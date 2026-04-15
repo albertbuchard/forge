@@ -80,6 +80,9 @@ describe("question flow quality coverage", () => {
     expect(entityPlaybook).toMatch(
       /The first question should usually clarify lived meaning, use, stake, or timing/i
     );
+    expect(entityPlaybook).toMatch(
+      /trying to understand,\s*preserve,\s*decide,\s*schedule,\s*or change something/i
+    );
     expect(entityPlaybook).toMatch(/hidden checklist says it is next/i);
     expect(entityPlaybook).toMatch(
       /If the next question would only decorate the record[\s\S]*skip it/i
@@ -106,6 +109,12 @@ describe("question flow quality coverage", () => {
     );
     expect(entityPlaybook).toMatch(
       /future reports to name the same way each time/i
+    );
+    expect(entityPlaybook).toMatch(
+      /what workflow they are trying to unlock/i
+    );
+    expect(entityPlaybook).toMatch(
+      /what felt most important to name before it gets smoothed over or forgotten/i
     );
   });
 

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getDatabase, runInTransaction } from "../db.js";
 import { recordActivityEvent } from "./activity-events.js";
-import { decorateOwnedEntity, inferFirstOwnedUserId, setEntityOwner } from "./entity-ownership.js";
+import { decorateOwnedEntity, inferFirstOwnedUserId, replaceEntityAssignees, setEntityOwner } from "./entity-ownership.js";
 import { filterDeletedEntities, isEntityDeleted } from "./deleted-entities.js";
 import { createLinkedNotes } from "./notes.js";
 import { assertGoalExists } from "../services/relations.js";
@@ -40,8 +40,16 @@ function mapProject(row) {
         title: row.title,
         description: row.description,
         status: row.status,
+        workflowStatus: row.workflow_status === "backlog" ||
+            row.workflow_status === "focus" ||
+            row.workflow_status === "in_progress" ||
+            row.workflow_status === "blocked" ||
+            row.workflow_status === "done"
+            ? row.workflow_status
+            : "backlog",
         themeColor: row.theme_color,
         targetPoints: row.target_points,
+        productRequirementsDocument: row.product_requirements_document,
         schedulingRules: calendarSchedulingRulesSchema.parse(JSON.parse(row.scheduling_rules_json || "{}")),
         createdAt: row.created_at,
         updatedAt: row.updated_at
@@ -71,7 +79,7 @@ export function listProjects(filters = {}) {
         params.push(filters.limit);
     }
     const rows = getDatabase()
-        .prepare(`SELECT id, goal_id, title, description, status, theme_color, target_points, created_at, updated_at
+        .prepare(`SELECT id, goal_id, title, description, status, workflow_status, theme_color, target_points, product_requirements_document, created_at, updated_at
        , scheduling_rules_json
        FROM projects
        ${whereSql}
@@ -85,7 +93,7 @@ export function getProjectById(projectId) {
         return undefined;
     }
     const row = getDatabase()
-        .prepare(`SELECT id, goal_id, title, description, status, theme_color, target_points, created_at, updated_at
+        .prepare(`SELECT id, goal_id, title, description, status, workflow_status, theme_color, target_points, product_requirements_document, created_at, updated_at
        , scheduling_rules_json
        FROM projects
        WHERE id = ?`)
@@ -99,11 +107,12 @@ export function createProject(input, activity) {
         const now = new Date().toISOString();
         const id = `project_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
         getDatabase()
-            .prepare(`INSERT INTO projects (id, goal_id, title, description, status, theme_color, target_points, scheduling_rules_json, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-            .run(id, parsed.goalId, parsed.title, parsed.description, parsed.status, parsed.themeColor, parsed.targetPoints, JSON.stringify(parsed.schedulingRules), now, now);
+            .prepare(`INSERT INTO projects (id, goal_id, title, description, status, workflow_status, theme_color, target_points, product_requirements_document, scheduling_rules_json, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+            .run(id, parsed.goalId, parsed.title, parsed.description, parsed.status, parsed.workflowStatus, parsed.themeColor, parsed.targetPoints, parsed.productRequirementsDocument, JSON.stringify(parsed.schedulingRules), now, now);
         setEntityOwner("project", id, parsed.userId ??
             inferFirstOwnedUserId([{ entityType: "goal", entityId: parsed.goalId }]));
+        replaceEntityAssignees("project", id, parsed.assigneeUserIds);
         const project = getProjectById(id);
         createLinkedNotes(parsed.notes, { entityType: "project", entityId: project.id, anchorKey: null }, activity ?? { source: "ui", actor: null });
         if (activity) {
@@ -139,22 +148,28 @@ export function updateProject(projectId, input, activity) {
             title: parsed.title ?? current.title,
             description: parsed.description ?? current.description,
             status: parsed.status ?? current.status,
+            workflowStatus: parsed.workflowStatus ?? current.workflowStatus,
             themeColor: parsed.themeColor ?? current.themeColor,
             targetPoints: parsed.targetPoints ?? current.targetPoints,
+            productRequirementsDocument: parsed.productRequirementsDocument ??
+                current.productRequirementsDocument,
             schedulingRules: parsed.schedulingRules ?? current.schedulingRules,
             updatedAt: new Date().toISOString()
         };
         getDatabase()
             .prepare(`UPDATE projects
-         SET goal_id = ?, title = ?, description = ?, status = ?, theme_color = ?, target_points = ?, scheduling_rules_json = ?, updated_at = ?
+         SET goal_id = ?, title = ?, description = ?, status = ?, workflow_status = ?, theme_color = ?, target_points = ?, product_requirements_document = ?, scheduling_rules_json = ?, updated_at = ?
          WHERE id = ?`)
-            .run(next.goalId, next.title, next.description, next.status, next.themeColor, next.targetPoints, JSON.stringify(next.schedulingRules), next.updatedAt, projectId);
+            .run(next.goalId, next.title, next.description, next.status, next.workflowStatus, next.themeColor, next.targetPoints, next.productRequirementsDocument, JSON.stringify(next.schedulingRules), next.updatedAt, projectId);
         // Keep legacy task.goal_id aligned with the project's parent goal.
         getDatabase()
             .prepare(`UPDATE tasks SET goal_id = ?, updated_at = ? WHERE project_id = ?`)
             .run(next.goalId, next.updatedAt, projectId);
         if (parsed.userId !== undefined) {
             setEntityOwner("project", projectId, parsed.userId);
+        }
+        if (parsed.assigneeUserIds !== undefined) {
+            replaceEntityAssignees("project", projectId, parsed.assigneeUserIds);
         }
         const completedLinkedTaskCount = current.status !== "completed" && next.status === "completed"
             ? completeLinkedProjectTasks(projectId, activity)

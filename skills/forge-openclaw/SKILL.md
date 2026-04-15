@@ -27,14 +27,20 @@ Project-management workflow rule:
 - Projects are PRD-backed initiatives.
 - PRDs should break down into issues that are vertical slices across the stack.
 - Every issue must be classified as `AFK` or `HITL`.
-- Issues keep end-to-end behavior in `description` and structured
-  Given/When/Then acceptance criteria.
+- Issues and tasks can both preserve `executionMode` and structured Given/When/Then
+  `acceptanceCriteria` when that helps the delivery contract stay explicit.
+- Issues keep end-to-end behavior in `description`.
 - Tasks are one focused AI session each.
 - If a task is too large for one focused AI session, split it.
 - Task instructions belong in `aiInstructions`.
 - File targets, patterns to follow, and done-shape guidance belong inside
   `aiInstructions`, not as separate schema fields.
 - Use subtasks only as lightweight child steps under a task.
+- Placement and linking should follow the hierarchy explicitly:
+  project -> issue -> task -> subtask.
+- When the user wants to link or place a work item, use a hierarchy-aware search flow
+  that can select or create the relevant goal, project, issue, or parent work item
+  instead of inventing a flat parent picker.
 
 Task completion rule:
 
@@ -44,6 +50,14 @@ Task completion rule:
 - Forge defaults to direct commits on `main`.
 - Do not ask the user to create a feature branch or pull request unless they
   explicitly want that workflow.
+
+PM surface rule:
+
+- Forge has one mixed Kanban board for `project`, `issue`, `task`, and `subtask`.
+- Forge also has one compact hierarchy tab for the full repeated hierarchy.
+- Both surfaces share search and filtering, including level visibility and
+  human/bot ownership filters.
+- Guided modal flows handle create, edit, move, link, and closeout actions.
 
 Forge has four major surfaces. The planning side covers goals, projects, strategies, tasks, habits, notes, calendar events, recurring work blocks, task timeboxes, live work sessions, and agent-authored insights. The Health side covers sleep sessions, sports and workout sessions, companion pairing, and habit-generated workout records that should still stay linked to the broader Forge graph. The Preferences side covers contextual taste modeling, pairwise comparisons, direct signals, editable concept libraries, and preference items that can come from Forge entities or seeded concept domains such as food, activities, places, countries, fashion, people, media, and tools. The Psyche side covers values, patterns, behaviors, beliefs, modes, guided mode sessions, trigger reports, event types, and reusable emotion definitions. Forge also has a file-first Wiki memory layer with explicit spaces, local markdown pages, backlinks, optional embeddings, and structured links back to Forge entities. Forge is also multi-user: every entity can belong to a typed `human` or `bot` user through `userId`, and read routes can scope to one or many users with `userId` or repeated `userIds`. The current access posture is configurable through a directional user graph, but the live default is still permissive: Forge can list users directly, every relationship edge starts open, and a user can read or affect another user's linked records when the route explicitly asks for them. Use `forge_get_user_directory` when owner identity or cross-user access matters. Strategies can also be locked into a contract with `isLocked`; once locked, do not mutate the graph or target structure unless the user explicitly wants the strategy unlocked first. The model should use the real entity names, not vague substitutes. Say `project`, not “initiative”. Say `behavior_pattern`, not “theme”. Say `trigger_report`, not “incident note”.
 Habits are a first-class recurring entity in the planning side.

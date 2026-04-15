@@ -263,10 +263,10 @@ run_verification_suite() {
     return 0
   fi
 
-  echo "+ npm exec -- vitest run src/openclaw/parity.test.ts src/openclaw/index.test.ts src/openclaw/api-client.test.ts src/openclaw/manifest.test.ts"
+  echo "+ npm exec -- vitest run src/openclaw/parity.test.ts src/openclaw/index.test.ts src/openclaw/api-client.test.ts src/openclaw/manifest.test.ts src/openclaw/tool-contract.test.ts"
   (
     cd "${FORGE_DIR}"
-    npm exec -- vitest run src/openclaw/parity.test.ts src/openclaw/index.test.ts src/openclaw/api-client.test.ts src/openclaw/manifest.test.ts
+    npm exec -- vitest run src/openclaw/parity.test.ts src/openclaw/index.test.ts src/openclaw/api-client.test.ts src/openclaw/manifest.test.ts src/openclaw/tool-contract.test.ts
   )
   echo "+ node --import tsx --test --test-concurrency=1 server/src/app.test.ts"
   (

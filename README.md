@@ -37,6 +37,10 @@ The work-item contract stays intentionally lean:
   `completionReport = { modifiedFiles[], workSummary, linkedGitRefIds[] }`
   are the only structured workflow add-ons below the shared task fields
 
+Issues and tasks can both carry `executionMode` and `acceptanceCriteria` when that
+helps the slice stay explicit. `aiInstructions` remains the dedicated execution field
+for task and subtask work.
+
 Forge stores canonical git refs separately and uses `linkedGitRefIds[]` inside the
 completion report to point back to those structured refs.
 
@@ -58,6 +62,23 @@ Forge defaults to a single-branch monorepo workflow:
 - commit directly to `main`
 - do not assume feature branches
 - do not assume pull requests
+
+## PM Workspace
+
+Forge's project-management workspace is intentionally shared instead of split into
+separate boards:
+
+- one mixed Kanban board for `project`, `issue`, `task`, and `subtask`
+- one compact hierarchy tab for the full
+  `Goal -> Strategy -> Project -> Strategy -> Issue -> Task -> Subtask` tree
+- one shared search and filtering model across board and hierarchy
+- one hierarchy-aware linking flow that can select or create goals, projects, issues,
+  and parent work items from the same guided modal search surface
+
+The board defaults to `task + subtask`, but users can multi-select visible levels.
+Cards use one shared visual language with distinct identity cues for projects, issues,
+ tasks, and subtasks, and each card exposes contextual actions such as open, edit,
+move, link, and create-child flows.
 
 ## Getting Started
 
@@ -160,6 +181,7 @@ not just a single dashboard shell.
 | Surface | Screenshot |
 | --- | --- |
 | Kanban board | ![Forge Kanban board](./openclaw-plugin/docs/assets/forge-kanban-board.png) |
+| Hierarchy view | ![Forge hierarchy view](./openclaw-plugin/docs/assets/forge-project-hierarchy.png) |
 | Movement timeline | ![Forge Movement life timeline](./openclaw-plugin/docs/assets/forge-movement-life-timeline.png) |
 | Sleep overview | ![Forge Sleep overview](./openclaw-plugin/docs/assets/forge-sleep-overview.png) |
 

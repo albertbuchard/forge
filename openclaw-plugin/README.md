@@ -67,6 +67,15 @@ Forge is a personal system for:
 - first-class sleep and sports records imported from the iPhone companion or generated from habits
 - structured Psyche records such as values, patterns, beliefs, modes, and trigger reports
 
+Forge project management is explicit and repeated:
+
+- `Goal -> Strategy -> Project -> Strategy -> Issue -> Task -> Subtask`
+- one mixed board for `project | issue | task | subtask`
+- one compact hierarchy view with shared search and filters
+- hierarchy-aware linking flows that can select or create goals, projects, issues, and parent work items
+- shared `executionMode` + `acceptanceCriteria` support on issues and tasks
+- direct commits to `main` by default
+
 This plugin gives OpenClaw the tools it needs to work with that system. It can read current state, search records, create and update records, control live work sessions, post insights, and hand the user off to the Forge UI when the visual workflow is easier.
 It can also grant an explicit audited XP bonus or penalty through the dedicated reward-bonus route when the normal automatic task or habit reward flows are not the right fit.
 It can also add or remove tracked minutes on existing tasks or projects through a dedicated signed work-adjustment route without pretending that a live task run happened.

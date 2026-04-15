@@ -15,11 +15,13 @@ function normalizeTask(task) {
         id: task?.id ?? "",
         title: task?.title ?? "",
         description: task?.description ?? "",
+        level: task?.level ?? "task",
         status: task?.status ?? "backlog",
         priority: task?.priority ?? "medium",
         owner: task?.owner ?? "Albert",
         goalId: task?.goalId ?? null,
         projectId: task?.projectId ?? null,
+        parentWorkItemId: task?.parentWorkItemId ?? null,
         dueDate: task?.dueDate ?? null,
         effort: task?.effort ?? "deep",
         energy: task?.energy ?? "steady",
@@ -29,12 +31,23 @@ function normalizeTask(task) {
         sortOrder: task?.sortOrder ?? 0,
         resolutionKind: task?.resolutionKind ?? null,
         splitParentTaskId: task?.splitParentTaskId ?? null,
+        aiInstructions: task?.aiInstructions ?? "",
+        executionMode: task?.executionMode ?? null,
+        acceptanceCriteria: task?.acceptanceCriteria ?? [],
+        blockerLinks: task?.blockerLinks ?? [],
+        completionReport: task?.completionReport ?? null,
+        gitRefs: task?.gitRefs ?? [],
         completedAt: task?.completedAt ?? null,
         createdAt: task?.createdAt ?? new Date(0).toISOString(),
         updatedAt: task?.updatedAt ?? new Date(0).toISOString(),
         tagIds: task?.tagIds ?? [],
         userId: task?.userId ?? null,
         user: task?.user ?? null,
+        ownerUserId: task?.ownerUserId ?? task?.userId ?? null,
+        ownerUser: task?.ownerUser ??
+            (task?.user ?? null),
+        assigneeUserIds: task?.assigneeUserIds ?? [],
+        assignees: task?.assignees ?? [],
         time: task?.time ?? {
             totalTrackedSeconds: 0,
             totalCreditedSeconds: 0,
@@ -103,8 +116,10 @@ function normalizeProject(project) {
         status: project?.status === "paused" || project?.status === "completed"
             ? project.status
             : "active",
+        workflowStatus: project?.workflowStatus ?? "backlog",
         targetPoints: project?.targetPoints ?? project?.totalPoints ?? 0,
         themeColor: project?.themeColor ?? "#c0c1ff",
+        productRequirementsDocument: project?.productRequirementsDocument ?? "",
         schedulingRules: project?.schedulingRules ?? EMPTY_CALENDAR_RULES,
         createdAt: project?.createdAt ?? new Date(0).toISOString(),
         updatedAt: project?.updatedAt ?? new Date(0).toISOString(),
@@ -119,6 +134,14 @@ function normalizeProject(project) {
         momentumLabel: project?.momentumLabel ?? "No momentum yet",
         userId: project?.userId ?? null,
         user: project?.user ?? null,
+        ownerUserId: project?.ownerUserId ??
+            project?.userId ??
+            null,
+        ownerUser: project?.ownerUser ??
+            project?.user ??
+            null,
+        assigneeUserIds: project?.assigneeUserIds ?? [],
+        assignees: project?.assignees ?? [],
         time: project?.time ?? {
             totalTrackedSeconds: 0,
             totalCreditedSeconds: 0,

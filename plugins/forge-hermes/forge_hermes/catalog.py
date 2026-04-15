@@ -1236,6 +1236,10 @@ TOOL_CATALOG: List[ToolSpec] = [
             {
                 "from": optional_string("Optional start datetime."),
                 "to": optional_string("Optional end datetime."),
+                "userIds": array_schema(
+                    {"type": "string"},
+                    "Optional Forge user ids to scope the read across one or more human/bot owners.",
+                ),
             }
         ),
         "method": "GET",
@@ -1243,23 +1247,42 @@ TOOL_CATALOG: List[ToolSpec] = [
     },
     {
         "name": "forge_connect_calendar_provider",
-        "description": "Create a Google, Apple, Exchange Online, or custom CalDAV calendar connection. Use this only for explicit provider-connection requests after discovery choices are known.",
+        "description": "Create a Google, Apple, Exchange Online, calendars already configured on this Mac, or custom CalDAV calendar connection. Use this only for explicit provider-connection requests after discovery choices are known.",
         "parameters": object_schema(
             {
-                "provider": {"enum": ["google", "apple", "caldav", "microsoft"]},
+                "provider": {
+                    "enum": [
+                        "google",
+                        "apple",
+                        "caldav",
+                        "microsoft",
+                        "macos_local",
+                    ]
+                },
                 "label": {"type": "string", "minLength": 1},
                 "username": optional_string("Optional username."),
-                "clientId": optional_string("Optional OAuth client id."),
-                "clientSecret": optional_string("Optional OAuth client secret."),
-                "refreshToken": optional_string("Optional refresh token."),
                 "password": optional_string("Optional password or app password."),
                 "serverUrl": optional_string("Optional CalDAV server url."),
-                "authSessionId": optional_string("Optional Microsoft auth session id."),
-                "selectedCalendarUrls": array_schema({"type": "string", "minLength": 1}, "Selected calendar urls."),
+                "authSessionId": optional_string(
+                    "Optional Google or Microsoft auth session id."
+                ),
+                "sourceId": optional_string(
+                    "Optional macOS local calendar source id."
+                ),
+                "selectedCalendarUrls": {
+                    "type": "array",
+                    "items": {"type": "string", "minLength": 1},
+                    "minItems": 1,
+                    "description": "Selected calendar urls.",
+                },
                 "forgeCalendarUrl": optional_string("Optional writable Forge calendar url."),
                 "createForgeCalendar": {"type": "boolean"},
+                "replaceConnectionIds": array_schema(
+                    {"type": "string", "minLength": 1},
+                    "Optional existing connection ids to replace during a macOS-local migration.",
+                ),
             },
-            required=["provider", "label"],
+            required=["provider", "label", "selectedCalendarUrls"],
         ),
         "method": "POST",
         "path": "/api/v1/calendar/connections",

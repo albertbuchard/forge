@@ -280,6 +280,74 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
     target: (_match: RegExpMatchArray, url: URL) =>
       passthroughSearch("/api/v1/health/fitness", url)
   }),
+  {
+    path: "/forge/v1/calendar",
+    match: "prefix",
+    operations: [
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/calendar\/overview$/,
+        upstreamPath: "/api/v1/calendar/overview",
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/calendar/overview", url)
+      },
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/calendar\/connections$/,
+        upstreamPath: "/api/v1/calendar/connections",
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/calendar/connections", url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/calendar\/connections$/,
+        upstreamPath: "/api/v1/calendar/connections",
+        requestBody: "json",
+        requiresToken: true,
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/calendar/connections", url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/calendar\/connections\/([^/]+)\/sync$/,
+        upstreamPath: "/api/v1/calendar/connections/:id/sync",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(
+            `/api/v1/calendar/connections/${match[1]}/sync`,
+            url
+          )
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/calendar\/work-block-templates$/,
+        upstreamPath: "/api/v1/calendar/work-block-templates",
+        requestBody: "json",
+        requiresToken: true,
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/calendar/work-block-templates", url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/calendar\/timeboxes\/recommend$/,
+        upstreamPath: "/api/v1/calendar/timeboxes/recommend",
+        requestBody: "json",
+        requiresToken: true,
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/calendar/timeboxes/recommend", url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/calendar\/timeboxes$/,
+        upstreamPath: "/api/v1/calendar/timeboxes",
+        requestBody: "json",
+        requiresToken: true,
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/calendar/timeboxes", url)
+      }
+    ]
+  },
   exact("/forge/v1/preferences/workspace", {
     method: "GET",
     upstreamPath: "/api/v1/preferences/workspace",

@@ -72,11 +72,17 @@ Workflow rule:
 - Projects are PRD-backed initiatives.
 - PRDs break down into vertical-slice issues.
 - Issues are classified as `AFK` or `HITL`.
+- Issues and tasks can both preserve `executionMode` and structured
+  `acceptanceCriteria` when the contract needs them.
 - Tasks are one focused AI session each and use direct `aiInstructions`.
 - If a task is too large for one focused session, split it into smaller tasks or
   subtasks.
 - Keep file targets, patterns, and done-shape guidance inside `aiInstructions`,
   not in separate fields.
+- Placement and linking should respect the explicit chain
+  `project -> issue -> task -> subtask`.
+- When Hermes helps place or link a work item, it should use a hierarchy-aware
+  search/create flow rather than a flat parent picker.
 
 Completion rule:
 
@@ -86,6 +92,14 @@ Completion rule:
 - Default workflow is direct commits to `main`.
 - Do not ask for feature branches or pull requests unless the user explicitly
   wants them.
+
+Surface rule:
+
+- Forge exposes one mixed board for `project`, `issue`, `task`, and `subtask`.
+- Forge also exposes one compact hierarchy tree for the repeated hierarchy.
+- Both surfaces share filtering, level visibility, and human/bot ownership
+  controls.
+- Guided modal flows cover create, edit, move, link, and completion actions.
 
 ## Wiki model
 

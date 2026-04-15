@@ -6,11 +6,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FORGE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 PLUGIN_DIR="${FORGE_DIR}/openclaw-plugin"
 ROOT_MANIFEST="${FORGE_DIR}/openclaw.plugin.json"
+FORGE_PACKAGE_JSON="${FORGE_DIR}/package.json"
 PLUGIN_MANIFEST="${PLUGIN_DIR}/openclaw.plugin.json"
 PLUGIN_PACKAGE_JSON="${PLUGIN_DIR}/package.json"
 PLUGIN_PACKAGE_LOCK_JSON="${PLUGIN_DIR}/package-lock.json"
 CODEX_PLUGIN_MANIFEST="${FORGE_DIR}/plugins/forge-codex/.codex-plugin/plugin.json"
 CODEX_RUNTIME_PACKAGE_JSON="${FORGE_DIR}/plugins/forge-codex/runtime/package.json"
+SAFE_OPENCLAW_HOST_RANGE="2026.4.8"
 DEFAULT_FORGE_PORT=4317
 RELEASE_MODE="${FORGE_RELEASE_MODE:-full}"
 SKIP_UPLOAD="${FORGE_RELEASE_SKIP_UPLOAD:-0}"
@@ -24,7 +26,8 @@ ORIGINAL_CODEX_PLUGIN_VERSION=""
 ORIGINAL_CODEX_RUNTIME_VERSION=""
 RELEASE_TARGET_VERSION=""
 VERIFY_TESTS=(
-  "npm exec -- vitest run src/openclaw/parity.test.ts src/openclaw/index.test.ts src/openclaw/api-client.test.ts src/openclaw/manifest.test.ts"
+  "npm --prefix openclaw-plugin audit --omit=dev"
+  "npm exec -- vitest run src/openclaw/parity.test.ts src/openclaw/index.test.ts src/openclaw/api-client.test.ts src/openclaw/manifest.test.ts src/openclaw/tool-contract.test.ts"
   "npm run build"
   "node --import tsx --test --test-concurrency=1 server/src/app.test.ts"
   "npm run build:openclaw-plugin"
@@ -234,7 +237,28 @@ NODE
   [[ "${actual}" == "[\"${version}\",\"${version}\",\"${version}:${version}\",\"${version}\",\"${version}\",\"${version}\"]" ]] || fail "plugin versions are not aligned: ${actual}"
 }
 
+verify_openclaw_host_floor() {
+  local actual
+  actual="$(node --input-type=module - "${FORGE_PACKAGE_JSON}" "${PLUGIN_PACKAGE_JSON}" <<'NODE'
+import fs from "node:fs";
+
+const [forgePath, pluginPath] = process.argv.slice(2);
+const forgePackage = JSON.parse(fs.readFileSync(forgePath, "utf8"));
+const pluginPackage = JSON.parse(fs.readFileSync(pluginPath, "utf8"));
+process.stdout.write(
+  JSON.stringify({
+    forgeDependency: forgePackage.dependencies?.openclaw ?? null,
+    pluginPeer: pluginPackage.peerDependencies?.openclaw ?? null
+  })
+);
+NODE
+)"
+  [[ "${actual}" == "{\"forgeDependency\":\"${SAFE_OPENCLAW_HOST_RANGE}\",\"pluginPeer\":\"${SAFE_OPENCLAW_HOST_RANGE}\"}" ]] \
+    || fail "openclaw host floor must stay pinned to ${SAFE_OPENCLAW_HOST_RANGE}: ${actual}"
+}
+
 run_verification_suite() {
+  verify_openclaw_host_floor
   if is_publish_from_tag_mode; then
     echo "+ npm run build:openclaw-plugin"
     (

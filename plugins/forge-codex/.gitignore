@@ -1,3 +1,6 @@
 runtime/data/
 !runtime/dist/
 !runtime/dist/**
+# Guard one incomplete hashed bundle pair produced alongside a conflicted dist/index.html.
+runtime/dist/assets/index-DJ1Y9Qrt.js
+runtime/dist/assets/index-DJ1Y9Qrt.js.map

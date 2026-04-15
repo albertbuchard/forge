@@ -1248,10 +1248,12 @@ export function TaskDetailPage() {
         open={dialogOpen}
         goals={shell.snapshot.goals}
         projects={shell.snapshot.dashboard.projects}
+        workItems={shell.snapshot.workItems}
         tags={shell.snapshot.tags}
         users={shell.snapshot.users}
         editingTask={payload.task}
         defaultUserId={payload.task.userId ?? defaultUserId}
+        onRefreshEntities={shell.refresh}
         onOpenChange={setDialogOpen}
         onSubmit={async (input, taskId) => {
           if (!taskId) {

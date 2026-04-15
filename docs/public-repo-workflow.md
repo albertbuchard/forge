@@ -18,6 +18,11 @@
 6. Forge's default operating workflow is direct work on `main`, not mandatory feature branches or pull requests.
 7. Public docs and agent skills must reflect Forge's explicit planning hierarchy:
    `Goal -> Strategy -> Project -> Strategy -> Issue -> Task -> Subtask`.
+8. Public docs and agent skills must also reflect the current PM interaction model:
+   one mixed board for `project | issue | task | subtask`, one compact hierarchy
+   surface, shared search/filtering, hierarchy-aware linking flows, shared
+   `executionMode` + `acceptanceCriteria` support for issues and tasks, and
+   `completionReport = { modifiedFiles[], workSummary, linkedGitRefIds[] }`.
 
 ## Public release boundary
 

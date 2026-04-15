@@ -39,6 +39,32 @@ const optionalInteger = (minimum, maximum) => Type.Optional(Type.Integer({
     ...(typeof minimum === "number" ? { minimum } : {}),
     ...(typeof maximum === "number" ? { maximum } : {})
 }));
+const calendarOverviewReadSchema = Type.Object({
+    from: optionalString(),
+    to: optionalString(),
+    userIds: Type.Optional(Type.Array(Type.String()))
+});
+const calendarConnectionParametersSchema = Type.Object({
+    provider: Type.Union([
+        Type.Literal("google"),
+        Type.Literal("apple"),
+        Type.Literal("caldav"),
+        Type.Literal("microsoft"),
+        Type.Literal("macos_local")
+    ]),
+    label: Type.String({ minLength: 1 }),
+    username: optionalString(),
+    password: optionalString(),
+    serverUrl: optionalString(),
+    authSessionId: optionalString(),
+    sourceId: optionalString(),
+    selectedCalendarUrls: Type.Array(Type.String({ minLength: 1 }), {
+        minItems: 1
+    }),
+    forgeCalendarUrl: optionalString(),
+    createForgeCalendar: optionalBoolean(),
+    replaceConnectionIds: Type.Optional(Type.Array(Type.String({ minLength: 1 })))
+});
 const healthLinkInputSchema = () => Type.Object({
     entityType: Type.String({ minLength: 1 }),
     entityId: Type.String({ minLength: 1 }),
@@ -1036,42 +1062,14 @@ export function registerForgePluginTools(api, config) {
         name: "forge_get_calendar_overview",
         label: "Forge Calendar Overview",
         description: "Read the calendar domain in one response: provider metadata, connected calendars, Forge-native events, mirrored events, recurring work blocks, and task timeboxes.",
-        parameters: Type.Object({
-            from: optionalString(),
-            to: optionalString()
-        }),
-        path: (params) => {
-            const search = new URLSearchParams();
-            if (typeof params.from === "string" && params.from.trim().length > 0) {
-                search.set("from", params.from);
-            }
-            if (typeof params.to === "string" && params.to.trim().length > 0) {
-                search.set("to", params.to);
-            }
-            const suffix = search.size > 0 ? `?${search.toString()}` : "";
-            return `/api/v1/calendar/overview${suffix}`;
-        }
+        parameters: calendarOverviewReadSchema,
+        path: (params) => withQueryParams("/api/v1/calendar/overview", params, ["from", "to", "userIds"])
     });
     registerWriteTool(api, config, {
         name: "forge_connect_calendar_provider",
         label: "Forge Connect Calendar Provider",
-        description: "Create a Google, Apple, Exchange Online, or custom CalDAV calendar connection. Use this only for explicit provider-connection requests after discovery choices are known.",
-        parameters: Type.Object({
-            provider: Type.Union([
-                Type.Literal("google"),
-                Type.Literal("apple"),
-                Type.Literal("caldav"),
-                Type.Literal("microsoft")
-            ]),
-            label: Type.String({ minLength: 1 }),
-            username: optionalString(),
-            password: optionalString(),
-            serverUrl: optionalString(),
-            authSessionId: optionalString(),
-            selectedCalendarUrls: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
-            forgeCalendarUrl: optionalString(),
-            createForgeCalendar: Type.Optional(Type.Boolean())
-        }),
+        description: "Create a Google, Apple, Exchange Online, calendars already configured on this Mac, or custom CalDAV calendar connection. Use this only for explicit provider-connection requests after discovery choices are known.",
+        parameters: calendarConnectionParametersSchema,
         method: "POST",
         path: "/api/v1/calendar/connections"
     });

@@ -1,10 +1,20 @@
-import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode
+} from "react";
 import {
   ArrowUpRight,
   ChevronDown,
   ChevronUp,
+  Link2,
+  MoreHorizontal,
   Pencil,
   Play,
+  PlusCircle,
   Scissors,
   Trash2
 } from "lucide-react";
@@ -30,14 +40,36 @@ import { Card } from "@/components/ui/card";
 import { EntityBadge } from "@/components/ui/entity-badge";
 import { EntityName } from "@/components/ui/entity-name";
 import { UserBadge } from "@/components/ui/user-badge";
+import { getEntityVisual } from "@/lib/entity-visuals";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 import { getEntityNotesSummary } from "@/lib/note-helpers";
-import type { Goal, Tag, Task, TaskStatus } from "@/lib/types";
+import type { Goal, ProjectSummary, Tag, Task, TaskStatus } from "@/lib/types";
 import type { NotesSummaryByEntity } from "@/lib/types";
 import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
+import {
+  FloatingActionMenu,
+  type FloatingActionMenuItem
+} from "@/components/ui/floating-action-menu";
 
 export const LANE_ORDER: TaskStatus[] = ["backlog", "focus", "in_progress", "blocked", "done"];
+
+type BoardItem =
+  | {
+      kind: "task";
+      id: string;
+      status: TaskStatus;
+      task: Task;
+      goal: Goal | undefined;
+      tags: Tag[];
+    }
+  | {
+      kind: "project";
+      id: string;
+      status: TaskStatus;
+      project: ProjectSummary;
+      goal: Goal | undefined;
+    };
 
 function isLaneContainerId(value: string) {
   return value.startsWith("lane:") || value.includes(":lane:");
@@ -127,6 +159,7 @@ function TaskCardShell({
   onOpenTask,
   onEditTask,
   onSplitTask,
+  onOpenMenu,
   notesSummaryByEntity
 }: {
   task: Task;
@@ -147,25 +180,42 @@ function TaskCardShell({
   onOpenTask?: (taskId: string) => void;
   onEditTask?: (taskId: string) => void;
   onSplitTask?: (taskId: string) => void;
+  onOpenMenu?: (
+    event: ReactMouseEvent<HTMLButtonElement>,
+    task: Task
+  ) => void;
   notesSummaryByEntity?: NotesSummaryByEntity;
 }) {
   const { t, formatDate } = useI18n();
   const previousStatus = LANE_ORDER[LANE_ORDER.indexOf(task.status) - 1] ?? null;
   const nextStatus = LANE_ORDER[LANE_ORDER.indexOf(task.status) + 1] ?? null;
   const noteCount = getEntityNotesSummary(notesSummaryByEntity, "task", task.id).count;
+  const entityKind = task.level === "issue" ? "issue" : "task";
+  const entityVisual = getEntityVisual(entityKind);
+  const accent =
+    task.level === "subtask"
+      ? "136,146,255"
+      : entityVisual.colorToken.rgb.join(", ");
+  const dueLabel =
+    task.dueDate && !Number.isNaN(Date.parse(task.dueDate))
+      ? formatDate(task.dueDate)
+      : "No due date";
 
   return (
     <article
       ref={setNodeRef}
-      style={style}
+      style={{
+        ...style,
+        ["--board-card-accent" as string]: accent
+      }}
       className={cn(
-        "w-full max-w-full min-w-0 overflow-hidden rounded-[18px] p-3 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)] transition cursor-grab active:cursor-grabbing",
+        "w-full max-w-full min-w-0 overflow-hidden rounded-[18px] p-3 shadow-[inset_0_0_0_1px_rgba(var(--board-card-accent),0.12)] transition cursor-grab active:cursor-grabbing",
         isMobile && "touch-none select-none",
-        isOverlay && "rotate-[0.5deg] bg-[linear-gradient(180deg,rgba(192,193,255,0.24),rgba(192,193,255,0.1))] shadow-[0_28px_80px_rgba(8,12,24,0.42),inset_0_0_0_1px_rgba(192,193,255,0.26)]",
-        isDragging && !isOverlay && "opacity-35 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.02)]",
+        isOverlay && "rotate-[0.5deg] bg-[linear-gradient(180deg,rgba(var(--board-card-accent),0.22),rgba(var(--board-card-accent),0.08))] shadow-[0_28px_80px_rgba(8,12,24,0.42),inset_0_0_0_1px_rgba(var(--board-card-accent),0.28)]",
+        isDragging && !isOverlay && "opacity-35 shadow-[inset_0_0_0_1px_rgba(var(--board-card-accent),0.08)]",
         isSelected
-          ? "bg-[linear-gradient(180deg,rgba(192,193,255,0.18),rgba(192,193,255,0.06))] shadow-[0_16px_40px_rgba(8,12,24,0.32),inset_0_0_0_1px_rgba(192,193,255,0.26)]"
-          : "bg-white/5"
+          ? "bg-[linear-gradient(180deg,rgba(var(--board-card-accent),0.18),rgba(var(--board-card-accent),0.06))] shadow-[0_16px_40px_rgba(8,12,24,0.32),inset_0_0_0_1px_rgba(var(--board-card-accent),0.26)]"
+          : "bg-[linear-gradient(180deg,rgba(var(--board-card-accent),0.08),rgba(255,255,255,0.03))]"
       )}
       data-dragging={isDragging ? "true" : "false"}
       data-testid={`task-card-${task.id}`}
@@ -173,8 +223,17 @@ function TaskCardShell({
       {...dragAttributes}
       {...dragListeners}
     >
+      <div
+        className="mb-3 h-px w-full rounded-full"
+        style={{ background: `linear-gradient(90deg, rgba(${accent}, 0.96), rgba(${accent}, 0.18))` }}
+      />
       <div className="mb-2 flex items-start justify-between gap-2">
-        <Badge className="shrink-0 text-[11px] text-[var(--tertiary)]">{task.priority}</Badge>
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <EntityBadge kind={entityKind} label={task.level} compact gradient={false} />
+          <Badge className="shrink-0 text-[11px] text-[var(--tertiary)]">
+            {task.priority}
+          </Badge>
+        </div>
         <div className="flex shrink-0 items-center gap-1.5">
           {onEditTask ? (
             <button
@@ -188,6 +247,20 @@ function TaskCardShell({
               }}
             >
               <Pencil className="size-3.5" />
+            </button>
+          ) : null}
+          {onOpenMenu ? (
+            <button
+              type="button"
+              aria-label={`Open ${task.title} actions`}
+              className="inline-flex size-8 items-center justify-center rounded-full bg-white/8 text-white/62 transition hover:bg-white/12 hover:text-white"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onOpenMenu(event, task);
+              }}
+            >
+              <MoreHorizontal className="size-3.5" />
             </button>
           ) : null}
           {onOpenTask ? (
@@ -266,7 +339,7 @@ function TaskCardShell({
           <span className="text-[11px] text-white/44">{task.points} xp</span>
         </div>
       </div>
-      <EntityName kind="task" label={task.title} className="max-w-full" lines={3} labelClassName="[overflow-wrap:anywhere]" />
+      <EntityName kind={entityKind} label={task.title} className="max-w-full" lines={3} labelClassName="[overflow-wrap:anywhere]" />
       <p className="mt-1.5 line-clamp-3 [overflow-wrap:anywhere] text-[12px] leading-5 text-white/62">{task.description || t("common.executionBoard.noExecutionNote")}</p>
       <div className="mt-2.5 flex min-w-0 flex-wrap gap-1.5">
         {goal ? <EntityBadge kind="goal" label={goal.title} compact wrap className="min-w-0 max-w-full" /> : null}
@@ -313,7 +386,7 @@ function TaskCardShell({
               {t("common.executionBoard.reopen")}
             </button>
           ) : null}
-          <span>{formatDate(task.dueDate)}</span>
+          <span>{dueLabel}</span>
         </div>
       </div>
     </article>
@@ -334,6 +407,10 @@ function SortableTaskCard(props: {
   onOpenTask?: (taskId: string) => void;
   onEditTask?: (taskId: string) => void;
   onSplitTask?: (taskId: string) => void;
+  onOpenMenu?: (
+    event: ReactMouseEvent<HTMLButtonElement>,
+    task: Task
+  ) => void;
   notesSummaryByEntity?: NotesSummaryByEntity;
 }) {
   const { task, sortableId } = props;
@@ -358,6 +435,230 @@ function SortableTaskCard(props: {
       onStepTask={props.onStepTask}
       onSplitTask={props.onSplitTask}
       notesSummaryByEntity={props.notesSummaryByEntity}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition
+      }}
+    />
+  );
+}
+
+function ProjectCardShell({
+  project,
+  goal,
+  isDragging = false,
+  isOverlay = false,
+  style,
+  setNodeRef,
+  dragAttributes,
+  dragListeners,
+  isMobile = false,
+  onStepProject,
+  onOpenProject,
+  onOpenMenu
+}: {
+  project: ProjectSummary;
+  goal: Goal | undefined;
+  isDragging?: boolean;
+  isOverlay?: boolean;
+  style?: React.CSSProperties;
+  setNodeRef?: (element: HTMLElement | null) => void;
+  dragAttributes?: DraggableAttributes;
+  dragListeners?: any;
+  isMobile?: boolean;
+  onStepProject?: (
+    projectId: string,
+    direction: "previous" | "next"
+  ) => Promise<void>;
+  onOpenProject?: (projectId: string) => void;
+  onOpenMenu?: (
+    event: ReactMouseEvent<HTMLButtonElement>,
+    project: ProjectSummary
+  ) => void;
+}) {
+  const { formatDate } = useI18n();
+  const previousStatus =
+    LANE_ORDER[LANE_ORDER.indexOf(project.workflowStatus) - 1] ?? null;
+  const nextStatus =
+    LANE_ORDER[LANE_ORDER.indexOf(project.workflowStatus) + 1] ?? null;
+  const entityVisual = getEntityVisual("project");
+  const accent = entityVisual.colorToken.rgb.join(", ");
+  const workflowLabel = project.workflowStatus.replaceAll("_", " ");
+  const lifecycleLabel = project.status.replaceAll("_", " ");
+  const updatedLabel =
+    project.updatedAt && !Number.isNaN(Date.parse(project.updatedAt))
+      ? formatDate(project.updatedAt)
+      : "No recent update";
+
+  return (
+    <article
+      ref={setNodeRef}
+      style={{
+        ...style,
+        ["--board-card-accent" as string]: accent
+      }}
+      className={cn(
+        "w-full max-w-full min-w-0 overflow-hidden rounded-[18px] p-3 shadow-[inset_0_0_0_1px_rgba(var(--board-card-accent),0.12)] transition cursor-grab active:cursor-grabbing",
+        isMobile && "touch-none select-none",
+        isOverlay && "rotate-[0.5deg] bg-[linear-gradient(180deg,rgba(var(--board-card-accent),0.22),rgba(var(--board-card-accent),0.08))] shadow-[0_28px_80px_rgba(8,12,24,0.42),inset_0_0_0_1px_rgba(var(--board-card-accent),0.28)]",
+        isDragging && !isOverlay && "opacity-35 shadow-[inset_0_0_0_1px_rgba(var(--board-card-accent),0.08)]",
+        !isDragging &&
+          !isOverlay &&
+          "bg-[linear-gradient(180deg,rgba(var(--board-card-accent),0.08),rgba(255,255,255,0.03))]"
+      )}
+      data-testid={`project-card-${project.id}`}
+      {...dragAttributes}
+      {...dragListeners}
+    >
+      <div
+        className="mb-3 h-px w-full rounded-full"
+        style={{
+          background: `linear-gradient(90deg, rgba(${accent}, 0.96), rgba(${accent}, 0.18))`
+        }}
+      />
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <EntityBadge kind="project" label="project" compact gradient={false} />
+          <Badge className="bg-[var(--primary)]/12 text-[var(--primary)]">
+            {workflowLabel}
+          </Badge>
+          <Badge className="bg-white/8 text-white/72">
+            {lifecycleLabel}
+          </Badge>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {onOpenMenu ? (
+            <button
+              type="button"
+              aria-label={`Open ${project.title} actions`}
+              className="inline-flex size-8 items-center justify-center rounded-full bg-white/8 text-white/62 transition hover:bg-white/12 hover:text-white"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onOpenMenu(event, project);
+              }}
+            >
+              <MoreHorizontal className="size-3.5" />
+            </button>
+          ) : null}
+          {onOpenProject ? (
+            <button
+              type="button"
+              aria-label={`Open ${project.title} details`}
+              className="inline-flex size-8 items-center justify-center rounded-full bg-white/8 text-white/62 transition hover:bg-white/12 hover:text-white"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onOpenProject(project.id);
+              }}
+            >
+              <ArrowUpRight className="size-3.5" />
+            </button>
+          ) : null}
+          {isMobile ? (
+            <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
+              <button
+                type="button"
+                aria-label={`Move ${project.title} to the previous lane`}
+                className="inline-flex size-7 items-center justify-center rounded-full bg-white/8 text-white/62 transition hover:bg-white/12 hover:text-white disabled:opacity-35"
+                disabled={!previousStatus}
+                onClick={() => {
+                  if (previousStatus) {
+                    void onStepProject?.(project.id, "previous");
+                  }
+                }}
+              >
+                <ChevronUp className="size-3.5" />
+              </button>
+              <button
+                type="button"
+                aria-label={`Move ${project.title} to the next lane`}
+                className="inline-flex size-7 items-center justify-center rounded-full bg-white/8 text-white/62 transition hover:bg-white/12 hover:text-white disabled:opacity-35"
+                disabled={!nextStatus}
+                onClick={() => {
+                  if (nextStatus) {
+                    void onStepProject?.(project.id, "next");
+                  }
+                }}
+              >
+                <ChevronDown className="size-3.5" />
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </div>
+      <EntityName
+        kind="project"
+        label={project.title}
+        className="max-w-full"
+        lines={3}
+        labelClassName="[overflow-wrap:anywhere]"
+      />
+      <p className="mt-1.5 line-clamp-3 [overflow-wrap:anywhere] text-[12px] leading-5 text-white/62">
+        {project.description || "PRD-backed initiative spanning multiple work items."}
+      </p>
+      <div className="mt-2.5 flex min-w-0 flex-wrap gap-1.5">
+        {goal ? (
+          <EntityBadge
+            kind="goal"
+            label={goal.title}
+            compact
+            wrap
+            className="min-w-0 max-w-full"
+          />
+        ) : null}
+        <UserBadge user={project.user} compact />
+        {(project.assignees ?? []).slice(0, 2).map((user) => (
+          <UserBadge key={user.id} user={user} compact />
+        ))}
+        <Badge className="bg-[var(--primary)]/12 text-[var(--primary)]">
+          {project.progress}% progress
+        </Badge>
+        <Badge className="bg-white/8 text-white/72">
+          {project.totalTasks} linked tasks
+        </Badge>
+      </div>
+      <div className="mt-2.5 flex min-w-0 items-center justify-between gap-2 text-[11px] text-white/45">
+        <span className="min-w-0 truncate">{project.goalTitle}</span>
+        <span>{updatedLabel}</span>
+      </div>
+    </article>
+  );
+}
+
+function SortableProjectCard(props: {
+  sortableId: string;
+  project: ProjectSummary;
+  goal: Goal | undefined;
+  isMobile?: boolean;
+  onStepProject?: (
+    projectId: string,
+    direction: "previous" | "next"
+  ) => Promise<void>;
+  onOpenProject?: (projectId: string) => void;
+  onOpenMenu?: (
+    event: ReactMouseEvent<HTMLButtonElement>,
+    project: ProjectSummary
+  ) => void;
+}) {
+  const { project, sortableId } = props;
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({
+      id: sortableId,
+      data: {
+        type: "project",
+        projectId: project.id,
+        status: project.workflowStatus
+      }
+    });
+
+  return (
+    <ProjectCardShell
+      {...props}
+      setNodeRef={setNodeRef}
+      dragAttributes={attributes}
+      dragListeners={listeners}
+      isDragging={isDragging}
       style={{
         transform: CSS.Transform.toString(transform),
         transition
@@ -476,30 +777,51 @@ function TrashDropzone({
 
 export function ExecutionBoard({
   tasks,
+  projects = [],
   goals,
   tags,
   selectedTaskId,
   onMove,
+  onMoveProject,
   onSelectTask,
   onStartTask,
   onQuickReopenTask,
   onDeleteTask,
+  onOpenProject,
   onOpenTask,
+  onEditProject,
   onEditTask,
+  onLinkProject,
+  onLinkTask,
+  onCreateIssueForProject,
+  onCreateTaskForIssue,
+  onCreateSubtaskForTask,
   onSplitTask,
   notesSummaryByEntity
 }: {
   tasks: Task[];
+  projects?: ProjectSummary[];
   goals: Goal[];
   tags: Tag[];
   selectedTaskId: string | null;
   onMove: (taskId: string, nextStatus: TaskStatus) => Promise<void>;
+  onMoveProject?: (
+    projectId: string,
+    nextStatus: TaskStatus
+  ) => Promise<void>;
   onSelectTask: (taskId: string) => void;
   onStartTask?: (taskId: string) => Promise<void>;
   onQuickReopenTask?: (taskId: string) => Promise<void>;
   onDeleteTask?: (taskId: string) => Promise<void>;
+  onOpenProject?: (projectId: string) => void;
   onOpenTask?: (taskId: string) => void;
+  onEditProject?: (projectId: string) => void;
   onEditTask?: (taskId: string) => void;
+  onLinkProject?: (projectId: string) => void;
+  onLinkTask?: (taskId: string) => void;
+  onCreateIssueForProject?: (projectId: string) => void;
+  onCreateTaskForIssue?: (taskId: string) => void;
+  onCreateSubtaskForTask?: (taskId: string) => void;
   onSplitTask?: (taskId: string) => void;
   notesSummaryByEntity?: NotesSummaryByEntity;
 }) {
@@ -516,6 +838,11 @@ export function ExecutionBoard({
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   );
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  const [menuState, setMenuState] = useState<{
+    kind: "project" | "task";
+    entityId: string;
+    position: { x: number; y: number };
+  } | null>(null);
   const [confirmingDeleteTask, setConfirmingDeleteTask] = useState<Task | null>(
     null
   );
@@ -534,6 +861,9 @@ export function ExecutionBoard({
   const [disableDeleteConfirmChoice, setDisableDeleteConfirmChoice] =
     useState(false);
   const [optimisticStatuses, setOptimisticStatuses] = useState<Record<string, TaskStatus>>({});
+  const [optimisticProjectStatuses, setOptimisticProjectStatuses] = useState<
+    Record<string, TaskStatus>
+  >({});
   const laneLabels: Record<TaskStatus, { title: string; detail: string }> = {
     backlog: { title: t("common.executionBoard.laneBacklogTitle"), detail: t("common.executionBoard.laneBacklogDetail") },
     focus: { title: t("common.executionBoard.laneFocusTitle"), detail: t("common.executionBoard.laneFocusDetail") },
@@ -549,9 +879,162 @@ export function ExecutionBoard({
       }),
     [optimisticStatuses, tasks]
   );
-  const activeTask = activeTaskId ? boardTasks.find((task) => task.id === activeTaskId) ?? null : null;
-  const activeGoal = activeTask ? goals.find((goal) => goal.id === activeTask.goalId) : undefined;
-  const activeTags = activeTask ? activeTask.tagIds.map((tagId) => tags.find((tag) => tag.id === tagId)).filter(Boolean) as Tag[] : [];
+  const boardProjects = useMemo(
+    () =>
+      projects.map((project) => {
+        const optimisticStatus = optimisticProjectStatuses[project.id];
+        return optimisticStatus
+          ? { ...project, workflowStatus: optimisticStatus }
+          : project;
+      }),
+    [optimisticProjectStatuses, projects]
+  );
+  const boardItems = useMemo<BoardItem[]>(
+    () => [
+      ...boardProjects.map((project) => ({
+        kind: "project" as const,
+        id: project.id,
+        status: project.workflowStatus,
+        project,
+        goal: goals.find((goal) => goal.id === project.goalId)
+      })),
+      ...boardTasks.map((task) => ({
+        kind: "task" as const,
+        id: task.id,
+        status: task.status,
+        task,
+        goal: goals.find((goal) => goal.id === task.goalId),
+        tags: task.tagIds
+          .map((tagId) => tags.find((tag) => tag.id === tagId))
+          .filter(Boolean) as Tag[]
+      }))
+    ],
+    [boardProjects, boardTasks, goals, tags]
+  );
+  const activeBoardItem = activeTaskId
+    ? boardItems.find((item) => item.id === activeTaskId) ?? null
+    : null;
+  const activeMenuItems = useMemo<FloatingActionMenuItem[]>(() => {
+    if (!menuState) {
+      return [];
+    }
+
+    if (menuState.kind === "project") {
+      const project = boardProjects.find((entry) => entry.id === menuState.entityId);
+      if (!project) {
+        return [];
+      }
+
+      return [
+        {
+          id: "open-project",
+          label: "Open",
+          description: "Jump to the project detail view.",
+          icon: ArrowUpRight,
+          onSelect: () => onOpenProject?.(project.id)
+        },
+        {
+          id: "edit-project",
+          label: "Edit",
+          description: "Open the guided project editor.",
+          icon: Pencil,
+          onSelect: () => onEditProject?.(project.id)
+        },
+        {
+          id: "link-project",
+          label: "Link",
+          description: "Open the anchor step to relink the project to its goal.",
+          icon: Link2,
+          onSelect: () => onLinkProject?.(project.id)
+        },
+        {
+          id: "create-issue",
+          label: "Create issue",
+          description: "Break this project into a new vertical slice issue.",
+          icon: PlusCircle,
+          onSelect: () => onCreateIssueForProject?.(project.id)
+        },
+        ...LANE_ORDER.filter((status) => status !== project.workflowStatus).map(
+          (status) => ({
+            id: `move-project-${status}`,
+            label: `Move to ${status.replaceAll("_", " ")}`,
+            description: "Update the project workflow lane without leaving the board.",
+            onSelect: () => void onMoveProject?.(project.id, status)
+          })
+        )
+      ];
+    }
+
+    const task = boardTasks.find((entry) => entry.id === menuState.entityId);
+    if (!task) {
+      return [];
+    }
+
+    const childCreateItem =
+      task.level === "issue"
+        ? {
+            id: "create-task",
+            label: "Create task",
+            description: "Add a focused execution task under this issue.",
+            icon: PlusCircle,
+            onSelect: () => onCreateTaskForIssue?.(task.id)
+          }
+        : task.level === "task"
+          ? {
+              id: "create-subtask",
+              label: "Create subtask",
+              description: "Add a granular child step under this task.",
+              icon: PlusCircle,
+              onSelect: () => onCreateSubtaskForTask?.(task.id)
+            }
+          : null;
+
+    return [
+      {
+        id: "open-task",
+        label: "Open",
+        description: "Jump to the work-item detail view.",
+        icon: ArrowUpRight,
+        onSelect: () => onOpenTask?.(task.id)
+      },
+      {
+        id: "edit-task",
+        label: "Edit",
+        description: "Open the guided work-item editor.",
+        icon: Pencil,
+        onSelect: () => onEditTask?.(task.id)
+      },
+      {
+        id: "link-task",
+        label: "Link",
+        description: "Open the placement step to relink this work item.",
+        icon: Link2,
+        onSelect: () => onLinkTask?.(task.id)
+      },
+      ...(childCreateItem ? [childCreateItem] : []),
+      ...LANE_ORDER.filter((status) => status !== task.status).map((status) => ({
+        id: `move-task-${status}`,
+        label: `Move to ${status.replaceAll("_", " ")}`,
+        description: "Update the workflow lane for this work item.",
+        onSelect: () => void onMove(task.id, status)
+      }))
+    ];
+  }, [
+    boardProjects,
+    boardTasks,
+    menuState,
+    onCreateIssueForProject,
+    onCreateSubtaskForTask,
+    onCreateTaskForIssue,
+    onEditProject,
+    onEditTask,
+    onLinkProject,
+    onLinkTask,
+    onMove,
+    onMoveProject,
+    onOpenProject,
+    onOpenTask
+  ]);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
@@ -605,10 +1088,32 @@ export function ExecutionBoard({
     });
   }, [tasks]);
 
+  useEffect(() => {
+    setOptimisticProjectStatuses((current) => {
+      const projectIds = new Set(projects.map((project) => project.id));
+      let changed = false;
+      const next: Record<string, TaskStatus> = {};
+
+      for (const [projectId, status] of Object.entries(current)) {
+        const project = projects.find((entry) => entry.id === projectId);
+        if (!projectIds.has(projectId) || !project || project.workflowStatus === status) {
+          changed = true;
+          continue;
+        }
+        next[projectId] = status;
+      }
+
+      return changed ? next : current;
+    });
+  }, [projects]);
+
   function handleDragStart(event: DragStartEvent) {
     const taskId = event.active.data.current?.taskId;
+    const projectId = event.active.data.current?.projectId;
     if (typeof taskId === "string") {
       setActiveTaskId(taskId);
+    } else if (typeof projectId === "string") {
+      setActiveTaskId(projectId);
     }
   }
 
@@ -652,43 +1157,95 @@ export function ExecutionBoard({
       return;
     }
 
-    const activeTaskId = typeof active.data.current?.taskId === "string" ? active.data.current.taskId : String(active.id);
-    const task = boardTasks.find((entry) => entry.id === activeTaskId);
-    if (!task) {
+    const activeTaskId = typeof active.data.current?.taskId === "string" ? active.data.current.taskId : null;
+    const activeProjectId =
+      typeof active.data.current?.projectId === "string"
+        ? active.data.current.projectId
+        : null;
+    const boardItem =
+      (activeTaskId
+        ? boardItems.find((entry) => entry.kind === "task" && entry.id === activeTaskId)
+        : null) ??
+      (activeProjectId
+        ? boardItems.find(
+            (entry) => entry.kind === "project" && entry.id === activeProjectId
+          )
+        : null);
+    if (!boardItem) {
       return;
     }
 
     if (over.data.current?.type === "trash") {
-      if (!onDeleteTask) {
+      if (boardItem.kind !== "task" || !onDeleteTask) {
         return;
       }
       if (skipDeleteConfirm) {
-        await deleteTaskNow(task, false);
+        await deleteTaskNow(boardItem.task, false);
         return;
       }
       setDisableDeleteConfirmChoice(false);
-      setConfirmingDeleteTask(task);
+      setConfirmingDeleteTask(boardItem.task);
       return;
     }
 
     const overStatus = typeof over.data.current?.status === "string" ? (over.data.current.status as TaskStatus) : null;
-    const overTaskId = typeof over.data.current?.taskId === "string" ? over.data.current.taskId : String(over.id);
-    const laneId = overStatus ?? (boardTasks.find((entry) => entry.id === overTaskId)?.status ?? task.status);
-    if (laneId !== task.status && LANE_ORDER.includes(laneId)) {
+    const overTaskId =
+      typeof over.data.current?.taskId === "string"
+        ? over.data.current.taskId
+        : null;
+    const overProjectId =
+      typeof over.data.current?.projectId === "string"
+        ? over.data.current.projectId
+        : null;
+    const overItem =
+      (overTaskId
+        ? boardItems.find((entry) => entry.kind === "task" && entry.id === overTaskId)
+        : null) ??
+      (overProjectId
+        ? boardItems.find(
+            (entry) => entry.kind === "project" && entry.id === overProjectId
+          )
+        : null);
+    const laneId = overStatus ?? overItem?.status ?? boardItem.status;
+    if (laneId === boardItem.status || !LANE_ORDER.includes(laneId)) {
+      return;
+    }
+
+    if (boardItem.kind === "task") {
       setOptimisticStatuses((current) => ({
         ...current,
-        [task.id]: laneId
+        [boardItem.task.id]: laneId
       }));
       try {
-        await onMove(task.id, laneId);
+        await onMove(boardItem.task.id, laneId);
       } catch (error) {
         setOptimisticStatuses((current) => {
           const next = { ...current };
-          delete next[task.id];
+          delete next[boardItem.task.id];
           return next;
         });
         throw error;
       }
+      return;
+    }
+
+    if (!onMoveProject) {
+      return;
+    }
+
+    setOptimisticProjectStatuses((current) => ({
+      ...current,
+      [boardItem.project.id]: laneId
+    }));
+    try {
+      await onMoveProject(boardItem.project.id, laneId);
+    } catch (error) {
+      setOptimisticProjectStatuses((current) => {
+        const next = { ...current };
+        delete next[boardItem.project.id];
+        return next;
+      });
+      throw error;
     }
   }
 
@@ -722,6 +1279,69 @@ export function ExecutionBoard({
     }
   }
 
+  async function handleStepProject(
+    projectId: string,
+    direction: "previous" | "next"
+  ) {
+    const project = boardProjects.find((entry) => entry.id === projectId);
+    if (!project || !onMoveProject) {
+      return;
+    }
+
+    const currentIndex = LANE_ORDER.indexOf(project.workflowStatus);
+    const nextIndex = direction === "previous" ? currentIndex - 1 : currentIndex + 1;
+    const nextStatus = LANE_ORDER[nextIndex] ?? null;
+    if (!nextStatus || nextStatus === project.workflowStatus) {
+      return;
+    }
+
+    setOptimisticProjectStatuses((current) => ({
+      ...current,
+      [project.id]: nextStatus
+    }));
+
+    try {
+      await onMoveProject(project.id, nextStatus);
+    } catch (error) {
+      setOptimisticProjectStatuses((current) => {
+        const next = { ...current };
+        delete next[project.id];
+        return next;
+      });
+      throw error;
+    }
+  }
+
+  function openTaskMenu(
+    event: ReactMouseEvent<HTMLButtonElement>,
+    task: Task
+  ) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setMenuState({
+      kind: "task",
+      entityId: task.id,
+      position: {
+        x: rect.right - 8,
+        y: rect.bottom + 8
+      }
+    });
+  }
+
+  function openProjectMenu(
+    event: ReactMouseEvent<HTMLButtonElement>,
+    project: ProjectSummary
+  ) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setMenuState({
+      kind: "project",
+      entityId: project.id,
+      position: {
+        x: rect.right - 8,
+        y: rect.bottom + 8
+      }
+    });
+  }
+
   return (
     <DndContext
       sensors={sensors}
@@ -730,7 +1350,7 @@ export function ExecutionBoard({
       onDragCancel={() => setActiveTaskId(null)}
       onDragEnd={(event) => void handleDragEnd(event)}
     >
-      {activeTask && onDeleteTask ? (
+      {activeBoardItem?.kind === "task" && onDeleteTask ? (
         <TrashDropzone
           droppableId={trashDroppableId}
           title={t("common.executionBoard.deleteDropTitle")}
@@ -741,37 +1361,55 @@ export function ExecutionBoard({
         {isMobileBoard ? (
           <div className="grid w-full max-w-full min-w-0 gap-2">
             {LANE_ORDER.map((status) => {
-              const laneTasks = boardTasks.filter((task) => task.status === status);
+              const laneItems = boardItems.filter((item) => item.status === status);
               return (
-                <SortableContext key={status} items={laneTasks.map((task) => `${boardInstanceId}:task:${task.id}`)} strategy={verticalListSortingStrategy}>
+                <SortableContext
+                  key={status}
+                  items={laneItems.map((item) => `${boardInstanceId}:${item.kind}:${item.id}`)}
+                  strategy={verticalListSortingStrategy}
+                >
                   <LaneDropzone
                     droppableId={`${boardInstanceId}:lane:${status}`}
                     status={status}
                     title={laneLabels[status].title}
                     detail={laneLabels[status].detail}
-                    count={laneTasks.length}
+                    count={laneItems.length}
                     dragging={activeTaskId !== null}
                   >
-                    {laneTasks.map((task) => (
-                      <SortableTaskCard
-                        key={task.id}
-                        sortableId={`${boardInstanceId}:task:${task.id}`}
-                        task={task}
-                        goal={goals.find((goal) => goal.id === task.goalId)}
-                        tags={task.tagIds.map((tagId) => tags.find((tag) => tag.id === tagId)).filter(Boolean) as Tag[]}
-                        isSelected={selectedTaskId === task.id}
-                        isMobile
-                        onSelect={onSelectTask}
-                        onStartTask={onStartTask}
-                        onQuickReopen={onQuickReopenTask}
-                        onStepTask={handleStepTask}
-                        onOpenTask={onOpenTask}
-                        onEditTask={onEditTask}
-                        onSplitTask={onSplitTask}
-                        notesSummaryByEntity={notesSummaryByEntity}
-                      />
-                    ))}
-                    {laneTasks.length === 0 ? (
+                    {laneItems.map((item) =>
+                      item.kind === "task" ? (
+                        <SortableTaskCard
+                          key={item.task.id}
+                          sortableId={`${boardInstanceId}:task:${item.task.id}`}
+                          task={item.task}
+                          goal={item.goal}
+                          tags={item.tags}
+                          isSelected={selectedTaskId === item.task.id}
+                          isMobile
+                          onSelect={onSelectTask}
+                          onStartTask={onStartTask}
+                          onQuickReopen={onQuickReopenTask}
+                          onStepTask={handleStepTask}
+                          onOpenTask={onOpenTask}
+                          onEditTask={onEditTask}
+                          onOpenMenu={openTaskMenu}
+                          onSplitTask={onSplitTask}
+                          notesSummaryByEntity={notesSummaryByEntity}
+                        />
+                      ) : (
+                        <SortableProjectCard
+                          key={item.project.id}
+                          sortableId={`${boardInstanceId}:project:${item.project.id}`}
+                          project={item.project}
+                          goal={item.goal}
+                          isMobile
+                          onStepProject={handleStepProject}
+                          onOpenProject={onOpenProject}
+                          onOpenMenu={openProjectMenu}
+                        />
+                      )
+                    )}
+                    {laneItems.length === 0 ? (
                       <div className="w-full max-w-full rounded-[18px] border border-dashed border-white/8 px-4 py-8 text-center text-sm text-white/35">
                         {t("common.executionBoard.emptyLane")}
                       </div>
@@ -784,36 +1422,53 @@ export function ExecutionBoard({
         ) : (
           <div className="grid w-full min-w-0 gap-0.5 xl:grid-cols-[repeat(5,minmax(0,1fr))]">
             {LANE_ORDER.map((status) => {
-              const laneTasks = boardTasks.filter((task) => task.status === status);
+              const laneItems = boardItems.filter((item) => item.status === status);
               return (
-                <SortableContext key={status} items={laneTasks.map((task) => `${boardInstanceId}:task:${task.id}`)} strategy={verticalListSortingStrategy}>
+                <SortableContext
+                  key={status}
+                  items={laneItems.map((item) => `${boardInstanceId}:${item.kind}:${item.id}`)}
+                  strategy={verticalListSortingStrategy}
+                >
                   <LaneDropzone
                     droppableId={`${boardInstanceId}:lane:${status}`}
                     status={status}
                     title={laneLabels[status].title}
                     detail={laneLabels[status].detail}
-                    count={laneTasks.length}
+                    count={laneItems.length}
                     dragging={activeTaskId !== null}
                   >
-                    {laneTasks.map((task) => (
-                      <SortableTaskCard
-                        key={task.id}
-                        sortableId={`${boardInstanceId}:task:${task.id}`}
-                        task={task}
-                        goal={goals.find((goal) => goal.id === task.goalId)}
-                        tags={task.tagIds.map((tagId) => tags.find((tag) => tag.id === tagId)).filter(Boolean) as Tag[]}
-                        isSelected={selectedTaskId === task.id}
-                        onSelect={onSelectTask}
-                        onStartTask={onStartTask}
-                        onQuickReopen={onQuickReopenTask}
-                        onStepTask={handleStepTask}
-                        onOpenTask={onOpenTask}
-                        onEditTask={onEditTask}
-                        onSplitTask={onSplitTask}
-                        notesSummaryByEntity={notesSummaryByEntity}
-                      />
-                    ))}
-                    {laneTasks.length === 0 ? (
+                    {laneItems.map((item) =>
+                      item.kind === "task" ? (
+                        <SortableTaskCard
+                          key={item.task.id}
+                          sortableId={`${boardInstanceId}:task:${item.task.id}`}
+                          task={item.task}
+                          goal={item.goal}
+                          tags={item.tags}
+                          isSelected={selectedTaskId === item.task.id}
+                          onSelect={onSelectTask}
+                          onStartTask={onStartTask}
+                          onQuickReopen={onQuickReopenTask}
+                          onStepTask={handleStepTask}
+                          onOpenTask={onOpenTask}
+                          onEditTask={onEditTask}
+                          onOpenMenu={openTaskMenu}
+                          onSplitTask={onSplitTask}
+                          notesSummaryByEntity={notesSummaryByEntity}
+                        />
+                      ) : (
+                        <SortableProjectCard
+                          key={item.project.id}
+                          sortableId={`${boardInstanceId}:project:${item.project.id}`}
+                          project={item.project}
+                          goal={item.goal}
+                          onStepProject={handleStepProject}
+                          onOpenProject={onOpenProject}
+                          onOpenMenu={openProjectMenu}
+                        />
+                      )
+                    )}
+                    {laneItems.length === 0 ? (
                       <div className="w-full max-w-full rounded-[18px] border border-dashed border-white/8 px-4 py-8 text-center text-sm text-white/35">
                         {t("common.executionBoard.emptyLane")}
                       </div>
@@ -826,24 +1481,53 @@ export function ExecutionBoard({
         )}
       </div>
       <DragOverlay adjustScale={false} dropAnimation={null}>
-        {activeTask ? (
+        {activeBoardItem ? (
           <div className="w-[20rem] max-w-[calc(100vw-2rem)]">
-            <TaskCardShell
-              task={activeTask}
-              goal={activeGoal}
-              tags={activeTags}
-              isSelected={selectedTaskId === activeTask.id}
-              isDragging
-              isOverlay
-              isMobile={isMobileBoard}
-              onSelect={() => {}}
-              onStartTask={onStartTask}
-              onSplitTask={onSplitTask}
-              notesSummaryByEntity={notesSummaryByEntity}
-            />
+            {activeBoardItem.kind === "task" ? (
+              <TaskCardShell
+                task={activeBoardItem.task}
+                goal={activeBoardItem.goal}
+                tags={activeBoardItem.tags}
+                isSelected={selectedTaskId === activeBoardItem.task.id}
+                isDragging
+                isOverlay
+                isMobile={isMobileBoard}
+                onSelect={() => {}}
+                onStartTask={onStartTask}
+                onSplitTask={onSplitTask}
+                notesSummaryByEntity={notesSummaryByEntity}
+              />
+            ) : (
+              <ProjectCardShell
+                project={activeBoardItem.project}
+                goal={activeBoardItem.goal}
+                isDragging
+                isOverlay
+                isMobile={isMobileBoard}
+                onOpenProject={onOpenProject}
+              />
+            )}
           </div>
         ) : null}
       </DragOverlay>
+      <FloatingActionMenu
+        open={menuState !== null}
+        title={
+          menuState?.kind === "project"
+            ? boardProjects.find((entry) => entry.id === menuState.entityId)?.title ??
+              "Project actions"
+            : boardTasks.find((entry) => entry.id === menuState?.entityId)?.title ??
+              "Work item actions"
+        }
+        subtitle={
+          menuState?.kind === "project"
+            ? "Edit, relink, move, or break this project into issues."
+            : "Edit, relink, move, or create the next child work item."
+        }
+        items={activeMenuItems}
+        position={menuState?.position ?? null}
+        onClose={() => setMenuState(null)}
+      />
       {confirmingDeleteTask ? (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[rgba(5,8,18,0.74)] p-4 backdrop-blur-xl">
           <Card className="w-full max-w-md border border-white/10 bg-[linear-gradient(180deg,rgba(16,22,36,0.96),rgba(9,13,22,0.98))] shadow-[0_32px_90px_rgba(5,8,18,0.58)]">

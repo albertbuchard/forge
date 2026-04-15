@@ -21,6 +21,16 @@ health sessions with reflective links, and work with file-first wiki pages.
 It also exposes a dedicated `forge_get_doctor` diagnostic tool for runtime and
 config-file health checks.
 
+Forge PM behavior Hermes should understand is:
+
+- `Goal -> Strategy -> Project -> Strategy -> Issue -> Task -> Subtask`
+- one mixed board for `project | issue | task | subtask`
+- one compact hierarchy view with shared search and filters
+- hierarchy-aware linking flows that can select or create goals, projects, issues, and parent work items
+- shared `executionMode` + `acceptanceCriteria` support on issues and tasks
+- `completionReport = { modifiedFiles[], workSummary, linkedGitRefIds[] }`
+- direct commits to `main` by default
+
 ## Install
 
 From the Forge repo:

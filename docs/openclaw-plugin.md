@@ -16,8 +16,10 @@ Forge's planning hierarchy is explicit:
 
 OpenClaw should preserve that hierarchy when it helps users plan or execute work.
 Projects are PRD-backed initiatives. Issues are vertical slices and must be marked
-`AFK` or `HITL`. Tasks are one focused AI session each, with `aiInstructions`
-written directly to the executing agent. Subtasks are lightweight child steps.
+`AFK` or `HITL`. Issues and tasks can both preserve `executionMode` and
+`acceptanceCriteria` when the delivery contract needs them. Tasks are one focused AI
+session each, with `aiInstructions` written directly to the executing agent. Subtasks
+are lightweight child steps.
 
 Task closeout should preserve:
 
@@ -27,6 +29,14 @@ Task closeout should preserve:
 
 OpenClaw should default to Forge's direct-to-`main` workflow and should not prompt
 for feature branches or pull requests unless the user explicitly asks for them.
+
+OpenClaw should also understand the current PM surfaces:
+
+- one shared board for `project`, `issue`, `task`, and `subtask`
+- one compact hierarchy view with shared search and filtering
+- guided modal flows for create, edit, link, move, and closeout actions
+- hierarchy-aware linking that can select or create a goal, project, issue, or parent
+  work item from the same search-first modal flow
 
 ## Session Bootstrap
 

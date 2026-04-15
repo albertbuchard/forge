@@ -769,11 +769,13 @@ export function ProjectDetailPage() {
         open={taskDialogOpen}
         goals={shell.snapshot.goals}
         projects={shell.snapshot.dashboard.projects}
+        workItems={shell.snapshot.workItems}
         tags={shell.snapshot.tags}
         users={shell.snapshot.users}
         editingTask={null}
         initialProjectId={isLegacyProject ? null : payload.project.id}
         defaultUserId={payload.project.userId ?? defaultUserId}
+        onRefreshEntities={shell.refresh}
         onOpenChange={setTaskDialogOpen}
         onSubmit={async (input, taskId) => {
           if (taskId) {

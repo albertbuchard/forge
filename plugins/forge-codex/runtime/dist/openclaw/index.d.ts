@@ -5,6 +5,6 @@ declare const pluginEntry: {
     description: string;
     configSchema: import("openclaw/plugin-sdk/plugin-entry").OpenClawPluginConfigSchema;
     register: NonNullable<import("openclaw/plugin-sdk/plugin-entry").OpenClawPluginDefinition["register"]>;
-} & Pick<import("openclaw/plugin-sdk/plugin-entry").OpenClawPluginDefinition, "kind">;
+} & Pick<import("openclaw/plugin-sdk/plugin-entry").OpenClawPluginDefinition, "kind" | "reload" | "nodeHostCommands" | "securityAuditCollectors">;
 export default pluginEntry;
 export { forgePluginConfigSchema, registerForgePlugin, resolveForgePluginConfig };

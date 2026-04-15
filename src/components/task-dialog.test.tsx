@@ -103,7 +103,14 @@ describe("TaskDialog", () => {
       </I18nProvider>
     );
 
-    fireEvent.click(screen.getByText("Forge Runtime"));
+    const anchorInput = screen.getByPlaceholderText(
+      'Search or create Goal, Project, or parent Issue like Goal + "Creative system"'
+    );
+    fireEvent.focus(anchorInput);
+    fireEvent.change(anchorInput, {
+      target: { value: "Forge Runtime" }
+    });
+    fireEvent.click(await screen.findByText("Forge Runtime"));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     fireEvent.change(
@@ -123,6 +130,7 @@ describe("TaskDialog", () => {
       target: { value: "2880" }
     });
     fireEvent.click(screen.getByText("Heavy"));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(await screen.findByRole("button", { name: "Create task" }));
 

@@ -25,6 +25,12 @@ const captures = [
     scrollTo: { x: 0, y: 320 }
   },
   {
+    name: "forge-project-hierarchy.png",
+    route: "projects/hierarchy",
+    waitForText: "HIERARCHY CONTROLS",
+    scrollTo: { x: 0, y: 180 }
+  },
+  {
     name: "forge-movement-life-timeline.png",
     route: "movement",
     waitForText: "Life graph",
@@ -34,8 +40,9 @@ const captures = [
   {
     name: "forge-sleep-overview.png",
     route: "sleep",
-    waitForText: "Recent sleep pattern",
-    scrollTo: { x: 0, y: 230 }
+    waitForText: "SLEEP CALENDAR",
+    waitForSelector: 'button[aria-label^="Select sleep for "]',
+    scrollTo: { x: 0, y: 150 }
   },
   {
     name: "forge-wiki-memory.png",

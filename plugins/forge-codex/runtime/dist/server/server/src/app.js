@@ -59,7 +59,7 @@ import { buildOpenApiDocument } from "./openapi.js";
 import { registerWebRoutes } from "./web.js";
 import { createManagerRuntime } from "./managers/runtime.js";
 import { isManagerError } from "./managers/type-guards.js";
-import { createCompanionPairingSession, createCompanionPairingSessionSchema, createSleepSession, createSleepSessionSchema, createWorkoutSession, createWorkoutSessionSchema, deleteSleepSession, deleteWorkoutSession, getCompanionPairingSessionById, getCompanionOverview, getFitnessViewData, getSleepSessionById, getSleepViewData, getWorkoutSessionById, ingestMobileHealthSync, mobileHealthSyncSchema, patchCompanionPairingSourceState, patchCompanionPairingSourceStateSchema, companionSourceKeySchema, requireValidPairing, revokeAllCompanionPairingSessions, revokeAllCompanionPairingSessionsSchema, revokeCompanionPairingSession, updateMobileCompanionSourceState, updateMobileCompanionSourceStateSchema, verifyCompanionPairing, verifyCompanionPairingSchema, updateSleepMetadata, updateSleepMetadataSchema, updateWorkoutMetadata, updateWorkoutMetadataSchema } from "./health.js";
+import { createCompanionPairingSession, createCompanionPairingSessionSchema, createSleepSession, createSleepSessionSchema, createWorkoutSession, createWorkoutSessionSchema, deleteSleepSession, deleteWorkoutSession, getCompanionPairingSessionById, getCompanionOverview, getFitnessViewData, getSleepSessionById, getSleepSessionDetailById, getSleepViewData, getVitalsViewData, getWorkoutSessionById, ingestMobileHealthSync, mobileHealthSyncSchema, patchCompanionPairingSourceState, patchCompanionPairingSourceStateSchema, companionSourceKeySchema, requireValidPairing, revokeAllCompanionPairingSessions, revokeAllCompanionPairingSessionsSchema, revokeCompanionPairingSession, updateMobileCompanionSourceState, updateMobileCompanionSourceStateSchema, verifyCompanionPairing, verifyCompanionPairingSchema, updateSleepMetadata, updateSleepMetadataSchema, updateWorkoutMetadata, updateWorkoutMetadataSchema } from "./health.js";
 import { analyzeMovementUserBoxPreflight, createMovementUserBox, createMovementPlace, deleteMovementUserBox, getMovementAllTimeSummary, getMovementBoxDetail, getMovementDayDetail, getMovementMobileBootstrap, getMovementTimeline, getMovementSelectionAggregate, getMovementSettings, getMovementTripDetail, getMovementMonthSummary, invalidateAutomaticMovementBox, listMovementPlaces, movementAutomaticBoxInvalidateSchema, movementMobileBootstrapSchema, movementMobilePlaceMutationSchema, movementMobileUserBoxCreateSchema, movementMobileUserBoxPreflightSchema, movementMobileUserBoxPatchSchema, movementMobileAutomaticBoxInvalidateSchema, movementMobileTimelineSchema, movementPlaceMutationSchema, movementPlacePatchSchema, movementSelectionAggregateSchema, movementStayPatchSchema, movementTripPatchSchema, movementUserBoxCreateSchema, movementUserBoxPreflightSchema, movementUserBoxPatchSchema, movementSettingsPatchSchema, movementTimelineQuerySchema, movementTripPointPatchSchema, deleteMovementStay, deleteMovementTrip, deleteMovementTripPoint, updateMovementPlace, updateMovementSettings, updateMovementStay, updateMovementTrip, updateMovementUserBox, updateMovementTripPoint, resolveMovementTimelineSegmentForBox } from "./movement.js";
 import { getScreenTimeAllTimeSummary, getScreenTimeDayDetail, getScreenTimeMonthSummary, getScreenTimeSettings, screenTimeSettingsPatchSchema, updateScreenTimeSettings } from "./screen-time.js";
 import { assertWatchReady, buildWatchBootstrap, ingestWatchCaptureBatch, mobileWatchBootstrapSchema, mobileWatchCaptureBatchSchema, mobileWatchHabitCheckInSchema } from "./watch-mobile.js";
@@ -1929,6 +1929,11 @@ function classifyOnboardingEntity(entityType) {
     if (entityType === "wiki_page" || entityType === "calendar_connection") {
         return "specialized_crud_entity";
     }
+    if (entityType === "movement" ||
+        entityType === "life_force" ||
+        entityType === "workbench") {
+        return "specialized_domain_surface";
+    }
     if (entityType === "task_run" ||
         entityType === "questionnaire_run" ||
         entityType === "preference_judgment" ||
@@ -1957,6 +1962,12 @@ function buildPreferredMutationPath(entityType) {
             return "Use /api/v1/preferences/signals to record one direct signal such as favorite or veto.";
         case "work_adjustment":
             return "Use /api/v1/work-adjustments to apply an explicit operator adjustment.";
+        case "movement":
+            return "Use the dedicated Movement route family for day, month, all-time, timeline, places, trip detail, selection aggregates, overlays, and repair actions.";
+        case "life_force":
+            return "Use the dedicated Life Force route family for overview, profile edits, weekday templates, and fatigue signals.";
+        case "workbench":
+            return "Use the dedicated Workbench route family for flow CRUD, execution, run history, published outputs, node results, and latest-node-output reads.";
         case "self_observation":
             return "Read the calendar surface; mutate it by creating or updating note-backed observations with frontmatter.observedAt.";
         case "sleep_overview":
@@ -1985,6 +1996,12 @@ function buildPreferredReadPath(entityType) {
             return "/api/v1/preferences/workspace";
         case "work_adjustment":
             return "/api/v1/operator/context";
+        case "movement":
+            return "/api/v1/movement/timeline";
+        case "life_force":
+            return "/api/v1/life-force";
+        case "workbench":
+            return "/api/v1/workbench/flows";
         case "self_observation":
             return "/api/v1/psyche/self-observation/calendar";
         case "sleep_overview":
@@ -2007,7 +2024,9 @@ function enrichOnboardingEntityGuide(entry) {
         preferredReadPath: buildPreferredReadPath(entry.entityType),
         preferredMutationTool: classification === "batch_crud_entity"
             ? "forge_create_entities | forge_update_entities | forge_delete_entities | forge_search_entities"
-            : null
+            : classification === "specialized_domain_surface"
+                ? "Follow forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces for the dedicated route family."
+                : null
     };
 }
 const AGENT_ONBOARDING_ENTITY_CATALOG = [
@@ -2706,6 +2725,7 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
     "Whenever possible, make the direction of the intake visible before the question by naming what you think the user is trying to preserve, clarify, decide, schedule, or make easier.",
     "When the user's operation is not already explicit, identify the job first: add, update, review, compare, navigate, link, or run.",
     "Before each question, decide the one missing thing you are trying to clarify and why it matters for the record.",
+    "The first question should usually clarify whether the user is trying to understand, preserve, decide, schedule, or change something, not just which field or provider they want.",
     "Use a progression of concrete example or intent, working name, purpose or meaning, placement in Forge, operational details, and linked context.",
     "Ask one to three focused questions at a time. One is usually best when the user is uncertain or emotionally loaded.",
     "One focused question is the default. Only stack a second question when both serve the same clarification job and the user is steady enough for it.",
@@ -2723,6 +2743,7 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
     "If the user accepts the wording or record shape, move to the write instead of reopening the intake.",
     "When updating an entity, start with what is changing, what should stay true, and what prompted the update now.",
     "For action-heavy flows such as work adjustments, preference judgments, preference signals, and specialized Movement, Life Force, or Workbench work, first ask what the user is trying to understand, change, add, update, link, or run, then choose the dedicated action or surface route instead of forcing the request into generic CRUD.",
+    "For specialized surfaces, ask what would make the answer or change useful before you ask route-shaped details such as provider, weekday, flow id, run id, or trip id.",
     "For Movement specifically, treat missing-data corrections as user-defined overlay boxes unless the user is editing an already-recorded stay or trip. When the user already gave a clear instruction like 'that missing block was home', act after only the last ambiguity is resolved."
 ];
 const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
@@ -2869,6 +2890,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
         askSequence: [
             "Ask which provider the user wants to connect and what they want Forge to do with it.",
             "Ask whether the goal is read-only visibility, writable planning, or both.",
+            "Ask what workflow they are trying to unlock so the connection stays grounded in a real use case.",
             "Ask only for the next provider-specific step that still matters, such as auth flow, label, or calendar selection.",
             "Move into the actual connection flow once the setup goal is clear."
         ]
@@ -2902,6 +2924,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
         askSequence: [
             "Ask what was observed.",
             "Reflect the moment without pretending it is already a finished interpretation.",
+            "Ask what felt most important to name before it gets smoothed over or forgotten.",
             "Ask for the smallest concrete slice if the observation still feels vague or global.",
             "Ask when it happened or became noticeable unless timing is already clear.",
             "Ask what it may connect to: pattern, belief, value, mode, task, project, or note.",
@@ -3007,6 +3030,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
             "Ask who it is for and when it should be used.",
             "Ask what kind of honest moment or decision it should help someone answer before getting into item wording.",
             "Reflect the practical use case back in plain language.",
+            "Ask what would make the instrument distinct instead of redundant if a near-duplicate risk is visible.",
             "Move to draft creation once the purpose is clear."
         ]
     },
@@ -3015,9 +3039,9 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
         openingQuestion: "Do you want to start, continue, review, or finish a questionnaire run?",
         coachingGoal: "Clarify whether the user wants to start, continue, or complete one answer session.",
         askSequence: [
-            "Ask which questionnaire run this is about.",
-            "Ask whether the user wants to start, continue, review, or complete it.",
-            "If the user wants to continue or finish, ask what state they are in right now before asking for more content.",
+            "Ask what the user wants from the run right now: start, continue, review, or finish.",
+            "Ask which questionnaire or existing run this is about.",
+            "If the user wants to continue or finish, ask what feels most stuck, unfinished, or important before asking for more content.",
             "If answering is still in progress, ask only for the next answer or note that matters."
         ]
     },
@@ -3032,6 +3056,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
             "Ask what they are trying to notice, preserve, or answer through that movement context.",
             "Skip the meta lane question when the user already named the exact correction or review target and only one ambiguity remains.",
             "If the request is filling a missing-data gap, use a user-defined movement box rather than a raw stay or trip patch.",
+            "If the request is repairing already-saved movement data, use the repair route that matches the saved object instead of treating it like a missing span.",
             "When the user already gave a concrete correction like 'I stayed home during that missing block', confirm only the interval or place if needed, then create the overlay and read the timeline back."
         ]
     },
@@ -3043,6 +3068,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
             "Ask whether the job is overview, profile change, weekday-template change, or fatigue signaling.",
             "Ask what part of the current energy picture feels most important or inaccurate.",
             "Ask what should stay true if they are changing profile or template assumptions.",
+            "Ask whether the user is describing a stable weekly shape or just how today feels when the lane is still blurred.",
             "If the user already named the life-force lane clearly, skip the meta lane question and ask only for the specific weekday, profile field, or signal that still matters.",
             "Route to the dedicated life-force path once the lane is clear."
         ]
@@ -3054,6 +3080,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
         askSequence: [
             "Ask whether the job is flow discovery, one flow edit, execution, run history, published output, node-level inspection, or latest-node-output lookup.",
             "Ask which flow, slug, run, or node the request is about.",
+            "Ask whether they need the flow contract, a run result, a published output, or a node result.",
             "Ask what the user is trying to learn, repair, or publish through that flow.",
             "If the user already named the flow and action clearly, skip the meta lane question and ask only for the missing run, node, or output scope.",
             "Route to the dedicated workbench route family once the execution lane is clear."
@@ -4000,7 +4027,7 @@ function buildAgentOnboardingPayload(request) {
             },
             specializedDomainSurfaces: {
                 movement: {
-                    summary: "Dedicated movement workspace API. Use these routes for stays, trips, time-in-place questions, visited places, trip detail, selected-span aggregates, and user-defined overlays.",
+                    summary: "Dedicated movement workspace API. Use these routes for stays, trips, time-in-place questions, visited places, trip detail, selection aggregates, user-defined overlays, and repair actions on already-recorded movement data.",
                     readRoutes: {
                         day: "/api/v1/movement/day",
                         month: "/api/v1/movement/month",
@@ -4025,7 +4052,7 @@ function buildAgentOnboardingPayload(request) {
                     notes: [
                         "Movement is not a normal batch CRUD entity family. It is a dedicated record of stays and trips: a stay means the user remained in the same place for a span of time, and a trip means they traveled between places.",
                         "Use /api/v1/movement/day, /month, /all-time, /timeline, or /selection when the user wants behavioral answers such as how long they stayed at home, when they traveled, which places dominated a period, or what happened across a selected span.",
-                        "Use the movement write routes when the user wants to add a place or manual overlay, update a specific stay or trip, or attach movement context to another Forge record. If the user is filling a missing-data gap, the usual write path is a user-defined overlay box rather than a raw stay or trip patch.",
+                        "Use the movement write routes when the user wants to add a place or manual overlay, update a specific stay or trip, repair one recorded movement span, or attach movement context to another Forge record. If the user is filling a missing-data gap, the usual write path is a user-defined overlay box rather than a raw stay or trip patch.",
                         "For an explicit statement like 'that missing block was me staying home', do not reopen broad intake. Preflight only if timing overlap is unclear, then create a user-defined `stay` box for that interval and read the updated timeline back."
                     ]
                 },
@@ -4169,6 +4196,11 @@ function buildAgentOnboardingPayload(request) {
             movementTripDetail: "/api/v1/movement/trips/:id",
             movementSelection: "/api/v1/movement/selection",
             movementUserBoxPreflight: "/api/v1/movement/user-boxes/preflight",
+            movementUserBoxUpdate: "/api/v1/movement/user-boxes/:id",
+            movementAutomaticBoxInvalidate: "/api/v1/movement/automatic-boxes/:id/invalidate",
+            movementStayUpdate: "/api/v1/movement/stays/:id",
+            movementTripUpdate: "/api/v1/movement/trips/:id",
+            movementTripPointUpdate: "/api/v1/movement/trips/:id/points/:pointId",
             workbenchFlows: "/api/v1/workbench/flows",
             workbenchFlowBySlug: "/api/v1/workbench/flows/by-slug/:slug",
             workbenchPublishedOutput: "/api/v1/workbench/flows/:id/output",
@@ -5325,8 +5357,20 @@ export async function buildServer(options = {}) {
         }
         return { sleep };
     });
+    app.get("/api/v1/health/sleep/:id/raw", async (request, reply) => {
+        const { id } = request.params;
+        const detail = getSleepSessionDetailById(id);
+        if (!detail) {
+            reply.code(404);
+            return { error: "Sleep session not found" };
+        }
+        return detail;
+    });
     app.get("/api/v1/health/fitness", async (request) => ({
         fitness: getFitnessViewData(resolveScopedUserIds(request.query))
+    }));
+    app.get("/api/v1/health/vitals", async (request) => ({
+        vitals: getVitalsViewData(resolveScopedUserIds(request.query))
     }));
     app.post("/api/v1/health/workouts", async (request, reply) => {
         const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/health/workouts" });
@@ -7283,6 +7327,32 @@ export async function buildServer(options = {}) {
         const query = taskListQuerySchema.parse(request.query ?? {});
         return {
             tasks: filterOwnedEntities("task", listTasks(query), query.userIds)
+        };
+    });
+    app.get("/api/v1/work-items", async (request) => {
+        const query = taskListQuerySchema.parse(request.query ?? {});
+        return {
+            workItems: filterOwnedEntities("task", listTasks(query), query.userIds)
+        };
+    });
+    app.get("/api/v1/work-items/board", async (request) => {
+        const query = taskListQuerySchema.parse(request.query ?? {});
+        const userIds = query.userIds;
+        return {
+            goals: filterOwnedEntities("goal", listGoals(), userIds),
+            strategies: listStrategies({ userIds }),
+            projects: listProjectSummaries({ userIds }),
+            workItems: filterOwnedEntities("task", listTasks(query), userIds)
+        };
+    });
+    app.get("/api/v1/work-items/hierarchy", async (request) => {
+        const query = taskListQuerySchema.parse(request.query ?? {});
+        const userIds = query.userIds;
+        return {
+            goals: filterOwnedEntities("goal", listGoals(), userIds),
+            strategies: listStrategies({ userIds }),
+            projects: listProjectSummaries({ userIds }),
+            workItems: filterOwnedEntities("task", listTasks(query), userIds)
         };
     });
     app.get("/api/v1/calendar/overview", async (request) => {
@@ -9277,6 +9347,15 @@ export async function buildServer(options = {}) {
         }
         return { task };
     });
+    app.get("/api/v1/work-items/:id", async (request, reply) => {
+        const { id } = request.params;
+        const workItem = getTaskById(id);
+        if (!workItem) {
+            reply.code(404);
+            return { error: "Work item not found" };
+        }
+        return { workItem };
+    });
     app.get("/api/tasks/:id/context", async (request, reply) => {
         markCompatibilityRoute(reply);
         const { id } = request.params;
@@ -9311,6 +9390,26 @@ export async function buildServer(options = {}) {
             goal: task.goalId ? (getGoalById(task.goalId) ?? null) : null,
             project: task.projectId
                 ? (listProjectSummaries().find((project) => project.id === task.projectId) ?? null)
+                : null,
+            activeTaskRun: taskRuns.find((run) => run.status === "active") ?? null,
+            taskRuns,
+            activity: listActivityEventsForTask(id, 20),
+            notesSummaryByEntity: buildNotesSummaryByEntity()
+        });
+    });
+    app.get("/api/v1/work-items/:id/context", async (request, reply) => {
+        const { id } = request.params;
+        const workItem = getTaskById(id);
+        if (!workItem) {
+            reply.code(404);
+            return { error: "Work item not found" };
+        }
+        const taskRuns = listTaskRuns({ taskId: id, limit: 10 });
+        return taskContextPayloadSchema.parse({
+            task: workItem,
+            goal: workItem.goalId ? (getGoalById(workItem.goalId) ?? null) : null,
+            project: workItem.projectId
+                ? (listProjectSummaries().find((project) => project.id === workItem.projectId) ?? null)
                 : null,
             activeTaskRun: taskRuns.find((run) => run.status === "active") ?? null,
             taskRuns,
@@ -9428,6 +9527,22 @@ export async function buildServer(options = {}) {
         }
         return { task: result.task };
     });
+    app.post("/api/v1/work-items", async (request, reply) => {
+        const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/work-items" });
+        const input = createTaskSchema.parse(request.body ?? {});
+        const idempotencyKey = parseIdempotencyKey(request.headers);
+        const activity = toActivityContext(auth);
+        const result = idempotencyKey
+            ? createTaskWithIdempotency(input, idempotencyKey, activity)
+            : { task: createTask(input, activity), replayed: false };
+        if (result.replayed) {
+            reply.code(200).header("Idempotency-Replayed", "true");
+        }
+        else {
+            reply.code(201);
+        }
+        return { workItem: result.task };
+    });
     app.post("/api/tasks/:id/runs", async (request, reply) => {
         markCompatibilityRoute(reply);
         const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/tasks/:id/runs" });
@@ -9472,6 +9587,16 @@ export async function buildServer(options = {}) {
         }
         return { task };
     });
+    app.patch("/api/v1/work-items/:id", async (request, reply) => {
+        const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/work-items/:id" });
+        const { id } = request.params;
+        const workItem = updateTask(id, updateTaskSchema.parse(request.body ?? {}), toActivityContext(auth));
+        if (!workItem) {
+            reply.code(404);
+            return { error: "Work item not found" };
+        }
+        return { workItem };
+    });
     app.post("/api/v1/tasks/:id/split", async (request, reply) => {
         const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/tasks/:id/split" });
         const { id } = request.params;
@@ -9491,6 +9616,16 @@ export async function buildServer(options = {}) {
             return { error: "Task not found" };
         }
         return { task };
+    });
+    app.delete("/api/v1/work-items/:id", async (request, reply) => {
+        const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/work-items/:id" });
+        const { id } = request.params;
+        const workItem = deleteEntity("task", id, entityDeleteQuerySchema.parse(request.query ?? {}), toActivityContext(auth));
+        if (!workItem) {
+            reply.code(404);
+            return { error: "Work item not found" };
+        }
+        return { workItem };
     });
     app.post("/api/v1/operator/log-work", async (request, reply) => {
         const auth = requireScopedAccess(request.headers, ["write", "rewards.manage"], { route: "/api/v1/operator/log-work" });

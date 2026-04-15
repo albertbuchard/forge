@@ -5,6 +5,7 @@ export type ForgeSupportedPluginApiRoute = {
   path: string;
   purpose:
     | "diagnostics"
+    | "calendar"
     | "overview"
     | "operator_context"
     | "onboarding"
@@ -52,6 +53,33 @@ export const FORGE_SUPPORTED_PLUGIN_API_ROUTES: ForgeSupportedPluginApiRoute[] =
     { method: "PATCH", path: "/api/v1/health/sleep/:id", purpose: "health" },
     { method: "GET", path: "/api/v1/health/fitness", purpose: "health" },
     { method: "PATCH", path: "/api/v1/health/workouts/:id", purpose: "health" },
+    { method: "GET", path: "/api/v1/calendar/overview", purpose: "calendar" },
+    {
+      method: "GET",
+      path: "/api/v1/calendar/connections",
+      purpose: "calendar"
+    },
+    {
+      method: "POST",
+      path: "/api/v1/calendar/connections",
+      purpose: "calendar"
+    },
+    {
+      method: "POST",
+      path: "/api/v1/calendar/connections/:id/sync",
+      purpose: "calendar"
+    },
+    {
+      method: "POST",
+      path: "/api/v1/calendar/work-block-templates",
+      purpose: "calendar"
+    },
+    {
+      method: "POST",
+      path: "/api/v1/calendar/timeboxes/recommend",
+      purpose: "calendar"
+    },
+    { method: "POST", path: "/api/v1/calendar/timeboxes", purpose: "calendar" },
     { method: "GET", path: "/api/v1/preferences/workspace", purpose: "preferences" },
     { method: "POST", path: "/api/v1/preferences/game/start", purpose: "preferences" },
     { method: "POST", path: "/api/v1/preferences/catalogs", purpose: "preferences" },

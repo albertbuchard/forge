@@ -1,21 +1,34 @@
 import { useEffect, useMemo, useState } from "react";
+import { Plus, Search, X } from "lucide-react";
 import {
   FlowChoiceGrid,
   FlowField,
   QuestionFlowDialog,
   type QuestionFlowStep
 } from "@/components/flows/question-flow-dialog";
+import { defaultGoalValues } from "@/components/goal-dialog";
 import { InlineNoteFields } from "@/components/notes/inline-note-fields";
+import { defaultProjectValues } from "@/components/project-dialog";
+import { Badge } from "@/components/ui/badge";
 import { EntityBadge } from "@/components/ui/entity-badge";
 import { EntityName } from "@/components/ui/entity-name";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { UserBadge } from "@/components/ui/user-badge";
 import { UserSelectField } from "@/components/ui/user-select-field";
+import { createGoal, createProject, createWorkItem } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { quickTaskSchema, type QuickTaskInput } from "@/lib/schemas";
-import type { Goal, ProjectSummary, Tag, Task, UserSummary } from "@/lib/types";
+import type {
+  Goal,
+  ProjectSummary,
+  Tag,
+  Task,
+  UserSummary,
+  WorkItemLevel
+} from "@/lib/types";
 import { formatOwnerSelectDefaultLabel } from "@/lib/user-ownership";
+import { cn } from "@/lib/utils";
 
 export const defaultTaskValues: QuickTaskInput = {
   title: "",
@@ -45,6 +58,8 @@ export const defaultTaskValues: QuickTaskInput = {
   notes: []
 };
 
+const EMPTY_WORK_ITEMS: Task[] = [];
+
 function parseMultilineList(value: string) {
   return value
     .split("\n")
@@ -69,6 +84,330 @@ function buildCompletionReport(options: {
     workSummary: options.workSummary,
     linkedGitRefIds: options.linkedGitRefIds
   };
+}
+
+type AnchorKind = "goal" | "project" | "issue" | "task";
+
+type ExistingAnchorOption = {
+  id: string;
+  kind: AnchorKind;
+  mode: "existing";
+  entityId: string;
+  label: string;
+  description: string;
+  searchText: string;
+  goalId: string | null;
+  projectId: string | null;
+  parentWorkItemId: string | null;
+};
+
+type CreateAnchorOption = {
+  id: string;
+  kind: AnchorKind;
+  mode: "create";
+  label: string;
+  description: string;
+  disabled?: boolean;
+  disabledReason?: string;
+};
+
+type AnchorOption = ExistingAnchorOption | CreateAnchorOption;
+
+function normalize(text: string) {
+  return text.trim().toLowerCase();
+}
+
+function getAllowedAnchorKinds(level: WorkItemLevel): AnchorKind[] {
+  if (level === "issue") {
+    return ["goal", "project"];
+  }
+  if (level === "task") {
+    return ["goal", "project", "issue"];
+  }
+  return ["goal", "project", "task"];
+}
+
+function getCreatableAnchorKinds(level: WorkItemLevel): AnchorKind[] {
+  if (level === "issue") {
+    return ["goal", "project"];
+  }
+  if (level === "task") {
+    return ["goal", "project", "issue"];
+  }
+  return ["goal", "project"];
+}
+
+function anchorKindToEntityKind(kind: AnchorKind) {
+  return kind === "task" ? "task" : kind;
+}
+
+function buildTaskDraft(options: {
+  editingTask: Task | null;
+  initialProjectId?: string | null;
+  initialGoalId?: string | null;
+  initialParentWorkItemId?: string | null;
+  initialLevel?: QuickTaskInput["level"];
+  defaultUserId?: string | null;
+  projects: ProjectSummary[];
+  users: UserSummary[];
+  workItems: Task[];
+}): QuickTaskInput {
+  const {
+    editingTask,
+    initialGoalId,
+    initialLevel,
+    initialParentWorkItemId,
+    initialProjectId,
+    defaultUserId,
+    projects,
+    users,
+    workItems
+  } = options;
+
+  if (editingTask) {
+    return taskToFormValues(editingTask);
+  }
+
+  const parent =
+    initialParentWorkItemId
+      ? workItems.find((item) => item.id === initialParentWorkItemId) ?? null
+      : null;
+  const project =
+    projects.find((entry) => entry.id === (parent?.projectId ?? initialProjectId)) ??
+    null;
+  const userId = project?.userId ?? defaultUserId ?? null;
+
+  return {
+    ...defaultTaskValues,
+    level:
+      initialLevel ??
+      (parent?.level === "issue"
+        ? "task"
+        : parent?.level === "task"
+          ? "subtask"
+          : defaultTaskValues.level),
+    owner:
+      users.find((user) => user.id === userId)?.displayName ??
+      defaultTaskValues.owner,
+    userId,
+    goalId: parent?.goalId ?? project?.goalId ?? initialGoalId ?? "",
+    projectId: project?.id ?? "",
+    parentWorkItemId: parent?.id ?? null
+  };
+}
+
+function buildSelectedAnchorOptions(options: {
+  draft: QuickTaskInput;
+  goals: Goal[];
+  projects: ProjectSummary[];
+  workItems: Task[];
+}): ExistingAnchorOption[] {
+  const { draft, goals, projects, workItems } = options;
+  const selected: ExistingAnchorOption[] = [];
+
+  if (draft.goalId) {
+    const goal = goals.find((entry) => entry.id === draft.goalId);
+    if (goal) {
+      selected.push({
+        id: `goal:${goal.id}`,
+        kind: "goal",
+        mode: "existing",
+        entityId: goal.id,
+        label: goal.title,
+        description: "Goal",
+        searchText: normalize(`${goal.title} ${goal.description}`),
+        goalId: goal.id,
+        projectId: null,
+        parentWorkItemId: null
+      });
+    }
+  }
+
+  if (draft.projectId) {
+    const project = projects.find((entry) => entry.id === draft.projectId);
+    if (project) {
+      selected.push({
+        id: `project:${project.id}`,
+        kind: "project",
+        mode: "existing",
+        entityId: project.id,
+        label: project.title,
+        description: "Project",
+        searchText: normalize(
+          `${project.title} ${project.description} ${project.goalTitle}`
+        ),
+        goalId: project.goalId,
+        projectId: project.id,
+        parentWorkItemId: null
+      });
+    }
+  }
+
+  if (draft.parentWorkItemId) {
+    const parent = workItems.find((entry) => entry.id === draft.parentWorkItemId);
+    if (parent) {
+      selected.push({
+        id: `${parent.level}:${parent.id}`,
+        kind: parent.level === "issue" ? "issue" : "task",
+        mode: "existing",
+        entityId: parent.id,
+        label: parent.title,
+        description: parent.level === "issue" ? "Issue" : "Task",
+        searchText: normalize(
+          `${parent.title} ${parent.description} ${parent.aiInstructions}`
+        ),
+        goalId: parent.goalId,
+        projectId: parent.projectId,
+        parentWorkItemId: parent.parentWorkItemId
+      });
+    }
+  }
+
+  return selected;
+}
+
+function buildExistingAnchorOptions(options: {
+  goals: Goal[];
+  projects: ProjectSummary[];
+  workItems: Task[];
+  allowedKinds: AnchorKind[];
+  editingTaskId?: string;
+}): ExistingAnchorOption[] {
+  const { goals, projects, workItems, allowedKinds, editingTaskId } = options;
+  const anchors: ExistingAnchorOption[] = [];
+
+  if (allowedKinds.includes("goal")) {
+    anchors.push(
+      ...goals.map((goal) => ({
+        id: `goal:${goal.id}`,
+        kind: "goal" as const,
+        mode: "existing" as const,
+        entityId: goal.id,
+        label: goal.title,
+        description: "Goal",
+        searchText: normalize(`${goal.title} ${goal.description}`),
+        goalId: goal.id,
+        projectId: null,
+        parentWorkItemId: null
+      }))
+    );
+  }
+
+  if (allowedKinds.includes("project")) {
+    anchors.push(
+      ...projects.map((project) => ({
+        id: `project:${project.id}`,
+        kind: "project" as const,
+        mode: "existing" as const,
+        entityId: project.id,
+        label: project.title,
+        description: `Project · ${project.goalTitle}`,
+        searchText: normalize(
+          `${project.title} ${project.description} ${project.goalTitle} ${project.productRequirementsDocument}`
+        ),
+        goalId: project.goalId,
+        projectId: project.id,
+        parentWorkItemId: null
+      }))
+    );
+  }
+
+  if (allowedKinds.includes("issue")) {
+    anchors.push(
+      ...workItems
+        .filter((item) => item.level === "issue" && item.id !== editingTaskId)
+        .map((item) => ({
+          id: `issue:${item.id}`,
+          kind: "issue" as const,
+          mode: "existing" as const,
+          entityId: item.id,
+          label: item.title,
+          description: "Issue",
+          searchText: normalize(
+            `${item.title} ${item.description} ${item.aiInstructions} ${item.executionMode ?? ""}`
+          ),
+          goalId: item.goalId,
+          projectId: item.projectId,
+          parentWorkItemId: null
+        }))
+    );
+  }
+
+  if (allowedKinds.includes("task")) {
+    anchors.push(
+      ...workItems
+        .filter((item) => item.level === "task" && item.id !== editingTaskId)
+        .map((item) => ({
+          id: `task:${item.id}`,
+          kind: "task" as const,
+          mode: "existing" as const,
+          entityId: item.id,
+          label: item.title,
+          description: "Task",
+          searchText: normalize(
+            `${item.title} ${item.description} ${item.aiInstructions} ${item.executionMode ?? ""}`
+          ),
+          goalId: item.goalId,
+          projectId: item.projectId,
+          parentWorkItemId: item.parentWorkItemId
+        }))
+    );
+  }
+
+  return anchors;
+}
+
+function applyAnchorSelection(
+  current: QuickTaskInput,
+  option: ExistingAnchorOption,
+  workItems: Task[]
+): Partial<QuickTaskInput> {
+  if (option.kind === "goal") {
+    const currentProject = current.projectId
+      ? workItems.find((item) => item.projectId === current.projectId) ?? null
+      : null;
+    const projectStillMatches =
+      !current.projectId ||
+      currentProject?.goalId === option.entityId ||
+      option.goalId === current.goalId;
+    return {
+      goalId: option.entityId,
+      projectId: projectStillMatches ? current.projectId : "",
+      parentWorkItemId: projectStillMatches ? current.parentWorkItemId : null
+    };
+  }
+
+  if (option.kind === "project") {
+    const currentParent = current.parentWorkItemId
+      ? workItems.find((item) => item.id === current.parentWorkItemId) ?? null
+      : null;
+    return {
+      goalId: option.goalId ?? current.goalId,
+      projectId: option.entityId,
+      parentWorkItemId:
+        !currentParent || currentParent.projectId === option.entityId
+          ? current.parentWorkItemId
+          : null
+    };
+  }
+
+  return {
+    goalId: option.goalId ?? current.goalId,
+    projectId: option.projectId ?? current.projectId,
+    parentWorkItemId: option.entityId
+  };
+}
+
+function clearAnchorSelection(
+  kind: AnchorKind
+): Partial<QuickTaskInput> {
+  if (kind === "goal") {
+    return { goalId: "", projectId: "", parentWorkItemId: null };
+  }
+  if (kind === "project") {
+    return { projectId: "", parentWorkItemId: null };
+  }
+  return { parentWorkItemId: null };
 }
 
 function taskToFormValues(task: Task): QuickTaskInput {
@@ -105,28 +444,41 @@ export function TaskDialog({
   open,
   goals,
   projects,
+  workItems,
   tags,
   users,
   editingTask,
   initialProjectId,
+  initialGoalId,
+  initialParentWorkItemId,
+  initialLevel,
+  initialStepId,
   defaultUserId = null,
+  onRefreshEntities,
   onOpenChange,
   onSubmit
 }: {
   open: boolean;
   goals: Goal[];
   projects: ProjectSummary[];
+  workItems?: Task[];
   tags: Tag[];
   users?: UserSummary[];
   editingTask: Task | null;
   initialProjectId?: string | null;
+  initialGoalId?: string | null;
+  initialParentWorkItemId?: string | null;
+  initialLevel?: QuickTaskInput["level"];
+  initialStepId?: string;
   defaultUserId?: string | null;
+  onRefreshEntities?: () => Promise<void> | void;
   onOpenChange: (open: boolean) => void;
   onSubmit: (input: QuickTaskInput, taskId?: string) => Promise<void>;
 }) {
   const { t } = useI18n();
   const safeGoals = goals ?? [];
   const safeProjects = projects ?? [];
+  const safeWorkItems = workItems ?? EMPTY_WORK_ITEMS;
   const safeTags = tags ?? [];
   const safeUsers = users ?? [];
   const [draft, setDraft] = useState<QuickTaskInput>(defaultTaskValues);
@@ -134,6 +486,12 @@ export function TaskDialog({
   const [fieldErrors, setFieldErrors] = useState<
     Record<string, string | undefined>
   >({});
+  const [anchorQuery, setAnchorQuery] = useState("");
+  const [anchorOpen, setAnchorOpen] = useState(false);
+  const [anchorHighlightedIndex, setAnchorHighlightedIndex] = useState(0);
+  const [anchorError, setAnchorError] = useState<string | null>(null);
+  const [anchorCreatePendingId, setAnchorCreatePendingId] =
+    useState<string | null>(null);
 
   const updateFieldErrors = (errors: Record<string, string[] | undefined>) => {
     setFieldErrors(
@@ -150,36 +508,36 @@ export function TaskDialog({
 
     setSubmitError(null);
     setFieldErrors({});
+    setAnchorQuery("");
+    setAnchorOpen(false);
+    setAnchorHighlightedIndex(0);
+    setAnchorError(null);
+    setAnchorCreatePendingId(null);
 
     setDraft(
-      editingTask
-        ? taskToFormValues(editingTask)
-        : {
-            ...defaultTaskValues,
-            owner:
-              safeUsers.find(
-                (user) =>
-                  user.id ===
-                  (safeProjects.find(
-                    (project) => project.id === initialProjectId
-                  )?.userId ?? defaultUserId)
-              )?.displayName ?? defaultTaskValues.owner,
-            userId:
-              safeProjects.find((project) => project.id === initialProjectId)
-                ?.userId ?? defaultUserId,
-            projectId: initialProjectId ?? "",
-            goalId:
-              safeProjects.find((project) => project.id === initialProjectId)
-                ?.goalId ?? ""
-          }
+      buildTaskDraft({
+        editingTask,
+        initialGoalId,
+        initialLevel,
+        initialParentWorkItemId,
+        initialProjectId,
+        defaultUserId,
+        projects: safeProjects,
+        users: safeUsers,
+        workItems: safeWorkItems
+      })
     );
   }, [
     defaultUserId,
     editingTask,
+    initialGoalId,
+    initialLevel,
+    initialParentWorkItemId,
     initialProjectId,
     open,
     safeProjects,
-    safeUsers
+    safeUsers,
+    safeWorkItems
   ]);
 
   const selectedProject = useMemo(
@@ -187,6 +545,88 @@ export function TaskDialog({
       safeProjects.find((project) => project.id === draft.projectId) ?? null,
     [draft.projectId, safeProjects]
   );
+  const allowedAnchorKinds = useMemo(
+    () => getAllowedAnchorKinds(draft.level),
+    [draft.level]
+  );
+  const creatableAnchorKinds = useMemo(
+    () => getCreatableAnchorKinds(draft.level),
+    [draft.level]
+  );
+  const selectedAnchorOptions = useMemo(
+    () =>
+      buildSelectedAnchorOptions({
+        draft,
+        goals: safeGoals,
+        projects: safeProjects,
+        workItems: safeWorkItems
+      }),
+    [draft, safeGoals, safeProjects, safeWorkItems]
+  );
+  const availableAnchorOptions = useMemo(
+    () =>
+      buildExistingAnchorOptions({
+        goals: safeGoals,
+        projects: safeProjects,
+        workItems: safeWorkItems,
+        allowedKinds: allowedAnchorKinds,
+        editingTaskId: editingTask?.id
+      }),
+    [allowedAnchorKinds, editingTask?.id, safeGoals, safeProjects, safeWorkItems]
+  );
+  const anchorSuggestions = useMemo<AnchorOption[]>(() => {
+    const normalizedQuery = normalize(anchorQuery);
+    const matchingExisting =
+      normalizedQuery.length === 0
+        ? availableAnchorOptions.slice(0, 8)
+        : availableAnchorOptions
+            .filter((option) => option.searchText.includes(normalizedQuery))
+            .slice(0, 8);
+
+    if (normalizedQuery.length === 0) {
+      return matchingExisting;
+    }
+
+    const createSuggestions = creatableAnchorKinds.map((kind) => {
+      if (kind === "project" && !draft.goalId) {
+        return {
+          id: `create:${kind}:${normalizedQuery}`,
+          kind,
+          mode: "create" as const,
+          label: anchorQuery.trim(),
+          description: "Pick or create a goal first, then create a project here.",
+          disabled: true,
+          disabledReason: "Pick or create a goal first."
+        };
+      }
+      if (kind === "issue" && !draft.projectId) {
+        return {
+          id: `create:${kind}:${normalizedQuery}`,
+          kind,
+          mode: "create" as const,
+          label: anchorQuery.trim(),
+          description: "Pick or create a project first, then create an issue here.",
+          disabled: true,
+          disabledReason: "Pick or create a project first."
+        };
+      }
+      return {
+        id: `create:${kind}:${normalizedQuery}`,
+        kind,
+        mode: "create" as const,
+        label: anchorQuery.trim(),
+        description: `Create a new ${kind} from "${anchorQuery.trim()}".`
+      };
+    });
+
+    return [...matchingExisting, ...createSuggestions];
+  }, [
+    anchorQuery,
+    availableAnchorOptions,
+    creatableAnchorKinds,
+    draft.goalId,
+    draft.projectId
+  ]);
   const suggestedUser =
     safeUsers.find(
       (user) => user.id === (selectedProject?.userId ?? defaultUserId)
@@ -201,80 +641,339 @@ export function TaskDialog({
     }
   }, [draft.goalId, selectedProject]);
 
+  const selectAnchor = (option: ExistingAnchorOption) => {
+    setDraft((current) => ({
+      ...current,
+      ...applyAnchorSelection(current, option, safeWorkItems)
+    }));
+    setAnchorQuery("");
+    setAnchorError(null);
+    setAnchorHighlightedIndex(0);
+    setAnchorOpen(false);
+  };
+
+  const removeAnchor = (kind: AnchorKind) => {
+    setDraft((current) => ({
+      ...current,
+      ...clearAnchorSelection(kind)
+    }));
+    setAnchorError(null);
+  };
+
+  const createAnchor = async (option: CreateAnchorOption) => {
+    if (option.disabled) {
+      setAnchorError(option.disabledReason ?? option.description);
+      return;
+    }
+
+    const title = option.label.trim();
+    if (!title) {
+      return;
+    }
+
+    setAnchorCreatePendingId(option.id);
+    setAnchorError(null);
+
+    try {
+      if (option.kind === "goal") {
+        const response = await createGoal({
+          ...defaultGoalValues,
+          title,
+          userId: draft.userId ?? null
+        });
+        await onRefreshEntities?.();
+        selectAnchor({
+          id: `goal:${response.goal.id}`,
+          kind: "goal",
+          mode: "existing",
+          entityId: response.goal.id,
+          label: response.goal.title,
+          description: "Goal",
+          searchText: normalize(`${response.goal.title} ${response.goal.description}`),
+          goalId: response.goal.id,
+          projectId: null,
+          parentWorkItemId: null
+        });
+        return;
+      }
+
+      if (option.kind === "project") {
+        if (!draft.goalId) {
+          throw new Error("Pick or create a goal first.");
+        }
+        const response = await createProject({
+          ...defaultProjectValues,
+          goalId: draft.goalId,
+          title,
+          userId: draft.userId ?? null,
+          assigneeUserIds: draft.assigneeUserIds
+        });
+        await onRefreshEntities?.();
+        selectAnchor({
+          id: `project:${response.project.id}`,
+          kind: "project",
+          mode: "existing",
+          entityId: response.project.id,
+          label: response.project.title,
+          description: "Project",
+          searchText: normalize(
+            `${response.project.title} ${response.project.description}`
+          ),
+          goalId: response.project.goalId,
+          projectId: response.project.id,
+          parentWorkItemId: null
+        });
+        return;
+      }
+
+      if (option.kind === "issue") {
+        if (!draft.projectId) {
+          throw new Error("Pick or create a project first.");
+        }
+        const response = await createWorkItem({
+          ...defaultTaskValues,
+          level: "issue",
+          title,
+          owner: draft.owner,
+          userId: draft.userId ?? null,
+          assigneeUserIds: draft.assigneeUserIds,
+          goalId: draft.goalId,
+          projectId: draft.projectId,
+          executionMode: "afk"
+        });
+        await onRefreshEntities?.();
+        selectAnchor({
+          id: `issue:${response.workItem.id}`,
+          kind: "issue",
+          mode: "existing",
+          entityId: response.workItem.id,
+          label: response.workItem.title,
+          description: "Issue",
+          searchText: normalize(
+            `${response.workItem.title} ${response.workItem.description}`
+          ),
+          goalId: response.workItem.goalId,
+          projectId: response.workItem.projectId,
+          parentWorkItemId: null
+        });
+      }
+    } catch (error) {
+      setAnchorError(
+        error instanceof Error
+          ? error.message
+          : "Unable to create that linked entity right now."
+      );
+    } finally {
+      setAnchorCreatePendingId(null);
+    }
+  };
+
   const steps: Array<QuestionFlowStep<QuickTaskInput>> = [
     {
       id: "anchor",
       eyebrow: "Placement",
-      title: "Choose where this task belongs",
+      title: "Choose where this work belongs",
       description:
-        "Link the task to the right project so the board, life goal, and rewards stay connected.",
+        "Anchor the work through the hierarchy. Tasks can carry a goal, project, and issue parent together so the chain of meaning stays explicit.",
       render: (value, setValue) => (
         <>
           <FlowField
-            label={t("common.dialogs.task.project")}
-            labelHelp="Projects are the main home for tasks. Pick the stream of work this task belongs to."
+            label="Hierarchy anchors"
+            labelHelp="Pick the goal and project anchors, then choose the real parent where needed. Tasks can live under issues, subtasks under tasks."
             error={fieldErrors.projectId ?? null}
           >
             <div className="grid gap-3">
-              {safeProjects.map((project) => {
-                const selected = project.id === value.projectId;
-                return (
-                  <button
-                    key={project.id}
-                    type="button"
-                    className={`rounded-[22px] border px-4 py-4 text-left transition ${
-                      selected
-                        ? "border-[rgba(192,193,255,0.28)] bg-[rgba(192,193,255,0.14)] text-white"
-                        : "border-white/8 bg-white/[0.04] text-white/72 hover:bg-white/[0.07]"
-                    }`}
-                    onClick={() =>
-                      setValue({
-                        projectId: project.id,
-                        goalId: project.goalId
-                      })
-                    }
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <EntityName
-                        kind="project"
-                        label={project.title}
-                        className="min-w-0"
-                        showIcon={false}
-                      />
-                      <div className="flex flex-wrap items-center justify-end gap-2">
+              <div className="rounded-[24px] border border-white/10 bg-white/[0.04] p-4">
+                {selectedAnchorOptions.length > 0 ? (
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    {selectedAnchorOptions.map((option) => (
+                      <span
+                        key={option.id}
+                        className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.06] px-2.5 py-1.5"
+                      >
                         <EntityBadge
-                          kind="goal"
-                          label={project.goalTitle}
+                          kind={anchorKindToEntityKind(option.kind)}
+                          label={option.label}
                           compact
                           gradient={false}
+                          className="max-w-[16rem]"
                         />
-                        <UserBadge user={project.user} compact />
-                      </div>
+                        <button
+                          type="button"
+                          className="rounded-full text-white/52 transition hover:text-white"
+                          onClick={() => removeAnchor(option.kind)}
+                          aria-label={`Remove ${option.label}`}
+                        >
+                          <X className="size-3.5" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+
+                <div className="relative">
+                  <div className="flex items-center gap-3 rounded-[18px] border border-white/8 bg-black/20 px-4 py-3">
+                    <Search className="size-4 text-white/36" />
+                    <input
+                      value={anchorQuery}
+                      onChange={(event) => {
+                        setAnchorQuery(event.target.value);
+                        setAnchorOpen(true);
+                        setAnchorHighlightedIndex(0);
+                        setAnchorError(null);
+                      }}
+                      onFocus={() => setAnchorOpen(true)}
+                      onBlur={() => {
+                        window.setTimeout(() => setAnchorOpen(false), 120);
+                      }}
+                      onKeyDown={(event) => {
+                        if (
+                          event.key === "Backspace" &&
+                          !anchorQuery &&
+                          selectedAnchorOptions.length > 0
+                        ) {
+                          removeAnchor(
+                            selectedAnchorOptions[selectedAnchorOptions.length - 1]!.kind
+                          );
+                          return;
+                        }
+
+                        if (event.key === "ArrowDown") {
+                          event.preventDefault();
+                          setAnchorOpen(true);
+                          setAnchorHighlightedIndex((current) =>
+                            anchorSuggestions.length === 0
+                              ? 0
+                              : Math.min(anchorSuggestions.length - 1, current + 1)
+                          );
+                          return;
+                        }
+
+                        if (event.key === "ArrowUp") {
+                          event.preventDefault();
+                          setAnchorHighlightedIndex((current) =>
+                            Math.max(0, current - 1)
+                          );
+                          return;
+                        }
+
+                        if (event.key === "Escape") {
+                          setAnchorOpen(false);
+                          return;
+                        }
+
+                        if (
+                          event.key === "Enter" &&
+                          anchorSuggestions[anchorHighlightedIndex]
+                        ) {
+                          event.preventDefault();
+                          const suggestion =
+                            anchorSuggestions[anchorHighlightedIndex]!;
+                          if (suggestion.mode === "existing") {
+                            selectAnchor(suggestion);
+                          } else {
+                            void createAnchor(suggestion);
+                          }
+                        }
+                      }}
+                      placeholder='Search or create Goal, Project, or parent Issue like Goal + "Creative system"'
+                      className="min-w-0 flex-1 bg-transparent text-sm text-white placeholder:text-white/34 focus:outline-none"
+                    />
+                  </div>
+
+                  {anchorOpen ? (
+                    <div className="absolute top-full z-20 mt-2 w-full rounded-[22px] border border-white/8 bg-[rgba(8,13,24,0.96)] p-2 shadow-[0_26px_60px_rgba(4,8,18,0.32)] backdrop-blur-xl">
+                      {anchorSuggestions.length > 0 ? (
+                        anchorSuggestions.map((suggestion, index) => (
+                          <button
+                            key={suggestion.id}
+                            type="button"
+                            disabled={
+                              suggestion.mode === "create" && suggestion.disabled
+                            }
+                            className={cn(
+                              "flex w-full items-start justify-between gap-3 rounded-[18px] px-3 py-2.5 text-left transition",
+                              index === anchorHighlightedIndex
+                                ? "bg-white/[0.1] text-white"
+                                : "text-white/70 hover:bg-white/[0.06] hover:text-white",
+                              suggestion.mode === "create" &&
+                                suggestion.disabled &&
+                                "cursor-not-allowed opacity-45"
+                            )}
+                            onMouseEnter={() => setAnchorHighlightedIndex(index)}
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => {
+                              if (suggestion.mode === "existing") {
+                                selectAnchor(suggestion);
+                                return;
+                              }
+                              void createAnchor(suggestion);
+                            }}
+                          >
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <EntityBadge
+                                  kind={anchorKindToEntityKind(suggestion.kind)}
+                                  label={
+                                    suggestion.mode === "create"
+                                      ? `Create ${suggestion.kind}`
+                                      : suggestion.label
+                                  }
+                                  compact
+                                  gradient={false}
+                                />
+                                {suggestion.mode === "create" ? (
+                                  <Badge className="bg-white/[0.08] text-white/70">
+                                    "{suggestion.label}"
+                                  </Badge>
+                                ) : null}
+                              </div>
+                              <div className="mt-1 text-xs leading-5 text-white/46">
+                                {suggestion.description}
+                              </div>
+                            </div>
+                            {suggestion.mode === "create" ? (
+                              <span className="rounded-full bg-[var(--primary)]/12 p-2 text-[var(--primary)]">
+                                <Plus className="size-3.5" />
+                              </span>
+                            ) : null}
+                          </button>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2.5 text-sm text-white/42">
+                          Type to find an existing anchor or create a new one.
+                        </div>
+                      )}
                     </div>
-                    <div className="mt-2 text-sm leading-6 text-white/54">
-                      {project.description}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </FlowField>
-          <FlowField
-            label={t("common.dialogs.task.goal")}
-            labelHelp="The life goal is shown automatically from the project so you can still see the bigger reason this task matters."
-          >
-            <Input
-              readOnly
-              value={
-                selectedProject
-                  ? (safeGoals.find(
-                      (goal) => goal.id === selectedProject.goalId
-                    )?.title ?? "")
-                  : ""
-              }
-              placeholder="The linked life goal will appear here."
-            />
-          </FlowField>
+                  ) : null}
+                </div>
+
+	                {anchorError ? (
+	                  <div className="mt-3 rounded-[16px] border border-rose-400/16 bg-rose-400/10 px-3 py-2 text-sm text-rose-100">
+	                    {anchorError}
+	                  </div>
+	                ) : null}
+	              </div>
+	            </div>
+	          </FlowField>
+	          <div className="grid gap-3 md:grid-cols-2">
+            <FlowField label="Resolved project">
+              <Input
+                readOnly
+                value={selectedProject?.title ?? ""}
+                placeholder="Select or create a project anchor"
+              />
+            </FlowField>
+            <FlowField label="Resolved goal">
+              <Input
+                readOnly
+                value={
+                  safeGoals.find((goal) => goal.id === value.goalId)?.title ?? ""
+                }
+                placeholder="Select or create a goal anchor"
+              />
+            </FlowField>
+          </div>
         </>
       )
     },
@@ -330,7 +1029,7 @@ export function TaskDialog({
               placeholder="Write the task description in Markdown. Keep it short or turn it into a full acceptance doc."
             />
           </FlowField>
-          {value.level === "issue" ? (
+          {value.level === "issue" || value.level === "task" ? (
             <>
               <FlowField label="Execution mode">
                 <FlowChoiceGrid
@@ -755,6 +1454,7 @@ export function TaskDialog({
       value={draft}
       onChange={setDraft}
       steps={steps}
+      initialStepId={initialStepId}
       submitLabel={
         editingTask
           ? t("common.dialogs.task.save")

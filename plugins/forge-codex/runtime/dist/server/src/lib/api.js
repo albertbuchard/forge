@@ -1388,6 +1388,62 @@ export function getProject(projectId) {
 export function getProjectBoard(projectId) {
     return request(`/api/v1/projects/${projectId}/board`);
 }
+export function getWorkItemsBoard(params) {
+    const query = new URLSearchParams();
+    if (params?.projectId) {
+        query.set("projectId", params.projectId);
+    }
+    if (params?.goalId) {
+        query.set("goalId", params.goalId);
+    }
+    if (Array.isArray(params?.levels) && params.levels.length > 0) {
+        query.set("levels", params.levels.join(","));
+    }
+    if (Array.isArray(params?.userIds)) {
+        for (const userId of params.userIds) {
+            if (typeof userId === "string" && userId.trim().length > 0) {
+                query.append("userIds", userId);
+            }
+        }
+    }
+    if (Array.isArray(params?.assigneeIds)) {
+        for (const userId of params.assigneeIds) {
+            if (typeof userId === "string" && userId.trim().length > 0) {
+                query.append("assigneeIds", userId);
+            }
+        }
+    }
+    const suffix = query.toString().length > 0 ? `?${query.toString()}` : "";
+    return request(`/api/v1/work-items/board${suffix}`);
+}
+export function getWorkItemsHierarchy(params) {
+    const query = new URLSearchParams();
+    if (params?.projectId) {
+        query.set("projectId", params.projectId);
+    }
+    if (params?.goalId) {
+        query.set("goalId", params.goalId);
+    }
+    if (Array.isArray(params?.levels) && params.levels.length > 0) {
+        query.set("levels", params.levels.join(","));
+    }
+    if (Array.isArray(params?.userIds)) {
+        for (const userId of params.userIds) {
+            if (typeof userId === "string" && userId.trim().length > 0) {
+                query.append("userIds", userId);
+            }
+        }
+    }
+    if (Array.isArray(params?.assigneeIds)) {
+        for (const userId of params.assigneeIds) {
+            if (typeof userId === "string" && userId.trim().length > 0) {
+                query.append("assigneeIds", userId);
+            }
+        }
+    }
+    const suffix = query.toString().length > 0 ? `?${query.toString()}` : "";
+    return request(`/api/v1/work-items/hierarchy${suffix}`);
+}
 export function getOperatorContext() {
     return request("/api/v1/operator/context");
 }
@@ -1552,11 +1608,20 @@ export function getSleepView(userIds) {
     const suffix = search.size > 0 ? `?${search.toString()}` : "";
     return request(`/api/v1/health/sleep${suffix}`);
 }
+export function getSleepSessionRawDetail(sleepId) {
+    return request(`/api/v1/health/sleep/${sleepId}/raw`);
+}
 export function getFitnessView(userIds) {
     const search = new URLSearchParams();
     appendUserIds(search, coerceUserIds(userIds));
     const suffix = search.size > 0 ? `?${search.toString()}` : "";
     return request(`/api/v1/health/fitness${suffix}`);
+}
+export function getVitalsView(userIds) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(userIds));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/health/vitals${suffix}`);
 }
 export function getMovementDay(input) {
     const search = new URLSearchParams();
@@ -2066,6 +2131,7 @@ export function createTask(input) {
         ...input,
         goalId: input.goalId || null,
         projectId: input.projectId || null,
+        parentWorkItemId: input.parentWorkItemId || null,
         dueDate: input.dueDate || null,
         plannedDurationSeconds: input.plannedDurationSeconds === undefined
             ? null
@@ -2077,6 +2143,23 @@ export function createTask(input) {
         body: JSON.stringify(normalized)
     });
 }
+export function createWorkItem(input) {
+    const normalized = {
+        ...input,
+        goalId: input.goalId || null,
+        projectId: input.projectId || null,
+        parentWorkItemId: input.parentWorkItemId || null,
+        dueDate: input.dueDate || null,
+        plannedDurationSeconds: input.plannedDurationSeconds === undefined
+            ? null
+            : input.plannedDurationSeconds,
+        notes: normalizeNestedNotes(input.notes)
+    };
+    return request("/api/v1/work-items", {
+        method: "POST",
+        body: JSON.stringify(normalized)
+    });
+}
 export function patchTask(taskId, patch) {
     return request(`/api/v1/tasks/${taskId}`, {
         method: "PATCH",
@@ -2084,6 +2167,22 @@ export function patchTask(taskId, patch) {
             ...patch,
             goalId: patch.goalId === "" ? null : patch.goalId,
             projectId: patch.projectId === "" ? null : patch.projectId,
+            parentWorkItemId: patch.parentWorkItemId === "" ? null : patch.parentWorkItemId,
+            dueDate: patch.dueDate === "" ? null : patch.dueDate,
+            plannedDurationSeconds: patch.plannedDurationSeconds === undefined
+                ? undefined
+                : patch.plannedDurationSeconds
+        })
+    });
+}
+export function patchWorkItem(workItemId, patch) {
+    return request(`/api/v1/work-items/${workItemId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+            ...patch,
+            goalId: patch.goalId === "" ? null : patch.goalId,
+            projectId: patch.projectId === "" ? null : patch.projectId,
+            parentWorkItemId: patch.parentWorkItemId === "" ? null : patch.parentWorkItemId,
             dueDate: patch.dueDate === "" ? null : patch.dueDate,
             plannedDurationSeconds: patch.plannedDurationSeconds === undefined
                 ? undefined
@@ -2110,6 +2209,9 @@ export function uncompleteTask(taskId) {
 }
 export function getTaskContext(taskId) {
     return request(`/api/v1/tasks/${taskId}/context`);
+}
+export function getWorkItemContext(workItemId) {
+    return request(`/api/v1/work-items/${workItemId}/context`);
 }
 export function logOperatorWork(input) {
     return request("/api/v1/operator/log-work", {

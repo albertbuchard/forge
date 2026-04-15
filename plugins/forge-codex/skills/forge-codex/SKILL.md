@@ -42,12 +42,18 @@ Workflow rule:
 - Projects are PRD-backed initiatives.
 - PRDs become vertical-slice issues.
 - Issues are classified as `AFK` or `HITL`.
+- Issues and tasks can both preserve `executionMode` and structured
+  `acceptanceCriteria` when the contract needs them.
 - Tasks are ordered, AI-directed, and small enough for one focused Codex
   session.
 - Subtasks remain lightweight child steps when needed.
 - `aiInstructions` is the dedicated task-execution field.
 - File targets, patterns, and done-shape guidance belong inside
   `aiInstructions`, not in separate fields.
+- Placement and linking should respect the explicit chain
+  `project -> issue -> task -> subtask`.
+- When Codex helps place or link a work item, it should use a hierarchy-aware
+  search/create flow rather than a flat parent picker.
 
 Completion rule:
 
@@ -57,6 +63,14 @@ Completion rule:
 - Default workflow is direct commits to `main`.
 - Do not assume feature branches or pull requests unless the user explicitly
   asks for them.
+
+Surface rule:
+
+- Forge exposes one mixed board for `project`, `issue`, `task`, and `subtask`.
+- Forge also exposes one compact hierarchy tree for the repeated hierarchy.
+- Both surfaces share filtering, level visibility, and human/bot ownership
+  controls.
+- Guided modal flows cover create, edit, move, link, and completion actions.
 
 ## Conversation rules
 

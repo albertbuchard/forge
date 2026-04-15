@@ -15,8 +15,10 @@ Hermes should follow Forge's explicit planning hierarchy:
 - Subtask
 
 Projects are PRD-backed. Issues are vertical slices classified as `AFK` or `HITL`.
-Tasks are one focused AI session each and should carry direct `aiInstructions`.
-Subtasks stay lightweight and derive most of their detail from `description`.
+Issues and tasks can both preserve `executionMode` and `acceptanceCriteria` when the
+delivery contract needs them. Tasks are one focused AI session each and should carry
+direct `aiInstructions`. Subtasks stay lightweight and derive most of their detail
+from `description`.
 
 When Hermes helps close out completed work, it should preserve Forge's structured
 completion contract:
@@ -25,6 +27,14 @@ completion contract:
 
 Hermes should assume direct commits to `main` by default and must not ask for
 feature branches or pull requests unless the user explicitly wants them.
+
+Hermes should also understand the current PM surface model:
+
+- one mixed Kanban board for `project`, `issue`, `task`, and `subtask`
+- one compact hierarchy view with shared search and filtering
+- guided modal flows for create, edit, link, move, and closeout
+- hierarchy-aware linking that can select or create a goal, project, issue, or parent
+  work item from one search-first modal flow
 
 The Hermes adapter now follows the native Hermes plugin guide structure end to end:
 

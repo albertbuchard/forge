@@ -17,6 +17,7 @@ const healthStageSchema = z.object({
     seconds: z.number().int().nonnegative()
 });
 const sleepRecoveryMetricSchema = z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]));
+const sleepSourceMetricSchema = sleepRecoveryMetricSchema;
 const sleepAnnotationSchema = z.object({
     qualitySummary: z.string().trim().default(""),
     notes: z.string().trim().default(""),
@@ -42,6 +43,29 @@ const generatedHealthEventTemplateSchema = z.object({
     tags: z.array(z.string().trim()).default([]),
     links: z.array(healthLinkSchema).default([]),
     notesTemplate: z.string().trim().default("")
+});
+const vitalMetricSummarySchema = z.object({
+    metric: z.string().trim().min(1),
+    label: z.string().trim().min(1),
+    category: z.string().trim().min(1),
+    unit: z.string().trim().min(1),
+    displayUnit: z.string().trim().min(1).default(""),
+    aggregation: z.enum(["discrete", "cumulative"]).default("discrete"),
+    average: z.number().nullable().optional(),
+    minimum: z.number().nullable().optional(),
+    maximum: z.number().nullable().optional(),
+    latest: z.number().nullable().optional(),
+    total: z.number().nullable().optional(),
+    sampleCount: z.number().int().nonnegative().default(0),
+    latestSampleAt: z.string().datetime().nullable().optional()
+});
+const vitalDaySummarySchema = z.object({
+    dateKey: z.string().trim().min(1),
+    sourceTimezone: z.string().trim().min(1).default("UTC"),
+    metrics: z.array(vitalMetricSummarySchema).default([])
+});
+const vitalsSyncPayloadSchema = z.object({
+    daySummaries: z.array(vitalDaySummarySchema).default([])
 });
 const pairingStatusSchema = z.enum([
     "pending",
@@ -148,6 +172,37 @@ export const mobileHealthSyncSchema = z.object({
         annotations: sleepAnnotationSchema.partial().default({})
     }))
         .default([]),
+    sleepNights: z
+        .array(z.object({
+        externalUid: z.string().trim().min(1),
+        startedAt: z.string().datetime(),
+        endedAt: z.string().datetime(),
+        sourceTimezone: z.string().trim().min(1).default("UTC"),
+        localDateKey: z.string().trim().min(1),
+        timeInBedSeconds: z.number().int().nonnegative().default(0),
+        asleepSeconds: z.number().int().nonnegative().default(0),
+        awakeSeconds: z.number().int().nonnegative().default(0),
+        rawSegmentCount: z.number().int().nonnegative().default(0),
+        stageBreakdown: z.array(healthStageSchema).default([]),
+        recoveryMetrics: sleepRecoveryMetricSchema.default({}),
+        sourceMetrics: sleepSourceMetricSchema.default({}),
+        links: z.array(healthLinkSchema).default([]),
+        annotations: sleepAnnotationSchema.partial().default({})
+    }))
+        .default([]),
+    sleepSegments: z
+        .array(z.object({
+        externalUid: z.string().trim().min(1),
+        startedAt: z.string().datetime(),
+        endedAt: z.string().datetime(),
+        sourceTimezone: z.string().trim().min(1).default("UTC"),
+        localDateKey: z.string().trim().min(1),
+        stage: z.string().trim().min(1),
+        bucket: z.enum(["in_bed", "asleep", "awake"]),
+        sourceValue: z.number().int().nullable().optional(),
+        metadata: z.record(z.string(), z.unknown()).default({})
+    }))
+        .default([]),
     workouts: z
         .array(z.object({
         externalUid: z.string().trim().min(1),
@@ -166,6 +221,7 @@ export const mobileHealthSyncSchema = z.object({
         annotations: workoutAnnotationSchema.partial().default({})
     }))
         .default([]),
+    vitals: vitalsSyncPayloadSchema.default({}),
     sourceStates: companionSourceStatesSchema.default({}),
     movement: movementSyncPayloadSchema.default({}),
     screenTime: screenTimeSyncPayloadSchema.default({})
@@ -205,11 +261,15 @@ export const createSleepSessionSchema = z.object({
     sourceDevice: z.string().trim().min(1).default("Forge"),
     startedAt: z.string().datetime(),
     endedAt: z.string().datetime(),
+    sourceTimezone: z.string().trim().min(1).default("UTC"),
+    localDateKey: z.string().trim().min(1).optional(),
     timeInBedSeconds: z.number().int().nonnegative().optional(),
     asleepSeconds: z.number().int().nonnegative().optional(),
     awakeSeconds: z.number().int().nonnegative().optional(),
+    rawSegmentCount: z.number().int().nonnegative().default(0),
     stageBreakdown: z.array(healthStageSchema).default([]),
     recoveryMetrics: sleepRecoveryMetricSchema.default({}),
+    sourceMetrics: sleepSourceMetricSchema.default({}),
     qualitySummary: z.string().trim().default(""),
     notes: z.string().trim().default(""),
     tags: z.array(z.string().trim()).default([]),
@@ -248,6 +308,7 @@ export const createWorkoutSessionSchema = z.object({
 export const updateWorkoutSessionSchema = createWorkoutSessionSchema
     .omit({ userId: true })
     .partial();
+let legacyAppleSleepRepairAttempted = false;
 function nowIso() {
     return new Date().toISOString();
 }
@@ -362,6 +423,62 @@ function average(values) {
 function round(value, digits = 0) {
     return Number(value.toFixed(digits));
 }
+function unionDurationSeconds(intervals) {
+    if (intervals.length === 0) {
+        return 0;
+    }
+    const sorted = [...intervals].sort((left, right) => left.startedAt.localeCompare(right.startedAt));
+    const merged = [sorted[0]];
+    for (const interval of sorted.slice(1)) {
+        const last = merged[merged.length - 1];
+        if (Date.parse(interval.startedAt) <= Date.parse(last.endedAt)) {
+            last.endedAt =
+                Date.parse(interval.endedAt) > Date.parse(last.endedAt)
+                    ? interval.endedAt
+                    : last.endedAt;
+            continue;
+        }
+        merged.push({ ...interval });
+    }
+    return merged.reduce((total, interval) => total + durationSecondsBetween(interval.startedAt, interval.endedAt), 0);
+}
+function resolveTimeZone(timeZone) {
+    const candidate = timeZone?.trim();
+    if (!candidate) {
+        return "UTC";
+    }
+    try {
+        new Intl.DateTimeFormat("en-US", { timeZone: candidate }).format(new Date());
+        return candidate;
+    }
+    catch {
+        return "UTC";
+    }
+}
+function getTimeZoneParts(value, timeZone) {
+    const formatter = new Intl.DateTimeFormat("en-CA", {
+        timeZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false
+    });
+    const parts = formatter.formatToParts(new Date(value));
+    const read = (type) => parts.find((part) => part.type === type)?.value ?? "00";
+    return {
+        year: read("year"),
+        month: read("month"),
+        day: read("day"),
+        hour: Number(read("hour")),
+        minute: Number(read("minute"))
+    };
+}
+function localDateKeyForTimezone(value, timeZone) {
+    const parts = getTimeZoneParts(value, timeZone);
+    return `${parts.year}-${parts.month}-${parts.day}`;
+}
 function mergeStringLists(...groups) {
     return [
         ...new Set(groups
@@ -384,9 +501,29 @@ function mergeHealthLinks(...groups) {
     }
     return [...deduped.values()];
 }
-function sleepMinutesOfDay(value, mode) {
-    const date = new Date(value);
-    const minutes = date.getUTCHours() * 60 + date.getUTCMinutes();
+function mergeSleepAnnotationPayloads(annotations, links) {
+    const qualitySummary = Array.from(new Set(annotations
+        .map((entry) => typeof entry?.qualitySummary === "string"
+        ? entry.qualitySummary.trim()
+        : "")
+        .filter(Boolean))).join("\n\n");
+    const notes = Array.from(new Set(annotations
+        .map((entry) => typeof entry?.notes === "string" ? entry.notes.trim() : "")
+        .filter(Boolean))).join("\n\n");
+    const tags = mergeStringLists(...annotations.map((entry) => Array.isArray(entry?.tags) ? entry?.tags : []));
+    const mergedLinks = mergeHealthLinks(...links, ...annotations.map((entry) => Array.isArray(entry?.links)
+        ? entry?.links
+        : []));
+    return {
+        qualitySummary,
+        notes,
+        tags,
+        links: mergedLinks
+    };
+}
+function sleepMinutesOfDay(value, mode, timeZone = "UTC") {
+    const parts = getTimeZoneParts(value, resolveTimeZone(timeZone));
+    const minutes = parts.hour * 60 + parts.minute;
     if (mode === "bedtime" && minutes < 12 * 60) {
         return minutes + 24 * 60;
     }
@@ -424,6 +561,7 @@ function computeSleepDerivedMetrics(input) {
     };
 }
 function computeSleepTimingMetrics(input) {
+    const sourceTimezone = resolveTimeZone(input.sourceTimezone);
     const params = [input.userId];
     const excludeSql = input.excludeSleepId ? "AND id != ?" : "";
     if (input.excludeSleepId) {
@@ -441,13 +579,14 @@ function computeSleepTimingMetrics(input) {
         return {
             bedtimeConsistencyMinutes: null,
             wakeConsistencyMinutes: null,
-            regularityScore: computeRegularityScore(input.startedAt)
+            regularityScore: computeRegularityScore(input.startedAt, sourceTimezone)
         };
     }
-    const bedtimeReference = average(rows.map((row) => sleepMinutesOfDay(row.started_at, "bedtime")));
-    const wakeReference = average(rows.map((row) => sleepMinutesOfDay(row.ended_at, "wake")));
-    const bedtimeConsistencyMinutes = Math.round(Math.abs(sleepMinutesOfDay(input.startedAt, "bedtime") - bedtimeReference));
-    const wakeConsistencyMinutes = Math.round(Math.abs(sleepMinutesOfDay(input.endedAt, "wake") - wakeReference));
+    const bedtimeReference = average(rows.map((row) => sleepMinutesOfDay(row.started_at, "bedtime", sourceTimezone)));
+    const wakeReference = average(rows.map((row) => sleepMinutesOfDay(row.ended_at, "wake", sourceTimezone)));
+    const bedtimeConsistencyMinutes = Math.round(Math.abs(sleepMinutesOfDay(input.startedAt, "bedtime", sourceTimezone) -
+        bedtimeReference));
+    const wakeConsistencyMinutes = Math.round(Math.abs(sleepMinutesOfDay(input.endedAt, "wake", sourceTimezone) - wakeReference));
     const regularityScore = Math.max(0, Math.min(100, Math.round(100 - average([bedtimeConsistencyMinutes, wakeConsistencyMinutes]) / 1.8)));
     return {
         bedtimeConsistencyMinutes,
@@ -477,9 +616,9 @@ function computeSleepScore(input) {
         20 * Math.min(1, restorativeRatio * 1.5) +
         10 * Math.max(0, 1 - wakePenalty))));
 }
-function computeRegularityScore(startedAt) {
-    const date = new Date(startedAt);
-    const bedtimeMinutes = date.getUTCHours() * 60 + date.getUTCMinutes();
+function computeRegularityScore(startedAt, timeZone = "UTC") {
+    const parts = getTimeZoneParts(startedAt, resolveTimeZone(timeZone));
+    const bedtimeMinutes = parts.hour * 60 + parts.minute;
     const distanceFromTarget = Math.min(Math.abs(bedtimeMinutes - 22 * 60 - 30), Math.abs(bedtimeMinutes - (24 * 60 + 22 * 60 + 30)));
     return Math.round(Math.max(0, 100 - distanceFromTarget / 3));
 }
@@ -517,23 +656,70 @@ function mapSleepSession(row) {
         source: row.source,
         sourceType: row.source_type,
         sourceDevice: row.source_device,
+        sourceTimezone: row.source_timezone,
+        localDateKey: row.local_date_key,
         startedAt: row.started_at,
         endedAt: row.ended_at,
         timeInBedSeconds: row.time_in_bed_seconds,
         asleepSeconds: row.asleep_seconds,
         awakeSeconds: row.awake_seconds,
+        rawSegmentCount: row.raw_segment_count,
         sleepScore: row.sleep_score,
         regularityScore: row.regularity_score,
         bedtimeConsistencyMinutes: row.bedtime_consistency_minutes,
         wakeConsistencyMinutes: row.wake_consistency_minutes,
         stageBreakdown: safeJsonParse(row.stage_breakdown_json, []),
         recoveryMetrics: safeJsonParse(row.recovery_metrics_json, {}),
+        sourceMetrics: safeJsonParse(row.source_metrics_json, {}),
         links: safeJsonParse(row.links_json, []),
         annotations: safeJsonParse(row.annotations_json, {}),
         provenance: safeJsonParse(row.provenance_json, {}),
         derived: safeJsonParse(row.derived_json, {}),
         createdAt: row.created_at,
         updatedAt: row.updated_at
+    };
+}
+function mapSleepSegment(row) {
+    return {
+        id: row.id,
+        externalUid: row.external_uid,
+        importRunId: row.import_run_id,
+        pairingSessionId: row.pairing_session_id,
+        sleepSessionId: row.sleep_session_id,
+        userId: row.user_id,
+        source: row.source,
+        sourceType: row.source_type,
+        sourceDevice: row.source_device,
+        sourceTimezone: row.source_timezone,
+        localDateKey: row.local_date_key,
+        startedAt: row.started_at,
+        endedAt: row.ended_at,
+        stage: row.stage,
+        bucket: row.bucket,
+        sourceValue: row.source_value,
+        metadata: safeJsonParse(row.metadata_json, {}),
+        provenance: safeJsonParse(row.provenance_json, {}),
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+    };
+}
+function mapSleepRawLog(row) {
+    return {
+        id: row.id,
+        importRunId: row.import_run_id,
+        pairingSessionId: row.pairing_session_id,
+        sleepSessionId: row.sleep_session_id,
+        userId: row.user_id,
+        source: row.source,
+        logType: row.log_type,
+        externalUid: row.external_uid,
+        sourceTimezone: row.source_timezone,
+        localDateKey: row.local_date_key,
+        startedAt: row.started_at,
+        endedAt: row.ended_at,
+        payload: safeJsonParse(row.payload_json, {}),
+        metadata: safeJsonParse(row.metadata_json, {}),
+        createdAt: row.created_at
     };
 }
 function mapWorkoutSession(row) {
@@ -594,6 +780,7 @@ function mapHealthImportRun(row) {
     };
 }
 function listSleepRows(userIds) {
+    ensureLegacyAppleSleepHistoryRepaired();
     const params = [];
     const where = userIds && userIds.length > 0
         ? `WHERE user_id IN (${userIds.map(() => "?").join(",")})`
@@ -623,6 +810,41 @@ function listWorkoutRows(userIds) {
        ORDER BY started_at DESC`)
         .all(...params);
 }
+function listDailySummaryRows(summaryType, userIds) {
+    const params = [summaryType];
+    const where = userIds && userIds.length > 0
+        ? `AND user_id IN (${userIds.map(() => "?").join(",")})`
+        : "";
+    if (userIds) {
+        params.push(...userIds);
+    }
+    return getDatabase()
+        .prepare(`SELECT *
+       FROM health_daily_summaries
+       WHERE summary_type = ?
+       ${where}
+       ORDER BY date_key DESC, updated_at DESC`)
+        .all(...params);
+}
+function listSleepSegmentRowsBySleepId(sleepId) {
+    return getDatabase()
+        .prepare(`SELECT *
+       FROM health_sleep_segments
+       WHERE sleep_session_id = ?
+       ORDER BY started_at ASC, ended_at ASC`)
+        .all(sleepId);
+}
+function listSleepRawLogRowsBySleepId(sleepId) {
+    return getDatabase()
+        .prepare(`SELECT *
+       FROM health_sleep_raw_logs
+       WHERE sleep_session_id = ?
+       ORDER BY created_at DESC`)
+        .all(sleepId);
+}
+function sleepSessionDateKey(row) {
+    return row.local_date_key || dayKey(row.ended_at);
+}
 export function listSleepSessions(userIds) {
     return listSleepRows(userIds).map(mapSleepSession);
 }
@@ -630,10 +852,279 @@ export function listWorkoutSessions(userIds) {
     return listWorkoutRows(userIds).map(mapWorkoutSession);
 }
 export function getSleepSessionById(sleepId) {
+    ensureLegacyAppleSleepHistoryRepaired();
     const row = getDatabase()
         .prepare(`SELECT * FROM health_sleep_sessions WHERE id = ?`)
         .get(sleepId);
     return row ? mapSleepSession(row) : undefined;
+}
+function sleepHasReflection(session) {
+    const annotations = session.annotations;
+    const tags = Array.isArray(annotations.tags) ? annotations.tags : [];
+    return (session.links.length > 0 ||
+        (typeof annotations.qualitySummary === "string" &&
+            annotations.qualitySummary.trim().length > 0) ||
+        (typeof annotations.notes === "string" &&
+            annotations.notes.trim().length > 0) ||
+        tags.length > 0);
+}
+function sleepEfficiency(session) {
+    return typeof session.derived.efficiency === "number"
+        ? session.derived.efficiency
+        : session.timeInBedSeconds > 0
+            ? session.asleepSeconds / session.timeInBedSeconds
+            : 0;
+}
+function sleepRestorativeShare(session) {
+    return typeof session.derived.restorativeShare ===
+        "number"
+        ? session.derived.restorativeShare
+        : 0;
+}
+function sleepRecoveryState(session) {
+    return typeof session.derived.recoveryState ===
+        "string"
+        ? (session.derived.recoveryState || null)
+        : null;
+}
+function sleepQualitativeState(session) {
+    const recoveryState = sleepRecoveryState(session);
+    if (recoveryState === "recharged") {
+        return "Recharged";
+    }
+    if (recoveryState === "steady") {
+        return "Steady";
+    }
+    if (recoveryState === "fragile") {
+        return "Fragile";
+    }
+    if (recoveryState === "depleted") {
+        return "Depleted";
+    }
+    if ((session.sleepScore ?? 0) >= 82) {
+        return "Strong";
+    }
+    if ((session.sleepScore ?? 0) >= 68) {
+        return "Stable";
+    }
+    if ((session.sleepScore ?? 0) >= 52) {
+        return "Uneven";
+    }
+    return "Short";
+}
+function sleepStageShare(session) {
+    return session.stageBreakdown.map((stage) => ({
+        stage: stage.stage,
+        seconds: stage.seconds,
+        percentage: session.asleepSeconds > 0 ? round(stage.seconds / session.asleepSeconds, 3) : 0
+    }));
+}
+function buildSleepSurfaceNight(session, baselineAverageSleepSeconds) {
+    return {
+        sleepId: session.id,
+        dateKey: session.localDateKey,
+        sourceTimezone: session.sourceTimezone,
+        startedAt: session.startedAt,
+        endedAt: session.endedAt,
+        asleepSeconds: session.asleepSeconds,
+        timeInBedSeconds: session.timeInBedSeconds,
+        awakeSeconds: session.awakeSeconds,
+        rawSegmentCount: session.rawSegmentCount,
+        score: session.sleepScore,
+        regularity: session.regularityScore,
+        efficiency: round(sleepEfficiency(session), 3),
+        restorativeShare: round(sleepRestorativeShare(session), 3),
+        weeklyAverageSleepSeconds: baselineAverageSleepSeconds,
+        deltaFromWeeklyAverageSeconds: session.asleepSeconds - baselineAverageSleepSeconds,
+        bedtimeDriftMinutes: session.bedtimeConsistencyMinutes,
+        wakeDriftMinutes: session.wakeConsistencyMinutes,
+        recoveryState: sleepRecoveryState(session),
+        qualitativeState: sleepQualitativeState(session),
+        hasReflection: sleepHasReflection(session),
+        hasRawSegments: session.rawSegmentCount > 0,
+        qualitySummary: typeof session.annotations.qualitySummary ===
+            "string"
+            ? (session.annotations.qualitySummary ||
+                null)
+            : null,
+        stageBreakdown: sleepStageShare(session)
+    };
+}
+function buildSleepCalendarDay(session) {
+    return {
+        dateKey: session.localDateKey,
+        sleepId: session.id,
+        startedAt: session.startedAt,
+        endedAt: session.endedAt,
+        sourceTimezone: session.sourceTimezone,
+        sleepHours: Number((session.asleepSeconds / 3600).toFixed(2)),
+        score: session.sleepScore,
+        regularity: session.regularityScore,
+        efficiency: round(sleepEfficiency(session), 3),
+        recoveryState: sleepRecoveryState(session),
+        hasReflection: sleepHasReflection(session),
+        hasRawSegments: session.rawSegmentCount > 0
+    };
+}
+function normalizeTimelineStage(stage, bucket) {
+    const normalized = stage.trim().toLowerCase().replace(/[\s-]+/g, "_");
+    if (bucket === "in_bed" || normalized.includes("bed")) {
+        return "in_bed";
+    }
+    if (bucket === "awake" || normalized.includes("awake")) {
+        return "awake";
+    }
+    if (normalized.includes("rem")) {
+        return "rem";
+    }
+    if (normalized.includes("deep")) {
+        return "deep";
+    }
+    if (normalized.includes("core") || normalized.includes("light")) {
+        return "core";
+    }
+    return "asleep_unspecified";
+}
+function timelineStagePriority(stage) {
+    switch (stage) {
+        case "awake":
+            return 5;
+        case "rem":
+            return 4;
+        case "deep":
+            return 3;
+        case "core":
+            return 2;
+        case "asleep_unspecified":
+            return 1;
+        default:
+            return 0;
+    }
+}
+function timelineStageLabel(stage) {
+    switch (stage) {
+        case "awake":
+            return "Awake";
+        case "core":
+            return "Core";
+        case "deep":
+            return "Deep";
+        case "rem":
+            return "REM";
+        case "in_bed":
+            return "In bed";
+        default:
+            return "Asleep";
+    }
+}
+function buildSleepPhaseTimeline(sleep, rawSegments) {
+    const sessionStartMs = Date.parse(sleep.startedAt);
+    const sessionEndMs = Date.parse(sleep.endedAt);
+    const totalSeconds = Math.max(1, durationSecondsBetween(sleep.startedAt, sleep.endedAt));
+    const segments = rawSegments
+        .map((segment) => {
+        const startedMs = Math.max(sessionStartMs, Date.parse(segment.startedAt));
+        const endedMs = Math.min(sessionEndMs, Date.parse(segment.endedAt));
+        return {
+            ...segment,
+            startedMs,
+            endedMs,
+            normalizedStage: normalizeTimelineStage(segment.stage, segment.bucket)
+        };
+    })
+        .filter((segment) => Number.isFinite(segment.startedMs))
+        .filter((segment) => Number.isFinite(segment.endedMs))
+        .filter((segment) => segment.endedMs > segment.startedMs);
+    if (segments.length === 0) {
+        return {
+            startedAt: sleep.startedAt,
+            endedAt: sleep.endedAt,
+            totalSeconds,
+            hasRawSegments: false,
+            hasSleepStageData: false,
+            blocks: []
+        };
+    }
+    const boundaries = new Set([sessionStartMs, sessionEndMs]);
+    for (const segment of segments) {
+        boundaries.add(segment.startedMs);
+        boundaries.add(segment.endedMs);
+    }
+    const ordered = [...boundaries].sort((left, right) => left - right);
+    const blocks = [];
+    const lastIndexByLane = new Map();
+    const pushBlock = (lane, stage, startedMs, endedMs) => {
+        const startedAt = new Date(startedMs).toISOString();
+        const endedAt = new Date(endedMs).toISOString();
+        const lastIndex = lastIndexByLane.get(lane);
+        if (lastIndex !== undefined) {
+            const previous = blocks[lastIndex];
+            if (previous &&
+                previous.stage === stage &&
+                previous.endedAt === startedAt) {
+                previous.endedAt = endedAt;
+                previous.durationSeconds += Math.max(0, Math.round((endedMs - startedMs) / 1000));
+                previous.widthRatio = round(Math.max(0.002, previous.durationSeconds / totalSeconds), 6);
+                return;
+            }
+        }
+        const durationSeconds = Math.max(0, Math.round((endedMs - startedMs) / 1000));
+        blocks.push({
+            id: `${lane}_${blocks.length + 1}`,
+            stage,
+            label: timelineStageLabel(stage),
+            lane,
+            startedAt,
+            endedAt,
+            durationSeconds,
+            offsetRatio: round((startedMs - sessionStartMs) / (totalSeconds * 1000), 6),
+            widthRatio: round(Math.max(0.002, durationSeconds / totalSeconds), 6)
+        });
+        lastIndexByLane.set(lane, blocks.length - 1);
+    };
+    for (let index = 0; index < ordered.length - 1; index += 1) {
+        const startedMs = ordered[index];
+        const endedMs = ordered[index + 1];
+        if (endedMs <= startedMs) {
+            continue;
+        }
+        const covering = segments.filter((segment) => segment.startedMs <= startedMs && segment.endedMs >= endedMs);
+        if (covering.length === 0) {
+            continue;
+        }
+        const hasInBedCoverage = covering.some((segment) => segment.normalizedStage === "in_bed");
+        const sleepStage = covering
+            .map((segment) => segment.normalizedStage)
+            .filter((stage) => stage !== "in_bed")
+            .sort((left, right) => timelineStagePriority(right) - timelineStagePriority(left))[0];
+        if (hasInBedCoverage) {
+            pushBlock("in_bed", "in_bed", startedMs, endedMs);
+        }
+        if (sleepStage) {
+            pushBlock("sleep", sleepStage, startedMs, endedMs);
+        }
+    }
+    return {
+        startedAt: sleep.startedAt,
+        endedAt: sleep.endedAt,
+        totalSeconds,
+        hasRawSegments: true,
+        hasSleepStageData: blocks.some((block) => block.lane === "sleep"),
+        blocks
+    };
+}
+export function getSleepSessionDetailById(sleepId) {
+    const sleep = getSleepSessionById(sleepId);
+    if (!sleep) {
+        return undefined;
+    }
+    const rawSegments = listSleepSegmentRowsBySleepId(sleepId).map(mapSleepSegment);
+    return {
+        sleep,
+        phaseTimeline: buildSleepPhaseTimeline(sleep, rawSegments),
+        rawSegments,
+        rawLogs: listSleepRawLogRowsBySleepId(sleepId).map(mapSleepRawLog)
+    };
 }
 export function getWorkoutSessionById(workoutId) {
     const row = getDatabase()
@@ -872,20 +1363,124 @@ export function requireValidPairing(sessionId, pairingToken) {
     }
     return row;
 }
-function normalizeHealthAuthorizationStatus(healthAccessAuthorized, sleepCount, workoutCount) {
+function normalizeHealthAuthorizationStatus(healthAccessAuthorized, sleepCount, workoutCount, vitalDayCount) {
     if (healthAccessAuthorized) {
         return "approved";
     }
-    if (sleepCount > 0 || workoutCount > 0) {
+    if (sleepCount > 0 || workoutCount > 0 || vitalDayCount > 0) {
         return "partial";
     }
     return "not_determined";
+}
+function normalizeSleepNightInput(input) {
+    const sourceTimezone = resolveTimeZone("sourceTimezone" in input ? input.sourceTimezone : "UTC");
+    const localDateKey = "localDateKey" in input && typeof input.localDateKey === "string"
+        ? input.localDateKey
+        : localDateKeyForTimezone(input.endedAt, sourceTimezone);
+    return {
+        externalUid: input.externalUid,
+        startedAt: input.startedAt,
+        endedAt: input.endedAt,
+        sourceTimezone,
+        localDateKey,
+        timeInBedSeconds: input.timeInBedSeconds,
+        asleepSeconds: input.asleepSeconds,
+        awakeSeconds: input.awakeSeconds,
+        rawSegmentCount: "rawSegmentCount" in input && typeof input.rawSegmentCount === "number"
+            ? input.rawSegmentCount
+            : 0,
+        stageBreakdown: input.stageBreakdown,
+        recoveryMetrics: input.recoveryMetrics ?? {},
+        sourceMetrics: "sourceMetrics" in input && input.sourceMetrics
+            ? input.sourceMetrics
+            : {
+                legacyPayloadAlias: true
+            },
+        links: input.links,
+        annotations: input.annotations
+    };
+}
+function normalizeSleepSegmentInput(input) {
+    const sourceTimezone = resolveTimeZone(input.sourceTimezone);
+    return {
+        ...input,
+        sourceTimezone,
+        localDateKey: input.localDateKey || localDateKeyForTimezone(input.endedAt, sourceTimezone)
+    };
+}
+function listNormalizedSleepNights(payload) {
+    if (payload.sleepNights.length > 0) {
+        return payload.sleepNights.map(normalizeSleepNightInput);
+    }
+    return payload.sleepSessions.map(normalizeSleepNightInput);
+}
+function listNormalizedSleepSegments(payload) {
+    return payload.sleepSegments.map(normalizeSleepSegmentInput);
+}
+function refreshSleepSessionRawSegmentCount(sleepSessionId) {
+    const count = getDatabase()
+        .prepare(`SELECT COUNT(*) AS count
+       FROM health_sleep_segments
+       WHERE sleep_session_id = ?`)
+        .get(sleepSessionId);
+    getDatabase()
+        .prepare(`UPDATE health_sleep_sessions
+       SET raw_segment_count = ?, updated_at = ?
+       WHERE id = ?`)
+        .run(count.count, nowIso(), sleepSessionId);
+}
+function upsertSleepSegment(input) {
+    const existing = getDatabase()
+        .prepare(`SELECT *
+       FROM health_sleep_segments
+       WHERE user_id = ? AND source = 'apple_health' AND external_uid = ?`)
+        .get(input.pairing.user_id, input.segment.externalUid);
+    const now = nowIso();
+    if (existing) {
+        getDatabase()
+            .prepare(`UPDATE health_sleep_segments
+         SET import_run_id = ?, pairing_session_id = ?, sleep_session_id = ?, source_type = ?, source_device = ?,
+             source_timezone = ?, local_date_key = ?, started_at = ?, ended_at = ?, stage = ?, bucket = ?,
+             source_value = ?, metadata_json = ?, provenance_json = ?, updated_at = ?
+         WHERE id = ?`)
+            .run(input.importRunId, input.pairing.id, input.sleepSessionId, "healthkit_segment", input.pairing.device_name ?? "", input.segment.sourceTimezone, input.segment.localDateKey, input.segment.startedAt, input.segment.endedAt, input.segment.stage, input.segment.bucket, input.segment.sourceValue ?? null, JSON.stringify(input.segment.metadata ?? {}), JSON.stringify({
+            importedVia: "ios_companion",
+            importRunId: input.importRunId,
+            updatedAt: now
+        }), now, existing.id);
+        return { mode: "updated", id: existing.id };
+    }
+    const id = `sleepseg_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+    getDatabase()
+        .prepare(`INSERT INTO health_sleep_segments (
+         id, external_uid, import_run_id, pairing_session_id, sleep_session_id, user_id, source, source_type,
+         source_device, source_timezone, local_date_key, started_at, ended_at, stage, bucket, source_value,
+         metadata_json, provenance_json, created_at, updated_at
+       )
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(id, input.segment.externalUid, input.importRunId, input.pairing.id, input.sleepSessionId, input.pairing.user_id, "apple_health", "healthkit_segment", input.pairing.device_name ?? "", input.segment.sourceTimezone, input.segment.localDateKey, input.segment.startedAt, input.segment.endedAt, input.segment.stage, input.segment.bucket, input.segment.sourceValue ?? null, JSON.stringify(input.segment.metadata ?? {}), JSON.stringify({
+        importedVia: "ios_companion",
+        importRunId: input.importRunId,
+        createdAt: now
+    }), now, now);
+    return { mode: "created", id };
+}
+function createSleepRawLog(input) {
+    const now = nowIso();
+    const id = `slraw_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+    getDatabase()
+        .prepare(`INSERT INTO health_sleep_raw_logs (
+         id, import_run_id, pairing_session_id, sleep_session_id, user_id, source, log_type, external_uid,
+         source_timezone, local_date_key, started_at, ended_at, payload_json, metadata_json, created_at
+       )
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(id, input.importRunId, input.pairingSessionId, input.sleepSessionId, input.userId, input.source, input.logType, input.externalUid ?? null, resolveTimeZone(input.sourceTimezone), input.localDateKey ?? "", input.startedAt ?? null, input.endedAt ?? null, JSON.stringify(input.payload), JSON.stringify(input.metadata ?? {}), now);
 }
 function syncPairingSourceStatesFromPayload(pairing, payload) {
     upsertPairingSourceState(pairing, "health", {
         desiredEnabled: payload.sourceStates.health.desiredEnabled,
         appliedEnabled: payload.sourceStates.health.appliedEnabled,
-        authorizationStatus: normalizeHealthAuthorizationStatus(payload.permissions.healthKitAuthorized, payload.sleepSessions.length, payload.workouts.length),
+        authorizationStatus: normalizeHealthAuthorizationStatus(payload.permissions.healthKitAuthorized, Math.max(payload.sleepNights.length, payload.sleepSessions.length), payload.workouts.length, payload.vitals.daySummaries.length),
         syncEligible: payload.sourceStates.health.syncEligible,
         lastObservedAt: payload.sourceStates.health.lastObservedAt ?? nowIso(),
         metadata: payload.sourceStates.health.metadata
@@ -966,8 +1561,37 @@ function upsertDailySummary(userId, dateKey, summaryType, metrics, derived = {})
        VALUES (?, ?, ?, ?, ?, ?, 'derived', ?, ?)`)
         .run(`hds_${randomUUID().replaceAll("-", "").slice(0, 10)}`, userId, dateKey, summaryType, JSON.stringify(metrics), JSON.stringify(derived), now, now);
 }
+function normalizeVitalMetricSummary(input) {
+    return {
+        metric: input.metric,
+        label: input.label,
+        category: input.category,
+        unit: input.unit,
+        displayUnit: input.displayUnit || input.unit,
+        aggregation: input.aggregation,
+        average: input.average ?? null,
+        minimum: input.minimum ?? null,
+        maximum: input.maximum ?? null,
+        latest: input.latest ?? null,
+        total: input.total ?? null,
+        sampleCount: input.sampleCount,
+        latestSampleAt: input.latestSampleAt ?? null
+    };
+}
+function upsertVitalDaySummary(userId, input) {
+    const metrics = input.metrics.reduce((accumulator, metric) => {
+        accumulator[metric.metric] = normalizeVitalMetricSummary(metric);
+        return accumulator;
+    }, {});
+    upsertDailySummary(userId, input.dateKey, "vitals", metrics, {
+        sourceTimezone: resolveTimeZone(input.sourceTimezone),
+        metricCount: input.metrics.length
+    });
+}
 function summarizeUserHealthDay(userId, dateKeyValue) {
-    const sleeps = listSleepRows([userId]).filter((row) => dayKey(row.ended_at) === dateKeyValue || dayKey(row.started_at) === dateKeyValue);
+    const sleeps = listSleepRows([userId]).filter((row) => sleepSessionDateKey(row) === dateKeyValue ||
+        localDateKeyForTimezone(row.started_at, resolveTimeZone(row.source_timezone)) ===
+            dateKeyValue);
     const workouts = listWorkoutRows([userId]).filter((row) => dayKey(row.started_at) === dateKeyValue);
     const totalSleepSeconds = sleeps.reduce((sum, row) => sum + row.asleep_seconds, 0);
     const totalWorkoutSeconds = workouts.reduce((sum, row) => sum + row.duration_seconds, 0);
@@ -1005,6 +1629,7 @@ function insertOrUpdateSleepSession(pairing, input) {
         userId: pairing.user_id,
         startedAt: input.startedAt,
         endedAt: input.endedAt,
+        sourceTimezone: input.sourceTimezone,
         excludeSleepId: existing?.id
     });
     const annotations = sleepAnnotationSchema.parse(input.annotations ?? {});
@@ -1019,12 +1644,12 @@ function insertOrUpdateSleepSession(pairing, input) {
     if (existing) {
         getDatabase()
             .prepare(`UPDATE health_sleep_sessions
-         SET pairing_session_id = ?, source_device = ?, started_at = ?, ended_at = ?, time_in_bed_seconds = ?,
+         SET pairing_session_id = ?, source_device = ?, source_timezone = ?, local_date_key = ?, started_at = ?, ended_at = ?, time_in_bed_seconds = ?,
              asleep_seconds = ?, awake_seconds = ?, sleep_score = ?, regularity_score = ?,
-             bedtime_consistency_minutes = ?, wake_consistency_minutes = ?, stage_breakdown_json = ?, recovery_metrics_json = ?, links_json = ?, annotations_json = ?,
+             bedtime_consistency_minutes = ?, wake_consistency_minutes = ?, raw_segment_count = ?, stage_breakdown_json = ?, recovery_metrics_json = ?, source_metrics_json = ?, links_json = ?, annotations_json = ?,
              provenance_json = ?, derived_json = ?, updated_at = ?
          WHERE id = ?`)
-            .run(pairing.id, pairing.device_name ?? "", input.startedAt, input.endedAt, input.timeInBedSeconds, input.asleepSeconds, input.awakeSeconds, sleepScore, timingMetrics.regularityScore, timingMetrics.bedtimeConsistencyMinutes, timingMetrics.wakeConsistencyMinutes, JSON.stringify(stageBreakdown), JSON.stringify(input.recoveryMetrics), JSON.stringify(mergeHealthLinks(safeJsonParse(existing.links_json, []), input.links, annotations.links)), JSON.stringify(annotations), JSON.stringify({
+            .run(pairing.id, pairing.device_name ?? "", input.sourceTimezone, input.localDateKey, input.startedAt, input.endedAt, input.timeInBedSeconds, input.asleepSeconds, input.awakeSeconds, sleepScore, timingMetrics.regularityScore, timingMetrics.bedtimeConsistencyMinutes, timingMetrics.wakeConsistencyMinutes, input.rawSegmentCount, JSON.stringify(stageBreakdown), JSON.stringify(input.recoveryMetrics), JSON.stringify(input.sourceMetrics), JSON.stringify(mergeHealthLinks(safeJsonParse(existing.links_json, []), input.links, annotations.links)), JSON.stringify(annotations), JSON.stringify({
             importedVia: "ios_companion",
             pairingSessionId: pairing.id,
             updatedAt: now
@@ -1035,13 +1660,13 @@ function insertOrUpdateSleepSession(pairing, input) {
     getDatabase()
         .prepare(`INSERT INTO health_sleep_sessions (
          id, external_uid, pairing_session_id, user_id, source, source_type, source_device,
-         started_at, ended_at, time_in_bed_seconds, asleep_seconds, awake_seconds,
+         source_timezone, local_date_key, started_at, ended_at, time_in_bed_seconds, asleep_seconds, awake_seconds,
          sleep_score, regularity_score, bedtime_consistency_minutes, wake_consistency_minutes,
-         stage_breakdown_json, recovery_metrics_json, links_json, annotations_json,
+         raw_segment_count, stage_breakdown_json, recovery_metrics_json, source_metrics_json, links_json, annotations_json,
          provenance_json, derived_json, created_at, updated_at
        )
-       VALUES (?, ?, ?, ?, 'apple_health', 'healthkit', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(id, input.externalUid, pairing.id, pairing.user_id, pairing.device_name ?? "", input.startedAt, input.endedAt, input.timeInBedSeconds, input.asleepSeconds, input.awakeSeconds, sleepScore, timingMetrics.regularityScore, timingMetrics.bedtimeConsistencyMinutes, timingMetrics.wakeConsistencyMinutes, JSON.stringify(stageBreakdown), JSON.stringify(input.recoveryMetrics), JSON.stringify(mergeHealthLinks(input.links, annotations.links)), JSON.stringify(annotations), JSON.stringify({
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(id, input.externalUid, pairing.id, pairing.user_id, "apple_health", "healthkit", pairing.device_name ?? "", input.sourceTimezone, input.localDateKey, input.startedAt, input.endedAt, input.timeInBedSeconds, input.asleepSeconds, input.awakeSeconds, sleepScore, timingMetrics.regularityScore, timingMetrics.bedtimeConsistencyMinutes, timingMetrics.wakeConsistencyMinutes, input.rawSegmentCount, JSON.stringify(stageBreakdown), JSON.stringify(input.recoveryMetrics), JSON.stringify(input.sourceMetrics), JSON.stringify(mergeHealthLinks(input.links, annotations.links)), JSON.stringify(annotations), JSON.stringify({
         importedVia: "ios_companion",
         pairingSessionId: pairing.id,
         createdAt: now
@@ -1135,19 +1760,207 @@ function insertOrUpdateWorkoutSession(pairing, input) {
     }), now, now);
     return { mode: "created", id };
 }
+function ensureLegacyAppleSleepHistoryRepaired() {
+    if (legacyAppleSleepRepairAttempted) {
+        return;
+    }
+    legacyAppleSleepRepairAttempted = true;
+    const legacyRows = getDatabase()
+        .prepare(`SELECT *
+       FROM health_sleep_sessions
+       WHERE source = 'apple_health'
+         AND raw_segment_count = 0
+         AND (time_in_bed_seconds = 0 OR local_date_key = '')
+       ORDER BY started_at ASC, ended_at ASC`)
+        .all();
+    if (legacyRows.length === 0) {
+        return;
+    }
+    runInTransaction(() => {
+        for (const row of legacyRows) {
+            const rawLogExists = getDatabase()
+                .prepare(`SELECT id
+           FROM health_sleep_raw_logs
+           WHERE source = 'apple_health'
+             AND log_type = 'legacy_sleep_session_row'
+             AND user_id = ?
+             AND external_uid = ?
+           LIMIT 1`)
+                .get(row.user_id, row.external_uid);
+            if (!rawLogExists) {
+                createSleepRawLog({
+                    sleepSessionId: null,
+                    importRunId: null,
+                    pairingSessionId: row.pairing_session_id,
+                    userId: row.user_id,
+                    source: row.source,
+                    logType: "legacy_sleep_session_row",
+                    externalUid: row.external_uid,
+                    sourceTimezone: row.source_timezone || "UTC",
+                    localDateKey: row.local_date_key || dayKey(row.ended_at),
+                    startedAt: row.started_at,
+                    endedAt: row.ended_at,
+                    payload: mapSleepSession(row),
+                    metadata: {
+                        legacyRowId: row.id,
+                        repairedVia: "canonical_sleep_backfill_v1"
+                    }
+                });
+            }
+        }
+        const byUser = new Map();
+        for (const row of legacyRows) {
+            const current = byUser.get(row.user_id) ?? [];
+            current.push(row);
+            byUser.set(row.user_id, current);
+        }
+        for (const [userId, rows] of byUser.entries()) {
+            const clusters = [];
+            let currentCluster = [];
+            let currentEnd = rows[0]?.ended_at ?? null;
+            for (const row of rows) {
+                if (currentEnd &&
+                    Date.parse(row.started_at) - Date.parse(currentEnd) > 4 * 60 * 60 * 1000) {
+                    if (currentCluster.length > 0) {
+                        clusters.push(currentCluster);
+                    }
+                    currentCluster = [row];
+                    currentEnd = row.ended_at;
+                    continue;
+                }
+                currentCluster.push(row);
+                if (!currentEnd || Date.parse(row.ended_at) > Date.parse(currentEnd)) {
+                    currentEnd = row.ended_at;
+                }
+            }
+            if (currentCluster.length > 0) {
+                clusters.push(currentCluster);
+            }
+            for (const cluster of clusters) {
+                const authoritativeRows = cluster.filter((candidate) => {
+                    const containsOther = cluster.some((other) => {
+                        if (other.id === candidate.id) {
+                            return false;
+                        }
+                        return (Date.parse(candidate.started_at) <= Date.parse(other.started_at) &&
+                            Date.parse(candidate.ended_at) >= Date.parse(other.ended_at));
+                    });
+                    return !containsOther;
+                });
+                const rowsForNight = authoritativeRows.length > 0 ? authoritativeRows : cluster;
+                const startedAt = rowsForNight[0].started_at;
+                const endedAt = rowsForNight.reduce((latest, row) => Date.parse(row.ended_at) > Date.parse(latest) ? row.ended_at : latest, rowsForNight[0].ended_at);
+                const sourceTimezone = resolveTimeZone(rowsForNight[0]?.source_timezone || "UTC");
+                const localDateKey = localDateKeyForTimezone(endedAt, sourceTimezone);
+                const asleepSeconds = unionDurationSeconds(rowsForNight.map((row) => ({
+                    startedAt: row.started_at,
+                    endedAt: row.ended_at
+                })));
+                const timeInBedSeconds = Math.max(durationSecondsBetween(startedAt, endedAt), asleepSeconds);
+                const awakeSeconds = Math.max(0, timeInBedSeconds - asleepSeconds);
+                const stageTotals = new Map();
+                for (const row of rowsForNight) {
+                    for (const stage of safeJsonParse(row.stage_breakdown_json, [])) {
+                        if (stage.seconds <= 0) {
+                            continue;
+                        }
+                        stageTotals.set(stage.stage, (stageTotals.get(stage.stage) ?? 0) + stage.seconds);
+                    }
+                }
+                const stageBreakdown = [...stageTotals.entries()].map(([stage, seconds]) => ({
+                    stage,
+                    seconds
+                }));
+                const sleepScore = computeSleepScore({
+                    asleepSeconds,
+                    timeInBedSeconds,
+                    awakeSeconds,
+                    stageBreakdown
+                });
+                const timingMetrics = computeSleepTimingMetrics({
+                    userId,
+                    startedAt,
+                    endedAt,
+                    sourceTimezone
+                });
+                const derived = computeSleepDerivedMetrics({
+                    asleepSeconds,
+                    timeInBedSeconds,
+                    awakeSeconds,
+                    sleepScore,
+                    stageBreakdown
+                });
+                const annotations = mergeSleepAnnotationPayloads(cluster.map((row) => safeJsonParse(row.annotations_json, {})), cluster.map((row) => safeJsonParse(row.links_json, [])));
+                const recoveryMetrics = cluster.reduce((acc, row) => {
+                    Object.assign(acc, safeJsonParse(row.recovery_metrics_json, {}));
+                    return acc;
+                }, {});
+                const sourceMetrics = {
+                    repairedFromLegacy: true,
+                    legacyClusterSize: cluster.length,
+                    authoritativeRowCount: rowsForNight.length
+                };
+                const id = `sleep_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+                getDatabase()
+                    .prepare(`INSERT INTO health_sleep_sessions (
+               id, external_uid, pairing_session_id, user_id, source, source_type, source_device,
+               source_timezone, local_date_key, started_at, ended_at, time_in_bed_seconds, asleep_seconds, awake_seconds,
+               sleep_score, regularity_score, bedtime_consistency_minutes, wake_consistency_minutes,
+               raw_segment_count, stage_breakdown_json, recovery_metrics_json, source_metrics_json, links_json, annotations_json,
+               provenance_json, derived_json, created_at, updated_at
+             )
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+                    .run(id, `legacy-repair-${startedAt}-${endedAt}`, cluster[0]?.pairing_session_id ?? null, userId, "apple_health", "healthkit_repaired", cluster[0]?.source_device ?? "", sourceTimezone, localDateKey, startedAt, endedAt, timeInBedSeconds, asleepSeconds, awakeSeconds, sleepScore, timingMetrics.regularityScore, timingMetrics.bedtimeConsistencyMinutes, timingMetrics.wakeConsistencyMinutes, rowsForNight.length, JSON.stringify(stageBreakdown), JSON.stringify(recoveryMetrics), JSON.stringify(sourceMetrics), JSON.stringify(annotations.links), JSON.stringify(annotations), JSON.stringify({
+                    repairedFromLegacy: true,
+                    legacyRowIds: cluster.map((row) => row.id)
+                }), JSON.stringify(derived), nowIso(), nowIso());
+                const legacyExternalUids = cluster
+                    .map((row) => row.external_uid)
+                    .filter((value) => value.trim().length > 0);
+                if (legacyExternalUids.length > 0) {
+                    getDatabase()
+                        .prepare(`UPDATE health_sleep_raw_logs
+               SET sleep_session_id = ?
+               WHERE source = 'apple_health'
+                 AND log_type = 'legacy_sleep_session_row'
+                 AND user_id = ?
+                 AND external_uid IN (${legacyExternalUids.map(() => "?").join(",")})`)
+                        .run(id, userId, ...legacyExternalUids);
+                }
+            }
+        }
+        const deleteStatement = getDatabase().prepare(`DELETE FROM health_sleep_sessions
+       WHERE id = ?`);
+        for (const row of legacyRows) {
+            deleteStatement.run(row.id);
+        }
+    });
+}
 export function ingestMobileHealthSync(payload) {
     const parsed = mobileHealthSyncSchema.parse(payload);
+    ensureLegacyAppleSleepHistoryRepaired();
     const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
     return runInTransaction(() => {
         const now = nowIso();
         const runId = `hir_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+        const normalizedSleepNights = listNormalizedSleepNights(parsed);
+        const normalizedSleepSegments = listNormalizedSleepSegments(parsed);
+        const vitalMetricEntries = parsed.vitals.daySummaries.reduce((sum, day) => sum + day.metrics.length, 0);
         let createdCount = 0;
         let updatedCount = 0;
         let mergedCount = 0;
+        getDatabase()
+            .prepare(`INSERT INTO health_import_runs (
+           id, pairing_session_id, user_id, source, source_device, status, payload_summary_json,
+           imported_count, created_count, updated_count, merged_count, imported_at, created_at, updated_at
+         )
+         VALUES (?, ?, ?, 'ios_companion', ?, 'running', '{}', 0, 0, 0, 0, ?, ?, ?)`)
+            .run(runId, pairing.id, pairing.user_id, parsed.device.sourceDevice, now, now, now);
         syncPairingSourceStatesFromPayload(pairing, parsed);
         const movementSync = ingestMovementSync(pairing, parsed.movement);
         const screenTimeSync = ingestScreenTimeSync(pairing, parsed.screenTime, parsed.device.sourceDevice);
-        for (const sleep of parsed.sleepSessions) {
+        const sleepSessionsByLocalDate = new Map();
+        for (const sleep of normalizedSleepNights) {
             const result = insertOrUpdateSleepSession(pairing, sleep);
             if (result.mode === "created") {
                 createdCount += 1;
@@ -1155,7 +1968,34 @@ export function ingestMobileHealthSync(payload) {
             else {
                 updatedCount += 1;
             }
-            summarizeUserHealthDay(pairing.user_id, dayKey(sleep.endedAt));
+            const group = sleepSessionsByLocalDate.get(sleep.localDateKey) ?? [];
+            group.push({
+                id: result.id,
+                startedAt: sleep.startedAt,
+                endedAt: sleep.endedAt
+            });
+            sleepSessionsByLocalDate.set(sleep.localDateKey, group);
+            summarizeUserHealthDay(pairing.user_id, sleep.localDateKey);
+        }
+        for (const segment of normalizedSleepSegments) {
+            const candidateSessions = sleepSessionsByLocalDate.get(segment.localDateKey) ?? [];
+            const sleepSessionId = candidateSessions.find((session) => Date.parse(segment.endedAt) > Date.parse(session.startedAt) &&
+                Date.parse(segment.startedAt) < Date.parse(session.endedAt))?.id ?? null;
+            const result = upsertSleepSegment({
+                pairing,
+                importRunId: runId,
+                sleepSessionId,
+                segment
+            });
+            if (result.mode === "created") {
+                createdCount += 1;
+            }
+            else {
+                updatedCount += 1;
+            }
+            if (sleepSessionId) {
+                refreshSleepSessionRawSegmentCount(sleepSessionId);
+            }
         }
         for (const workout of parsed.workouts) {
             const result = insertOrUpdateWorkoutSession(pairing, workout);
@@ -1170,6 +2010,9 @@ export function ingestMobileHealthSync(payload) {
             }
             summarizeUserHealthDay(pairing.user_id, dayKey(workout.startedAt));
         }
+        for (const daySummary of parsed.vitals.daySummaries) {
+            upsertVitalDaySummary(pairing.user_id, daySummary);
+        }
         const permissionStatus = parsed.permissions.healthKitAuthorized === false
             ? "permission_denied"
             : "healthy";
@@ -1180,15 +2023,21 @@ export function ingestMobileHealthSync(payload) {
          WHERE id = ?`)
             .run(permissionStatus, parsed.device.name, parsed.device.platform, parsed.device.appVersion, now, now, now, now, pairing.id);
         getDatabase()
-            .prepare(`INSERT INTO health_import_runs (
-           id, pairing_session_id, user_id, source, source_device, status, payload_summary_json,
-           imported_count, created_count, updated_count, merged_count, imported_at, created_at, updated_at
-         )
-         VALUES (?, ?, ?, 'ios_companion', ?, 'completed', ?, ?, ?, ?, ?, ?, ?, ?)`)
-            .run(runId, pairing.id, pairing.user_id, parsed.device.sourceDevice, JSON.stringify({
+            .prepare(`UPDATE health_import_runs
+         SET source_device = ?, status = 'completed', payload_summary_json = ?,
+             imported_count = ?, created_count = ?, updated_count = ?, merged_count = ?,
+             imported_at = ?, updated_at = ?
+         WHERE id = ?`)
+            .run(parsed.device.sourceDevice, JSON.stringify({
             permissions: parsed.permissions,
             sleepSessions: parsed.sleepSessions.length,
+            sleepNights: normalizedSleepNights.length,
+            sleepSegments: normalizedSleepSegments.length,
             workouts: parsed.workouts.length,
+            vitals: {
+                daySummaries: parsed.vitals.daySummaries.length,
+                metricEntries: vitalMetricEntries
+            },
             movement: {
                 knownPlaces: parsed.movement.knownPlaces.length,
                 stays: parsed.movement.stays.length,
@@ -1200,12 +2049,14 @@ export function ingestMobileHealthSync(payload) {
                 authorizationStatus: parsed.screenTime.settings.authorizationStatus,
                 captureState: parsed.screenTime.settings.captureState
             }
-        }), parsed.sleepSessions.length +
+        }), normalizedSleepNights.length +
+            normalizedSleepSegments.length +
             parsed.workouts.length +
+            parsed.vitals.daySummaries.length +
             parsed.movement.stays.length +
             parsed.movement.trips.length +
             parsed.screenTime.daySummaries.length +
-            parsed.screenTime.hourlySegments.length, createdCount + movementSync.createdCount + screenTimeSync.createdCount, updatedCount + movementSync.updatedCount + screenTimeSync.updatedCount, mergedCount, now, now, now);
+            parsed.screenTime.hourlySegments.length, createdCount + movementSync.createdCount + screenTimeSync.createdCount, updatedCount + movementSync.updatedCount + screenTimeSync.updatedCount, mergedCount, now, now, runId);
         recordActivityEvent({
             entityType: "system",
             entityId: pairing.id,
@@ -1216,7 +2067,11 @@ export function ingestMobileHealthSync(payload) {
             source: "system",
             metadata: {
                 sleepSessions: parsed.sleepSessions.length,
+                sleepNights: normalizedSleepNights.length,
+                sleepSegments: normalizedSleepSegments.length,
                 workouts: parsed.workouts.length,
+                vitalsDaySummaries: parsed.vitals.daySummaries.length,
+                vitalsMetricEntries: vitalMetricEntries,
                 movementStays: parsed.movement.stays.length,
                 movementTrips: parsed.movement.trips.length,
                 screenTimeDaySummaries: parsed.screenTime.daySummaries.length,
@@ -1232,7 +2087,11 @@ export function ingestMobileHealthSync(payload) {
                 .get(pairing.id)),
             imported: {
                 sleepSessions: parsed.sleepSessions.length,
+                sleepNights: normalizedSleepNights.length,
+                sleepSegments: normalizedSleepSegments.length,
                 workouts: parsed.workouts.length,
+                vitalsDaySummaries: parsed.vitals.daySummaries.length,
+                vitalsMetricEntries: vitalMetricEntries,
                 createdCount: createdCount + movementSync.createdCount + screenTimeSync.createdCount,
                 updatedCount: updatedCount + movementSync.updatedCount + screenTimeSync.updatedCount,
                 mergedCount,
@@ -1250,7 +2109,26 @@ export function getCompanionOverview(userIds) {
     const pairings = listPairingSessions(userIds);
     const importRuns = listHealthImportRunRows(userIds).map(mapHealthImportRun);
     const sleepSessions = listSleepRows(userIds).map(mapSleepSession);
+    const sleepSegments = getDatabase()
+        .prepare(userIds && userIds.length > 0
+        ? `SELECT COUNT(*) AS count
+           FROM health_sleep_segments
+           WHERE user_id IN (${userIds.map(() => "?").join(",")})`
+        : `SELECT COUNT(*) AS count FROM health_sleep_segments`)
+        .get(...(userIds ?? []));
+    const sleepRawLogs = getDatabase()
+        .prepare(userIds && userIds.length > 0
+        ? `SELECT COUNT(*) AS count
+           FROM health_sleep_raw_logs
+           WHERE user_id IN (${userIds.map(() => "?").join(",")})`
+        : `SELECT COUNT(*) AS count FROM health_sleep_raw_logs`)
+        .get(...(userIds ?? []));
     const workouts = listWorkoutRows(userIds).map(mapWorkoutSession);
+    const vitalsRows = listDailySummaryRows("vitals", userIds);
+    const vitalsMetricEntries = vitalsRows.reduce((sum, row) => {
+        const metrics = safeJsonParse(row.metrics_json, {});
+        return sum + Object.keys(metrics).length;
+    }, 0);
     const movementSummary = importRuns.reduce((totals, run) => {
         const movement = safeJsonParse(JSON.stringify(run.payloadSummary.movement ?? {}), {}) ?? {};
         return {
@@ -1292,6 +2170,8 @@ export function getCompanionOverview(userIds) {
         lastSyncAt,
         counts: {
             sleepSessions: sleepSessions.length,
+            sleepSegments: sleepSegments.count,
+            sleepRawLogs: sleepRawLogs.count,
             workouts: workouts.length,
             reflectiveSleepSessions: sleepSessions.filter((session) => {
                 const annotations = session.annotations;
@@ -1305,6 +2185,8 @@ export function getCompanionOverview(userIds) {
             linkedWorkouts: workouts.filter((session) => session.links.length > 0).length,
             habitGeneratedWorkouts: workouts.filter((session) => session.sourceType === "habit_generated").length,
             reconciledWorkouts: workouts.filter((session) => session.reconciliationStatus === "merged").length,
+            vitalsDaySummaries: vitalsRows.length,
+            vitalsMetricEntries,
             movementKnownPlaces: movementSummary.knownPlaces,
             movementStays: movementSummary.stays,
             movementTrips: movementSummary.trips,
@@ -1325,6 +2207,11 @@ export function getSleepViewData(userIds) {
     const recent = sessions.slice(0, 30);
     const weekly = recent.slice(0, 7);
     const monthly = recent.slice(0, 30);
+    const calendarWindow = sessions.slice(0, 84);
+    const latestNight = recent[0] ?? null;
+    const weeklyBaseline = weekly.length > 1
+        ? Math.round(average(weekly.slice(1).map((session) => session.asleepSeconds)))
+        : Math.round(average(weekly.map((session) => session.asleepSeconds)));
     const stageTotals = new Map();
     const linkTotals = new Map();
     for (const session of monthly) {
@@ -1353,20 +2240,9 @@ export function getSleepViewData(userIds) {
                 : session.timeInBedSeconds > 0
                     ? session.asleepSeconds / session.timeInBedSeconds
                     : 0)), 2),
-            averageRestorativeShare: round(average(weekly.map((session) => typeof session.derived
-                .restorativeShare === "number"
-                ? session.derived
-                    .restorativeShare
-                : 0)), 2),
-            reflectiveNightCount: weekly.filter((session) => {
-                const annotations = session.annotations;
-                const tags = Array.isArray(annotations.tags) ? annotations.tags : [];
-                return (session.links.length > 0 ||
-                    (typeof annotations.qualitySummary === "string" &&
-                        annotations.qualitySummary.length > 0) ||
-                    (typeof annotations.notes === "string" && annotations.notes.length > 0) ||
-                    tags.length > 0);
-            }).length,
+            averageRestorativeShare: round(average(weekly.map((session) => sleepRestorativeShare(session))), 2),
+            reflectiveNightCount: weekly.filter((session) => sleepHasReflection(session))
+                .length,
             linkedNightCount: weekly.filter((session) => session.links.length > 0).length,
             averageBedtimeConsistencyMinutes: Math.round(average(weekly
                 .map((session) => session.bedtimeConsistencyMinutes)
@@ -1377,10 +2253,16 @@ export function getSleepViewData(userIds) {
             latestBedtime: recent[0]?.startedAt ?? null,
             latestWakeTime: recent[0]?.endedAt ?? null
         },
+        latestNight: latestNight
+            ? buildSleepSurfaceNight(latestNight, weeklyBaseline)
+            : null,
+        calendarDays: calendarWindow
+            .map((session) => buildSleepCalendarDay(session))
+            .reverse(),
         weeklyTrend: weekly
             .map((session) => ({
             id: session.id,
-            dateKey: dayKey(session.endedAt),
+            dateKey: session.localDateKey,
             sleepHours: Number((session.asleepSeconds / 3600).toFixed(2)),
             score: session.sleepScore ?? 0,
             regularity: session.regularityScore ?? 0
@@ -1389,9 +2271,9 @@ export function getSleepViewData(userIds) {
         monthlyPattern: monthly
             .map((session) => ({
             id: session.id,
-            dateKey: dayKey(session.endedAt),
-            onsetHour: new Date(session.startedAt).getHours(),
-            wakeHour: new Date(session.endedAt).getHours(),
+            dateKey: session.localDateKey,
+            onsetHour: getTimeZoneParts(session.startedAt, session.sourceTimezone).hour,
+            wakeHour: getTimeZoneParts(session.endedAt, session.sourceTimezone).hour,
             sleepHours: Number((session.asleepSeconds / 3600).toFixed(2))
         }))
             .reverse(),
@@ -1467,9 +2349,147 @@ export function getFitnessViewData(userIds) {
         sessions: recent
     };
 }
+function averageNullable(values) {
+    const present = values.filter((value) => value != null);
+    return present.length > 0 ? average(present) : null;
+}
+function sumNullable(values) {
+    const present = values.filter((value) => value != null);
+    return present.length > 0 ? present.reduce((sum, value) => sum + value, 0) : null;
+}
+function maxNullable(values) {
+    const present = values.filter((value) => value != null);
+    return present.length > 0 ? Math.max(...present) : null;
+}
+function minNullable(values) {
+    const present = values.filter((value) => value != null);
+    return present.length > 0 ? Math.min(...present) : null;
+}
+function vitalMetricPrimaryValue(metric) {
+    if (metric.aggregation === "cumulative") {
+        return metric.total ?? metric.latest;
+    }
+    return metric.latest ?? metric.average ?? metric.maximum;
+}
+export function getVitalsViewData(userIds) {
+    const rows = listDailySummaryRows("vitals", userIds);
+    const dayCount = new Set(rows.map((row) => row.date_key)).size;
+    const metricBuckets = new Map();
+    for (const row of rows) {
+        const metrics = safeJsonParse(row.metrics_json, {});
+        for (const [metricKey, metric] of Object.entries(metrics)) {
+            const bucket = metricBuckets.get(metricKey) ?? {
+                label: metric.label,
+                category: metric.category,
+                unit: metric.unit,
+                displayUnit: metric.displayUnit || metric.unit,
+                aggregation: metric.aggregation,
+                days: new Map()
+            };
+            const entries = bucket.days.get(row.date_key) ?? [];
+            entries.push(metric);
+            bucket.days.set(row.date_key, entries);
+            metricBuckets.set(metricKey, bucket);
+        }
+    }
+    const metrics = [...metricBuckets.entries()]
+        .map(([metric, bucket]) => {
+        const days = [...bucket.days.entries()]
+            .sort((left, right) => left[0].localeCompare(right[0]))
+            .map(([dateKey, entries]) => {
+            const aggregated = {
+                dateKey,
+                average: averageNullable(entries.map((entry) => entry.average)),
+                minimum: minNullable(entries.map((entry) => entry.minimum)),
+                maximum: maxNullable(entries.map((entry) => entry.maximum)),
+                latest: averageNullable(entries.map((entry) => entry.latest)),
+                total: bucket.aggregation === "cumulative"
+                    ? sumNullable(entries.map((entry) => entry.total ?? entry.latest))
+                    : sumNullable(entries.map((entry) => entry.total)),
+                sampleCount: entries.reduce((sum, entry) => sum + entry.sampleCount, 0),
+                latestSampleAt: entries
+                    .map((entry) => entry.latestSampleAt)
+                    .filter((value) => Boolean(value))
+                    .sort()
+                    .at(-1) ?? null
+            };
+            return aggregated;
+        });
+        const latestDay = [...days].reverse().find((day) => vitalMetricPrimaryValue({
+            aggregation: bucket.aggregation,
+            latest: day.latest,
+            average: day.average,
+            total: day.total,
+            maximum: day.maximum
+        }) !== null) ?? null;
+        const recentValues = days
+            .map((day) => vitalMetricPrimaryValue({
+            aggregation: bucket.aggregation,
+            latest: day.latest,
+            average: day.average,
+            total: day.total,
+            maximum: day.maximum
+        }))
+            .filter((value) => value != null);
+        const baselineValues = recentValues.slice(Math.max(0, recentValues.length - 8), recentValues.length - 1);
+        const baselineValue = baselineValues.length > 0 ? average(baselineValues) : recentValues.at(-2) ?? null;
+        const latestValue = latestDay
+            ? vitalMetricPrimaryValue({
+                aggregation: bucket.aggregation,
+                latest: latestDay.latest,
+                average: latestDay.average,
+                total: latestDay.total,
+                maximum: latestDay.maximum
+            })
+            : null;
+        return {
+            metric,
+            label: bucket.label,
+            category: bucket.category,
+            unit: bucket.displayUnit,
+            aggregation: bucket.aggregation,
+            latestValue: latestValue == null ? null : round(latestValue, bucket.aggregation === "cumulative" ? 0 : 1),
+            latestDateKey: latestDay?.dateKey ?? null,
+            baselineValue: baselineValue == null ? null : round(baselineValue, bucket.aggregation === "cumulative" ? 0 : 1),
+            deltaValue: latestValue != null && baselineValue != null
+                ? round(latestValue - baselineValue, bucket.aggregation === "cumulative" ? 0 : 1)
+                : null,
+            coverageDays: days.filter((day) => day.sampleCount > 0).length,
+            days
+        };
+    })
+        .sort((left, right) => {
+        if (left.category === right.category) {
+            return left.label.localeCompare(right.label);
+        }
+        return left.category.localeCompare(right.category);
+    });
+    const categoryBreakdown = [...new Set(metrics.map((metric) => metric.category))]
+        .map((category) => {
+        const categoryMetrics = metrics.filter((metric) => metric.category === category);
+        return {
+            category,
+            metricCount: categoryMetrics.length,
+            coverageDays: Math.max(...categoryMetrics.map((metric) => metric.coverageDays), 0)
+        };
+    })
+        .sort((left, right) => right.metricCount - left.metricCount);
+    return {
+        summary: {
+            trackedDays: dayCount,
+            metricCount: metrics.length,
+            latestDateKey: rows[0]?.date_key ?? null,
+            latestMetricCount: metrics.filter((metric) => metric.latestDateKey === (rows[0]?.date_key ?? null))
+                .length,
+            categoryBreakdown
+        },
+        metrics
+    };
+}
 export function createSleepSession(input, activity) {
     const parsed = createSleepSessionSchema.parse(input);
     const userId = resolveHealthUserId(parsed.userId);
+    const sourceTimezone = resolveTimeZone(parsed.sourceTimezone);
     const now = nowIso();
     const id = `sleep_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
     const externalUid = parsed.externalUid ??
@@ -1487,7 +2507,8 @@ export function createSleepSession(input, activity) {
     const timingMetrics = computeSleepTimingMetrics({
         userId,
         startedAt: parsed.startedAt,
-        endedAt: parsed.endedAt
+        endedAt: parsed.endedAt,
+        sourceTimezone
     });
     const annotations = {
         qualitySummary: parsed.qualitySummary,
@@ -1505,13 +2526,13 @@ export function createSleepSession(input, activity) {
     getDatabase()
         .prepare(`INSERT INTO health_sleep_sessions (
          id, external_uid, pairing_session_id, user_id, source, source_type, source_device,
-         started_at, ended_at, time_in_bed_seconds, asleep_seconds, awake_seconds,
+         source_timezone, local_date_key, started_at, ended_at, time_in_bed_seconds, asleep_seconds, awake_seconds,
          sleep_score, regularity_score, bedtime_consistency_minutes, wake_consistency_minutes,
-         stage_breakdown_json, recovery_metrics_json, links_json, annotations_json,
+         raw_segment_count, stage_breakdown_json, recovery_metrics_json, source_metrics_json, links_json, annotations_json,
          provenance_json, derived_json, created_at, updated_at
        )
-       VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(id, externalUid, userId, parsed.source, parsed.sourceType, parsed.sourceDevice, parsed.startedAt, parsed.endedAt, timeInBedSeconds, asleepSeconds, awakeSeconds, sleepScore, timingMetrics.regularityScore, timingMetrics.bedtimeConsistencyMinutes, timingMetrics.wakeConsistencyMinutes, JSON.stringify(parsed.stageBreakdown), JSON.stringify(parsed.recoveryMetrics), JSON.stringify(parsed.links), JSON.stringify(annotations), JSON.stringify({
+       VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(id, externalUid, userId, parsed.source, parsed.sourceType, parsed.sourceDevice, sourceTimezone, parsed.localDateKey ?? localDateKeyForTimezone(parsed.endedAt, sourceTimezone), parsed.startedAt, parsed.endedAt, timeInBedSeconds, asleepSeconds, awakeSeconds, sleepScore, timingMetrics.regularityScore, timingMetrics.bedtimeConsistencyMinutes, timingMetrics.wakeConsistencyMinutes, parsed.rawSegmentCount, JSON.stringify(parsed.stageBreakdown), JSON.stringify(parsed.recoveryMetrics), JSON.stringify(parsed.sourceMetrics), JSON.stringify(parsed.links), JSON.stringify(annotations), JSON.stringify({
         manualEntry: true,
         entryMode: "local",
         source: parsed.source,
@@ -1521,7 +2542,7 @@ export function createSleepSession(input, activity) {
         createdAt: now,
         ...parsed.provenance
     }), JSON.stringify(derived), now, now);
-    summarizeUserHealthDay(userId, dayKey(parsed.endedAt));
+    summarizeUserHealthDay(userId, parsed.localDateKey ?? localDateKeyForTimezone(parsed.endedAt, sourceTimezone));
     recordActivityEvent({
         entityType: "sleep_session",
         entityId: id,
@@ -1547,6 +2568,7 @@ export function updateSleepSession(sleepId, patch, activity) {
         return undefined;
     }
     const now = nowIso();
+    const sourceTimezone = resolveTimeZone(parsed.sourceTimezone ?? current.source_timezone);
     const startedAt = parsed.startedAt ?? current.started_at;
     const endedAt = parsed.endedAt ?? current.ended_at;
     const timeInBedSeconds = parsed.timeInBedSeconds ??
@@ -1557,6 +2579,7 @@ export function updateSleepSession(sleepId, patch, activity) {
     const awakeSeconds = parsed.awakeSeconds ?? Math.max(0, timeInBedSeconds - asleepSeconds);
     const stageBreakdown = parsed.stageBreakdown ?? safeJsonParse(current.stage_breakdown_json, []);
     const recoveryMetrics = parsed.recoveryMetrics ?? safeJsonParse(current.recovery_metrics_json, {});
+    const sourceMetrics = parsed.sourceMetrics ?? safeJsonParse(current.source_metrics_json, {});
     const currentAnnotations = safeJsonParse(current.annotations_json, {});
     const links = parsed.links ?? safeJsonParse(current.links_json, []);
     const annotations = {
@@ -1584,6 +2607,7 @@ export function updateSleepSession(sleepId, patch, activity) {
         userId: current.user_id,
         startedAt,
         endedAt,
+        sourceTimezone,
         excludeSleepId: current.id
     });
     const derived = computeSleepDerivedMetrics({
@@ -1596,20 +2620,22 @@ export function updateSleepSession(sleepId, patch, activity) {
     const currentProvenance = safeJsonParse(current.provenance_json, {});
     getDatabase()
         .prepare(`UPDATE health_sleep_sessions
-       SET external_uid = ?, source = ?, source_type = ?, source_device = ?,
+       SET external_uid = ?, source = ?, source_type = ?, source_device = ?, source_timezone = ?, local_date_key = ?,
            started_at = ?, ended_at = ?, time_in_bed_seconds = ?, asleep_seconds = ?, awake_seconds = ?,
            sleep_score = ?, regularity_score = ?, bedtime_consistency_minutes = ?, wake_consistency_minutes = ?,
-           stage_breakdown_json = ?, recovery_metrics_json = ?, links_json = ?, annotations_json = ?,
+           raw_segment_count = ?, stage_breakdown_json = ?, recovery_metrics_json = ?, source_metrics_json = ?, links_json = ?, annotations_json = ?,
            provenance_json = ?, derived_json = ?, updated_at = ?
        WHERE id = ?`)
-        .run(parsed.externalUid ?? current.external_uid, parsed.source ?? current.source, parsed.sourceType ?? current.source_type, parsed.sourceDevice ?? current.source_device, startedAt, endedAt, timeInBedSeconds, asleepSeconds, awakeSeconds, sleepScore, timingMetrics.regularityScore, timingMetrics.bedtimeConsistencyMinutes, timingMetrics.wakeConsistencyMinutes, JSON.stringify(stageBreakdown), JSON.stringify(recoveryMetrics), JSON.stringify(links), JSON.stringify(annotations), JSON.stringify({
+        .run(parsed.externalUid ?? current.external_uid, parsed.source ?? current.source, parsed.sourceType ?? current.source_type, parsed.sourceDevice ?? current.source_device, sourceTimezone, (parsed.localDateKey ?? current.local_date_key) ||
+        localDateKeyForTimezone(endedAt, sourceTimezone), startedAt, endedAt, timeInBedSeconds, asleepSeconds, awakeSeconds, sleepScore, timingMetrics.regularityScore, timingMetrics.bedtimeConsistencyMinutes, timingMetrics.wakeConsistencyMinutes, parsed.rawSegmentCount ?? current.raw_segment_count, JSON.stringify(stageBreakdown), JSON.stringify(recoveryMetrics), JSON.stringify(sourceMetrics), JSON.stringify(links), JSON.stringify(annotations), JSON.stringify({
         ...currentProvenance,
         ...(parsed.provenance ?? {}),
         updatedAt: now,
         updatedByActor: activity?.actor ?? null
     }), JSON.stringify(derived), now, sleepId);
-    summarizeUserHealthDay(current.user_id, dayKey(current.ended_at));
-    summarizeUserHealthDay(current.user_id, dayKey(endedAt));
+    summarizeUserHealthDay(current.user_id, sleepSessionDateKey(current));
+    summarizeUserHealthDay(current.user_id, (parsed.localDateKey ?? current.local_date_key) ||
+        localDateKeyForTimezone(endedAt, sourceTimezone));
     recordActivityEvent({
         entityType: "sleep_session",
         entityId: sleepId,

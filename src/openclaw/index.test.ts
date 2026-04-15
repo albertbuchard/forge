@@ -289,6 +289,7 @@ describe("forge openclaw plugin", () => {
       "/forge/v1/wiki/health",
       "/forge/v1/health/sleep",
       "/forge/v1/health/fitness",
+      "/forge/v1/calendar",
       "/forge/v1/preferences/workspace",
       "/forge/v1/psyche/self-observation/calendar",
       "/forge/v1/operator/log-work",

@@ -12,6 +12,16 @@ It also carries a bundled built Forge runtime under [`runtime/`](./runtime), so 
 - post structured insights
 - hand off to the Forge UI when Kanban, review, or Psyche exploration is easier visually
 
+The current PM contract it should understand is:
+
+- `Goal -> Strategy -> Project -> Strategy -> Issue -> Task -> Subtask`
+- one mixed board for `project | issue | task | subtask`
+- one compact hierarchy view with shared filters and level visibility
+- shared `executionMode` + `acceptanceCriteria` support on issues and tasks
+- hierarchy-aware linking and creation flows
+- `completionReport = { modifiedFiles[], workSummary, linkedGitRefIds[] }`
+- direct work on `main` by default
+
 The MCP server is launched by [`./scripts/run-mcp.sh`](./scripts/run-mcp.sh), which starts the bundled MCP bridge and reuses the built Forge OpenClaw tool registrations from the packaged runtime.
 
 Environment variables:

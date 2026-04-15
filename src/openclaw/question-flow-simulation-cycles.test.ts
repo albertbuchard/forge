@@ -73,6 +73,7 @@ describe("question flow simulation cycles", () => {
     expect(entityPlaybook).toMatch(/Strategic record:/i);
     expect(entityPlaybook).toMatch(/Reusable record:/i);
     expect(entityPlaybook).toMatch(/Operational record:/i);
+    expect(entityPlaybook).toMatch(/trying to understand,\s*preserve,\s*decide,\s*schedule,\s*or change something/i);
 
     for (const section of nonPsycheSections) {
       const sectionSlice = getSectionSlice(entityPlaybook, section);
@@ -93,6 +94,7 @@ describe("question flow simulation cycles", () => {
     expect(entityPlaybook).toMatch(/feels important to keep true/i);
     expect(entityPlaybook).toMatch(/Close cleanly/i);
     expect(entityPlaybook).toMatch(/what seems clear now is/i);
+    expect(entityPlaybook).toMatch(/what workflow they are trying to unlock/i);
 
     expect(psychePlaybook).toMatch(/living center of the moment/i);
     expect(psychePlaybook).toMatch(/First reflection menu/i);
@@ -126,6 +128,8 @@ describe("question flow simulation cycles", () => {
     expect(entityPlaybook).toMatch(/If no detail is still decision-relevant/i);
     expect(entityPlaybook).toMatch(/revise the working formulation once/i);
     expect(entityPlaybook).toMatch(/what this would help[\s\S]*decide later is/i);
+    expect(entityPlaybook).toMatch(/repair or revise one saved overlay/i);
+    expect(entityPlaybook).toMatch(/public input contract or a published output/i);
 
     expect(psychePlaybook).toMatch(/Change and save pivots/i);
     expect(psychePlaybook).toMatch(/When the user says the formulation lands/i);

@@ -27,6 +27,7 @@ import type { AiConnectorKind, CrudEntityType, Note } from "@/lib/types";
 export const ENTITY_KINDS = [
   "goal",
   "project",
+  "issue",
   "task",
   "strategy",
   "habit",
@@ -96,6 +97,13 @@ const ENTITY_VISUAL_SEEDS: ReadonlyArray<EntityVisualSeed> = [
     icon: FolderOpen,
     iconName: "FolderOpen",
     accentRgb: [56, 189, 248]
+  },
+  {
+    kind: "issue",
+    label: "Issue",
+    icon: FileText,
+    iconName: "FileText",
+    accentRgb: [251, 146, 60]
   },
   {
     kind: "task",

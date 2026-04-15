@@ -55,6 +55,7 @@ export function ProjectDialog({
   users,
   editingProject,
   initialGoalId,
+  initialStepId,
   defaultUserId = null,
   onOpenChange,
   onSubmit
@@ -64,6 +65,7 @@ export function ProjectDialog({
   users?: UserSummary[];
   editingProject: ProjectSummary | null;
   initialGoalId?: string | null;
+  initialStepId?: string;
   defaultUserId?: string | null;
   onOpenChange: (open: boolean) => void;
   onSubmit: (input: ProjectMutationInput, projectId?: string) => Promise<void>;
@@ -342,6 +344,7 @@ export function ProjectDialog({
       value={draft}
       onChange={setDraft}
       steps={steps}
+      initialStepId={initialStepId}
       submitLabel={
         editingProject
           ? t("common.dialogs.project.save")

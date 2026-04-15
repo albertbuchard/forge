@@ -103,12 +103,18 @@ Use this intake progression:
 1. Clarify whether the user is shaping a PRD-backed project, a vertical-slice
    issue, a one-session task, or a lightweight subtask.
 2. For projects, ask what the PRD-backed outcome should become.
-3. For issues, ask what end-to-end slice should become true and whether the
-   issue is `AFK` or `HITL`.
-4. For tasks, ask for the one focused AI session outcome and capture the
-   execution contract in `aiInstructions`.
+3. For issues, ask what end-to-end slice should become true, where it belongs
+   in the hierarchy, and whether `executionMode` or `acceptanceCriteria` should
+   be made explicit now.
+4. For tasks, ask for the one focused AI session outcome, where it should live
+   under an issue, and capture the execution contract in `aiInstructions`. Tasks
+   can also preserve `executionMode` and `acceptanceCriteria` when useful.
 5. For completed tasks, preserve modified files, work summary, and linked
    commits through `completionReport`.
+
+When placement matters, prefer one hierarchy-aware linking question that can
+select or create the right goal, project, issue, or parent work item from the
+same search-first flow.
 
 ## Operation lane checkpoint
 

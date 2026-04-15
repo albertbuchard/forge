@@ -99,7 +99,9 @@ describe("forge skill playbook parity", () => {
     expect(codexSkill).toMatch(/simple entities/i);
     expect(codexSkill).toMatch(/hundreds of individual CRUD routes|route jungle/i);
     expect(codexSkill).toMatch(/specializedDomainSurfaces/i);
+    expect(codexSkill).toMatch(/specialized_domain_surface/i);
     expect(codexSkill).toMatch(/\/api\/v1\/movement\/day/i);
+    expect(codexSkill).toMatch(/\/api\/v1\/movement\/automatic-boxes\/:id\/invalidate/i);
     expect(codexSkill).toMatch(/\/api\/v1\/life-force\/profile/i);
     expect(codexSkill).toMatch(/\/api\/v1\/workbench\/flows\/:id\/run/i);
     expect(codexSkill).toMatch(/forge_adjust_work_minutes/);
@@ -160,6 +162,7 @@ describe("forge skill playbook parity", () => {
     expect(entityPlaybook).toMatch(/## Workbench/);
     expect(entityPlaybook).toMatch(/Lane-to-route map:/);
     expect(entityPlaybook).toMatch(/\/api\/v1\/movement\/day/);
+    expect(entityPlaybook).toMatch(/\/api\/v1\/movement\/automatic-boxes\/:id\/invalidate/);
     expect(entityPlaybook).toMatch(/\/api\/v1\/life-force\/profile/);
     expect(entityPlaybook).toMatch(/\/api\/v1\/workbench\/flows\/:id\/run/);
     expect(entityPlaybook).toMatch(/favorite, veto, or compare-later/i);
@@ -311,9 +314,12 @@ describe("forge skill playbook parity", () => {
     expect(appSource).toMatch(/entityType:\s*"movement"/);
     expect(appSource).toMatch(/entityType:\s*"life_force"/);
     expect(appSource).toMatch(/entityType:\s*"workbench"/);
+    expect(appSource).toMatch(/specialized_domain_surface/);
     expect(appSource).toMatch(/workAdjustment:/);
     expect(appSource).toMatch(/specializedDomainSurfaces:/);
     expect(appSource).toMatch(/movementAllTime:/);
+    expect(appSource).toMatch(/movementAutomaticBoxInvalidate:/);
+    expect(appSource).toMatch(/movementTripPointUpdate:/);
     expect(appSource).toMatch(/workbenchFlows:/);
 
     expect(openApiSource).toMatch(/"workAdjustment"/);
@@ -321,8 +327,10 @@ describe("forge skill playbook parity", () => {
     expect(openApiSource).toMatch(/"lifeForce"/);
     expect(openApiSource).toMatch(/"workbench"/);
     expect(openApiSource).toMatch(/"specializedDomainSurfaces"/);
+    expect(openApiSource).toMatch(/"specialized_domain_surface"/);
     expect(openApiSource).toMatch(/"movementTimeline"/);
     expect(openApiSource).toMatch(/"movementAllTime"/);
+    expect(openApiSource).toMatch(/"movementAutomaticBoxInvalidate"/);
     expect(openApiSource).toMatch(/"workbenchFlows"/);
   });
 });

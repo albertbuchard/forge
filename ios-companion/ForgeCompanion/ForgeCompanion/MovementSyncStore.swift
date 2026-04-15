@@ -1191,8 +1191,9 @@ final class MovementSyncStore: NSObject, ObservableObject, @preconcurrency CLLoc
             }
 
             if let latest = ensured.last {
+                let hasActiveSegment = activeStayId != nil || activeTripId != nil
                 let trailingGap = referenceDate.timeIntervalSince(latest.endedAt)
-                if trailingGap > 0 {
+                if trailingGap > 0, hasActiveSegment == false {
                     if trailingGap <= DetectionThresholds.stayContinuityGapSeconds {
                         let trailingOrigin: TimelineSegment.Origin =
                             latest.kind == .stay ? .continuedStay : .repairedGap

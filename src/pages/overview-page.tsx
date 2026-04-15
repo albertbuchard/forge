@@ -168,29 +168,36 @@ export function OverviewPage() {
   const { t } = useI18n();
   const shell = useForgeShell();
   const snapshot = shell.snapshot;
+  const selectedUserIds = Array.isArray(shell.selectedUserIds)
+    ? shell.selectedUserIds
+    : [];
   const todayDateKey = localDateKey();
-  const sleepQuery = useQuery({
-    queryKey: ["forge-overview-sleep", ...shell.selectedUserIds],
-    queryFn: async () => (await getSleepView(shell.selectedUserIds)).sleep
-  });
-  const fitnessQuery = useQuery({
-    queryKey: ["forge-overview-fitness", ...shell.selectedUserIds],
-    queryFn: async () => (await getFitnessView(shell.selectedUserIds)).fitness
-  });
-  const movementDayQuery = useQuery({
-    queryKey: ["forge-overview-movement-day", todayDateKey, ...shell.selectedUserIds],
-    queryFn: async () =>
-      (
-        await getMovementDay({
-          date: todayDateKey,
-          userIds: shell.selectedUserIds
-        })
-      ).movement
-  });
-  const vitalsQuery = useQuery({
-    queryKey: ["forge-overview-vitals", ...shell.selectedUserIds],
-    queryFn: async () => (await getVitalsView(shell.selectedUserIds)).vitals
-  });
+  const sleepQuery =
+    useQuery({
+      queryKey: ["forge-overview-sleep", ...selectedUserIds],
+      queryFn: async () => (await getSleepView(selectedUserIds)).sleep
+    }) ?? {};
+  const fitnessQuery =
+    useQuery({
+      queryKey: ["forge-overview-fitness", ...selectedUserIds],
+      queryFn: async () => (await getFitnessView(selectedUserIds)).fitness
+    }) ?? {};
+  const movementDayQuery =
+    useQuery({
+      queryKey: ["forge-overview-movement-day", todayDateKey, ...selectedUserIds],
+      queryFn: async () =>
+        (
+          await getMovementDay({
+            date: todayDateKey,
+            userIds: selectedUserIds
+          })
+        ).movement
+    }) ?? {};
+  const vitalsQuery =
+    useQuery({
+      queryKey: ["forge-overview-vitals", ...selectedUserIds],
+      queryFn: async () => (await getVitalsView(selectedUserIds)).vitals
+    }) ?? {};
   const nextMilestone =
     snapshot.dashboard.milestoneRewards.find((reward) => !reward.completed) ??
     snapshot.dashboard.milestoneRewards[0] ??
@@ -445,7 +452,7 @@ export function OverviewPage() {
       render: () => (
         snapshot.lifeForce ? (
           <LifeForceOverviewWorkspace
-            selectedUserIds={shell.selectedUserIds}
+            selectedUserIds={selectedUserIds}
             fallbackLifeForce={snapshot.lifeForce}
             onRefresh={shell.refresh}
             showEditor={false}
@@ -907,9 +914,7 @@ export function OverviewPage() {
       render: ({ compact }) => (
         <QuickCaptureWidget
           compact={compact}
-          defaultUserId={
-            shell.selectedUserIds[0] ?? snapshot.users[0]?.id ?? null
-          }
+          defaultUserId={selectedUserIds[0] ?? snapshot.users[0]?.id ?? null}
         />
       )
     }
