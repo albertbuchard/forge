@@ -156,8 +156,6 @@ function TaskCardShell({
   onStartTask,
   onQuickReopen,
   onStepTask,
-  onOpenTask,
-  onEditTask,
   onSplitTask,
   onOpenMenu,
   notesSummaryByEntity
@@ -177,8 +175,6 @@ function TaskCardShell({
   onStartTask?: (taskId: string) => Promise<void>;
   onQuickReopen?: (taskId: string) => Promise<void>;
   onStepTask?: (taskId: string, direction: "previous" | "next") => Promise<void>;
-  onOpenTask?: (taskId: string) => void;
-  onEditTask?: (taskId: string) => void;
   onSplitTask?: (taskId: string) => void;
   onOpenMenu?: (
     event: ReactMouseEvent<HTMLButtonElement>,
@@ -227,28 +223,21 @@ function TaskCardShell({
         className="mb-3 h-px w-full rounded-full"
         style={{ background: `linear-gradient(90deg, rgba(${accent}, 0.96), rgba(${accent}, 0.18))` }}
       />
-      <div className="mb-2 flex items-start justify-between gap-2">
+      <div className="mb-3 flex items-start justify-between gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <EntityBadge kind={entityKind} label={task.level} compact gradient={false} />
-          <Badge className="shrink-0 text-[11px] text-[var(--tertiary)]">
+          <EntityBadge
+            kind={entityKind}
+            label={task.level}
+            compact
+            size="xs"
+            gradient={false}
+            className="shrink-0"
+          />
+          <Badge size="xs" className="shrink-0 text-[10px] text-[var(--tertiary)]">
             {task.priority}
           </Badge>
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          {onEditTask ? (
-            <button
-              type="button"
-              aria-label={`Edit ${task.title}`}
-              className="inline-flex size-8 items-center justify-center rounded-full bg-white/8 text-white/62 transition hover:bg-white/12 hover:text-white"
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                onEditTask(task.id);
-              }}
-            >
-              <Pencil className="size-3.5" />
-            </button>
-          ) : null}
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
           {onOpenMenu ? (
             <button
               type="button"
@@ -261,20 +250,6 @@ function TaskCardShell({
               }}
             >
               <MoreHorizontal className="size-3.5" />
-            </button>
-          ) : null}
-          {onOpenTask ? (
-            <button
-              type="button"
-              aria-label={`Open ${task.title} details`}
-              className="inline-flex size-8 items-center justify-center rounded-full bg-white/8 text-white/62 transition hover:bg-white/12 hover:text-white"
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                onOpenTask(task.id);
-              }}
-            >
-              <ArrowUpRight className="size-3.5" />
             </button>
           ) : null}
           {isMobile ? (
@@ -336,34 +311,43 @@ function TaskCardShell({
               Split it
             </button>
           ) : null}
-          <span className="text-[11px] text-white/44">{task.points} xp</span>
+          <span className="shrink-0 text-[11px] text-white/44">{task.points} xp</span>
         </div>
       </div>
       <EntityName kind={entityKind} label={task.title} className="max-w-full" lines={3} labelClassName="[overflow-wrap:anywhere]" />
       <p className="mt-1.5 line-clamp-3 [overflow-wrap:anywhere] text-[12px] leading-5 text-white/62">{task.description || t("common.executionBoard.noExecutionNote")}</p>
       <div className="mt-2.5 flex min-w-0 flex-wrap gap-1.5">
-        {goal ? <EntityBadge kind="goal" label={goal.title} compact wrap className="min-w-0 max-w-full" /> : null}
-        <UserBadge user={task.user} compact />
-        <EntityNoteCountLink entityType="task" entityId={task.id} count={noteCount} />
+        {goal ? (
+          <EntityBadge
+            kind="goal"
+            label={goal.title}
+            compact
+            size="xs"
+            wrap
+            className="min-w-0 max-w-full"
+          />
+        ) : null}
+        <UserBadge user={task.user} compact size="xs" />
+        <EntityNoteCountLink entityType="task" entityId={task.id} count={noteCount} compact />
         {task.actionPointSummary ? (
-          <Badge className="bg-[var(--primary)]/12 text-[var(--primary)]">
+          <Badge size="xs" className="bg-[var(--primary)]/12 text-[var(--primary)]">
             {Math.round(task.actionPointSummary.totalCostAp)} AP
           </Badge>
         ) : null}
         {task.actionPointSummary ? (
-          <Badge className="bg-white/8 text-white/72">
+          <Badge size="xs" className="bg-white/8 text-white/72">
             {task.actionPointSummary.costBand}
           </Badge>
         ) : null}
         {task.actionPointSummary ? (
-          <Badge className="bg-white/8 text-white/72">
+          <Badge size="xs" className="bg-white/8 text-white/72">
             {Math.round(task.actionPointSummary.expectedDurationSeconds / 3600)} h target
           </Badge>
         ) : null}
-        {task.time.totalCreditedSeconds > 0 ? <Badge className="bg-white/8 text-white/72">{Math.floor(task.time.totalCreditedSeconds / 60)} min</Badge> : null}
-        {task.time.activeRunCount > 0 ? <Badge className="bg-emerald-500/12 text-emerald-200">{task.time.activeRunCount} live</Badge> : null}
+        {task.time.totalCreditedSeconds > 0 ? <Badge size="xs" className="bg-white/8 text-white/72">{Math.floor(task.time.totalCreditedSeconds / 60)} min</Badge> : null}
+        {task.time.activeRunCount > 0 ? <Badge size="xs" className="bg-emerald-500/12 text-emerald-200">{task.time.activeRunCount} live</Badge> : null}
         {tags.slice(0, 2).map((tag) => (
-          <Badge key={tag.id} className="bg-white/8" style={{ color: tag.color }}>
+          <Badge key={tag.id} size="xs" className="bg-white/8" style={{ color: tag.color }}>
             {tag.name}
           </Badge>
         ))}
@@ -404,8 +388,6 @@ function SortableTaskCard(props: {
   onStartTask?: (taskId: string) => Promise<void>;
   onQuickReopen?: (taskId: string) => Promise<void>;
   onStepTask?: (taskId: string, direction: "previous" | "next") => Promise<void>;
-  onOpenTask?: (taskId: string) => void;
-  onEditTask?: (taskId: string) => void;
   onSplitTask?: (taskId: string) => void;
   onOpenMenu?: (
     event: ReactMouseEvent<HTMLButtonElement>,
@@ -454,7 +436,6 @@ function ProjectCardShell({
   dragListeners,
   isMobile = false,
   onStepProject,
-  onOpenProject,
   onOpenMenu
 }: {
   project: ProjectSummary;
@@ -470,7 +451,6 @@ function ProjectCardShell({
     projectId: string,
     direction: "previous" | "next"
   ) => Promise<void>;
-  onOpenProject?: (projectId: string) => void;
   onOpenMenu?: (
     event: ReactMouseEvent<HTMLButtonElement>,
     project: ProjectSummary
@@ -516,17 +496,27 @@ function ProjectCardShell({
           background: `linear-gradient(90deg, rgba(${accent}, 0.96), rgba(${accent}, 0.18))`
         }}
       />
-      <div className="mb-2 flex items-start justify-between gap-2">
+      <div className="mb-3 flex items-start justify-between gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <EntityBadge kind="project" label="project" compact gradient={false} />
-          <Badge className="bg-[var(--primary)]/12 text-[var(--primary)]">
+          <EntityBadge
+            kind="project"
+            label="project"
+            compact
+            size="xs"
+            gradient={false}
+            className="shrink-0"
+          />
+          <Badge
+            size="xs"
+            className="shrink-0 bg-[var(--primary)]/12 text-[var(--primary)]"
+          >
             {workflowLabel}
           </Badge>
-          <Badge className="bg-white/8 text-white/72">
+          <Badge size="xs" className="shrink-0 bg-white/8 text-white/72">
             {lifecycleLabel}
           </Badge>
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
           {onOpenMenu ? (
             <button
               type="button"
@@ -539,20 +529,6 @@ function ProjectCardShell({
               }}
             >
               <MoreHorizontal className="size-3.5" />
-            </button>
-          ) : null}
-          {onOpenProject ? (
-            <button
-              type="button"
-              aria-label={`Open ${project.title} details`}
-              className="inline-flex size-8 items-center justify-center rounded-full bg-white/8 text-white/62 transition hover:bg-white/12 hover:text-white"
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                onOpenProject(project.id);
-              }}
-            >
-              <ArrowUpRight className="size-3.5" />
             </button>
           ) : null}
           {isMobile ? (
@@ -603,18 +579,19 @@ function ProjectCardShell({
             kind="goal"
             label={goal.title}
             compact
+            size="xs"
             wrap
             className="min-w-0 max-w-full"
           />
         ) : null}
-        <UserBadge user={project.user} compact />
+        <UserBadge user={project.user} compact size="xs" />
         {(project.assignees ?? []).slice(0, 2).map((user) => (
-          <UserBadge key={user.id} user={user} compact />
+          <UserBadge key={user.id} user={user} compact size="xs" />
         ))}
-        <Badge className="bg-[var(--primary)]/12 text-[var(--primary)]">
+        <Badge size="xs" className="bg-[var(--primary)]/12 text-[var(--primary)]">
           {project.progress}% progress
         </Badge>
-        <Badge className="bg-white/8 text-white/72">
+        <Badge size="xs" className="bg-white/8 text-white/72">
           {project.totalTasks} linked tasks
         </Badge>
       </div>
@@ -635,7 +612,6 @@ function SortableProjectCard(props: {
     projectId: string,
     direction: "previous" | "next"
   ) => Promise<void>;
-  onOpenProject?: (projectId: string) => void;
   onOpenMenu?: (
     event: ReactMouseEvent<HTMLButtonElement>,
     project: ProjectSummary
@@ -1390,8 +1366,6 @@ export function ExecutionBoard({
                           onStartTask={onStartTask}
                           onQuickReopen={onQuickReopenTask}
                           onStepTask={handleStepTask}
-                          onOpenTask={onOpenTask}
-                          onEditTask={onEditTask}
                           onOpenMenu={openTaskMenu}
                           onSplitTask={onSplitTask}
                           notesSummaryByEntity={notesSummaryByEntity}
@@ -1404,7 +1378,6 @@ export function ExecutionBoard({
                           goal={item.goal}
                           isMobile
                           onStepProject={handleStepProject}
-                          onOpenProject={onOpenProject}
                           onOpenMenu={openProjectMenu}
                         />
                       )
@@ -1450,8 +1423,6 @@ export function ExecutionBoard({
                           onStartTask={onStartTask}
                           onQuickReopen={onQuickReopenTask}
                           onStepTask={handleStepTask}
-                          onOpenTask={onOpenTask}
-                          onEditTask={onEditTask}
                           onOpenMenu={openTaskMenu}
                           onSplitTask={onSplitTask}
                           notesSummaryByEntity={notesSummaryByEntity}
@@ -1463,7 +1434,6 @@ export function ExecutionBoard({
                           project={item.project}
                           goal={item.goal}
                           onStepProject={handleStepProject}
-                          onOpenProject={onOpenProject}
                           onOpenMenu={openProjectMenu}
                         />
                       )
@@ -1504,7 +1474,6 @@ export function ExecutionBoard({
                 isDragging
                 isOverlay
                 isMobile={isMobileBoard}
-                onOpenProject={onOpenProject}
               />
             )}
           </div>

@@ -7,11 +7,13 @@ export function EntityNoteCountLink({
   entityType,
   entityId,
   count,
+  compact = false,
   className = ""
 }: {
   entityType: CrudEntityType;
   entityId: string;
   count: number;
+  compact?: boolean;
   className?: string;
 }) {
   const navigate = useNavigate();
@@ -24,7 +26,9 @@ export function EntityNoteCountLink({
     <span
       role="link"
       tabIndex={0}
-      className={`inline-flex min-h-10 items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-3 py-2 text-xs text-white/72 transition hover:bg-white/[0.09] hover:text-white ${className}`}
+      className={`inline-flex items-center rounded-full border border-white/10 bg-white/[0.05] text-white/72 transition hover:bg-white/[0.09] hover:text-white ${
+        compact ? "min-h-5 gap-1 px-2 py-0.5 text-[10px]" : "min-h-10 gap-2 px-3 py-2 text-xs"
+      } ${className}`}
       onClick={(event) => {
         event.stopPropagation();
         navigate(href);
@@ -37,7 +41,7 @@ export function EntityNoteCountLink({
         }
       }}
     >
-      <NotebookPen className="size-3.5" />
+      <NotebookPen className={compact ? "size-3" : "size-3.5"} />
       {formatNotesCountLabel(count)}
     </span>
   );
