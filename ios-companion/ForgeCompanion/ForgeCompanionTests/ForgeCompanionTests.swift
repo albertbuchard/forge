@@ -343,6 +343,135 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(clusters[1].count, 2)
     }
 
+    func testCompanionSyncPayloadEncodesRawSleepRecordsAlongsideSegmentsAndNights() throws {
+        let payload = CompanionSyncPayload(
+            sessionId: "pair_1",
+            pairingToken: "token",
+            device: .init(
+                name: "Omar iPhone",
+                platform: "ios",
+                appVersion: "1.0",
+                sourceDevice: "iPhone"
+            ),
+            permissions: .init(
+                healthKitAuthorized: true,
+                backgroundRefreshEnabled: true,
+                motionReady: false,
+                locationReady: false,
+                screenTimeReady: false
+            ),
+            sourceStates: .init(
+                health: .init(
+                    desiredEnabled: true,
+                    appliedEnabled: true,
+                    authorizationStatus: "approved",
+                    syncEligible: true,
+                    lastObservedAt: nil,
+                    metadata: .init(values: [:])
+                ),
+                movement: .init(
+                    desiredEnabled: false,
+                    appliedEnabled: false,
+                    authorizationStatus: "not_determined",
+                    syncEligible: false,
+                    lastObservedAt: nil,
+                    metadata: .init(values: [:])
+                ),
+                screenTime: .init(
+                    desiredEnabled: false,
+                    appliedEnabled: false,
+                    authorizationStatus: "not_determined",
+                    syncEligible: false,
+                    lastObservedAt: nil,
+                    metadata: .init(values: [:])
+                )
+            ),
+            sleepSessions: [],
+            sleepNights: [
+                .init(
+                    externalUid: "night_1",
+                    startedAt: "2026-04-04T22:00:00.000Z",
+                    endedAt: "2026-04-05T06:00:00.000Z",
+                    sourceTimezone: "Europe/Zurich",
+                    localDateKey: "2026-04-05",
+                    timeInBedSeconds: 28_800,
+                    asleepSeconds: 27_000,
+                    awakeSeconds: 1_800,
+                    rawSegmentCount: 2,
+                    stageBreakdown: [.init(stage: "core", seconds: 18_000)],
+                    recoveryMetrics: [:],
+                    sourceMetrics: [:],
+                    links: [],
+                    annotations: .init(qualitySummary: "", notes: "", tags: [])
+                )
+            ],
+            sleepSegments: [
+                .init(
+                    externalUid: "seg_1",
+                    startedAt: "2026-04-04T22:15:00.000Z",
+                    endedAt: "2026-04-05T01:15:00.000Z",
+                    sourceTimezone: "Europe/Zurich",
+                    localDateKey: "2026-04-05",
+                    stage: "core",
+                    bucket: "asleep",
+                    sourceValue: 3,
+                    metadata: [:]
+                )
+            ],
+            sleepRawRecords: [
+                .init(
+                    externalUid: "seg_1",
+                    startedAt: "2026-04-04T22:15:00.000Z",
+                    endedAt: "2026-04-05T01:15:00.000Z",
+                    sourceTimezone: "Europe/Zurich",
+                    localDateKey: "2026-04-05",
+                    providerRecordType: "healthkit_sleep_sample",
+                    rawStage: "core",
+                    rawValue: 3,
+                    payload: ["source": .string("unit-test")],
+                    metadata: [:]
+                )
+            ],
+            workouts: [],
+            vitals: .init(daySummaries: []),
+            movement: .init(
+                settings: .init(
+                    trackingEnabled: false,
+                    publishMode: "disabled",
+                    retentionMode: "device_only",
+                    locationPermissionStatus: "not_determined",
+                    motionPermissionStatus: "not_determined",
+                    backgroundTrackingReady: false,
+                    metadata: [:]
+                ),
+                knownPlaces: [],
+                stays: [],
+                trips: []
+            ),
+            screenTime: .init(
+                settings: .init(
+                    trackingEnabled: false,
+                    syncEnabled: false,
+                    authorizationStatus: "not_determined",
+                    captureState: "disabled",
+                    lastCapturedDayKey: nil,
+                    lastCaptureStartedAt: nil,
+                    lastCaptureEndedAt: nil,
+                    metadata: [:]
+                ),
+                daySummaries: [],
+                hourlySegments: []
+            )
+        )
+
+        let encoded = try JSONEncoder().encode(payload)
+        let json = try JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+
+        XCTAssertEqual((json?["sleepRawRecords"] as? [[String: Any]])?.count, 1)
+        XCTAssertEqual((json?["sleepSegments"] as? [[String: Any]])?.count, 1)
+        XCTAssertEqual((json?["sleepNights"] as? [[String: Any]])?.count, 1)
+    }
+
     func testPermissionSyncPhaseUsesBusyLabelsForLiveWork() {
         XCTAssertTrue(CompanionPermissionSyncPhase.requestingHealth.isBusy)
         XCTAssertEqual(CompanionPermissionSyncPhase.requestingHealth.buttonLabel, "Requesting Health…")

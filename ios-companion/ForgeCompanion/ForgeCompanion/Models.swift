@@ -522,6 +522,101 @@ struct SyncPayloadSummary: Codable {
     let screenTimeHourlySegments: Int
     let screenTimeTotalActivitySeconds: Int
     let rawHeartRateDatapointsSynced: Int
+
+    init(
+        builtAt: Date,
+        sleepSessions: Int,
+        sleepNights: Int,
+        sleepSegments: Int,
+        sleepRawRecords: Int,
+        sleepStageEntries: Int,
+        workouts: Int,
+        workoutsWithAverageHeartRate: Int,
+        workoutsWithMaxHeartRate: Int,
+        workoutsWithStepCount: Int,
+        movementKnownPlaces: Int,
+        movementStays: Int,
+        movementTrips: Int,
+        movementTripPoints: Int,
+        movementTripStops: Int,
+        vitalsDaySummaries: Int,
+        vitalsMetricEntries: Int,
+        screenTimeDaySummaries: Int,
+        screenTimeHourlySegments: Int,
+        screenTimeTotalActivitySeconds: Int,
+        rawHeartRateDatapointsSynced: Int
+    ) {
+        self.builtAt = builtAt
+        self.sleepSessions = sleepSessions
+        self.sleepNights = sleepNights
+        self.sleepSegments = sleepSegments
+        self.sleepRawRecords = sleepRawRecords
+        self.sleepStageEntries = sleepStageEntries
+        self.workouts = workouts
+        self.workoutsWithAverageHeartRate = workoutsWithAverageHeartRate
+        self.workoutsWithMaxHeartRate = workoutsWithMaxHeartRate
+        self.workoutsWithStepCount = workoutsWithStepCount
+        self.movementKnownPlaces = movementKnownPlaces
+        self.movementStays = movementStays
+        self.movementTrips = movementTrips
+        self.movementTripPoints = movementTripPoints
+        self.movementTripStops = movementTripStops
+        self.vitalsDaySummaries = vitalsDaySummaries
+        self.vitalsMetricEntries = vitalsMetricEntries
+        self.screenTimeDaySummaries = screenTimeDaySummaries
+        self.screenTimeHourlySegments = screenTimeHourlySegments
+        self.screenTimeTotalActivitySeconds = screenTimeTotalActivitySeconds
+        self.rawHeartRateDatapointsSynced = rawHeartRateDatapointsSynced
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case builtAt
+        case sleepSessions
+        case sleepNights
+        case sleepSegments
+        case sleepRawRecords
+        case sleepStageEntries
+        case workouts
+        case workoutsWithAverageHeartRate
+        case workoutsWithMaxHeartRate
+        case workoutsWithStepCount
+        case movementKnownPlaces
+        case movementStays
+        case movementTrips
+        case movementTripPoints
+        case movementTripStops
+        case vitalsDaySummaries
+        case vitalsMetricEntries
+        case screenTimeDaySummaries
+        case screenTimeHourlySegments
+        case screenTimeTotalActivitySeconds
+        case rawHeartRateDatapointsSynced
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        builtAt = try container.decode(Date.self, forKey: .builtAt)
+        sleepSessions = try container.decode(Int.self, forKey: .sleepSessions)
+        sleepNights = try container.decode(Int.self, forKey: .sleepNights)
+        sleepSegments = try container.decode(Int.self, forKey: .sleepSegments)
+        sleepRawRecords = try container.decodeIfPresent(Int.self, forKey: .sleepRawRecords) ?? 0
+        sleepStageEntries = try container.decode(Int.self, forKey: .sleepStageEntries)
+        workouts = try container.decode(Int.self, forKey: .workouts)
+        workoutsWithAverageHeartRate = try container.decode(Int.self, forKey: .workoutsWithAverageHeartRate)
+        workoutsWithMaxHeartRate = try container.decode(Int.self, forKey: .workoutsWithMaxHeartRate)
+        workoutsWithStepCount = try container.decode(Int.self, forKey: .workoutsWithStepCount)
+        movementKnownPlaces = try container.decode(Int.self, forKey: .movementKnownPlaces)
+        movementStays = try container.decode(Int.self, forKey: .movementStays)
+        movementTrips = try container.decode(Int.self, forKey: .movementTrips)
+        movementTripPoints = try container.decode(Int.self, forKey: .movementTripPoints)
+        movementTripStops = try container.decode(Int.self, forKey: .movementTripStops)
+        vitalsDaySummaries = try container.decode(Int.self, forKey: .vitalsDaySummaries)
+        vitalsMetricEntries = try container.decode(Int.self, forKey: .vitalsMetricEntries)
+        screenTimeDaySummaries = try container.decode(Int.self, forKey: .screenTimeDaySummaries)
+        screenTimeHourlySegments = try container.decode(Int.self, forKey: .screenTimeHourlySegments)
+        screenTimeTotalActivitySeconds = try container.decode(Int.self, forKey: .screenTimeTotalActivitySeconds)
+        rawHeartRateDatapointsSynced = try container.decode(Int.self, forKey: .rawHeartRateDatapointsSynced)
+    }
 }
 
 struct SyncCoverageRow: Identifiable {

@@ -348,8 +348,10 @@ describe("SleepPage", () => {
             widthRatio: 0.5
           }
         ]),
-        rawSegments: [],
-        rawLogs: []
+        segments: [],
+        sourceRecords: [],
+        rawDataStatus: "raw_unavailable",
+        auditLogs: []
       }
     ],
     [
@@ -380,7 +382,7 @@ describe("SleepPage", () => {
             widthRatio: 0.09
           }
         ]),
-        rawSegments: [
+        segments: [
           {
             id: "seg_older_1",
             externalUid: "seg_older_1",
@@ -398,13 +400,39 @@ describe("SleepPage", () => {
             stage: "awake",
             bucket: "awake",
             sourceValue: 2,
+            qualityKind: "historical_import",
+            sourceRecordIds: ["src_older_1"],
             metadata: {},
             provenance: {},
             createdAt: olderSession.createdAt,
             updatedAt: olderSession.updatedAt
           }
         ],
-        rawLogs: []
+        sourceRecords: [
+          {
+            id: "src_older_1",
+            importRunId: "run_2",
+            pairingSessionId: "pair_1",
+            sleepSessionId: olderSession.id,
+            userId: "user_operator",
+            provider: "apple_health",
+            providerRecordType: "historical_import_interval",
+            providerRecordUid: "seg_older_1",
+            sourceDevice: "Omar iPhone",
+            sourceTimezone: "Europe/Zurich",
+            localDateKey: "2026-04-13",
+            startedAt: "2026-04-13T03:45:00.000Z",
+            endedAt: "2026-04-13T04:10:00.000Z",
+            rawStage: "awake",
+            rawValue: 2,
+            qualityKind: "historical_import",
+            payload: { source: "historical" },
+            metadata: {},
+            ingestedAt: olderSession.createdAt
+          }
+        ],
+        rawDataStatus: "historical_raw",
+        auditLogs: []
       }
     ]
   ]);
@@ -501,7 +529,9 @@ describe("SleepPage", () => {
 
     await waitForCondition(() => {
       expect(getSleepSessionRawDetailMock).toHaveBeenLastCalledWith("sleep_older");
-      expect(container.textContent).toContain("Raw segments");
+      expect(container.textContent).toContain("Historical raw data");
+      expect(container.textContent).toContain("Sleep segments");
+      expect(container.textContent).toContain("See JSON");
       expect(container.textContent).toMatch(/awake/i);
     });
   });

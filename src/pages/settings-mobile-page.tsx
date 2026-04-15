@@ -43,6 +43,10 @@ function formatSyncSummary(payloadSummary: Record<string, unknown>) {
     typeof payloadSummary.sleepSegments === "number"
       ? payloadSummary.sleepSegments
       : 0;
+  const sleepRawRecords =
+    typeof payloadSummary.sleepRawRecords === "number"
+      ? payloadSummary.sleepRawRecords
+      : 0;
   const sleepSessions =
     typeof payloadSummary.sleepSessions === "number"
       ? payloadSummary.sleepSessions
@@ -56,7 +60,7 @@ function formatSyncSummary(payloadSummary: Record<string, unknown>) {
     typeof (payloadSummary.vitals as Record<string, unknown>).metricEntries === "number"
       ? ((payloadSummary.vitals as Record<string, unknown>).metricEntries as number)
       : 0;
-  return `${sleepNights || sleepSessions} nights · ${sleepSegments} raw segments · ${workouts} workouts · ${vitals} vitals`;
+  return `${sleepNights || sleepSessions} nights · ${sleepSegments} segments · ${sleepRawRecords} raw records · ${workouts} workouts · ${vitals} vitals`;
 }
 
 function permissionTone(enabled: boolean) {
@@ -361,6 +365,12 @@ export function SettingsMobilePage() {
               <div className="text-sm text-white/58">Sleep sessions</div>
               <div className="mt-2 font-display text-3xl text-white">
                 {overview.counts.sleepSessions}
+              </div>
+            </div>
+            <div className="rounded-[18px] bg-white/[0.04] p-4">
+              <div className="text-sm text-white/58">Raw sleep records</div>
+              <div className="mt-2 font-display text-3xl text-white">
+                {overview.counts.sleepRawRecords}
               </div>
             </div>
             <div className="rounded-[18px] bg-white/[0.04] p-4">

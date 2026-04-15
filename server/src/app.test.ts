@@ -2077,6 +2077,56 @@ test("mobile health sync stores canonical sleep nights with raw segments and exp
             metadata: { source: "test" }
           }
         ],
+        sleepRawRecords: [
+          {
+            externalUid: "seg_1",
+            startedAt: "2026-04-04T22:40:00.000Z",
+            endedAt: "2026-04-05T06:35:00.000Z",
+            sourceTimezone: "Europe/Zurich",
+            localDateKey: "2026-04-05",
+            providerRecordType: "healthkit_sleep_sample",
+            rawStage: "in_bed",
+            rawValue: 0,
+            payload: { source: "test" },
+            metadata: { origin: "raw" }
+          },
+          {
+            externalUid: "seg_2",
+            startedAt: "2026-04-04T22:55:00.000Z",
+            endedAt: "2026-04-05T02:55:00.000Z",
+            sourceTimezone: "Europe/Zurich",
+            localDateKey: "2026-04-05",
+            providerRecordType: "healthkit_sleep_sample",
+            rawStage: "core",
+            rawValue: 3,
+            payload: { source: "test" },
+            metadata: { origin: "raw" }
+          },
+          {
+            externalUid: "seg_3",
+            startedAt: "2026-04-05T02:55:00.000Z",
+            endedAt: "2026-04-05T04:25:00.000Z",
+            sourceTimezone: "Europe/Zurich",
+            localDateKey: "2026-04-05",
+            providerRecordType: "healthkit_sleep_sample",
+            rawStage: "deep",
+            rawValue: 4,
+            payload: { source: "test" },
+            metadata: { origin: "raw" }
+          },
+          {
+            externalUid: "seg_4",
+            startedAt: "2026-04-05T04:25:00.000Z",
+            endedAt: "2026-04-05T06:20:00.000Z",
+            sourceTimezone: "Europe/Zurich",
+            localDateKey: "2026-04-05",
+            providerRecordType: "healthkit_sleep_sample",
+            rawStage: "rem",
+            rawValue: 5,
+            payload: { source: "test" },
+            metadata: { origin: "raw" }
+          }
+        ],
         workouts: []
       }
     });
@@ -2088,6 +2138,7 @@ test("mobile health sync stores canonical sleep nights with raw segments and exp
             sleepSessions: number;
             sleepNights: number;
             sleepSegments: number;
+            sleepRawRecords: number;
           };
         };
       }
@@ -2095,6 +2146,7 @@ test("mobile health sync stores canonical sleep nights with raw segments and exp
     assert.equal(sync.imported.sleepSessions, 0);
     assert.equal(sync.imported.sleepNights, 1);
     assert.equal(sync.imported.sleepSegments, 4);
+    assert.equal(sync.imported.sleepRawRecords, 4);
 
     const sleepResponse = await app.inject({
       method: "GET",
@@ -2147,30 +2199,45 @@ test("mobile health sync stores canonical sleep nights with raw segments and exp
     assert.equal(rawDetailResponse.statusCode, 200);
     const rawDetail = rawDetailResponse.json() as {
       sleep: { id: string };
+      rawDataStatus: string;
       phaseTimeline: {
         hasSleepStageData: boolean;
         blocks: Array<{ lane: string; stage: string }>;
       };
-      rawSegments: Array<{ stage: string; bucket: string; sourceValue: number | null }>;
-      rawLogs: Array<unknown>;
+      segments: Array<{
+        stage: string;
+        bucket: string;
+        sourceValue: number | null;
+        qualityKind: string;
+      }>;
+      sourceRecords: Array<{ rawStage: string; rawValue: number | null; qualityKind: string }>;
+      auditLogs: Array<unknown>;
     };
     assert.equal(rawDetail.sleep.id, sleep.sessions[0]?.id);
+    assert.equal(rawDetail.rawDataStatus, "provider_raw");
     assert.equal(rawDetail.phaseTimeline.hasSleepStageData, true);
     assert.deepEqual(
       rawDetail.phaseTimeline.blocks.map((block) => `${block.lane}:${block.stage}`),
       ["in_bed:in_bed", "sleep:core", "sleep:deep", "sleep:rem"]
     );
-    assert.equal(rawDetail.rawSegments.length, 4);
+    assert.equal(rawDetail.segments.length, 4);
     assert.deepEqual(
-      rawDetail.rawSegments.map((segment) => segment.stage),
+      rawDetail.segments.map((segment) => segment.stage),
       ["in_bed", "core", "deep", "rem"]
     );
     assert.deepEqual(
-      rawDetail.rawSegments.map((segment) => segment.bucket),
+      rawDetail.segments.map((segment) => segment.bucket),
       ["in_bed", "asleep", "asleep", "asleep"]
     );
-    assert.equal(rawDetail.rawSegments[1]?.sourceValue, 3);
-    assert.equal(rawDetail.rawLogs.length, 0);
+    assert.equal(rawDetail.segments[1]?.sourceValue, 3);
+    assert.equal(rawDetail.segments[1]?.qualityKind, "provider_native");
+    assert.equal(rawDetail.sourceRecords.length, 4);
+    assert.deepEqual(
+      rawDetail.sourceRecords.map((record) => record.rawStage),
+      ["in_bed", "core", "deep", "rem"]
+    );
+    assert.equal(rawDetail.sourceRecords[1]?.rawValue, 3);
+    assert.equal(rawDetail.auditLogs.length, 0);
 
     const overviewResponse = await app.inject({
       method: "GET",
@@ -2183,6 +2250,7 @@ test("mobile health sync stores canonical sleep nights with raw segments and exp
           counts: {
             sleepSessions: number;
             sleepSegments: number;
+            sleepRawRecords: number;
             sleepRawLogs: number;
           };
         };
@@ -2190,6 +2258,7 @@ test("mobile health sync stores canonical sleep nights with raw segments and exp
     ).overview;
     assert.equal(overview.counts.sleepSessions, 1);
     assert.equal(overview.counts.sleepSegments, 4);
+    assert.equal(overview.counts.sleepRawRecords, 4);
     assert.equal(overview.counts.sleepRawLogs, 0);
   } finally {
     await app.close();
@@ -2312,6 +2381,302 @@ test("sleep view collapses duplicate localDateKey nights into one calendar day a
     assert.equal(sleep.latestNight?.asleepSeconds, 28_200);
     assert.equal(sleep.sessions[0]?.id, sleep.latestNight?.sleepId);
     assert.equal(sleep.latestNight?.sleepId, sleep.calendarDays[0]?.sleepId);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("historical repaired sleep nights expose historical raw data, normalized segments, and inferred timezone", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-mobile-health-historical-sleep-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: false });
+
+  try {
+    const now = new Date().toISOString();
+    getDatabase()
+      .prepare(
+        `INSERT INTO health_sleep_sessions (
+           id, external_uid, pairing_session_id, user_id, source, source_type, source_device, source_timezone, local_date_key,
+           started_at, ended_at, time_in_bed_seconds, asleep_seconds, awake_seconds, raw_segment_count, sleep_score, regularity_score,
+           bedtime_consistency_minutes, wake_consistency_minutes, stage_breakdown_json, recovery_metrics_json, source_metrics_json,
+           links_json, annotations_json, provenance_json, derived_json, created_at, updated_at
+         )
+         VALUES (?, ?, NULL, 'user_operator', 'apple_health', 'healthkit', 'Omar iPhone', 'UTC', '', ?, ?, 0, ?, 0, 0, NULL, NULL, NULL, NULL, ?, '{}', '{}', '[]', '{}', '{}', '{}', ?, ?)`
+      )
+      .run(
+        "legacy_sleep_1",
+        "legacy_sleep_1",
+        "2026-04-15T00:18:18.465Z",
+        "2026-04-15T04:15:52.844Z",
+        14_254,
+        JSON.stringify([{ stage: "asleep_unspecified", seconds: 14_254 }]),
+        now,
+        now
+      );
+    getDatabase()
+      .prepare(
+        `INSERT INTO health_sleep_sessions (
+           id, external_uid, pairing_session_id, user_id, source, source_type, source_device, source_timezone, local_date_key,
+           started_at, ended_at, time_in_bed_seconds, asleep_seconds, awake_seconds, raw_segment_count, sleep_score, regularity_score,
+           bedtime_consistency_minutes, wake_consistency_minutes, stage_breakdown_json, recovery_metrics_json, source_metrics_json,
+           links_json, annotations_json, provenance_json, derived_json, created_at, updated_at
+         )
+         VALUES (?, ?, NULL, 'user_operator', 'apple_health', 'healthkit', 'Omar iPhone', 'UTC', '', ?, ?, 0, ?, 0, 0, NULL, NULL, NULL, NULL, ?, '{}', '{}', '[]', '{}', '{}', '{}', ?, ?)`
+      )
+      .run(
+        "legacy_sleep_2",
+        "legacy_sleep_2",
+        "2026-04-15T04:15:52.844Z",
+        "2026-04-15T07:09:48.112Z",
+        10_436,
+        JSON.stringify([{ stage: "asleep_unspecified", seconds: 10_436 }]),
+        now,
+        now
+      );
+
+    const sleepResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/health/sleep"
+    });
+    assert.equal(sleepResponse.statusCode, 200);
+    const sleep = (
+      sleepResponse.json() as {
+        sleep: {
+          sessions: Array<{
+            id: string;
+            sourceType: string;
+            sourceTimezone: string;
+            localDateKey: string;
+          }>;
+        };
+      }
+    ).sleep;
+    const repairedSession = sleep.sessions.find(
+      (session) =>
+        session.sourceType === "healthkit_repaired" &&
+        session.localDateKey === "2026-04-15"
+    );
+    assert.ok(repairedSession);
+    const runtimeTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    if (runtimeTimeZone !== "UTC") {
+      assert.equal(repairedSession.sourceTimezone, runtimeTimeZone);
+    }
+
+    const rawDetailResponse = await app.inject({
+      method: "GET",
+      url: `/api/v1/health/sleep/${repairedSession.id}/raw`
+    });
+    assert.equal(rawDetailResponse.statusCode, 200);
+    const rawDetail = rawDetailResponse.json() as {
+      rawDataStatus: string;
+      segments: Array<{ qualityKind: string; stage: string }>;
+      sourceRecords: Array<{ qualityKind: string; providerRecordType: string }>;
+      auditLogs: Array<unknown>;
+    };
+    assert.equal(rawDetail.rawDataStatus, "historical_raw");
+    assert.equal(rawDetail.segments.length, 2);
+    assert.ok(
+      rawDetail.segments.every((segment) => segment.qualityKind === "historical_import")
+    );
+    assert.equal(rawDetail.sourceRecords.length, 2);
+    assert.ok(
+      rawDetail.sourceRecords.every(
+        (record) =>
+          record.qualityKind === "historical_import" &&
+          record.providerRecordType === "historical_import_interval"
+      )
+    );
+    assert.equal(rawDetail.auditLogs.length, 2);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("provider-backed sleep import replaces reconstructed historical nights for the same wake date", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-mobile-health-replace-historical-sleep-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const now = new Date().toISOString();
+    getDatabase()
+      .prepare(
+        `INSERT INTO health_sleep_sessions (
+           id, external_uid, pairing_session_id, user_id, source, source_type, source_device, source_timezone, local_date_key,
+           started_at, ended_at, time_in_bed_seconds, asleep_seconds, awake_seconds, raw_segment_count, sleep_score, regularity_score,
+           bedtime_consistency_minutes, wake_consistency_minutes, stage_breakdown_json, recovery_metrics_json, source_metrics_json,
+           links_json, annotations_json, provenance_json, derived_json, created_at, updated_at
+         )
+         VALUES (?, ?, NULL, 'user_operator', 'apple_health', 'healthkit', 'Omar iPhone', 'UTC', '', ?, ?, 0, ?, 0, 0, NULL, NULL, NULL, NULL, ?, '{}', '{}', '[]', '{}', '{}', '{}', ?, ?)`
+      )
+      .run(
+        "legacy_sleep_replace_1",
+        "legacy_sleep_replace_1",
+        "2026-04-15T00:18:18.465Z",
+        "2026-04-15T07:09:48.112Z",
+        24_208,
+        JSON.stringify([{ stage: "asleep_unspecified", seconds: 24_208 }]),
+        now,
+        now
+      );
+
+    const initialSleepResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/health/sleep"
+    });
+    assert.equal(initialSleepResponse.statusCode, 200);
+
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const pairingResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: {
+        userId: "user_operator"
+      }
+    });
+    assert.equal(pairingResponse.statusCode, 201);
+    const qrPayload = (
+      pairingResponse.json() as {
+        qrPayload: { sessionId: string; pairingToken: string };
+      }
+    ).qrPayload;
+
+    const syncResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        device: {
+          name: "Omar iPhone",
+          platform: "ios",
+          appVersion: "1.0",
+          sourceDevice: "iPhone"
+        },
+        permissions: {
+          healthKitAuthorized: true,
+          backgroundRefreshEnabled: true,
+          motionReady: false,
+          locationReady: false,
+          screenTimeReady: false
+        },
+        sleepSessions: [],
+        sleepNights: [
+          {
+            externalUid: "night_2026_04_15_provider",
+            startedAt: "2026-04-15T00:18:18.465Z",
+            endedAt: "2026-04-15T07:09:48.112Z",
+            sourceTimezone: "Europe/Zurich",
+            localDateKey: "2026-04-15",
+            timeInBedSeconds: 24_690,
+            asleepSeconds: 24_208,
+            awakeSeconds: 482,
+            rawSegmentCount: 2,
+            stageBreakdown: [
+              { stage: "core", seconds: 16_000 },
+              { stage: "rem", seconds: 8_208 }
+            ],
+            recoveryMetrics: {},
+            sourceMetrics: {},
+            links: [],
+            annotations: {}
+          }
+        ],
+        sleepSegments: [
+          {
+            externalUid: "provider_seg_1",
+            startedAt: "2026-04-15T00:18:18.465Z",
+            endedAt: "2026-04-15T04:15:52.844Z",
+            sourceTimezone: "Europe/Zurich",
+            localDateKey: "2026-04-15",
+            stage: "core",
+            bucket: "asleep",
+            sourceValue: 3,
+            metadata: {}
+          },
+          {
+            externalUid: "provider_seg_2",
+            startedAt: "2026-04-15T04:15:52.844Z",
+            endedAt: "2026-04-15T07:09:48.112Z",
+            sourceTimezone: "Europe/Zurich",
+            localDateKey: "2026-04-15",
+            stage: "rem",
+            bucket: "asleep",
+            sourceValue: 5,
+            metadata: {}
+          }
+        ],
+        sleepRawRecords: [
+          {
+            externalUid: "provider_seg_1",
+            startedAt: "2026-04-15T00:18:18.465Z",
+            endedAt: "2026-04-15T04:15:52.844Z",
+            sourceTimezone: "Europe/Zurich",
+            localDateKey: "2026-04-15",
+            providerRecordType: "healthkit_sleep_sample",
+            rawStage: "core",
+            rawValue: 3,
+            payload: {},
+            metadata: {}
+          },
+          {
+            externalUid: "provider_seg_2",
+            startedAt: "2026-04-15T04:15:52.844Z",
+            endedAt: "2026-04-15T07:09:48.112Z",
+            sourceTimezone: "Europe/Zurich",
+            localDateKey: "2026-04-15",
+            providerRecordType: "healthkit_sleep_sample",
+            rawStage: "rem",
+            rawValue: 5,
+            payload: {},
+            metadata: {}
+          }
+        ],
+        workouts: []
+      }
+    });
+    assert.equal(syncResponse.statusCode, 200);
+
+    const sleepResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/health/sleep"
+    });
+    assert.equal(sleepResponse.statusCode, 200);
+    const sleep = (
+      sleepResponse.json() as {
+        sleep: {
+          sessions: Array<{ id: string; sourceType: string; localDateKey: string }>;
+        };
+      }
+    ).sleep;
+    assert.equal(sleep.sessions.length, 1);
+    assert.equal(sleep.sessions[0]?.sourceType, "healthkit");
+    assert.equal(sleep.sessions[0]?.localDateKey, "2026-04-15");
+
+    const rawDetailResponse = await app.inject({
+      method: "GET",
+      url: `/api/v1/health/sleep/${sleep.sessions[0]?.id}/raw`
+    });
+    assert.equal(rawDetailResponse.statusCode, 200);
+    const rawDetail = rawDetailResponse.json() as {
+      rawDataStatus: string;
+      sourceRecords: Array<{ qualityKind: string }>;
+    };
+    assert.equal(rawDetail.rawDataStatus, "provider_raw");
+    assert.equal(rawDetail.sourceRecords.length, 2);
+    assert.ok(
+      rawDetail.sourceRecords.every((record) => record.qualityKind === "provider_native")
+    );
   } finally {
     await app.close();
     closeDatabase();

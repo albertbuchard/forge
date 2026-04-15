@@ -1208,6 +1208,7 @@ export interface CompanionOverviewPayload {
   counts: {
     sleepSessions: number;
     sleepSegments: number;
+    sleepRawRecords: number;
     sleepRawLogs: number;
     workouts: number;
     vitalsDaySummaries?: number;
@@ -1303,11 +1304,40 @@ export interface SleepSegmentRecord {
   stage: string;
   bucket: string;
   sourceValue: number | null;
+  qualityKind: "provider_native" | "historical_import" | "reconstructed";
+  sourceRecordIds: string[];
   metadata: Record<string, unknown>;
   provenance: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
 }
+
+export interface SleepSourceRecord {
+  id: string;
+  importRunId: string | null;
+  pairingSessionId: string | null;
+  sleepSessionId: string | null;
+  userId: string;
+  provider: string;
+  providerRecordType: string;
+  providerRecordUid: string;
+  sourceDevice: string;
+  sourceTimezone: string;
+  localDateKey: string;
+  startedAt: string;
+  endedAt: string;
+  rawStage: string;
+  rawValue: number | null;
+  qualityKind: "provider_native" | "historical_import" | "reconstructed";
+  payload: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  ingestedAt: string;
+}
+
+export type SleepRawDataStatus =
+  | "provider_raw"
+  | "historical_raw"
+  | "raw_unavailable";
 
 export interface SleepRawLogRecord {
   id: string;
@@ -1398,8 +1428,10 @@ export interface SleepPhaseTimeline {
 export interface SleepSessionDetailPayload {
   sleep: SleepSessionRecord;
   phaseTimeline: SleepPhaseTimeline;
-  rawSegments: SleepSegmentRecord[];
-  rawLogs: SleepRawLogRecord[];
+  segments: SleepSegmentRecord[];
+  sourceRecords: SleepSourceRecord[];
+  rawDataStatus: SleepRawDataStatus;
+  auditLogs: SleepRawLogRecord[];
 }
 
 export interface WorkoutSessionRecord {

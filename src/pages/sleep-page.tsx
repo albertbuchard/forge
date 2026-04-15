@@ -37,6 +37,7 @@ import type {
   SleepPhaseTimelineBlock,
   SleepSessionDetailPayload,
   SleepSessionRecord,
+  SleepSourceRecord,
   SleepSurfaceNight
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -250,6 +251,32 @@ function summaryBadgeTone(state: string | null) {
     return "bg-rose-400/16 text-rose-100";
   }
   return "bg-white/10 text-white/76";
+}
+
+function rawStatusTone(status: SleepSessionDetailPayload["rawDataStatus"]) {
+  if (status === "provider_raw") {
+    return "bg-emerald-400/16 text-emerald-100";
+  }
+  if (status === "historical_raw") {
+    return "bg-amber-400/16 text-amber-100";
+  }
+  return "bg-white/10 text-white/70";
+}
+
+function rawStatusLabel(status: SleepSessionDetailPayload["rawDataStatus"]) {
+  if (status === "provider_raw") {
+    return "Provider raw data";
+  }
+  if (status === "historical_raw") {
+    return "Historical raw data";
+  }
+  return "Raw data unavailable";
+}
+
+function sourceRecordTone(record: SleepSourceRecord) {
+  return record.qualityKind === "provider_native"
+    ? "bg-emerald-400/16 text-emerald-100"
+    : "bg-amber-400/16 text-amber-100";
 }
 
 function StageDistributionBar({
@@ -468,6 +495,7 @@ function LastNightHero({
               <Badge className={cn("border-white/0", summaryBadgeTone(latestNight.recoveryState))}>
                 {latestNight.qualitativeState}
               </Badge>
+              <Badge tone="meta">{latestNight.sourceTimezone}</Badge>
               {latestNight.hasReflection ? (
                 <Badge tone="meta">Has reflection</Badge>
               ) : null}
@@ -793,6 +821,7 @@ function SleepDetailPanel({
   onDraftChange: (patch: Partial<SleepDraft>) => void;
   onSave: () => void;
 }) {
+  const [expandedRecordId, setExpandedRecordId] = useState<string | null>(null);
   const efficiency =
     typeof session.derived.efficiency === "number"
       ? session.derived.efficiency
@@ -818,6 +847,7 @@ function SleepDetailPanel({
                 {recoveryState ? recoveryState.replaceAll("_", " ") : "Canonical night"}
               </Badge>
               <Badge tone="meta">{session.rawSegmentCount} raw segments</Badge>
+              <Badge tone="meta">{session.sourceTimezone}</Badge>
             </div>
             <div className="mt-3 text-[11px] uppercase tracking-[0.18em] text-white/42">
               Selected night
@@ -973,7 +1003,7 @@ function SleepDetailPanel({
         {tab === "raw" ? (
           <div className="grid gap-5">
             <div className="rounded-[18px] border border-white/8 bg-white/[0.03] px-4 py-4 text-sm leading-6 text-white/56">
-              Forge shows the canonical overnight session by default. This view is the raw evidence from the phone sync: segment-level phases first, then any legacy repair logs.
+              Forge shows the canonical overnight session by default. This view reveals the evidence stack underneath it: raw provider or historical imported records first, then Forge-normalized sleep segments.
             </div>
 
             {rawDetailLoading ? (
@@ -982,81 +1012,140 @@ function SleepDetailPanel({
 
             {!rawDetailLoading ? (
               <div className="grid gap-5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className={cn("border-white/0", rawStatusTone(rawDetail?.rawDataStatus ?? "raw_unavailable"))}>
+                    {rawStatusLabel(rawDetail?.rawDataStatus ?? "raw_unavailable")}
+                  </Badge>
+                  {rawDetail?.rawDataStatus === "historical_raw" ? (
+                    <Badge tone="meta">Partial evidence</Badge>
+                  ) : null}
+                </div>
+
                 <div className="grid gap-3">
                   <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
-                    Raw segments
+                    Raw data
                   </div>
-                  {rawDetail?.rawSegments.length ? (
-                    rawDetail.rawSegments.map((segment) => (
+                  {rawDetail?.sourceRecords.length ? (
+                    rawDetail.sourceRecords.map((record) => (
                       <div
-                        key={segment.id}
-                        className="flex flex-wrap items-center justify-between gap-3 rounded-[16px] border border-white/8 bg-black/18 px-4 py-3"
+                        key={record.id}
+                        className="rounded-[16px] border border-white/8 bg-black/18 px-4 py-3"
                       >
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge tone="meta" className="capitalize">
-                            {segment.stage.replaceAll("_", " ")}
-                          </Badge>
-                          <span className="text-sm text-white/64">
-                            {formatSleepWindow(
-                              segment.startedAt,
-                              segment.endedAt,
-                              segment.sourceTimezone
-                            )}
-                          </span>
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge className={cn("border-white/0", sourceRecordTone(record))}>
+                              {record.qualityKind === "provider_native"
+                                ? "Provider raw"
+                                : "Historical raw"}
+                            </Badge>
+                            <Badge tone="meta" className="capitalize">
+                              {record.rawStage.replaceAll("_", " ")}
+                            </Badge>
+                            <span className="text-sm text-white/64">
+                              {formatSleepWindow(
+                                record.startedAt,
+                                record.endedAt,
+                                record.sourceTimezone
+                              )}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-white/42">
+                              {record.providerRecordType.replaceAll("_", " ")}
+                            </span>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              className="h-8 rounded-full px-3"
+                              onClick={() =>
+                                setExpandedRecordId((current) =>
+                                  current === record.id ? null : record.id
+                                )
+                              }
+                            >
+                              {expandedRecordId === record.id ? "Hide JSON" : "See JSON"}
+                            </Button>
+                          </div>
                         </div>
-                        <span className="text-sm text-white/50">
+                        <div className="mt-3 text-sm text-white/50">
                           {formatDurationCompact(
                             Math.max(
                               0,
                               Math.round(
-                                (new Date(segment.endedAt).getTime() -
-                                  new Date(segment.startedAt).getTime()) /
+                                (new Date(record.endedAt).getTime() -
+                                  new Date(record.startedAt).getTime()) /
                                   1000
                               )
                             )
                           )}
-                        </span>
+                        </div>
+                        {expandedRecordId === record.id ? (
+                          <pre className="mt-3 overflow-x-auto rounded-[14px] border border-white/8 bg-slate-950/70 p-3 text-xs leading-6 text-white/72">
+                            {JSON.stringify(
+                              {
+                                payload: record.payload,
+                                metadata: record.metadata
+                              },
+                              null,
+                              2
+                            )}
+                          </pre>
+                        ) : null}
                       </div>
                     ))
                   ) : (
                     <div className="rounded-[16px] border border-dashed border-white/10 bg-black/10 px-4 py-4 text-sm text-white/52">
-                      No raw segments were stored for this night.
+                      No raw data was stored for this night.
                     </div>
                   )}
                 </div>
 
                 <div className="grid gap-3">
                   <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
-                    Legacy repair logs
+                    Sleep segments
                   </div>
-                  {rawDetail?.rawLogs.length ? (
-                    rawDetail.rawLogs.map((entry) => (
+                  {rawDetail?.segments.length ? (
+                    rawDetail.segments.map((segment) => (
                       <div
-                        key={entry.id}
+                        key={segment.id}
                         className="rounded-[16px] border border-white/8 bg-black/18 px-4 py-3"
                       >
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div className="flex flex-wrap items-center gap-2">
-                            <Badge tone="meta">{entry.logType.replaceAll("_", " ")}</Badge>
+                            <Badge tone="meta" className="capitalize">
+                              {segment.stage.replaceAll("_", " ")}
+                            </Badge>
+                            <Badge tone="meta">
+                              {segment.qualityKind === "provider_native"
+                                ? "provider-backed"
+                                : "historical"}
+                            </Badge>
                             <span className="text-sm text-white/64">
-                              {entry.startedAt && entry.endedAt
-                                ? formatSleepWindow(
-                                    entry.startedAt,
-                                    entry.endedAt,
-                                    entry.sourceTimezone
-                                  )
-                                : "Legacy raw sleep row"}
+                              {formatSleepWindow(
+                                segment.startedAt,
+                                segment.endedAt,
+                                segment.sourceTimezone
+                              )}
                             </span>
                           </div>
-                          <span className="text-xs text-white/42">
-                            {new Date(entry.createdAt).toLocaleString()}
+                          <span className="text-sm text-white/50">
+                            {formatDurationCompact(
+                              Math.max(
+                                0,
+                                Math.round(
+                                  (new Date(segment.endedAt).getTime() -
+                                    new Date(segment.startedAt).getTime()) /
+                                    1000
+                                )
+                              )
+                            )}
                           </span>
                         </div>
                       </div>
                     ))
                   ) : (
                     <div className="rounded-[16px] border border-dashed border-white/10 bg-black/10 px-4 py-4 text-sm text-white/52">
-                      No legacy repair logs were attached to this night.
+                      No normalized sleep segments were stored for this night.
                     </div>
                   )}
                 </div>

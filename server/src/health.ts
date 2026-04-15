@@ -240,6 +240,22 @@ export const mobileHealthSyncSchema = z.object({
       })
     )
     .default([]),
+  sleepRawRecords: z
+    .array(
+      z.object({
+        externalUid: z.string().trim().min(1),
+        startedAt: z.string().datetime(),
+        endedAt: z.string().datetime(),
+        sourceTimezone: z.string().trim().min(1).default("UTC"),
+        localDateKey: z.string().trim().min(1),
+        providerRecordType: z.string().trim().min(1).default("healthkit_sleep_sample"),
+        rawStage: z.string().trim().min(1),
+        rawValue: z.number().int().nullable().optional(),
+        payload: z.record(z.string(), z.unknown()).default({}),
+        metadata: z.record(z.string(), z.unknown()).default({})
+      })
+    )
+    .default([]),
   workouts: z
     .array(
       z.object({
@@ -451,10 +467,34 @@ type SleepSegmentRow = {
   stage: string;
   bucket: string;
   source_value: number | null;
+  quality_kind: string;
+  source_record_ids_json: string;
   metadata_json: string;
   provenance_json: string;
   created_at: string;
   updated_at: string;
+};
+
+type SleepSourceRecordRow = {
+  id: string;
+  import_run_id: string | null;
+  pairing_session_id: string | null;
+  sleep_session_id: string | null;
+  user_id: string;
+  provider: string;
+  provider_record_type: string;
+  provider_record_uid: string;
+  source_device: string;
+  source_timezone: string;
+  local_date_key: string;
+  started_at: string;
+  ended_at: string;
+  raw_stage: string;
+  raw_value: number | null;
+  quality_kind: string;
+  payload_json: string;
+  metadata_json: string;
+  ingested_at: string;
 };
 
 type SleepRawLogRow = {
@@ -555,7 +595,7 @@ type HealthImportRunRow = {
   updated_at: string;
 };
 
-let legacyAppleSleepRepairAttempted = false;
+let legacyAppleSleepRepairDatabase: ReturnType<typeof getDatabase> | null = null;
 
 function nowIso() {
   return new Date().toISOString();
@@ -1143,10 +1183,42 @@ function mapSleepSegment(row: SleepSegmentRow) {
     stage: row.stage,
     bucket: row.bucket,
     sourceValue: row.source_value,
+    qualityKind: row.quality_kind as
+      | "provider_native"
+      | "historical_import"
+      | "reconstructed",
+    sourceRecordIds: safeJsonParse<string[]>(row.source_record_ids_json, []),
     metadata: safeJsonParse<Record<string, unknown>>(row.metadata_json, {}),
     provenance: safeJsonParse<Record<string, unknown>>(row.provenance_json, {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at
+  };
+}
+
+function mapSleepSourceRecord(row: SleepSourceRecordRow) {
+  return {
+    id: row.id,
+    importRunId: row.import_run_id,
+    pairingSessionId: row.pairing_session_id,
+    sleepSessionId: row.sleep_session_id,
+    userId: row.user_id,
+    provider: row.provider,
+    providerRecordType: row.provider_record_type,
+    providerRecordUid: row.provider_record_uid,
+    sourceDevice: row.source_device,
+    sourceTimezone: row.source_timezone,
+    localDateKey: row.local_date_key,
+    startedAt: row.started_at,
+    endedAt: row.ended_at,
+    rawStage: row.raw_stage,
+    rawValue: row.raw_value,
+    qualityKind: row.quality_kind as
+      | "provider_native"
+      | "historical_import"
+      | "reconstructed",
+    payload: safeJsonParse<Record<string, unknown>>(row.payload_json, {}),
+    metadata: safeJsonParse<Record<string, unknown>>(row.metadata_json, {}),
+    ingestedAt: row.ingested_at
   };
 }
 
@@ -1172,6 +1244,7 @@ function mapSleepRawLog(row: SleepRawLogRow) {
 
 type MappedSleepSession = ReturnType<typeof mapSleepSession>;
 type MappedSleepSegment = ReturnType<typeof mapSleepSegment>;
+type MappedSleepSourceRecord = ReturnType<typeof mapSleepSourceRecord>;
 
 function mapWorkoutSession(row: WorkoutSessionRow) {
   return {
@@ -1308,6 +1381,17 @@ function listSleepSegmentRowsBySleepId(sleepId: string) {
     .all(sleepId) as SleepSegmentRow[];
 }
 
+function listSleepSourceRecordRowsBySleepId(sleepId: string) {
+  return getDatabase()
+    .prepare(
+      `SELECT *
+       FROM health_sleep_source_records
+       WHERE sleep_session_id = ?
+       ORDER BY started_at ASC, ended_at ASC, ingested_at ASC`
+    )
+    .all(sleepId) as SleepSourceRecordRow[];
+}
+
 function listSleepRawLogRowsBySleepId(sleepId: string) {
   return getDatabase()
     .prepare(
@@ -1321,6 +1405,60 @@ function listSleepRawLogRowsBySleepId(sleepId: string) {
 
 function sleepSessionDateKey(row: Pick<SleepSessionRow, "local_date_key" | "ended_at">) {
   return row.local_date_key || dayKey(row.ended_at);
+}
+
+function defaultSleepTimeZone() {
+  const runtimeTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return resolveTimeZone(runtimeTimeZone || "UTC");
+}
+
+function inferHistoricalSleepTimeZone(
+  values: Array<string | null | undefined>
+) {
+  for (const value of values) {
+    const normalized = value?.trim();
+    if (normalized && normalized.length > 0 && normalized !== "UTC") {
+      return resolveTimeZone(normalized);
+    }
+  }
+  return defaultSleepTimeZone();
+}
+
+function inferHistoricalRawStage(payload: Record<string, unknown>) {
+  const breakdown = Array.isArray(payload.stageBreakdown)
+    ? (payload.stageBreakdown as Array<Record<string, unknown>>)
+    : [];
+  const positiveStages = breakdown.filter(
+    (stage) =>
+      typeof stage.stage === "string" &&
+      typeof stage.seconds === "number" &&
+      stage.seconds > 0
+  );
+  if (positiveStages.length === 1) {
+    return (positiveStages[0]?.stage as string) || "asleep_unspecified";
+  }
+  return "asleep_unspecified";
+}
+
+function inferHistoricalSleepBucket(stage: string) {
+  const normalized = stage.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (normalized.includes("bed")) {
+    return "in_bed" as const;
+  }
+  if (normalized.includes("awake")) {
+    return "awake" as const;
+  }
+  return "asleep" as const;
+}
+
+function sleepRawDataStatus(records: MappedSleepSourceRecord[]) {
+  if (records.some((record) => record.qualityKind === "provider_native")) {
+    return "provider_raw" as const;
+  }
+  if (records.length > 0) {
+    return "historical_raw" as const;
+  }
+  return "raw_unavailable" as const;
 }
 
 export function listSleepSessions(userIds?: string[]) {
@@ -1482,8 +1620,12 @@ function pickDisplaySleepSessions(sessions: MappedSleepSession[]) {
     }
     const currentHasRawSegments = current.rawSegmentCount > 0 ? 1 : 0;
     const nextHasRawSegments = session.rawSegmentCount > 0 ? 1 : 0;
+    const currentIsProviderBacked = current.sourceType !== "healthkit_repaired" ? 1 : 0;
+    const nextIsProviderBacked = session.sourceType !== "healthkit_repaired" ? 1 : 0;
     const shouldReplace =
-      session.asleepSeconds > current.asleepSeconds ||
+      nextIsProviderBacked > currentIsProviderBacked ||
+      (nextIsProviderBacked === currentIsProviderBacked &&
+        session.asleepSeconds > current.asleepSeconds) ||
       (session.asleepSeconds === current.asleepSeconds &&
         nextHasRawSegments > currentHasRawSegments) ||
       (session.asleepSeconds === current.asleepSeconds &&
@@ -1711,12 +1853,15 @@ export function getSleepSessionDetailById(sleepId: string) {
   if (!sleep) {
     return undefined;
   }
-  const rawSegments = listSleepSegmentRowsBySleepId(sleepId).map(mapSleepSegment);
+  const segments = listSleepSegmentRowsBySleepId(sleepId).map(mapSleepSegment);
+  const sourceRecords = listSleepSourceRecordRowsBySleepId(sleepId).map(mapSleepSourceRecord);
   return {
     sleep,
-    phaseTimeline: buildSleepPhaseTimeline(sleep, rawSegments),
-    rawSegments,
-    rawLogs: listSleepRawLogRowsBySleepId(sleepId).map(mapSleepRawLog)
+    phaseTimeline: buildSleepPhaseTimeline(sleep, segments),
+    segments,
+    sourceRecords,
+    rawDataStatus: sleepRawDataStatus(sourceRecords),
+    auditLogs: listSleepRawLogRowsBySleepId(sleepId).map(mapSleepRawLog)
   };
 }
 
@@ -2136,6 +2281,18 @@ function normalizeSleepSegmentInput(
   };
 }
 
+function normalizeSleepRawRecordInput(
+  input: z.infer<typeof mobileHealthSyncSchema>["sleepRawRecords"][number]
+) {
+  const sourceTimezone = resolveTimeZone(input.sourceTimezone);
+  return {
+    ...input,
+    sourceTimezone,
+    localDateKey:
+      input.localDateKey || localDateKeyForTimezone(input.endedAt, sourceTimezone)
+  };
+}
+
 function listNormalizedSleepNights(payload: z.infer<typeof mobileHealthSyncSchema>) {
   if (payload.sleepNights.length > 0) {
     return payload.sleepNights.map(normalizeSleepNightInput);
@@ -2147,6 +2304,12 @@ function listNormalizedSleepSegments(
   payload: z.infer<typeof mobileHealthSyncSchema>
 ) {
   return payload.sleepSegments.map(normalizeSleepSegmentInput);
+}
+
+function listNormalizedSleepRawRecords(
+  payload: z.infer<typeof mobileHealthSyncSchema>
+) {
+  return payload.sleepRawRecords.map(normalizeSleepRawRecordInput);
 }
 
 function refreshSleepSessionRawSegmentCount(sleepSessionId: string) {
@@ -2166,11 +2329,95 @@ function refreshSleepSessionRawSegmentCount(sleepSessionId: string) {
     .run(count.count, nowIso(), sleepSessionId);
 }
 
+function upsertSleepSourceRecord(input: {
+  pairing: PairingSessionRow;
+  importRunId: string;
+  sleepSessionId: string | null;
+  rawRecord: ReturnType<typeof normalizeSleepRawRecordInput>;
+  qualityKind: "provider_native" | "historical_import" | "reconstructed";
+}) {
+  const existing = getDatabase()
+    .prepare(
+      `SELECT *
+       FROM health_sleep_source_records
+       WHERE user_id = ? AND provider = 'apple_health' AND provider_record_uid = ?`
+    )
+    .get(
+      input.pairing.user_id,
+      input.rawRecord.externalUid
+    ) as SleepSourceRecordRow | undefined;
+  const now = nowIso();
+  if (existing) {
+    getDatabase()
+      .prepare(
+        `UPDATE health_sleep_source_records
+         SET import_run_id = ?, pairing_session_id = ?, sleep_session_id = ?, source_device = ?, source_timezone = ?,
+             local_date_key = ?, started_at = ?, ended_at = ?, provider_record_type = ?, raw_stage = ?, raw_value = ?,
+             quality_kind = ?, payload_json = ?, metadata_json = ?, ingested_at = ?
+         WHERE id = ?`
+      )
+      .run(
+        input.importRunId,
+        input.pairing.id,
+        input.sleepSessionId,
+        input.pairing.device_name ?? "",
+        input.rawRecord.sourceTimezone,
+        input.rawRecord.localDateKey,
+        input.rawRecord.startedAt,
+        input.rawRecord.endedAt,
+        input.rawRecord.providerRecordType,
+        input.rawRecord.rawStage,
+        input.rawRecord.rawValue ?? null,
+        input.qualityKind,
+        JSON.stringify(input.rawRecord.payload ?? {}),
+        JSON.stringify(input.rawRecord.metadata ?? {}),
+        now,
+        existing.id
+      );
+    return { mode: "updated" as const, id: existing.id };
+  }
+
+  const id = `sraw_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+  getDatabase()
+    .prepare(
+      `INSERT INTO health_sleep_source_records (
+         id, import_run_id, pairing_session_id, sleep_session_id, user_id, provider, provider_record_type, provider_record_uid,
+         source_device, source_timezone, local_date_key, started_at, ended_at, raw_stage, raw_value, quality_kind,
+         payload_json, metadata_json, ingested_at
+       )
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      id,
+      input.importRunId,
+      input.pairing.id,
+      input.sleepSessionId,
+      input.pairing.user_id,
+      "apple_health",
+      input.rawRecord.providerRecordType,
+      input.rawRecord.externalUid,
+      input.pairing.device_name ?? "",
+      input.rawRecord.sourceTimezone,
+      input.rawRecord.localDateKey,
+      input.rawRecord.startedAt,
+      input.rawRecord.endedAt,
+      input.rawRecord.rawStage,
+      input.rawRecord.rawValue ?? null,
+      input.qualityKind,
+      JSON.stringify(input.rawRecord.payload ?? {}),
+      JSON.stringify(input.rawRecord.metadata ?? {}),
+      now
+    );
+  return { mode: "created" as const, id };
+}
+
 function upsertSleepSegment(input: {
   pairing: PairingSessionRow;
   importRunId: string;
   sleepSessionId: string | null;
   segment: ReturnType<typeof normalizeSleepSegmentInput>;
+  sourceRecordIds?: string[];
+  qualityKind?: "provider_native" | "historical_import" | "reconstructed";
 }) {
   const existing = getDatabase()
     .prepare(
@@ -2189,7 +2436,7 @@ function upsertSleepSegment(input: {
         `UPDATE health_sleep_segments
          SET import_run_id = ?, pairing_session_id = ?, sleep_session_id = ?, source_type = ?, source_device = ?,
              source_timezone = ?, local_date_key = ?, started_at = ?, ended_at = ?, stage = ?, bucket = ?,
-             source_value = ?, metadata_json = ?, provenance_json = ?, updated_at = ?
+             source_value = ?, quality_kind = ?, source_record_ids_json = ?, metadata_json = ?, provenance_json = ?, updated_at = ?
          WHERE id = ?`
       )
       .run(
@@ -2205,6 +2452,8 @@ function upsertSleepSegment(input: {
         input.segment.stage,
         input.segment.bucket,
         input.segment.sourceValue ?? null,
+        input.qualityKind ?? "provider_native",
+        JSON.stringify(input.sourceRecordIds ?? []),
         JSON.stringify(input.segment.metadata ?? {}),
         JSON.stringify({
           importedVia: "ios_companion",
@@ -2223,9 +2472,9 @@ function upsertSleepSegment(input: {
       `INSERT INTO health_sleep_segments (
          id, external_uid, import_run_id, pairing_session_id, sleep_session_id, user_id, source, source_type,
          source_device, source_timezone, local_date_key, started_at, ended_at, stage, bucket, source_value,
-         metadata_json, provenance_json, created_at, updated_at
+         quality_kind, source_record_ids_json, metadata_json, provenance_json, created_at, updated_at
        )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       id,
@@ -2244,6 +2493,8 @@ function upsertSleepSegment(input: {
       input.segment.stage,
       input.segment.bucket,
       input.segment.sourceValue ?? null,
+      input.qualityKind ?? "provider_native",
+      JSON.stringify(input.sourceRecordIds ?? []),
       JSON.stringify(input.segment.metadata ?? {}),
       JSON.stringify({
         importedVia: "ios_companion",
@@ -2826,13 +3077,298 @@ function insertOrUpdateWorkoutSession(
   return { mode: "created" as const, id };
 }
 
-function ensureLegacyAppleSleepHistoryRepaired() {
-  if (legacyAppleSleepRepairAttempted) {
+function clusterSleepRowsByGap<T extends { started_at: string; ended_at: string }>(
+  rows: T[]
+) {
+  const clusters: T[][] = [];
+  let currentCluster: T[] = [];
+  let currentEnd = rows[0]?.ended_at ?? null;
+  for (const row of rows) {
+    if (
+      currentEnd &&
+      Date.parse(row.started_at) - Date.parse(currentEnd) > 4 * 60 * 60 * 1000
+    ) {
+      if (currentCluster.length > 0) {
+        clusters.push(currentCluster);
+      }
+      currentCluster = [row];
+      currentEnd = row.ended_at;
+      continue;
+    }
+    currentCluster.push(row);
+    if (!currentEnd || Date.parse(row.ended_at) > Date.parse(currentEnd)) {
+      currentEnd = row.ended_at;
+    }
+  }
+  if (currentCluster.length > 0) {
+    clusters.push(currentCluster);
+  }
+  return clusters;
+}
+
+function selectAuthoritativeSleepRows<T extends { id: string; started_at: string; ended_at: string }>(
+  rows: T[]
+) {
+  const authoritativeRows = rows.filter((candidate) => {
+    const containsOther = rows.some((other) => {
+      if (other.id === candidate.id) {
+        return false;
+      }
+      return (
+        Date.parse(candidate.started_at) <= Date.parse(other.started_at) &&
+        Date.parse(candidate.ended_at) >= Date.parse(other.ended_at)
+      );
+    });
+    return !containsOther;
+  });
+  return authoritativeRows.length > 0 ? authoritativeRows : rows;
+}
+
+function backfillHistoricalSleepEvidence() {
+  const repairedSessions = getDatabase()
+    .prepare(
+      `SELECT *
+       FROM health_sleep_sessions
+       WHERE source = 'apple_health'
+         AND source_type = 'healthkit_repaired'
+       ORDER BY started_at ASC`
+    )
+    .all() as SleepSessionRow[];
+  if (repairedSessions.length === 0) {
     return;
   }
-  legacyAppleSleepRepairAttempted = true;
 
-  const legacyRows = getDatabase()
+  const updateSessionTimezoneStatement = getDatabase().prepare(
+    `UPDATE health_sleep_sessions
+     SET source_timezone = ?, local_date_key = ?, updated_at = ?
+     WHERE id = ?`
+  );
+  const detachSourceRecordsStatement = getDatabase().prepare(
+    `UPDATE health_sleep_source_records
+     SET sleep_session_id = NULL, metadata_json = ?
+     WHERE sleep_session_id = ?`
+  );
+  const detachSegmentsStatement = getDatabase().prepare(
+    `UPDATE health_sleep_segments
+     SET sleep_session_id = NULL, provenance_json = ?, updated_at = ?
+     WHERE sleep_session_id = ?`
+  );
+  const detachRawLogsStatement = getDatabase().prepare(
+    `UPDATE health_sleep_raw_logs
+     SET sleep_session_id = NULL, metadata_json = ?
+     WHERE sleep_session_id = ?`
+  );
+  const deleteSessionStatement = getDatabase().prepare(
+    `DELETE FROM health_sleep_sessions WHERE id = ?`
+  );
+
+  for (const session of repairedSessions) {
+    const rawLogs = listSleepRawLogRowsBySleepId(session.id);
+    const sourceTimezone = inferHistoricalSleepTimeZone([
+      session.source_timezone,
+      ...rawLogs.map((row) => row.source_timezone)
+    ]);
+    const localDateKey = localDateKeyForTimezone(session.ended_at, sourceTimezone);
+    if (
+      session.source_timezone !== sourceTimezone ||
+      sleepSessionDateKey(session) !== localDateKey
+    ) {
+      updateSessionTimezoneStatement.run(sourceTimezone, localDateKey, nowIso(), session.id);
+    }
+
+    const existingSourceRecordCount = getDatabase()
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM health_sleep_source_records
+         WHERE sleep_session_id = ?`
+      )
+      .get(session.id) as { count: number };
+    const existingSegmentCount = getDatabase()
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM health_sleep_segments
+         WHERE sleep_session_id = ?`
+      )
+      .get(session.id) as { count: number };
+
+    if (existingSourceRecordCount.count === 0) {
+      for (const rawLog of rawLogs) {
+        const payload = safeJsonParse<Record<string, unknown>>(rawLog.payload_json, {});
+        const sourceRecordId = `sraw_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+        getDatabase()
+          .prepare(
+            `INSERT INTO health_sleep_source_records (
+               id, import_run_id, pairing_session_id, sleep_session_id, user_id, provider, provider_record_type, provider_record_uid,
+               source_device, source_timezone, local_date_key, started_at, ended_at, raw_stage, raw_value, quality_kind,
+               payload_json, metadata_json, ingested_at
+             )
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          )
+          .run(
+            sourceRecordId,
+            rawLog.import_run_id,
+            rawLog.pairing_session_id,
+            session.id,
+            rawLog.user_id,
+            "apple_health",
+            "historical_import_interval",
+            rawLog.external_uid ?? rawLog.id,
+            session.source_device,
+            sourceTimezone,
+            localDateKey,
+            rawLog.started_at ?? session.started_at,
+            rawLog.ended_at ?? session.ended_at,
+            inferHistoricalRawStage(payload),
+            null,
+            "historical_import",
+            JSON.stringify(payload),
+            JSON.stringify({
+              ...(safeJsonParse<Record<string, unknown>>(rawLog.metadata_json, {})),
+              migratedFromRawLogId: rawLog.id
+            }),
+            rawLog.created_at
+          );
+      }
+    }
+
+    if (existingSegmentCount.count === 0 && rawLogs.length > 0) {
+      const authoritativeLogs = selectAuthoritativeSleepRows(
+        rawLogs.filter(
+          (row): row is SleepRawLogRow & { started_at: string; ended_at: string } =>
+            typeof row.started_at === "string" && typeof row.ended_at === "string"
+        )
+      );
+      for (const rawLog of authoritativeLogs) {
+        const payload = safeJsonParse<Record<string, unknown>>(rawLog.payload_json, {});
+        const inferredStage = inferHistoricalRawStage(payload);
+        const sourceRecord = getDatabase()
+          .prepare(
+            `SELECT *
+             FROM health_sleep_source_records
+             WHERE sleep_session_id = ? AND provider_record_uid = ?
+             LIMIT 1`
+          )
+          .get(session.id, rawLog.external_uid ?? rawLog.id) as SleepSourceRecordRow | undefined;
+        getDatabase()
+          .prepare(
+            `INSERT INTO health_sleep_segments (
+               id, external_uid, import_run_id, pairing_session_id, sleep_session_id, user_id, source, source_type,
+               source_device, source_timezone, local_date_key, started_at, ended_at, stage, bucket, source_value,
+               quality_kind, source_record_ids_json, metadata_json, provenance_json, created_at, updated_at
+             )
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          )
+          .run(
+            `sleepseg_${randomUUID().replaceAll("-", "").slice(0, 12)}`,
+            rawLog.external_uid ?? rawLog.id,
+            rawLog.import_run_id,
+            rawLog.pairing_session_id,
+            session.id,
+            rawLog.user_id,
+            "apple_health",
+            "historical_import_segment",
+            session.source_device,
+            sourceTimezone,
+            localDateKey,
+            rawLog.started_at,
+            rawLog.ended_at,
+            inferredStage,
+            inferHistoricalSleepBucket(inferredStage),
+            null,
+            "historical_import",
+            JSON.stringify(sourceRecord ? [sourceRecord.id] : []),
+            JSON.stringify({
+              historicalImport: true
+            }),
+            JSON.stringify({
+              backfilledFrom: "health_sleep_raw_logs",
+              rawLogId: rawLog.id
+            }),
+            rawLog.created_at,
+            nowIso()
+          );
+      }
+      refreshSleepSessionRawSegmentCount(session.id);
+    }
+
+    const providerBackedSourceRecordCount = getDatabase()
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM health_sleep_source_records
+         WHERE sleep_session_id = ? AND quality_kind = 'provider_native'`
+      )
+      .get(session.id) as { count: number };
+    if (providerBackedSourceRecordCount.count > 0) {
+      const competingHistoricalSessions = getDatabase()
+        .prepare(
+          `SELECT *
+           FROM health_sleep_sessions
+           WHERE user_id = ?
+             AND source = 'apple_health'
+             AND local_date_key = ?
+             AND source_type = 'healthkit_repaired'
+             AND id != ?`
+        )
+        .all(session.user_id, localDateKey, session.id) as SleepSessionRow[];
+      for (const historical of competingHistoricalSessions) {
+        const mergedAnnotations = mergeSleepAnnotationPayloads(
+          [
+            safeJsonParse<Record<string, unknown>>(session.annotations_json, {}),
+            safeJsonParse<Record<string, unknown>>(historical.annotations_json, {})
+          ],
+          [
+            safeJsonParse<Array<z.infer<typeof healthLinkSchema>>>(session.links_json, []),
+            safeJsonParse<Array<z.infer<typeof healthLinkSchema>>>(historical.links_json, [])
+          ]
+        );
+        getDatabase()
+          .prepare(
+            `UPDATE health_sleep_sessions
+             SET links_json = ?, annotations_json = ?, updated_at = ?
+             WHERE id = ?`
+          )
+          .run(
+            JSON.stringify(mergedAnnotations.links),
+            JSON.stringify(mergedAnnotations),
+            nowIso(),
+            session.id
+          );
+        detachSourceRecordsStatement.run(
+          JSON.stringify({
+            replacedBySleepSessionId: session.id,
+            replacedAt: nowIso()
+          }),
+          historical.id
+        );
+        detachSegmentsStatement.run(
+          JSON.stringify({
+            replacedBySleepSessionId: session.id,
+            replacedAt: nowIso()
+          }),
+          nowIso(),
+          historical.id
+        );
+        detachRawLogsStatement.run(
+          JSON.stringify({
+            replacedBySleepSessionId: session.id,
+            replacedAt: nowIso()
+          }),
+          historical.id
+        );
+        deleteSessionStatement.run(historical.id);
+      }
+    }
+  }
+}
+
+function ensureLegacyAppleSleepHistoryRepaired() {
+  const database = getDatabase();
+  if (legacyAppleSleepRepairDatabase === database) {
+    return;
+  }
+  legacyAppleSleepRepairDatabase = database;
+
+  const legacyRows = database
     .prepare(
       `SELECT *
        FROM health_sleep_sessions
@@ -2842,237 +3378,312 @@ function ensureLegacyAppleSleepHistoryRepaired() {
        ORDER BY started_at ASC, ended_at ASC`
     )
     .all() as SleepSessionRow[];
-  if (legacyRows.length === 0) {
+
+  runInTransaction(() => {
+    if (legacyRows.length > 0) {
+      for (const row of legacyRows) {
+        const rawLogExists = getDatabase()
+          .prepare(
+            `SELECT id
+             FROM health_sleep_raw_logs
+             WHERE source = 'apple_health'
+               AND log_type = 'legacy_sleep_session_row'
+               AND user_id = ?
+               AND external_uid = ?
+             LIMIT 1`
+          )
+          .get(row.user_id, row.external_uid) as { id: string } | undefined;
+        if (!rawLogExists) {
+          createSleepRawLog({
+            sleepSessionId: null,
+            importRunId: null,
+            pairingSessionId: row.pairing_session_id,
+            userId: row.user_id,
+            source: row.source,
+            logType: "legacy_sleep_session_row",
+            externalUid: row.external_uid,
+            sourceTimezone: row.source_timezone || defaultSleepTimeZone(),
+            localDateKey: row.local_date_key || dayKey(row.ended_at),
+            startedAt: row.started_at,
+            endedAt: row.ended_at,
+            payload: mapSleepSession(row),
+            metadata: {
+              legacyRowId: row.id,
+              repairedVia: "canonical_sleep_backfill_v1"
+            }
+          });
+        }
+      }
+
+      const byUser = new Map<string, SleepSessionRow[]>();
+      for (const row of legacyRows) {
+        const current = byUser.get(row.user_id) ?? [];
+        current.push(row);
+        byUser.set(row.user_id, current);
+      }
+
+      for (const [userId, rows] of byUser.entries()) {
+        const clusters = clusterSleepRowsByGap(rows);
+        for (const cluster of clusters) {
+          const rowsForNight = selectAuthoritativeSleepRows(cluster);
+          const startedAt = rowsForNight[0]!.started_at;
+          const endedAt = rowsForNight.reduce(
+            (latest, row) =>
+              Date.parse(row.ended_at) > Date.parse(latest) ? row.ended_at : latest,
+            rowsForNight[0]!.ended_at
+          );
+          const sourceTimezone = inferHistoricalSleepTimeZone(
+            cluster.map((row) => row.source_timezone)
+          );
+          const localDateKey = localDateKeyForTimezone(endedAt, sourceTimezone);
+          const asleepSeconds = unionDurationSeconds(
+            rowsForNight.map((row) => ({
+              startedAt: row.started_at,
+              endedAt: row.ended_at
+            }))
+          );
+          const timeInBedSeconds = Math.max(
+            durationSecondsBetween(startedAt, endedAt),
+            asleepSeconds
+          );
+          const awakeSeconds = Math.max(0, timeInBedSeconds - asleepSeconds);
+          const stageTotals = new Map<string, number>();
+          for (const row of rowsForNight) {
+            for (const stage of safeJsonParse<Array<{ stage: string; seconds: number }>>(
+              row.stage_breakdown_json,
+              []
+            )) {
+              if (stage.seconds <= 0) {
+                continue;
+              }
+              stageTotals.set(stage.stage, (stageTotals.get(stage.stage) ?? 0) + stage.seconds);
+            }
+          }
+          const stageBreakdown = [...stageTotals.entries()].map(([stage, seconds]) => ({
+            stage,
+            seconds
+          }));
+          const sleepScore = computeSleepScore({
+            asleepSeconds,
+            timeInBedSeconds,
+            awakeSeconds,
+            stageBreakdown
+          });
+          const timingMetrics = computeSleepTimingMetrics({
+            userId,
+            startedAt,
+            endedAt,
+            sourceTimezone
+          });
+          const derived = computeSleepDerivedMetrics({
+            asleepSeconds,
+            timeInBedSeconds,
+            awakeSeconds,
+            sleepScore,
+            stageBreakdown
+          });
+          const annotations = mergeSleepAnnotationPayloads(
+            cluster.map((row) =>
+              safeJsonParse<Record<string, unknown>>(row.annotations_json, {})
+            ),
+            cluster.map((row) =>
+              safeJsonParse<Array<z.infer<typeof healthLinkSchema>>>(row.links_json, [])
+            )
+          );
+          const recoveryMetrics = cluster.reduce<Record<string, unknown>>((acc, row) => {
+            Object.assign(acc, safeJsonParse<Record<string, unknown>>(row.recovery_metrics_json, {}));
+            return acc;
+          }, {});
+          const sourceMetrics = {
+            repairedFromLegacy: true,
+            legacyClusterSize: cluster.length,
+            authoritativeRowCount: rowsForNight.length
+          };
+          const id = `sleep_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+          getDatabase()
+            .prepare(
+              `INSERT INTO health_sleep_sessions (
+                 id, external_uid, pairing_session_id, user_id, source, source_type, source_device,
+                 source_timezone, local_date_key, started_at, ended_at, time_in_bed_seconds, asleep_seconds, awake_seconds,
+                 sleep_score, regularity_score, bedtime_consistency_minutes, wake_consistency_minutes,
+                 raw_segment_count, stage_breakdown_json, recovery_metrics_json, source_metrics_json, links_json, annotations_json,
+                 provenance_json, derived_json, created_at, updated_at
+               )
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            )
+            .run(
+              id,
+              `legacy-repair-${startedAt}-${endedAt}`,
+              cluster[0]?.pairing_session_id ?? null,
+              userId,
+              "apple_health",
+              "healthkit_repaired",
+              cluster[0]?.source_device ?? "",
+              sourceTimezone,
+              localDateKey,
+              startedAt,
+              endedAt,
+              timeInBedSeconds,
+              asleepSeconds,
+              awakeSeconds,
+              sleepScore,
+              timingMetrics.regularityScore,
+              timingMetrics.bedtimeConsistencyMinutes,
+              timingMetrics.wakeConsistencyMinutes,
+              rowsForNight.length,
+              JSON.stringify(stageBreakdown),
+              JSON.stringify(recoveryMetrics),
+              JSON.stringify(sourceMetrics),
+              JSON.stringify(annotations.links),
+              JSON.stringify(annotations),
+              JSON.stringify({
+                repairedFromLegacy: true,
+                legacyRowIds: cluster.map((row) => row.id)
+              }),
+              JSON.stringify(derived),
+              nowIso(),
+              nowIso()
+            );
+
+          const legacyExternalUids = cluster
+            .map((row) => row.external_uid)
+            .filter((value): value is string => value.trim().length > 0);
+          if (legacyExternalUids.length > 0) {
+            getDatabase()
+              .prepare(
+                `UPDATE health_sleep_raw_logs
+                 SET sleep_session_id = ?
+                 WHERE source = 'apple_health'
+                   AND log_type = 'legacy_sleep_session_row'
+                   AND user_id = ?
+                   AND external_uid IN (${legacyExternalUids.map(() => "?").join(",")})`
+              )
+              .run(id, userId, ...legacyExternalUids);
+          }
+        }
+      }
+
+      const deleteStatement = getDatabase().prepare(
+        `DELETE FROM health_sleep_sessions
+         WHERE id = ?`
+      );
+      for (const row of legacyRows) {
+        deleteStatement.run(row.id);
+      }
+    }
+
+    backfillHistoricalSleepEvidence();
+  });
+}
+
+function replaceHistoricalSleepSessionsForDate(
+  userId: string,
+  localDateKey: string,
+  providerBackedSleepSessionId: string
+) {
+  const providerRecordCount = getDatabase()
+    .prepare(
+      `SELECT COUNT(*) AS count
+       FROM health_sleep_source_records
+       WHERE sleep_session_id = ? AND quality_kind = 'provider_native'`
+    )
+    .get(providerBackedSleepSessionId) as { count: number };
+  if (providerRecordCount.count === 0) {
     return;
   }
 
-  runInTransaction(() => {
-    for (const row of legacyRows) {
-      const rawLogExists = getDatabase()
-        .prepare(
-          `SELECT id
-           FROM health_sleep_raw_logs
-           WHERE source = 'apple_health'
-             AND log_type = 'legacy_sleep_session_row'
-             AND user_id = ?
-             AND external_uid = ?
-           LIMIT 1`
-        )
-        .get(row.user_id, row.external_uid) as { id: string } | undefined;
-      if (!rawLogExists) {
-        createSleepRawLog({
-          sleepSessionId: null,
-          importRunId: null,
-          pairingSessionId: row.pairing_session_id,
-          userId: row.user_id,
-          source: row.source,
-          logType: "legacy_sleep_session_row",
-          externalUid: row.external_uid,
-          sourceTimezone: row.source_timezone || "UTC",
-          localDateKey: row.local_date_key || dayKey(row.ended_at),
-          startedAt: row.started_at,
-          endedAt: row.ended_at,
-          payload: mapSleepSession(row),
-          metadata: {
-            legacyRowId: row.id,
-            repairedVia: "canonical_sleep_backfill_v1"
-          }
-        });
-      }
-    }
+  const providerSession = getDatabase()
+    .prepare(`SELECT * FROM health_sleep_sessions WHERE id = ?`)
+    .get(providerBackedSleepSessionId) as SleepSessionRow | undefined;
+  if (!providerSession) {
+    return;
+  }
 
-    const byUser = new Map<string, SleepSessionRow[]>();
-    for (const row of legacyRows) {
-      const current = byUser.get(row.user_id) ?? [];
-      current.push(row);
-      byUser.set(row.user_id, current);
-    }
+  const historicalSessions = getDatabase()
+    .prepare(
+      `SELECT *
+       FROM health_sleep_sessions
+       WHERE user_id = ?
+         AND source = 'apple_health'
+         AND local_date_key = ?
+         AND source_type = 'healthkit_repaired'
+         AND id != ?`
+    )
+    .all(userId, localDateKey, providerBackedSleepSessionId) as SleepSessionRow[];
+  if (historicalSessions.length === 0) {
+    return;
+  }
 
-    for (const [userId, rows] of byUser.entries()) {
-      const clusters: SleepSessionRow[][] = [];
-      let currentCluster: SleepSessionRow[] = [];
-      let currentEnd = rows[0]?.ended_at ?? null;
-      for (const row of rows) {
-        if (
-          currentEnd &&
-          Date.parse(row.started_at) - Date.parse(currentEnd) > 4 * 60 * 60 * 1000
-        ) {
-          if (currentCluster.length > 0) {
-            clusters.push(currentCluster);
-          }
-          currentCluster = [row];
-          currentEnd = row.ended_at;
-          continue;
-        }
-        currentCluster.push(row);
-        if (!currentEnd || Date.parse(row.ended_at) > Date.parse(currentEnd)) {
-          currentEnd = row.ended_at;
-        }
-      }
-      if (currentCluster.length > 0) {
-        clusters.push(currentCluster);
-      }
-
-      for (const cluster of clusters) {
-        const authoritativeRows = cluster.filter((candidate) => {
-          const containsOther = cluster.some((other) => {
-            if (other.id === candidate.id) {
-              return false;
-            }
-            return (
-              Date.parse(candidate.started_at) <= Date.parse(other.started_at) &&
-              Date.parse(candidate.ended_at) >= Date.parse(other.ended_at)
-            );
-          });
-          return !containsOther;
-        });
-        const rowsForNight =
-          authoritativeRows.length > 0 ? authoritativeRows : cluster;
-        const startedAt = rowsForNight[0]!.started_at;
-        const endedAt = rowsForNight.reduce(
-          (latest, row) =>
-            Date.parse(row.ended_at) > Date.parse(latest) ? row.ended_at : latest,
-          rowsForNight[0]!.ended_at
-        );
-        const sourceTimezone = resolveTimeZone(
-          rowsForNight[0]?.source_timezone || "UTC"
-        );
-        const localDateKey = localDateKeyForTimezone(endedAt, sourceTimezone);
-        const asleepSeconds = unionDurationSeconds(
-          rowsForNight.map((row) => ({
-            startedAt: row.started_at,
-            endedAt: row.ended_at
-          }))
-        );
-        const timeInBedSeconds = Math.max(
-          durationSecondsBetween(startedAt, endedAt),
-          asleepSeconds
-        );
-        const awakeSeconds = Math.max(0, timeInBedSeconds - asleepSeconds);
-        const stageTotals = new Map<string, number>();
-        for (const row of rowsForNight) {
-          for (const stage of safeJsonParse<Array<{ stage: string; seconds: number }>>(
-            row.stage_breakdown_json,
-            []
-          )) {
-            if (stage.seconds <= 0) {
-              continue;
-            }
-            stageTotals.set(stage.stage, (stageTotals.get(stage.stage) ?? 0) + stage.seconds);
-          }
-        }
-        const stageBreakdown = [...stageTotals.entries()].map(([stage, seconds]) => ({
-          stage,
-          seconds
-        }));
-        const sleepScore = computeSleepScore({
-          asleepSeconds,
-          timeInBedSeconds,
-          awakeSeconds,
-          stageBreakdown
-        });
-        const timingMetrics = computeSleepTimingMetrics({
-          userId,
-          startedAt,
-          endedAt,
-          sourceTimezone
-        });
-        const derived = computeSleepDerivedMetrics({
-          asleepSeconds,
-          timeInBedSeconds,
-          awakeSeconds,
-          sleepScore,
-          stageBreakdown
-        });
-        const annotations = mergeSleepAnnotationPayloads(
-          cluster.map((row) =>
-            safeJsonParse<Record<string, unknown>>(row.annotations_json, {})
-          ),
-          cluster.map((row) =>
-            safeJsonParse<Array<z.infer<typeof healthLinkSchema>>>(row.links_json, [])
-          )
-        );
-        const recoveryMetrics = cluster.reduce<Record<string, unknown>>((acc, row) => {
-          Object.assign(acc, safeJsonParse<Record<string, unknown>>(row.recovery_metrics_json, {}));
-          return acc;
-        }, {});
-        const sourceMetrics = {
-          repairedFromLegacy: true,
-          legacyClusterSize: cluster.length,
-          authoritativeRowCount: rowsForNight.length
-        };
-        const id = `sleep_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
-        getDatabase()
-          .prepare(
-            `INSERT INTO health_sleep_sessions (
-               id, external_uid, pairing_session_id, user_id, source, source_type, source_device,
-               source_timezone, local_date_key, started_at, ended_at, time_in_bed_seconds, asleep_seconds, awake_seconds,
-               sleep_score, regularity_score, bedtime_consistency_minutes, wake_consistency_minutes,
-               raw_segment_count, stage_breakdown_json, recovery_metrics_json, source_metrics_json, links_json, annotations_json,
-               provenance_json, derived_json, created_at, updated_at
-             )
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-          )
-          .run(
-            id,
-            `legacy-repair-${startedAt}-${endedAt}`,
-            cluster[0]?.pairing_session_id ?? null,
-            userId,
-            "apple_health",
-            "healthkit_repaired",
-            cluster[0]?.source_device ?? "",
-            sourceTimezone,
-            localDateKey,
-            startedAt,
-            endedAt,
-            timeInBedSeconds,
-            asleepSeconds,
-            awakeSeconds,
-            sleepScore,
-            timingMetrics.regularityScore,
-            timingMetrics.bedtimeConsistencyMinutes,
-            timingMetrics.wakeConsistencyMinutes,
-            rowsForNight.length,
-            JSON.stringify(stageBreakdown),
-            JSON.stringify(recoveryMetrics),
-            JSON.stringify(sourceMetrics),
-            JSON.stringify(annotations.links),
-            JSON.stringify(annotations),
-            JSON.stringify({
-              repairedFromLegacy: true,
-              legacyRowIds: cluster.map((row) => row.id)
-            }),
-            JSON.stringify(derived),
-            nowIso(),
-            nowIso()
-          );
-
-        const legacyExternalUids = cluster
-          .map((row) => row.external_uid)
-          .filter((value): value is string => value.trim().length > 0);
-        if (legacyExternalUids.length > 0) {
-          getDatabase()
-            .prepare(
-              `UPDATE health_sleep_raw_logs
-               SET sleep_session_id = ?
-               WHERE source = 'apple_health'
-                 AND log_type = 'legacy_sleep_session_row'
-                 AND user_id = ?
-                 AND external_uid IN (${legacyExternalUids.map(() => "?").join(",")})`
-            )
-            .run(id, userId, ...legacyExternalUids);
-        }
-      }
-    }
-
-    const deleteStatement = getDatabase().prepare(
-      `DELETE FROM health_sleep_sessions
-       WHERE id = ?`
+  for (const historical of historicalSessions) {
+    const currentProviderSession = getDatabase()
+      .prepare(`SELECT * FROM health_sleep_sessions WHERE id = ?`)
+      .get(providerBackedSleepSessionId) as SleepSessionRow;
+    const mergedAnnotations = mergeSleepAnnotationPayloads(
+      [
+        safeJsonParse<Record<string, unknown>>(currentProviderSession.annotations_json, {}),
+        safeJsonParse<Record<string, unknown>>(historical.annotations_json, {})
+      ],
+      [
+        safeJsonParse<Array<z.infer<typeof healthLinkSchema>>>(currentProviderSession.links_json, []),
+        safeJsonParse<Array<z.infer<typeof healthLinkSchema>>>(historical.links_json, [])
+      ]
     );
-    for (const row of legacyRows) {
-      deleteStatement.run(row.id);
-    }
-  });
+    getDatabase()
+      .prepare(
+        `UPDATE health_sleep_sessions
+         SET links_json = ?, annotations_json = ?, updated_at = ?
+         WHERE id = ?`
+      )
+      .run(
+        JSON.stringify(mergedAnnotations.links),
+        JSON.stringify(mergedAnnotations),
+        nowIso(),
+        providerBackedSleepSessionId
+      );
+    getDatabase()
+      .prepare(
+        `UPDATE health_sleep_source_records
+         SET sleep_session_id = NULL, metadata_json = ?
+         WHERE sleep_session_id = ?`
+      )
+      .run(
+        JSON.stringify({
+          replacedBySleepSessionId: providerBackedSleepSessionId,
+          replacedAt: nowIso()
+        }),
+        historical.id
+      );
+    getDatabase()
+      .prepare(
+        `UPDATE health_sleep_segments
+         SET sleep_session_id = NULL, provenance_json = ?, updated_at = ?
+         WHERE sleep_session_id = ?`
+      )
+      .run(
+        JSON.stringify({
+          replacedBySleepSessionId: providerBackedSleepSessionId,
+          replacedAt: nowIso()
+        }),
+        nowIso(),
+        historical.id
+      );
+    getDatabase()
+      .prepare(
+        `UPDATE health_sleep_raw_logs
+         SET sleep_session_id = NULL, metadata_json = ?
+         WHERE sleep_session_id = ?`
+      )
+      .run(
+        JSON.stringify({
+          replacedBySleepSessionId: providerBackedSleepSessionId,
+          replacedAt: nowIso()
+        }),
+        historical.id
+      );
+    getDatabase()
+      .prepare(`DELETE FROM health_sleep_sessions WHERE id = ?`)
+      .run(historical.id);
+  }
 }
 
 export function ingestMobileHealthSync(
@@ -3086,6 +3697,7 @@ export function ingestMobileHealthSync(
     const runId = `hir_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
     const normalizedSleepNights = listNormalizedSleepNights(parsed);
     const normalizedSleepSegments = listNormalizedSleepSegments(parsed);
+    const normalizedSleepRawRecords = listNormalizedSleepRawRecords(parsed);
     const vitalMetricEntries = parsed.vitals.daySummaries.reduce(
       (sum, day) => sum + day.metrics.length,
       0
@@ -3114,6 +3726,7 @@ export function ingestMobileHealthSync(
       string,
       Array<{ id: string; startedAt: string; endedAt: string }>
     >();
+    const sourceRecordIdsByExternalUid = new Map<string, string>();
 
     for (const sleep of normalizedSleepNights) {
       const result = insertOrUpdateSleepSession(pairing, sleep);
@@ -3132,6 +3745,29 @@ export function ingestMobileHealthSync(
       summarizeUserHealthDay(pairing.user_id, sleep.localDateKey);
     }
 
+    for (const rawRecord of normalizedSleepRawRecords) {
+      const candidateSessions = sleepSessionsByLocalDate.get(rawRecord.localDateKey) ?? [];
+      const sleepSessionId =
+        candidateSessions.find(
+          (session) =>
+            Date.parse(rawRecord.endedAt) > Date.parse(session.startedAt) &&
+            Date.parse(rawRecord.startedAt) < Date.parse(session.endedAt)
+        )?.id ?? null;
+      const result = upsertSleepSourceRecord({
+        pairing,
+        importRunId: runId,
+        sleepSessionId,
+        rawRecord,
+        qualityKind: "provider_native"
+      });
+      sourceRecordIdsByExternalUid.set(rawRecord.externalUid, result.id);
+      if (result.mode === "created") {
+        createdCount += 1;
+      } else {
+        updatedCount += 1;
+      }
+    }
+
     for (const segment of normalizedSleepSegments) {
       const candidateSessions = sleepSessionsByLocalDate.get(segment.localDateKey) ?? [];
       const sleepSessionId =
@@ -3144,7 +3780,13 @@ export function ingestMobileHealthSync(
         pairing,
         importRunId: runId,
         sleepSessionId,
-        segment
+        segment,
+        sourceRecordIds: sourceRecordIdsByExternalUid.has(segment.externalUid)
+          ? [sourceRecordIdsByExternalUid.get(segment.externalUid)!]
+          : [],
+        qualityKind: sourceRecordIdsByExternalUid.has(segment.externalUid)
+          ? "provider_native"
+          : "reconstructed"
       });
       if (result.mode === "created") {
         createdCount += 1;
@@ -3153,6 +3795,23 @@ export function ingestMobileHealthSync(
       }
       if (sleepSessionId) {
         refreshSleepSessionRawSegmentCount(sleepSessionId);
+      }
+    }
+
+    for (const sleep of normalizedSleepNights) {
+      const targetSessionId =
+        sleepSessionsByLocalDate
+          .get(sleep.localDateKey)
+          ?.find(
+            (session) =>
+              session.startedAt === sleep.startedAt && session.endedAt === sleep.endedAt
+          )?.id ?? null;
+      if (targetSessionId) {
+        replaceHistoricalSleepSessionsForDate(
+          pairing.user_id,
+          sleep.localDateKey,
+          targetSessionId
+        );
       }
     }
 
@@ -3210,6 +3869,7 @@ export function ingestMobileHealthSync(
           sleepSessions: parsed.sleepSessions.length,
           sleepNights: normalizedSleepNights.length,
           sleepSegments: normalizedSleepSegments.length,
+          sleepRawRecords: normalizedSleepRawRecords.length,
           workouts: parsed.workouts.length,
           vitals: {
             daySummaries: parsed.vitals.daySummaries.length,
@@ -3228,7 +3888,8 @@ export function ingestMobileHealthSync(
           }
         }),
         normalizedSleepNights.length +
-          normalizedSleepSegments.length +
+        normalizedSleepSegments.length +
+          normalizedSleepRawRecords.length +
           parsed.workouts.length +
           parsed.vitals.daySummaries.length +
           parsed.movement.stays.length +
@@ -3256,6 +3917,7 @@ export function ingestMobileHealthSync(
         sleepSessions: parsed.sleepSessions.length,
         sleepNights: normalizedSleepNights.length,
         sleepSegments: normalizedSleepSegments.length,
+        sleepRawRecords: normalizedSleepRawRecords.length,
         workouts: parsed.workouts.length,
         vitalsDaySummaries: parsed.vitals.daySummaries.length,
         vitalsMetricEntries: vitalMetricEntries,
@@ -3279,6 +3941,7 @@ export function ingestMobileHealthSync(
         sleepSessions: parsed.sleepSessions.length,
         sleepNights: normalizedSleepNights.length,
         sleepSegments: normalizedSleepSegments.length,
+        sleepRawRecords: normalizedSleepRawRecords.length,
         workouts: parsed.workouts.length,
         vitalsDaySummaries: parsed.vitals.daySummaries.length,
         vitalsMetricEntries: vitalMetricEntries,
@@ -3309,6 +3972,15 @@ export function getCompanionOverview(userIds?: string[]) {
            FROM health_sleep_segments
            WHERE user_id IN (${userIds.map(() => "?").join(",")})`
         : `SELECT COUNT(*) AS count FROM health_sleep_segments`
+    )
+    .get(...(userIds ?? [])) as { count: number };
+  const sleepRawRecords = getDatabase()
+    .prepare(
+      userIds && userIds.length > 0
+        ? `SELECT COUNT(*) AS count
+           FROM health_sleep_source_records
+           WHERE user_id IN (${userIds.map(() => "?").join(",")})`
+        : `SELECT COUNT(*) AS count FROM health_sleep_source_records`
     )
     .get(...(userIds ?? [])) as { count: number };
   const sleepRawLogs = getDatabase()
@@ -3386,6 +4058,7 @@ export function getCompanionOverview(userIds?: string[]) {
     counts: {
       sleepSessions: sleepSessions.length,
       sleepSegments: sleepSegments.count,
+      sleepRawRecords: sleepRawRecords.count,
       sleepRawLogs: sleepRawLogs.count,
       workouts: workouts.length,
       reflectiveSleepSessions: sleepSessions.filter((session) => {
