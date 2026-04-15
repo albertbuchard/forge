@@ -41,7 +41,7 @@
     ]
   },
   "peerDependencies": {
-    "openclaw": "^2026.4.8"
+    "openclaw": "2026.4.8"
   },
   "dependencies": {
     "@azure/msal-node": "^5.1.2",
