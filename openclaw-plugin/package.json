@@ -41,7 +41,7 @@
     ]
   },
   "peerDependencies": {
-    "openclaw": "^2026.3.22"
+    "openclaw": "^2026.4.8"
   },
   "dependencies": {
     "@azure/msal-node": "^5.1.2",
@@ -49,10 +49,15 @@
     "@fastify/multipart": "^9.4.0",
     "@sinclair/typebox": "^0.34.48",
     "adm-zip": "^0.5.17",
-    "fastify": "^5.2.1",
+    "fastify": "^5.8.5",
     "node-ical": "^0.20.1",
     "tsdav": "^2.1.8",
     "zod": "^3.25.67"
+  },
+  "overrides": {
+    "axios": "^1.15.0",
+    "follow-redirects": "^1.16.0",
+    "hono": "4.12.14"
   },
   "scripts": {
     "build": "node ./scripts/build.mjs"

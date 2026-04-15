@@ -23,6 +23,42 @@ access or ownership defaults. Strategies may also be locked with `isLocked`; onc
 strategy is locked, Hermes should treat the graph, targets, and descriptive plan
 fields as a contract until the user explicitly unlocks it.
 
+## Project Management Hierarchy Rule
+
+Forge project management is explicit:
+
+- Goal
+- Strategy (high level)
+- Project
+- Strategy (lower level when useful)
+- Issue
+- Task
+- Subtask
+
+Hermes should preserve that hierarchy in the records it creates or updates. Keep
+`project` and `strategy` first-class. Treat `issue`, `task`, and `subtask` as the
+execution layer below projects.
+
+Workflow rule:
+
+- Projects are PRD-backed initiatives.
+- PRDs break down into vertical-slice issues.
+- Issues are classified as `AFK` or `HITL`.
+- Tasks are one focused AI session each and use direct `aiInstructions`.
+- If a task is too large for one focused session, split it into smaller tasks or
+  subtasks.
+- Keep file targets, patterns, and done-shape guidance inside `aiInstructions`,
+  not in separate fields.
+
+Completion rule:
+
+- Completed work should preserve
+  `completionReport = { modifiedFiles[], workSummary, linkedGitRefIds[] }`.
+- `linkedGitRefIds[]` points to canonical Forge git refs.
+- Default workflow is direct commits to `main`.
+- Do not ask for feature branches or pull requests unless the user explicitly
+  wants them.
+
 Treat `note` as a first-class Markdown entity. Notes can link to one or many Forge
 entities, carry note-owned `tags`, and optionally self-delete when `destroyAt` is set.
 Use note tags both for custom labels and for memory-system labels such as `Working
@@ -40,6 +76,16 @@ For all other entity creation and update flows, use
 [`entity_conversation_playbooks.md`](./entity_conversation_playbooks.md) before you
 fall back to field-by-field intake. When the user is vague, ask for one small concrete
 example, stake, or desired outcome before asking them to name the record.
+Use those same playbooks for action-heavy non-Psyche flows such as
+`work_adjustment`, `preference_judgment`, `preference_signal`, and specialized
+`movement`, `life_force`, or `workbench` work so Hermes starts from the user's real
+job before choosing a route family.
+When the operation is not already explicit, identify the job first:
+add, update, review, compare, navigate, link, or run. Skip that meta question when
+the action is already obvious from the user's wording.
+When the user wants to review, compare, inspect, or navigate an existing Forge
+record, ask what they are trying to understand first and prefer the read path before
+you reopen create or update intake.
 
 ## Wiki model
 
@@ -80,13 +126,14 @@ When Hermes is trying to find the right wiki record, use these search patterns:
    `forge_ingest_wiki_source` queues background ingest work; when the user wants to review candidate pages or entities before publishing, hand off to the Forge UI instead of pretending Hermes already has an inline review tool.
 6. Use the health tools for sleep and sports review and reflective enrichment:
    `forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_update_sleep_session`, `forge_update_workout_session`.
-7. Treat narrow calendar helpers as convenience helpers, not the default architecture:
+7. Movement, Life Force, and Workbench are specialized Forge API surfaces rather than simple batch entities. When Hermes needs those domains, read `forge_get_agent_onboarding` and follow `entityRouteModel.specializedDomainSurfaces` for the dedicated route families.
+8. Treat narrow calendar helpers as convenience helpers, not the default architecture:
    `forge_create_work_block_template` and `forge_create_task_timebox` are fine, but Hermes should still prefer the generic batch entity routes when practical.
-8. Use the task-run tools for truthful live work:
+9. Use the task-run tools for truthful live work:
    `forge_start_task_run`, `forge_heartbeat_task_run`, `forge_focus_task_run`, `forge_complete_task_run`, `forge_release_task_run`.
-9. Use `forge_adjust_work_minutes` for signed minute corrections on existing tasks or projects, not to fake a live session.
-10. Use `forge_post_insight` only for agent-authored interpretation or recommendation, not as a substitute for creating a real goal, project, task, note, or Psyche record.
-11. Use `forge_get_ui_entrypoint` only when the Forge UI is genuinely the better surface for Kanban, review, graph exploration, or complex multi-record editing.
+10. Use `forge_adjust_work_minutes` for signed minute corrections on existing tasks or projects, not to fake a live session.
+11. Use `forge_post_insight` only for agent-authored interpretation or recommendation, not as a substitute for creating a real goal, project, task, note, or Psyche record.
+12. Use `forge_get_ui_entrypoint` only when the Forge UI is genuinely the better surface for Kanban, review, graph exploration, or complex multi-record editing.
 
 For wiki-specific recall:
 
@@ -112,7 +159,28 @@ For wiki-specific recall:
 - Use the high-level batch routes for basic Preferences CRUD. `preference_catalog`, `preference_catalog_item`, `preference_context`, and `preference_item` should normally flow through `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`.
 - Use the high-level batch routes for basic questionnaire CRUD too. `questionnaire_instrument` should normally flow through `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`.
 - Use the high-level batch routes for ordinary health-session CRUD too. `sleep_session` and `workout_session` should normally flow through `forge_search_entities`, `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`. Keep `forge_get_sleep_overview` and `forge_get_sports_overview` for read models, and keep `forge_update_sleep_session` and `forge_update_workout_session` for reflective enrichment on one already-existing record.
+- Use the dedicated API families for Movement, Life Force, and Workbench. Those routes are published in `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces` and are the preferred contract for movement stays, trips, time-in-place and travel-behavior queries, life-force state, and workbench execution/result work.
+- In the live onboarding catalog, those domains should appear as `specialized_domain_surface`. If the route family and the catalog classification disagree, trust the specialized route family and fix the contract mismatch before guessing a CRUD path.
+- Movement lane hints: review spans through `/api/v1/movement/day`,
+  `/api/v1/movement/month`, `/api/v1/movement/all-time`, `/api/v1/movement/timeline`,
+  `/api/v1/movement/places`, `/api/v1/movement/selection`, and
+  `/api/v1/movement/trips/:id`; fill missing spans through
+  `/api/v1/movement/user-boxes/preflight` then `/api/v1/movement/user-boxes`; only
+  patch `/stays/:id` or `/trips/:id` when editing an already-recorded item; use
+  `/api/v1/movement/user-boxes/:id`,
+  `/api/v1/movement/automatic-boxes/:id/invalidate`, and the stay/trip repair routes
+  when the user is repairing already-saved movement data.
+- Life Force lane hints: overview is `GET /api/v1/life-force`, durable profile edits
+  are `PATCH /api/v1/life-force/profile`, weekday curve edits are
+  `PUT /api/v1/life-force/templates/:weekday`, and real-time tired or recovered
+  reports are `POST /api/v1/life-force/fatigue-signals`.
+- Workbench lane hints: flow catalog and CRUD live under `/api/v1/workbench/flows`,
+  execution uses `/api/v1/workbench/flows/:id/run` or `/api/v1/workbench/run`,
+  published outputs use `/api/v1/workbench/flows/:id/output`, and per-run or per-node
+  inspection uses the run and node-result routes under `/api/v1/workbench/flows/:id`.
 - Keep dedicated Preferences tools only for real preference actions and read models: workspace reads, game starts, context merges, entity seeding, judgments, direct signals, and score overrides.
+- For `work_adjustment`, ask what existing task or project the correction belongs to, whether time should be added or removed, and what truthful reason should stay with it before calling `forge_adjust_work_minutes`.
+- For `preference_judgment` and `preference_signal`, ask what comparison or direct mark the user is actually trying to make, what context it belongs to, and only then call the dedicated judgment or signal route.
 - Keep dedicated questionnaire tools only for real flow actions and read models: list/get, clone, ensure draft, publish, start run, update run, complete run.
 - Self-observation is note-backed. Read the calendar through the dedicated self-observation tool, but create or update the stored observation through `note` with tag `Self-observation`, `frontmatter.observedAt`, and links to the relevant Psyche or Forge records.
 - Exact create-shape expectations live in `forge_get_agent_onboarding`. Use its `entityCatalog` as the schema source of truth for `minimumCreateFields`, `fieldGuide`, examples, classification, and preferred mutation path instead of guessing field names.

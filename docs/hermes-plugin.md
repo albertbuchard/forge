@@ -2,6 +2,30 @@
 
 Forge ships a Hermes plugin alongside the published OpenClaw plugin.
 
+## Project Management Workflow
+
+Hermes should follow Forge's explicit planning hierarchy:
+
+- Goal
+- Strategy (high level)
+- Project
+- Strategy (lower level when useful)
+- Issue
+- Task
+- Subtask
+
+Projects are PRD-backed. Issues are vertical slices classified as `AFK` or `HITL`.
+Tasks are one focused AI session each and should carry direct `aiInstructions`.
+Subtasks stay lightweight and derive most of their detail from `description`.
+
+When Hermes helps close out completed work, it should preserve Forge's structured
+completion contract:
+
+`completionReport = { modifiedFiles[], workSummary, linkedGitRefIds[] }`
+
+Hermes should assume direct commits to `main` by default and must not ask for
+feature branches or pull requests unless the user explicitly wants them.
+
 The Hermes adapter now follows the native Hermes plugin guide structure end to end:
 
 - `plugin.yaml`

@@ -5,6 +5,7 @@ import { SchedulingRulesEditor } from "@/components/calendar/scheduling-rules-ed
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import { OpenInGraphButton } from "@/components/knowledge-graph/open-in-graph-button";
 import { ProjectDialog } from "@/components/project-dialog";
+import { ProjectManagementSectionNav } from "@/components/projects/project-management-section-nav";
 import { TaskDialog } from "@/components/task-dialog";
 import { WorkAdjustmentDialog } from "@/components/work-adjustment-dialog";
 import { ExecutionBoard } from "@/components/execution-board";
@@ -233,6 +234,12 @@ export function ProjectDetailPage() {
     rules: payload.project.schedulingRules,
     overview: calendarOverviewQuery.data?.calendar
   });
+  const goalStrategies = shell.snapshot.strategies.filter((strategy) =>
+    strategy.targetGoalIds.includes(payload.goal.id)
+  );
+  const projectStrategies = shell.snapshot.strategies.filter((strategy) =>
+    strategy.targetProjectIds.includes(payload.project.id)
+  );
 
   const updateProjectStatus = async (status: Project["status"]) => {
     await lifecycleMutation.mutateAsync(status);
@@ -252,6 +259,7 @@ export function ProjectDetailPage() {
 
   return (
     <div className="grid min-w-0 gap-5">
+      <ProjectManagementSectionNav />
       <PageHero
         entityKind="project"
         title={
@@ -300,7 +308,91 @@ export function ProjectDetailPage() {
         <div className="flex flex-wrap items-center gap-2 text-sm text-white/62">
           <span className="text-white/42">Owned by</span>
           <UserBadge user={payload.project.user} />
+          {payload.project.assignees && payload.project.assignees.length > 0 ? (
+            <>
+              <span className="text-white/35">Assigned with</span>
+              <div className="flex flex-wrap items-center gap-2">
+                {payload.project.assignees.map((user) => (
+                  <UserBadge key={user.id} user={user} compact />
+                ))}
+              </div>
+            </>
+          ) : null}
         </div>
+      ) : null}
+
+      {payload.project.productRequirementsDocument ? (
+        <Card>
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            Product requirements document
+          </div>
+          <div className="mt-3">
+            <NoteMarkdown
+              markdown={payload.project.productRequirementsDocument}
+              className="[&>p]:text-[13px] [&>p]:leading-6 [&>blockquote]:text-[13px] [&>ul]:text-[13px] [&>ol]:text-[13px]"
+            />
+          </div>
+        </Card>
+      ) : null}
+
+      {goalStrategies.length > 0 || projectStrategies.length > 0 ? (
+        <Card>
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            Strategy stack
+          </div>
+          <div className="mt-3 grid gap-3 lg:grid-cols-2">
+            <div className="grid gap-2">
+              <div className="text-xs uppercase tracking-[0.16em] text-white/42">
+                Goal-level strategies
+              </div>
+              {goalStrategies.length === 0 ? (
+                <div className="text-sm text-white/48">
+                  No goal-level strategies linked yet.
+                </div>
+              ) : (
+                goalStrategies.map((strategy) => (
+                  <Link
+                    key={strategy.id}
+                    to={`/strategies/${strategy.id}`}
+                    className="rounded-[18px] border border-white/8 bg-white/[0.04] px-4 py-3 transition hover:bg-white/[0.07]"
+                  >
+                    <div className="text-sm font-medium text-white">
+                      {strategy.title}
+                    </div>
+                    <div className="mt-1 text-xs text-white/48">
+                      {strategy.overview || strategy.endStateDescription}
+                    </div>
+                  </Link>
+                ))
+              )}
+            </div>
+            <div className="grid gap-2">
+              <div className="text-xs uppercase tracking-[0.16em] text-white/42">
+                Project-level strategies
+              </div>
+              {projectStrategies.length === 0 ? (
+                <div className="text-sm text-white/48">
+                  No lower-level strategies linked yet.
+                </div>
+              ) : (
+                projectStrategies.map((strategy) => (
+                  <Link
+                    key={strategy.id}
+                    to={`/strategies/${strategy.id}`}
+                    className="rounded-[18px] border border-white/8 bg-white/[0.04] px-4 py-3 transition hover:bg-white/[0.07]"
+                  >
+                    <div className="text-sm font-medium text-white">
+                      {strategy.title}
+                    </div>
+                    <div className="mt-1 text-xs text-white/48">
+                      {strategy.overview || strategy.endStateDescription}
+                    </div>
+                  </Link>
+                ))
+              )}
+            </div>
+          </div>
+        </Card>
       ) : null}
 
       {isLegacyProject ? (

@@ -13,6 +13,52 @@ The repo contains the React web app, the Fastify API, the SQLite-backed runtime,
 file-first wiki layer, the OpenClaw and Hermes adapter packages, the Codex adapter,
 and the iPhone companion.
 
+## Planning Hierarchy
+
+Forge now treats product management as one explicit hierarchy:
+
+- Goal
+- Strategy (high level)
+- Project
+- Strategy (lower level when useful)
+- Issue
+- Task
+- Subtask
+
+Projects stay first-class initiatives with a PRD. Issues are vertical slices across
+the stack. Tasks are one focused AI session each. Subtasks are lightweight child
+steps under a task.
+
+The work-item contract stays intentionally lean:
+
+- `description` is the main rich planning field
+- `aiInstructions` is the direct AI-execution field
+- `executionMode`, `acceptanceCriteria`, `blockerLinks`, and
+  `completionReport = { modifiedFiles[], workSummary, linkedGitRefIds[] }`
+  are the only structured workflow add-ons below the shared task fields
+
+Forge stores canonical git refs separately and uses `linkedGitRefIds[]` inside the
+completion report to point back to those structured refs.
+
+## Default AI Workflow
+
+Forge-adapted agent workflow follows this sequence:
+
+1. Write the project PRD.
+2. Break the PRD into vertical-slice issues.
+3. Break each issue into ordered tasks that each fit one focused AI session.
+4. Add subtasks only when a task genuinely needs granular child steps.
+5. Close out completed tasks with modified files, a work summary, and linked commits.
+
+Issue execution mode is either `AFK` or `HITL`. Task-generation guidance follows
+`Schema -> Logic -> API -> UI`, with tests interleaved.
+
+Forge defaults to a single-branch monorepo workflow:
+
+- commit directly to `main`
+- do not assume feature branches
+- do not assume pull requests
+
 ## Getting Started
 
 ### OpenClaw

@@ -75,7 +75,7 @@ Forge also needs the user-facing product management experience to become hierarc
 
 Finally, Forge still needs the workflow and documentation layer to match the runtime:
 
-- `.vision/product_requirements_document.md` and `.vision/product_vision.md` to coexist cleanly, with the product vision describing the actual current surfaces and stack
+- `.vision/product_requirements_document.md` to replace `.vision/product_vision.md`, with the PRD becoming the canonical project requirements surface
 - `goal_alignment.md` in this exact four-part format
 - skill flows for PRD authoring, PRD -> issues, issues -> tasks, and task closeout
 - public docs that explicitly describe the full hierarchy and the direct-to-`main` workflow

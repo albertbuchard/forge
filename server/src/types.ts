@@ -15,9 +15,12 @@ export const taskStatusSchema = z.enum([
 export const taskPrioritySchema = z.enum(["low", "medium", "high", "critical"]);
 export const taskEffortSchema = z.enum(["light", "deep", "marathon"]);
 export const taskEnergySchema = z.enum(["low", "steady", "high"]);
+export const workItemLevelSchema = z.enum(["issue", "task", "subtask"]);
+export const workItemExecutionModeSchema = z.enum(["afk", "hitl"]);
 export const goalStatusSchema = z.enum(["active", "paused", "completed"]);
 export const goalHorizonSchema = z.enum(["quarter", "year", "lifetime"]);
 export const projectStatusSchema = z.enum(["active", "paused", "completed"]);
+export const projectWorkflowStatusSchema = taskStatusSchema;
 export const tagKindSchema = z.enum(["value", "category", "execution"]);
 export const taskDueFilterSchema = z.enum(["overdue", "today", "week"]);
 export const userKindSchema = z.enum(["human", "bot"]);
@@ -34,6 +37,11 @@ export const timeAccountingModeSchema = z.enum([
   "split",
   "parallel",
   "primary_only"
+]);
+export const workItemGitRefTypeSchema = z.enum([
+  "commit",
+  "branch",
+  "pull_request"
 ]);
 export const habitFrequencySchema = z.enum(["daily", "weekly"]);
 export const habitPolaritySchema = z.enum(["positive", "negative"]);
@@ -488,8 +496,37 @@ export const userDirectoryPayloadSchema = z.object({
 
 const ownershipShape = {
   userId: z.string().nullable().default(null),
-  user: userSummarySchema.nullable().default(null)
+  user: userSummarySchema.nullable().default(null),
+  ownerUserId: z.string().nullable().default(null),
+  ownerUser: userSummarySchema.nullable().default(null),
+  assigneeUserIds: z.array(z.string()).default([]),
+  assignees: z.array(userSummarySchema).default([])
 };
+
+const blockerLinkSchema = z.object({
+  entityType: z.string(),
+  entityId: z.string(),
+  label: trimmedString.optional()
+});
+
+const workItemGitRefSchema = z.object({
+  id: z.string(),
+  workItemId: z.string(),
+  refType: workItemGitRefTypeSchema,
+  provider: trimmedString.default("git"),
+  repository: trimmedString.default(""),
+  refValue: nonEmptyTrimmedString,
+  url: trimmedString.nullable().default(null),
+  displayTitle: trimmedString.default(""),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+
+const completionReportSchema = z.object({
+  modifiedFiles: z.array(z.string()).default([]),
+  workSummary: trimmedString.default(""),
+  linkedGitRefIds: z.array(z.string()).default([])
+});
 
 export const tagSchema = z.object({
   id: z.string(),
@@ -740,8 +777,10 @@ export const projectSchema = z.object({
   title: nonEmptyTrimmedString,
   description: trimmedString,
   status: projectStatusSchema,
+  workflowStatus: projectWorkflowStatusSchema.default("backlog"),
   targetPoints: z.number().int().nonnegative(),
   themeColor: z.string(),
+  productRequirementsDocument: trimmedString.default(""),
   schedulingRules: calendarSchedulingRulesSchema.default({
     allowWorkBlockKinds: [],
     blockWorkBlockKinds: [],
@@ -763,11 +802,13 @@ export const taskSchema = z.object({
   id: z.string(),
   title: nonEmptyTrimmedString,
   description: trimmedString,
+  level: workItemLevelSchema.default("task"),
   status: taskStatusSchema,
   priority: taskPrioritySchema,
   owner: nonEmptyTrimmedString,
   goalId: z.string().nullable(),
   projectId: z.string().nullable(),
+  parentWorkItemId: z.string().nullable().default(null),
   dueDate: dateOnlySchema.nullable(),
   effort: taskEffortSchema,
   energy: taskEnergySchema,
@@ -783,6 +824,12 @@ export const taskSchema = z.object({
   schedulingRules: calendarSchedulingRulesSchema.nullable().default(null),
   resolutionKind: taskResolutionKindSchema.nullable().default(null),
   splitParentTaskId: z.string().nullable().default(null),
+  aiInstructions: trimmedString.default(""),
+  executionMode: workItemExecutionModeSchema.nullable().default(null),
+  acceptanceCriteria: z.array(trimmedString).default([]),
+  blockerLinks: z.array(blockerLinkSchema).default([]),
+  completionReport: completionReportSchema.nullable().default(null),
+  gitRefs: z.array(workItemGitRefSchema).default([]),
   completedAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -2523,12 +2570,28 @@ export const notesListQuerySchema = z
 
 export const taskListQuerySchema = z.object({
   status: taskStatusSchema.optional(),
+  levels: z
+    .preprocess(
+      (value) => {
+        if (Array.isArray(value)) {
+          return value;
+        }
+        if (typeof value === "string" && value.trim().length > 0) {
+          return value.split(",").map((entry) => entry.trim());
+        }
+        return undefined;
+      },
+      z.array(workItemLevelSchema).optional()
+    )
+    .optional(),
   owner: nonEmptyTrimmedString.optional(),
   goalId: nonEmptyTrimmedString.optional(),
   projectId: nonEmptyTrimmedString.optional(),
+  parentWorkItemId: nonEmptyTrimmedString.optional(),
   tagId: nonEmptyTrimmedString.optional(),
   due: taskDueFilterSchema.optional(),
   userIds: repeatedTrimmedStringQuerySchema.optional(),
+  assigneeIds: repeatedTrimmedStringQuerySchema.optional(),
   limit: z.coerce.number().int().positive().max(100).optional()
 });
 
@@ -2972,11 +3035,14 @@ export const createProjectSchema = z.object({
   title: nonEmptyTrimmedString,
   description: trimmedString.default(""),
   status: projectStatusSchema.default("active"),
+  workflowStatus: projectWorkflowStatusSchema.default("backlog"),
+  assigneeUserIds: uniqueStringArraySchema.default([]),
   targetPoints: z.number().int().min(25).max(10000).default(240),
   themeColor: z
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/)
     .default("#c0c1ff"),
+  productRequirementsDocument: trimmedString.default(""),
   schedulingRules: calendarSchedulingRulesSchema.default({
     allowWorkBlockKinds: [],
     blockWorkBlockKinds: [],
@@ -2998,12 +3064,15 @@ export const updateProjectSchema = createProjectSchema.partial();
 export const taskMutationShape = {
   title: nonEmptyTrimmedString,
   description: trimmedString.default(""),
+  level: workItemLevelSchema.default("task"),
   status: taskStatusSchema.default("backlog"),
   priority: taskPrioritySchema.default("medium"),
   owner: nonEmptyTrimmedString.default("Albert"),
   userId: nonEmptyTrimmedString.nullable().optional(),
+  assigneeUserIds: uniqueStringArraySchema.default([]),
   goalId: nonEmptyTrimmedString.nullable().default(null),
   projectId: nonEmptyTrimmedString.nullable().default(null),
+  parentWorkItemId: nonEmptyTrimmedString.nullable().default(null),
   dueDate: dateOnlySchema.nullable().default(null),
   effort: taskEffortSchema.default("deep"),
   energy: taskEnergySchema.default("steady"),
@@ -3017,6 +3086,21 @@ export const taskMutationShape = {
     .default(86_400),
   schedulingRules: calendarSchedulingRulesSchema.nullable().default(null),
   sortOrder: z.number().int().nonnegative().optional(),
+  aiInstructions: trimmedString.default(""),
+  executionMode: workItemExecutionModeSchema.nullable().default(null),
+  acceptanceCriteria: z.array(trimmedString).default([]),
+  blockerLinks: z.array(blockerLinkSchema).default([]),
+  completionReport: completionReportSchema.nullable().default(null),
+  gitRefs: z
+    .array(
+      workItemGitRefSchema.omit({
+        id: true,
+        workItemId: true,
+        createdAt: true,
+        updatedAt: true
+      })
+    )
+    .default([]),
   tagIds: uniqueStringArraySchema.default([]),
   actionCostBand: actionCostBandSchema.default("standard"),
   notes: z.array(nestedCreateNoteSchema).default([])
@@ -3155,13 +3239,16 @@ export const updateHabitSchema = z
 export const updateTaskSchema = z.object({
   title: nonEmptyTrimmedString.optional(),
   description: trimmedString.optional(),
+  level: workItemLevelSchema.optional(),
   status: taskStatusSchema.optional(),
   completedAt: dateTimeSchema.optional(),
   priority: taskPrioritySchema.optional(),
   owner: nonEmptyTrimmedString.optional(),
   userId: nonEmptyTrimmedString.nullable().optional(),
+  assigneeUserIds: uniqueStringArraySchema.optional(),
   goalId: nonEmptyTrimmedString.nullable().optional(),
   projectId: nonEmptyTrimmedString.nullable().optional(),
+  parentWorkItemId: nonEmptyTrimmedString.nullable().optional(),
   dueDate: dateOnlySchema.nullable().optional(),
   effort: taskEffortSchema.optional(),
   energy: taskEnergySchema.optional(),
@@ -3176,6 +3263,22 @@ export const updateTaskSchema = z.object({
   schedulingRules: calendarSchedulingRulesSchema.nullable().optional(),
   resolutionKind: taskResolutionKindSchema.nullable().optional(),
   splitParentTaskId: z.string().nullable().optional(),
+  aiInstructions: trimmedString.optional(),
+  executionMode: workItemExecutionModeSchema.nullable().optional(),
+  acceptanceCriteria: z.array(trimmedString).optional(),
+  blockerLinks: z.array(blockerLinkSchema).optional(),
+  completionReport: completionReportSchema.nullable().optional(),
+  gitRefs: z
+    .array(
+      workItemGitRefSchema
+        .omit({
+          workItemId: true,
+          createdAt: true,
+          updatedAt: true
+        })
+        .partial({ id: true })
+    )
+    .optional(),
   enforceTodayWorkLog: z.boolean().optional(),
   completedTodayWorkSeconds: z
     .number()
@@ -3969,10 +4072,10 @@ export const operatorLogWorkResultSchema = z.object({
 export type CreateGoalInput = z.infer<typeof createGoalSchema>;
 export type CreateHabitCheckInInput = z.infer<typeof createHabitCheckInSchema>;
 export type CreateHabitInput = z.infer<typeof createHabitSchema>;
-export type CreateProjectInput = z.infer<typeof createProjectSchema>;
+export type CreateProjectInput = z.input<typeof createProjectSchema>;
 export type CreateStrategyInput = z.infer<typeof createStrategySchema>;
 export type CreateTagInput = z.infer<typeof createTagSchema>;
-export type CreateTaskInput = z.infer<typeof createTaskSchema>;
+export type CreateTaskInput = z.input<typeof createTaskSchema>;
 export type TaskResolutionKind = z.infer<typeof taskResolutionKindSchema>;
 export type LifeForceProfilePatchInput = z.infer<
   typeof lifeForceProfilePatchSchema
@@ -4145,6 +4248,12 @@ export type HabitListQuery = z.infer<typeof habitListQuerySchema>;
 export type Tag = z.infer<typeof tagSchema>;
 export type TagKind = z.infer<typeof tagKindSchema>;
 export type Task = z.infer<typeof taskSchema>;
+export type WorkItem = z.infer<typeof taskSchema>;
+export type WorkItemLevel = z.infer<typeof workItemLevelSchema>;
+export type WorkItemExecutionMode = z.infer<
+  typeof workItemExecutionModeSchema
+>;
+export type WorkItemGitRef = z.infer<typeof workItemGitRefSchema>;
 export type TaskTimeSummary = z.infer<typeof taskTimeSummarySchema>;
 export type TaskDueFilter = z.infer<typeof taskDueFilterSchema>;
 export type ActivityListQuery = z.infer<typeof activityListQuerySchema>;

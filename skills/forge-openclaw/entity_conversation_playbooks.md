@@ -15,6 +15,9 @@ Forge correctly, and gather only the structure that still matters.
   naming what you think the user is trying to preserve, clarify, decide, schedule, or
   make easier.
 - Ask only for what is missing or still unclear.
+- The first question should usually clarify whether the user is trying to understand,
+  preserve, decide, schedule, or change something, not just which field or provider
+  they want.
 - First identify the user's job when the lane is not already explicit:
   are they trying to add, update, review, compare, navigate, link, or run something?
 - Before every question, decide the one missing thing you are trying to clarify.
@@ -48,6 +51,8 @@ Forge correctly, and gather only the structure that still matters.
   ask what the user is trying to understand, change, add, update, link, or run, then
   route to the dedicated action or surface path instead of pretending it is normal
   CRUD.
+- For specialized surfaces, ask what would make the answer or change useful before you
+  ask route-shaped details such as provider, weekday, flow id, run id, or trip id.
 - Do not read schema fields out loud unless the user explicitly wants a checklist.
 - One focused question is the default. Ask two only when both questions serve the same
   job and the user is steady enough for it.
@@ -79,6 +84,35 @@ Most good Forge intake flows follow this sequence:
 5. Ask about links only when those links will make the record more useful.
 
 That sequence is not a script. Skip steps the user already answered.
+
+## Project-management hierarchy playbook
+
+When the conversation is about Forge planning or delivery, preserve this
+hierarchy explicitly:
+
+- Goal
+- Strategy (high level)
+- Project
+- Strategy (lower level when useful)
+- Issue
+- Task
+- Subtask
+
+Use this intake progression:
+
+1. Clarify whether the user is shaping a PRD-backed project, a vertical-slice
+   issue, a one-session task, or a lightweight subtask.
+2. For projects, ask what the PRD-backed outcome should become.
+3. For issues, ask what end-to-end slice should become true and whether the
+   issue is `AFK` or `HITL`.
+4. For tasks, ask for the one focused AI session outcome and capture the
+   execution contract in `aiInstructions`.
+5. For completed tasks, preserve modified files, work summary, and linked
+   commits through `completionReport`.
+
+Do not ask for separate user-story references, target-file fields, pattern-ref
+fields, definition-of-done fields, or recommended-order fields. Keep rich
+context in `description` and keep AI execution guidance in `aiInstructions`.
 
 ## Operation lane checkpoint
 
@@ -764,9 +798,10 @@ Arc:
 
 1. Ask what was observed.
 2. Reflect the moment without pretending it is already a finished interpretation.
-3. Ask when it happened or became noticeable.
-4. Ask what it may connect to: pattern, belief, value, mode, task, project, or note.
-5. Ask for tags or extra context only if that will help later review.
+3. Ask what felt most important to name before it gets smoothed over or forgotten.
+4. Ask when it happened or became noticeable.
+5. Ask what it may connect to: pattern, belief, value, mode, task, project, or note.
+6. Ask for tags or extra context only if that will help later review.
 
 If the user already gave the moment or timing, move straight to what they noticed most
 clearly instead of re-asking when.
@@ -774,6 +809,7 @@ clearly instead of re-asking when.
 Ready to save when:
 
 - the observation itself is clear
+- the lived point of the observation is clear enough to revisit later
 - timing is clear enough
 - any useful links are captured
 
@@ -832,9 +868,11 @@ Arc:
 1. Ask which provider the user wants to connect and what they want Forge to do with
    it.
 2. Ask whether the goal is read-only visibility, writable planning, or both.
-3. Ask only for the next provider-specific step that still matters, such as auth flow,
+3. Ask what workflow they are trying to unlock so the connection stays grounded in a
+   real use case.
+4. Ask only for the next provider-specific step that still matters, such as auth flow,
    label, or calendar selection.
-4. Move into the actual connection flow once the setup goal is clear.
+5. Move into the actual connection flow once the setup goal is clear.
 
 Helpful follow-up lanes:
 
@@ -846,6 +884,7 @@ Ready to act when:
 
 - the provider is clear
 - the intended sync behavior is clear enough
+- the user-facing workflow that depends on the connection is clear enough
 - the next setup step is obvious
 
 Preferred opening question:
@@ -944,6 +983,8 @@ Helpful follow-up lanes:
 - whether the question is behavioral, such as time at home, travel frequency, or place
   distribution, versus an edit
 - whether the edit is a missing-gap overlay versus a true recorded stay/trip patch
+- whether the user is trying to repair one recorded movement item versus fill a
+  missing span
 
 Lane-to-route map:
 
@@ -957,6 +998,10 @@ Lane-to-route map:
   `/api/v1/movement/trips/:id`
 - fill a missing span:
   `/api/v1/movement/user-boxes/preflight` then `/api/v1/movement/user-boxes`
+- repair or revise one saved overlay:
+  `/api/v1/movement/user-boxes/:id`
+- repair one recorded automatic box:
+  `/api/v1/movement/automatic-boxes/:id/invalidate`
 - edit an already-recorded stay, trip, or trip point:
   `/api/v1/movement/stays/:id`, `/api/v1/movement/trips/:id`, or `/api/v1/movement/trips/:id/points/:pointId`
 
@@ -964,6 +1009,7 @@ Ready to act when:
 
 - the movement surface is clear
 - the time range, place, stay, trip, or selection is clear enough
+- the user goal is clear enough to tell review, overlay, and repair apart
 - the user goal is clear enough to choose the route
 
 Preferred opening question:
@@ -987,6 +1033,7 @@ Helpful follow-up lanes:
 - whether the user wants explanation, editing, or signaling
 - what part of the energy model feels off or useful
 - what durable assumption versus real-time state is being changed
+- whether the user is describing a stable weekly shape or just how today feels
 
 Lane-to-route map:
 
@@ -1018,14 +1065,16 @@ Arc:
 
 1. Ask whether the job is flow discovery, one flow edit, execution, run history, published output, node-level inspection, or latest-node-output lookup.
 2. Ask which flow, slug, run, or node the request is about.
-3. Ask what the user is trying to learn, repair, or publish through that flow.
-4. Route to the dedicated workbench route family once the execution lane is clear.
+3. Ask whether they need the flow contract, a run result, a published output, or a node result.
+4. Ask what the user is trying to learn, repair, or publish through that flow.
+5. Route to the dedicated workbench route family once the execution lane is clear.
 
 Helpful follow-up lanes:
 
 - whether the user wants structure, execution, or results
 - what exact flow or run is in scope
 - whether they need whole-flow output or node-level detail
+- whether they need a public input contract or a published output instead of a debug trace
 
 Lane-to-route map:
 
@@ -1187,6 +1236,12 @@ Arc:
 4. Reflect the practical use case back in plain language.
 5. Move to draft creation once the purpose is clear.
 
+Helpful follow-up lanes:
+
+- what honest moment, decision, or review this instrument should support
+- who will answer it and under what circumstances
+- what would make the instrument distinct instead of redundant
+
 Ready to act when:
 
 - the purpose is clear
@@ -1203,9 +1258,16 @@ Aim: clarify whether the user wants to start, continue, or complete one answer s
 
 Arc:
 
-1. Ask which questionnaire run this is about.
-2. Ask whether the user wants to start, continue, review, or complete it.
-3. If answering is still in progress, ask only for the next answer or note that matters.
+1. Ask what the user wants from the run right now: start, continue, review, or finish.
+2. Ask which questionnaire or existing run this is about.
+3. Ask what feels most stuck, unfinished, or important if the run is already in progress.
+4. If answering is still in progress, ask only for the next answer or note that matters.
+
+Helpful follow-up lanes:
+
+- whether the job is to begin, resume, review, or complete
+- what questionnaire or run is in scope
+- what next answer, uncertainty, or note is actually blocking progress
 
 Ready to act when:
 

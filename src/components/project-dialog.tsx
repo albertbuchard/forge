@@ -24,9 +24,12 @@ export const defaultProjectValues: ProjectMutationInput = {
   title: "",
   description: "",
   status: "active",
+  workflowStatus: "backlog",
   userId: null,
+  assigneeUserIds: [],
   targetPoints: 240,
   themeColor: "#c0c1ff",
+  productRequirementsDocument: "",
   notes: []
 };
 
@@ -36,9 +39,12 @@ function projectToFormValues(project: ProjectSummary): ProjectMutationInput {
     title: project.title,
     description: project.description,
     status: project.status,
+    workflowStatus: project.workflowStatus,
     userId: project.userId ?? null,
+    assigneeUserIds: project.assigneeUserIds ?? [],
     targetPoints: project.targetPoints,
     themeColor: project.themeColor,
+    productRequirementsDocument: project.productRequirementsDocument,
     notes: []
   };
 }
@@ -174,6 +180,17 @@ export function ProjectDialog({
               placeholder="Write the project description in Markdown. Use as much detail as the workstream needs."
             />
           </FlowField>
+          <FlowField label="Product requirements document">
+            <Textarea
+              value={value.productRequirementsDocument}
+              onChange={(event) =>
+                setValue({
+                  productRequirementsDocument: event.target.value
+                })
+              }
+              placeholder="Capture the PRD in Markdown so the project view can present it clearly."
+            />
+          </FlowField>
           <UserSelectField
             value={value.userId}
             users={safeUsers}
@@ -182,6 +199,27 @@ export function ProjectDialog({
             defaultLabel={formatOwnerSelectDefaultLabel(suggestedUser)}
             help="Projects can intentionally cross user boundaries, but the linked goal owner is suggested by default."
           />
+          <FlowField label="Assignees">
+            <select
+              multiple
+              value={value.assigneeUserIds}
+              onChange={(event) =>
+                setValue({
+                  assigneeUserIds: Array.from(
+                    event.target.selectedOptions,
+                    (option) => option.value
+                  )
+                })
+              }
+              className="min-h-28 rounded-[var(--radius-control)] border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white outline-none transition focus:border-[rgba(192,193,255,0.3)]"
+            >
+              {safeUsers.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.displayName} · {user.kind}
+                </option>
+              ))}
+            </select>
+          </FlowField>
         </>
       )
     },
@@ -215,6 +253,23 @@ export function ProjectDialog({
                   label: t("common.enums.projectStatus.completed"),
                   description: "This initiative has landed."
                 }
+              ]}
+            />
+          </FlowField>
+          <FlowField label="Board workflow status">
+            <FlowChoiceGrid
+              value={value.workflowStatus}
+              onChange={(next) =>
+                setValue({
+                  workflowStatus: next as ProjectMutationInput["workflowStatus"]
+                })
+              }
+              options={[
+                { value: "backlog", label: "Backlog" },
+                { value: "focus", label: "Focus" },
+                { value: "in_progress", label: "In progress" },
+                { value: "blocked", label: "Blocked" },
+                { value: "done", label: "Done" }
               ]}
             />
           </FlowField>

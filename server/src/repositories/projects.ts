@@ -4,6 +4,7 @@ import { recordActivityEvent } from "./activity-events.js";
 import {
   decorateOwnedEntity,
   inferFirstOwnedUserId,
+  replaceEntityAssignees,
   setEntityOwner
 } from "./entity-ownership.js";
 import { filterDeletedEntities, isEntityDeleted } from "./deleted-entities.js";
@@ -30,8 +31,10 @@ type ProjectRow = {
   title: string;
   description: string;
   status: string;
+  workflow_status: string;
   theme_color: string;
   target_points: number;
+  product_requirements_document: string;
   scheduling_rules_json: string;
   created_at: string;
   updated_at: string;
@@ -85,8 +88,17 @@ function mapProject(row: ProjectRow): Project {
       title: row.title,
       description: row.description,
       status: row.status,
+      workflowStatus:
+        row.workflow_status === "backlog" ||
+        row.workflow_status === "focus" ||
+        row.workflow_status === "in_progress" ||
+        row.workflow_status === "blocked" ||
+        row.workflow_status === "done"
+          ? row.workflow_status
+          : "backlog",
       themeColor: row.theme_color,
       targetPoints: row.target_points,
+      productRequirementsDocument: row.product_requirements_document,
       schedulingRules: calendarSchedulingRulesSchema.parse(
         JSON.parse(row.scheduling_rules_json || "{}")
       ),
@@ -131,7 +143,7 @@ export function listProjects(filters: ProjectListQuery = {}): Project[] {
 
   const rows = getDatabase()
     .prepare(
-      `SELECT id, goal_id, title, description, status, theme_color, target_points, created_at, updated_at
+      `SELECT id, goal_id, title, description, status, workflow_status, theme_color, target_points, product_requirements_document, created_at, updated_at
        , scheduling_rules_json
        FROM projects
        ${whereSql}
@@ -148,7 +160,7 @@ export function getProjectById(projectId: string): Project | undefined {
   }
   const row = getDatabase()
     .prepare(
-      `SELECT id, goal_id, title, description, status, theme_color, target_points, created_at, updated_at
+      `SELECT id, goal_id, title, description, status, workflow_status, theme_color, target_points, product_requirements_document, created_at, updated_at
        , scheduling_rules_json
        FROM projects
        WHERE id = ?`
@@ -168,8 +180,8 @@ export function createProject(
     const id = `project_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
     getDatabase()
       .prepare(
-        `INSERT INTO projects (id, goal_id, title, description, status, theme_color, target_points, scheduling_rules_json, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO projects (id, goal_id, title, description, status, workflow_status, theme_color, target_points, product_requirements_document, scheduling_rules_json, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         id,
@@ -177,8 +189,10 @@ export function createProject(
         parsed.title,
         parsed.description,
         parsed.status,
+        parsed.workflowStatus,
         parsed.themeColor,
         parsed.targetPoints,
+        parsed.productRequirementsDocument,
         JSON.stringify(parsed.schedulingRules),
         now,
         now
@@ -189,6 +203,7 @@ export function createProject(
       parsed.userId ??
         inferFirstOwnedUserId([{ entityType: "goal", entityId: parsed.goalId }])
     );
+    replaceEntityAssignees("project", id, parsed.assigneeUserIds);
 
     const project = getProjectById(id)!;
     createLinkedNotes(
@@ -235,8 +250,12 @@ export function updateProject(
       title: parsed.title ?? current.title,
       description: parsed.description ?? current.description,
       status: parsed.status ?? current.status,
+      workflowStatus: parsed.workflowStatus ?? current.workflowStatus,
       themeColor: parsed.themeColor ?? current.themeColor,
       targetPoints: parsed.targetPoints ?? current.targetPoints,
+      productRequirementsDocument:
+        parsed.productRequirementsDocument ??
+        current.productRequirementsDocument,
       schedulingRules: parsed.schedulingRules ?? current.schedulingRules,
       updatedAt: new Date().toISOString()
     };
@@ -244,7 +263,7 @@ export function updateProject(
     getDatabase()
       .prepare(
         `UPDATE projects
-         SET goal_id = ?, title = ?, description = ?, status = ?, theme_color = ?, target_points = ?, scheduling_rules_json = ?, updated_at = ?
+         SET goal_id = ?, title = ?, description = ?, status = ?, workflow_status = ?, theme_color = ?, target_points = ?, product_requirements_document = ?, scheduling_rules_json = ?, updated_at = ?
          WHERE id = ?`
       )
       .run(
@@ -252,8 +271,10 @@ export function updateProject(
         next.title,
         next.description,
         next.status,
+        next.workflowStatus,
         next.themeColor,
         next.targetPoints,
+        next.productRequirementsDocument,
         JSON.stringify(next.schedulingRules),
         next.updatedAt,
         projectId
@@ -267,6 +288,9 @@ export function updateProject(
       .run(next.goalId, next.updatedAt, projectId);
     if (parsed.userId !== undefined) {
       setEntityOwner("project", projectId, parsed.userId);
+    }
+    if (parsed.assigneeUserIds !== undefined) {
+      replaceEntityAssignees("project", projectId, parsed.assigneeUserIds);
     }
 
     const completedLinkedTaskCount =

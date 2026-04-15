@@ -14,6 +14,7 @@ import {
 import { PageHero } from "@/components/shell/page-hero";
 import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
 import { ProjectCollectionFilters } from "@/components/projects/project-collection-filters";
+import { ProjectManagementSectionNav } from "@/components/projects/project-management-section-nav";
 import {
   ProjectSearchBar,
   type ProjectSearchTokenOption
@@ -701,6 +702,7 @@ export function ProjectsPage() {
 
   return (
     <div className="grid gap-5">
+      <ProjectManagementSectionNav />
       {shell.snapshot.dashboard.projects.length === 0 ? (
         <EmptyState
           eyebrow="Projects"

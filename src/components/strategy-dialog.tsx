@@ -1533,17 +1533,27 @@ export function StrategyDialog({
         await createTask({
           title: inlineTaskDraft.title.trim(),
           description: inlineTaskDraft.description.trim(),
+          level: "task",
           owner: taskOwner?.displayName ?? "Albert",
           userId:
             inlineTaskDraft.userId ?? selectedProject.userId ?? draft.userId,
+          assigneeUserIds: [],
           goalId: selectedProject.goalId,
           projectId: selectedProject.id,
+          parentWorkItemId: null,
           priority: inlineTaskDraft.priority,
           status: "focus",
           effort: inlineTaskDraft.effort,
           energy: inlineTaskDraft.energy,
           dueDate: "",
           points: inlineTaskDraft.points,
+          plannedDurationSeconds: 86_400,
+          aiInstructions: "",
+          executionMode: null,
+          acceptanceCriteria: [],
+          blockerLinks: [],
+          completionReport: null,
+          gitRefs: [],
           tagIds: [],
           notes: []
         })

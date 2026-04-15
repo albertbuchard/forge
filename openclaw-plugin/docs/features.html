@@ -75,21 +75,39 @@
             <p class="eyebrow">Execution And Planning</p>
             <h2>Forge turns goals into work you can actually carry through.</h2>
           </div>
+          <article class="card" style="margin-bottom: 24px">
+            <h3>Canonical hierarchy</h3>
+            <p>
+              Forge plans work through one explicit ladder:
+              <strong>Goal &gt; Strategy &gt; Project &gt; Strategy &gt; Issue &gt; Task &gt; Subtask</strong>.
+              Projects are PRD-backed initiatives. Issues are vertical slices
+              across the stack. Tasks are one focused AI session each, and
+              subtasks are lightweight child steps.
+            </p>
+          </article>
           <div class="card-grid three">
             <article class="card">
-              <h3>Goals, projects, tasks</h3>
+              <h3>Goals, projects, issues, tasks</h3>
               <p>
-                Forge stores long-horizon goals, active projects, and executable
-                tasks as separate first-class records with explicit links
-                between them.
+                Forge stores long-horizon goals, PRD-backed projects,
+                vertical-slice issues, executable tasks, and subtasks as linked
+                first-class planning records.
               </p>
             </article>
             <article class="card">
               <h3>Strategies</h3>
               <p>
-                Strategies sit above project execution and model multi-step
-                plans with linked goals, projects, tasks, and directed
-                sequencing.
+                Strategies remain flexible and can sit above projects or inside
+                a project plan, which keeps both strategy layers visible in the
+                hierarchy instead of flattening everything into one list.
+              </p>
+            </article>
+            <article class="card">
+              <h3>AFK and HITL issues</h3>
+              <p>
+                Each issue can be marked AFK when AI can complete it
+                autonomously or HITL when a human decision is required at some
+                point in the slice.
               </p>
             </article>
             <article class="card">
@@ -97,6 +115,22 @@
               <p>
                 Task runs record active or historical timed work, credited
                 duration, manual adjustments, and current focus state.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Mixed Kanban + hierarchy</h3>
+              <p>
+                Forge's PM workspace now supports a mixed-level board and a
+                compact hierarchy tab, so you can browse work as lanes or as a
+                full tree without losing context.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Task closeout</h3>
+              <p>
+                Completed work can preserve modified files, a concise work
+                summary, and linked git refs, so agents leave behind a truthful
+                delivery record instead of only flipping a status field.
               </p>
             </article>
             <article class="card">

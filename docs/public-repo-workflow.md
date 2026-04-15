@@ -15,6 +15,9 @@
 3. Keep public docs, manifests, and package metadata self-contained inside Forge.
 4. Keep release scripts, workflow files, and plugin packaging inside Forge.
 5. Do not let private parent-monorepo paths become required for the published plugin artifact.
+6. Forge's default operating workflow is direct work on `main`, not mandatory feature branches or pull requests.
+7. Public docs and agent skills must reflect Forge's explicit planning hierarchy:
+   `Goal -> Strategy -> Project -> Strategy -> Issue -> Task -> Subtask`.
 
 ## Public release boundary
 

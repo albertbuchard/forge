@@ -7,6 +7,12 @@ type EntityOwnerRow = {
   user_id: string;
 };
 
+type EntityAssignmentRow = {
+  entity_id: string;
+  user_id: string;
+  role: string;
+};
+
 type OwnerCandidate = {
   entityType: string;
   entityId: string | null | undefined;
@@ -94,6 +100,55 @@ function listOwnerRows(
     .all(entityType, ...entityIds) as EntityOwnerRow[];
 }
 
+function listAssignmentRows(
+  entityType: string,
+  entityIds: string[]
+): EntityAssignmentRow[] {
+  if (entityIds.length === 0) {
+    return [];
+  }
+  const placeholders = entityIds.map(() => "?").join(", ");
+  return getDatabase()
+    .prepare(
+      `SELECT entity_id, user_id, role
+       FROM entity_assignments
+       WHERE entity_type = ?
+         AND entity_id IN (${placeholders})`
+    )
+    .all(entityType, ...entityIds) as EntityAssignmentRow[];
+}
+
+export function replaceEntityAssignees(
+  entityType: string,
+  entityId: string,
+  userIds?: string[] | null
+): UserSummary[] {
+  const normalizedIds = Array.from(
+    new Set(
+      (userIds ?? []).map((value) => value.trim()).filter((value) => value.length > 0)
+    )
+  );
+  const users = normalizedIds.map((userId) => resolveUserForMutation(userId));
+  const now = new Date().toISOString();
+  const database = getDatabase();
+  database
+    .prepare(
+      `DELETE FROM entity_assignments
+       WHERE entity_type = ?
+         AND entity_id = ?
+         AND role = 'assignee'`
+    )
+    .run(entityType, entityId);
+  const insert = database.prepare(
+    `INSERT INTO entity_assignments (entity_type, entity_id, user_id, role, created_at, updated_at)
+     VALUES (?, ?, ?, 'assignee', ?, ?)`
+  );
+  for (const user of users) {
+    insert.run(entityType, entityId, user.id, now, now);
+  }
+  return users;
+}
+
 export function buildEntityOwnerIndex(
   entityType: string,
   entityIds: string[]
@@ -119,20 +174,73 @@ export function buildEntityOwnerIndex(
   return index;
 }
 
+export function buildEntityAssigneeIndex(
+  entityType: string,
+  entityIds: string[]
+): Map<string, { assigneeUserIds: string[]; assignees: UserSummary[] }> {
+  const rows = listAssignmentRows(entityType, entityIds).filter(
+    (row) => row.role === "assignee"
+  );
+  const userIds = Array.from(new Set(rows.map((row) => row.user_id)));
+  const usersById = new Map(
+    listUsersByIds(userIds).map((user) => [user.id, user] as const)
+  );
+  const index = new Map<
+    string,
+    { assigneeUserIds: string[]; assignees: UserSummary[] }
+  >();
+  for (const entityId of entityIds) {
+    index.set(entityId, { assigneeUserIds: [], assignees: [] });
+  }
+  for (const entityId of entityIds) {
+    const assigneeIds = rows
+      .filter((row) => row.entity_id === entityId)
+      .map((row) => row.user_id);
+    index.set(entityId, {
+      assigneeUserIds: assigneeIds,
+      assignees: assigneeIds
+        .map((userId) => usersById.get(userId) ?? null)
+        .filter((user): user is UserSummary => user !== null)
+    });
+  }
+  return index;
+}
+
 export function decorateOwnedEntities<T extends { id: string }>(
   entityType: string,
   entities: T[]
-): Array<T & { userId: string | null; user: UserSummary | null }> {
+): Array<
+  T & {
+    userId: string | null;
+    user: UserSummary | null;
+    ownerUserId: string | null;
+    ownerUser: UserSummary | null;
+    assigneeUserIds: string[];
+    assignees: UserSummary[];
+  }
+> {
   const ownerIndex = buildEntityOwnerIndex(
+    entityType,
+    entities.map((entity) => entity.id)
+  );
+  const assigneeIndex = buildEntityAssigneeIndex(
     entityType,
     entities.map((entity) => entity.id)
   );
   return entities.map((entity) => {
     const owner = ownerIndex.get(entity.id) ?? { userId: null, user: null };
+    const assigneeSummary = assigneeIndex.get(entity.id) ?? {
+      assigneeUserIds: [],
+      assignees: []
+    };
     return {
       ...entity,
       userId: owner.userId,
-      user: owner.user
+      user: owner.user,
+      ownerUserId: owner.userId,
+      ownerUser: owner.user,
+      assigneeUserIds: assigneeSummary.assigneeUserIds,
+      assignees: assigneeSummary.assignees
     };
   });
 }
@@ -140,7 +248,14 @@ export function decorateOwnedEntities<T extends { id: string }>(
 export function decorateOwnedEntity<T extends { id: string }>(
   entityType: string,
   entity: T
-): T & { userId: string | null; user: UserSummary | null } {
+): T & {
+  userId: string | null;
+  user: UserSummary | null;
+  ownerUserId: string | null;
+  ownerUser: UserSummary | null;
+  assigneeUserIds: string[];
+  assignees: UserSummary[];
+} {
   return decorateOwnedEntities(entityType, [entity])[0]!;
 }
 
@@ -148,7 +263,16 @@ export function filterOwnedEntities<T extends { id: string }>(
   entityType: string,
   entities: T[],
   userIds?: string[] | null
-): Array<T & { userId: string | null; user: UserSummary | null }> {
+): Array<
+  T & {
+    userId: string | null;
+    user: UserSummary | null;
+    ownerUserId: string | null;
+    ownerUser: UserSummary | null;
+    assigneeUserIds: string[];
+    assignees: UserSummary[];
+  }
+> {
   const decorated = decorateOwnedEntities(entityType, entities);
   if (!userIds || userIds.length === 0) {
     return decorated;
@@ -157,6 +281,12 @@ export function filterOwnedEntities<T extends { id: string }>(
   return decorated.filter(
     (entity) => {
       if (entity.userId !== null && allowed.has(entity.userId)) {
+        return true;
+      }
+      if (
+        Array.isArray(entity.assigneeUserIds) &&
+        entity.assigneeUserIds.some((userId) => allowed.has(userId))
+      ) {
         return true;
       }
       const embeddedUserId =

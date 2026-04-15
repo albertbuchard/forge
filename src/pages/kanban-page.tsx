@@ -7,12 +7,14 @@ import {
   KanbanFiltersBox,
   KanbanSummaryBox
 } from "@/components/workbench-boxes/kanban/kanban-boxes";
-import { ExecutionBoard } from "@/components/execution-board";
+import { ExecutionBoard, LANE_ORDER } from "@/components/execution-board";
+import { ProjectManagementSectionNav } from "@/components/projects/project-management-section-nav";
 import {
   EntityLinkMultiSelect,
   type EntityLinkOption
 } from "@/components/psyche/entity-link-multiselect";
 import { TaskDialog } from "@/components/task-dialog";
+import { EntityBadge } from "@/components/ui/entity-badge";
 import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -112,6 +114,9 @@ export function KanbanPage() {
   const [selectedOwnerFilterIds, setSelectedOwnerFilterIds] = useState<
     string[]
   >([]);
+  const [selectedLevels, setSelectedLevels] = useState<
+    Array<"project" | "issue" | "task" | "subtask">
+  >(["task", "subtask"]);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(
     shell.snapshot.tasks[0]?.id ?? null
   );
@@ -208,6 +213,9 @@ export function KanbanPage() {
   );
 
   const filteredTasks = shell.snapshot.tasks.filter((task) => {
+    if (!selectedLevels.includes(task.level)) {
+      return false;
+    }
     if (
       parsedEntityFilters.goalIds.length > 0 &&
       (task.goalId === null ||
@@ -232,11 +240,16 @@ export function KanbanPage() {
       parsedOwnerFilters.userIds.length > 0 ||
       parsedOwnerFilters.kinds.length > 0
     ) {
-      const matchesExplicitUser = parsedOwnerFilters.userIds.includes(
-        task.userId ?? ""
+      const linkedUsers = [
+        ...(task.user ? [task.user] : []),
+        ...(task.assignees ?? [])
+      ];
+      const matchesExplicitUser = linkedUsers.some((user) =>
+        parsedOwnerFilters.userIds.includes(user.id)
       );
-      const matchesOwnerKind =
-        task.user && parsedOwnerFilters.kinds.includes(task.user.kind);
+      const matchesOwnerKind = linkedUsers.some((user) =>
+        parsedOwnerFilters.kinds.includes(user.kind)
+      );
 
       if (!matchesExplicitUser && !matchesOwnerKind) {
         return false;
@@ -244,6 +257,46 @@ export function KanbanPage() {
     }
     return true;
   });
+
+  const filteredProjects = shell.snapshot.dashboard.projects.filter((project) => {
+    if (
+      parsedEntityFilters.goalIds.length > 0 &&
+      !parsedEntityFilters.goalIds.includes(project.goalId)
+    ) {
+      return false;
+    }
+    if (
+      parsedEntityFilters.projectIds.length > 0 &&
+      !parsedEntityFilters.projectIds.includes(project.id)
+    ) {
+      return false;
+    }
+    if (
+      parsedOwnerFilters.userIds.length > 0 ||
+      parsedOwnerFilters.kinds.length > 0
+    ) {
+      const linkedUsers = [
+        ...(project.user ? [project.user] : []),
+        ...(project.assignees ?? [])
+      ];
+      const matchesExplicitUser = linkedUsers.some((user) =>
+        parsedOwnerFilters.userIds.includes(user.id)
+      );
+      const matchesOwnerKind = linkedUsers.some((user) =>
+        parsedOwnerFilters.kinds.includes(user.kind)
+      );
+      if (!matchesExplicitUser && !matchesOwnerKind) {
+        return false;
+      }
+    }
+    return true;
+  });
+  const visibleItemCount =
+    filteredTasks.length +
+    (selectedLevels.includes("project") ? filteredProjects.length : 0);
+  const hasVisibleBoardContent =
+    (selectedLevels.includes("project") && filteredProjects.length > 0) ||
+    filteredTasks.length > 0;
 
   const selectedTask =
     filteredTasks.find((task) => task.id === selectedTaskId) ??
@@ -313,7 +366,10 @@ export function KanbanPage() {
     }
   });
 
-  if (shell.snapshot.tasks.length === 0) {
+  if (
+    shell.snapshot.tasks.length === 0 &&
+    shell.snapshot.dashboard.projects.length === 0
+  ) {
     return (
       <div className="grid min-w-0 grid-cols-1 gap-5">
         <PageHero
@@ -345,10 +401,11 @@ export function KanbanPage() {
 
   return (
     <div className="grid min-w-0 grid-cols-1 gap-5">
+      <ProjectManagementSectionNav />
       <PageHero
         title="Kanban"
         description="Move tasks between states, start work directly from the board, or open a task when you need to edit it."
-        badge={`${filteredTasks.length} visible tasks`}
+        badge={`${visibleItemCount} visible work items`}
         actions={
           <Button
             size="lg"
@@ -376,6 +433,27 @@ export function KanbanPage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
+            {(["project", "issue", "task", "subtask"] as const).map((level) => {
+              const selected = selectedLevels.includes(level);
+              return (
+                <button
+                  key={level}
+                  type="button"
+                  className={selected
+                    ? "rounded-full border border-sky-300/30 bg-sky-400/14 px-3 py-2 text-[11px] uppercase tracking-[0.16em] text-sky-100"
+                    : "rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] uppercase tracking-[0.16em] text-white/62"}
+                  onClick={() =>
+                    setSelectedLevels((current) =>
+                      current.includes(level)
+                        ? current.filter((entry) => entry !== level)
+                        : [...current, level]
+                    )
+                  }
+                >
+                  {level}
+                </button>
+              );
+            })}
             <Badge className="bg-white/[0.08] text-white/72">
               {focusCount} ready or active
             </Badge>
@@ -452,7 +530,7 @@ export function KanbanPage() {
         </Card>
       </KanbanFiltersBox>
 
-      {filteredTasks.length === 0 ? (
+      {!hasVisibleBoardContent ? (
         <EmptyState
           eyebrow={t("common.kanban.heroEyebrow")}
           title={t("common.kanban.noTasksMatch")}
@@ -473,60 +551,180 @@ export function KanbanPage() {
         />
       ) : (
         <KanbanBoardBox>
-          <ExecutionBoard
-            tasks={filteredTasks}
-            goals={shell.snapshot.goals}
-            tags={shell.snapshot.tags}
-            notesSummaryByEntity={shell.snapshot.dashboard.notesSummaryByEntity}
-            selectedTaskId={selectedTaskId}
-            onMove={async (taskId, nextStatus) => {
-              await shell.patchTaskStatus(taskId, nextStatus);
-            }}
-            onQuickReopenTask={async (taskId) => {
-              await uncompleteTask(taskId);
-              await invalidateBoard();
-            }}
-            onDeleteTask={async (taskId) => {
-              await deleteTaskMutation.mutateAsync(taskId);
-              setSelectedTaskId((current) => {
-                if (current !== taskId) {
-                  return current;
-                }
-                return filteredTasks.find((task) => task.id !== taskId)?.id ?? null;
-              });
-              setEditingTaskId((current) => (current === taskId ? null : current));
-            }}
-            onStartTask={async (taskId) => {
-              await shell.startTaskNow(taskId);
-              setSelectedTaskId(taskId);
-              await queryClient.invalidateQueries({
-                queryKey: ["task-context", taskId]
-              });
-            }}
-            onSelectTask={(taskId) => {
-              setSelectedTaskId(taskId);
-            }}
-            onOpenTask={(taskId) => {
-              navigate(`/tasks/${taskId}`);
-            }}
-            onEditTask={(taskId) => {
-              setEditingTaskId(taskId);
-            }}
-            onSplitTask={(taskId) => {
-              const task =
-                shell.snapshot.tasks.find((entry) => entry.id === taskId) ?? null;
-              if (!task) {
-                return;
-              }
-              const defaultTitles = buildDefaultSplitTitles(task.title);
-              setSplittingTaskId(taskId);
-              setSplitDraft({
-                firstTitle: defaultTitles.firstTitle,
-                secondTitle: defaultTitles.secondTitle,
-                remainingRatio: 0.5
-              });
-            }}
-          />
+          <div className="grid gap-5">
+            {selectedLevels.includes("project") ? (
+              <Card className="min-w-0 overflow-hidden">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="type-label text-white/40">Projects</div>
+                    <div className="mt-2 text-sm leading-6 text-white/58">
+                      Projects share the same workflow lanes as issues, tasks,
+                      and subtasks, while strategies remain visible in the
+                      hierarchy view above and below them.
+                    </div>
+                  </div>
+                  <Badge className="bg-white/[0.08] text-white/72">
+                    {filteredProjects.length} visible projects
+                  </Badge>
+                </div>
+                <div className="grid gap-4 xl:grid-cols-5">
+                  {LANE_ORDER.map((lane) => {
+                    const laneProjects = filteredProjects.filter(
+                      (project) => project.workflowStatus === lane
+                    );
+                    return (
+                      <div
+                        key={lane}
+                        className="rounded-[22px] border border-white/8 bg-white/[0.03] p-3"
+                      >
+                        <div className="mb-3 flex items-center justify-between gap-2">
+                          <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
+                            {lane.replaceAll("_", " ")}
+                          </div>
+                          <Badge className="bg-white/[0.08] text-white/72">
+                            {laneProjects.length}
+                          </Badge>
+                        </div>
+                        <div className="grid gap-3">
+                          {laneProjects.map((project) => {
+                            const laneIndex = LANE_ORDER.indexOf(project.workflowStatus);
+                            const previousLane = LANE_ORDER[laneIndex - 1] ?? null;
+                            const nextLane = LANE_ORDER[laneIndex + 1] ?? null;
+                            return (
+                              <button
+                                key={project.id}
+                                type="button"
+                                className="rounded-[18px] border border-white/8 bg-white/[0.04] p-3 text-left transition hover:bg-white/[0.07]"
+                                onClick={() => navigate(`/projects/${project.id}`)}
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <div className="text-sm font-medium text-white">
+                                      {project.title}
+                                    </div>
+                                    <div className="mt-1 text-xs leading-5 text-white/54">
+                                      {project.description}
+                                    </div>
+                                  </div>
+                                  <UserBadge user={project.user} compact />
+                                </div>
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  <EntityBadge
+                                    kind="goal"
+                                    label={project.goalTitle}
+                                    compact
+                                    gradient={false}
+                                  />
+                                  {(project.assignees ?? []).slice(0, 2).map((user) => (
+                                    <UserBadge key={user.id} user={user} compact />
+                                  ))}
+                                </div>
+                                <div
+                                  className="mt-3 flex gap-2"
+                                  onClick={(event) => event.stopPropagation()}
+                                >
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    disabled={!previousLane}
+                                    onClick={() =>
+                                      previousLane
+                                        ? void shell.patchProject(project.id, {
+                                            workflowStatus: previousLane
+                                          })
+                                        : undefined
+                                    }
+                                  >
+                                    Previous
+                                  </Button>
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    disabled={!nextLane}
+                                    onClick={() =>
+                                      nextLane
+                                        ? void shell.patchProject(project.id, {
+                                            workflowStatus: nextLane
+                                          })
+                                        : undefined
+                                    }
+                                  >
+                                    Next
+                                  </Button>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+            ) : null}
+
+            {filteredTasks.length > 0 ? (
+              <ExecutionBoard
+                tasks={filteredTasks}
+                goals={shell.snapshot.goals}
+                tags={shell.snapshot.tags}
+                notesSummaryByEntity={shell.snapshot.dashboard.notesSummaryByEntity}
+                selectedTaskId={selectedTaskId}
+                onMove={async (taskId, nextStatus) => {
+                  await shell.patchTaskStatus(taskId, nextStatus);
+                }}
+                onQuickReopenTask={async (taskId) => {
+                  await uncompleteTask(taskId);
+                  await invalidateBoard();
+                }}
+                onDeleteTask={async (taskId) => {
+                  await deleteTaskMutation.mutateAsync(taskId);
+                  setSelectedTaskId((current) => {
+                    if (current !== taskId) {
+                      return current;
+                    }
+                    return (
+                      filteredTasks.find((task) => task.id !== taskId)?.id ?? null
+                    );
+                  });
+                  setEditingTaskId((current) =>
+                    current === taskId ? null : current
+                  );
+                }}
+                onStartTask={async (taskId) => {
+                  await shell.startTaskNow(taskId);
+                  setSelectedTaskId(taskId);
+                  await queryClient.invalidateQueries({
+                    queryKey: ["task-context", taskId]
+                  });
+                }}
+                onSelectTask={(taskId) => {
+                  setSelectedTaskId(taskId);
+                }}
+                onOpenTask={(taskId) => {
+                  navigate(`/tasks/${taskId}`);
+                }}
+                onEditTask={(taskId) => {
+                  setEditingTaskId(taskId);
+                }}
+                onSplitTask={(taskId) => {
+                  const task =
+                    shell.snapshot.tasks.find((entry) => entry.id === taskId) ??
+                    null;
+                  if (!task) {
+                    return;
+                  }
+                  const defaultTitles = buildDefaultSplitTitles(task.title);
+                  setSplittingTaskId(taskId);
+                  setSplitDraft({
+                    firstTitle: defaultTitles.firstTitle,
+                    secondTitle: defaultTitles.secondTitle,
+                    remainingRatio: 0.5
+                  });
+                }}
+              />
+            ) : null}
+          </div>
         </KanbanBoardBox>
       )}
 

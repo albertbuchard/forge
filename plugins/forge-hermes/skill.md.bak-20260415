@@ -51,42 +51,6 @@ When the user wants to review, compare, inspect, or navigate an existing Forge
 record, ask what they are trying to understand first and prefer the read path before
 you reopen create or update intake.
 
-## Project Management Hierarchy Rule
-
-Forge project management is explicit:
-
-- Goal
-- Strategy (high level)
-- Project
-- Strategy (lower level when useful)
-- Issue
-- Task
-- Subtask
-
-Hermes should preserve that hierarchy in the records it creates or updates. Keep
-`project` and `strategy` first-class. Treat `issue`, `task`, and `subtask` as the
-execution layer below projects.
-
-Workflow rule:
-
-- Projects are PRD-backed initiatives.
-- PRDs break down into vertical-slice issues.
-- Issues are classified as `AFK` or `HITL`.
-- Tasks are one focused AI session each and use direct `aiInstructions`.
-- If a task is too large for one focused session, split it into smaller tasks or
-  subtasks.
-- Keep file targets, patterns, and done-shape guidance inside `aiInstructions`,
-  not in separate fields.
-
-Completion rule:
-
-- Completed work should preserve
-  `completionReport = { modifiedFiles[], workSummary, linkedGitRefIds[] }`.
-- `linkedGitRefIds[]` points to canonical Forge git refs.
-- Default workflow is direct commits to `main`.
-- Do not ask for feature branches or pull requests unless the user explicitly
-  wants them.
-
 ## Wiki model
 
 Treat the wiki as Forge's canonical long-form memory layer rather than as a loose pile

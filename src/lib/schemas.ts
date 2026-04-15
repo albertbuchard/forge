@@ -31,12 +31,15 @@ export const projectMutationSchema = z.object({
   title: z.string().trim().min(1, "Title is required"),
   description: z.string().trim(),
   status: z.enum(["active", "paused", "completed"]),
+  workflowStatus: z.enum(["backlog", "focus", "in_progress", "blocked", "done"]),
   userId: z.string().trim().nullable().optional(),
+  assigneeUserIds: z.array(z.string().trim()),
   targetPoints: z.coerce.number().int().min(25).max(10000),
   themeColor: z
     .string()
     .trim()
     .regex(/^#[0-9a-fA-F]{6}$/, "Theme color must be a valid hex value"),
+  productRequirementsDocument: z.string().trim(),
   notes: z.array(inlineCreateNoteSchema)
 });
 
@@ -167,10 +170,13 @@ export const createInsightSchema = z.object({
 export const quickTaskSchema = z.object({
   title: z.string().trim().min(1, "Title is required"),
   description: z.string().trim(),
+  level: z.enum(["issue", "task", "subtask"]),
   owner: z.string().trim().min(1, "Owner is required"),
   userId: z.string().trim().nullable().optional(),
+  assigneeUserIds: z.array(z.string().trim()),
   goalId: z.string().trim(),
   projectId: z.string().trim().min(1, "Project is required"),
+  parentWorkItemId: z.string().trim().nullable().optional(),
   priority: z.enum(["low", "medium", "high", "critical"]),
   status: z.enum(["backlog", "focus", "in_progress", "blocked", "done"]),
   effort: z.enum(["light", "deep", "marathon"]),
@@ -181,6 +187,38 @@ export const quickTaskSchema = z.object({
   actionCostBand: z
     .enum(["tiny", "light", "standard", "heavy", "brutal"])
     .optional(),
+  aiInstructions: z.string().trim(),
+  executionMode: z.enum(["afk", "hitl"]).nullable().optional(),
+  acceptanceCriteria: z.array(z.string().trim()),
+  blockerLinks: z.array(
+    z.object({
+      entityType: z.string().trim().min(1),
+      entityId: z.string().trim().min(1),
+      label: z.string().trim().optional()
+    })
+  ),
+  completionReport: z
+    .object({
+      modifiedFiles: z.array(z.string().trim()),
+      workSummary: z.string().trim(),
+      linkedGitRefIds: z.array(z.string().trim())
+    })
+    .nullable()
+    .optional(),
+  gitRefs: z
+    .array(
+      z.object({
+        id: z.string().trim().min(1).optional(),
+        workItemId: z.string().trim().optional(),
+        refType: z.enum(["commit", "branch", "pull_request"]),
+        provider: z.string().trim().default("git"),
+        repository: z.string().trim().default(""),
+        refValue: z.string().trim().min(1),
+        url: z.string().trim().url().nullable().optional(),
+        displayTitle: z.string().trim().default("")
+      })
+    )
+    .default([]),
   tagIds: z.array(z.string()),
   notes: z.array(inlineCreateNoteSchema)
 });

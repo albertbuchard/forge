@@ -21,43 +21,6 @@ Write to Forge only with clear user consent. If the user is still thinking aloud
 help first and offer storage lightly only when it would genuinely help. When the user
 does want to save or update something, ask only for what is missing or unclear.
 
-## Project Management Hierarchy Rule
-
-Forge project management follows one explicit hierarchy:
-
-- Goal
-- Strategy (high level)
-- Project
-- Strategy (lower level when useful)
-- Issue
-- Task
-- Subtask
-
-Codex should preserve that hierarchy in both planning language and stored Forge
-records. Keep `project` and `strategy` first-class. Treat `issue`, `task`, and
-`subtask` as the execution layer below projects.
-
-Workflow rule:
-
-- Projects are PRD-backed initiatives.
-- PRDs become vertical-slice issues.
-- Issues are classified as `AFK` or `HITL`.
-- Tasks are ordered, AI-directed, and small enough for one focused Codex
-  session.
-- Subtasks remain lightweight child steps when needed.
-- `aiInstructions` is the dedicated task-execution field.
-- File targets, patterns, and done-shape guidance belong inside
-  `aiInstructions`, not in separate fields.
-
-Completion rule:
-
-- Completed work should preserve
-  `completionReport = { modifiedFiles[], workSummary, linkedGitRefIds[] }`.
-- `linkedGitRefIds[]` points to canonical Forge git refs.
-- Default workflow is direct commits to `main`.
-- Do not assume feature branches or pull requests unless the user explicitly
-  asks for them.
-
 ## Conversation rules
 
 - For all entity creation or update flows, use

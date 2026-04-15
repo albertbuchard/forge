@@ -2,6 +2,32 @@
 
 Forge ships a native OpenClaw plugin add-on with a deliberately small public surface.
 
+## Project Management Workflow
+
+Forge's planning hierarchy is explicit:
+
+- Goal
+- Strategy (high level)
+- Project
+- Strategy (lower level when useful)
+- Issue
+- Task
+- Subtask
+
+OpenClaw should preserve that hierarchy when it helps users plan or execute work.
+Projects are PRD-backed initiatives. Issues are vertical slices and must be marked
+`AFK` or `HITL`. Tasks are one focused AI session each, with `aiInstructions`
+written directly to the executing agent. Subtasks are lightweight child steps.
+
+Task closeout should preserve:
+
+- modified files
+- a concise work summary
+- linked commits through Forge's canonical git refs
+
+OpenClaw should default to Forge's direct-to-`main` workflow and should not prompt
+for feature branches or pull requests unless the user explicitly asks for them.
+
 ## Session Bootstrap
 
 Forge now injects a live session-start bootstrap block into each newly created

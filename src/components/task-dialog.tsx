@@ -20,10 +20,13 @@ import { formatOwnerSelectDefaultLabel } from "@/lib/user-ownership";
 export const defaultTaskValues: QuickTaskInput = {
   title: "",
   description: "",
+  level: "task",
   owner: "Albert",
   userId: null,
+  assigneeUserIds: [],
   goalId: "",
   projectId: "",
+  parentWorkItemId: null,
   priority: "medium",
   status: "focus",
   effort: "deep",
@@ -32,18 +35,53 @@ export const defaultTaskValues: QuickTaskInput = {
   points: 60,
   plannedDurationSeconds: 86_400,
   actionCostBand: "standard",
+  aiInstructions: "",
+  executionMode: null,
+  acceptanceCriteria: [],
+  blockerLinks: [],
+  completionReport: null,
+  gitRefs: [],
   tagIds: [],
   notes: []
 };
+
+function parseMultilineList(value: string) {
+  return value
+    .split("\n")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+}
+
+function buildCompletionReport(options: {
+  modifiedFiles: string[];
+  workSummary: string;
+  linkedGitRefIds: string[];
+}) {
+  if (
+    options.modifiedFiles.length === 0 &&
+    options.workSummary.trim().length === 0 &&
+    options.linkedGitRefIds.length === 0
+  ) {
+    return null;
+  }
+  return {
+    modifiedFiles: options.modifiedFiles,
+    workSummary: options.workSummary,
+    linkedGitRefIds: options.linkedGitRefIds
+  };
+}
 
 function taskToFormValues(task: Task): QuickTaskInput {
   return {
     title: task.title,
     description: task.description,
+    level: task.level,
     owner: task.owner,
     userId: task.userId ?? null,
+    assigneeUserIds: task.assigneeUserIds ?? [],
     goalId: task.goalId ?? "",
     projectId: task.projectId ?? "",
+    parentWorkItemId: task.parentWorkItemId ?? null,
     priority: task.priority,
     status: task.status,
     effort: task.effort,
@@ -52,6 +90,12 @@ function taskToFormValues(task: Task): QuickTaskInput {
     points: task.points,
     plannedDurationSeconds: task.plannedDurationSeconds ?? 86_400,
     actionCostBand: task.actionPointSummary?.costBand ?? "standard",
+    aiInstructions: task.aiInstructions,
+    executionMode: task.executionMode,
+    acceptanceCriteria: task.acceptanceCriteria,
+    blockerLinks: task.blockerLinks,
+    completionReport: task.completionReport,
+    gitRefs: task.gitRefs,
     tagIds: task.tagIds,
     notes: []
   };
@@ -242,6 +286,31 @@ export function TaskDialog({
         "Keep the task small enough to be actionable and strong enough to clearly move the project forward.",
       render: (value, setValue) => (
         <>
+          <FlowField label="Hierarchy level" error={fieldErrors.level ?? null}>
+            <FlowChoiceGrid
+              value={value.level}
+              onChange={(next) =>
+                setValue({ level: next as QuickTaskInput["level"] })
+              }
+              options={[
+                {
+                  value: "issue",
+                  label: "Issue",
+                  description: "Vertical slice with AFK or HITL execution mode."
+                },
+                {
+                  value: "task",
+                  label: "Task",
+                  description: "One focused AI session with direct instructions."
+                },
+                {
+                  value: "subtask",
+                  label: "Subtask",
+                  description: "A lightweight child step under a task."
+                }
+              ]}
+            />
+          </FlowField>
           <FlowField
             label={t("common.dialogs.task.title")}
             error={fieldErrors.title ?? null}
@@ -261,6 +330,60 @@ export function TaskDialog({
               placeholder="Write the task description in Markdown. Keep it short or turn it into a full acceptance doc."
             />
           </FlowField>
+          {value.level === "issue" ? (
+            <>
+              <FlowField label="Execution mode">
+                <FlowChoiceGrid
+                  value={value.executionMode ?? "afk"}
+                  onChange={(next) =>
+                    setValue({
+                      executionMode:
+                        next as NonNullable<QuickTaskInput["executionMode"]>
+                    })
+                  }
+                  options={[
+                    {
+                      value: "afk",
+                      label: "AFK",
+                      description:
+                        "AI can complete the issue flow without waiting on a human decision."
+                    },
+                    {
+                      value: "hitl",
+                      label: "HITL",
+                      description:
+                        "A human decision is required somewhere in the slice."
+                    }
+                  ]}
+                />
+              </FlowField>
+              <FlowField label="Acceptance criteria">
+                <Textarea
+                  value={value.acceptanceCriteria.join("\n")}
+                  onChange={(event) =>
+                    setValue({
+                      acceptanceCriteria: event.target.value
+                        .split("\n")
+                        .map((entry) => entry.trim())
+                        .filter((entry) => entry.length > 0)
+                    })
+                  }
+                  placeholder="Given ... / When ... / Then ..."
+                />
+              </FlowField>
+            </>
+          ) : null}
+          {value.level !== "issue" ? (
+            <FlowField label="AI instructions">
+              <Textarea
+                value={value.aiInstructions}
+                onChange={(event) =>
+                  setValue({ aiInstructions: event.target.value })
+                }
+                placeholder="Tell the executing agent which files and patterns matter, and what finished work looks like."
+              />
+            </FlowField>
+          ) : null}
           <FlowField
             label={t("common.dialogs.task.owner")}
             labelHelp="The owner is the person or role expected to carry this task."
@@ -287,6 +410,27 @@ export function TaskDialog({
             defaultLabel={formatOwnerSelectDefaultLabel(suggestedUser)}
             help="Tasks can belong to a human or bot user. The linked project owner is suggested first so cross-user task routing stays explicit."
           />
+          <FlowField label="Assignees">
+            <select
+              multiple
+              value={value.assigneeUserIds}
+              onChange={(event) =>
+                setValue({
+                  assigneeUserIds: Array.from(
+                    event.target.selectedOptions,
+                    (option) => option.value
+                  )
+                })
+              }
+              className="min-h-28 rounded-[var(--radius-control)] border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white outline-none transition focus:border-[rgba(192,193,255,0.3)]"
+            >
+              {safeUsers.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.displayName} · {user.kind}
+                </option>
+              ))}
+            </select>
+          </FlowField>
         </>
       )
     },
@@ -493,18 +637,106 @@ export function TaskDialog({
     },
     {
       id: "notes",
+      eyebrow: "Closeout",
+      title: "Capture what changed when the work is done",
+      description:
+        "Completion stays truthful when the closeout records modified files, a concise work summary, and the associated commit refs.",
+      render: (value, setValue) => (
+        <>
+          {value.level !== "issue" ? (
+            <>
+              <FlowField label="Work summary">
+                <Textarea
+                  value={value.completionReport?.workSummary ?? ""}
+                  onChange={(event) =>
+                    setValue({
+                      completionReport: buildCompletionReport({
+                        modifiedFiles:
+                          value.completionReport?.modifiedFiles ?? [],
+                        workSummary: event.target.value,
+                        linkedGitRefIds:
+                          value.completionReport?.linkedGitRefIds ?? []
+                      })
+                    })
+                  }
+                  placeholder="Summarize what changed in this session and what is now true."
+                />
+              </FlowField>
+              <FlowField label="Modified files">
+                <Textarea
+                  value={(value.completionReport?.modifiedFiles ?? []).join("\n")}
+                  onChange={(event) =>
+                    setValue({
+                      completionReport: buildCompletionReport({
+                        modifiedFiles: parseMultilineList(event.target.value),
+                        workSummary: value.completionReport?.workSummary ?? "",
+                        linkedGitRefIds:
+                          value.completionReport?.linkedGitRefIds ?? []
+                      })
+                    })
+                  }
+                  placeholder="src/pages/kanban-page.tsx&#10;server/src/repositories/tasks.ts"
+                />
+              </FlowField>
+              <FlowField label="Associated commits">
+                <Textarea
+                  value={value.gitRefs
+                    .filter((ref) => ref.refType === "commit")
+                    .map((ref) => ref.refValue)
+                    .join("\n")}
+                  onChange={(event) => {
+                    const commitRefs = parseMultilineList(event.target.value).map(
+                      (refValue, index) => ({
+                        id: `draft-commit-${index + 1}`,
+                        refType: "commit" as const,
+                        provider: "git",
+                        repository: "",
+                        refValue,
+                        url: null,
+                        displayTitle: ""
+                      })
+                    );
+                    const nextGitRefs = [
+                      ...value.gitRefs.filter((ref) => ref.refType !== "commit"),
+                      ...commitRefs
+                    ];
+                    setValue({
+                      gitRefs: nextGitRefs,
+                      completionReport: buildCompletionReport({
+                        modifiedFiles:
+                          value.completionReport?.modifiedFiles ?? [],
+                        workSummary: value.completionReport?.workSummary ?? "",
+                        linkedGitRefIds: commitRefs.map((ref) => ref.id ?? "")
+                      })
+                    });
+                  }}
+                  placeholder="abc1234&#10;def5678"
+                />
+              </FlowField>
+            </>
+          ) : null}
+          <FlowField label="Creation notes">
+            <InlineNoteFields
+              notes={value.notes}
+              onChange={(notes) => setValue({ notes })}
+              entityLabel="task"
+            />
+          </FlowField>
+        </>
+      )
+    },
+    {
+      id: "notes-evidence",
       eyebrow: "Evidence",
       title: "Capture launch context if this task needs a durable work note",
       description:
         "These notes become linked Markdown evidence on the task immediately, which helps preserve setup context, blockers, or handoff detail.",
       render: (value, setValue) => (
-        <FlowField label="Creation notes">
-          <InlineNoteFields
-            notes={value.notes}
-            onChange={(notes) => setValue({ notes })}
-            entityLabel="task"
-          />
-        </FlowField>
+        <div className="text-sm leading-6 text-white/62">
+          Use the previous step for completion closeout. Use linked notes here
+          only when you want durable extra context, setup detail, or handoff
+          evidence beyond the structured completion report.
+        </div>
       )
     }
   ];

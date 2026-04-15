@@ -445,7 +445,74 @@ export function TaskDetailPage() {
         <div className="flex flex-wrap items-center gap-2 text-sm text-white/62">
           <span className="text-white/42">Owned by</span>
           <UserBadge user={payload.task.user} />
+          {payload.task.assignees && payload.task.assignees.length > 0 ? (
+            <>
+              <span className="text-white/35">Assigned with</span>
+              <div className="flex flex-wrap items-center gap-2">
+                {payload.task.assignees.map((user) => (
+                  <UserBadge key={user.id} user={user} compact />
+                ))}
+              </div>
+            </>
+          ) : null}
         </div>
+      ) : null}
+
+      {payload.task.aiInstructions ? (
+        <Card>
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            AI instructions
+          </div>
+          <div className="mt-3">
+            <NoteMarkdown
+              markdown={payload.task.aiInstructions}
+              className="[&>p]:text-[13px] [&>p]:leading-6 [&>blockquote]:text-[13px] [&>ul]:text-[13px] [&>ol]:text-[13px]"
+            />
+          </div>
+        </Card>
+      ) : null}
+
+      {payload.task.acceptanceCriteria.length > 0 ||
+      payload.task.completionReport ? (
+        <Card>
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            Delivery contract
+          </div>
+          {payload.task.acceptanceCriteria.length > 0 ? (
+            <div className="mt-3 grid gap-2">
+              {payload.task.acceptanceCriteria.map((criterion, index) => (
+                <div
+                  key={`${payload.task.id}-criterion-${index}`}
+                  className="rounded-[18px] border border-white/8 bg-white/[0.04] px-4 py-3 text-sm text-white/72"
+                >
+                  {criterion}
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {payload.task.completionReport ? (
+            <div className="mt-4 grid gap-3">
+              <div className="text-xs uppercase tracking-[0.16em] text-white/42">
+                Completion report
+              </div>
+              <div className="rounded-[18px] border border-white/8 bg-white/[0.04] px-4 py-3 text-sm text-white/72">
+                {payload.task.completionReport.workSummary || "No work summary yet."}
+              </div>
+              {payload.task.completionReport.modifiedFiles.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {payload.task.completionReport.modifiedFiles.map((file) => (
+                    <Badge
+                      key={file}
+                      className="bg-white/[0.08] text-white/72"
+                    >
+                      {file}
+                    </Badge>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </Card>
       ) : null}
 
       <Card className="min-w-0 overflow-hidden">

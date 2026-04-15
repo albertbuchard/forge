@@ -5,6 +5,46 @@ description: use when the user wants to save, search, update, review, start, sto
 
 Forge is the user's structured system for planning work, doing work, reflecting on patterns, and keeping a truthful record of what is happening. Use it when the user is clearly working inside that system, or when they are describing something that naturally belongs there and would benefit from being stored, updated, reviewed, or acted on in Forge. Keep the conversation natural first. Do not turn every message into intake. When a real Forge entity is clearly present, name the exact entity type plainly, help with the substance of the conversation, and then offer Forge once, lightly, if storing it would genuinely help.
 
+## Project Management Hierarchy Rule
+
+Forge project management is explicit and hierarchical:
+
+- Goal
+- Strategy (high level)
+- Project
+- Strategy (lower level when useful)
+- Issue
+- Task
+- Subtask
+
+Keep `project` and `strategy` as first-class Forge entities. Treat `issue`,
+`task`, and `subtask` as the execution layer below projects. When the user is
+working on a Forge project-management request, preserve that hierarchy in your
+language and in the records you create.
+
+Project-management workflow rule:
+
+- Projects are PRD-backed initiatives.
+- PRDs should break down into issues that are vertical slices across the stack.
+- Every issue must be classified as `AFK` or `HITL`.
+- Issues keep end-to-end behavior in `description` and structured
+  Given/When/Then acceptance criteria.
+- Tasks are one focused AI session each.
+- If a task is too large for one focused AI session, split it.
+- Task instructions belong in `aiInstructions`.
+- File targets, patterns to follow, and done-shape guidance belong inside
+  `aiInstructions`, not as separate schema fields.
+- Use subtasks only as lightweight child steps under a task.
+
+Task completion rule:
+
+- When a task is finished, preserve
+  `completionReport = { modifiedFiles[], workSummary, linkedGitRefIds[] }`.
+- `linkedGitRefIds[]` points to canonical Forge git refs.
+- Forge defaults to direct commits on `main`.
+- Do not ask the user to create a feature branch or pull request unless they
+  explicitly want that workflow.
+
 Forge has four major surfaces. The planning side covers goals, projects, strategies, tasks, habits, notes, calendar events, recurring work blocks, task timeboxes, live work sessions, and agent-authored insights. The Health side covers sleep sessions, sports and workout sessions, companion pairing, and habit-generated workout records that should still stay linked to the broader Forge graph. The Preferences side covers contextual taste modeling, pairwise comparisons, direct signals, editable concept libraries, and preference items that can come from Forge entities or seeded concept domains such as food, activities, places, countries, fashion, people, media, and tools. The Psyche side covers values, patterns, behaviors, beliefs, modes, guided mode sessions, trigger reports, event types, and reusable emotion definitions. Forge also has a file-first Wiki memory layer with explicit spaces, local markdown pages, backlinks, optional embeddings, and structured links back to Forge entities. Forge is also multi-user: every entity can belong to a typed `human` or `bot` user through `userId`, and read routes can scope to one or many users with `userId` or repeated `userIds`. The current access posture is configurable through a directional user graph, but the live default is still permissive: Forge can list users directly, every relationship edge starts open, and a user can read or affect another user's linked records when the route explicitly asks for them. Use `forge_get_user_directory` when owner identity or cross-user access matters. Strategies can also be locked into a contract with `isLocked`; once locked, do not mutate the graph or target structure unless the user explicitly wants the strategy unlocked first. The model should use the real entity names, not vague substitutes. Say `project`, not “initiative”. Say `behavior_pattern`, not “theme”. Say `trigger_report`, not “incident note”.
 Habits are a first-class recurring entity in the planning side.
 NEGATIVE HABIT CHECK-IN RULE: for a `negative` habit, the correct aligned/resisted outcome is `missed`. `missed` means the bad habit was resisted, the user stayed aligned, and the habit should award its XP bonus.
@@ -302,12 +342,19 @@ Use the health tools for review and reflective enrichment, not as the default CR
 Use the dedicated domain routes for specialized surfaces that are not simple batch entities:
 
 - Movement lives under `/api/v1/movement/*`. Treat it as a dedicated timeline of `stays` and `trips`, not as generic batch CRUD. A `stay` means the user remained in the same place for a span of time. A `trip` means the user traveled between places. Use the movement routes when the user wants to understand time in place, travel behavior, specific stays or trips, known places, or selected-span aggregates such as "how long was I at home in the past 2 weeks?" or "when did I travel last month?".
+- In the live onboarding catalog, Movement, Life Force, and Workbench should appear as `specialized_domain_surface`. If the classification and route family disagree, trust the specialized route family and fix the contract mismatch instead of inventing a batch CRUD path.
 - Movement user actions are: query movement behavior, add a place or manual stay/trip overlay, update an existing stay/trip/place, or link a specific movement item to another Forge entity. Keep the explanation user-facing: where they stayed, when they traveled, what changed, and what this movement should be linked to.
 - Movement read lanes map cleanly to the dedicated routes:
   `/api/v1/movement/day`, `/api/v1/movement/month`, `/api/v1/movement/all-time`,
   `/api/v1/movement/timeline`, `/api/v1/movement/places`,
   `/api/v1/movement/selection`, and `/api/v1/movement/trips/:id`.
 - When the user is filling a missing-data gap, the default write path is a user-defined overlay box, not a raw stay or trip patch. Use `POST /api/v1/movement/user-boxes/preflight` if you need to confirm overlap or snap to the nearest missing interval, then `POST /api/v1/movement/user-boxes` with `kind: "stay"` or `kind: "trip"`.
+- When the user is repairing already-saved movement data, use the repair routes that match the saved object:
+  `PATCH /api/v1/movement/user-boxes/:id`,
+  `POST /api/v1/movement/automatic-boxes/:id/invalidate`,
+  `PATCH /api/v1/movement/stays/:id`,
+  `PATCH /api/v1/movement/trips/:id`, or
+  `PATCH /api/v1/movement/trips/:id/points/:pointId`.
 - Use `PATCH /api/v1/movement/stays/:id` or `PATCH /api/v1/movement/trips/:id` only when the user is editing an existing recorded stay or recorded trip. Do not use those routes to fill a missing span.
 - If the user says something as explicit as "that missing block was me staying home", do not reopen broad intake. Confirm the interval or place only if it is still ambiguous, then create the overlay and read the timeline back.
 - Life Force lives under `/api/v1/life-force*`. Use `GET /api/v1/life-force` for the current energy overview, `PATCH /api/v1/life-force/profile` for durable profile changes, `PUT /api/v1/life-force/templates/:weekday` for weekday curve edits, and `POST /api/v1/life-force/fatigue-signals` for real-time tired or recovered signals.

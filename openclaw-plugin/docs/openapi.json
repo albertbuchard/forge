@@ -3425,6 +3425,9 @@
               "solar",
               "aurora",
               "ember",
+              "paper",
+              "dawn",
+              "atelier",
               "custom",
               "system"
             ]
@@ -3887,6 +3890,9 @@
               "solar",
               "aurora",
               "ember",
+              "paper",
+              "dawn",
+              "atelier",
               "custom",
               "system"
             ]
@@ -3976,9 +3982,15 @@
           "conceptModel",
           "psycheSubmoduleModel",
           "psycheCoachingPlaybooks",
+          "conversationRules",
+          "entityConversationPlaybooks",
           "relationshipModel",
+          "entityRouteModel",
+          "multiUserModel",
+          "strategyContractModel",
           "entityCatalog",
           "toolInputCatalog",
+          "connectionGuides",
           "verificationPaths",
           "recommendedPluginTools",
           "interactionGuidance",
@@ -4162,10 +4174,20 @@
               "task",
               "taskRun",
               "note",
+              "wiki",
+              "sleepSession",
+              "workoutSession",
+              "preferences",
+              "questionnaire",
+              "selfObservation",
               "insight",
               "calendar",
               "workBlock",
               "taskTimebox",
+              "workAdjustment",
+              "movement",
+              "lifeForce",
+              "workbench",
               "psyche"
             ],
             "properties": {
@@ -4184,6 +4206,24 @@
               "note": {
                 "type": "string"
               },
+              "wiki": {
+                "type": "string"
+              },
+              "sleepSession": {
+                "type": "string"
+              },
+              "workoutSession": {
+                "type": "string"
+              },
+              "preferences": {
+                "type": "string"
+              },
+              "questionnaire": {
+                "type": "string"
+              },
+              "selfObservation": {
+                "type": "string"
+              },
               "insight": {
                 "type": "string"
               },
@@ -4194,6 +4234,18 @@
                 "type": "string"
               },
               "taskTimebox": {
+                "type": "string"
+              },
+              "workAdjustment": {
+                "type": "string"
+              },
+              "movement": {
+                "type": "string"
+              },
+              "lifeForce": {
+                "type": "string"
+              },
+              "workbench": {
                 "type": "string"
               },
               "psyche": {
@@ -4307,10 +4359,184 @@
               }
             }
           },
+          "conversationRules": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "entityConversationPlaybooks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "focus",
+                "openingQuestion",
+                "coachingGoal",
+                "askSequence"
+              ],
+              "properties": {
+                "focus": {
+                  "type": "string"
+                },
+                "openingQuestion": {
+                  "type": "string"
+                },
+                "coachingGoal": {
+                  "type": "string"
+                },
+                "askSequence": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
           "relationshipModel": {
             "type": "array",
             "items": {
               "type": "string"
+            }
+          },
+          "entityRouteModel": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "batchCrudEntities",
+              "batchRoutes",
+              "specializedCrudEntities",
+              "actionEntities",
+              "specializedDomainSurfaces",
+              "readModelOnlySurfaces"
+            ],
+            "properties": {
+              "batchCrudEntities": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "batchRoutes": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "search",
+                  "create",
+                  "update",
+                  "delete",
+                  "restore"
+                ],
+                "properties": {
+                  "search": {
+                    "type": "string"
+                  },
+                  "create": {
+                    "type": "string"
+                  },
+                  "update": {
+                    "type": "string"
+                  },
+                  "delete": {
+                    "type": "string"
+                  },
+                  "restore": {
+                    "type": "string"
+                  }
+                }
+              },
+              "specializedCrudEntities": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              },
+              "actionEntities": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "specializedDomainSurfaces": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "readModelOnlySurfaces": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "multiUserModel": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "summary",
+              "defaultUserScopeBehavior",
+              "routeScoping",
+              "relationshipGraphDefaults"
+            ],
+            "properties": {
+              "summary": {
+                "type": "string"
+              },
+              "defaultUserScopeBehavior": {
+                "type": "string"
+              },
+              "routeScoping": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "relationshipGraphDefaults": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "strategyContractModel": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "draftSummary",
+              "lockSummary",
+              "unlockSummary",
+              "alignmentSummary",
+              "metricBreakdown"
+            ],
+            "properties": {
+              "draftSummary": {
+                "type": "string"
+              },
+              "lockSummary": {
+                "type": "string"
+              },
+              "unlockSummary": {
+                "type": "string"
+              },
+              "alignmentSummary": {
+                "type": "string"
+              },
+              "metricBreakdown": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
             }
           },
           "entityCatalog": {
@@ -4320,15 +4546,27 @@
               "additionalProperties": false,
               "required": [
                 "entityType",
+                "classification",
                 "purpose",
                 "minimumCreateFields",
                 "relationshipRules",
                 "searchHints",
-                "fieldGuide"
+                "fieldGuide",
+                "preferredMutationPath"
               ],
               "properties": {
                 "entityType": {
                   "type": "string"
+                },
+                "classification": {
+                  "type": "string",
+                  "enum": [
+                    "batch_crud_entity",
+                    "specialized_crud_entity",
+                    "action_workflow_entity",
+                    "specialized_domain_surface",
+                    "read_model_only_surface"
+                  ]
                 },
                 "purpose": {
                   "type": "string"
@@ -4346,6 +4584,45 @@
                   }
                 },
                 "searchHints": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "routeBase": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "preferredMutationPath": {
+                  "type": "string"
+                },
+                "preferredReadPath": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "preferredMutationTool": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "examples": {
                   "type": "array",
                   "items": {
                     "type": "string"
@@ -4458,6 +4735,34 @@
               "context",
               "xpMetrics",
               "weeklyReview",
+              "sleepOverview",
+              "sportsOverview",
+              "lifeForce",
+              "lifeForceProfile",
+              "lifeForceWeekdayTemplate",
+              "lifeForceFatigueSignals",
+              "movementDay",
+              "movementMonth",
+              "movementTimeline",
+              "movementAllTime",
+              "movementPlaces",
+              "movementTripDetail",
+              "movementSelection",
+              "movementUserBoxPreflight",
+              "movementUserBoxUpdate",
+              "movementAutomaticBoxInvalidate",
+              "movementStayUpdate",
+              "movementTripUpdate",
+              "movementTripPointUpdate",
+              "workbenchFlows",
+              "workbenchFlowBySlug",
+              "workbenchPublishedOutput",
+              "workbenchRunDetail",
+              "workbenchNodeResult",
+              "workbenchLatestNodeOutput",
+              "wikiSettings",
+              "wikiSearch",
+              "wikiHealth",
               "calendarOverview",
               "settingsBin",
               "batchSearch",
@@ -4473,6 +4778,90 @@
                 "type": "string"
               },
               "weeklyReview": {
+                "type": "string"
+              },
+              "sleepOverview": {
+                "type": "string"
+              },
+              "sportsOverview": {
+                "type": "string"
+              },
+              "lifeForce": {
+                "type": "string"
+              },
+              "lifeForceProfile": {
+                "type": "string"
+              },
+              "lifeForceWeekdayTemplate": {
+                "type": "string"
+              },
+              "lifeForceFatigueSignals": {
+                "type": "string"
+              },
+              "movementDay": {
+                "type": "string"
+              },
+              "movementMonth": {
+                "type": "string"
+              },
+              "movementTimeline": {
+                "type": "string"
+              },
+              "movementAllTime": {
+                "type": "string"
+              },
+              "movementPlaces": {
+                "type": "string"
+              },
+              "movementTripDetail": {
+                "type": "string"
+              },
+              "movementSelection": {
+                "type": "string"
+              },
+              "movementUserBoxPreflight": {
+                "type": "string"
+              },
+              "movementUserBoxUpdate": {
+                "type": "string"
+              },
+              "movementAutomaticBoxInvalidate": {
+                "type": "string"
+              },
+              "movementStayUpdate": {
+                "type": "string"
+              },
+              "movementTripUpdate": {
+                "type": "string"
+              },
+              "movementTripPointUpdate": {
+                "type": "string"
+              },
+              "workbenchFlows": {
+                "type": "string"
+              },
+              "workbenchFlowBySlug": {
+                "type": "string"
+              },
+              "workbenchPublishedOutput": {
+                "type": "string"
+              },
+              "workbenchRunDetail": {
+                "type": "string"
+              },
+              "workbenchNodeResult": {
+                "type": "string"
+              },
+              "workbenchLatestNodeOutput": {
+                "type": "string"
+              },
+              "wikiSettings": {
+                "type": "string"
+              },
+              "wikiSearch": {
+                "type": "string"
+              },
+              "wikiHealth": {
                 "type": "string"
               },
               "calendarOverview": {
@@ -4503,6 +4892,9 @@
               "readModels",
               "uiWorkflow",
               "entityWorkflow",
+              "wikiWorkflow",
+              "healthWorkflow",
+              "rewardWorkflow",
               "workWorkflow",
               "calendarWorkflow",
               "insightWorkflow"
@@ -4527,6 +4919,24 @@
                 }
               },
               "entityWorkflow": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "wikiWorkflow": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "healthWorkflow": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "rewardWorkflow": {
                 "type": "array",
                 "items": {
                   "type": "string"
@@ -4560,6 +4970,8 @@
               "saveSuggestionPlacement",
               "saveSuggestionTone",
               "maxQuestionsPerTurn",
+              "psycheExplorationRule",
+              "psycheOpeningQuestionRule",
               "duplicateCheckRoute",
               "uiSuggestionRule",
               "browserFallbackRule",
@@ -4578,6 +4990,12 @@
               "maxQuestionsPerTurn": {
                 "type": "integer"
               },
+              "psycheExplorationRule": {
+                "type": "string"
+              },
+              "psycheOpeningQuestionRule": {
+                "type": "string"
+              },
               "duplicateCheckRoute": {
                 "type": "string"
               },
@@ -4589,6 +5007,42 @@
               },
               "writeConsentRule": {
                 "type": "string"
+              }
+            }
+          },
+          "connectionGuides": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "label",
+                "installSteps",
+                "verifyCommands",
+                "configNotes"
+              ],
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "installSteps": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "verifyCommands": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "configNotes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
               }
             }
           },
@@ -7931,6 +8385,36 @@
           "Health"
         ],
         "operationId": "gethealth_sleep"
+      },
+      "post": {
+        "summary": "Create one manual sleep session",
+        "responses": {
+          "201": {
+            "description": "Created sleep session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "sleep"
+                  ],
+                  "properties": {
+                    "sleep": {
+                      "$ref": "#/components/schemas/SleepSession"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Health"
+        ],
+        "operationId": "posthealth_sleep"
       }
     },
     "/api/v1/health/fitness": {
@@ -7962,7 +8446,69 @@
         "operationId": "gethealth_fitness"
       }
     },
+    "/api/v1/health/workouts": {
+      "post": {
+        "summary": "Create one manual workout session",
+        "responses": {
+          "201": {
+            "description": "Created workout session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "workout"
+                  ],
+                  "properties": {
+                    "workout": {
+                      "$ref": "#/components/schemas/WorkoutSession"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Health"
+        ],
+        "operationId": "posthealth_workouts"
+      }
+    },
     "/api/v1/health/workouts/{id}": {
+      "get": {
+        "summary": "Read one workout session",
+        "responses": {
+          "200": {
+            "description": "Workout session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "workout"
+                  ],
+                  "properties": {
+                    "workout": {
+                      "$ref": "#/components/schemas/WorkoutSession"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Health"
+        ],
+        "operationId": "gethealth_workouts_id"
+      },
       "patch": {
         "summary": "Update one workout session's reflective metadata",
         "responses": {
@@ -7992,9 +8538,69 @@
           "Health"
         ],
         "operationId": "patchhealth_workouts_id"
+      },
+      "delete": {
+        "summary": "Delete one workout session immediately",
+        "responses": {
+          "200": {
+            "description": "Deleted workout session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "workout"
+                  ],
+                  "properties": {
+                    "workout": {
+                      "$ref": "#/components/schemas/WorkoutSession"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Health"
+        ],
+        "operationId": "deletehealth_workouts_id"
       }
     },
     "/api/v1/health/sleep/{id}": {
+      "get": {
+        "summary": "Read one sleep session",
+        "responses": {
+          "200": {
+            "description": "Sleep session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "sleep"
+                  ],
+                  "properties": {
+                    "sleep": {
+                      "$ref": "#/components/schemas/SleepSession"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Health"
+        ],
+        "operationId": "gethealth_sleep_id"
+      },
       "patch": {
         "summary": "Update one sleep session's reflective metadata",
         "responses": {
@@ -8024,6 +8630,1443 @@
           "Health"
         ],
         "operationId": "patchhealth_sleep_id"
+      },
+      "delete": {
+        "summary": "Delete one sleep session immediately",
+        "responses": {
+          "200": {
+            "description": "Deleted sleep session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "sleep"
+                  ],
+                  "properties": {
+                    "sleep": {
+                      "$ref": "#/components/schemas/SleepSession"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Health"
+        ],
+        "operationId": "deletehealth_sleep_id"
+      }
+    },
+    "/api/v1/life-force": {
+      "get": {
+        "summary": "Read the current life-force overview with stats, drains, curve state, warnings, and recommendations",
+        "responses": {
+          "200": {
+            "description": "Life-force overview",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "lifeForce",
+                    "templates"
+                  ],
+                  "properties": {
+                    "lifeForce": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "templates": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Life Force"
+        ],
+        "operationId": "getlife_force"
+      }
+    },
+    "/api/v1/life-force/profile": {
+      "patch": {
+        "summary": "Update the user-controlled life-force profile settings",
+        "responses": {
+          "200": {
+            "description": "Updated life-force profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "lifeForce",
+                    "actor"
+                  ],
+                  "properties": {
+                    "lifeForce": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "actor": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Life Force"
+        ],
+        "operationId": "patchlife_force_profile"
+      }
+    },
+    "/api/v1/life-force/templates/{weekday}": {
+      "put": {
+        "summary": "Replace one weekday life-force curve template",
+        "responses": {
+          "200": {
+            "description": "Updated weekday curve template",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "weekday",
+                    "points",
+                    "actor"
+                  ],
+                  "properties": {
+                    "weekday": {
+                      "type": "integer"
+                    },
+                    "points": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "actor": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Life Force"
+        ],
+        "operationId": "putlife_force_templates_weekday"
+      }
+    },
+    "/api/v1/life-force/fatigue-signals": {
+      "post": {
+        "summary": "Record a tired or recovered fatigue signal and rebuild life-force state",
+        "responses": {
+          "200": {
+            "description": "Updated life-force state after fatigue signal",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "lifeForce",
+                    "actor"
+                  ],
+                  "properties": {
+                    "lifeForce": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "actor": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Life Force"
+        ],
+        "operationId": "postlife_force_fatigue_signals"
+      }
+    },
+    "/api/v1/movement/day": {
+      "get": {
+        "summary": "Read one day of movement detail with distance, stays, trips, gaps, and summaries",
+        "responses": {
+          "200": {
+            "description": "Movement day detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "movement"
+                  ],
+                  "properties": {
+                    "movement": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Movement"
+        ],
+        "operationId": "getmovement_day"
+      }
+    },
+    "/api/v1/movement/month": {
+      "get": {
+        "summary": "Read one month of movement summary",
+        "responses": {
+          "200": {
+            "description": "Movement month summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "movement"
+                  ],
+                  "properties": {
+                    "movement": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Movement"
+        ],
+        "operationId": "getmovement_month"
+      }
+    },
+    "/api/v1/movement/all-time": {
+      "get": {
+        "summary": "Read all-time movement summary including place and trip distribution",
+        "responses": {
+          "200": {
+            "description": "Movement all-time summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "movement"
+                  ],
+                  "properties": {
+                    "movement": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Movement"
+        ],
+        "operationId": "getmovement_all_time"
+      }
+    },
+    "/api/v1/movement/timeline": {
+      "get": {
+        "summary": "Read the paginated movement timeline with stays, trips, missing spans, and projected boxes",
+        "responses": {
+          "200": {
+            "description": "Movement timeline",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "movement"
+                  ],
+                  "properties": {
+                    "movement": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Movement"
+        ],
+        "operationId": "getmovement_timeline"
+      }
+    },
+    "/api/v1/movement/settings": {
+      "get": {
+        "summary": "Read movement capture settings",
+        "responses": {
+          "200": {
+            "description": "Movement settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "settings"
+                  ],
+                  "properties": {
+                    "settings": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Movement"
+        ],
+        "operationId": "getmovement_settings"
+      },
+      "patch": {
+        "summary": "Update movement capture settings",
+        "responses": {
+          "200": {
+            "description": "Updated movement settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "settings"
+                  ],
+                  "properties": {
+                    "settings": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Movement"
+        ],
+        "operationId": "patchmovement_settings"
+      }
+    },
+    "/api/v1/movement/places": {
+      "get": {
+        "summary": "List known movement places",
+        "responses": {
+          "200": {
+            "description": "Movement places",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "places"
+                  ],
+                  "properties": {
+                    "places": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Movement"
+        ],
+        "operationId": "getmovement_places"
+      },
+      "post": {
+        "summary": "Create one user-defined movement place",
+        "responses": {
+          "201": {
+            "description": "Created movement place",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "place"
+                  ],
+                  "properties": {
+                    "place": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Movement"
+        ],
+        "operationId": "postmovement_places"
+      }
+    },
+    "/api/v1/movement/places/{id}": {
+      "patch": {
+        "summary": "Update one known movement place",
+        "responses": {
+          "200": {
+            "description": "Updated movement place",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "place"
+                  ],
+                  "properties": {
+                    "place": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Movement"
+        ],
+        "operationId": "patchmovement_places_id"
+      }
+    },
+    "/api/v1/movement/user-boxes": {
+      "post": {
+        "summary": "Create a user-defined movement overlay box such as a manual stay, trip, or missing-data override",
+        "responses": {
+          "201": {
+            "description": "Created movement user box",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "box"
+                  ],
+                  "properties": {
+                    "box": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Movement"
+        ],
+        "operationId": "postmovement_user_boxes"
+      }
+    },
+    "/api/v1/movement/user-boxes/preflight": {
+      "post": {
+        "summary": "Analyze a proposed movement overlay before saving it, especially when replacing a missing gap or overlapping another box",
+        "responses": {
+          "200": {
+            "description": "Movement user-box preflight",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "preflight"
+                  ],
+                  "properties": {
+                    "preflight": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Movement"
+        ],
+        "operationId": "postmovement_user_boxes_preflight"
+      }
+    },
+    "/api/v1/movement/user-boxes/{id}": {
+      "patch": {
+        "summary": "Update one user-defined movement overlay box",
+        "responses": {
+          "200": {
+            "description": "Updated movement user box",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "box"
+                  ],
+                  "properties": {
+                    "box": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Movement"
+        ],
+        "operationId": "patchmovement_user_boxes_id"
+      },
+      "delete": {
+        "summary": "Delete one user-defined movement box",
+        "responses": {
+          "200": {
+            "description": "Deleted movement user box",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Movement"
+        ],
+        "operationId": "deletemovement_user_boxes_id"
+      }
+    },
+    "/api/v1/movement/automatic-boxes/{id}/invalidate": {
+      "post": {
+        "summary": "Hide one automatic movement box and project the resulting user-defined overlay",
+        "responses": {
+          "201": {
+            "description": "Invalidated automatic movement box",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "box"
+                  ],
+                  "properties": {
+                    "box": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Movement"
+        ],
+        "operationId": "postmovement_automatic_boxes_id_invalidate"
+      }
+    },
+    "/api/v1/movement/stays/{id}": {
+      "patch": {
+        "summary": "Update one recorded movement stay",
+        "responses": {
+          "200": {
+            "description": "Updated movement stay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "stay"
+                  ],
+                  "properties": {
+                    "stay": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Movement"
+        ],
+        "operationId": "patchmovement_stays_id"
+      },
+      "delete": {
+        "summary": "Delete one recorded movement stay",
+        "responses": {
+          "200": {
+            "description": "Deleted movement stay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Movement"
+        ],
+        "operationId": "deletemovement_stays_id"
+      }
+    },
+    "/api/v1/movement/trips/{id}": {
+      "get": {
+        "summary": "Read one movement trip with its full detail",
+        "responses": {
+          "200": {
+            "description": "Movement trip detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "movement"
+                  ],
+                  "properties": {
+                    "movement": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Movement"
+        ],
+        "operationId": "getmovement_trips_id"
+      },
+      "patch": {
+        "summary": "Update one movement trip",
+        "responses": {
+          "200": {
+            "description": "Updated movement trip",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "trip"
+                  ],
+                  "properties": {
+                    "trip": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Movement"
+        ],
+        "operationId": "patchmovement_trips_id"
+      },
+      "delete": {
+        "summary": "Delete one movement trip",
+        "responses": {
+          "200": {
+            "description": "Deleted movement trip",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Movement"
+        ],
+        "operationId": "deletemovement_trips_id"
+      }
+    },
+    "/api/v1/movement/trips/{id}/points/{pointId}": {
+      "patch": {
+        "summary": "Update one movement trip datapoint",
+        "responses": {
+          "200": {
+            "description": "Updated movement trip point",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Movement"
+        ],
+        "operationId": "patchmovement_trips_id_points_pointId"
+      },
+      "delete": {
+        "summary": "Delete one movement trip datapoint",
+        "responses": {
+          "200": {
+            "description": "Deleted movement trip point",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Movement"
+        ],
+        "operationId": "deletemovement_trips_id_points_pointId"
+      }
+    },
+    "/api/v1/movement/selection": {
+      "post": {
+        "summary": "Aggregate one selected movement range or set of segments",
+        "responses": {
+          "200": {
+            "description": "Movement selection aggregate",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "movement"
+                  ],
+                  "properties": {
+                    "movement": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Movement"
+        ],
+        "operationId": "postmovement_selection"
+      }
+    },
+    "/api/v1/workbench/catalog/boxes": {
+      "get": {
+        "summary": "List registered Workbench boxes and their contracts",
+        "responses": {
+          "200": {
+            "description": "Workbench box catalog",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "boxes"
+                  ],
+                  "properties": {
+                    "boxes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Workbench"
+        ],
+        "operationId": "getworkbench_catalog_boxes"
+      }
+    },
+    "/api/v1/workbench/flows": {
+      "get": {
+        "summary": "List Workbench flows and recent execution summaries",
+        "responses": {
+          "200": {
+            "description": "Workbench flow collection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "flows"
+                  ],
+                  "properties": {
+                    "flows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Workbench"
+        ],
+        "operationId": "getworkbench_flows"
+      },
+      "post": {
+        "summary": "Create one Workbench flow",
+        "responses": {
+          "201": {
+            "description": "Created Workbench flow",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "flow"
+                  ],
+                  "properties": {
+                    "flow": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Workbench"
+        ],
+        "operationId": "postworkbench_flows"
+      }
+    },
+    "/api/v1/workbench/flows/{id}": {
+      "get": {
+        "summary": "Read one Workbench flow with runs",
+        "responses": {
+          "200": {
+            "description": "Workbench flow detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "flow",
+                    "runs"
+                  ],
+                  "properties": {
+                    "flow": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "runs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Workbench"
+        ],
+        "operationId": "getworkbench_flows_id"
+      },
+      "patch": {
+        "summary": "Update one Workbench flow",
+        "responses": {
+          "200": {
+            "description": "Updated Workbench flow",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "flow"
+                  ],
+                  "properties": {
+                    "flow": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Workbench"
+        ],
+        "operationId": "patchworkbench_flows_id"
+      },
+      "delete": {
+        "summary": "Delete one Workbench flow",
+        "responses": {
+          "200": {
+            "description": "Deleted Workbench flow",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Workbench"
+        ],
+        "operationId": "deleteworkbench_flows_id"
+      }
+    },
+    "/api/v1/workbench/flows/by-slug/{slug}": {
+      "get": {
+        "summary": "Read one Workbench flow by slug",
+        "responses": {
+          "200": {
+            "description": "Workbench flow by slug",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "flow"
+                  ],
+                  "properties": {
+                    "flow": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Workbench"
+        ],
+        "operationId": "getworkbench_flows_by_slug_slug"
+      }
+    },
+    "/api/v1/workbench/flows/{id}/run": {
+      "post": {
+        "summary": "Run one Workbench flow by id",
+        "responses": {
+          "200": {
+            "description": "Workbench flow execution",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "flow",
+                    "run",
+                    "conversation"
+                  ],
+                  "properties": {
+                    "flow": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "run": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "conversation": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Workbench"
+        ],
+        "operationId": "postworkbench_flows_id_run"
+      }
+    },
+    "/api/v1/workbench/run": {
+      "post": {
+        "summary": "Run one Workbench flow by payload with flowId",
+        "responses": {
+          "200": {
+            "description": "Workbench flow execution",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "flow",
+                    "run",
+                    "conversation"
+                  ],
+                  "properties": {
+                    "flow": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "run": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "conversation": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Workbench"
+        ],
+        "operationId": "postworkbench_run"
+      }
+    },
+    "/api/v1/workbench/flows/{id}/chat": {
+      "post": {
+        "summary": "Continue or start one Workbench chat flow",
+        "responses": {
+          "200": {
+            "description": "Workbench chat response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Workbench"
+        ],
+        "operationId": "postworkbench_flows_id_chat"
+      }
+    },
+    "/api/v1/workbench/flows/{id}/output": {
+      "get": {
+        "summary": "Read the latest published whole-flow output",
+        "responses": {
+          "200": {
+            "description": "Workbench published output",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Workbench"
+        ],
+        "operationId": "getworkbench_flows_id_output"
+      }
+    },
+    "/api/v1/workbench/flows/{id}/runs": {
+      "get": {
+        "summary": "List Workbench runs for one flow",
+        "responses": {
+          "200": {
+            "description": "Workbench run list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "flow",
+                    "runs"
+                  ],
+                  "properties": {
+                    "flow": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "runs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Workbench"
+        ],
+        "operationId": "getworkbench_flows_id_runs"
+      }
+    },
+    "/api/v1/workbench/flows/{id}/runs/{runId}": {
+      "get": {
+        "summary": "Read one Workbench run detail",
+        "responses": {
+          "200": {
+            "description": "Workbench run detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "flow",
+                    "run"
+                  ],
+                  "properties": {
+                    "flow": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "run": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Workbench"
+        ],
+        "operationId": "getworkbench_flows_id_runs_runId"
+      }
+    },
+    "/api/v1/workbench/flows/{id}/runs/{runId}/nodes": {
+      "get": {
+        "summary": "List node results for one Workbench run",
+        "responses": {
+          "200": {
+            "description": "Workbench node results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "flow",
+                    "run",
+                    "nodeResults"
+                  ],
+                  "properties": {
+                    "flow": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "run": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "nodeResults": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Workbench"
+        ],
+        "operationId": "getworkbench_flows_id_runs_runId_nodes"
+      }
+    },
+    "/api/v1/workbench/flows/{id}/runs/{runId}/nodes/{nodeId}": {
+      "get": {
+        "summary": "Read one node result for one Workbench run",
+        "responses": {
+          "200": {
+            "description": "Workbench node result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "flow",
+                    "nodeResult"
+                  ],
+                  "properties": {
+                    "flow": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "nodeResult": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Workbench"
+        ],
+        "operationId": "getworkbench_flows_id_runs_runId_nodes_nodeId"
+      }
+    },
+    "/api/v1/workbench/flows/{id}/nodes/{nodeId}/output": {
+      "get": {
+        "summary": "Read the latest successful output for one Workbench node",
+        "responses": {
+          "200": {
+            "description": "Workbench latest node output",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "flow",
+                    "run",
+                    "nodeResult"
+                  ],
+                  "properties": {
+                    "flow": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "run": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "nodeResult": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Workbench"
+        ],
+        "operationId": "getworkbench_flows_id_nodes_nodeId_output"
       }
     },
     "/api/v1/wiki/settings": {
@@ -8463,6 +10506,40 @@
       }
     },
     "/api/v1/preferences/catalogs": {
+      "get": {
+        "summary": "List Preferences concept lists",
+        "responses": {
+          "200": {
+            "description": "Preferences catalogs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "catalogs"
+                  ],
+                  "properties": {
+                    "catalogs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Preferences"
+        ],
+        "operationId": "getpreferences_catalogs"
+      },
       "post": {
         "summary": "Create a Preferences concept list",
         "responses": {
@@ -8496,6 +10573,37 @@
       }
     },
     "/api/v1/preferences/catalogs/{id}": {
+      "get": {
+        "summary": "Get one Preferences concept list",
+        "responses": {
+          "200": {
+            "description": "Preferences catalog",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "catalog"
+                  ],
+                  "properties": {
+                    "catalog": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Preferences"
+        ],
+        "operationId": "getpreferences_catalogs_id"
+      },
       "patch": {
         "summary": "Update a Preferences concept list",
         "responses": {
@@ -8560,6 +10668,40 @@
       }
     },
     "/api/v1/preferences/catalog-items": {
+      "get": {
+        "summary": "List Preferences concept entries",
+        "responses": {
+          "200": {
+            "description": "Preferences catalog items",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Preferences"
+        ],
+        "operationId": "getpreferences_catalog_items"
+      },
       "post": {
         "summary": "Create a Preferences concept entry",
         "responses": {
@@ -8593,6 +10735,37 @@
       }
     },
     "/api/v1/preferences/catalog-items/{id}": {
+      "get": {
+        "summary": "Get one Preferences concept entry",
+        "responses": {
+          "200": {
+            "description": "Preferences catalog item",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "item"
+                  ],
+                  "properties": {
+                    "item": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Preferences"
+        ],
+        "operationId": "getpreferences_catalog_items_id"
+      },
       "patch": {
         "summary": "Update a Preferences concept entry",
         "responses": {
@@ -8657,6 +10830,40 @@
       }
     },
     "/api/v1/preferences/contexts": {
+      "get": {
+        "summary": "List Preferences contexts",
+        "responses": {
+          "200": {
+            "description": "Preferences contexts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "contexts"
+                  ],
+                  "properties": {
+                    "contexts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Preferences"
+        ],
+        "operationId": "getpreferences_contexts"
+      },
       "post": {
         "summary": "Create a Preferences context",
         "responses": {
@@ -8690,6 +10897,37 @@
       }
     },
     "/api/v1/preferences/contexts/{id}": {
+      "get": {
+        "summary": "Get one Preferences context",
+        "responses": {
+          "200": {
+            "description": "Preferences context",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "context"
+                  ],
+                  "properties": {
+                    "context": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Preferences"
+        ],
+        "operationId": "getpreferences_contexts_id"
+      },
       "patch": {
         "summary": "Update a Preferences context",
         "responses": {
@@ -8720,6 +10958,37 @@
           "Preferences"
         ],
         "operationId": "patchpreferences_contexts_id"
+      },
+      "delete": {
+        "summary": "Delete a Preferences context",
+        "responses": {
+          "200": {
+            "description": "Deleted Preferences context",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "context"
+                  ],
+                  "properties": {
+                    "context": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Preferences"
+        ],
+        "operationId": "deletepreferences_contexts_id"
       }
     },
     "/api/v1/preferences/contexts/merge": {
@@ -8756,6 +11025,40 @@
       }
     },
     "/api/v1/preferences/items": {
+      "get": {
+        "summary": "List Preferences items",
+        "responses": {
+          "200": {
+            "description": "Preferences items",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Preferences"
+        ],
+        "operationId": "getpreferences_items"
+      },
       "post": {
         "summary": "Create a standalone Preferences item",
         "responses": {
@@ -8789,6 +11092,37 @@
       }
     },
     "/api/v1/preferences/items/{id}": {
+      "get": {
+        "summary": "Get one Preferences item",
+        "responses": {
+          "200": {
+            "description": "Preferences item",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "item"
+                  ],
+                  "properties": {
+                    "item": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Preferences"
+        ],
+        "operationId": "getpreferences_items_id"
+      },
       "patch": {
         "summary": "Update a Preferences item",
         "responses": {
@@ -8819,6 +11153,37 @@
           "Preferences"
         ],
         "operationId": "patchpreferences_items_id"
+      },
+      "delete": {
+        "summary": "Delete a Preferences item",
+        "responses": {
+          "200": {
+            "description": "Deleted Preferences item",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "item"
+                  ],
+                  "properties": {
+                    "item": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Preferences"
+        ],
+        "operationId": "deletepreferences_items_id"
       }
     },
     "/api/v1/preferences/items/from-entity": {
@@ -9054,6 +11419,70 @@
           "Psyche"
         ],
         "operationId": "getpsyche_questionnaires_id"
+      },
+      "patch": {
+        "summary": "Update one questionnaire instrument through the direct route",
+        "responses": {
+          "200": {
+            "description": "Updated questionnaire instrument",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "instrument"
+                  ],
+                  "properties": {
+                    "instrument": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Questionnaires",
+          "Psyche"
+        ],
+        "operationId": "patchpsyche_questionnaires_id"
+      },
+      "delete": {
+        "summary": "Archive one questionnaire instrument through the direct route",
+        "responses": {
+          "200": {
+            "description": "Archived questionnaire instrument",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "instrument"
+                  ],
+                  "properties": {
+                    "instrument": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Questionnaires",
+          "Psyche"
+        ],
+        "operationId": "deletepsyche_questionnaires_id"
       }
     },
     "/api/v1/psyche/questionnaires/{id}/clone": {
@@ -11461,7 +13890,7 @@
       },
       "post": {
         "summary": "Create a Google, Apple, or custom CalDAV calendar connection",
-        "description": "Forge first discovers the writable calendars for the account, then stores the chosen mirrored calendars and dedicated Forge write calendar.",
+        "description": "Forge first discovers the writable calendars for the account, then stores the chosen mirrored calendars and either reuses the existing shared Forge write target or saves a new one when needed.",
         "responses": {
           "201": {
             "description": "Created calendar connection",
@@ -11588,6 +14017,38 @@
         "operationId": "postcalendar_work_block_templates"
       }
     },
+    "/api/v1/calendar/work-block-templates/{id}": {
+      "get": {
+        "summary": "Get one recurring work-block template",
+        "responses": {
+          "200": {
+            "description": "Work-block template",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "template"
+                  ],
+                  "properties": {
+                    "template": {
+                      "$ref": "#/components/schemas/WorkBlockTemplate"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Calendar"
+        ],
+        "operationId": "getcalendar_work_block_templates_id"
+      }
+    },
     "/api/v1/calendar/timeboxes": {
       "get": {
         "summary": "List task timeboxes",
@@ -11653,6 +14114,38 @@
         "operationId": "postcalendar_timeboxes"
       }
     },
+    "/api/v1/calendar/timeboxes/{id}": {
+      "get": {
+        "summary": "Get one task timebox",
+        "responses": {
+          "200": {
+            "description": "Task timebox",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "timebox"
+                  ],
+                  "properties": {
+                    "timebox": {
+                      "$ref": "#/components/schemas/TaskTimebox"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Calendar"
+        ],
+        "operationId": "getcalendar_timeboxes_id"
+      }
+    },
     "/api/v1/calendar/timeboxes/recommend": {
       "post": {
         "summary": "Suggest future timeboxes for a task",
@@ -11690,6 +14183,39 @@
       }
     },
     "/api/v1/calendar/events": {
+      "get": {
+        "summary": "List native and mirrored calendar events for a range",
+        "responses": {
+          "200": {
+            "description": "Calendar events",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "events"
+                  ],
+                  "properties": {
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CalendarEvent"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Calendar"
+        ],
+        "operationId": "getcalendar_events"
+      },
       "post": {
         "summary": "Create a native Forge calendar event",
         "description": "Forge stores the event canonically first, then projects it to a connected writable calendar when a preferred calendar is selected.",
@@ -11723,6 +14249,36 @@
       }
     },
     "/api/v1/calendar/events/{id}": {
+      "get": {
+        "summary": "Get one Forge calendar event",
+        "responses": {
+          "200": {
+            "description": "Calendar event",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "event"
+                  ],
+                  "properties": {
+                    "event": {
+                      "$ref": "#/components/schemas/CalendarEvent"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Calendar"
+        ],
+        "operationId": "getcalendar_events_id"
+      },
       "patch": {
         "summary": "Update a Forge calendar event and sync remote projections",
         "responses": {
@@ -14415,6 +16971,14 @@
       "description": "Runtime health, sleep, sports, workout, and mobile sync surfaces."
     },
     {
+      "name": "Movement",
+      "description": "Movement overviews, timeline history, known places, stays, trips, selection aggregates, and user-defined overlay routes."
+    },
+    {
+      "name": "Life Force",
+      "description": "Energy-budget, fatigue, and action-point modeling routes."
+    },
+    {
       "name": "Auth",
       "description": "Operator session bootstrapping for trusted local usage."
     },
@@ -14503,6 +17067,10 @@
       "description": "Stored insights and structured feedback on them."
     },
     {
+      "name": "Workbench",
+      "description": "Graph-flow catalog, execution, published outputs, and node-result routes."
+    },
+    {
       "name": "Metrics",
       "description": "XP, reward-ledger, and runtime metric surfaces."
     },
@@ -14524,11 +17092,18 @@
       "name": "Runtime",
       "tags": [
         "Meta",
-        "Health",
         "Auth",
         "Platform",
         "Operator",
         "Diagnostics"
+      ]
+    },
+    {
+      "name": "Embodied Context",
+      "tags": [
+        "Health",
+        "Movement",
+        "Life Force"
       ]
     },
     {
@@ -14546,7 +17121,8 @@
         "Activity",
         "Metrics",
         "Reviews",
-        "Insights"
+        "Insights",
+        "Workbench"
       ]
     },
     {

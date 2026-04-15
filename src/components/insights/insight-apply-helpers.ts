@@ -19,16 +19,27 @@ export type InsightSourceLink = NoteLink | null;
 const DEFAULT_TASK_VALUES: QuickTaskInput = {
   title: "",
   description: "",
+  level: "task",
   owner: "Albert",
   userId: null,
+  assigneeUserIds: [],
   goalId: "",
   projectId: "",
+  parentWorkItemId: null,
   priority: "medium",
   status: "focus",
   effort: "deep",
   energy: "steady",
   dueDate: "",
   points: 60,
+  plannedDurationSeconds: 86_400,
+  actionCostBand: "standard",
+  aiInstructions: "",
+  executionMode: null,
+  acceptanceCriteria: [],
+  blockerLinks: [],
+  completionReport: null,
+  gitRefs: [],
   tagIds: [],
   notes: []
 };
@@ -38,9 +49,12 @@ const DEFAULT_PROJECT_VALUES: ProjectMutationInput = {
   title: "",
   description: "",
   status: "active",
+  workflowStatus: "backlog",
   userId: null,
+  assigneeUserIds: [],
   targetPoints: 240,
   themeColor: "#c0c1ff",
+  productRequirementsDocument: "",
   notes: []
 };
 

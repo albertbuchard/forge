@@ -155,9 +155,10 @@
             <article class="card">
               <h3>Structured runtime records</h3>
               <p>
-                Goals, projects, tasks, task runs, habits, calendar records,
-                preferences, Psyche entities, questionnaires, sleep, workouts, and
-                notes are stored in SQLite with typed repository boundaries.
+                Goals, strategies, projects, work items, task runs, habits,
+                calendar records, preferences, Psyche entities,
+                questionnaires, sleep, workouts, and notes are stored in
+                SQLite with typed repository boundaries.
               </p>
             </article>
             <article class="card">
@@ -171,9 +172,21 @@
             <article class="card">
               <h3>Multi-user ownership</h3>
               <p>
-                Most entity families support explicit <code>userId</code> ownership
-                for human and bot actors. Read flows may widen scope with repeated
-                <code>userIds</code>.
+                Most entity families support explicit <code>userId</code>
+                ownership for human and bot actors. Forge's project-management
+                surfaces also support one owner plus one-or-many assignees.
+                Read flows may widen scope with repeated <code>userIds</code>.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Hierarchy-aware execution</h3>
+              <p>
+                Forge keeps <code>goal</code>, <code>strategy</code>, and
+                <code>project</code> as first-class records, then models
+                <code>issue</code>, <code>task</code>, and
+                <code>subtask</code> through one lean work-item layer with AI
+                instructions, acceptance criteria, blocker links, completion
+                reports, and canonical git refs.
               </p>
             </article>
             <article class="card">
@@ -203,8 +216,8 @@
             <tbody>
               <tr>
                 <td>Execution</td>
-                <td><code>/api/v1/goals</code>, <code>/projects</code>, <code>/tasks</code></td>
-                <td>Goals, projects, tasks, task runs, adjustments, activity, metrics, and reviews.</td>
+                <td><code>/api/v1/goals</code>, <code>/projects</code>, <code>/tasks</code>, <code>/work-items</code></td>
+                <td>Goals, strategies, projects, issues, tasks, subtasks, task runs, adjustments, activity, metrics, and reviews.</td>
               </tr>
               <tr>
                 <td>Calendar</td>
