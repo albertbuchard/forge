@@ -573,6 +573,90 @@ describe("SleepPage", () => {
       });
     });
   });
+
+  it("renders historical raw fallback data from legacy payload fields without crashing", async () => {
+    getSleepSessionRawDetailMock.mockImplementationOnce(
+      async () =>
+        ({
+          sleep: olderSession,
+          phaseTimeline: {
+            startedAt: olderSession.startedAt,
+            endedAt: olderSession.endedAt,
+            totalSeconds: olderSession.asleepSeconds,
+            hasRawSegments: true,
+            hasSleepStageData: true,
+            blocks: []
+          } satisfies SleepPhaseTimeline,
+          rawSegments: [
+            {
+              id: "legacy_seg_1",
+              externalUid: "legacy_seg_1",
+              importRunId: "run_legacy",
+              pairingSessionId: "pair_1",
+              sleepSessionId: olderSession.id,
+              userId: "user_operator",
+              source: "apple_health",
+              sourceType: "historical_import_segment",
+              sourceDevice: "Omar iPhone",
+              sourceTimezone: "Europe/Zurich",
+              localDateKey: "2026-04-13",
+              startedAt: "2026-04-13T03:45:00.000Z",
+              endedAt: "2026-04-13T04:10:00.000Z",
+              stage: "awake",
+              bucket: "awake",
+              sourceValue: 2,
+              qualityKind: "historical_import",
+              sourceRecordIds: [],
+              metadata: {},
+              provenance: {},
+              createdAt: olderSession.createdAt,
+              updatedAt: olderSession.updatedAt
+            }
+          ],
+          rawLogs: [
+            {
+              id: "legacy_log_1",
+              importRunId: "run_legacy",
+              pairingSessionId: "pair_1",
+              sleepSessionId: olderSession.id,
+              userId: "user_operator",
+              source: "apple_health",
+              logType: "legacy_sleep_session_row",
+              externalUid: "legacy_log_1",
+              sourceTimezone: "Europe/Zurich",
+              localDateKey: "2026-04-13",
+              startedAt: "2026-04-13T03:45:00.000Z",
+              endedAt: "2026-04-13T04:10:00.000Z",
+              payload: { stage: "awake" },
+              metadata: {},
+              createdAt: olderSession.createdAt
+            }
+          ]
+        }) as unknown as SleepSessionDetailPayload
+    );
+
+    await renderPage();
+
+    await waitForCondition(() => {
+      expect(container.textContent).toContain("Last night");
+    });
+
+    await act(async () => {
+      requireButton("Select sleep for 2026-04-13").click();
+    });
+    await flushUi();
+
+    await act(async () => {
+      requireButton("Show raw data").click();
+    });
+    await flushUi();
+
+    await waitForCondition(() => {
+      expect(container.textContent).toContain("Historical raw data");
+      expect(container.textContent).toContain("Sleep segments");
+      expect(container.textContent).toContain("awake");
+    });
+  });
 });
 
 function cleanup() {

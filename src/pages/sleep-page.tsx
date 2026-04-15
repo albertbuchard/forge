@@ -35,6 +35,8 @@ import type {
   SleepCalendarDay,
   SleepPhaseTimeline,
   SleepPhaseTimelineBlock,
+  SleepRawLogRecord,
+  SleepSegmentRecord,
   SleepSessionDetailPayload,
   SleepSessionRecord,
   SleepSourceRecord,
@@ -277,6 +279,83 @@ function sourceRecordTone(record: SleepSourceRecord) {
   return record.qualityKind === "provider_native"
     ? "bg-emerald-400/16 text-emerald-100"
     : "bg-amber-400/16 text-amber-100";
+}
+
+type LegacySleepSessionDetailPayload = SleepSessionDetailPayload & {
+  rawSegments?: SleepSegmentRecord[];
+  rawLogs?: SleepRawLogRecord[];
+};
+
+function inferHistoricalRawStage(
+  payload: Record<string, unknown>,
+  logType: string
+) {
+  const stage = payload.stage;
+  if (typeof stage === "string" && stage.trim().length > 0) {
+    return stage;
+  }
+  const sourceType = payload.sourceType;
+  if (typeof sourceType === "string" && sourceType.trim().length > 0) {
+    return sourceType;
+  }
+  const stageBreakdown = payload.stageBreakdown;
+  if (Array.isArray(stageBreakdown) && stageBreakdown.length > 0) {
+    const firstStage = stageBreakdown[0];
+    if (
+      firstStage &&
+      typeof firstStage === "object" &&
+      typeof (firstStage as { stage?: unknown }).stage === "string"
+    ) {
+      return ((firstStage as { stage: string }).stage || "asleep_unspecified").trim();
+    }
+  }
+  return logType.includes("awake") ? "awake" : "asleep_unspecified";
+}
+
+function normalizeRawDetail(detail: SleepSessionDetailPayload | null) {
+  const legacyDetail = detail as LegacySleepSessionDetailPayload | null;
+  const segments = legacyDetail?.segments ?? legacyDetail?.rawSegments ?? [];
+  const auditLogs = legacyDetail?.auditLogs ?? legacyDetail?.rawLogs ?? [];
+  const sourceRecords =
+    legacyDetail?.sourceRecords && legacyDetail.sourceRecords.length > 0
+      ? legacyDetail.sourceRecords
+      : auditLogs
+          .filter(
+            (entry): entry is SleepRawLogRecord & { startedAt: string; endedAt: string } =>
+              typeof entry.startedAt === "string" && typeof entry.endedAt === "string"
+          )
+          .map(
+            (entry): SleepSourceRecord => ({
+              id: entry.id,
+              importRunId: entry.importRunId,
+              pairingSessionId: entry.pairingSessionId,
+              sleepSessionId: entry.sleepSessionId,
+              userId: entry.userId,
+              provider: entry.source,
+              providerRecordType: entry.logType,
+              providerRecordUid: entry.externalUid ?? entry.id,
+              sourceDevice: "",
+              sourceTimezone: entry.sourceTimezone,
+              localDateKey: entry.localDateKey,
+              startedAt: entry.startedAt,
+              endedAt: entry.endedAt,
+              rawStage: inferHistoricalRawStage(entry.payload, entry.logType),
+              rawValue: null,
+              qualityKind: "historical_import",
+              payload: entry.payload,
+              metadata: entry.metadata,
+              ingestedAt: entry.createdAt
+            })
+          );
+  const rawDataStatus =
+    legacyDetail?.rawDataStatus ??
+    (sourceRecords.length > 0 ? "historical_raw" : "raw_unavailable");
+  return {
+    sourceRecords,
+    segments,
+    auditLogs,
+    rawDataStatus
+  };
 }
 
 function StageDistributionBar({
@@ -822,6 +901,7 @@ function SleepDetailPanel({
   onSave: () => void;
 }) {
   const [expandedRecordId, setExpandedRecordId] = useState<string | null>(null);
+  const normalizedRawDetail = useMemo(() => normalizeRawDetail(rawDetail), [rawDetail]);
   const efficiency =
     typeof session.derived.efficiency === "number"
       ? session.derived.efficiency
@@ -1013,10 +1093,10 @@ function SleepDetailPanel({
             {!rawDetailLoading ? (
               <div className="grid gap-5">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge className={cn("border-white/0", rawStatusTone(rawDetail?.rawDataStatus ?? "raw_unavailable"))}>
-                    {rawStatusLabel(rawDetail?.rawDataStatus ?? "raw_unavailable")}
+                  <Badge className={cn("border-white/0", rawStatusTone(normalizedRawDetail.rawDataStatus))}>
+                    {rawStatusLabel(normalizedRawDetail.rawDataStatus)}
                   </Badge>
-                  {rawDetail?.rawDataStatus === "historical_raw" ? (
+                  {normalizedRawDetail.rawDataStatus === "historical_raw" ? (
                     <Badge tone="meta">Partial evidence</Badge>
                   ) : null}
                 </div>
@@ -1025,8 +1105,8 @@ function SleepDetailPanel({
                   <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
                     Raw data
                   </div>
-                  {rawDetail?.sourceRecords.length ? (
-                    rawDetail.sourceRecords.map((record) => (
+                  {normalizedRawDetail.sourceRecords.length ? (
+                    normalizedRawDetail.sourceRecords.map((record) => (
                       <div
                         key={record.id}
                         className="rounded-[16px] border border-white/8 bg-black/18 px-4 py-3"
@@ -1104,8 +1184,8 @@ function SleepDetailPanel({
                   <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
                     Sleep segments
                   </div>
-                  {rawDetail?.segments.length ? (
-                    rawDetail.segments.map((segment) => (
+                  {normalizedRawDetail.segments.length ? (
+                    normalizedRawDetail.segments.map((segment) => (
                       <div
                         key={segment.id}
                         className="rounded-[16px] border border-white/8 bg-black/18 px-4 py-3"
