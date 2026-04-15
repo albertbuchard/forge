@@ -1471,6 +1471,33 @@ function buildSleepCalendarDay(session: MappedSleepSession) {
   };
 }
 
+function pickDisplaySleepSessions(sessions: MappedSleepSession[]) {
+  const byDateKey = new Map<string, MappedSleepSession>();
+  for (const session of sessions) {
+    const key = session.localDateKey || dayKey(session.endedAt);
+    const current = byDateKey.get(key);
+    if (!current) {
+      byDateKey.set(key, session);
+      continue;
+    }
+    const currentHasRawSegments = current.rawSegmentCount > 0 ? 1 : 0;
+    const nextHasRawSegments = session.rawSegmentCount > 0 ? 1 : 0;
+    const shouldReplace =
+      session.asleepSeconds > current.asleepSeconds ||
+      (session.asleepSeconds === current.asleepSeconds &&
+        nextHasRawSegments > currentHasRawSegments) ||
+      (session.asleepSeconds === current.asleepSeconds &&
+        nextHasRawSegments === currentHasRawSegments &&
+        Date.parse(session.endedAt) > Date.parse(current.endedAt));
+    if (shouldReplace) {
+      byDateKey.set(key, session);
+    }
+  }
+  return [...byDateKey.values()].sort(
+    (left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt)
+  );
+}
+
 function normalizeTimelineStage(
   stage: string,
   bucket: MappedSleepSegment["bucket"]
@@ -3409,11 +3436,12 @@ export function getCompanionOverview(userIds?: string[]) {
 
 export function getSleepViewData(userIds?: string[]) {
   const sessions = listSleepRows(userIds).map(mapSleepSession);
-  const recent = sessions.slice(0, 30);
-  const weekly = recent.slice(0, 7);
-  const monthly = recent.slice(0, 30);
-  const calendarWindow = sessions.slice(0, 84);
-  const latestNight = recent[0] ?? null;
+  const displaySessions = pickDisplaySleepSessions(sessions);
+  const recentDisplay = displaySessions.slice(0, 30);
+  const weekly = recentDisplay.slice(0, 7);
+  const monthly = recentDisplay.slice(0, 30);
+  const calendarWindow = displaySessions.slice(0, 84);
+  const latestNight = recentDisplay[0] ?? null;
   const weeklyBaseline =
     weekly.length > 1
       ? Math.round(average(weekly.slice(1).map((session) => session.asleepSeconds)))
@@ -3496,8 +3524,8 @@ export function getSleepViewData(userIds?: string[]) {
             .filter((value): value is number => value !== null)
         )
       ),
-      latestBedtime: recent[0]?.startedAt ?? null,
-      latestWakeTime: recent[0]?.endedAt ?? null
+      latestBedtime: latestNight?.startedAt ?? null,
+      latestWakeTime: latestNight?.endedAt ?? null
     },
     latestNight: latestNight
       ? buildSleepSurfaceNight(latestNight, weeklyBaseline)
@@ -3532,7 +3560,7 @@ export function getSleepViewData(userIds?: string[]) {
     linkBreakdown: [...linkTotals.entries()]
       .map(([entityType, count]) => ({ entityType, count }))
       .sort((left, right) => right.count - left.count),
-    sessions: recent
+    sessions: recentDisplay
   };
 }
 

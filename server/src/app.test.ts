@@ -2198,6 +2198,127 @@ test("mobile health sync stores canonical sleep nights with raw segments and exp
   }
 });
 
+test("sleep view collapses duplicate localDateKey nights into one calendar day and keeps the strongest representative", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-mobile-health-sleep-calendar-dedupe-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const pairingResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: {
+        userId: "user_operator"
+      }
+    });
+    assert.equal(pairingResponse.statusCode, 201);
+    const qrPayload = (
+      pairingResponse.json() as {
+        qrPayload: { sessionId: string; pairingToken: string };
+      }
+    ).qrPayload;
+
+    const syncResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        device: {
+          name: "Omar iPhone",
+          platform: "ios",
+          appVersion: "1.0",
+          sourceDevice: "iPhone"
+        },
+        permissions: {
+          healthKitAuthorized: true,
+          backgroundRefreshEnabled: true,
+          motionReady: false,
+          locationReady: false,
+          screenTimeReady: false
+        },
+        sleepSessions: [],
+        sleepNights: [
+          {
+            externalUid: "night_long",
+            startedAt: "2026-04-04T22:20:00.000Z",
+            endedAt: "2026-04-05T06:40:00.000Z",
+            sourceTimezone: "Europe/Zurich",
+            localDateKey: "2026-04-05",
+            timeInBedSeconds: 30_000,
+            asleepSeconds: 28_200,
+            awakeSeconds: 1_800,
+            rawSegmentCount: 4,
+            stageBreakdown: [
+              { stage: "core", seconds: 15_000 },
+              { stage: "deep", seconds: 5_400 },
+              { stage: "rem", seconds: 7_800 }
+            ],
+            recoveryMetrics: {},
+            sourceMetrics: {},
+            links: [],
+            annotations: {}
+          },
+          {
+            externalUid: "night_short",
+            startedAt: "2026-04-05T09:00:00.000Z",
+            endedAt: "2026-04-05T10:15:00.000Z",
+            sourceTimezone: "Europe/Zurich",
+            localDateKey: "2026-04-05",
+            timeInBedSeconds: 4_500,
+            asleepSeconds: 4_200,
+            awakeSeconds: 300,
+            rawSegmentCount: 0,
+            stageBreakdown: [{ stage: "core", seconds: 4_200 }],
+            recoveryMetrics: {},
+            sourceMetrics: {},
+            links: [],
+            annotations: {
+              qualitySummary: "Nap-like duplicate day row"
+            }
+          }
+        ],
+        sleepSegments: [],
+        workouts: []
+      }
+    });
+    assert.equal(syncResponse.statusCode, 200);
+
+    const sleepResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/health/sleep"
+    });
+    assert.equal(sleepResponse.statusCode, 200);
+    const sleep = (
+      sleepResponse.json() as {
+        sleep: {
+          latestNight: { sleepId: string; dateKey: string; asleepSeconds: number } | null;
+          calendarDays: Array<{ sleepId: string; dateKey: string; sleepHours: number }>;
+          sessions: Array<{ id: string }>;
+        };
+      }
+    ).sleep;
+
+    assert.equal(sleep.sessions.length, 1);
+    assert.equal(sleep.calendarDays.length, 1);
+    assert.equal(sleep.calendarDays[0]?.dateKey, "2026-04-05");
+    assert.equal(sleep.latestNight?.dateKey, "2026-04-05");
+    assert.equal(sleep.latestNight?.asleepSeconds, 28_200);
+    assert.equal(sleep.sessions[0]?.id, sleep.latestNight?.sleepId);
+    assert.equal(sleep.latestNight?.sleepId, sleep.calendarDays[0]?.sleepId);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("mobile health sync accepts waiting_for_snapshot screen time capture state", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-screen-time-waiting-"));
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
