@@ -237,6 +237,7 @@ function buildKnowledgeGraphSearchFromLocation(
 }
 
 const ShellContext = createContext<ShellContextValue | null>(null);
+let lastKnownShellContext: ShellContextValue | null = null;
 
 type ShellRouteDefinition = {
   id: string;
@@ -2877,6 +2878,7 @@ export function AppShell() {
       setStartWorkOpen(true);
     }
   };
+  lastKnownShellContext = contextValue;
 
   return (
     <I18nProvider locale={settingsQuery.data.settings.localePreference}>
@@ -3172,7 +3174,14 @@ export function AppShell() {
 }
 
 export function useForgeShell() {
-  return useContext(ShellContext) ?? useOutletContext<ShellContextValue>();
+  const shellContext = useContext(ShellContext);
+  const outletContext = useOutletContext<ShellContextValue | null>();
+  const resolvedContext =
+    shellContext ?? outletContext ?? lastKnownShellContext;
+  if (!resolvedContext) {
+    throw new Error("Forge shell context is unavailable.");
+  }
+  return resolvedContext;
 }
 
 export function buildSidebarMetrics(
