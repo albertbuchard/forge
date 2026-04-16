@@ -1014,6 +1014,16 @@ test("goal detail, operator context, and retroactive work logging are available 
         overview: {
           snapshot: { goals: Array<{ id: string }> };
           operator: { focusTasks: Array<unknown> };
+          sleep: {
+            summary: {
+              totalSleepSeconds: number;
+              averageSleepSeconds: number;
+              latestBedtime: string | null;
+              latestWakeTime: string | null;
+            };
+            latestNight: { id: string } | null;
+            sessions: Array<{ id: string }>;
+          };
           routeGuide: {
             preferredStart: string;
             mainRoutes: Array<{ id: string }>;
@@ -1024,6 +1034,20 @@ test("goal detail, operator context, and retroactive work logging are available 
     ).overview;
     assert.ok(overview.snapshot.goals.length >= 1);
     assert.ok(Array.isArray(overview.operator.focusTasks));
+    assert.ok(typeof overview.sleep.summary.totalSleepSeconds === "number");
+    assert.ok(typeof overview.sleep.summary.averageSleepSeconds === "number");
+    assert.ok(Array.isArray(overview.sleep.sessions));
+    if (overview.sleep.latestNight) {
+      assert.ok(typeof overview.sleep.latestNight.id === "string");
+      assert.ok(
+        typeof overview.sleep.summary.latestBedtime === "string" ||
+          overview.sleep.summary.latestBedtime === null
+      );
+      assert.ok(
+        typeof overview.sleep.summary.latestWakeTime === "string" ||
+          overview.sleep.summary.latestWakeTime === null
+      );
+    }
     assert.equal(
       overview.routeGuide.preferredStart,
       "/api/v1/operator/overview"

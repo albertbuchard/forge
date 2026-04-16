@@ -2942,6 +2942,7 @@ export interface OperatorOverviewPayload {
   generatedAt: string;
   snapshot: ForgeSnapshot;
   operator: OperatorContextPayload;
+  sleep: SleepViewData;
   domains: Array<{
     id: string;
     slug: string;

@@ -8126,6 +8126,7 @@
           "generatedAt",
           "snapshot",
           "operator",
+          "sleep",
           "domains",
           "psyche",
           "onboarding",
@@ -8143,6 +8144,9 @@
           },
           "operator": {
             "$ref": "#/components/schemas/OperatorContextPayload"
+          },
+          "sleep": {
+            "$ref": "#/components/schemas/SleepViewData"
           },
           "domains": {
             "type": "array",
