@@ -4781,6 +4781,7 @@ function buildOperatorOverview(request) {
         generatedAt: new Date().toISOString(),
         snapshot: buildV1Context(userIds),
         operator: buildOperatorContext(userIds),
+        sleep: getSleepViewData(userIds),
         domains: listDomains(),
         psyche: canReadPsyche ? getPsycheOverview(userIds) : null,
         onboarding: buildAgentOnboardingPayload(request),
