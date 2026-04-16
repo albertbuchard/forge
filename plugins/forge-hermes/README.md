@@ -6,6 +6,7 @@ This plugin follows the Hermes plugin guide directly:
 
 - a Python package with a `hermes_agent.plugins` entry point for pip discovery
 - a Hermes plugin manifest and registration module that expose Forge to Hermes
+- bundled plugin skills that prefer native Hermes plugin-skill registration
 - bundled Forge runtime assets so Hermes can start Forge safely without repo-only runtime imports
 
 It exposes the same curated Forge contract as the OpenClaw adapter, but through Hermes' Python plugin system.
@@ -37,10 +38,12 @@ From the Forge repo:
 
 ```bash
 ~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
-~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade ./plugins/forge-hermes
+~/.hermes/hermes-agent/venv/bin/python -m pip uninstall -y forge-hermes-plugin
+~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade --editable ./plugins/forge-hermes
 ```
 
-That installs the package into Hermes' own Python environment through `pip`, creates
+That installs the package into Hermes' own Python environment through `pip`, keeps the
+live code pointed at this local dev folder, creates
 `~/.hermes/forge/config.json` automatically on first plugin load if it is missing, and defaults the Forge runtime data root to
 `~/.hermes/forge` so local Hermes usage does not write into the repo root.
 
@@ -48,11 +51,12 @@ Use `~/.hermes/hermes-agent/venv/bin/python` so the package lands in the Python
 environment Hermes actually runs and Hermes can discover Forge through the package
 entry point on the next startup.
 
-If you want editable package mode while developing from this repo:
+If you want a non-editable wheel-style install instead:
 
 ```bash
 ~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
-~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade --editable ./plugins/forge-hermes
+~/.hermes/hermes-agent/venv/bin/python -m pip uninstall -y forge-hermes-plugin
+~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade ./plugins/forge-hermes
 ```
 
 ## Runtime behavior
@@ -160,8 +164,20 @@ health surfaces, markdown vault, backlinks, and metadata index stay aligned.
 - `FORGE_TIMEOUT_MS`
 - `FORGE_DATA_ROOT`
 
+## Bundled Skills
+
+Forge Hermes now follows the newer Hermes plugin-skill recommendation when the
+runtime supports it:
+
+- first try `ctx.register_skill(...)` for bundled plugin skills
+- fall back to the legacy `~/.hermes/skills/forge-hermes/` copy pattern only on
+  older Hermes builds that do not expose `register_skill` yet
+
+That keeps installs smooth on the current Hermes release while aligning the
+plugin with the newer documentation.
+
 ## Notes
 
 - the recommended install path is now pip-based Hermes entry-point discovery, not the old folder-plugin symlink
 - edit `~/.hermes/forge/config.json` if you want to move the data root or pin a different local port
-- the bundled skill pack is installed automatically on first plugin load under `~/.hermes/skills/forge-hermes/` if those files do not already exist
+- bundled skills prefer native plugin registration and only copy into `~/.hermes/skills/forge-hermes/` as a compatibility fallback on older Hermes runtimes

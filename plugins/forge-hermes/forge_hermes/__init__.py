@@ -14,9 +14,14 @@ from .version import __version__
 
 logger = logging.getLogger(__name__)
 PACKAGE_DIR = Path(__file__).resolve().parent
+SKILL_FILES = {
+    "forge-hermes": PACKAGE_DIR / "skill.md",
+    "entity-conversation-playbooks": PACKAGE_DIR / "entity_conversation_playbooks.md",
+    "psyche-entity-playbooks": PACKAGE_DIR / "psyche_entity_playbooks.md",
+}
 
 
-def _install_skill_bundle() -> None:
+def _install_legacy_skill_bundle() -> None:
     try:
         from hermes_cli.config import get_hermes_home  # type: ignore
 
@@ -33,6 +38,29 @@ def _install_skill_bundle() -> None:
         shutil.copy2(source, destination)
 
 
+def _register_skill_bundle(ctx) -> None:
+    register_skill = getattr(ctx, "register_skill", None)
+    if callable(register_skill):
+        registered = 0
+        for skill_name, source in SKILL_FILES.items():
+            if not source.exists():
+                logger.warning("Forge Hermes skill source missing: %s", source)
+                continue
+            register_skill(skill_name, source)
+            registered += 1
+        logger.info(
+            "Registered %s Forge Hermes bundled skills through ctx.register_skill",
+            registered,
+        )
+        return
+
+    logger.info(
+        "Hermes runtime does not expose ctx.register_skill yet; "
+        "falling back to legacy ~/.hermes/skills installation"
+    )
+    _install_legacy_skill_bundle()
+
+
 def register(ctx) -> None:
     ensure_plugin_config()
 
@@ -44,5 +72,5 @@ def register(ctx) -> None:
             handler=build_handler(spec["name"]),
         )
 
-    _install_skill_bundle()
+    _register_skill_bundle(ctx)
     logger.info("Registered Forge Hermes plugin with %s tools", len(TOOL_CATALOG))

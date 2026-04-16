@@ -42,7 +42,7 @@ The Hermes adapter now follows the native Hermes plugin guide structure end to e
 - `__init__.py`
 - `schemas.py`
 - `tools.py`
-- bundled `skill.md`
+- bundled plugin skills with native registration when supported
 - `pyproject.toml` with a `hermes_agent.plugins` entry point
 
 Its job is to expose the same curated Forge operating surface as the OpenClaw plugin:
@@ -64,23 +64,26 @@ From the Forge repo:
 
 ```bash
 ~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
-~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade ./plugins/forge-hermes
+~/.hermes/hermes-agent/venv/bin/python -m pip uninstall -y forge-hermes-plugin
+~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade --editable ./plugins/forge-hermes
 ```
 
 That does three things:
 
 - installs the plugin into Hermes' own Python environment through `pip`
+- keeps Hermes pointed at the local Forge dev folder in editable mode
 - creates `~/.hermes/forge/config.json` automatically on first plugin load if it is missing
 - loads Forge through the standard `hermes_agent.plugins` entry point on the next Hermes startup
 
 Use Hermes' own runtime Python at `~/.hermes/hermes-agent/venv/bin/python` so the
 plugin lives in the same environment Hermes actually runs.
 
-If you want editable package mode while developing from this repo, use:
+If you want a non-editable install instead, use:
 
 ```bash
 ~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
-~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade --editable ./plugins/forge-hermes
+~/.hermes/hermes-agent/venv/bin/python -m pip uninstall -y forge-hermes-plugin
+~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade ./plugins/forge-hermes
 ```
 
 The generated config file is also the durable user-editable settings surface for the
@@ -185,8 +188,20 @@ If Hermes is meant to operate as its own bot user inside that shared runtime,
 create that bot in `Settings -> Users` and write records with that bot's
 `userId` instead of defaulting to the human operator.
 
+## Bundled skills
+
+The current Forge Hermes plugin now prefers the newer Hermes plugin-skill model:
+
+- if the runtime exposes `ctx.register_skill(...)`, Forge registers its bundled
+  skills natively as plugin skills
+- if the runtime is older and does not expose that method yet, Forge falls back
+  to copying the skill bundle into `~/.hermes/skills/forge-hermes/`
+
+That keeps installs smooth on current Hermes builds while matching the newer
+plugin guidance as closely as possible.
+
 ## Notes
 
-- the plugin installs its bundled Forge skill pack to `~/.hermes/skills/forge-hermes/` on first load if the user does not already have those files there
+- bundled skills use native plugin registration when available and only use `~/.hermes/skills/forge-hermes/` as a compatibility fallback
 - remote write calls still need `FORGE_API_TOKEN` unless the target supports trusted local or Tailscale operator-session bootstrap
 - the curated Forge tool names stay identical to the OpenClaw adapter so the operating model does not drift between agent platforms
