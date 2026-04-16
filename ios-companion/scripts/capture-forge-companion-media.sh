@@ -2,8 +2,9 @@
 
 set -euo pipefail
 
-ROOT_DIR="/Users/omarclaw/Documents/aurel-monorepo/projects/forge"
-IOS_DIR="$ROOT_DIR/ios-companion"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+IOS_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+ROOT_DIR="$(cd "${IOS_DIR}/.." && pwd)"
 PROJECT_PATH="$IOS_DIR/ForgeCompanion.xcodeproj"
 SCHEME="ForgeCompanion"
 DERIVED_DATA_PATH="$IOS_DIR/.artifacts/screenshot-derived-data"
