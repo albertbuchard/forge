@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -142,6 +142,22 @@ vi.mock("@/components/ui/info-tooltip", () => ({
   InfoTooltip: () => null
 }));
 
+function mockMatchMedia(matches: boolean) {
+  Object.defineProperty(window, "matchMedia", {
+    writable: true,
+    value: vi.fn().mockImplementation(() => ({
+      matches,
+      media: "(max-width: 1023px)",
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn()
+    }))
+  });
+}
+
 function renderWithProviders() {
   const client = new QueryClient({
     defaultOptions: {
@@ -163,19 +179,7 @@ function renderWithProviders() {
 
 describe("TaskDetailPage", () => {
   beforeEach(() => {
-    Object.defineProperty(window, "matchMedia", {
-      writable: true,
-      value: vi.fn().mockImplementation(() => ({
-        matches: false,
-        media: "(max-width: 1023px)",
-        onchange: null,
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        dispatchEvent: vi.fn()
-      }))
-    });
+    mockMatchMedia(false);
     useForgeShellMock.mockReturnValue({
       selectedUserIds: ["user_operator"],
       patchTaskStatus: vi.fn().mockResolvedValue(undefined),
@@ -184,8 +188,236 @@ describe("TaskDetailPage", () => {
       snapshot: {
         lifeForce: null,
         goals: [],
-        tags: [],
-        users: [],
+        tags: [
+          {
+            id: "tag_ship",
+            name: "feature",
+            color: "#60a5fa",
+            createdAt: "2026-04-10T08:00:00.000Z",
+            updatedAt: "2026-04-10T08:00:00.000Z"
+          }
+        ],
+        users: [
+          {
+            id: "user_operator",
+            kind: "human",
+            handle: "albert",
+            displayName: "Albert",
+            description: "",
+            accentColor: "#60a5fa",
+            createdAt: "2026-04-10T08:00:00.000Z",
+            updatedAt: "2026-04-10T08:00:00.000Z"
+          },
+          {
+            id: "user_bot",
+            kind: "bot",
+            handle: "forge-bot",
+            displayName: "Forge Bot",
+            description: "",
+            accentColor: "#f472b6",
+            createdAt: "2026-04-10T08:00:00.000Z",
+            updatedAt: "2026-04-10T08:00:00.000Z"
+          }
+        ],
+        tasks: [],
+        workItems: [
+          {
+            id: "issue_1",
+            title: "Task architecture",
+            description: "Parent issue",
+            level: "issue",
+            status: "focus",
+            priority: "high",
+            owner: "Albert",
+            goalId: null,
+            projectId: null,
+            parentWorkItemId: null,
+            dueDate: null,
+            effort: "deep",
+            energy: "high",
+            points: 55,
+            plannedDurationSeconds: 86400,
+            schedulingRules: null,
+            sortOrder: 0,
+            resolutionKind: null,
+            splitParentTaskId: null,
+            aiInstructions: "",
+            executionMode: "afk",
+            acceptanceCriteria: [],
+            blockerLinks: [],
+            completionReport: null,
+            gitRefs: [],
+            completedAt: null,
+            createdAt: "2026-04-10T09:00:00.000Z",
+            updatedAt: "2026-04-11T09:00:00.000Z",
+            tagIds: [],
+            time: {
+              totalTrackedSeconds: 0,
+              totalCreditedSeconds: 0,
+              todayCreditedSeconds: 0,
+              liveTrackedSeconds: 0,
+              liveCreditedSeconds: 0,
+              manualAdjustedSeconds: 0,
+              activeRunCount: 0
+            }
+          },
+          {
+            id: "task_1",
+            title: "Deep work writeup",
+            description: "Finish the spec and clean up notes.",
+            level: "task",
+            status: "in_progress",
+            priority: "high",
+            owner: "Albert",
+            goalId: null,
+            projectId: null,
+            parentWorkItemId: "issue_1",
+            dueDate: null,
+            effort: "deep",
+            energy: "high",
+            points: 34,
+            plannedDurationSeconds: 86400,
+            schedulingRules: null,
+            sortOrder: 1,
+            resolutionKind: null,
+            splitParentTaskId: null,
+            aiInstructions: "Use the kanban patterns and finish in one focused AI pass.",
+            executionMode: "afk",
+            acceptanceCriteria: ["Given the task page, when it loads, then the new fields are visible."],
+            blockerLinks: [
+              {
+                entityType: "task",
+                entityId: "task_blocker_1",
+                label: "Waiting on timer polish"
+              }
+            ],
+            completionReport: {
+              workSummary: "Added the task dossier and mobile-safe action rail.",
+              modifiedFiles: [
+                "src/pages/task-detail-page.tsx",
+                "src/pages/task-detail-page.test.tsx"
+              ],
+              linkedGitRefIds: ["gitref_commit_1"]
+            },
+            gitRefs: [
+              {
+                id: "gitref_commit_1",
+                workItemId: "task_1",
+                refType: "commit",
+                provider: "git",
+                repository: "forge",
+                refValue: "abc1234",
+                url: null,
+                displayTitle: "task detail redesign",
+                createdAt: "2026-04-11T09:30:00.000Z",
+                updatedAt: "2026-04-11T09:30:00.000Z"
+              },
+              {
+                id: "gitref_branch_1",
+                workItemId: "task_1",
+                refType: "branch",
+                provider: "git",
+                repository: "forge",
+                refValue: "main",
+                url: "https://example.com/forge/tree/main",
+                displayTitle: "main branch",
+                createdAt: "2026-04-11T09:30:00.000Z",
+                updatedAt: "2026-04-11T09:30:00.000Z"
+              }
+            ],
+            completedAt: null,
+            createdAt: "2026-04-10T09:00:00.000Z",
+            updatedAt: "2026-04-11T09:00:00.000Z",
+            tagIds: ["tag_ship"],
+            time: {
+              totalTrackedSeconds: 8100,
+              totalCreditedSeconds: 7200,
+              todayCreditedSeconds: 3600,
+              liveTrackedSeconds: 900,
+              liveCreditedSeconds: 600,
+              manualAdjustedSeconds: 300,
+              activeRunCount: 1
+            },
+            userId: "user_operator",
+            user: {
+              id: "user_operator",
+              kind: "human",
+              handle: "albert",
+              displayName: "Albert",
+              description: "",
+              accentColor: "#60a5fa",
+              createdAt: "2026-04-10T08:00:00.000Z",
+              updatedAt: "2026-04-10T08:00:00.000Z"
+            },
+            assigneeUserIds: ["user_bot"],
+            assignees: [
+              {
+                id: "user_bot",
+                kind: "bot",
+                handle: "forge-bot",
+                displayName: "Forge Bot",
+                description: "",
+                accentColor: "#f472b6",
+                createdAt: "2026-04-10T08:00:00.000Z",
+                updatedAt: "2026-04-10T08:00:00.000Z"
+              }
+            ],
+            actionPointSummary: {
+              costBand: "standard",
+              totalCostAp: 100,
+              expectedDurationSeconds: 86400,
+              sustainRateApPerHour: 4.17,
+              spentTodayAp: 4.17,
+              spentTotalAp: 8.33,
+              remainingAp: 91.67
+            },
+            splitSuggestion: {
+              shouldSplit: true,
+              reason: "Projected work exceeds the default healthy threshold.",
+              thresholdSeconds: 172800
+            }
+          },
+          {
+            id: "subtask_1",
+            title: "Polish badge layout",
+            description: "Child subtask",
+            level: "subtask",
+            status: "backlog",
+            priority: "medium",
+            owner: "Albert",
+            goalId: null,
+            projectId: null,
+            parentWorkItemId: "task_1",
+            dueDate: null,
+            effort: "light",
+            energy: "low",
+            points: 13,
+            plannedDurationSeconds: 3600,
+            schedulingRules: null,
+            sortOrder: 2,
+            resolutionKind: null,
+            splitParentTaskId: null,
+            aiInstructions: "",
+            executionMode: null,
+            acceptanceCriteria: [],
+            blockerLinks: [],
+            completionReport: null,
+            gitRefs: [],
+            completedAt: null,
+            createdAt: "2026-04-10T09:00:00.000Z",
+            updatedAt: "2026-04-11T09:00:00.000Z",
+            tagIds: [],
+            time: {
+              totalTrackedSeconds: 0,
+              totalCreditedSeconds: 0,
+              todayCreditedSeconds: 0,
+              liveTrackedSeconds: 0,
+              liveCreditedSeconds: 0,
+              manualAdjustedSeconds: 0,
+              activeRunCount: 0
+            }
+          }
+        ],
         dashboard: {
           projects: []
         }
@@ -288,27 +520,79 @@ describe("TaskDetailPage", () => {
         id: "task_1",
         title: "Deep work writeup",
         description: "Finish the spec and clean up notes.",
+        level: "task",
         status: "in_progress",
-        priority: "p1",
+        priority: "high",
         owner: "Albert",
         goalId: null,
         projectId: null,
+        parentWorkItemId: "issue_1",
         dueDate: null,
-        effort: "medium",
-        energy: "deep",
+        effort: "deep",
+        energy: "high",
         points: 34,
         plannedDurationSeconds: 86400,
         schedulingRules: null,
         sortOrder: 1,
         resolutionKind: null,
         splitParentTaskId: null,
+        aiInstructions: "Use the kanban patterns and finish in one focused AI pass.",
+        executionMode: "afk",
+        acceptanceCriteria: [
+          "Given the task page, when it loads, then the new fields are visible."
+        ],
+        blockerLinks: [
+          {
+            entityType: "task",
+            entityId: "task_blocker_1",
+            label: "Waiting on timer polish"
+          }
+        ],
+        completionReport: {
+          workSummary: "Added the task dossier and mobile-safe action rail.",
+          modifiedFiles: [
+            "src/pages/task-detail-page.tsx",
+            "src/pages/task-detail-page.test.tsx"
+          ],
+          linkedGitRefIds: ["gitref_commit_1"]
+        },
+        gitRefs: [
+          {
+            id: "gitref_commit_1",
+            workItemId: "task_1",
+            refType: "commit",
+            provider: "git",
+            repository: "forge",
+            refValue: "abc1234",
+            url: null,
+            displayTitle: "task detail redesign",
+            createdAt: "2026-04-11T09:30:00.000Z",
+            updatedAt: "2026-04-11T09:30:00.000Z"
+          },
+          {
+            id: "gitref_branch_1",
+            workItemId: "task_1",
+            refType: "branch",
+            provider: "git",
+            repository: "forge",
+            refValue: "main",
+            url: "https://example.com/forge/tree/main",
+            displayTitle: "main branch",
+            createdAt: "2026-04-11T09:30:00.000Z",
+            updatedAt: "2026-04-11T09:30:00.000Z"
+          }
+        ],
         completedAt: null,
         createdAt: "2026-04-10T09:00:00.000Z",
         updatedAt: "2026-04-11T09:00:00.000Z",
-        tagIds: [],
+        tagIds: ["tag_ship"],
         time: {
+          totalTrackedSeconds: 8100,
           totalCreditedSeconds: 7200,
           todayCreditedSeconds: 3600,
+          liveTrackedSeconds: 900,
+          liveCreditedSeconds: 600,
+          manualAdjustedSeconds: 300,
           activeRunCount: 1
         },
         actionPointSummary: {
@@ -328,8 +612,23 @@ describe("TaskDetailPage", () => {
         userId: "user_operator",
         user: {
           id: "user_operator",
+          kind: "human",
+          handle: "albert",
           displayName: "Albert"
-        }
+        },
+        assigneeUserIds: ["user_bot"],
+        assignees: [
+          {
+            id: "user_bot",
+            kind: "bot",
+            handle: "forge-bot",
+            displayName: "Forge Bot",
+            description: "",
+            accentColor: "#f472b6",
+            createdAt: "2026-04-10T08:00:00.000Z",
+            updatedAt: "2026-04-10T08:00:00.000Z"
+          }
+        ]
       },
       goal: null,
       project: null,
@@ -341,6 +640,7 @@ describe("TaskDetailPage", () => {
   });
 
   afterEach(() => {
+    cleanup();
     vi.clearAllMocks();
   });
 
@@ -348,6 +648,19 @@ describe("TaskDetailPage", () => {
     renderWithProviders();
 
     expect(await screen.findByText("34 xp · 100 AP")).toBeInTheDocument();
+    expect(screen.getByText("Execution profile")).toBeInTheDocument();
+    expect(screen.getAllByText("AI session task").length).toBeGreaterThan(0);
+    expect(screen.getByText("Bot collaboration live")).toBeInTheDocument();
+    expect(screen.getByText("feature")).toBeInTheDocument();
+    expect(screen.getByText("Waiting on timer polish")).toBeInTheDocument();
+    expect(screen.getByText("Added the task dossier and mobile-safe action rail.")).toBeInTheDocument();
+    expect(screen.getByText("src/pages/task-detail-page.tsx")).toBeInTheDocument();
+    expect(screen.getByText("abc1234")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open ref/i })).toHaveAttribute(
+      "href",
+      "https://example.com/forge/tree/main"
+    );
+    expect(screen.getByText("Polish badge layout")).toBeInTheDocument();
     expect(screen.getByText("Action Point load")).toBeInTheDocument();
     expect(screen.getAllByText("4.2 AP").length).toBeGreaterThan(0);
     expect(screen.getAllByText("4.2 AP/h").length).toBeGreaterThan(0);
@@ -368,5 +681,17 @@ describe("TaskDetailPage", () => {
     expect(
       screen.getByText(/This task only debits the Action Points you actually worked today/i)
     ).toBeInTheDocument();
+  });
+
+  it("keeps edit and status controls visible on mobile", async () => {
+    mockMatchMedia(true);
+    renderWithProviders();
+
+    expect(
+      (await screen.findAllByRole("button", { name: /^Edit task$/i })).length
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByRole("button", { name: /^Change status$/i }).length
+    ).toBeGreaterThan(0);
   });
 });

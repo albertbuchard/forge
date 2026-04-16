@@ -472,6 +472,13 @@ export function createHabitCheckIn(habitId, input, activity) {
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
                 .run(`hci_${randomUUID().replaceAll("-", "").slice(0, 10)}`, habitId, parsed.dateKey, parsed.status, parsed.note, reward.deltaXp, now, now);
         }
+        if (parsed.description !== undefined) {
+            getDatabase()
+                .prepare(`UPDATE habits
+           SET description = ?, updated_at = ?
+           WHERE id = ?`)
+                .run(parsed.description, now, habitId);
+        }
         recordActivityEvent({
             entityType: "habit",
             entityId: habit.id,
@@ -490,7 +497,8 @@ export function createHabitCheckIn(habitId, input, activity) {
                 dateKey: parsed.dateKey,
                 status: parsed.status,
                 polarity: habit.polarity,
-                deltaXp: reward.deltaXp
+                deltaXp: reward.deltaXp,
+                descriptionReplaced: parsed.description !== undefined
             }
         });
         if (parsed.status === "done") {

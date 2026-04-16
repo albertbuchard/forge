@@ -128,9 +128,7 @@ export function UserRelationshipFlowDialog({
 
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="grid gap-3">
-              <div className="text-sm font-medium text-white">
-                Access level
-              </div>
+              <div className="text-sm font-medium text-white">Access level</div>
               <FlowChoiceGrid
                 columns={2}
                 value={value.accessLevel}
@@ -171,8 +169,7 @@ export function UserRelationshipFlowDialog({
                     {
                       value: "this_arrow",
                       label: "This arrow",
-                      description:
-                        "Only change the exact direction you opened."
+                      description: "Only change the exact direction you opened."
                     },
                     {
                       value: "both_arrows",
@@ -198,7 +195,9 @@ export function UserRelationshipFlowDialog({
                       ? "border-[rgba(244,185,122,0.35)] bg-[rgba(244,185,122,0.08)]"
                       : "border-white/8 bg-white/[0.03] hover:bg-white/[0.05]"
                   }`}
-                  onClick={() => setValue({ rights: { ...value.rights, ...preset.rights } })}
+                  onClick={() =>
+                    setValue({ rights: { ...value.rights, ...preset.rights } })
+                  }
                 >
                   <div className="text-sm font-medium text-white">
                     {preset.label}
@@ -327,9 +326,7 @@ export function UserRelationshipFlowDialog({
             </div>
 
             <div className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
-              <div className="text-sm font-medium text-white">
-                Save scope
-              </div>
+              <div className="text-sm font-medium text-white">Save scope</div>
               <div className="mt-3 text-sm leading-6 text-white/58">
                 {value.applyScope === "both_arrows" && reverseGrant
                   ? "Forge will apply the same access level and rights to both directions of this pair."
@@ -372,6 +369,9 @@ export function UserRelationshipFlowDialog({
       description="Edit the exact directional contract between two users without keeping the full rights editor pinned on the page."
       value={draft}
       onChange={setDraft}
+      draftPersistenceKey={
+        grant ? `users.relationship.${grant.id}` : "users.relationship.new"
+      }
       steps={steps}
       submitLabel="Save relationship"
       pending={pending}

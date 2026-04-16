@@ -2734,6 +2734,9 @@ export function StrategyDialog({
       description="Strategies connect goals, projects, and tasks into a guided multi-step plan with a focused sequence builder at the end."
       value={draft}
       onChange={setDraft}
+      draftPersistenceKey={
+        editingStrategy ? `strategy.${editingStrategy.id}` : "strategy.new"
+      }
       steps={steps}
       initialStepId={initialStepId}
       contentClassName="lg:h-[min(56rem,calc(100vh-1rem))] lg:w-[min(78rem,calc(100vw-1.5rem))]"

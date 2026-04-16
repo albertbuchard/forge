@@ -7,7 +7,11 @@ import {
 } from "@/components/flows/question-flow-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { WORK_BLOCK_PRESETS, WEEKDAY_LABELS, minutesToLabel } from "@/lib/calendar-ui";
+import {
+  WORK_BLOCK_PRESETS,
+  WEEKDAY_LABELS,
+  minutesToLabel
+} from "@/lib/calendar-ui";
 import {
   estimateWorkBlockTemplateActionPointLoad,
   formatLifeForceAp,
@@ -47,7 +51,9 @@ function buildDraft(template?: WorkBlockTemplate | null): WorkBlockDraft {
       endsOn: template.endsOn,
       blockingState: template.blockingState,
       activityPresetKey: getCalendarActivityPresetKey(template.actionProfile),
-      customSustainRateApPerHour: getCalendarActivityCustomRate(template.actionProfile)
+      customSustainRateApPerHour: getCalendarActivityCustomRate(
+        template.actionProfile
+      )
     };
   }
 
@@ -112,8 +118,7 @@ function WorkBlockApPreview({ draft }: { draft: WorkBlockDraft }) {
       </div>
       <div className="mt-3 text-sm leading-6 text-white/58">
         This is the default Life Force container drain for each occurrence of
-        the block when no richer task run or timebox already covers that
-        window.
+        the block when no richer task run or timebox already covers that window.
       </div>
     </div>
   );
@@ -132,7 +137,9 @@ export function WorkBlockFlowDialog({
   pending?: boolean;
   template?: WorkBlockTemplate | null;
 }) {
-  const [draft, setDraft] = useState<WorkBlockDraft>(() => buildDraft(template));
+  const [draft, setDraft] = useState<WorkBlockDraft>(() =>
+    buildDraft(template)
+  );
   const [submitError, setSubmitError] = useState<string | null>(null);
   const isEditing = template !== null;
 
@@ -196,10 +203,14 @@ export function WorkBlockFlowDialog({
                 value={value.kind}
                 columns={3}
                 onChange={(next) => {
-                  const preset = WORK_BLOCK_PRESETS.find((entry) => entry.kind === next);
+                  const preset = WORK_BLOCK_PRESETS.find(
+                    (entry) => entry.kind === next
+                  );
                   if (preset) {
                     const defaultWeekDays =
-                      preset.kind === "holiday" ? [0, 1, 2, 3, 4, 5, 6] : [1, 2, 3, 4, 5];
+                      preset.kind === "holiday"
+                        ? [0, 1, 2, 3, 4, 5, 6]
+                        : [1, 2, 3, 4, 5];
                     setValue({
                       kind: preset.kind,
                       title: preset.title,
@@ -271,7 +282,9 @@ export function WorkBlockFlowDialog({
                   max={1440}
                   step={15}
                   value={value.startMinute}
-                  onChange={(event) => setValue({ startMinute: Number(event.target.value) || 0 })}
+                  onChange={(event) =>
+                    setValue({ startMinute: Number(event.target.value) || 0 })
+                  }
                 />
               </FlowField>
               <FlowField label="End minute">
@@ -281,7 +294,9 @@ export function WorkBlockFlowDialog({
                   max={1440}
                   step={15}
                   value={value.endMinute}
-                  onChange={(event) => setValue({ endMinute: Number(event.target.value) || 0 })}
+                  onChange={(event) =>
+                    setValue({ endMinute: Number(event.target.value) || 0 })
+                  }
                 />
               </FlowField>
             </div>
@@ -306,9 +321,10 @@ export function WorkBlockFlowDialog({
               </FlowField>
             </div>
             <div className="text-sm leading-6 text-white/54">
-              Leave the end date empty to keep repeating indefinitely. Holiday blocks work well
-              with all seven weekdays and `0-1440`, and they still carry AP load because
-              leisure and holiday time are real activities.
+              Leave the end date empty to keep repeating indefinitely. Holiday
+              blocks work well with all seven weekdays and `0-1440`, and they
+              still carry AP load because leisure and holiday time are real
+              activities.
             </div>
             <FlowField label="Weekdays">
               <div className="flex flex-wrap gap-2">
@@ -353,18 +369,22 @@ export function WorkBlockFlowDialog({
               <FlowChoiceGrid
                 value={value.blockingState}
                 onChange={(next) =>
-                  setValue({ blockingState: next as WorkBlockDraft["blockingState"] })
+                  setValue({
+                    blockingState: next as WorkBlockDraft["blockingState"]
+                  })
                 }
                 options={[
                   {
                     value: "blocked",
                     label: "Blocks work",
-                    description: "Starting blocked tasks should require an explicit override."
+                    description:
+                      "Starting blocked tasks should require an explicit override."
                   },
                   {
                     value: "allowed",
                     label: "Allows work",
-                    description: "Use this for protected windows where the right tasks should fit."
+                    description:
+                      "Use this for protected windows where the right tasks should fit."
                   }
                 ]}
               />
@@ -404,6 +424,11 @@ export function WorkBlockFlowDialog({
       }
       value={draft}
       onChange={setDraft}
+      draftPersistenceKey={
+        template
+          ? `calendar.work-block.${template.id}`
+          : "calendar.work-block.new"
+      }
       steps={steps}
       submitLabel={isEditing ? "Save changes" : "Save work block"}
       pending={pending}
@@ -411,19 +436,27 @@ export function WorkBlockFlowDialog({
       error={submitError}
       onSubmit={async () => {
         if (!draft.title.trim()) {
-          setSubmitError("Give the block a title so it stays readable in the calendar.");
+          setSubmitError(
+            "Give the block a title so it stays readable in the calendar."
+          );
           return;
         }
         if (draft.weekDays.length === 0) {
-          setSubmitError("Select at least one weekday for the recurring block.");
+          setSubmitError(
+            "Select at least one weekday for the recurring block."
+          );
           return;
         }
         if (draft.endMinute <= draft.startMinute) {
-          setSubmitError("The end minute needs to be later than the start minute.");
+          setSubmitError(
+            "The end minute needs to be later than the start minute."
+          );
           return;
         }
         if (draft.startsOn && draft.endsOn && draft.endsOn < draft.startsOn) {
-          setSubmitError("The end date needs to be on or after the start date.");
+          setSubmitError(
+            "The end date needs to be on or after the start date."
+          );
           return;
         }
         try {
@@ -435,7 +468,9 @@ export function WorkBlockFlowDialog({
           onOpenChange(false);
         } catch (error) {
           setSubmitError(
-            error instanceof Error ? error.message : "Forge could not save this work block."
+            error instanceof Error
+              ? error.message
+              : "Forge could not save this work block."
           );
         }
       }}

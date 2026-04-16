@@ -1,14 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
-import { FlowField, QuestionFlowDialog, type QuestionFlowStep } from "@/components/flows/question-flow-dialog";
+import {
+  FlowField,
+  QuestionFlowDialog,
+  type QuestionFlowStep
+} from "@/components/flows/question-flow-dialog";
 import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
 import { AtlasPanel } from "@/components/psyche/atlas-panel";
-import { EntityLinkMultiSelect, type EntityLinkOption } from "@/components/psyche/entity-link-multiselect";
+import {
+  EntityLinkMultiSelect,
+  type EntityLinkOption
+} from "@/components/psyche/entity-link-multiselect";
 import { OrbitMap } from "@/components/psyche/orbit-map";
 import { PsycheSectionNav } from "@/components/psyche/psyche-section-nav";
 import { SchemaBadge } from "@/components/psyche/schema-badge";
-import { psycheFocusClass, usePsycheFocusTarget } from "@/components/psyche/use-psyche-focus-target";
+import {
+  psycheFocusClass,
+  usePsycheFocusTarget
+} from "@/components/psyche/use-psyche-focus-target";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
@@ -22,8 +32,16 @@ import { UserBadge } from "@/components/ui/user-badge";
 import { UserSelectField } from "@/components/ui/user-select-field";
 import { prependEntityToCollection } from "@/lib/query-cache";
 import { getEntityNotesSummary } from "@/lib/note-helpers";
-import { behaviorPatternSchema, type BehaviorPatternInput } from "@/lib/psyche-schemas";
-import type { BehaviorPattern, BeliefEntry, ModeProfile, SchemaCatalogEntry } from "@/lib/psyche-types";
+import {
+  behaviorPatternSchema,
+  type BehaviorPatternInput
+} from "@/lib/psyche-schemas";
+import type {
+  BehaviorPattern,
+  BeliefEntry,
+  ModeProfile,
+  SchemaCatalogEntry
+} from "@/lib/psyche-types";
 import { findSchemaForLink, getSchemaFamilyLabel } from "@/lib/schema-visuals";
 import {
   createBehaviorPattern,
@@ -106,9 +124,15 @@ export function PsychePatternsPage() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingPattern, setEditingPattern] = useState<BehaviorPattern | null>(null);
-  const [sourceObservationNoteId, setSourceObservationNoteId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<BehaviorPatternInput>(DEFAULT_PATTERN_INPUT);
+  const [editingPattern, setEditingPattern] = useState<BehaviorPattern | null>(
+    null
+  );
+  const [sourceObservationNoteId, setSourceObservationNoteId] = useState<
+    string | null
+  >(null);
+  const [draft, setDraft] = useState<BehaviorPatternInput>(
+    DEFAULT_PATTERN_INPUT
+  );
   const [submitError, setSubmitError] = useState<string | null>(null);
   const patternsQuery = useQuery({
     queryKey: ["forge-psyche-patterns"],
@@ -204,7 +228,9 @@ export function PsychePatternsPage() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["forge-psyche-patterns"] }),
         queryClient.invalidateQueries({ queryKey: ["forge-psyche-overview"] }),
-        queryClient.invalidateQueries({ queryKey: ["forge-psyche-self-observation-calendar"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["forge-psyche-self-observation-calendar"]
+        }),
         queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] }),
         queryClient.invalidateQueries({ queryKey: ["notes-index"] })
       ]);
@@ -214,21 +240,38 @@ export function PsychePatternsPage() {
   const valueOptions: EntityLinkOption[] = values.map((entry) => ({
     value: entry.id,
     label: formatOwnedEntityOptionLabel(entry.title, entry.user),
-    description: formatOwnedEntityDescription(entry.valuedDirection, entry.user),
+    description: formatOwnedEntityDescription(
+      entry.valuedDirection,
+      entry.user
+    ),
     searchText: buildOwnedEntitySearchText(
       [entry.title, entry.valuedDirection, entry.description],
       entry
     ),
     kind: "value"
   }));
-  const schemaOptions: EntityLinkOption[] = schemas.map((schema: SchemaCatalogEntry) => ({
-    value: schema.title,
-    label: schema.title,
-    description: `${schema.description} ${getSchemaFamilyLabel(schema.family)}`,
-    searchText: `${schema.slug} ${schema.family} ${schema.schemaType}`,
-    badge: <SchemaBadge label={schema.title} schemaType={schema.schemaType} compact />,
-    menuBadge: <SchemaBadge label={schema.title} schemaType={schema.schemaType} compact />
-  }));
+  const schemaOptions: EntityLinkOption[] = schemas.map(
+    (schema: SchemaCatalogEntry) => ({
+      value: schema.title,
+      label: schema.title,
+      description: `${schema.description} ${getSchemaFamilyLabel(schema.family)}`,
+      searchText: `${schema.slug} ${schema.family} ${schema.schemaType}`,
+      badge: (
+        <SchemaBadge
+          label={schema.title}
+          schemaType={schema.schemaType}
+          compact
+        />
+      ),
+      menuBadge: (
+        <SchemaBadge
+          label={schema.title}
+          schemaType={schema.schemaType}
+          compact
+        />
+      )
+    })
+  );
   const modeOptions: EntityLinkOption[] = modes.map((mode: ModeProfile) => ({
     value: mode.id,
     label: formatOwnedEntityOptionLabel(mode.title, mode.user),
@@ -242,24 +285,26 @@ export function PsychePatternsPage() {
     ),
     kind: "mode"
   }));
-  const beliefOptions: EntityLinkOption[] = beliefs.map((belief: BeliefEntry) => ({
-    value: belief.id,
-    label: formatOwnedEntityOptionLabel(belief.statement, belief.user),
-    description: formatOwnedEntityDescription(
-      belief.flexibleAlternative || belief.originNote,
-      belief.user
-    ),
-    searchText: buildOwnedEntitySearchText(
-      [
-        belief.statement,
-        belief.flexibleAlternative,
-        belief.originNote,
-        belief.beliefType
-      ],
-      belief
-    ),
-    kind: "belief"
-  }));
+  const beliefOptions: EntityLinkOption[] = beliefs.map(
+    (belief: BeliefEntry) => ({
+      value: belief.id,
+      label: formatOwnedEntityOptionLabel(belief.statement, belief.user),
+      description: formatOwnedEntityDescription(
+        belief.flexibleAlternative || belief.originNote,
+        belief.user
+      ),
+      searchText: buildOwnedEntitySearchText(
+        [
+          belief.statement,
+          belief.flexibleAlternative,
+          belief.originNote,
+          belief.beliefType
+        ],
+        belief
+      ),
+      kind: "belief"
+    })
+  );
 
   const createLinkedMode = async (title: string) => {
     const { mode } = await createMode({
@@ -280,8 +325,15 @@ export function PsychePatternsPage() {
       linkedValueIds: [],
       userId: draft.userId
     });
-    prependEntityToCollection(queryClient, ["forge-psyche-modes"], "modes", mode);
-    await queryClient.invalidateQueries({ queryKey: ["forge-psyche-overview"] });
+    prependEntityToCollection(
+      queryClient,
+      ["forge-psyche-modes"],
+      "modes",
+      mode
+    );
+    await queryClient.invalidateQueries({
+      queryKey: ["forge-psyche-overview"]
+    });
     return {
       value: mode.id,
       label: mode.title,
@@ -302,8 +354,15 @@ export function PsychePatternsPage() {
       committedActions: [],
       userId: draft.userId
     });
-    prependEntityToCollection(queryClient, ["forge-psyche-values"], "values", value);
-    await queryClient.invalidateQueries({ queryKey: ["forge-psyche-overview"] });
+    prependEntityToCollection(
+      queryClient,
+      ["forge-psyche-values"],
+      "values",
+      value
+    );
+    await queryClient.invalidateQueries({
+      queryKey: ["forge-psyche-overview"]
+    });
     return {
       value: value.id,
       label: value.title,
@@ -328,8 +387,15 @@ export function PsychePatternsPage() {
       linkedReportIds: [],
       userId: draft.userId
     });
-    prependEntityToCollection(queryClient, ["forge-psyche-beliefs"], "beliefs", belief);
-    await queryClient.invalidateQueries({ queryKey: ["forge-psyche-overview"] });
+    prependEntityToCollection(
+      queryClient,
+      ["forge-psyche-beliefs"],
+      "beliefs",
+      belief
+    );
+    await queryClient.invalidateQueries({
+      queryKey: ["forge-psyche-overview"]
+    });
     return {
       value: belief.id,
       label: belief.statement,
@@ -339,7 +405,15 @@ export function PsychePatternsPage() {
   };
 
   const seedablePatterns = useMemo(
-    () => patterns.filter((pattern) => !behaviors.some((behavior) => behavior.kind === "away" && behavior.linkedPatternIds.includes(pattern.id))),
+    () =>
+      patterns.filter(
+        (pattern) =>
+          !behaviors.some(
+            (behavior) =>
+              behavior.kind === "away" &&
+              behavior.linkedPatternIds.includes(pattern.id)
+          )
+      ),
     [patterns, behaviors]
   );
 
@@ -359,7 +433,8 @@ export function PsychePatternsPage() {
       id: "loop",
       eyebrow: "Loop",
       title: "Name the pattern and the behavior it keeps producing",
-      description: "This should feel like a recognizable loop, not a diagnostic label.",
+      description:
+        "This should feel like a recognizable loop, not a diagnostic label.",
       render: (value, setValue) => (
         <>
           {sourceObservationNoteId ? (
@@ -390,14 +465,39 @@ export function PsychePatternsPage() {
             )}
             help="Patterns can belong to a human or bot user even when linked values, modes, or beliefs cross owners."
           />
-          <FlowField label="Pattern name" description="Give the loop a name you will recognize quickly later.">
-            <Input value={value.title} onChange={(event) => setValue({ title: event.target.value })} placeholder="Anxious reassurance loop" />
+          <FlowField
+            label="Pattern name"
+            description="Give the loop a name you will recognize quickly later."
+          >
+            <Input
+              value={value.title}
+              onChange={(event) => setValue({ title: event.target.value })}
+              placeholder="Anxious reassurance loop"
+            />
           </FlowField>
-          <FlowField label="What happens in the loop" description="Describe the actual sequence of behavior, not the diagnosis.">
-            <Textarea value={value.targetBehavior} onChange={(event) => setValue({ targetBehavior: event.target.value })} placeholder="What do you actually do when the trigger hits?" />
+          <FlowField
+            label="What happens in the loop"
+            description="Describe the actual sequence of behavior, not the diagnosis."
+          >
+            <Textarea
+              value={value.targetBehavior}
+              onChange={(event) =>
+                setValue({ targetBehavior: event.target.value })
+              }
+              placeholder="What do you actually do when the trigger hits?"
+            />
           </FlowField>
-          <FlowField label="Description" description="Write the loop in plain language so it stays usable in the future.">
-            <Textarea value={value.description} onChange={(event) => setValue({ description: event.target.value })} placeholder="Describe the loop in plain human language so it stays recognizable later." />
+          <FlowField
+            label="Description"
+            description="Write the loop in plain language so it stays usable in the future."
+          >
+            <Textarea
+              value={value.description}
+              onChange={(event) =>
+                setValue({ description: event.target.value })
+              }
+              placeholder="Describe the loop in plain human language so it stays recognizable later."
+            />
           </FlowField>
         </>
       )
@@ -409,7 +509,10 @@ export function PsychePatternsPage() {
       description: "The goal is to make the action map obvious at a glance.",
       render: (value, setValue) => (
         <>
-          <FlowField label="Common cues" description="Add one cue per line so the trigger pattern stays easy to scan.">
+          <FlowField
+            label="Common cues"
+            description="Add one cue per line so the trigger pattern stays easy to scan."
+          >
             <Textarea
               value={value.cueContexts.join("\n")}
               onChange={(event) =>
@@ -420,19 +523,48 @@ export function PsychePatternsPage() {
                     .filter(Boolean)
                 })
               }
-              placeholder={"One line per cue\nSilence after vulnerability\nLate-night social comparison"}
+              placeholder={
+                "One line per cue\nSilence after vulnerability\nLate-night social comparison"
+              }
             />
           </FlowField>
           <div className="grid gap-4 md:grid-cols-2">
-            <FlowField label="Short-term payoff" description="What relief, certainty, control, or distance do you get right away?">
-              <Textarea value={value.shortTermPayoff} onChange={(event) => setValue({ shortTermPayoff: event.target.value })} placeholder="What relief do you get right away?" />
+            <FlowField
+              label="Short-term payoff"
+              description="What relief, certainty, control, or distance do you get right away?"
+            >
+              <Textarea
+                value={value.shortTermPayoff}
+                onChange={(event) =>
+                  setValue({ shortTermPayoff: event.target.value })
+                }
+                placeholder="What relief do you get right away?"
+              />
             </FlowField>
-            <FlowField label="Long-term cost" description="What does the loop cost you later in closeness, energy, values, or progress?">
-              <Textarea value={value.longTermCost} onChange={(event) => setValue({ longTermCost: event.target.value })} placeholder="What does this cost over time?" />
+            <FlowField
+              label="Long-term cost"
+              description="What does the loop cost you later in closeness, energy, values, or progress?"
+            >
+              <Textarea
+                value={value.longTermCost}
+                onChange={(event) =>
+                  setValue({ longTermCost: event.target.value })
+                }
+                placeholder="What does this cost over time?"
+              />
             </FlowField>
           </div>
-          <FlowField label="Preferred response" description="Name the return-path response you want to practice instead.">
-            <Textarea value={value.preferredResponse} onChange={(event) => setValue({ preferredResponse: event.target.value })} placeholder="What do you want to practice instead?" />
+          <FlowField
+            label="Preferred response"
+            description="Name the return-path response you want to practice instead."
+          >
+            <Textarea
+              value={value.preferredResponse}
+              onChange={(event) =>
+                setValue({ preferredResponse: event.target.value })
+              }
+              placeholder="What do you want to practice instead?"
+            />
           </FlowField>
         </>
       )
@@ -441,10 +573,14 @@ export function PsychePatternsPage() {
       id: "links",
       eyebrow: "Links",
       title: "Attach the loop to values, schemas, modes, and beliefs",
-      description: "This is what turns a private note into a navigable graphical system.",
+      description:
+        "This is what turns a private note into a navigable graphical system.",
       render: (value, setValue) => (
         <>
-          <FlowField label="Linked values" description="Choose the values this loop pulls against or tries to protect badly.">
+          <FlowField
+            label="Linked values"
+            description="Choose the values this loop pulls against or tries to protect badly."
+          >
             <EntityLinkMultiSelect
               options={valueOptions}
               selectedValues={value.linkedValueIds}
@@ -456,16 +592,24 @@ export function PsychePatternsPage() {
             />
           </FlowField>
           <div className="grid gap-4 md:grid-cols-2">
-            <FlowField label="Schema labels" description="Attach the schema themes that define the pressure in this loop.">
+            <FlowField
+              label="Schema labels"
+              description="Attach the schema themes that define the pressure in this loop."
+            >
               <EntityLinkMultiSelect
                 options={schemaOptions}
                 selectedValues={value.linkedSchemaLabels}
-                onChange={(linkedSchemaLabels) => setValue({ linkedSchemaLabels })}
+                onChange={(linkedSchemaLabels) =>
+                  setValue({ linkedSchemaLabels })
+                }
                 placeholder="Search schema themes…"
                 emptyMessage="No schema themes match."
               />
             </FlowField>
-            <FlowField label="Linked modes" description="Search for an existing mode or press Enter to create and link one immediately.">
+            <FlowField
+              label="Linked modes"
+              description="Search for an existing mode or press Enter to create and link one immediately."
+            >
               <EntityLinkMultiSelect
                 options={modeOptions}
                 selectedValues={value.linkedModeIds}
@@ -477,7 +621,10 @@ export function PsychePatternsPage() {
               />
             </FlowField>
           </div>
-          <FlowField label="Linked beliefs" description="Search for a belief, or type a new one and press Enter to create it inline.">
+          <FlowField
+            label="Linked beliefs"
+            description="Search for a belief, or type a new one and press Enter to create it inline."
+          >
             <EntityLinkMultiSelect
               options={beliefOptions}
               selectedValues={value.linkedBeliefIds}
@@ -493,20 +640,61 @@ export function PsychePatternsPage() {
     }
   ];
 
-  if (patternsQuery.isLoading || valuesQuery.isLoading || schemasQuery.isLoading || modesQuery.isLoading || beliefsQuery.isLoading || behaviorsQuery.isLoading) {
-    return <LoadingState eyebrow="Patterns" title="Loading patterns" description="Getting patterns, values, schemas, beliefs, modes, and linked behaviors ready." />;
+  if (
+    patternsQuery.isLoading ||
+    valuesQuery.isLoading ||
+    schemasQuery.isLoading ||
+    modesQuery.isLoading ||
+    beliefsQuery.isLoading ||
+    behaviorsQuery.isLoading
+  ) {
+    return (
+      <LoadingState
+        eyebrow="Patterns"
+        title="Loading patterns"
+        description="Getting patterns, values, schemas, beliefs, modes, and linked behaviors ready."
+      />
+    );
   }
 
-  const routeError = patternsQuery.error ?? valuesQuery.error ?? schemasQuery.error ?? modesQuery.error ?? beliefsQuery.error ?? behaviorsQuery.error;
+  const routeError =
+    patternsQuery.error ??
+    valuesQuery.error ??
+    schemasQuery.error ??
+    modesQuery.error ??
+    beliefsQuery.error ??
+    behaviorsQuery.error;
   if (routeError) {
-    return <ErrorState eyebrow="Psyche patterns" error={routeError} onRetry={() => void Promise.all([patternsQuery.refetch(), valuesQuery.refetch(), schemasQuery.refetch(), modesQuery.refetch(), beliefsQuery.refetch(), behaviorsQuery.refetch()])} />;
+    return (
+      <ErrorState
+        eyebrow="Psyche patterns"
+        error={routeError}
+        onRetry={() =>
+          void Promise.all([
+            patternsQuery.refetch(),
+            valuesQuery.refetch(),
+            schemasQuery.refetch(),
+            modesQuery.refetch(),
+            beliefsQuery.refetch(),
+            behaviorsQuery.refetch()
+          ])
+        }
+      />
+    );
   }
 
   return (
-    <div className="grid gap-5">
+    <div className="grid min-w-0 gap-5">
       <PageHero
         entityKind="pattern"
-        title={<EntityName kind="pattern" label="Patterns" variant="heading" size="lg" />}
+        title={
+          <EntityName
+            kind="pattern"
+            label="Patterns"
+            variant="heading"
+            size="lg"
+          />
+        }
         description="See each pattern as a loop: what starts it, what payoff it gives, what it costs, and what you want to do instead."
         badge={`${patterns.length} patterns`}
         actions={
@@ -553,7 +741,12 @@ export function PsychePatternsPage() {
         >
           <div className="flex flex-wrap gap-2">
             {seedablePatterns.slice(0, 8).map((pattern) => (
-              <EntityBadge key={pattern.id} kind="pattern" label={pattern.title} compact />
+              <EntityBadge
+                key={pattern.id}
+                kind="pattern"
+                label={pattern.title}
+                compact
+              />
             ))}
           </div>
         </AtlasPanel>
@@ -566,7 +759,7 @@ export function PsychePatternsPage() {
         tone="sky"
         className="scroll-mt-24"
       >
-        <div id="pattern-lanes" className="grid gap-4">
+        <div id="pattern-lanes" className="grid min-w-0 gap-4">
           {patterns.length === 0 ? (
             <div className="flex justify-start">
               <Button
@@ -581,21 +774,48 @@ export function PsychePatternsPage() {
             </div>
           ) : (
             patterns.map((pattern) => {
-              const linkedValues = values.filter((value) => pattern.linkedValueIds.includes(value.id));
-              const linkedModes = modes.filter((mode) => pattern.linkedModeIds.includes(mode.id));
-              const linkedBeliefs = beliefs.filter((belief) => pattern.linkedBeliefIds.includes(belief.id));
+              const linkedValues = values.filter((value) =>
+                pattern.linkedValueIds.includes(value.id)
+              );
+              const linkedModes = modes.filter((mode) =>
+                pattern.linkedModeIds.includes(mode.id)
+              );
+              const linkedBeliefs = beliefs.filter((belief) =>
+                pattern.linkedBeliefIds.includes(belief.id)
+              );
               const isFocused = focusedPatternId === pattern.id;
-              const noteCount = getEntityNotesSummary(notesSummaryByEntity, "behavior_pattern", pattern.id).count;
+              const noteCount = getEntityNotesSummary(
+                notesSummaryByEntity,
+                "behavior_pattern",
+                pattern.id
+              ).count;
               return (
-                <div key={pattern.id} data-psyche-focus-id={pattern.id} className={`rounded-[28px] border border-white/8 bg-white/[0.04] p-5 transition ${psycheFocusClass(isFocused)}`}>
-                  <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div>
-                      <EntityName kind="pattern" label={pattern.title} variant="heading" size="xl" />
-                      <div className="mt-2 text-sm leading-7 text-white/58">{pattern.description}</div>
+                <div
+                  key={pattern.id}
+                  data-psyche-focus-id={pattern.id}
+                  className={`min-w-0 rounded-[28px] border border-white/8 bg-white/[0.04] p-5 transition ${psycheFocusClass(isFocused)}`}
+                >
+                  <div className="flex min-w-0 flex-wrap items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <EntityName
+                        kind="pattern"
+                        label={pattern.title}
+                        variant="heading"
+                        size="xl"
+                      />
+                      <div className="mt-2 max-w-3xl text-sm leading-7 text-white/58">
+                        {pattern.description}
+                      </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      {pattern.user ? <UserBadge user={pattern.user} compact /> : null}
-                      <EntityNoteCountLink entityType="behavior_pattern" entityId={pattern.id} count={noteCount} />
+                      {pattern.user ? (
+                        <UserBadge user={pattern.user} compact />
+                      ) : null}
+                      <EntityNoteCountLink
+                        entityType="behavior_pattern"
+                        entityId={pattern.id}
+                        count={noteCount}
+                      />
                       <Button
                         variant="secondary"
                         onClick={() => {
@@ -609,47 +829,88 @@ export function PsychePatternsPage() {
                       </Button>
                     </div>
                   </div>
-                  <div className="mt-5 grid gap-3 xl:grid-cols-4">
-                    <div className="rounded-[22px] bg-white/[0.04] p-4">
-                      <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">Cue</div>
-                      <div className="mt-3 text-sm leading-6 text-white/68">{pattern.cueContexts[0] ?? "No cue captured yet."}</div>
+                  <div className="mt-5 grid min-w-0 gap-3 xl:grid-cols-4">
+                    <div className="min-w-0 rounded-[22px] bg-white/[0.04] p-4">
+                      <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                        Cue
+                      </div>
+                      <div className="mt-3 text-sm leading-6 text-white/68">
+                        {pattern.cueContexts[0] ?? "No cue captured yet."}
+                      </div>
                     </div>
-                    <div className="rounded-[22px] bg-[rgba(251,113,133,0.08)] p-4">
-                      <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">Loop</div>
-                      <div className="mt-3 text-sm leading-6 text-white/68">{pattern.targetBehavior}</div>
+                    <div className="min-w-0 rounded-[22px] bg-[rgba(251,113,133,0.08)] p-4">
+                      <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                        Loop
+                      </div>
+                      <div className="mt-3 text-sm leading-6 text-white/68">
+                        {pattern.targetBehavior}
+                      </div>
                     </div>
-                    <div className="rounded-[22px] bg-[rgba(251,191,36,0.08)] p-4">
-                      <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">Short-term relief / long-term cost</div>
-                      <div className="mt-3 text-sm leading-6 text-white/68">{pattern.shortTermPayoff || "No payoff note yet."}</div>
-                      <div className="mt-2 text-sm leading-6 text-white/52">{pattern.longTermCost || "No long-term cost note yet."}</div>
+                    <div className="min-w-0 rounded-[22px] bg-[rgba(251,191,36,0.08)] p-4">
+                      <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                        Short-term relief / long-term cost
+                      </div>
+                      <div className="mt-3 text-sm leading-6 text-white/68">
+                        {pattern.shortTermPayoff || "No payoff note yet."}
+                      </div>
+                      <div className="mt-2 text-sm leading-6 text-white/52">
+                        {pattern.longTermCost || "No long-term cost note yet."}
+                      </div>
                     </div>
-                    <div className="rounded-[22px] bg-[rgba(110,231,183,0.08)] p-4">
-                      <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">Return path</div>
-                      <div className="mt-3 text-sm leading-6 text-white/68">{pattern.preferredResponse}</div>
+                    <div className="min-w-0 rounded-[22px] bg-[rgba(110,231,183,0.08)] p-4">
+                      <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                        Return path
+                      </div>
+                      <div className="mt-3 text-sm leading-6 text-white/68">
+                        {pattern.preferredResponse}
+                      </div>
                     </div>
                   </div>
-                  <div className="mt-4 flex flex-wrap gap-2">
+                  <div className="mt-4 flex min-w-0 flex-wrap gap-2">
                     {linkedValues.map((value) => (
-                      <EntityBadge key={value.id} kind="value" label={value.title} compact />
+                      <EntityBadge
+                        key={value.id}
+                        kind="value"
+                        label={value.title}
+                        compact
+                      />
                     ))}
                     {linkedModes.map((mode) => (
-                      <EntityBadge key={mode.id} kind="mode" label={mode.title} compact />
+                      <EntityBadge
+                        key={mode.id}
+                        kind="mode"
+                        label={mode.title}
+                        compact
+                      />
                     ))}
                     {pattern.linkedModeLabels.map((label) => (
-                      <Badge key={`legacy-${label}`} className="text-violet-100">
+                      <Badge
+                        key={`legacy-${label}`}
+                        className="text-violet-100"
+                      >
                         {label}
                       </Badge>
                     ))}
                     {pattern.linkedSchemaLabels.map((label) => (
                       <SchemaBadge
                         key={label}
-                        label={findSchemaForLink(label, schemas)?.title ?? label}
-                        schemaType={findSchemaForLink(label, schemas)?.schemaType ?? "maladaptive"}
+                        label={
+                          findSchemaForLink(label, schemas)?.title ?? label
+                        }
+                        schemaType={
+                          findSchemaForLink(label, schemas)?.schemaType ??
+                          "maladaptive"
+                        }
                         compact
                       />
                     ))}
                     {linkedBeliefs.map((belief) => (
-                      <EntityBadge key={belief.id} kind="belief" label={belief.statement} compact />
+                      <EntityBadge
+                        key={belief.id}
+                        kind="belief"
+                        label={belief.statement}
+                        compact
+                      />
                     ))}
                   </div>
                 </div>
@@ -676,6 +937,11 @@ export function PsychePatternsPage() {
         }
         value={draft}
         onChange={setDraft}
+        draftPersistenceKey={
+          editingPattern
+            ? `psyche.pattern.${editingPattern.id}`
+            : `psyche.pattern.new.${sourceObservationNoteId ?? "blank"}`
+        }
         steps={steps}
         submitLabel={editingPattern ? "Save pattern" : "Create pattern"}
         pending={saveMutation.isPending}
@@ -684,14 +950,20 @@ export function PsychePatternsPage() {
           setSubmitError(null);
           const parsed = behaviorPatternSchema.safeParse(draft);
           if (!parsed.success) {
-            setSubmitError("This pattern still needs a title, a loop description, and a preferred response.");
+            setSubmitError(
+              "This pattern still needs a title, a loop description, and a preferred response."
+            );
             return;
           }
 
           try {
             await saveMutation.mutateAsync(parsed.data);
           } catch (error) {
-            setSubmitError(error instanceof Error ? error.message : "Unable to save this pattern right now.");
+            setSubmitError(
+              error instanceof Error
+                ? error.message
+                : "Unable to save this pattern right now."
+            );
           }
         }}
       />

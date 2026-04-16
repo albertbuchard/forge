@@ -2008,6 +2008,22 @@ export function buildOpenApiDocument() {
     }
   };
 
+  const habitCheckInInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["status"],
+    properties: {
+      dateKey: { type: "string", format: "date", default: "2026-04-16" },
+      status: { type: "string", enum: ["done", "missed"] },
+      note: { type: "string", default: "" },
+      description: {
+        type: "string",
+        description:
+          "Optional replacement for the habit's current description. When provided, this overwrites habit.description."
+      }
+    }
+  };
+
   const workAdjustment = {
     type: "object",
     additionalProperties: false,
@@ -4109,6 +4125,7 @@ export function buildOpenApiDocument() {
         TaskRunHeartbeatInput: taskRunHeartbeatInput,
         TaskRunFinishInput: taskRunFinishInput,
         TaskRunFocusInput: taskRunFocusInput,
+        HabitCheckInInput: habitCheckInInput,
         WorkAdjustment: workAdjustment,
         WorkAdjustmentTargetSummary: workAdjustmentTargetSummary,
         WorkAdjustmentInput: workAdjustmentInput,
@@ -7967,6 +7984,14 @@ export function buildOpenApiDocument() {
       "/api/v1/habits/{id}/check-ins": {
         post: {
           summary: "Record a habit outcome for one day",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/HabitCheckInInput" }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
               {

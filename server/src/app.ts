@@ -7309,7 +7309,8 @@ export async function buildServer(
         {
           dateKey: parsed.dateKey,
           status: parsed.status,
-          note: parsed.note
+          note: parsed.note,
+          description: parsed.description
         },
         { source: "system", actor: `watch:${parsed.dedupeKey}` }
       );

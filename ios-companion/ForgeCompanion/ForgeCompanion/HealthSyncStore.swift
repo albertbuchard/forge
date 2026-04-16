@@ -908,6 +908,14 @@ actor HealthSyncStore {
                 sortDescriptors: sortDescriptors
             ) { _, samples, error in
                 if let error {
+                    if self.isHealthKitNoDataError(error) {
+                        companionDebugLog(
+                            "HealthSyncStore",
+                            "queryQuantitySamples no data metric=\(definition.key)"
+                        )
+                        continuation.resume(returning: [])
+                        return
+                    }
                     continuation.resume(throwing: error)
                     return
                 }
@@ -946,6 +954,11 @@ actor HealthSyncStore {
                 sortDescriptors: sortDescriptors
             ) { _, samples, error in
                 if let error {
+                    if self.isHealthKitNoDataError(error) {
+                        companionDebugLog("HealthSyncStore", "queryCategorySamples no data")
+                        continuation.resume(returning: [])
+                        return
+                    }
                     companionDebugLog(
                         "HealthSyncStore",
                         "queryCategorySamples failed error=\(error.localizedDescription)"
@@ -978,6 +991,11 @@ actor HealthSyncStore {
                 sortDescriptors: sortDescriptors
             ) { _, samples, error in
                 if let error {
+                    if self.isHealthKitNoDataError(error) {
+                        companionDebugLog("HealthSyncStore", "queryWorkouts no data")
+                        continuation.resume(returning: [])
+                        return
+                    }
                     companionDebugLog(
                         "HealthSyncStore",
                         "queryWorkouts failed error=\(error.localizedDescription)"
@@ -1011,6 +1029,10 @@ actor HealthSyncStore {
                 options: option
             ) { _, statistics, error in
                 if let error {
+                    if self.isHealthKitNoDataError(error) {
+                        continuation.resume(returning: nil)
+                        return
+                    }
                     continuation.resume(throwing: error)
                     return
                 }
@@ -1028,6 +1050,12 @@ actor HealthSyncStore {
             }
             self.store.execute(query)
         }
+    }
+
+    private nonisolated func isHealthKitNoDataError(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        return (nsError.domain == HKErrorDomain && nsError.code == 11) // HKErrorNoData
+            || nsError.localizedDescription == "No data available for the specified predicate."
     }
 
     private func mapSleepSegment(sample: HKCategorySample) -> SleepSegment? {

@@ -171,11 +171,15 @@ export function SettingsDataPage() {
     createSafetyBackup: true
   });
   const [rootDialogError, setRootDialogError] = useState<string | null>(null);
-  const [restoreTarget, setRestoreTarget] = useState<DataBackupEntry | null>(null);
+  const [restoreTarget, setRestoreTarget] = useState<DataBackupEntry | null>(
+    null
+  );
   const [restoreFlowValue, setRestoreFlowValue] = useState<RestoreFlowValue>({
     createSafetyBackup: true
   });
-  const [restoreDialogError, setRestoreDialogError] = useState<string | null>(null);
+  const [restoreDialogError, setRestoreDialogError] = useState<string | null>(
+    null
+  );
 
   const operatorSessionQuery = useQuery({
     queryKey: ["forge-operator-session"],
@@ -214,7 +218,8 @@ export function SettingsDataPage() {
   });
 
   const backupMutation = useMutation({
-    mutationFn: () => createRuntimeDataBackup("Manual backup from Settings → Data"),
+    mutationFn: () =>
+      createRuntimeDataBackup("Manual backup from Settings → Data"),
     onSuccess: async () => {
       setFeedback({
         tone: "success",
@@ -268,7 +273,8 @@ export function SettingsDataPage() {
     onSuccess: async () => {
       setFeedback({
         tone: "success",
-        message: "Backup restored. Forge is now running from that restored state."
+        message:
+          "Backup restored. Forge is now running from that restored state."
       });
       setRestoreTarget(null);
       await invalidateData();
@@ -296,8 +302,12 @@ export function SettingsDataPage() {
       return;
     }
     setBackupDirectory((current) => current || data.settings.backupDirectory);
-    setBackupFrequency((current) =>
-      current || (data.settings.backupFrequencyHours ? String(data.settings.backupFrequencyHours) : "off")
+    setBackupFrequency(
+      (current) =>
+        current ||
+        (data.settings.backupFrequencyHours
+          ? String(data.settings.backupFrequencyHours)
+          : "off")
     );
     setAutoRepairEnabled(data.settings.autoRepairEnabled);
     setRootFlowValue((current) => ({
@@ -327,9 +337,7 @@ export function SettingsDataPage() {
         <div className="grid gap-4">
           <FlowChoiceGrid
             value={value.mode}
-            onChange={(mode) =>
-              setValue({ mode: mode as DataRootSwitchMode })
-            }
+            onChange={(mode) => setValue({ mode: mode as DataRootSwitchMode })}
             options={[
               {
                 value: "migrate_current",
@@ -435,14 +443,18 @@ export function SettingsDataPage() {
         <div className="grid gap-4">
           <div className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 text-sm leading-6 text-[var(--ui-ink-soft)]">
             <div className="font-medium text-[var(--ui-ink-strong)]">
-              {restoreTarget ? formatDateTime(restoreTarget.createdAt) : "Selected backup"}
+              {restoreTarget
+                ? formatDateTime(restoreTarget.createdAt)
+                : "Selected backup"}
             </div>
             <div className="mt-2">
               {restoreTarget?.note || "Forge backup archive"}
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               <Badge className="bg-white/[0.08] text-white/78">
-                {restoreTarget ? formatBackupMode(restoreTarget.mode) : "Backup"}
+                {restoreTarget
+                  ? formatBackupMode(restoreTarget.mode)
+                  : "Backup"}
               </Badge>
               <Badge className="bg-white/[0.08] text-white/78">
                 {restoreTarget ? formatBytes(restoreTarget.sizeBytes) : "0 B"}
@@ -478,7 +490,8 @@ export function SettingsDataPage() {
         "Use this only when you are confident this backup is the state you want back.",
       render: () => (
         <div className="rounded-[22px] border border-amber-400/20 bg-amber-500/[0.08] p-4 text-sm leading-6 text-amber-100/88">
-          Forge will replace the live database and wiki files with this backup, then reopen the restored copy.
+          Forge will replace the live database and wiki files with this backup,
+          then reopen the restored copy.
         </div>
       )
     }
@@ -510,7 +523,9 @@ export function SettingsDataPage() {
     return (
       <ErrorState
         eyebrow="Data"
-        error={dataQuery.error ?? new Error("Forge returned an empty data payload.")}
+        error={
+          dataQuery.error ?? new Error("Forge returned an empty data payload.")
+        }
         onRetry={() => void dataQuery.refetch()}
       />
     );
@@ -632,7 +647,9 @@ export function SettingsDataPage() {
                   Protection plan
                 </div>
                 <div className="mt-1 text-sm leading-6 text-[var(--ui-ink-soft)]">
-                  Choose where backups go, how often Forge creates them, and whether scans should call out newer copies found elsewhere on disk.
+                  Choose where backups go, how often Forge creates them, and
+                  whether scans should call out newer copies found elsewhere on
+                  disk.
                 </div>
               </div>
             </div>
@@ -640,7 +657,9 @@ export function SettingsDataPage() {
             <div className="grid gap-3 md:grid-cols-2">
               <MetricTile
                 label="Automatic backup"
-                value={formatBackupFrequency(data.settings.backupFrequencyHours)}
+                value={formatBackupFrequency(
+                  data.settings.backupFrequencyHours
+                )}
                 detail={
                   data.settings.lastAutoBackupAt
                     ? `Last run ${formatDateTime(data.settings.lastAutoBackupAt)}`
@@ -691,10 +710,13 @@ export function SettingsDataPage() {
                   type="checkbox"
                   className="mt-1"
                   checked={autoRepairEnabled}
-                  onChange={(event) => setAutoRepairEnabled(event.target.checked)}
+                  onChange={(event) =>
+                    setAutoRepairEnabled(event.target.checked)
+                  }
                 />
                 <span className="text-sm leading-6 text-[var(--ui-ink-soft)]">
-                  When I scan, point out Forge copies that look newer than the one I am using now.
+                  When I scan, point out Forge copies that look newer than the
+                  one I am using now.
                 </span>
               </label>
 
@@ -726,7 +748,8 @@ export function SettingsDataPage() {
                 Change data folder
               </div>
               <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
-                Move today’s Forge data into a new folder, or switch to another folder that already contains the right Forge database.
+                Move today’s Forge data into a new folder, or switch to another
+                folder that already contains the right Forge database.
               </div>
             </div>
 
@@ -784,7 +807,8 @@ export function SettingsDataPage() {
                   Downloads
                 </div>
                 <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
-                  Download the live database itself, or export a structure and table snapshot in other formats.
+                  Download the live database itself, or export a structure and
+                  table snapshot in other formats.
                 </div>
               </div>
               <Download className="size-5 text-[var(--ui-ink-faint)]" />
@@ -808,7 +832,9 @@ export function SettingsDataPage() {
                     variant="secondary"
                     pending={exportMutation.isPending}
                     pendingLabel="Preparing"
-                    onClick={() => void exportMutation.mutateAsync(option.format)}
+                    onClick={() =>
+                      void exportMutation.mutateAsync(option.format)
+                    }
                   >
                     Download
                   </Button>
@@ -826,7 +852,8 @@ export function SettingsDataPage() {
                   Backup history
                 </div>
                 <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
-                  Go back to an older saved state if you need to undo a bad change.
+                  Go back to an older saved state if you need to undo a bad
+                  change.
                 </div>
               </div>
               <Archive className="size-5 text-[var(--ui-ink-faint)]" />
@@ -834,7 +861,8 @@ export function SettingsDataPage() {
             <div className="grid gap-3">
               {data.backups.length === 0 ? (
                 <div className="rounded-[20px] border border-dashed border-[var(--ui-border-subtle)] px-4 py-6 text-sm text-[var(--ui-ink-soft)]">
-                  No backups yet. Create one now so you have a safe restore point.
+                  No backups yet. Create one now so you have a safe restore
+                  point.
                 </div>
               ) : (
                 data.backups.map((backup) => (
@@ -884,7 +912,9 @@ export function SettingsDataPage() {
                   Find other Forge copies
                 </div>
                 <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
-                  Search common folders on this machine for other Forge databases. Use this when Forge opened the wrong copy or when you think a newer copy exists somewhere else.
+                  Search common folders on this machine for other Forge
+                  databases. Use this when Forge opened the wrong copy or when
+                  you think a newer copy exists somewhere else.
                 </div>
               </div>
               <Button
@@ -901,7 +931,8 @@ export function SettingsDataPage() {
             <div className="grid gap-3">
               {scanResults.length === 0 ? (
                 <div className="rounded-[20px] border border-dashed border-[var(--ui-border-subtle)] px-4 py-6 text-sm text-[var(--ui-ink-soft)]">
-                  No scan results yet. Run a scan to compare the live data folder with other Forge copies on disk.
+                  No scan results yet. Run a scan to compare the live data
+                  folder with other Forge copies on disk.
                 </div>
               ) : (
                 scanResults.map((candidate) => (
@@ -943,15 +974,15 @@ export function SettingsDataPage() {
                       {!candidate.sameAsCurrent ? (
                         <Button
                           variant="secondary"
-                        onClick={() => {
-                          setRootFlowValue({
-                            mode: "adopt_existing",
-                            targetDataRoot: candidate.dataRoot,
-                            createSafetyBackup: true
-                          });
-                          setRootDialogError(null);
-                          setRootDialogOpen(true);
-                        }}
+                          onClick={() => {
+                            setRootFlowValue({
+                              mode: "adopt_existing",
+                              targetDataRoot: candidate.dataRoot,
+                              createSafetyBackup: true
+                            });
+                            setRootDialogError(null);
+                            setRootDialogOpen(true);
+                          }}
                         >
                           Use this folder
                         </Button>
@@ -978,7 +1009,8 @@ export function SettingsDataPage() {
               <div className="flex items-start gap-3 rounded-[20px] border border-amber-400/20 bg-amber-500/[0.08] px-4 py-3 text-sm text-amber-100/88">
                 <AlertTriangle className="mt-0.5 size-4 shrink-0" />
                 <div>
-                  Forge found a copy on disk that looks newer than the one you are using now. Review it carefully before switching.
+                  Forge found a copy on disk that looks newer than the one you
+                  are using now. Review it carefully before switching.
                 </div>
               </div>
             ) : null}
@@ -1003,10 +1035,13 @@ export function SettingsDataPage() {
         description="This guided flow keeps the folder change explicit and gives you a safety backup option first."
         value={rootFlowValue}
         onChange={setRootFlowValue}
+        draftPersistenceKey={`settings.data.root.${rootFlowValue.mode}`}
         steps={rootFlowSteps}
         pending={switchRootMutation.isPending}
         pendingLabel={
-          rootFlowValue.mode === "migrate_current" ? "Moving data" : "Switching folder"
+          rootFlowValue.mode === "migrate_current"
+            ? "Moving data"
+            : "Switching folder"
         }
         submitLabel={
           rootFlowValue.mode === "migrate_current"
@@ -1042,6 +1077,11 @@ export function SettingsDataPage() {
         description="This flow replaces the live data with an older saved state."
         value={restoreFlowValue}
         onChange={setRestoreFlowValue}
+        draftPersistenceKey={
+          restoreTarget
+            ? `settings.data.restore.${restoreTarget.id}`
+            : "settings.data.restore"
+        }
         steps={restoreFlowSteps}
         pending={restoreMutation.isPending}
         pendingLabel="Restoring"

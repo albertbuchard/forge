@@ -854,6 +854,16 @@ export function createHabitCheckIn(
         );
     }
 
+    if (parsed.description !== undefined) {
+      getDatabase()
+        .prepare(
+          `UPDATE habits
+           SET description = ?, updated_at = ?
+           WHERE id = ?`
+        )
+        .run(parsed.description, now, habitId);
+    }
+
     recordActivityEvent({
       entityType: "habit",
       entityId: habit.id,
@@ -873,7 +883,8 @@ export function createHabitCheckIn(
         dateKey: parsed.dateKey,
         status: parsed.status,
         polarity: habit.polarity,
-        deltaXp: reward.deltaXp
+        deltaXp: reward.deltaXp,
+        descriptionReplaced: parsed.description !== undefined
       }
     });
 

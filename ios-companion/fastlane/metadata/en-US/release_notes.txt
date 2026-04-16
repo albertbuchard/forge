@@ -1,4 +1,4 @@
-Forge Companion 1.0.1 fixes stay location labeling across the native companion and the
-shared Forge movement timeline. Stay boxes now keep their place labels reliably, show
-the linked place badge when available, and make it easier to assign an existing place
-or create a new one from the stay's coordinates.
+Forge Companion 1.0.2 improves sync resilience when Apple Health returns no matching
+data for a query. The iOS companion now treats those responses as empty results instead
+of failing the entire sync, reducing repeated resync prompts and fixing the predicate
+error shown in Companion status.

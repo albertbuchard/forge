@@ -17,7 +17,12 @@ import {
   formatLifeForceRate,
   getCalendarActivityPresetOptions
 } from "@/lib/life-force-display";
-import type { CalendarEvent, Task, TaskTimebox, WorkBlockInstance } from "@/lib/types";
+import type {
+  CalendarEvent,
+  Task,
+  TaskTimebox,
+  WorkBlockInstance
+} from "@/lib/types";
 
 type PlannerMode = "suggested" | "manual";
 
@@ -61,7 +66,11 @@ function getPreferredPlanningDateKey(from: string, to: string) {
   const maxDateKey = toDateKey(to);
   const candidate = new Date(`${minDateKey}T12:00:00`);
   candidate.setDate(candidate.getDate() + 1);
-  return clampDateKey(toDateKey(candidate.toISOString()), minDateKey, maxDateKey);
+  return clampDateKey(
+    toDateKey(candidate.toISOString()),
+    minDateKey,
+    maxDateKey
+  );
 }
 
 function padNumber(value: number) {
@@ -158,7 +167,9 @@ function CalendarEventCard({ event }: { event: CalendarEvent }) {
     <div className="rounded-[18px] bg-white/[0.04] px-3 py-3">
       <div className="flex items-center justify-between gap-3">
         <div className="font-medium text-white">{event.title}</div>
-        <Badge className="bg-white/[0.08] text-white/70">{event.availability}</Badge>
+        <Badge className="bg-white/[0.08] text-white/70">
+          {event.availability}
+        </Badge>
       </div>
       <div className="mt-1 text-sm text-white/56">
         {formatContextTime(event.startAt, event.endAt)}
@@ -172,7 +183,9 @@ function WorkBlockCard({ block }: { block: WorkBlockInstance }) {
     <div className="rounded-[18px] bg-white/[0.04] px-3 py-3">
       <div className="flex items-center justify-between gap-3">
         <div className="font-medium text-white">{block.title}</div>
-        <Badge className="bg-white/[0.08] text-white/70">{block.blockingState}</Badge>
+        <Badge className="bg-white/[0.08] text-white/70">
+          {block.blockingState}
+        </Badge>
       </div>
       <div className="mt-1 text-sm text-white/56">
         {formatContextTime(block.startAt, block.endAt)}
@@ -187,7 +200,9 @@ function TimeboxCard({ timebox }: { timebox: TaskTimebox }) {
     <div className="rounded-[18px] bg-white/[0.04] px-3 py-3">
       <div className="flex items-center justify-between gap-3">
         <div className="font-medium text-white">{timebox.title}</div>
-        <Badge className="bg-white/[0.08] text-white/70">{timebox.source}</Badge>
+        <Badge className="bg-white/[0.08] text-white/70">
+          {timebox.source}
+        </Badge>
       </div>
       <div className="mt-1 text-sm text-white/56">
         {formatContextTime(timebox.startsAt, timebox.endsAt)}
@@ -276,7 +291,9 @@ export function TimeboxPlanningDialog({
     availableTasks[0]?.id ??
     "";
   const defaultTask =
-    availableTasks.find((task) => task.id === defaultTaskId) ?? availableTasks[0] ?? null;
+    availableTasks.find((task) => task.id === defaultTaskId) ??
+    availableTasks[0] ??
+    null;
   const defaultManualWindow = buildManualWindow(
     defaultDateKey,
     defaultTask?.plannedDurationSeconds,
@@ -312,10 +329,13 @@ export function TimeboxPlanningDialog({
     if (!open) {
       return;
     }
-    const nextTaskId = lockedTaskId ?? initialTaskId ?? availableTasks[0]?.id ?? "";
+    const nextTaskId =
+      lockedTaskId ?? initialTaskId ?? availableTasks[0]?.id ?? "";
     const resolvedTaskId = editingTimebox?.taskId ?? nextTaskId;
     const nextTask =
-      availableTasks.find((task) => task.id === resolvedTaskId) ?? availableTasks[0] ?? null;
+      availableTasks.find((task) => task.id === resolvedTaskId) ??
+      availableTasks[0] ??
+      null;
     const nextDateKey = editingTimebox
       ? clampDateKey(toDateKey(editingTimebox.startsAt), minDateKey, maxDateKey)
       : getPreferredPlanningDateKey(from, to);
@@ -346,7 +366,17 @@ export function TimeboxPlanningDialog({
       manualTitle: editingTimebox?.title ?? nextTask?.title ?? "",
       overrideReason: editingTimebox?.overrideReason ?? ""
     });
-  }, [availableTasks, editingTimebox, from, initialTaskId, lockedTaskId, maxDateKey, minDateKey, open, to]);
+  }, [
+    availableTasks,
+    editingTimebox,
+    from,
+    initialTaskId,
+    lockedTaskId,
+    maxDateKey,
+    minDateKey,
+    open,
+    to
+  ]);
 
   const selectedTask =
     availableTasks.find((task) => task.id === draft.taskId) ?? null;
@@ -399,7 +429,9 @@ export function TimeboxPlanningDialog({
     const suggestions = suggestionQuery.data?.timeboxes ?? [];
     if (!suggestions.length) {
       setDraft((current) =>
-        current.selectedTimeboxId ? { ...current, selectedTimeboxId: "" } : current
+        current.selectedTimeboxId
+          ? { ...current, selectedTimeboxId: "" }
+          : current
       );
       return;
     }
@@ -421,7 +453,10 @@ export function TimeboxPlanningDialog({
   const selectedSuggestion = (suggestionQuery.data?.timeboxes ?? []).find(
     (timebox) => timebox.id === draft.selectedTimeboxId
   );
-  const manualStart = parseDateAndTime(draft.preferredDate, draft.manualStartTime);
+  const manualStart = parseDateAndTime(
+    draft.preferredDate,
+    draft.manualStartTime
+  );
   const manualEnd = parseDateAndTime(draft.preferredDate, draft.manualEndTime);
   const manualPreview =
     manualStart && manualEnd
@@ -434,7 +469,10 @@ export function TimeboxPlanningDialog({
               ? {
                   id: "manual-preview",
                   profileKey: "manual-preview",
-                  title: draft.manualTitle || selectedTask?.title || "Manual timebox",
+                  title:
+                    draft.manualTitle ||
+                    selectedTask?.title ||
+                    "Manual timebox",
                   entityType: "task_timebox",
                   mode: "container",
                   startupAp: 0,
@@ -468,14 +506,14 @@ export function TimeboxPlanningDialog({
   const taskStepTitle = isEditing
     ? "Review the task tied to this scheduled block"
     : lockedTaskId
-    ? "Review the task you are planning"
-    : "Choose the task you want to place into the calendar";
+      ? "Review the task you are planning"
+      : "Choose the task you want to place into the calendar";
 
   const taskStepDescription = isEditing
     ? "The timebox stays linked to this task. Update the day, hours, title, or AP profile without leaving the planning flow."
     : lockedTaskId
-    ? "Forge will use this task's current duration target and scheduling rules while it looks for viable slots."
-    : "Forge will use the task's current planned duration and scheduling rules when it searches for valid slots.";
+      ? "Forge will use this task's current duration target and scheduling rules while it looks for viable slots."
+      : "Forge will use the task's current planned duration and scheduling rules when it searches for valid slots.";
 
   const steps = useMemo<Array<QuestionFlowStep<PlannerDraft>>>(
     () => [
@@ -543,7 +581,9 @@ export function TimeboxPlanningDialog({
                       : "No duration yet"}
                   </Badge>
                   <Badge className="bg-white/[0.08] text-white/74">
-                    {selectedTask.schedulingRules ? "Task-specific rules" : "Uses project rules"}
+                    {selectedTask.schedulingRules
+                      ? "Task-specific rules"
+                      : "Uses project rules"}
                   </Badge>
                   <Badge className="bg-white/[0.08] text-white/74">
                     {selectedTask.points} xp
@@ -551,18 +591,21 @@ export function TimeboxPlanningDialog({
                   {selectedTask.plannedDurationSeconds ? (
                     <Badge className="bg-white/[0.08] text-white/74">
                       {formatLifeForceAp(
-                        ((selectedTask.plannedDurationSeconds / 3600) / 24) * 100
-                      )} target load
+                        (selectedTask.plannedDurationSeconds / 3600 / 24) * 100
+                      )}{" "}
+                      target load
                     </Badge>
                   ) : null}
                 </div>
                 <p className="mt-4 text-sm leading-6 text-white/60">
-                  Pick a day first, then either accept one of Forge&apos;s suggested slots or set the block manually.
+                  Pick a day first, then either accept one of Forge&apos;s
+                  suggested slots or set the block manually.
                 </p>
                 {isEditing && editingTimebox && onDeleteTimebox ? (
                   <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-rose-400/18 bg-rose-400/8 px-4 py-3">
                     <div className="text-sm leading-6 text-rose-100/84">
-                      Remove this planned timebox if you no longer want it in the calendar.
+                      Remove this planned timebox if you no longer want it in
+                      the calendar.
                     </div>
                     <Button
                       type="button"
@@ -650,12 +693,14 @@ export function TimeboxPlanningDialog({
                       {
                         value: "suggested",
                         label: "Use suggestions",
-                        description: "Forge proposes slots that fit the task rules and the selected day."
+                        description:
+                          "Forge proposes slots that fit the task rules and the selected day."
                       },
                       {
                         value: "manual",
                         label: "Set it manually",
-                        description: "You choose the exact start and end time yourself."
+                        description:
+                          "You choose the exact start and end time yourself."
                       }
                     ]}
                   />
@@ -669,7 +714,9 @@ export function TimeboxPlanningDialog({
                     </div>
                     <div className="mt-2 font-display text-[1.3rem] leading-tight text-white">
                       {value.preferredDate
-                        ? new Date(`${value.preferredDate}T12:00:00`).toLocaleDateString([], {
+                        ? new Date(
+                            `${value.preferredDate}T12:00:00`
+                          ).toLocaleDateString([], {
                             weekday: "long",
                             month: "long",
                             day: "numeric"
@@ -690,7 +737,9 @@ export function TimeboxPlanningDialog({
                   </div>
                 </div>
                 <p className="mt-3 text-sm leading-6 text-white/58">
-                  This is the context Forge will use while recommending a slot. You can still place the block manually if you want something more exact.
+                  This is the context Forge will use while recommending a slot.
+                  You can still place the block manually if you want something
+                  more exact.
                 </p>
                 {calendarDayQuery.isLoading ? (
                   <div className="mt-4 rounded-[18px] border border-white/8 bg-white/[0.04] px-4 py-4 text-sm text-white/56">
@@ -757,7 +806,9 @@ export function TimeboxPlanningDialog({
                       min={minDateKey}
                       max={maxDateKey}
                       value={value.preferredDate}
-                      onChange={(event) => setValue({ preferredDate: event.target.value })}
+                      onChange={(event) =>
+                        setValue({ preferredDate: event.target.value })
+                      }
                     />
                   </FlowField>
                   <FlowField
@@ -849,7 +900,9 @@ export function TimeboxPlanningDialog({
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <div className="font-medium text-white">
-                        {value.manualTitle || selectedTask?.title || "Manual timebox"}
+                        {value.manualTitle ||
+                          selectedTask?.title ||
+                          "Manual timebox"}
                       </div>
                       <div className="mt-1 text-sm text-white/56">
                         {manualStart && manualEnd
@@ -864,7 +917,9 @@ export function TimeboxPlanningDialog({
                           : "Choose a start and end time."}
                       </div>
                     </div>
-                    <Badge className="bg-white/[0.08] text-white/74">manual</Badge>
+                    <Badge className="bg-white/[0.08] text-white/74">
+                      manual
+                    </Badge>
                   </div>
                   {manualPreview ? (
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -883,16 +938,25 @@ export function TimeboxPlanningDialog({
 
           const suggestions = suggestionQuery.data?.timeboxes ?? [];
           if (suggestionQuery.isLoading) {
-            return <div className="text-sm text-white/62">Looking for valid slots on the selected day…</div>;
+            return (
+              <div className="text-sm text-white/62">
+                Looking for valid slots on the selected day…
+              </div>
+            );
           }
           if (!suggestions.length) {
             return (
               <div className="grid gap-3">
                 <div className="rounded-[24px] border border-amber-400/20 bg-amber-400/10 px-4 py-4 text-sm leading-6 text-amber-100/86">
-                  Forge could not find a valid slot on this day. Try another day, adjust the task rules, or switch to manual placement if you already know the right block.
+                  Forge could not find a valid slot on this day. Try another
+                  day, adjust the task rules, or switch to manual placement if
+                  you already know the right block.
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button variant="secondary" onClick={() => void suggestionQuery.refetch()}>
+                  <Button
+                    variant="secondary"
+                    onClick={() => void suggestionQuery.refetch()}
+                  >
                     Refresh suggestions
                   </Button>
                   <Button
@@ -960,7 +1024,9 @@ export function TimeboxPlanningDialog({
                   >
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="font-medium">{timebox.title}</div>
-                      <Badge className="bg-white/[0.08] text-white/76">{timebox.source}</Badge>
+                      <Badge className="bg-white/[0.08] text-white/76">
+                        {timebox.source}
+                      </Badge>
                     </div>
                     <div className="mt-2 text-sm leading-6 text-white/58">
                       {formatContextTime(timebox.startsAt, timebox.endsAt)}
@@ -979,15 +1045,19 @@ export function TimeboxPlanningDialog({
                           <select
                             value={value.activityPresetKey ?? "task_inherited"}
                             onChange={(event) =>
-                              setValue({ activityPresetKey: event.target.value })
+                              setValue({
+                                activityPresetKey: event.target.value
+                              })
                             }
                             className="rounded-[18px] border border-white/8 bg-white/6 px-4 py-3 text-[15px] text-white outline-none"
                           >
-                            {getCalendarActivityPresetOptions().map((preset) => (
-                              <option key={preset.key} value={preset.key}>
-                                {preset.label}
-                              </option>
-                            ))}
+                            {getCalendarActivityPresetOptions().map(
+                              (preset) => (
+                                <option key={preset.key} value={preset.key}>
+                                  {preset.label}
+                                </option>
+                              )
+                            )}
                           </select>
                         </FlowField>
                         <FlowField label="Custom AP per hour">
@@ -1052,6 +1122,11 @@ export function TimeboxPlanningDialog({
       }
       value={draft}
       onChange={setDraft}
+      draftPersistenceKey={
+        editingTimebox
+          ? `calendar.timebox.${editingTimebox.id}`
+          : `calendar.timebox.new.${selectedTask?.id ?? "unscoped"}`
+      }
       steps={steps}
       submitLabel={isEditing ? "Save timebox" : "Schedule timebox"}
       pending={submitting}
@@ -1070,7 +1145,9 @@ export function TimeboxPlanningDialog({
             return;
           }
           if (manualEnd <= manualStart) {
-            setSubmitError("The manual timebox needs an end time after the start time.");
+            setSubmitError(
+              "The manual timebox needs an end time after the start time."
+            );
             return;
           }
           setSubmitError(null);
@@ -1108,7 +1185,9 @@ export function TimeboxPlanningDialog({
         }
 
         if (!selectedSuggestion) {
-          setSubmitError("Pick one suggested slot before scheduling the timebox.");
+          setSubmitError(
+            "Pick one suggested slot before scheduling the timebox."
+          );
           return;
         }
         setSubmitError(null);

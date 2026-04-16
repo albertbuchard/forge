@@ -1,10 +1,4 @@
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode
-} from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Plus, Search, X } from "lucide-react";
 import { EntityBadge } from "@/components/ui/entity-badge";
@@ -78,25 +72,36 @@ export function EntityLinkMultiSelect({
 
   const selectedOptions = useMemo(
     () =>
-      safeSelectedValues.map((value) => mergedOptions.find((option) => option.value === value) ?? { value, label: value }),
+      safeSelectedValues.map(
+        (value) =>
+          mergedOptions.find((option) => option.value === value) ?? {
+            value,
+            label: value
+          }
+      ),
     [mergedOptions, safeSelectedValues]
   );
 
   const normalizedQuery = normalize(query);
   const filteredOptions = useMemo(() => {
-    const pool = mergedOptions.filter((option) => !safeSelectedValues.includes(option.value));
+    const pool = mergedOptions.filter(
+      (option) => !safeSelectedValues.includes(option.value)
+    );
     if (!normalizedQuery) {
       return pool.slice(0, 8);
     }
     return pool
       .filter((option) => {
-        const haystack = `${option.label} ${option.description ?? ""} ${option.searchText ?? ""}`.toLowerCase();
+        const haystack =
+          `${option.label} ${option.description ?? ""} ${option.searchText ?? ""}`.toLowerCase();
         return haystack.includes(normalizedQuery);
       })
       .slice(0, 8);
   }, [mergedOptions, normalizedQuery, safeSelectedValues]);
 
-  const hasExactMatch = mergedOptions.some((option) => normalize(option.label) === normalizedQuery);
+  const hasExactMatch = mergedOptions.some(
+    (option) => normalize(option.label) === normalizedQuery
+  );
 
   useEffect(() => {
     if (!open) {
@@ -105,7 +110,10 @@ export function EntityLinkMultiSelect({
 
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
-      if (rootRef.current?.contains(target) || menuRef.current?.contains(target)) {
+      if (
+        rootRef.current?.contains(target) ||
+        menuRef.current?.contains(target)
+      ) {
         return;
       }
       setOpen(false);
@@ -146,14 +154,22 @@ export function EntityLinkMultiSelect({
     setPendingCreate(true);
     try {
       const option = await onCreate(nextValue);
-      setCreatedOptions((current) => (current.some((entry) => entry.value === option.value) ? current : [option, ...current]));
+      setCreatedOptions((current) =>
+        current.some((entry) => entry.value === option.value)
+          ? current
+          : [option, ...current]
+      );
       onChange(appendUnique(safeSelectedValues, option.value));
       setQuery("");
       setCreateError(null);
       setHighlightedIndex(0);
       setOpen(false);
     } catch (error) {
-      setCreateError(error instanceof Error ? error.message : "Unable to create that link right now.");
+      setCreateError(
+        error instanceof Error
+          ? error.message
+          : "Unable to create that link right now."
+      );
     } finally {
       setPendingCreate(false);
     }
@@ -177,14 +193,18 @@ export function EntityLinkMultiSelect({
             )}
           >
             {selectedOptions.map((option) => (
-              <span key={option.value} className="inline-flex min-w-0 max-w-full items-center gap-2">
+              <span
+                key={option.value}
+                className="inline-flex min-w-0 max-w-full items-center gap-2"
+              >
                 {option.kind ? (
                   <EntityBadge
                     kind={option.kind}
                     label={option.label}
                     compact
+                    wrap
                     gradient={false}
-                    className="max-w-[16rem]"
+                    className="max-w-full"
                   />
                 ) : option.badge ? (
                   option.badge
@@ -197,7 +217,9 @@ export function EntityLinkMultiSelect({
                         : "bg-white/[0.08] text-white/78"
                     )}
                   >
-                    <span className="max-w-[16rem] truncate">{option.label}</span>
+                    <span className="max-w-full break-words whitespace-normal [overflow-wrap:anywhere]">
+                      {option.label}
+                    </span>
                   </span>
                 )}
                 <button
@@ -222,12 +244,11 @@ export function EntityLinkMultiSelect({
           <Search
             className={cn(
               "size-4",
-              actionBarVariant
-                ? "text-[var(--ui-ink-faint)]"
-                : "text-white/34"
+              actionBarVariant ? "text-[var(--ui-ink-faint)]" : "text-white/34"
             )}
           />
           <input
+            type="text"
             value={query}
             onChange={(event) => {
               setQuery(event.target.value);
@@ -237,7 +258,11 @@ export function EntityLinkMultiSelect({
             }}
             onFocus={() => setOpen(true)}
             onKeyDown={(event) => {
-              if (event.key === "Backspace" && !query && safeSelectedValues.length > 0) {
+              if (
+                event.key === "Backspace" &&
+                !query &&
+                safeSelectedValues.length > 0
+              ) {
                 removeValue(safeSelectedValues[safeSelectedValues.length - 1]!);
                 return;
               }
@@ -245,7 +270,11 @@ export function EntityLinkMultiSelect({
               if (event.key === "ArrowDown") {
                 event.preventDefault();
                 setOpen(true);
-                setHighlightedIndex((current) => (filteredOptions.length === 0 ? 0 : Math.min(filteredOptions.length - 1, current + 1)));
+                setHighlightedIndex((current) =>
+                  filteredOptions.length === 0
+                    ? 0
+                    : Math.min(filteredOptions.length - 1, current + 1)
+                );
                 return;
               }
 
@@ -272,7 +301,9 @@ export function EntityLinkMultiSelect({
                 return;
               }
 
-              const exact = mergedOptions.find((option) => normalize(option.label) === normalizedQuery);
+              const exact = mergedOptions.find(
+                (option) => normalize(option.label) === normalizedQuery
+              );
               if (exact && !safeSelectedValues.includes(exact.value)) {
                 selectValue(exact.value);
                 return;
@@ -306,91 +337,102 @@ export function EntityLinkMultiSelect({
               )}
               style={menuStyle}
             >
-          {filteredOptions.map((option, index) => (
-            <button
-              key={option.value}
-              type="button"
-              role="option"
-              aria-selected={false}
-              className={cn(
-                "flex w-full items-start justify-between gap-3 rounded-[18px] px-3 py-2.5 text-left transition",
-                index === highlightedIndex
-                  ? actionBarVariant
-                    ? "bg-[var(--ui-surface-3)] text-[var(--ui-ink-strong)]"
-                    : "bg-white/[0.1] text-white"
-                  : actionBarVariant
-                    ? "text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
-                    : "text-white/70 hover:bg-white/[0.06] hover:text-white"
-              )}
-              onMouseEnter={() => setHighlightedIndex(index)}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => selectValue(option.value)}
-            >
-              <div className="min-w-0">
-                <div className="truncate text-sm font-medium">
-                  {option.kind ? (
-                    <EntityBadge
-                      kind={option.kind}
-                      label={option.label}
-                      compact
-                      gradient={false}
-                    />
-                  ) : option.menuBadge ? (
-                    option.menuBadge
-                  ) : option.badge ? (
-                    option.badge
-                  ) : (
-                    option.label
+              {filteredOptions.map((option, index) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="option"
+                  aria-selected={false}
+                  className={cn(
+                    "flex w-full items-start justify-between gap-3 rounded-[18px] px-3 py-2.5 text-left transition",
+                    index === highlightedIndex
+                      ? actionBarVariant
+                        ? "bg-[var(--ui-surface-3)] text-[var(--ui-ink-strong)]"
+                        : "bg-white/[0.1] text-white"
+                      : actionBarVariant
+                        ? "text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
+                        : "text-white/70 hover:bg-white/[0.06] hover:text-white"
                   )}
-                </div>
-                {option.description ? (
-                  <div
-                    className={cn(
-                      "mt-1 text-xs leading-5",
-                      actionBarVariant
-                        ? "text-[var(--ui-ink-soft)]"
-                        : "text-white/46"
-                    )}
-                  >
-                    {option.description}
+                  onMouseEnter={() => setHighlightedIndex(index)}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    selectValue(option.value);
+                  }}
+                  onClick={() => selectValue(option.value)}
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium">
+                      {option.kind ? (
+                        <EntityBadge
+                          kind={option.kind}
+                          label={option.label}
+                          compact
+                          gradient={false}
+                        />
+                      ) : option.menuBadge ? (
+                        option.menuBadge
+                      ) : option.badge ? (
+                        option.badge
+                      ) : (
+                        option.label
+                      )}
+                    </div>
+                    {option.description ? (
+                      <div
+                        className={cn(
+                          "mt-1 text-xs leading-5",
+                          actionBarVariant
+                            ? "text-[var(--ui-ink-soft)]"
+                            : "text-white/46"
+                        )}
+                      >
+                        {option.description}
+                      </div>
+                    ) : null}
                   </div>
-                ) : null}
-              </div>
-            </button>
-          ))}
+                </button>
+              ))}
 
-          {!hasExactMatch && normalizedQuery && onCreate ? (
-            <button
-              type="button"
-              disabled={pendingCreate}
-              className={cn(
-                "mt-1 flex w-full items-center gap-2 rounded-[18px] px-3 py-2.5 text-left text-sm transition disabled:opacity-50",
-                actionBarVariant
-                  ? "text-[var(--secondary)] hover:bg-[var(--ui-surface-hover)]"
-                  : "text-[var(--secondary)] hover:bg-white/[0.06]"
-              )}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => void createValue()}
-            >
-              <Plus className="size-4" />
-              <span className="truncate">
-                {pendingCreate ? "Creating…" : `${createLabel} "${query.trim()}"`}
-              </span>
-            </button>
-          ) : null}
+              {!hasExactMatch && normalizedQuery && onCreate ? (
+                <button
+                  type="button"
+                  disabled={pendingCreate}
+                  className={cn(
+                    "mt-1 flex w-full items-center gap-2 rounded-[18px] px-3 py-2.5 text-left text-sm transition disabled:opacity-50",
+                    actionBarVariant
+                      ? "text-[var(--secondary)] hover:bg-[var(--ui-surface-hover)]"
+                      : "text-[var(--secondary)] hover:bg-white/[0.06]"
+                  )}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    void createValue();
+                  }}
+                  onClick={() => void createValue()}
+                >
+                  <Plus className="size-4" />
+                  <span className="truncate">
+                    {pendingCreate
+                      ? "Creating…"
+                      : `${createLabel} "${query.trim()}"`}
+                  </span>
+                </button>
+              ) : null}
 
-          {filteredOptions.length === 0 && (!normalizedQuery || hasExactMatch || !onCreate) ? (
-            <div
-              className={cn(
-                "px-3 py-2.5 text-sm",
-                actionBarVariant
-                  ? "text-[var(--ui-ink-soft)]"
-                  : "text-white/42"
-              )}
-            >
-              {emptyMessage}
-            </div>
-          ) : null}
+              {filteredOptions.length === 0 &&
+              (!normalizedQuery || hasExactMatch || !onCreate) ? (
+                <div
+                  className={cn(
+                    "px-3 py-2.5 text-sm",
+                    actionBarVariant
+                      ? "text-[var(--ui-ink-soft)]"
+                      : "text-white/42"
+                  )}
+                >
+                  {emptyMessage}
+                </div>
+              ) : null}
             </div>,
             document.body
           )

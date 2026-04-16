@@ -321,7 +321,9 @@ export function HabitDialog({
           <FlowField label="Generate workout record">
             <FlowChoiceGrid
               value={
-                value.generatedHealthEventTemplate.enabled ? "enabled" : "disabled"
+                value.generatedHealthEventTemplate.enabled
+                  ? "enabled"
+                  : "disabled"
               }
               onChange={(next) =>
                 setValue({
@@ -729,6 +731,9 @@ export function HabitDialog({
       description="Habits are recurring commitments or recurring slips with explicit XP consequences."
       value={draft}
       onChange={setDraft}
+      draftPersistenceKey={
+        editingHabit ? `habit.${editingHabit.id}` : "habit.new"
+      }
       steps={steps}
       pending={pending}
       pendingLabel={editingHabit ? "Save habit" : "Create habit"}

@@ -38,14 +38,22 @@ describe("question flow quality coverage", () => {
       ["Habit", /strengthen or interrupt/i, /honest check-in/i],
       ["Tag", /help you notice or find again later/i, /inside versus outside/i],
       ["Note", /worth preserving in a note/i, /durable or temporary/i],
+      ["Wiki Page", /main reference for/i, /durable reference page/i],
       ["Insight", /future-you or the agent/i, /practical recommendation/i],
       ["Calendar Event", /when should it happen in your local time/i, /timezone/i],
       ["Work Block Template", /when should it repeat/i, /allows or blocks work/i],
       ["Task Timebox", /make time for/i, /planned work with completed work/i],
       ["Task Run", /Which task should I start/i, /Start the run instead of turning it into intake/i],
+      ["Work Adjustment", /time correction belong to/i, /truthfully/i],
       ["Self Observation", /notice most clearly in that moment/i, /support later reflection/i],
       ["Sleep Session", /important enough to remember or connect/i, /reflective takeaway/i],
       ["Workout Session", /most worth remembering or connecting/i, /subjective effort, mood, meaning/i],
+      ["Calendar Connection", /calendar provider are you trying to connect/i, /workflow they are trying to unlock/i],
+      ["Preference Judgment", /comparison are you actually trying to settle/i, /pairwise preference decision/i],
+      ["Preference Signal", /remember about this item right now/i, /favorite, veto, bookmark,[\s\S]*compare-later/i],
+      ["Movement", /stayed and traveled/i, /dedicated movement read or write path/i],
+      ["Life Force", /current energy picture/i, /dedicated life-force path/i],
+      ["Workbench", /inspect a flow, change it, run it/i, /dedicated workbench route family/i],
       ["Preference Catalog", /decision or taste question should this catalog help with/i, /comparison pool/i],
       ["Preference Catalog Item", /meaningfully worth comparing/i, /clear and fair/i],
       ["Preference Context", /treat your preferences differently here/i, /inside versus outside/i],
@@ -115,6 +123,24 @@ describe("question flow quality coverage", () => {
     );
     expect(entityPlaybook).toMatch(
       /what felt most important to name before it gets smoothed over or forgotten/i
+    );
+    expect(entityPlaybook).toMatch(
+      /what sentence future-you would need to recover from this note later/i
+    );
+    expect(entityPlaybook).toMatch(
+      /what belongs inside the boundary and what can stay out if the scope still[\s\S]*feels muddy/i
+    );
+    expect(entityPlaybook).toMatch(
+      /smallest concrete slice if the observation still feels vague[\s\S]*global/i
+    );
+    expect(entityPlaybook).toMatch(
+      /do not ask a broad review question again[\s\S]*then act/i
+    );
+    expect(entityPlaybook).toMatch(
+      /what would make the comparison confusing or unfair if the label stayed as-is/i
+    );
+    expect(entityPlaybook).toMatch(
+      /what would make the instrument distinct instead of redundant/i
     );
   });
 

@@ -97,7 +97,10 @@ const MICROSOFT_CLIENT_ID_PATTERN =
   /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 const OAUTH_SESSION_POLL_INTERVAL_MS = 1000;
 
-const PROVIDER_DEFAULTS: Record<CalendarProvider, { label: string; serverUrl: string }> = {
+const PROVIDER_DEFAULTS: Record<
+  CalendarProvider,
+  { label: string; serverUrl: string }
+> = {
   google: {
     label: "Primary Google",
     serverUrl: ""
@@ -161,7 +164,10 @@ function buildGoogleSettingsDraft(
 
 function sanitizeGoogleSetupMessage(message: string) {
   return message
-    .replace(/\s*No GOOGLE_CLIENT_SECRET is used in this local PKCE flow\./gi, "")
+    .replace(
+      /\s*No GOOGLE_CLIENT_SECRET is used in this local PKCE flow\./gi,
+      ""
+    )
     .replace(/\s{2,}/g, " ")
     .trim();
 }
@@ -174,7 +180,10 @@ function buildGoogleClientIdMissingMessage() {
   ].join("\n");
 }
 
-function buildGoogleRouteErrorMessage(routeMessage: string, allowedOrigins: string[]) {
+function buildGoogleRouteErrorMessage(
+  routeMessage: string,
+  allowedOrigins: string[]
+) {
   return [
     routeMessage,
     `- Open Forge from a local browser on the host running Forge.`,
@@ -397,32 +406,44 @@ export function CalendarConnectionFlowDialog({
   pending?: boolean;
 }) {
   const queryClient = useQueryClient();
-  const [draft, setDraft] = useState<ConnectionDraft>(() => createDraft(initialProvider));
+  const [draft, setDraft] = useState<ConnectionDraft>(() =>
+    createDraft(initialProvider)
+  );
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [discovery, setDiscovery] = useState<CalendarDiscoveryPayload | null>(null);
+  const [discovery, setDiscovery] = useState<CalendarDiscoveryPayload | null>(
+    null
+  );
   const [macosStatus, setMacosStatus] =
     useState<MacOSCalendarAccessStatus>("not_determined");
   const [macosDiscovery, setMacosDiscovery] =
     useState<MacOSLocalCalendarDiscoveryPayload | null>(null);
-  const [googleSession, setGoogleSession] = useState<GoogleCalendarOauthSession | null>(null);
-  const [microsoftSession, setMicrosoftSession] = useState<MicrosoftCalendarOauthSession | null>(null);
+  const [googleSession, setGoogleSession] =
+    useState<GoogleCalendarOauthSession | null>(null);
+  const [microsoftSession, setMicrosoftSession] =
+    useState<MicrosoftCalendarOauthSession | null>(null);
   const [activeGoogleSetup, setActiveGoogleSetup] =
     useState<GoogleCalendarAuthSettings>(googleSetup);
-  const [googleSettingsDraft, setGoogleSettingsDraft] = useState<GoogleSettingsDraft>(() =>
-    buildGoogleSettingsDraft(googleSetup)
-  );
+  const [googleSettingsDraft, setGoogleSettingsDraft] =
+    useState<GoogleSettingsDraft>(() => buildGoogleSettingsDraft(googleSetup));
   const [savedGoogleSettingsDraft, setSavedGoogleSettingsDraft] =
     useState<GoogleSettingsDraft>(() => buildGoogleSettingsDraft(googleSetup));
   const [googleClientIdEditing, setGoogleClientIdEditing] = useState(false);
-  const [googleSetupMessage, setGoogleSetupMessage] = useState<string | null>(null);
+  const [googleSetupMessage, setGoogleSetupMessage] = useState<string | null>(
+    null
+  );
   const [activeMicrosoftSetup, setActiveMicrosoftSetup] =
     useState<MicrosoftCalendarAuthSettings>(microsoftSetup);
-  const [microsoftSettingsDraft, setMicrosoftSettingsDraft] = useState<MicrosoftSettingsDraft>(() =>
-    buildMicrosoftSettingsDraft(microsoftSetup)
-  );
+  const [microsoftSettingsDraft, setMicrosoftSettingsDraft] =
+    useState<MicrosoftSettingsDraft>(() =>
+      buildMicrosoftSettingsDraft(microsoftSetup)
+    );
   const [savedMicrosoftSettingsDraft, setSavedMicrosoftSettingsDraft] =
-    useState<MicrosoftSettingsDraft>(() => buildMicrosoftSettingsDraft(microsoftSetup));
-  const [microsoftSetupMessage, setMicrosoftSetupMessage] = useState<string | null>(null);
+    useState<MicrosoftSettingsDraft>(() =>
+      buildMicrosoftSettingsDraft(microsoftSetup)
+    );
+  const [microsoftSetupMessage, setMicrosoftSetupMessage] = useState<
+    string | null
+  >(null);
   const popupRef = useRef<Window | null>(null);
 
   const findSharedForgeWriteTarget = (excludeConnectionIds: string[] = []) => {
@@ -454,7 +475,9 @@ export function CalendarConnectionFlowDialog({
       : sharedForgeWriteTarget.label
     : null;
 
-  const applyServerSettings = (response: Awaited<ReturnType<typeof patchSettings>>) => {
+  const applyServerSettings = (
+    response: Awaited<ReturnType<typeof patchSettings>>
+  ) => {
     queryClient.setQueryData(["forge-settings"], response);
     return response.settings;
   };
@@ -474,7 +497,9 @@ export function CalendarConnectionFlowDialog({
     const syncSelection = payload.calendars
       .filter((calendar) => calendar.selectedByDefault)
       .map((calendar) => calendar.url);
-    const existingForge = payload.calendars.find((calendar) => calendar.isForgeCandidate);
+    const existingForge = payload.calendars.find(
+      (calendar) => calendar.isForgeCandidate
+    );
     setDraft((current) => {
       const sharedWriteTarget = findSharedForgeWriteTarget(
         current.replaceConnectionIds
@@ -492,7 +517,7 @@ export function CalendarConnectionFlowDialog({
             ? null
             : sharedWriteTarget
               ? null
-              : existingForge?.url ?? current.forgeCalendarUrl ?? null,
+              : (existingForge?.url ?? current.forgeCalendarUrl ?? null),
         createForgeCalendar:
           current.provider === "microsoft"
             ? false
@@ -540,7 +565,9 @@ export function CalendarConnectionFlowDialog({
     ) {
       return;
     }
-    const existingForge = discovery.calendars.find((calendar) => calendar.isForgeCandidate);
+    const existingForge = discovery.calendars.find(
+      (calendar) => calendar.isForgeCandidate
+    );
     if (!existingForge) {
       return;
     }
@@ -612,7 +639,7 @@ export function CalendarConnectionFlowDialog({
       }
       if (
         event.data?.type !== "forge:google-calendar-auth" ||
-          event.data?.sessionId !== googleSession.sessionId
+        event.data?.sessionId !== googleSession.sessionId
       ) {
         return;
       }
@@ -665,7 +692,7 @@ export function CalendarConnectionFlowDialog({
       }
       if (
         event.data?.type !== "forge:microsoft-calendar-auth" ||
-          event.data?.sessionId !== microsoftSession.sessionId
+        event.data?.sessionId !== microsoftSession.sessionId
       ) {
         return;
       }
@@ -705,9 +732,11 @@ export function CalendarConnectionFlowDialog({
           setMacosDiscovery(discovery);
           setMacosStatus(discovery.status);
           const preferredSource =
-            discovery.sources.find((source) =>
-              source.sourceId === draft.sourceId
-            ) ?? discovery.sources[0] ?? null;
+            discovery.sources.find(
+              (source) => source.sourceId === draft.sourceId
+            ) ??
+            discovery.sources[0] ??
+            null;
           if (preferredSource) {
             applyDiscoveryPayload({
               provider: "macos_local",
@@ -798,13 +827,7 @@ export function CalendarConnectionFlowDialog({
       return;
     }
     void discoveryMutation.mutateAsync();
-  }, [
-    discoveryMutation,
-    draft.provider,
-    macosDiscovery,
-    macosStatus,
-    open
-  ]);
+  }, [discoveryMutation, draft.provider, macosDiscovery, macosStatus, open]);
 
   const saveMicrosoftSettingsMutation = useMutation({
     mutationFn: async (input: MicrosoftSettingsDraft) => {
@@ -855,7 +878,9 @@ export function CalendarConnectionFlowDialog({
     },
     onSuccess: async ({ normalized, settings }) => {
       setActiveGoogleSetup(settings.calendarProviders.google);
-      const savedDraft = buildGoogleSettingsDraft(settings.calendarProviders.google);
+      const savedDraft = buildGoogleSettingsDraft(
+        settings.calendarProviders.google
+      );
       setSavedGoogleSettingsDraft(savedDraft);
       setGoogleSettingsDraft(savedDraft);
       setGoogleClientIdEditing(false);
@@ -922,8 +947,8 @@ export function CalendarConnectionFlowDialog({
     activeGoogleSetup.allowedOrigins.includes(currentBrowserOrigin) &&
     (!activeGoogleSetup.isLocalOnly ||
       isLoopbackHostname(new URL(currentBrowserOrigin).hostname));
-  const googleWrongRouteMessage = currentBrowserOrigin &&
-    !googlePairingAllowedFromCurrentOrigin
+  const googleWrongRouteMessage =
+    currentBrowserOrigin && !googlePairingAllowedFromCurrentOrigin
       ? describeGoogleRouteRequirement({
           currentOrigin: currentBrowserOrigin,
           appBaseUrl: activeGoogleSetup.appBaseUrl,
@@ -947,13 +972,17 @@ export function CalendarConnectionFlowDialog({
       return submitError;
     }
 
-    if (draft.provider === "google" && (stepId === "credentials" || stepId === "discovery")) {
+    if (
+      draft.provider === "google" &&
+      (stepId === "credentials" || stepId === "discovery")
+    ) {
       if (hasUnsavedGoogleSettings) {
         return "Save the Google OAuth credential change before starting sign-in.";
       }
-      const googleBlockingMessages = [googleRouteError, googleSetupError].filter(
-        (message): message is string => Boolean(message)
-      );
+      const googleBlockingMessages = [
+        googleRouteError,
+        googleSetupError
+      ].filter((message): message is string => Boolean(message));
       if (googleBlockingMessages.length > 0) {
         return googleBlockingMessages.join("\n\n");
       }
@@ -963,7 +992,11 @@ export function CalendarConnectionFlowDialog({
       if (hasUnsavedMicrosoftSettings) {
         return "Save these Microsoft settings before starting sign-in.";
       }
-      if (!hasUnsavedMicrosoftSettings && !savedMicrosoftSettingsDraft.clientId && !microsoftSetupMessage) {
+      if (
+        !hasUnsavedMicrosoftSettings &&
+        !savedMicrosoftSettingsDraft.clientId &&
+        !microsoftSetupMessage
+      ) {
         return activeMicrosoftSetup.setupMessage;
       }
     }
@@ -1171,27 +1204,32 @@ export function CalendarConnectionFlowDialog({
                   {
                     value: "google",
                     label: "Google Calendar",
-                    description: "Use Google sign-in with Authorization Code + PKCE, let Forge exchange the code on the backend, and store a per-user refresh token server-side."
+                    description:
+                      "Use Google sign-in with Authorization Code + PKCE, let Forge exchange the code on the backend, and store a per-user refresh token server-side."
                   },
                   {
                     value: "apple",
                     label: "Apple Calendar",
-                    description: "Start from https://caldav.icloud.com and autodiscover calendars with your app password."
+                    description:
+                      "Start from https://caldav.icloud.com and autodiscover calendars with your app password."
                   },
                   {
                     value: "microsoft",
                     label: "Exchange Online",
-                    description: "Save the Microsoft app registration fields in Settings, then sign in with Microsoft and mirror selected Exchange Online calendars in read-only mode."
+                    description:
+                      "Save the Microsoft app registration fields in Settings, then sign in with Microsoft and mirror selected Exchange Online calendars in read-only mode."
                   },
                   {
                     value: "macos_local",
                     label: "Calendars On This Mac",
-                    description: "Use EventKit to access the calendars already configured in Calendar.app on this host machine and avoid reconnecting those same accounts manually."
+                    description:
+                      "Use EventKit to access the calendars already configured in Calendar.app on this host machine and avoid reconnecting those same accounts manually."
                   },
                   {
                     value: "caldav",
                     label: "Custom CalDAV",
-                    description: "Use a CalDAV base URL for Nextcloud, Fastmail, Baikal, and other compatible providers."
+                    description:
+                      "Use a CalDAV base URL for Nextcloud, Fastmail, Baikal, and other compatible providers."
                   }
                 ]}
               />
@@ -1204,14 +1242,15 @@ export function CalendarConnectionFlowDialog({
                   <div className="font-medium">Dedicated write calendar</div>
                 </div>
                 <p className="mt-3 text-sm leading-6 text-white/60">
-                  {value.provider === "microsoft"
-                    ? "Exchange Online is read-only for now. Forge mirrors selected calendars into Forge, but it does not publish work blocks or owned timeboxes back to Microsoft."
-                    : (
-                        <>
-                          Forge writes work blocks and owned timeboxes into a dedicated
-                          calendar named <span className="font-medium text-white">Forge</span>.
-                        </>
-                      )}
+                  {value.provider === "microsoft" ? (
+                    "Exchange Online is read-only for now. Forge mirrors selected calendars into Forge, but it does not publish work blocks or owned timeboxes back to Microsoft."
+                  ) : (
+                    <>
+                      Forge writes work blocks and owned timeboxes into a
+                      dedicated calendar named{" "}
+                      <span className="font-medium text-white">Forge</span>.
+                    </>
+                  )}
                 </p>
               </div>
               <div className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4">
@@ -1223,10 +1262,10 @@ export function CalendarConnectionFlowDialog({
                   {value.provider === "google"
                     ? "Forge opens a Google sign-in popup, exchanges the authorization code on the backend, stores a per-user refresh token, and then discovers the writable calendars for that account."
                     : value.provider === "macos_local"
-                    ? "Forge asks macOS for Calendar access, discovers the host calendars grouped by account source, and replaces overlapping remote connections instead of keeping two copies."
-                    : value.provider === "microsoft"
-                    ? "Forge starts a Microsoft sign-in popup, then discovers the calendars available to that account before you choose what to mirror."
-                    : "Forge discovers the actual calendar collections before you choose which ones to mirror and which one should receive owned timeboxes."}
+                      ? "Forge asks macOS for Calendar access, discovers the host calendars grouped by account source, and replaces overlapping remote connections instead of keeping two copies."
+                      : value.provider === "microsoft"
+                        ? "Forge starts a Microsoft sign-in popup, then discovers the calendars available to that account before you choose what to mirror."
+                        : "Forge discovers the actual calendar collections before you choose which ones to mirror and which one should receive owned timeboxes."}
                 </p>
               </div>
             </div>
@@ -1236,9 +1275,9 @@ export function CalendarConnectionFlowDialog({
                 Setup guide
               </div>
               <p className="mt-2 text-sm leading-6 text-white/60">
-                These are the exact setup steps for the selected provider. They stay
-                inside this guided flow so Settings can stay focused on connection
-                health and actions.
+                These are the exact setup steps for the selected provider. They
+                stay inside this guided flow so Settings can stay focused on
+                connection health and actions.
               </p>
               <div className="mt-4">
                 <CalendarSetupGuide provider={value.provider} compact />
@@ -1255,21 +1294,21 @@ export function CalendarConnectionFlowDialog({
             ? "Sign in with Google"
             : draft.provider === "macos_local"
               ? "Use the calendars already configured on this Mac"
-            : draft.provider === "apple"
-              ? "Provide the Apple account email and app-specific password"
-              : draft.provider === "microsoft"
-              ? "Sign in with Microsoft"
-              : "Provide the custom CalDAV base URL and credentials",
+              : draft.provider === "apple"
+                ? "Provide the Apple account email and app-specific password"
+                : draft.provider === "microsoft"
+                  ? "Sign in with Microsoft"
+                  : "Provide the custom CalDAV base URL and credentials",
         description:
           draft.provider === "google"
             ? "Review the Google desktop OAuth client, save a local override only if you need one, then start the popup and let Forge finish the PKCE exchange on the backend."
             : draft.provider === "macos_local"
-            ? "Forge requests Calendar access through EventKit, discovers sources from Calendar.app, then lets you choose which host calendars to mirror and where Forge should write."
-            : draft.provider === "apple"
-            ? "Apple discovery starts from https://caldav.icloud.com, so you only need the Apple ID email and app password here."
-            : draft.provider === "microsoft"
-              ? "Forge uses the Microsoft client ID, tenant, and redirect URI saved in Settings -> Calendar, then runs a guided popup sign-in."
-              : "Forge stores the secrets securely, then discovers the available calendars before anything is saved.",
+              ? "Forge requests Calendar access through EventKit, discovers sources from Calendar.app, then lets you choose which host calendars to mirror and where Forge should write."
+              : draft.provider === "apple"
+                ? "Apple discovery starts from https://caldav.icloud.com, so you only need the Apple ID email and app password here."
+                : draft.provider === "microsoft"
+                  ? "Forge uses the Microsoft client ID, tenant, and redirect URI saved in Settings -> Calendar, then runs a guided popup sign-in."
+                  : "Forge stores the secrets securely, then discovers the available calendars before anything is saved.",
         render: (value, setValue) => (
           <div className="grid gap-4">
             <FlowField
@@ -1292,9 +1331,10 @@ export function CalendarConnectionFlowDialog({
                         macOS Calendar access
                       </div>
                       <p className="mt-2 max-w-2xl text-sm leading-6 text-white/60">
-                        Forge uses EventKit to read and write the calendars already
-                        configured in Calendar.app on this Mac. Grant Calendar full
-                        access, then discover the available account sources.
+                        Forge uses EventKit to read and write the calendars
+                        already configured in Calendar.app on this Mac. Grant
+                        Calendar full access, then discover the available
+                        account sources.
                       </p>
                     </div>
                     <Badge
@@ -1374,7 +1414,8 @@ export function CalendarConnectionFlowDialog({
                               {source.accountLabel || source.sourceTitle}
                             </div>
                             <div className="mt-1 text-sm text-white/56">
-                              {source.sourceType} · {source.calendars.length} calendars
+                              {source.sourceType} · {source.calendars.length}{" "}
+                              calendars
                             </div>
                           </button>
                         );
@@ -1448,14 +1489,18 @@ export function CalendarConnectionFlowDialog({
                                 </span>
                                 <Badge
                                   className={
-                                    (activeGoogleSetup.storedClientId || "") ||
-                                    (activeGoogleSetup.storedClientSecret || "")
+                                    activeGoogleSetup.storedClientId ||
+                                    "" ||
+                                    activeGoogleSetup.storedClientSecret ||
+                                    ""
                                       ? "bg-emerald-500/16 text-emerald-100"
                                       : "bg-white/[0.08] text-white/72"
                                   }
                                 >
-                                  {(activeGoogleSetup.storedClientId || "") ||
-                                  (activeGoogleSetup.storedClientSecret || "")
+                                  {activeGoogleSetup.storedClientId ||
+                                  "" ||
+                                  activeGoogleSetup.storedClientSecret ||
+                                  ""
                                     ? "Stored on server"
                                     : "Using packaged default"}
                                 </Badge>
@@ -1516,9 +1561,10 @@ export function CalendarConnectionFlowDialog({
                               Google OAuth override
                             </div>
                             <p className="mt-2 max-w-2xl text-sm leading-6 text-white/60">
-                              Save both the client ID and client secret only when
-                              this Forge install should use a different Google
-                              desktop OAuth app than the packaged default.
+                              Save both the client ID and client secret only
+                              when this Forge install should use a different
+                              Google desktop OAuth app than the packaged
+                              default.
                             </p>
                           </div>
                           <button
@@ -1592,7 +1638,8 @@ export function CalendarConnectionFlowDialog({
                               )
                             }
                             disabled={
-                              !hasUnsavedGoogleSettings || !googleValidation.isValid
+                              !hasUnsavedGoogleSettings ||
+                              !googleValidation.isValid
                             }
                             pending={saveGoogleSettingsMutation.isPending}
                             pendingLabel="Saving"
@@ -1634,9 +1681,9 @@ export function CalendarConnectionFlowDialog({
                   ) : null}
 
                   <div className="mt-4 rounded-[18px] border border-sky-400/20 bg-sky-400/10 px-4 py-3 text-sm leading-6 text-sky-50">
-                    If you open Forge on a phone or another remote route,
-                    Google redirects to localhost on that other device instead of
-                    back to Forge.
+                    If you open Forge on a phone or another remote route, Google
+                    redirects to localhost on that other device instead of back
+                    to Forge.
                   </div>
 
                   <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -1833,7 +1880,9 @@ export function CalendarConnectionFlowDialog({
                   >
                     <Input
                       value={value.serverUrl}
-                      onChange={(event) => setValue({ serverUrl: event.target.value })}
+                      onChange={(event) =>
+                        setValue({ serverUrl: event.target.value })
+                      }
                       placeholder="https://caldav.example.com"
                     />
                   </FlowField>
@@ -1848,18 +1897,26 @@ export function CalendarConnectionFlowDialog({
                 <FlowField label="Account email or username">
                   <Input
                     value={value.username}
-                    onChange={(event) => setValue({ username: event.target.value })}
+                    onChange={(event) =>
+                      setValue({ username: event.target.value })
+                    }
                     placeholder="operator@example.com"
                   />
                 </FlowField>
 
                 <FlowField
-                  label={value.provider === "apple" ? "App-specific password" : "Password or app password"}
+                  label={
+                    value.provider === "apple"
+                      ? "App-specific password"
+                      : "Password or app password"
+                  }
                 >
                   <Input
                     type="password"
                     value={value.password}
-                    onChange={(event) => setValue({ password: event.target.value })}
+                    onChange={(event) =>
+                      setValue({ password: event.target.value })
+                    }
                     placeholder="Password"
                   />
                 </FlowField>
@@ -1876,12 +1933,12 @@ export function CalendarConnectionFlowDialog({
           draft.provider === "microsoft"
             ? "Select the Exchange Online calendars Forge should mirror into the Calendar page. This connection stays read-only for now."
             : draft.provider === "macos_local"
-            ? sharedForgeWriteTargetLabel
-              ? `Select the host-machine calendars Forge should mirror into the Calendar page. Forge already writes work blocks and timeboxes through ${sharedForgeWriteTargetLabel}.`
-              : "Select the host-machine calendars Forge should mirror into the Calendar page, then choose the host calendar Forge should write into for work blocks and timeboxes."
-            : sharedForgeWriteTargetLabel
-              ? `Select the calendars Forge should mirror into the Calendar page. Forge already writes work blocks and timeboxes through ${sharedForgeWriteTargetLabel}.`
-              : "Select the calendars Forge should mirror into the Calendar page, then choose the calendar Forge should write into for work blocks and timeboxes.",
+              ? sharedForgeWriteTargetLabel
+                ? `Select the host-machine calendars Forge should mirror into the Calendar page. Forge already writes work blocks and timeboxes through ${sharedForgeWriteTargetLabel}.`
+                : "Select the host-machine calendars Forge should mirror into the Calendar page, then choose the host calendar Forge should write into for work blocks and timeboxes."
+              : sharedForgeWriteTargetLabel
+                ? `Select the calendars Forge should mirror into the Calendar page. Forge already writes work blocks and timeboxes through ${sharedForgeWriteTargetLabel}.`
+                : "Select the calendars Forge should mirror into the Calendar page, then choose the calendar Forge should write into for work blocks and timeboxes.",
         render: (value, setValue) => (
           <div className="grid gap-4">
             {value.provider === "google" ? (
@@ -1958,18 +2015,25 @@ export function CalendarConnectionFlowDialog({
             {discovery ? (
               <>
                 <div className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4 text-sm leading-6 text-white/64">
-                  {value.provider === "macos_local" ? "Discovered through the host calendar store" : "Discovered through"}{" "}
-                  <span className="font-medium text-white">{discovery.serverUrl}</span>
+                  {value.provider === "macos_local"
+                    ? "Discovered through the host calendar store"
+                    : "Discovered through"}{" "}
+                  <span className="font-medium text-white">
+                    {discovery.serverUrl}
+                  </span>
                   {discovery.homeUrl ? (
                     <>
                       {" "}
                       · home set{" "}
-                      <span className="font-medium text-white">{discovery.homeUrl}</span>
+                      <span className="font-medium text-white">
+                        {discovery.homeUrl}
+                      </span>
                     </>
                   ) : null}
                 </div>
 
-                {value.provider !== "microsoft" && sharedForgeWriteTargetLabel ? (
+                {value.provider !== "microsoft" &&
+                sharedForgeWriteTargetLabel ? (
                   <div className="rounded-[24px] border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm leading-6 text-emerald-50">
                     Forge already writes work blocks and owned timeboxes through{" "}
                     <span className="font-medium text-white">
@@ -1981,8 +2045,11 @@ export function CalendarConnectionFlowDialog({
 
                 <div className="grid gap-3">
                   {discovery.calendars.map((calendar) => {
-                    const selected = value.selectedCalendarUrls.includes(calendar.url);
-                    const isWriteTarget = value.forgeCalendarUrl === calendar.url;
+                    const selected = value.selectedCalendarUrls.includes(
+                      calendar.url
+                    );
+                    const isWriteTarget =
+                      value.forgeCalendarUrl === calendar.url;
                     return (
                       <div
                         key={calendar.url}
@@ -2021,7 +2088,10 @@ export function CalendarConnectionFlowDialog({
                                   ? value.selectedCalendarUrls.filter(
                                       (entry) => entry !== calendar.url
                                     )
-                                  : [...value.selectedCalendarUrls, calendar.url]
+                                  : [
+                                      ...value.selectedCalendarUrls,
+                                      calendar.url
+                                    ]
                               })
                             }
                             className={`rounded-full px-3 py-2 text-sm transition ${
@@ -2032,7 +2102,8 @@ export function CalendarConnectionFlowDialog({
                           >
                             {selected ? "Mirrored" : "Mirror into Forge"}
                           </button>
-                          {value.provider !== "microsoft" && !sharedForgeWriteTargetLabel ? (
+                          {value.provider !== "microsoft" &&
+                          !sharedForgeWriteTargetLabel ? (
                             <button
                               type="button"
                               onClick={() =>
@@ -2070,13 +2141,16 @@ export function CalendarConnectionFlowDialog({
                   })}
                 </div>
 
-                {value.provider !== "microsoft" && !sharedForgeWriteTargetLabel ? (
+                {value.provider !== "microsoft" &&
+                !sharedForgeWriteTargetLabel ? (
                   <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] p-4">
-                    <div className="font-medium text-white">No Forge calendar yet?</div>
+                    <div className="font-medium text-white">
+                      No Forge calendar yet?
+                    </div>
                     <p className="mt-2 text-sm leading-6 text-white/60">
-                      If none of the discovered calendars should receive Forge-owned
-                      work blocks and timeboxes, let Forge create a dedicated
-                      calendar named{" "}
+                      If none of the discovered calendars should receive
+                      Forge-owned work blocks and timeboxes, let Forge create a
+                      dedicated calendar named{" "}
                       <span className="font-medium text-white">Forge</span>.
                     </p>
                     <div className="mt-4">
@@ -2102,10 +2176,10 @@ export function CalendarConnectionFlowDialog({
                   </div>
                 ) : value.provider === "microsoft" ? (
                   <div className="rounded-[24px] border border-sky-400/20 bg-sky-400/10 p-4 text-sm leading-6 text-sky-50">
-                    Exchange Online is connected through Microsoft Graph in read-only
-                    mode. Forge will mirror the calendars you select here, but it
-                    will keep work blocks and owned timeboxes local or publish them
-                    through another writable provider.
+                    Exchange Online is connected through Microsoft Graph in
+                    read-only mode. Forge will mirror the calendars you select
+                    here, but it will keep work blocks and owned timeboxes local
+                    or publish them through another writable provider.
                   </div>
                 ) : (
                   <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] p-4 text-sm leading-6 text-white/60">
@@ -2113,8 +2187,8 @@ export function CalendarConnectionFlowDialog({
                     <span className="font-medium text-white">
                       {sharedForgeWriteTargetLabel}
                     </span>{" "}
-                    as the canonical write target instead of creating another Forge
-                    calendar on this connection.
+                    as the canonical write target instead of creating another
+                    Forge calendar on this connection.
                   </div>
                 )}
               </>
@@ -2128,24 +2202,25 @@ export function CalendarConnectionFlowDialog({
                   </>
                 ) : value.provider === "microsoft" ? (
                   <>
-                    Start the guided Microsoft sign-in first. Forge will bring the
-                    discovered Exchange Online calendars back here as soon as the
-                    popup completes.
+                    Start the guided Microsoft sign-in first. Forge will bring
+                    the discovered Exchange Online calendars back here as soon
+                    as the popup completes.
                   </>
                 ) : (
                   <>
-                    {value.provider === "macos_local"
-                      ? "Grant macOS Calendar access and discover the host calendars first. If Calendar.app already aggregates Google, Exchange, or iCloud for this Mac, Forge will pick them up here without reconnecting those accounts."
-                      : (
-                          <>
-                            Discover calendars after entering the credentials. For Apple,
-                            Forge starts from{" "}
-                            <span className="font-medium text-white">
-                              https://caldav.icloud.com
-                            </span>{" "}
-                            and resolves the principal plus calendar home automatically.
-                          </>
-                        )}
+                    {value.provider === "macos_local" ? (
+                      "Grant macOS Calendar access and discover the host calendars first. If Calendar.app already aggregates Google, Exchange, or iCloud for this Mac, Forge will pick them up here without reconnecting those accounts."
+                    ) : (
+                      <>
+                        Discover calendars after entering the credentials. For
+                        Apple, Forge starts from{" "}
+                        <span className="font-medium text-white">
+                          https://caldav.icloud.com
+                        </span>{" "}
+                        and resolves the principal plus calendar home
+                        automatically.
+                      </>
+                    )}
                   </>
                 )}
               </div>
@@ -2165,8 +2240,12 @@ export function CalendarConnectionFlowDialog({
               <div className="rounded-[20px] border border-white/8 bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/70">
                 Selected host source:{" "}
                 <span className="font-medium text-white">
-                  {macosDiscovery?.sources.find((source) => source.sourceId === value.sourceId)?.accountLabel ??
-                    macosDiscovery?.sources.find((source) => source.sourceId === value.sourceId)?.sourceTitle ??
+                  {macosDiscovery?.sources.find(
+                    (source) => source.sourceId === value.sourceId
+                  )?.accountLabel ??
+                    macosDiscovery?.sources.find(
+                      (source) => source.sourceId === value.sourceId
+                    )?.sourceTitle ??
                     value.sourceId}
                 </span>
               </div>
@@ -2185,11 +2264,11 @@ export function CalendarConnectionFlowDialog({
                       ? "Google Calendar"
                       : value.provider === "macos_local"
                         ? "Calendars On This Mac"
-                      : value.provider === "apple"
-                        ? "Apple Calendar"
-                        : value.provider === "microsoft"
-                          ? "Exchange Online"
-                          : "Custom CalDAV"}
+                        : value.provider === "apple"
+                          ? "Apple Calendar"
+                          : value.provider === "microsoft"
+                            ? "Exchange Online"
+                            : "Custom CalDAV"}
                   </div>
                 </div>
               </div>
@@ -2217,15 +2296,20 @@ export function CalendarConnectionFlowDialog({
               </div>
               {value.replaceConnectionIds.length > 0 ? (
                 <div className="mt-4 rounded-[20px] border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm leading-6 text-amber-50">
-                  Forge will replace {value.replaceConnectionIds.length} older overlapping
-                  connection{value.replaceConnectionIds.length === 1 ? "" : "s"} for this
+                  Forge will replace {value.replaceConnectionIds.length} older
+                  overlapping connection
+                  {value.replaceConnectionIds.length === 1 ? "" : "s"} for this
                   same calendar account so only one visible copy remains.
                   {existingConnections
-                    .filter((connection) => value.replaceConnectionIds.includes(connection.id))
+                    .filter((connection) =>
+                      value.replaceConnectionIds.includes(connection.id)
+                    )
                     .map((connection) => connection.label)
                     .join(", ")
                     ? ` ${existingConnections
-                        .filter((connection) => value.replaceConnectionIds.includes(connection.id))
+                        .filter((connection) =>
+                          value.replaceConnectionIds.includes(connection.id)
+                        )
                         .map((connection) => connection.label)
                         .join(", ")}.`
                     : ""}
@@ -2294,6 +2378,7 @@ export function CalendarConnectionFlowDialog({
           setMacosDiscovery(null);
         }
       }}
+      draftPersistenceKey="calendar.connection.new"
       steps={steps}
       submitLabel={submitLabel}
       pending={pending}
@@ -2305,11 +2390,15 @@ export function CalendarConnectionFlowDialog({
         try {
           setSubmitError(null);
           if (!discovery) {
-            setSubmitError("Discover the available calendars before saving the connection.");
+            setSubmitError(
+              "Discover the available calendars before saving the connection."
+            );
             return;
           }
           if (draft.selectedCalendarUrls.length === 0) {
-            setSubmitError("Select at least one calendar to mirror into Forge.");
+            setSubmitError(
+              "Select at least one calendar to mirror into Forge."
+            );
             return;
           }
           if (
@@ -2325,7 +2414,10 @@ export function CalendarConnectionFlowDialog({
           }
 
           if (draft.provider === "google") {
-            if (!googleSession?.sessionId || googleSession.status !== "authorized") {
+            if (
+              !googleSession?.sessionId ||
+              googleSession.status !== "authorized"
+            ) {
               setSubmitError(
                 "Complete the Google sign-in flow before saving this connection."
               );
@@ -2350,7 +2442,10 @@ export function CalendarConnectionFlowDialog({
               createForgeCalendar: draft.createForgeCalendar
             });
           } else if (draft.provider === "microsoft") {
-            if (!microsoftSession?.sessionId || microsoftSession.status !== "authorized") {
+            if (
+              !microsoftSession?.sessionId ||
+              microsoftSession.status !== "authorized"
+            ) {
               setSubmitError(
                 "Complete the Microsoft sign-in flow before saving this connection."
               );
@@ -2396,9 +2491,11 @@ export function CalendarConnectionFlowDialog({
             error instanceof ForgeApiError &&
             error.code === "calendar_connection_overlap"
           ) {
-            const response = (error as ForgeApiError & {
-              response?: { overlappingConnectionIds?: unknown };
-            }).response;
+            const response = (
+              error as ForgeApiError & {
+                response?: { overlappingConnectionIds?: unknown };
+              }
+            ).response;
             const overlappingConnectionIds = Array.isArray(
               response?.overlappingConnectionIds
             )

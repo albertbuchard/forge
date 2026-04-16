@@ -343,6 +343,9 @@ export function ProjectDialog({
       description={t("common.dialogs.project.description")}
       value={draft}
       onChange={setDraft}
+      draftPersistenceKey={
+        editingProject ? `project.${editingProject.id}` : "project.new"
+      }
       steps={steps}
       initialStepId={initialStepId}
       submitLabel={

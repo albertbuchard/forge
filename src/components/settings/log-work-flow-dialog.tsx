@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import { FlowChoiceGrid, FlowField, QuestionFlowDialog, type QuestionFlowStep } from "@/components/flows/question-flow-dialog";
+import {
+  FlowChoiceGrid,
+  FlowField,
+  QuestionFlowDialog,
+  type QuestionFlowStep
+} from "@/components/flows/question-flow-dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type { OperatorLogWorkInput } from "@/lib/types";
@@ -48,7 +53,9 @@ export function LogWorkFlowDialog({
   availableProjects?: ActiveProject[];
   onSubmit: (input: OperatorLogWorkInput) => Promise<void>;
 }) {
-  const [draft, setDraft] = useState<LogWorkDraft>(() => buildInitialDraft(defaultOwner));
+  const [draft, setDraft] = useState<LogWorkDraft>(() =>
+    buildInitialDraft(defaultOwner)
+  );
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -58,7 +65,8 @@ export function LogWorkFlowDialog({
     }
   }, [open, defaultOwner]);
 
-  const patch = (update: Partial<LogWorkDraft>) => setDraft((prev) => ({ ...prev, ...update }));
+  const patch = (update: Partial<LogWorkDraft>) =>
+    setDraft((prev) => ({ ...prev, ...update }));
 
   const steps: Array<QuestionFlowStep<LogWorkDraft>> = [
     {
@@ -72,22 +80,29 @@ export function LogWorkFlowDialog({
           <FlowChoiceGrid
             columns={2}
             value={value.source}
-            onChange={(next) => setValue({ source: next as "existing" | "new", taskId: "" })}
+            onChange={(next) =>
+              setValue({ source: next as "existing" | "new", taskId: "" })
+            }
             options={[
               {
                 value: "new",
                 label: "New task",
-                description: "The work is not tracked yet — Forge will create a task and log the time against it."
+                description:
+                  "The work is not tracked yet — Forge will create a task and log the time against it."
               },
               {
                 value: "existing",
                 label: "Existing task",
-                description: "Pick a task already in the board. The log will update its record and award XP."
+                description:
+                  "Pick a task already in the board. The log will update its record and award XP."
               }
             ]}
           />
           {value.source === "existing" && availableTasks.length > 0 ? (
-            <FlowField label="Pick the task" description="Select the task this work belongs to.">
+            <FlowField
+              label="Pick the task"
+              description="Select the task this work belongs to."
+            >
               <select
                 className="rounded-[14px] bg-white/[0.06] px-3 py-3 text-white"
                 value={value.taskId}
@@ -103,7 +118,8 @@ export function LogWorkFlowDialog({
             </FlowField>
           ) : value.source === "existing" && availableTasks.length === 0 ? (
             <div className="rounded-[18px] bg-white/[0.04] px-4 py-3 text-sm text-white/58">
-              No tasks are loaded yet. Switch to "New task" to create one from scratch.
+              No tasks are loaded yet. Switch to "New task" to create one from
+              scratch.
             </div>
           ) : null}
         </>
@@ -127,7 +143,10 @@ export function LogWorkFlowDialog({
               onChange={(e) => setValue({ title: e.target.value })}
             />
           </FlowField>
-          <FlowField label="Owner" description="Who did this work? Defaults to the operator name.">
+          <FlowField
+            label="Owner"
+            description="Who did this work? Defaults to the operator name."
+          >
             <Input
               value={value.owner}
               placeholder="Your name"
@@ -157,7 +176,10 @@ export function LogWorkFlowDialog({
       render: (value, setValue) => (
         <>
           <div className="grid gap-5 md:grid-cols-2">
-            <FlowField label="Project" description="Link this work to an active project if it belongs to one.">
+            <FlowField
+              label="Project"
+              description="Link this work to an active project if it belongs to one."
+            >
               <select
                 className="rounded-[14px] bg-white/[0.06] px-3 py-3 text-white"
                 value={value.projectId}
@@ -178,12 +200,30 @@ export function LogWorkFlowDialog({
               <FlowChoiceGrid
                 columns={2}
                 value={value.status}
-                onChange={(next) => setValue({ status: next as LogWorkDraft["status"] })}
+                onChange={(next) =>
+                  setValue({ status: next as LogWorkDraft["status"] })
+                }
                 options={[
-                  { value: "done", label: "Done", description: "Work is complete." },
-                  { value: "in_progress", label: "In progress", description: "Still active but already worth logging." },
-                  { value: "focus", label: "Focus", description: "Moved into focus." },
-                  { value: "blocked", label: "Blocked", description: "Work hit a wall." }
+                  {
+                    value: "done",
+                    label: "Done",
+                    description: "Work is complete."
+                  },
+                  {
+                    value: "in_progress",
+                    label: "In progress",
+                    description: "Still active but already worth logging."
+                  },
+                  {
+                    value: "focus",
+                    label: "Focus",
+                    description: "Moved into focus."
+                  },
+                  {
+                    value: "blocked",
+                    label: "Blocked",
+                    description: "Work hit a wall."
+                  }
                 ]}
               />
             </FlowField>
@@ -229,6 +269,7 @@ export function LogWorkFlowDialog({
       description="Capture work that happened outside the timer so it counts toward progress and XP."
       value={draft}
       onChange={setDraft}
+      draftPersistenceKey="settings.log-work"
       steps={steps}
       submitLabel="Log work"
       pending={pending}
@@ -247,8 +288,14 @@ export function LogWorkFlowDialog({
 
         try {
           await onSubmit({
-            taskId: draft.source === "existing" && draft.taskId ? draft.taskId : undefined,
-            title: draft.source === "new" && draft.title.trim() ? draft.title.trim() : undefined,
+            taskId:
+              draft.source === "existing" && draft.taskId
+                ? draft.taskId
+                : undefined,
+            title:
+              draft.source === "new" && draft.title.trim()
+                ? draft.title.trim()
+                : undefined,
             description: draft.description.trim() || undefined,
             owner: draft.owner.trim() || undefined,
             projectId: draft.projectId || null,
@@ -257,7 +304,11 @@ export function LogWorkFlowDialog({
           });
           onOpenChange(false);
         } catch (error) {
-          setSubmitError(error instanceof Error ? error.message : "Could not log the work right now.");
+          setSubmitError(
+            error instanceof Error
+              ? error.message
+              : "Could not log the work right now."
+          );
         }
       }}
     />

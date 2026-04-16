@@ -69,7 +69,8 @@ export const mobileWatchHabitCheckInSchema = z.object({
   dedupeKey: z.string().trim().min(1),
   dateKey: z.string().trim().min(1).default(new Date().toISOString().slice(0, 10)),
   status: z.enum(["done", "missed"]),
-  note: z.string().trim().default("")
+  note: z.string().trim().default(""),
+  description: z.string().trim().optional()
 });
 
 export const mobileWatchCaptureBatchSchema = z.object({

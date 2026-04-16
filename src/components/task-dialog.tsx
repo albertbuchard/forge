@@ -168,13 +168,13 @@ function buildTaskDraft(options: {
     return taskToFormValues(editingTask);
   }
 
-  const parent =
-    initialParentWorkItemId
-      ? workItems.find((item) => item.id === initialParentWorkItemId) ?? null
-      : null;
+  const parent = initialParentWorkItemId
+    ? (workItems.find((item) => item.id === initialParentWorkItemId) ?? null)
+    : null;
   const project =
-    projects.find((entry) => entry.id === (parent?.projectId ?? initialProjectId)) ??
-    null;
+    projects.find(
+      (entry) => entry.id === (parent?.projectId ?? initialProjectId)
+    ) ?? null;
   const userId = project?.userId ?? defaultUserId ?? null;
 
   return {
@@ -244,7 +244,9 @@ function buildSelectedAnchorOptions(options: {
   }
 
   if (draft.parentWorkItemId) {
-    const parent = workItems.find((entry) => entry.id === draft.parentWorkItemId);
+    const parent = workItems.find(
+      (entry) => entry.id === draft.parentWorkItemId
+    );
     if (parent) {
       selected.push({
         id: `${parent.level}:${parent.id}`,
@@ -364,7 +366,7 @@ function applyAnchorSelection(
 ): Partial<QuickTaskInput> {
   if (option.kind === "goal") {
     const currentProject = current.projectId
-      ? workItems.find((item) => item.projectId === current.projectId) ?? null
+      ? (workItems.find((item) => item.projectId === current.projectId) ?? null)
       : null;
     const projectStillMatches =
       !current.projectId ||
@@ -379,7 +381,7 @@ function applyAnchorSelection(
 
   if (option.kind === "project") {
     const currentParent = current.parentWorkItemId
-      ? workItems.find((item) => item.id === current.parentWorkItemId) ?? null
+      ? (workItems.find((item) => item.id === current.parentWorkItemId) ?? null)
       : null;
     return {
       goalId: option.goalId ?? current.goalId,
@@ -398,9 +400,7 @@ function applyAnchorSelection(
   };
 }
 
-function clearAnchorSelection(
-  kind: AnchorKind
-): Partial<QuickTaskInput> {
+function clearAnchorSelection(kind: AnchorKind): Partial<QuickTaskInput> {
   if (kind === "goal") {
     return { goalId: "", projectId: "", parentWorkItemId: null };
   }
@@ -490,8 +490,9 @@ export function TaskDialog({
   const [anchorOpen, setAnchorOpen] = useState(false);
   const [anchorHighlightedIndex, setAnchorHighlightedIndex] = useState(0);
   const [anchorError, setAnchorError] = useState<string | null>(null);
-  const [anchorCreatePendingId, setAnchorCreatePendingId] =
-    useState<string | null>(null);
+  const [anchorCreatePendingId, setAnchorCreatePendingId] = useState<
+    string | null
+  >(null);
 
   const updateFieldErrors = (errors: Record<string, string[] | undefined>) => {
     setFieldErrors(
@@ -572,7 +573,13 @@ export function TaskDialog({
         allowedKinds: allowedAnchorKinds,
         editingTaskId: editingTask?.id
       }),
-    [allowedAnchorKinds, editingTask?.id, safeGoals, safeProjects, safeWorkItems]
+    [
+      allowedAnchorKinds,
+      editingTask?.id,
+      safeGoals,
+      safeProjects,
+      safeWorkItems
+    ]
   );
   const anchorSuggestions = useMemo<AnchorOption[]>(() => {
     const normalizedQuery = normalize(anchorQuery);
@@ -594,7 +601,8 @@ export function TaskDialog({
           kind,
           mode: "create" as const,
           label: anchorQuery.trim(),
-          description: "Pick or create a goal first, then create a project here.",
+          description:
+            "Pick or create a goal first, then create a project here.",
           disabled: true,
           disabledReason: "Pick or create a goal first."
         };
@@ -605,7 +613,8 @@ export function TaskDialog({
           kind,
           mode: "create" as const,
           label: anchorQuery.trim(),
-          description: "Pick or create a project first, then create an issue here.",
+          description:
+            "Pick or create a project first, then create an issue here.",
           disabled: true,
           disabledReason: "Pick or create a project first."
         };
@@ -689,7 +698,9 @@ export function TaskDialog({
           entityId: response.goal.id,
           label: response.goal.title,
           description: "Goal",
-          searchText: normalize(`${response.goal.title} ${response.goal.description}`),
+          searchText: normalize(
+            `${response.goal.title} ${response.goal.description}`
+          ),
           goalId: response.goal.id,
           projectId: null,
           parentWorkItemId: null
@@ -833,7 +844,9 @@ export function TaskDialog({
                           selectedAnchorOptions.length > 0
                         ) {
                           removeAnchor(
-                            selectedAnchorOptions[selectedAnchorOptions.length - 1]!.kind
+                            selectedAnchorOptions[
+                              selectedAnchorOptions.length - 1
+                            ]!.kind
                           );
                           return;
                         }
@@ -844,7 +857,10 @@ export function TaskDialog({
                           setAnchorHighlightedIndex((current) =>
                             anchorSuggestions.length === 0
                               ? 0
-                              : Math.min(anchorSuggestions.length - 1, current + 1)
+                              : Math.min(
+                                  anchorSuggestions.length - 1,
+                                  current + 1
+                                )
                           );
                           return;
                         }
@@ -889,7 +905,8 @@ export function TaskDialog({
                             key={suggestion.id}
                             type="button"
                             disabled={
-                              suggestion.mode === "create" && suggestion.disabled
+                              suggestion.mode === "create" &&
+                              suggestion.disabled
                             }
                             className={cn(
                               "flex w-full items-start justify-between gap-3 rounded-[18px] px-3 py-2.5 text-left transition",
@@ -900,7 +917,9 @@ export function TaskDialog({
                                 suggestion.disabled &&
                                 "cursor-not-allowed opacity-45"
                             )}
-                            onMouseEnter={() => setAnchorHighlightedIndex(index)}
+                            onMouseEnter={() =>
+                              setAnchorHighlightedIndex(index)
+                            }
                             onMouseDown={(event) => event.preventDefault()}
                             onClick={() => {
                               if (suggestion.mode === "existing") {
@@ -948,15 +967,15 @@ export function TaskDialog({
                   ) : null}
                 </div>
 
-	                {anchorError ? (
-	                  <div className="mt-3 rounded-[16px] border border-rose-400/16 bg-rose-400/10 px-3 py-2 text-sm text-rose-100">
-	                    {anchorError}
-	                  </div>
-	                ) : null}
-	              </div>
-	            </div>
-	          </FlowField>
-	          <div className="grid gap-3 md:grid-cols-2">
+                {anchorError ? (
+                  <div className="mt-3 rounded-[16px] border border-rose-400/16 bg-rose-400/10 px-3 py-2 text-sm text-rose-100">
+                    {anchorError}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </FlowField>
+          <div className="grid gap-3 md:grid-cols-2">
             <FlowField label="Resolved project">
               <Input
                 readOnly
@@ -968,7 +987,8 @@ export function TaskDialog({
               <Input
                 readOnly
                 value={
-                  safeGoals.find((goal) => goal.id === value.goalId)?.title ?? ""
+                  safeGoals.find((goal) => goal.id === value.goalId)?.title ??
+                  ""
                 }
                 placeholder="Select or create a goal anchor"
               />
@@ -1000,7 +1020,8 @@ export function TaskDialog({
                 {
                   value: "task",
                   label: "Task",
-                  description: "One focused AI session with direct instructions."
+                  description:
+                    "One focused AI session with direct instructions."
                 },
                 {
                   value: "subtask",
@@ -1036,8 +1057,9 @@ export function TaskDialog({
                   value={value.executionMode ?? "afk"}
                   onChange={(next) =>
                     setValue({
-                      executionMode:
-                        next as NonNullable<QuickTaskInput["executionMode"]>
+                      executionMode: next as NonNullable<
+                        QuickTaskInput["executionMode"]
+                      >
                     })
                   }
                   options={[
@@ -1294,8 +1316,9 @@ export function TaskDialog({
                 value={value.actionCostBand ?? "standard"}
                 onChange={(next) =>
                   setValue({
-                    actionCostBand:
-                      next as NonNullable<QuickTaskInput["actionCostBand"]>
+                    actionCostBand: next as NonNullable<
+                      QuickTaskInput["actionCostBand"]
+                    >
                   })
                 }
                 options={[
@@ -1363,7 +1386,9 @@ export function TaskDialog({
               </FlowField>
               <FlowField label="Modified files">
                 <Textarea
-                  value={(value.completionReport?.modifiedFiles ?? []).join("\n")}
+                  value={(value.completionReport?.modifiedFiles ?? []).join(
+                    "\n"
+                  )}
                   onChange={(event) =>
                     setValue({
                       completionReport: buildCompletionReport({
@@ -1384,19 +1409,21 @@ export function TaskDialog({
                     .map((ref) => ref.refValue)
                     .join("\n")}
                   onChange={(event) => {
-                    const commitRefs = parseMultilineList(event.target.value).map(
-                      (refValue, index) => ({
-                        id: `draft-commit-${index + 1}`,
-                        refType: "commit" as const,
-                        provider: "git",
-                        repository: "",
-                        refValue,
-                        url: null,
-                        displayTitle: ""
-                      })
-                    );
+                    const commitRefs = parseMultilineList(
+                      event.target.value
+                    ).map((refValue, index) => ({
+                      id: `draft-commit-${index + 1}`,
+                      refType: "commit" as const,
+                      provider: "git",
+                      repository: "",
+                      refValue,
+                      url: null,
+                      displayTitle: ""
+                    }));
                     const nextGitRefs = [
-                      ...value.gitRefs.filter((ref) => ref.refType !== "commit"),
+                      ...value.gitRefs.filter(
+                        (ref) => ref.refType !== "commit"
+                      ),
                       ...commitRefs
                     ];
                     setValue({
@@ -1453,6 +1480,7 @@ export function TaskDialog({
       description={t("common.dialogs.task.description")}
       value={draft}
       onChange={setDraft}
+      draftPersistenceKey={editingTask ? `task.${editingTask.id}` : "task.new"}
       steps={steps}
       initialStepId={initialStepId}
       submitLabel={

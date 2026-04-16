@@ -291,6 +291,7 @@ export function GoalDialog({
       description={t("common.dialogs.goal.description")}
       value={draft}
       onChange={setDraft}
+      draftPersistenceKey={editingGoal ? `goal.${editingGoal.id}` : "goal.new"}
       steps={steps}
       pending={pending}
       pendingLabel={

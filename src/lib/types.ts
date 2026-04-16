@@ -209,6 +209,7 @@ export interface OwnedEntity {
 export interface TaskTimeSummary {
   totalTrackedSeconds: number;
   totalCreditedSeconds: number;
+  todayCreditedSeconds?: number;
   liveTrackedSeconds: number;
   liveCreditedSeconds: number;
   manualAdjustedSeconds: number;

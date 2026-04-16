@@ -11,7 +11,10 @@ import {
 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { CalendarConnectionFlowDialog } from "@/components/calendar/calendar-connection-flow-dialog";
-import { QuestionFlowDialog, type QuestionFlowStep } from "@/components/flows/question-flow-dialog";
+import {
+  QuestionFlowDialog,
+  type QuestionFlowStep
+} from "@/components/flows/question-flow-dialog";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import { SettingsSectionNav } from "@/components/settings/settings-section-nav";
 import { PageHero } from "@/components/shell/page-hero";
@@ -39,7 +42,11 @@ import {
   dedupeCalendarResourcesWithConnections,
   readCalendarDisplayName
 } from "@/lib/calendar-name-deduper";
-import type { CalendarDiscoveryPayload, CalendarProvider, CalendarResource } from "@/lib/types";
+import type {
+  CalendarDiscoveryPayload,
+  CalendarProvider,
+  CalendarResource
+} from "@/lib/types";
 
 function normalizeCalendarUrl(value: string) {
   try {
@@ -148,13 +155,22 @@ export function SettingsCalendarPage() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [initialProvider, setInitialProvider] = useState<CalendarProvider>("google");
-  const [dialogInitialStepId, setDialogInitialStepId] = useState<string | undefined>(undefined);
-  const [manageConnectionId, setManageConnectionId] = useState<string | null>(null);
+  const [initialProvider, setInitialProvider] =
+    useState<CalendarProvider>("google");
+  const [dialogInitialStepId, setDialogInitialStepId] = useState<
+    string | undefined
+  >(undefined);
+  const [manageConnectionId, setManageConnectionId] = useState<string | null>(
+    null
+  );
   const [managedCalendarUrls, setManagedCalendarUrls] = useState<string[]>([]);
   const [manageSelectionSeeded, setManageSelectionSeeded] = useState(false);
-  const [removeConnectionId, setRemoveConnectionId] = useState<string | null>(null);
-  const [displayPreferences, setDisplayPreferences] = useState(() => readCalendarDisplayPreferences());
+  const [removeConnectionId, setRemoveConnectionId] = useState<string | null>(
+    null
+  );
+  const [displayPreferences, setDisplayPreferences] = useState(() =>
+    readCalendarDisplayPreferences()
+  );
 
   const operatorSessionQuery = useQuery({
     queryKey: ["forge-operator-session"],
@@ -183,7 +199,9 @@ export function SettingsCalendarPage() {
   const invalidateCalendarSettings = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["forge-settings"] }),
-      queryClient.invalidateQueries({ queryKey: ["forge-calendar-connections"] }),
+      queryClient.invalidateQueries({
+        queryKey: ["forge-calendar-connections"]
+      }),
       queryClient.invalidateQueries({ queryKey: ["forge-calendar-resources"] }),
       queryClient.invalidateQueries({ queryKey: ["forge-calendar-overview"] }),
       queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] })
@@ -212,7 +230,8 @@ export function SettingsCalendarPage() {
   });
 
   const deleteConnectionMutation = useMutation({
-    mutationFn: (connectionId: string) => deleteCalendarConnection(connectionId),
+    mutationFn: (connectionId: string) =>
+      deleteCalendarConnection(connectionId),
     onSuccess: invalidateCalendarSettings
   });
 
@@ -234,7 +253,9 @@ export function SettingsCalendarPage() {
         ? provider
         : "google"
     );
-    setDialogInitialStepId(provider === "microsoft" ? "credentials" : undefined);
+    setDialogInitialStepId(
+      provider === "microsoft" ? "credentials" : undefined
+    );
     setDialogOpen(true);
     const next = new URLSearchParams(searchParams);
     next.delete("intent");
@@ -267,7 +288,11 @@ export function SettingsCalendarPage() {
     return counts;
   }, [connectionsQuery.data?.connections]);
   const calendarDisplayColors = useMemo(
-    () => buildCalendarDisplayColorMap(displayCalendars, displayPreferences.calendarColors),
+    () =>
+      buildCalendarDisplayColorMap(
+        displayCalendars,
+        displayPreferences.calendarColors
+      ),
     [displayCalendars, displayPreferences.calendarColors]
   );
   const sharedForgeWriteTargetConnection = useMemo(
@@ -281,17 +306,26 @@ export function SettingsCalendarPage() {
   );
 
   const managedConnection = useMemo(
-    () => connectionsQuery.data?.connections.find((connection) => connection.id === manageConnectionId) ?? null,
+    () =>
+      connectionsQuery.data?.connections.find(
+        (connection) => connection.id === manageConnectionId
+      ) ?? null,
     [connectionsQuery.data, manageConnectionId]
   );
 
   const removableConnection = useMemo(
-    () => connectionsQuery.data?.connections.find((connection) => connection.id === removeConnectionId) ?? null,
+    () =>
+      connectionsQuery.data?.connections.find(
+        (connection) => connection.id === removeConnectionId
+      ) ?? null,
     [connectionsQuery.data, removeConnectionId]
   );
 
   const managedResources = useMemo(
-    () => (manageConnectionId ? calendarsByConnection.get(manageConnectionId) ?? [] : []),
+    () =>
+      manageConnectionId
+        ? (calendarsByConnection.get(manageConnectionId) ?? [])
+        : [],
     [calendarsByConnection, manageConnectionId]
   );
 
@@ -318,7 +352,9 @@ export function SettingsCalendarPage() {
     writeCalendarDisplayPreferences(displayPreferences);
   }, [displayPreferences]);
 
-  const manageMirrorSteps = useMemo<Array<QuestionFlowStep<{ selectedCalendarUrls: string[] }>>>(
+  const manageMirrorSteps = useMemo<
+    Array<QuestionFlowStep<{ selectedCalendarUrls: string[] }>>
+  >(
     () => [
       {
         id: "mirrors",
@@ -335,7 +371,10 @@ export function SettingsCalendarPage() {
             );
           }
 
-          if (managedDiscoveryQuery.isError || !managedDiscoveryQuery.data?.discovery) {
+          if (
+            managedDiscoveryQuery.isError ||
+            !managedDiscoveryQuery.data?.discovery
+          ) {
             return (
               <div className="rounded-[24px] border border-rose-400/20 bg-rose-400/10 px-4 py-6 text-sm leading-6 text-rose-100">
                 {managedDiscoveryQuery.error instanceof Error
@@ -345,8 +384,10 @@ export function SettingsCalendarPage() {
             );
           }
 
-          const discovery: CalendarDiscoveryPayload = managedDiscoveryQuery.data.discovery;
-          const readOnlyConnection = managedConnection?.provider === "microsoft";
+          const discovery: CalendarDiscoveryPayload =
+            managedDiscoveryQuery.data.discovery;
+          const readOnlyConnection =
+            managedConnection?.provider === "microsoft";
           const writeTargetUrl =
             typeof managedConnection?.config?.forgeCalendarUrl === "string"
               ? normalizeCalendarUrl(managedConnection.config.forgeCalendarUrl)
@@ -361,7 +402,8 @@ export function SettingsCalendarPage() {
                   : managedResources.some(
                       (resource) =>
                         resource.selectedForSync &&
-                        normalizeCalendarUrl(resource.remoteId) === normalizedUrl
+                        normalizeCalendarUrl(resource.remoteId) ===
+                          normalizedUrl
                     );
                 const isWriteTarget = writeTargetUrl === normalizedUrl;
 
@@ -376,18 +418,25 @@ export function SettingsCalendarPage() {
                           {readCalendarDisplayName(calendar)}
                         </div>
                         <div className="mt-1 text-sm text-white/56">
-                          {calendar.timezone || "No timezone exposed"} · {calendar.url}
+                          {calendar.timezone || "No timezone exposed"} ·{" "}
+                          {calendar.url}
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {isWriteTarget && !readOnlyConnection ? (
-                          <Badge className="bg-[var(--primary)]/14 text-[var(--primary)]">Forge writes here</Badge>
+                          <Badge className="bg-[var(--primary)]/14 text-[var(--primary)]">
+                            Forge writes here
+                          </Badge>
                         ) : null}
                         {readOnlyConnection ? (
-                          <Badge className="bg-sky-400/12 text-sky-100">Read only</Badge>
+                          <Badge className="bg-sky-400/12 text-sky-100">
+                            Read only
+                          </Badge>
                         ) : null}
                         {calendar.isPrimary ? (
-                          <Badge className="bg-white/[0.08] text-white/74">Primary</Badge>
+                          <Badge className="bg-white/[0.08] text-white/74">
+                            Primary
+                          </Badge>
                         ) : null}
                       </div>
                     </div>
@@ -399,7 +448,9 @@ export function SettingsCalendarPage() {
                         onClick={() =>
                           setValue({
                             selectedCalendarUrls: isSelected
-                              ? value.selectedCalendarUrls.filter((entry) => entry !== normalizedUrl)
+                              ? value.selectedCalendarUrls.filter(
+                                  (entry) => entry !== normalizedUrl
+                                )
                               : [...value.selectedCalendarUrls, normalizedUrl]
                           })
                         }
@@ -484,7 +535,8 @@ export function SettingsCalendarPage() {
 
   const { providers, connections } = connectionsQuery.data;
   const googleSettings = settingsQuery.data.settings.calendarProviders.google;
-  const microsoftSettings = settingsQuery.data.settings.calendarProviders.microsoft;
+  const microsoftSettings =
+    settingsQuery.data.settings.calendarProviders.microsoft;
 
   return (
     <div className="mx-auto grid w-full max-w-[1220px] gap-5">
@@ -503,14 +555,20 @@ export function SettingsCalendarPage() {
               Provider connections
             </div>
             <p className="mt-2 text-sm leading-6 text-white/60">
-              Connect a provider here, then choose which calendars Forge should mirror. Writable providers publish work blocks and owned timeboxes through one shared <span className="font-medium text-white">Forge</span> write target, creating it only when the runtime does not already have one.
+              Connect a provider here, then choose which calendars Forge should
+              mirror. Writable providers publish work blocks and owned timeboxes
+              through one shared{" "}
+              <span className="font-medium text-white">Forge</span> write
+              target, creating it only when the runtime does not already have
+              one.
             </p>
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
             {providers.map((provider) => {
               const ProviderIcon = providerConnectionIcon(provider.provider);
-              const connectionCount = connectionCountsByProvider[provider.provider] ?? 0;
+              const connectionCount =
+                connectionCountsByProvider[provider.provider] ?? 0;
               const hasConnections = connectionCount > 0;
 
               return (
@@ -534,10 +592,14 @@ export function SettingsCalendarPage() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <div className="font-medium text-[var(--ui-ink-strong)]">{provider.label}</div>
+                        <div className="font-medium text-[var(--ui-ink-strong)]">
+                          {provider.label}
+                        </div>
                         {hasConnections ? (
                           <>
-                            <Badge className="bg-emerald-400/16 text-emerald-50">Connected</Badge>
+                            <Badge className="bg-emerald-400/16 text-emerald-50">
+                              Connected
+                            </Badge>
                             <Badge className="bg-white/[0.08] text-white/82">
                               {providerConnectionCountLabel(connectionCount)}
                             </Badge>
@@ -549,14 +611,20 @@ export function SettingsCalendarPage() {
                       </p>
                       {hasConnections ? (
                         <div className="mt-3 text-sm text-emerald-100/88">
-                          Forge already has {providerConnectionCountLabel(connectionCount)} for this provider. Open the guided flow again to add another account or reconfigure one.
+                          Forge already has{" "}
+                          {providerConnectionCountLabel(connectionCount)} for
+                          this provider. Open the guided flow again to add
+                          another account or reconfigure one.
                         </div>
                       ) : null}
                     </div>
                   </div>
 
                   <div className="mt-5 flex flex-wrap gap-2">
-                    <Badge tone="signal" className="bg-[var(--primary)]/14 text-white/86">
+                    <Badge
+                      tone="signal"
+                      className="bg-[var(--primary)]/14 text-white/86"
+                    >
                       {providerAccessLabel(provider.provider)}
                     </Badge>
                     <Badge
@@ -598,9 +666,13 @@ export function SettingsCalendarPage() {
         <Card className="surface-section-panel grid gap-4 rounded-[30px] border">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">Calendar colors</div>
+              <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">
+                Calendar colors
+              </div>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-white/60">
-                Calendar colors are on by default so each mirrored calendar stays legible in the week view. Adjust any display color here without changing the provider itself.
+                Calendar colors are on by default so each mirrored calendar
+                stays legible in the week view. Adjust any display color here
+                without changing the provider itself.
               </p>
             </div>
             <button
@@ -617,7 +689,9 @@ export function SettingsCalendarPage() {
                   : "border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)]"
               }`}
             >
-              {displayPreferences.useCalendarColors ? "Colors on" : "Colors off"}
+              {displayPreferences.useCalendarColors
+                ? "Colors on"
+                : "Colors off"}
             </button>
           </div>
 
@@ -635,12 +709,17 @@ export function SettingsCalendarPage() {
                         <span
                           aria-hidden="true"
                           className="size-3 shrink-0 rounded-full"
-                          style={{ backgroundColor: calendarDisplayColors[calendar.id] }}
+                          style={{
+                            backgroundColor: calendarDisplayColors[calendar.id]
+                          }}
                         />
                         <div className="min-w-0">
-                          <div className="truncate font-medium text-[var(--ui-ink-strong)]">{calendarLabel}</div>
+                          <div className="truncate font-medium text-[var(--ui-ink-strong)]">
+                            {calendarLabel}
+                          </div>
                           <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
-                            {calendar.canWrite ? "Writable" : "Read only"} · {calendar.timezone}
+                            {calendar.canWrite ? "Writable" : "Read only"} ·{" "}
+                            {calendar.timezone}
                           </div>
                         </div>
                       </div>
@@ -684,7 +763,8 @@ export function SettingsCalendarPage() {
             </div>
           ) : (
             <div className="rounded-[24px] border border-dashed border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-5 text-sm leading-6 text-[var(--ui-ink-soft)]">
-              Connect a provider first, then Forge will let you tune the display color of each mirrored calendar here.
+              Connect a provider first, then Forge will let you tune the display
+              color of each mirrored calendar here.
             </div>
           )}
         </Card>
@@ -692,9 +772,13 @@ export function SettingsCalendarPage() {
         <Card className="surface-section-panel grid gap-4 rounded-[30px] border">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">Connected providers</div>
+              <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">
+                Connected providers
+              </div>
               <p className="mt-2 text-sm leading-6 text-white/60">
-                Review connection health, confirm which provider calendars Forge can read or mirror, and see which connection currently owns the shared Forge write target.
+                Review connection health, confirm which provider calendars Forge
+                can read or mirror, and see which connection currently owns the
+                shared Forge write target.
               </p>
             </div>
           </div>
@@ -702,26 +786,36 @@ export function SettingsCalendarPage() {
           {connections.length > 0 ? (
             <div className="grid gap-3">
               {connections.map((connection) => {
-                const calendars = calendarsByConnection.get(connection.id) ?? [];
+                const calendars =
+                  calendarsByConnection.get(connection.id) ?? [];
                 const usesSharedWriteTargetElsewhere =
                   connection.provider !== "microsoft" &&
                   sharedForgeWriteTargetConnection !== null &&
                   sharedForgeWriteTargetConnection.id !== connection.id;
                 return (
-                  <div key={connection.id} className="rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
+                  <div
+                    key={connection.id}
+                    className="rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4"
+                  >
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <div className="font-medium text-[var(--ui-ink-strong)]">{connection.label}</div>
+                        <div className="font-medium text-[var(--ui-ink-strong)]">
+                          {connection.label}
+                        </div>
                         <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
-                          {calendarProviderLabel(connection.provider)} · {connection.accountLabel || "No account label yet"}
+                          {calendarProviderLabel(connection.provider)} ·{" "}
+                          {connection.accountLabel || "No account label yet"}
                         </div>
                         {connection.lastSyncedAt ? (
                           <div className="mt-2 text-sm text-[var(--ui-ink-faint)]">
-                            Last synced {new Date(connection.lastSyncedAt).toLocaleString()}
+                            Last synced{" "}
+                            {new Date(connection.lastSyncedAt).toLocaleString()}
                           </div>
                         ) : null}
                         {connection.lastSyncError ? (
-                          <div className="mt-2 text-sm text-rose-200">{connection.lastSyncError}</div>
+                          <div className="mt-2 text-sm text-rose-200">
+                            {connection.lastSyncError}
+                          </div>
                         ) : null}
                         {usesSharedWriteTargetElsewhere ? (
                           <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
@@ -731,50 +825,64 @@ export function SettingsCalendarPage() {
                             </span>
                             {sharedForgeWriteTargetConnection.accountLabel
                               ? ` · ${sharedForgeWriteTargetConnection.accountLabel}`
-                              : ""}.
+                              : ""}
+                            .
                           </div>
                         ) : null}
                       </div>
                       <div className="flex items-center gap-2">
-                        <Badge className="bg-white/[0.08] text-white/74">{connection.status}</Badge>
+                        <Badge className="bg-white/[0.08] text-white/74">
+                          {connection.status}
+                        </Badge>
                         {connection.config?.readOnly === true ? (
-                          <Badge className="bg-sky-400/12 text-sky-100">Read only</Badge>
+                          <Badge className="bg-sky-400/12 text-sky-100">
+                            Read only
+                          </Badge>
                         ) : null}
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            pending={syncMutation.isPending && syncMutation.variables === connection.id}
-                            pendingLabel="Syncing"
-                            onClick={() => void syncMutation.mutateAsync(connection.id)}
-                          >
-                            <RefreshCcw className="size-4" />
-                            Sync
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => {
-                              const selected = (calendarsByConnection.get(connection.id) ?? [])
-                                .filter((calendar) => calendar.selectedForSync)
-                                .map((calendar) => normalizeCalendarUrl(calendar.remoteId));
-                              setManagedCalendarUrls(selected);
-                              setManageSelectionSeeded(true);
-                              setManageConnectionId(connection.id);
-                            }}
-                          >
-                            <EyeOff className="size-4" />
-                            Manage mirrored calendars
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => setRemoveConnectionId(connection.id)}
-                          >
-                            <Trash2 className="size-4" />
-                            Remove
-                          </Button>
-                        </div>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          pending={
+                            syncMutation.isPending &&
+                            syncMutation.variables === connection.id
+                          }
+                          pendingLabel="Syncing"
+                          onClick={() =>
+                            void syncMutation.mutateAsync(connection.id)
+                          }
+                        >
+                          <RefreshCcw className="size-4" />
+                          Sync
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => {
+                            const selected = (
+                              calendarsByConnection.get(connection.id) ?? []
+                            )
+                              .filter((calendar) => calendar.selectedForSync)
+                              .map((calendar) =>
+                                normalizeCalendarUrl(calendar.remoteId)
+                              );
+                            setManagedCalendarUrls(selected);
+                            setManageSelectionSeeded(true);
+                            setManageConnectionId(connection.id);
+                          }}
+                        >
+                          <EyeOff className="size-4" />
+                          Manage mirrored calendars
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => setRemoveConnectionId(connection.id)}
+                        >
+                          <Trash2 className="size-4" />
+                          Remove
+                        </Button>
                       </div>
+                    </div>
 
                     <div className="mt-4 grid gap-2">
                       {calendars.map((calendar) => (
@@ -787,11 +895,14 @@ export function SettingsCalendarPage() {
                               {readCalendarDisplayName(calendar)}
                             </div>
                             <div className="mt-1 text-xs uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
-                              {calendar.canWrite ? "Writable" : "Read only"} · {calendar.timezone}
+                              {calendar.canWrite ? "Writable" : "Read only"} ·{" "}
+                              {calendar.timezone}
                             </div>
                           </div>
                           {calendar.forgeManaged ? (
-                            <Badge className="bg-[var(--primary)]/14 text-[var(--primary)]">Forge</Badge>
+                            <Badge className="bg-[var(--primary)]/14 text-[var(--primary)]">
+                              Forge
+                            </Badge>
                           ) : (
                             <Badge className="bg-white/[0.08] text-white/74">
                               <CalendarDays className="mr-1 size-3.5" />
@@ -807,7 +918,12 @@ export function SettingsCalendarPage() {
             </div>
           ) : (
             <div className="rounded-[26px] border border-dashed border-white/10 bg-white/[0.03] px-5 py-6 text-sm leading-6 text-white/60">
-              No provider is connected yet. Open a guided setup flow above when you are ready. Forge will reuse one shared <span className="font-medium text-white">Forge</span> write target across writable providers when it already exists, create one only when none exists yet, and mirror selected calendars in read-only mode for providers like Exchange Online.
+              No provider is connected yet. Open a guided setup flow above when
+              you are ready. Forge will reuse one shared{" "}
+              <span className="font-medium text-white">Forge</span> write target
+              across writable providers when it already exists, create one only
+              when none exists yet, and mirror selected calendars in read-only
+              mode for providers like Exchange Online.
             </div>
           )}
         </Card>
@@ -853,6 +969,11 @@ export function SettingsCalendarPage() {
         description="Choose which calendars this connection should mirror into Forge."
         value={{ selectedCalendarUrls: managedCalendarUrls }}
         onChange={(next) => setManagedCalendarUrls(next.selectedCalendarUrls)}
+        draftPersistenceKey={
+          manageConnectionId
+            ? `settings.calendar.manage.${manageConnectionId}`
+            : "settings.calendar.manage"
+        }
         steps={manageMirrorSteps}
         pending={patchConnectionMutation.isPending}
         pendingLabel="Saving"
@@ -868,7 +989,10 @@ export function SettingsCalendarPage() {
           }
           await patchConnectionMutation.mutateAsync({
             connectionId: manageConnectionId,
-            patch: { selectedCalendarUrls: managedCalendarUrls.map(normalizeCalendarUrl) }
+            patch: {
+              selectedCalendarUrls:
+                managedCalendarUrls.map(normalizeCalendarUrl)
+            }
           });
           setManageSelectionSeeded(false);
           setManageConnectionId(null);
@@ -887,6 +1011,11 @@ export function SettingsCalendarPage() {
         description="This removes the provider connection, stops syncing its calendars, removes mirrored external events from Forge, and keeps Forge-native events local."
         value={{ acknowledgement: false }}
         onChange={() => undefined}
+        draftPersistenceKey={
+          removeConnectionId
+            ? `settings.calendar.remove.${removeConnectionId}`
+            : "settings.calendar.remove"
+        }
         steps={[
           {
             id: "confirm",
@@ -901,10 +1030,13 @@ export function SettingsCalendarPage() {
                 {removableConnection ? (
                   <>
                     <div className="font-medium text-white">
-                      {calendarProviderLabel(removableConnection.provider)} · {removableConnection.accountLabel || "No account label"}
+                      {calendarProviderLabel(removableConnection.provider)} ·{" "}
+                      {removableConnection.accountLabel || "No account label"}
                     </div>
                     <div className="mt-2">
-                      Mirrored provider calendars and external mirrored events from this connection will be removed. Forge-owned events, work blocks, and timeboxes remain in Forge.
+                      Mirrored provider calendars and external mirrored events
+                      from this connection will be removed. Forge-owned events,
+                      work blocks, and timeboxes remain in Forge.
                     </div>
                   </>
                 ) : (

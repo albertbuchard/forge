@@ -124,12 +124,15 @@ function createDraft(
       "UTC",
     availability: seed?.availability ?? event?.availability ?? "busy",
     activityPresetKey: getCalendarActivityPresetKey(event?.actionProfile),
-    customSustainRateApPerHour: getCalendarActivityCustomRate(event?.actionProfile),
+    customSustainRateApPerHour: getCalendarActivityCustomRate(
+      event?.actionProfile
+    ),
     preferredCalendarId:
       seed && "preferredCalendarId" in seed
         ? seed.preferredCalendarId
-        : event?.calendarId ?? undefined,
-    categoriesText: seed?.categories?.join(", ") ?? event?.categories.join(", ") ?? "",
+        : (event?.calendarId ?? undefined),
+    categoriesText:
+      seed?.categories?.join(", ") ?? event?.categories.join(", ") ?? "",
     linkQuery: "",
     links:
       seed?.links ??
@@ -138,7 +141,8 @@ function createDraft(
         entityId: link.entityId,
         relationshipType: link.relationshipType,
         label: `${link.entityType.replaceAll("_", " ")} · ${link.entityId}`
-      })) ?? []
+      })) ??
+      []
   };
 }
 
@@ -207,7 +211,9 @@ export function CalendarEventFlowDialog({
   }) => Promise<void>;
   pending?: boolean;
 }) {
-  const [draft, setDraft] = useState<EventDraft>(() => createDraft(event, seed));
+  const [draft, setDraft] = useState<EventDraft>(() =>
+    createDraft(event, seed)
+  );
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -229,7 +235,12 @@ export function CalendarEventFlowDialog({
           searchText: `${option.label} ${option.subtitle} ${option.entityType}`,
           kind: entityKind ?? undefined,
           menuBadge: entityKind ? (
-            <EntityBadge kind={entityKind} label={option.label} compact gradient={false} />
+            <EntityBadge
+              kind={entityKind}
+              label={option.label}
+              compact
+              gradient={false}
+            />
           ) : undefined,
           badge: entityKind ? (
             <EntityBadge kind={entityKind} label={option.label} compact />
@@ -244,7 +255,9 @@ export function CalendarEventFlowDialog({
       {
         id: "identity",
         eyebrow: "Event",
-        title: event ? "Refine the Forge event" : "Create a Forge calendar event",
+        title: event
+          ? "Refine the Forge event"
+          : "Create a Forge calendar event",
         description:
           "This event belongs to Forge first. If you choose a writable calendar, Forge will also project it to the connected provider.",
         render: (value, setValue) => (
@@ -259,7 +272,9 @@ export function CalendarEventFlowDialog({
             <FlowField label="Description">
               <Textarea
                 value={value.description}
-                onChange={(next) => setValue({ description: next.target.value })}
+                onChange={(next) =>
+                  setValue({ description: next.target.value })
+                }
                 placeholder="Agenda, context, or outcomes you want this event to carry."
               />
             </FlowField>
@@ -273,14 +288,18 @@ export function CalendarEventFlowDialog({
             <FlowField label="Place address">
               <Input
                 value={value.placeAddress}
-                onChange={(next) => setValue({ placeAddress: next.target.value })}
+                onChange={(next) =>
+                  setValue({ placeAddress: next.target.value })
+                }
                 placeholder="Bahnhofstrasse 10, Zurich"
               />
             </FlowField>
             <FlowField label="Place timezone">
               <Input
                 value={value.placeTimezone}
-                onChange={(next) => setValue({ placeTimezone: next.target.value })}
+                onChange={(next) =>
+                  setValue({ placeTimezone: next.target.value })
+                }
                 placeholder="Europe/Zurich"
               />
             </FlowField>
@@ -297,7 +316,9 @@ export function CalendarEventFlowDialog({
           <div className="grid gap-4">
             {(() => {
               const fallbackStart = new Date().toISOString();
-              const fallbackEnd = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+              const fallbackEnd = new Date(
+                Date.now() + 60 * 60 * 1000
+              ).toISOString();
               const preview = estimateCalendarEventActionPointLoad({
                 title: value.title,
                 availability: value.availability,
@@ -363,14 +384,18 @@ export function CalendarEventFlowDialog({
                 <Input
                   type="datetime-local"
                   value={value.startAtLocal}
-                  onChange={(next) => setValue({ startAtLocal: next.target.value })}
+                  onChange={(next) =>
+                    setValue({ startAtLocal: next.target.value })
+                  }
                 />
               </FlowField>
               <FlowField label="Ends">
                 <Input
                   type="datetime-local"
                   value={value.endAtLocal}
-                  onChange={(next) => setValue({ endAtLocal: next.target.value })}
+                  onChange={(next) =>
+                    setValue({ endAtLocal: next.target.value })
+                  }
                 />
               </FlowField>
             </div>
@@ -384,17 +409,21 @@ export function CalendarEventFlowDialog({
             <FlowField label="Availability">
               <FlowChoiceGrid
                 value={value.availability}
-                onChange={(next) => setValue({ availability: next as CalendarAvailability })}
+                onChange={(next) =>
+                  setValue({ availability: next as CalendarAvailability })
+                }
                 options={[
                   {
                     value: "busy",
                     label: "Busy",
-                    description: "This event should block timebox recommendations and rule checks."
+                    description:
+                      "This event should block timebox recommendations and rule checks."
                   },
                   {
                     value: "free",
                     label: "Free",
-                    description: "This event stays visible in the calendar without blocking work."
+                    description:
+                      "This event stays visible in the calendar without blocking work."
                   }
                 ]}
               />
@@ -416,7 +445,9 @@ export function CalendarEventFlowDialog({
             >
               <EntityLinkMultiSelect
                 options={linkSelectOptions}
-                selectedValues={value.links.map((link) => `${link.entityType}:${link.entityId}`)}
+                selectedValues={value.links.map(
+                  (link) => `${link.entityType}:${link.entityId}`
+                )}
                 onChange={(selectedValues) => {
                   setValue({
                     links: selectedValues
@@ -438,7 +469,9 @@ export function CalendarEventFlowDialog({
                           label: option.label
                         } satisfies EventLinkDraft;
                       })
-                      .filter((entry): entry is EventLinkDraft => entry !== null)
+                      .filter(
+                        (entry): entry is EventLinkDraft => entry !== null
+                      )
                   });
                 }}
                 placeholder="Search strategies, goals, projects, tasks, habits, human, or bot owners"
@@ -472,7 +505,8 @@ export function CalendarEventFlowDialog({
                     Default synced calendar
                   </div>
                   <div className="mt-2 text-sm leading-6 text-white/55">
-                    Let Forge use the default writable connected calendar automatically.
+                    Let Forge use the default writable connected calendar
+                    automatically.
                   </div>
                 </button>
               ) : null}
@@ -490,7 +524,8 @@ export function CalendarEventFlowDialog({
                   Forge only
                 </div>
                 <div className="mt-2 text-sm leading-6 text-white/55">
-                  Keep the event in Forge without creating a remote provider copy yet.
+                  Keep the event in Forge without creating a remote provider
+                  copy yet.
                 </div>
               </button>
               {writableCalendars.map((calendar) => (
@@ -522,7 +557,9 @@ export function CalendarEventFlowDialog({
               </div>
               <Input
                 value={value.categoriesText}
-                onChange={(next) => setValue({ categoriesText: next.target.value })}
+                onChange={(next) =>
+                  setValue({ categoriesText: next.target.value })
+                }
                 placeholder="meeting, clinic, research"
               />
             </div>
@@ -542,6 +579,9 @@ export function CalendarEventFlowDialog({
       description="Forge-owned events can stay local or publish to a connected provider calendar."
       value={draft}
       onChange={setDraft}
+      draftPersistenceKey={
+        event ? `calendar.event.${event.id}` : "calendar.event.new"
+      }
       steps={steps}
       onSubmit={async () => {
         if (!draft.title.trim()) {
@@ -552,7 +592,10 @@ export function CalendarEventFlowDialog({
           setError("Set both the start and end time before saving.");
           return;
         }
-        if (new Date(draft.endAtLocal).getTime() <= new Date(draft.startAtLocal).getTime()) {
+        if (
+          new Date(draft.endAtLocal).getTime() <=
+          new Date(draft.startAtLocal).getTime()
+        ) {
           setError("The event end time must be after the start time.");
           return;
         }

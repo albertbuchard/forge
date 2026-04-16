@@ -3383,7 +3383,8 @@ export const taskRunFocusSchema = z.object({
 export const createHabitCheckInSchema = z.object({
   dateKey: dateOnlySchema.default(new Date().toISOString().slice(0, 10)),
   status: habitCheckInStatusSchema,
-  note: trimmedString.default("")
+  note: trimmedString.default(""),
+  description: trimmedString.optional()
 });
 
 export const updateSettingsSchema = z.object({

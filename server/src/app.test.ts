@@ -5150,12 +5150,17 @@ test("watch bootstrap serves compact habit state and watch habit check-ins prese
         dedupeKey: "watch-positive-1",
         dateKey: currentDateKey,
         status: "done",
-        note: "Checked in from the watch."
+        note: "Checked in from the watch.",
+        description: "Start the day by opening the plan before reacting."
       }
     });
     assert.equal(positiveCheckInResponse.statusCode, 200);
     const positiveCheckIn = positiveCheckInResponse.json() as {
-      habit: { streakCount: number; lastCheckInStatus: string | null };
+      habit: {
+        description: string;
+        streakCount: number;
+        lastCheckInStatus: string | null;
+      };
       watch: {
         habits: Array<{
           id: string;
@@ -5164,6 +5169,10 @@ test("watch bootstrap serves compact habit state and watch habit check-ins prese
         }>;
       };
     };
+    assert.equal(
+      positiveCheckIn.habit.description,
+      "Start the day by opening the plan before reacting."
+    );
     assert.equal(positiveCheckIn.habit.lastCheckInStatus, "done");
     assert.equal(positiveCheckIn.habit.streakCount, 1);
     assert.equal(
@@ -7619,6 +7628,29 @@ test("openapi document exposes schema-backed versioned contracts", async () => {
     assert.ok(body.paths?.["/api/v1/habits/{id}"]);
     assert.ok(body.paths?.["/api/v1/habits/{id}/check-ins"]);
     assert.ok(body.paths?.["/api/v1/habits/{id}/check-ins/{dateKey}"]);
+    const habitCheckInOperation = body.paths?.["/api/v1/habits/{id}/check-ins"] as
+      | {
+          post?: {
+            requestBody?: {
+              content?: {
+                "application/json"?: { schema?: { $ref?: string } };
+              };
+            };
+          };
+        }
+      | undefined;
+    assert.equal(
+      habitCheckInOperation?.post?.requestBody?.content?.["application/json"]
+        ?.schema?.$ref,
+      "#/components/schemas/HabitCheckInInput"
+    );
+    const habitCheckInInputSchema = body.components?.schemas?.HabitCheckInInput as
+      | { properties?: Record<string, { description?: string }> }
+      | undefined;
+    assert.match(
+      habitCheckInInputSchema?.properties?.description?.description ?? "",
+      /overwrites habit\.description/
+    );
     assert.ok(body.paths?.["/api/v1/tags"]);
     assert.ok(body.paths?.["/api/v1/tags/{id}"]);
     assert.ok(body.paths?.["/api/v1/projects"]);
@@ -8613,12 +8645,14 @@ test("habits persist with check-ins and XP updates through the versioned API", a
       headers: { cookie: operatorCookie },
       payload: {
         dateKey: "2026-03-30",
-        status: "done"
+        status: "done",
+        description: "Bedtime means the phone stays in another room."
       }
     });
     assert.equal(checkIn.statusCode, 200);
     const checkInBody = checkIn.json() as {
       habit: {
+        description: string;
         lastCheckInStatus: string | null;
         completionRate: number;
         checkIns: Array<{ dateKey: string; deltaXp: number }>;
@@ -8631,6 +8665,10 @@ test("habits persist with check-ins and XP updates through the versioned API", a
         }>;
       };
     };
+    assert.equal(
+      checkInBody.habit.description,
+      "Bedtime means the phone stays in another room."
+    );
     assert.equal(checkInBody.habit.lastCheckInStatus, "done");
     assert.ok(checkInBody.habit.completionRate >= 100);
     assert.equal(checkInBody.habit.checkIns[0]?.dateKey, "2026-03-30");

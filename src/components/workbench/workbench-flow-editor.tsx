@@ -31,7 +31,14 @@ import {
   Trash2,
   Wand2
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode
+} from "react";
 import { Link } from "react-router-dom";
 import {
   FlowField,
@@ -39,7 +46,10 @@ import {
   type QuestionFlowStep
 } from "@/components/flows/question-flow-dialog";
 import { useWorkbenchNodeDefinition } from "@/components/workbench/workbench-provider";
-import { FacetedTokenSearch, type FacetedTokenOption } from "@/components/search/faceted-token-search";
+import {
+  FacetedTokenSearch,
+  type FacetedTokenOption
+} from "@/components/search/faceted-token-search";
 import { Button } from "@/components/ui/button";
 import { EntityBadge } from "@/components/ui/entity-badge";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
@@ -84,7 +94,9 @@ type WorkbenchGraphNodeData = AiConnectorNode["data"] & {
 type WorkbenchEditorSection = "overview" | "contracts" | "parameters";
 type WorkbenchSaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 
-const PORT_KIND_OPTIONS: Array<ForgeBoxPortDefinition["kind"]> = [...WORKBENCH_PORT_KINDS];
+const PORT_KIND_OPTIONS: Array<ForgeBoxPortDefinition["kind"]> = [
+  ...WORKBENCH_PORT_KINDS
+];
 
 const PORT_KIND_TONES: Record<string, string> = {
   summary: "border-amber-300/28 bg-amber-300/12 text-amber-100",
@@ -240,7 +252,8 @@ function defaultPortsForNodeType(nodeType: AiConnectorNodeType): {
             key: "context",
             label: "Structured context",
             kind: "context",
-            description: "Structured context fields that arrived with the user input.",
+            description:
+              "Structured context fields that arrived with the user input.",
             modelName: "WorkbenchUserContext"
           }
         ]
@@ -432,27 +445,28 @@ function resolveNodePorts(
   ) =>
     ports.map((port, index) => {
       const normalized = normalizeWorkbenchPortDefinition(port);
-      const key = normalized.key === "primary"
-        ? direction === "output"
-          ? node.type === "functor" || node.type === "chat"
-            ? "answer"
-            : node.type === "box" || node.type === "box_input"
-              ? "summary"
-              : node.type === "value"
-                ? "value"
-                : node.type === "merge"
-                  ? "merged"
-                  : node.type === "template"
-                    ? "rendered"
-                    : node.type === "pick_key"
-                      ? "selected"
-                      : "result"
-          : node.type === "functor" || node.type === "chat"
-            ? "input"
-            : node.type === "output"
-              ? "result"
-            : normalized.key
-        : normalized.key;
+      const key =
+        normalized.key === "primary"
+          ? direction === "output"
+            ? node.type === "functor" || node.type === "chat"
+              ? "answer"
+              : node.type === "box" || node.type === "box_input"
+                ? "summary"
+                : node.type === "value"
+                  ? "value"
+                  : node.type === "merge"
+                    ? "merged"
+                    : node.type === "template"
+                      ? "rendered"
+                      : node.type === "pick_key"
+                        ? "selected"
+                        : "result"
+            : node.type === "functor" || node.type === "chat"
+              ? "input"
+              : node.type === "output"
+                ? "result"
+                : normalized.key
+          : normalized.key;
       return normalizeWorkbenchPortDefinition({
         ...normalized,
         key,
@@ -463,10 +477,10 @@ function resolveNodePorts(
     const box = boxes.find((entry) => entry.id === node.data.boxId);
     return {
       inputs: normalizePorts(box?.inputs ?? [], "input"),
-      outputs:
-        box?.output?.length
-          ? normalizePorts(box.output, "output")
-          : normalizePorts([
+      outputs: box?.output?.length
+        ? normalizePorts(box.output, "output")
+        : normalizePorts(
+            [
               {
                 key: "summary",
                 label: "Summary",
@@ -474,18 +488,25 @@ function resolveNodePorts(
                 description: "Human-readable summary of the box snapshot.",
                 modelName: "WorkbenchBoxSummary"
               }
-            ], "output"),
-      enabledToolKeys:
-        node.data.enabledToolKeys?.length
-          ? node.data.enabledToolKeys
-          : (box?.tools ?? []).map((tool) => tool.key),
+            ],
+            "output"
+          ),
+      enabledToolKeys: node.data.enabledToolKeys?.length
+        ? node.data.enabledToolKeys
+        : (box?.tools ?? []).map((tool) => tool.key),
       boxId: box?.id ?? node.data.boxId ?? null
     };
   }
   const defaults = defaultPortsForNodeType(node.type);
   return {
-    inputs: normalizePorts(node.data.inputs?.length ? node.data.inputs : defaults.inputs, "input"),
-    outputs: normalizePorts(node.data.outputs?.length ? node.data.outputs : defaults.outputs, "output"),
+    inputs: normalizePorts(
+      node.data.inputs?.length ? node.data.inputs : defaults.inputs,
+      "input"
+    ),
+    outputs: normalizePorts(
+      node.data.outputs?.length ? node.data.outputs : defaults.outputs,
+      "output"
+    ),
     enabledToolKeys: node.data.enabledToolKeys ?? [],
     boxId: node.data.boxId ?? null
   };
@@ -602,7 +623,9 @@ function graphEdgeFromConnector(edge: AiConnectorEdge): Edge {
   };
 }
 
-function connectorNodeFromGraph(node: Node<WorkbenchGraphNodeData>): AiConnectorNode {
+function connectorNodeFromGraph(
+  node: Node<WorkbenchGraphNodeData>
+): AiConnectorNode {
   return {
     id: node.id,
     type: node.data.nodeType === "box" ? "box" : node.data.nodeType,
@@ -665,13 +688,13 @@ function buildNodeTemplate(
               ? "Output"
               : nodeType === "value"
                 ? "Value"
-              : nodeType === "template"
-                ? "Template"
-                : nodeType === "pick_key"
-                  ? "Pick key"
-                  : nodeType === "merge"
-                    ? "Merge"
-                    : "User input"),
+                : nodeType === "template"
+                  ? "Template"
+                  : nodeType === "pick_key"
+                    ? "Pick key"
+                    : nodeType === "merge"
+                      ? "Merge"
+                      : "User input"),
       description:
         box?.description ??
         (nodeType === "box"
@@ -708,7 +731,11 @@ function buildNodeTemplate(
 }
 
 function formatPortMeta(port: ForgeBoxPortDefinition) {
-  return [port.kind, port.modelName, port.itemKind ? `item:${port.itemKind}` : null]
+  return [
+    port.kind,
+    port.modelName,
+    port.itemKind ? `item:${port.itemKind}` : null
+  ]
     .filter(Boolean)
     .join(" · ");
 }
@@ -728,7 +755,9 @@ function summarizeSaveState(state: WorkbenchSaveState, error: string | null) {
   }
 }
 
-function createPortDefinition(prefix: "input" | "output"): ForgeBoxPortDefinition {
+function createPortDefinition(
+  prefix: "input" | "output"
+): ForgeBoxPortDefinition {
   const suffix = crypto.randomUUID().replaceAll("-", "").slice(0, 4);
   return {
     key: `${prefix}_${suffix}`,
@@ -736,7 +765,8 @@ function createPortDefinition(prefix: "input" | "output"): ForgeBoxPortDefinitio
     kind: prefix === "input" ? "context" : "record",
     description: "",
     required: false,
-    modelName: prefix === "input" ? "WorkbenchInputContract" : "WorkbenchOutputContract"
+    modelName:
+      prefix === "input" ? "WorkbenchInputContract" : "WorkbenchOutputContract"
   };
 }
 
@@ -819,13 +849,17 @@ function PortDefinitionEditor({
               label={`Explain ${title.toLowerCase()}`}
             />
           </div>
-          <div className="mt-1 text-sm leading-6 text-white/54">{description}</div>
+          <div className="mt-1 text-sm leading-6 text-white/54">
+            {description}
+          </div>
         </div>
         <Button
           type="button"
           variant="secondary"
           size="sm"
-          onClick={() => onChange([...(ports ?? []), createPortDefinition(prefix)])}
+          onClick={() =>
+            onChange([...(ports ?? []), createPortDefinition(prefix)])
+          }
         >
           Add {prefix}
         </Button>
@@ -845,7 +879,9 @@ function PortDefinitionEditor({
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2">
                 <PortKindBadge kind={port.kind} />
-                <span className="text-sm font-medium text-white">{port.label}</span>
+                <span className="text-sm font-medium text-white">
+                  {port.label}
+                </span>
               </div>
               <Button
                 type="button"
@@ -910,7 +946,8 @@ function PortDefinitionEditor({
                         entryIndex === index
                           ? {
                               ...entry,
-                              kind: event.target.value as ForgeBoxPortDefinition["kind"]
+                              kind: event.target
+                                .value as ForgeBoxPortDefinition["kind"]
                             }
                           : entry
                       )
@@ -989,7 +1026,11 @@ function PortDefinitionEditor({
                       )
                     )
                   }
-                  placeholder={prefix === "input" ? "task ids and filters" : "summarized result"}
+                  placeholder={
+                    prefix === "input"
+                      ? "task ids and filters"
+                      : "summarized result"
+                  }
                   className={WORKBENCH_FIELD_CLASS}
                 />
               </FlowField>
@@ -1005,7 +1046,10 @@ function PortDefinitionEditor({
                   onChange(
                     ports.map((entry, entryIndex) =>
                       entryIndex === index
-                        ? { ...entry, description: event.target.value || undefined }
+                        ? {
+                            ...entry,
+                            description: event.target.value || undefined
+                          }
                         : entry
                     )
                   )
@@ -1025,7 +1069,8 @@ function PortDefinitionEditor({
               <div className="mt-3 grid gap-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="text-sm leading-6 text-white/54">
-                    Describe the object structure or list item shape this port carries.
+                    Describe the object structure or list item shape this port
+                    carries.
                   </div>
                   <Button
                     type="button"
@@ -1078,7 +1123,8 @@ function PortDefinitionEditor({
                                 ? {
                                     ...entry,
                                     shape: (entry.shape ?? []).filter(
-                                      (_, shapeIndex) => shapeIndex !== fieldIndex
+                                      (_, shapeIndex) =>
+                                        shapeIndex !== fieldIndex
                                     )
                                   }
                                 : entry
@@ -1098,10 +1144,14 @@ function PortDefinitionEditor({
                               entryIndex === index
                                 ? {
                                     ...entry,
-                                    shape: (entry.shape ?? []).map((shapeEntry, shapeIndex) =>
-                                      shapeIndex === fieldIndex
-                                        ? { ...shapeEntry, key: event.target.value }
-                                        : shapeEntry
+                                    shape: (entry.shape ?? []).map(
+                                      (shapeEntry, shapeIndex) =>
+                                        shapeIndex === fieldIndex
+                                          ? {
+                                              ...shapeEntry,
+                                              key: event.target.value
+                                            }
+                                          : shapeEntry
                                     )
                                   }
                                 : entry
@@ -1119,10 +1169,14 @@ function PortDefinitionEditor({
                               entryIndex === index
                                 ? {
                                     ...entry,
-                                    shape: (entry.shape ?? []).map((shapeEntry, shapeIndex) =>
-                                      shapeIndex === fieldIndex
-                                        ? { ...shapeEntry, label: event.target.value }
-                                        : shapeEntry
+                                    shape: (entry.shape ?? []).map(
+                                      (shapeEntry, shapeIndex) =>
+                                        shapeIndex === fieldIndex
+                                          ? {
+                                              ...shapeEntry,
+                                              label: event.target.value
+                                            }
+                                          : shapeEntry
                                     )
                                   }
                                 : entry
@@ -1142,13 +1196,15 @@ function PortDefinitionEditor({
                               entryIndex === index
                                 ? {
                                     ...entry,
-                                    shape: (entry.shape ?? []).map((shapeEntry, shapeIndex) =>
-                                      shapeIndex === fieldIndex
-                                        ? {
-                                            ...shapeEntry,
-                                            kind: event.target.value as ForgeBoxPortDefinition["kind"]
-                                          }
-                                        : shapeEntry
+                                    shape: (entry.shape ?? []).map(
+                                      (shapeEntry, shapeIndex) =>
+                                        shapeIndex === fieldIndex
+                                          ? {
+                                              ...shapeEntry,
+                                              kind: event.target
+                                                .value as ForgeBoxPortDefinition["kind"]
+                                            }
+                                          : shapeEntry
                                     )
                                   }
                                 : entry
@@ -1173,10 +1229,14 @@ function PortDefinitionEditor({
                                 entryIndex === index
                                   ? {
                                       ...entry,
-                                      shape: (entry.shape ?? []).map((shapeEntry, shapeIndex) =>
-                                        shapeIndex === fieldIndex
-                                          ? { ...shapeEntry, required: event.target.checked }
-                                          : shapeEntry
+                                      shape: (entry.shape ?? []).map(
+                                        (shapeEntry, shapeIndex) =>
+                                          shapeIndex === fieldIndex
+                                            ? {
+                                                ...shapeEntry,
+                                                required: event.target.checked
+                                              }
+                                            : shapeEntry
                                       )
                                     }
                                   : entry
@@ -1196,13 +1256,15 @@ function PortDefinitionEditor({
                             entryIndex === index
                               ? {
                                   ...entry,
-                                  shape: (entry.shape ?? []).map((shapeEntry, shapeIndex) =>
-                                    shapeIndex === fieldIndex
-                                      ? {
-                                          ...shapeEntry,
-                                          description: event.target.value || undefined
-                                        }
-                                      : shapeEntry
+                                  shape: (entry.shape ?? []).map(
+                                    (shapeEntry, shapeIndex) =>
+                                      shapeIndex === fieldIndex
+                                        ? {
+                                            ...shapeEntry,
+                                            description:
+                                              event.target.value || undefined
+                                          }
+                                        : shapeEntry
                                   )
                                 }
                               : entry
@@ -1260,15 +1322,17 @@ function PublicInputEditor({
             />
           </div>
           <div className="mt-1 text-sm leading-6 text-white/54">
-            Define the external contract once, then bind each input to the node inputs or
-            parameters that should consume it.
+            Define the external contract once, then bind each input to the node
+            inputs or parameters that should consume it.
           </div>
         </div>
         <Button
           type="button"
           variant="secondary"
           size="sm"
-          onClick={() => onChange([...(inputs ?? []), createPublicInputDefinition()])}
+          onClick={() =>
+            onChange([...(inputs ?? []), createPublicInputDefinition()])
+          }
         >
           Add flow input
         </Button>
@@ -1282,7 +1346,8 @@ function PublicInputEditor({
         {inputs.map((input, index) => {
           const compatibleNodes = nodes.filter(
             (node) =>
-              (node.data.inputs ?? []).length > 0 || (node.data.params ?? []).length > 0
+              (node.data.inputs ?? []).length > 0 ||
+              (node.data.params ?? []).length > 0
           );
           const updateInput = (next: Partial<AiConnectorPublicInput>) =>
             onChange(
@@ -1298,40 +1363,60 @@ function PublicInputEditor({
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <PortKindBadge kind={input.kind} />
-                  <span className="text-sm font-medium text-white">{input.label}</span>
+                  <span className="text-sm font-medium text-white">
+                    {input.label}
+                  </span>
                 </div>
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => onChange(inputs.filter((_, inputIndex) => inputIndex !== index))}
+                  onClick={() =>
+                    onChange(
+                      inputs.filter((_, inputIndex) => inputIndex !== index)
+                    )
+                  }
                 >
                   Remove
                 </Button>
               </div>
               <div className="grid gap-3 md:grid-cols-2">
-                <FlowField label="Key" description="External API key callers will send.">
+                <FlowField
+                  label="Key"
+                  description="External API key callers will send."
+                >
                   <input
                     value={input.key}
-                    onChange={(event) => updateInput({ key: event.target.value })}
+                    onChange={(event) =>
+                      updateInput({ key: event.target.value })
+                    }
                     className={WORKBENCH_FIELD_CLASS}
                   />
                 </FlowField>
-                <FlowField label="Label" description="Human-readable name used in the Run modal.">
+                <FlowField
+                  label="Label"
+                  description="Human-readable name used in the Run modal."
+                >
                   <input
                     value={input.label}
-                    onChange={(event) => updateInput({ label: event.target.value })}
+                    onChange={(event) =>
+                      updateInput({ label: event.target.value })
+                    }
                     className={WORKBENCH_FIELD_CLASS}
                   />
                 </FlowField>
               </div>
               <div className="grid gap-3 md:grid-cols-2">
-                <FlowField label="Value type" description="Expected type for this flow input.">
+                <FlowField
+                  label="Value type"
+                  description="Expected type for this flow input."
+                >
                   <select
                     value={input.kind}
                     onChange={(event) =>
                       updateInput({
-                        kind: event.target.value as ForgeBoxPortDefinition["kind"]
+                        kind: event.target
+                          .value as ForgeBoxPortDefinition["kind"]
                       })
                     }
                     className={WORKBENCH_FIELD_CLASS}
@@ -1352,7 +1437,10 @@ function PublicInputEditor({
                     value={formatWorkbenchParamValue(input.defaultValue)}
                     onChange={(event) =>
                       updateInput({
-                        defaultValue: parseWorkbenchParamValue(input.kind, event.target.value)
+                        defaultValue: parseWorkbenchParamValue(
+                          input.kind,
+                          event.target.value
+                        )
                       })
                     }
                     className={WORKBENCH_FIELD_CLASS}
@@ -1366,7 +1454,9 @@ function PublicInputEditor({
                 <textarea
                   rows={3}
                   value={input.description ?? ""}
-                  onChange={(event) => updateInput({ description: event.target.value })}
+                  onChange={(event) =>
+                    updateInput({ description: event.target.value })
+                  }
                   className={WORKBENCH_FIELD_CLASS}
                 />
               </FlowField>
@@ -1374,7 +1464,9 @@ function PublicInputEditor({
                 <input
                   type="checkbox"
                   checked={Boolean(input.required)}
-                  onChange={(event) => updateInput({ required: event.target.checked })}
+                  onChange={(event) =>
+                    updateInput({ required: event.target.checked })
+                  }
                 />
                 Required input
               </label>
@@ -1387,7 +1479,8 @@ function PublicInputEditor({
                   />
                 </div>
                 {(input.bindings ?? []).map((binding, bindingIndex) => {
-                  const targetNode = nodes.find((node) => node.id === binding.nodeId) ?? null;
+                  const targetNode =
+                    nodes.find((node) => node.id === binding.nodeId) ?? null;
                   const targetPorts =
                     binding.targetKind === "param"
                       ? (targetNode?.data.params ?? [])
@@ -1401,10 +1494,15 @@ function PublicInputEditor({
                         value={binding.nodeId}
                         onChange={(event) =>
                           updateInput({
-                            bindings: (input.bindings ?? []).map((entry, entryIndex) =>
-                              entryIndex === bindingIndex
-                                ? { ...entry, nodeId: event.target.value, targetKey: "" }
-                                : entry
+                            bindings: (input.bindings ?? []).map(
+                              (entry, entryIndex) =>
+                                entryIndex === bindingIndex
+                                  ? {
+                                      ...entry,
+                                      nodeId: event.target.value,
+                                      targetKey: ""
+                                    }
+                                  : entry
                             )
                           })
                         }
@@ -1421,14 +1519,17 @@ function PublicInputEditor({
                         value={binding.targetKind}
                         onChange={(event) =>
                           updateInput({
-                            bindings: (input.bindings ?? []).map((entry, entryIndex) =>
-                              entryIndex === bindingIndex
-                                ? {
-                                    ...entry,
-                                    targetKind: event.target.value as "input" | "param",
-                                    targetKey: ""
-                                  }
-                                : entry
+                            bindings: (input.bindings ?? []).map(
+                              (entry, entryIndex) =>
+                                entryIndex === bindingIndex
+                                  ? {
+                                      ...entry,
+                                      targetKind: event.target.value as
+                                        | "input"
+                                        | "param",
+                                      targetKey: ""
+                                    }
+                                  : entry
                             )
                           })
                         }
@@ -1441,10 +1542,11 @@ function PublicInputEditor({
                         value={binding.targetKey}
                         onChange={(event) =>
                           updateInput({
-                            bindings: (input.bindings ?? []).map((entry, entryIndex) =>
-                              entryIndex === bindingIndex
-                                ? { ...entry, targetKey: event.target.value }
-                                : entry
+                            bindings: (input.bindings ?? []).map(
+                              (entry, entryIndex) =>
+                                entryIndex === bindingIndex
+                                  ? { ...entry, targetKey: event.target.value }
+                                  : entry
                             )
                           })
                         }
@@ -1522,7 +1624,9 @@ function PortColumn({
               ? "Inputs are values this node expects from earlier nodes in the flow."
               : "Outputs are the values this node publishes for later nodes to consume."
           }
-          label={side === "left" ? "Explain node inputs" : "Explain node outputs"}
+          label={
+            side === "left" ? "Explain node inputs" : "Explain node outputs"
+          }
         />
       </div>
       {ports.length === 0 ? (
@@ -1560,7 +1664,9 @@ function PortColumn({
                 <span>{port.label}</span>
                 <PortKindBadge kind={port.kind} />
               </div>
-              <div className="mt-1 text-[10px] text-white/36">{formatPortMeta(port)}</div>
+              <div className="mt-1 text-[10px] text-white/36">
+                {formatPortMeta(port)}
+              </div>
             </div>
           ) : null}
         </div>
@@ -1626,7 +1732,9 @@ function WorkbenchNodeCard(props: NodeProps<Node<WorkbenchGraphNodeData>>) {
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-white">
             {tone.icon}
-            <div className="truncate text-sm font-semibold">{props.data.label}</div>
+            <div className="truncate text-sm font-semibold">
+              {props.data.label}
+            </div>
           </div>
           {props.data.description ? (
             <div className="mt-1 line-clamp-2 text-[12px] leading-5 text-white/48">
@@ -1662,7 +1770,10 @@ function WorkbenchNodeCard(props: NodeProps<Node<WorkbenchGraphNodeData>>) {
           label={schemaOpen ? "Hide schema" : "Preview schema"}
           onClick={() => setSchemaOpen((current) => !current)}
         />
-        <NodeActionButton label="Edit" onClick={() => props.data.onEditRequest?.()} />
+        <NodeActionButton
+          label="Edit"
+          onClick={() => props.data.onEditRequest?.()}
+        />
         <NodeActionButton
           label={contractLabel}
           onClick={() => props.data.onContractEditRequest?.()}
@@ -1677,8 +1788,16 @@ function WorkbenchNodeCard(props: NodeProps<Node<WorkbenchGraphNodeData>>) {
       </div>
 
       <div className="mt-3 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
-        <PortColumn side="left" ports={props.data.inputs ?? []} collapsed={portsCollapsed} />
-        <PortColumn side="right" ports={props.data.outputs ?? []} collapsed={portsCollapsed} />
+        <PortColumn
+          side="left"
+          ports={props.data.inputs ?? []}
+          collapsed={portsCollapsed}
+        />
+        <PortColumn
+          side="right"
+          ports={props.data.outputs ?? []}
+          collapsed={portsCollapsed}
+        />
       </div>
       {schemaOpen ? (
         <div className="mt-3 rounded-[18px] border border-white/8 bg-black/20 p-3">
@@ -1692,16 +1811,20 @@ function WorkbenchNodeCard(props: NodeProps<Node<WorkbenchGraphNodeData>>) {
           <pre className="mt-2 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-white/64">
             {JSON.stringify(
               {
-                inputs: (props.data.inputs ?? []).map(({ key, kind, required }) => ({
-                  key,
-                  kind,
-                  required: Boolean(required)
-                })),
-                outputs: (props.data.outputs ?? []).map(({ key, kind, required }) => ({
-                  key,
-                  kind,
-                  required: Boolean(required)
-                })),
+                inputs: (props.data.inputs ?? []).map(
+                  ({ key, kind, required }) => ({
+                    key,
+                    kind,
+                    required: Boolean(required)
+                  })
+                ),
+                outputs: (props.data.outputs ?? []).map(
+                  ({ key, kind, required }) => ({
+                    key,
+                    kind,
+                    required: Boolean(required)
+                  })
+                ),
                 tools: props.data.enabledToolKeys ?? []
               },
               null,
@@ -1729,7 +1852,11 @@ function formatWorkbenchRunError(error: unknown) {
     error instanceof ForgeApiError || error instanceof Error
       ? error.message
       : String(error);
-  if (message.includes("No model connection is configured for this connector node.")) {
+  if (
+    message.includes(
+      "No model connection is configured for this connector node."
+    )
+  ) {
     return [
       "This flow uses an AI node, but Forge does not have any model connection configured yet.",
       "Open Settings > Models, add a model connection, then run the flow again.",
@@ -1741,7 +1868,16 @@ function formatWorkbenchRunError(error: unknown) {
 
 function summarizePortShape(ports: ForgeBoxPortDefinition[]) {
   return ports.map(
-    ({ key, kind, required, description, modelName, itemKind, shape, exampleValue }) => ({
+    ({
+      key,
+      kind,
+      required,
+      description,
+      modelName,
+      itemKind,
+      shape,
+      exampleValue
+    }) => ({
       key,
       kind,
       required: Boolean(required),
@@ -1756,11 +1892,7 @@ function summarizePortShape(ports: ForgeBoxPortDefinition[]) {
 
 function buildAiNodeOutputsFromKeys(keys: string[]) {
   const normalizedKeys = Array.from(
-    new Set(
-      keys
-        .map((entry) => entry.trim())
-        .filter(Boolean)
-    )
+    new Set(keys.map((entry) => entry.trim()).filter(Boolean))
   );
   const orderedKeys = normalizedKeys.includes("answer")
     ? normalizedKeys
@@ -1809,7 +1941,9 @@ function collectWorkbenchGraphIssues(
   }
   const outputNodes = nodes.filter((node) => node.data.nodeType === "output");
   if (outputNodes.length === 0) {
-    issues.push("Add an Output node so Forge knows what result the flow should publish.");
+    issues.push(
+      "Add an Output node so Forge knows what result the flow should publish."
+    );
   }
 
   const incomingCounts = new Map<string, number>();
@@ -1896,11 +2030,21 @@ function collectWorkbenchGraphIssues(
         `Merge node "${node.data.label}" should receive both left and right inputs before you run it.`
       );
     }
-    if (node.data.nodeType === "template" && !(node.data.template ?? "").trim()) {
-      issues.push(`Add a template string to "${node.data.label}" before running the flow.`);
+    if (
+      node.data.nodeType === "template" &&
+      !(node.data.template ?? "").trim()
+    ) {
+      issues.push(
+        `Add a template string to "${node.data.label}" before running the flow.`
+      );
     }
-    if (node.data.nodeType === "pick_key" && !(node.data.selectedKey ?? "").trim()) {
-      issues.push(`Choose which key "${node.data.label}" should pick from incoming objects.`);
+    if (
+      node.data.nodeType === "pick_key" &&
+      !(node.data.selectedKey ?? "").trim()
+    ) {
+      issues.push(
+        `Choose which key "${node.data.label}" should pick from incoming objects.`
+      );
     }
     if (node.data.nodeType !== "output" && outgoing === 0) {
       issues.push(
@@ -1914,7 +2058,9 @@ function collectWorkbenchGraphIssues(
       isAiWorkbenchNode(node.data.nodeType) &&
       !(node.data.promptTemplate?.trim() || node.data.prompt?.trim())
     ) {
-      issues.push(`Add a prompt to the AI node "${node.data.label}" before running the flow.`);
+      issues.push(
+        `Add a prompt to the AI node "${node.data.label}" before running the flow.`
+      );
     }
   }
 
@@ -2029,20 +2175,20 @@ export function WorkbenchFlowEditor({
   const [publicInputs, setPublicInputs] = useState<AiConnectorPublicInput[]>(
     flow.publicInputs ?? []
   );
-  const [nodes, setNodes] = useState<Node<WorkbenchGraphNodeData>[]>(() =>
-    normalizeWorkbenchGraph(flow, boxes).nodes
+  const [nodes, setNodes] = useState<Node<WorkbenchGraphNodeData>[]>(
+    () => normalizeWorkbenchGraph(flow, boxes).nodes
   );
-  const [edges, setEdges] = useState<Edge[]>(() =>
-    normalizeWorkbenchGraph(flow, boxes).edges
+  const [edges, setEdges] = useState<Edge[]>(
+    () => normalizeWorkbenchGraph(flow, boxes).edges
   );
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [addNodeOpen, setAddNodeOpen] = useState(false);
   const [editNodeOpen, setEditNodeOpen] = useState(false);
   const [editNodeSection, setEditNodeSection] =
     useState<WorkbenchEditorSection>("overview");
-  const [aiNodeInitialStepId, setAiNodeInitialStepId] = useState<string | undefined>(
-    undefined
-  );
+  const [aiNodeInitialStepId, setAiNodeInitialStepId] = useState<
+    string | undefined
+  >(undefined);
   const [runOpen, setRunOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [traceOpen, setTraceOpen] = useState(false);
@@ -2054,8 +2200,12 @@ export function WorkbenchFlowEditor({
   const [runError, setRunError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<WorkbenchSaveState>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(runs[0]?.id ?? null);
-  const [selectedResultNodeId, setSelectedResultNodeId] = useState<string | null>(null);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(
+    runs[0]?.id ?? null
+  );
+  const [selectedResultNodeId, setSelectedResultNodeId] = useState<
+    string | null
+  >(null);
 
   const flowSnapshot = useMemo(
     () =>
@@ -2065,7 +2215,9 @@ export function WorkbenchFlowEditor({
           description: flow.description,
           kind: flow.kind,
           publicInputs: flow.publicInputs ?? [],
-          nodes: flow.graph.nodes.map((node) => graphNodeFromConnector(node, boxes)),
+          nodes: flow.graph.nodes.map((node) =>
+            graphNodeFromConnector(node, boxes)
+          ),
           edges: flow.graph.edges.map(graphEdgeFromConnector)
         })
       ),
@@ -2135,7 +2287,13 @@ export function WorkbenchFlowEditor({
     return boxes.filter((box) => {
       const matchesQuery =
         normalizedQuery.length === 0 ||
-        [box.title, box.description, box.category, box.routePath ?? "", ...box.tags]
+        [
+          box.title,
+          box.description,
+          box.category,
+          box.routePath ?? "",
+          ...box.tags
+        ]
           .join(" ")
           .toLowerCase()
           .includes(normalizedQuery);
@@ -2153,7 +2311,8 @@ export function WorkbenchFlowEditor({
     [nodes, selectedNodeId]
   );
   const latestRun = runs[0] ?? null;
-  const selectedRun = runs.find((run) => run.id === selectedRunId) ?? latestRun ?? null;
+  const selectedRun =
+    runs.find((run) => run.id === selectedRunId) ?? latestRun ?? null;
   const runNodesQuery = useGetWorkbenchFlowRunNodesQuery(
     {
       flowId: flow.id,
@@ -2164,7 +2323,9 @@ export function WorkbenchFlowEditor({
     }
   );
   const selectedNodeResult =
-    runNodesQuery.data?.nodeResults.find((entry) => entry.nodeId === selectedResultNodeId) ?? null;
+    runNodesQuery.data?.nodeResults.find(
+      (entry) => entry.nodeId === selectedResultNodeId
+    ) ?? null;
   const selectedNodeResultQuery = useGetWorkbenchFlowRunNodeQuery(
     {
       flowId: flow.id,
@@ -2175,7 +2336,10 @@ export function WorkbenchFlowEditor({
       skip: !selectedRunId || !selectedResultNodeId || !traceOpen
     }
   );
-  const graphIssues = useMemo(() => collectWorkbenchGraphIssues(nodes, edges), [nodes, edges]);
+  const graphIssues = useMemo(
+    () => collectWorkbenchGraphIssues(nodes, edges),
+    [nodes, edges]
+  );
   const hasAiNodes = useMemo(
     () => nodes.some((node) => isAiWorkbenchNode(node.data.nodeType)),
     [nodes]
@@ -2194,8 +2358,8 @@ export function WorkbenchFlowEditor({
     () =>
       Boolean(
         selectedNode &&
-          selectedNode.data.nodeType !== "box" &&
-          selectedNode.data.nodeType !== "box_input"
+        selectedNode.data.nodeType !== "box" &&
+        selectedNode.data.nodeType !== "box_input"
       ),
     [selectedNode]
   );
@@ -2250,14 +2414,17 @@ export function WorkbenchFlowEditor({
     }
     setSaveState((current) => (current === "saving" ? current : "dirty"));
   }, [draftSnapshot]);
-  const aiNodeSteps = useMemo<QuestionFlowStep<WorkbenchGraphNodeData>[]>(() => {
+  const aiNodeSteps = useMemo<
+    QuestionFlowStep<WorkbenchGraphNodeData>[]
+  >(() => {
     if (!selectedNode || !isAiWorkbenchNode(selectedNode.data.nodeType)) {
       return [];
     }
     return [
       {
         id: "overview",
-        eyebrow: selectedNode.data.nodeType === "chat" ? "Chat node" : "Functor node",
+        eyebrow:
+          selectedNode.data.nodeType === "chat" ? "Chat node" : "Functor node",
         title: "Define what this node is responsible for",
         description:
           "Give the node a clear role in the flow before configuring prompts and models.",
@@ -2280,7 +2447,9 @@ export function WorkbenchFlowEditor({
               <textarea
                 rows={4}
                 value={value.description}
-                onChange={(event) => setValue({ description: event.target.value })}
+                onChange={(event) =>
+                  setValue({ description: event.target.value })
+                }
                 className={WORKBENCH_FIELD_CLASS}
               />
             </FlowField>
@@ -2318,7 +2487,9 @@ export function WorkbenchFlowEditor({
               <textarea
                 rows={5}
                 value={value.systemPrompt ?? ""}
-                onChange={(event) => setValue({ systemPrompt: event.target.value })}
+                onChange={(event) =>
+                  setValue({ systemPrompt: event.target.value })
+                }
                 className={WORKBENCH_FIELD_CLASS}
               />
             </FlowField>
@@ -2335,8 +2506,8 @@ export function WorkbenchFlowEditor({
           <>
             {modelConnections.length === 0 ? (
               <div className="rounded-[20px] border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm leading-6 text-amber-100">
-                No model connection is configured yet. Open Settings &gt; Models, add one
-                connection, then come back here.
+                No model connection is configured yet. Open Settings &gt;
+                Models, add one connection, then come back here.
               </div>
             ) : null}
             <FlowField
@@ -2467,7 +2638,9 @@ export function WorkbenchFlowEditor({
               <div className="grid max-h-[18rem] gap-2 overflow-y-auto pr-1">
                 {availableToolOptions.length > 0 ? (
                   availableToolOptions.map((tool) => {
-                    const enabled = (value.enabledToolKeys ?? []).includes(tool.key);
+                    const enabled = (value.enabledToolKeys ?? []).includes(
+                      tool.key
+                    );
                     return (
                       <label
                         key={tool.key}
@@ -2477,7 +2650,9 @@ export function WorkbenchFlowEditor({
                           type="checkbox"
                           checked={enabled}
                           onChange={(event) => {
-                            const current = new Set(value.enabledToolKeys ?? []);
+                            const current = new Set(
+                              value.enabledToolKeys ?? []
+                            );
                             if (event.target.checked) {
                               current.add(tool.key);
                             } else {
@@ -2624,7 +2799,12 @@ export function WorkbenchFlowEditor({
         )
       }
     ];
-  }, [availableToolOptions, modelConnections, selectedAiToolPreview, selectedNode]);
+  }, [
+    availableToolOptions,
+    modelConnections,
+    selectedAiToolPreview,
+    selectedNode
+  ]);
 
   const persistDraft = useCallback(async () => {
     const snapshot = draftSnapshotRef.current;
@@ -2657,7 +2837,10 @@ export function WorkbenchFlowEditor({
       })
       .finally(() => {
         savePromiseRef.current = null;
-        if (queuedSaveRef.current && draftSnapshotRef.current !== lastSavedSnapshotRef.current) {
+        if (
+          queuedSaveRef.current &&
+          draftSnapshotRef.current !== lastSavedSnapshotRef.current
+        ) {
           queuedSaveRef.current = false;
           void persistDraft();
         } else {
@@ -2682,7 +2865,9 @@ export function WorkbenchFlowEditor({
     (nodeId: string, section: WorkbenchEditorSection = "overview") => {
       setSelectedNodeId(nodeId);
       setEditNodeSection(section);
-      setAiNodeInitialStepId(section === "contracts" ? "contracts" : "overview");
+      setAiNodeInitialStepId(
+        section === "contracts" ? "contracts" : "overview"
+      );
       setEditNodeOpen(true);
     },
     []
@@ -2702,7 +2887,9 @@ export function WorkbenchFlowEditor({
   );
 
   function updateSelectedNode(
-    updater: (node: Node<WorkbenchGraphNodeData>) => Node<WorkbenchGraphNodeData>
+    updater: (
+      node: Node<WorkbenchGraphNodeData>
+    ) => Node<WorkbenchGraphNodeData>
   ) {
     if (!selectedNodeId) {
       return;
@@ -2837,7 +3024,11 @@ export function WorkbenchFlowEditor({
               Latest {latestRun.mode} · {latestRun.status}
             </button>
           ) : null}
-          <Button type="button" variant="secondary" onClick={() => setRunOpen(true)}>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setRunOpen(true)}
+          >
             <Play className="size-4" />
             Run
           </Button>
@@ -2891,14 +3082,19 @@ export function WorkbenchFlowEditor({
                 {
                   ...connection,
                   id: `edge_${crypto.randomUUID().replaceAll("-", "").slice(0, 8)}`,
-                  style: { stroke: "rgba(188, 194, 255, 0.44)", strokeWidth: 1.6 }
+                  style: {
+                    stroke: "rgba(188, 194, 255, 0.44)",
+                    strokeWidth: 1.6
+                  }
                 },
                 current
               )
             )
           }
           onEdgeClick={(_, edge) => {
-            setEdges((current) => current.filter((entry) => entry.id !== edge.id));
+            setEdges((current) =>
+              current.filter((entry) => entry.id !== edge.id)
+            );
           }}
           onNodeClick={(_, node) => {
             setSelectedNodeId(node.id);
@@ -2962,14 +3158,42 @@ export function WorkbenchFlowEditor({
         <div className="grid gap-4">
           <div className="grid gap-2 sm:grid-cols-2">
             {[
-              { type: "user_input", label: "User input", icon: <SquareTerminal className="size-4" /> },
-              { type: "value", label: "Value", icon: <ListTree className="size-4" /> },
-              { type: "functor", label: "Functor", icon: <Sparkles className="size-4" /> },
+              {
+                type: "user_input",
+                label: "User input",
+                icon: <SquareTerminal className="size-4" />
+              },
+              {
+                type: "value",
+                label: "Value",
+                icon: <ListTree className="size-4" />
+              },
+              {
+                type: "functor",
+                label: "Functor",
+                icon: <Sparkles className="size-4" />
+              },
               { type: "chat", label: "Chat", icon: <Bot className="size-4" /> },
-              { type: "merge", label: "Merge", icon: <GitMerge className="size-4" /> },
-              { type: "template", label: "Template", icon: <Wand2 className="size-4" /> },
-              { type: "pick_key", label: "Pick key", icon: <Braces className="size-4" /> },
-              { type: "output", label: "Output", icon: <Send className="size-4" /> }
+              {
+                type: "merge",
+                label: "Merge",
+                icon: <GitMerge className="size-4" />
+              },
+              {
+                type: "template",
+                label: "Template",
+                icon: <Wand2 className="size-4" />
+              },
+              {
+                type: "pick_key",
+                label: "Pick key",
+                icon: <Braces className="size-4" />
+              },
+              {
+                type: "output",
+                label: "Output",
+                icon: <Send className="size-4" />
+              }
             ].map((entry) => (
               <button
                 key={entry.type}
@@ -2978,7 +3202,10 @@ export function WorkbenchFlowEditor({
                 onClick={() => {
                   setNodes((current) => [
                     ...current,
-                    buildNodeTemplate(entry.type as AiConnectorNodeType, current)
+                    buildNodeTemplate(
+                      entry.type as AiConnectorNodeType,
+                      current
+                    )
                   ]);
                   setAddNodeOpen(false);
                 }}
@@ -3008,15 +3235,25 @@ export function WorkbenchFlowEditor({
                 type="button"
                 className="rounded-[20px] bg-white/[0.04] px-4 py-3 text-left transition hover:bg-white/[0.08]"
                 onClick={() => {
-                  setNodes((current) => [...current, buildNodeTemplate("box", current, box)]);
+                  setNodes((current) => [
+                    ...current,
+                    buildNodeTemplate("box", current, box)
+                  ]);
                   setAddNodeOpen(false);
                 }}
               >
                 <div className="flex items-start justify-between gap-3">
-                  <div className="text-sm font-medium text-white">{box.title}</div>
+                  <div className="text-sm font-medium text-white">
+                    {box.title}
+                  </div>
                   <div className="flex shrink-0 flex-wrap gap-2 text-[10px] uppercase tracking-[0.14em] text-white/42">
-                    <span>{box.output.length} output{box.output.length === 1 ? "" : "s"}</span>
-                    <span>{box.tools.length} tool{box.tools.length === 1 ? "" : "s"}</span>
+                    <span>
+                      {box.output.length} output
+                      {box.output.length === 1 ? "" : "s"}
+                    </span>
+                    <span>
+                      {box.tools.length} tool{box.tools.length === 1 ? "" : "s"}
+                    </span>
                   </div>
                 </div>
                 <div className="mt-1 text-[12px] leading-5 text-white/50">
@@ -3057,6 +3294,7 @@ export function WorkbenchFlowEditor({
               data: nextValue
             }))
           }
+          draftPersistenceKey={`workbench.ai-node.${selectedNode.id}`}
           steps={aiNodeSteps}
           initialStepId={aiNodeInitialStepId}
           onSubmit={async () => {
@@ -3088,11 +3326,13 @@ export function WorkbenchFlowEditor({
                 ]
                   .filter(
                     (section) =>
-                      section.id !== "contracts" || selectedNodeSupportsContractEditing
+                      section.id !== "contracts" ||
+                      selectedNodeSupportsContractEditing
                   )
                   .filter(
                     (section) =>
-                      section.id !== "parameters" || (selectedNode.data.params?.length ?? 0) > 0
+                      section.id !== "parameters" ||
+                      (selectedNode.data.params?.length ?? 0) > 0
                   )
                   .map((section) => (
                     <button
@@ -3104,7 +3344,9 @@ export function WorkbenchFlowEditor({
                           ? "bg-[rgba(192,193,255,0.18)] text-white"
                           : "text-white/58 hover:bg-white/[0.05] hover:text-white"
                       )}
-                      onClick={() => setEditNodeSection(section.id as WorkbenchEditorSection)}
+                      onClick={() =>
+                        setEditNodeSection(section.id as WorkbenchEditorSection)
+                      }
                     >
                       {section.label}
                     </button>
@@ -3134,23 +3376,28 @@ export function WorkbenchFlowEditor({
                     }
                     className={WORKBENCH_FIELD_CLASS}
                   />
-                  {(selectedNode.data.nodeType === "box" ||
-                    selectedNode.data.nodeType === "box_input") ? (
+                  {selectedNode.data.nodeType === "box" ||
+                  selectedNode.data.nodeType === "box_input" ? (
                     <select
                       value={selectedNode.data.boxId ?? ""}
                       onChange={(event) => {
-                        const box = boxes.find((entry) => entry.id === event.target.value);
+                        const box = boxes.find(
+                          (entry) => entry.id === event.target.value
+                        );
                         updateSelectedNode((node) => ({
                           ...node,
                           data: {
                             ...node.data,
                             boxId: event.target.value,
                             label: box?.title ?? node.data.label,
-                            description: box?.description ?? node.data.description,
+                            description:
+                              box?.description ?? node.data.description,
                             inputs: box?.inputs ?? [],
                             outputs: box?.output ?? [],
                             params: box?.params ?? [],
-                            enabledToolKeys: (box?.tools ?? []).map((tool) => tool.key)
+                            enabledToolKeys: (box?.tools ?? []).map(
+                              (tool) => tool.key
+                            )
                           }
                         }));
                       }}
@@ -3184,7 +3431,10 @@ export function WorkbenchFlowEditor({
                       onChange={(event) =>
                         updateSelectedNode((node) => ({
                           ...node,
-                          data: { ...node.data, selectedKey: event.target.value }
+                          data: {
+                            ...node.data,
+                            selectedKey: event.target.value
+                          }
                         }))
                       }
                       placeholder="Key to select from object input"
@@ -3198,7 +3448,10 @@ export function WorkbenchFlowEditor({
                         onChange={(event) =>
                           updateSelectedNode((node) => ({
                             ...node,
-                            data: { ...node.data, outputKey: event.target.value }
+                            data: {
+                              ...node.data,
+                              outputKey: event.target.value
+                            }
                           }))
                         }
                         className={WORKBENCH_FIELD_CLASS}
@@ -3210,13 +3463,17 @@ export function WorkbenchFlowEditor({
                             </option>
                           ))
                         ) : (
-                          <option value={selectedNode.data.outputKey ?? "answer"}>
+                          <option
+                            value={selectedNode.data.outputKey ?? "answer"}
+                          >
                             {selectedNode.data.outputKey ?? "answer"}
                           </option>
                         )}
                       </select>
                       <div className="rounded-[18px] border border-white/8 bg-white/[0.03] px-4 py-3 text-sm leading-6 text-white/58">
-                        Publish one upstream output as the flow result. If the output key is missing from the graph, Forge will flag it in graph checks.
+                        Publish one upstream output as the flow result. If the
+                        output key is missing from the graph, Forge will flag it
+                        in graph checks.
                       </div>
                     </div>
                   ) : null}
@@ -3227,12 +3484,22 @@ export function WorkbenchFlowEditor({
                         onChange={(event) =>
                           updateSelectedNode((node) => ({
                             ...node,
-                            data: { ...node.data, valueType: event.target.value as any }
+                            data: {
+                              ...node.data,
+                              valueType: event.target.value as any
+                            }
                           }))
                         }
                         className={WORKBENCH_FIELD_CLASS}
                       >
-                        {["string", "number", "boolean", "null", "array", "object"].map((kind) => (
+                        {[
+                          "string",
+                          "number",
+                          "boolean",
+                          "null",
+                          "array",
+                          "object"
+                        ].map((kind) => (
                           <option key={kind} value={kind}>
                             {kind}
                           </option>
@@ -3244,7 +3511,10 @@ export function WorkbenchFlowEditor({
                         onChange={(event) =>
                           updateSelectedNode((node) => ({
                             ...node,
-                            data: { ...node.data, valueLiteral: event.target.value }
+                            data: {
+                              ...node.data,
+                              valueLiteral: event.target.value
+                            }
                           }))
                         }
                         placeholder="Value literal or JSON"
@@ -3285,7 +3555,9 @@ export function WorkbenchFlowEditor({
                   </div>
                 ) : (
                   <div className="rounded-[20px] border border-white/8 bg-white/[0.03] px-4 py-4 text-sm leading-6 text-white/58">
-                    This node inherits its contract from the registered Forge box. Edit the box definition in the registry when the contract itself needs to change.
+                    This node inherits its contract from the registered Forge
+                    box. Edit the box definition in the registry when the
+                    contract itself needs to change.
                   </div>
                 )
               ) : null}
@@ -3306,7 +3578,9 @@ export function WorkbenchFlowEditor({
                         <label className="flex items-center gap-3 rounded-[18px] border border-white/10 bg-black/20 px-4 py-3 text-sm text-white">
                           <input
                             type="checkbox"
-                            checked={Boolean(selectedNode.data.paramValues?.[param.key])}
+                            checked={Boolean(
+                              selectedNode.data.paramValues?.[param.key]
+                            )}
                             onChange={(event) =>
                               updateSelectedNode((node) => ({
                                 ...node,
@@ -3340,7 +3614,10 @@ export function WorkbenchFlowEditor({
                             }))
                           }
                           placeholder={param.description ?? param.label}
-                          className={cn(WORKBENCH_FIELD_CLASS, "min-h-[104px] resize-y")}
+                          className={cn(
+                            WORKBENCH_FIELD_CLASS,
+                            "min-h-[104px] resize-y"
+                          )}
                         />
                       ) : (
                         <input
@@ -3480,7 +3757,9 @@ export function WorkbenchFlowEditor({
           ) : null}
           {!runError && graphIssues.length > 0 ? (
             <div className="rounded-[20px] border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm leading-6 text-amber-100">
-              <div className="font-medium">Fix these graph issues before running:</div>
+              <div className="font-medium">
+                Fix these graph issues before running:
+              </div>
               <ul className="mt-2 grid gap-1">
                 {graphIssues.slice(0, 4).map((issue) => (
                   <li key={issue}>• {issue}</li>
@@ -3490,9 +3769,9 @@ export function WorkbenchFlowEditor({
           ) : null}
           {!runError && hasAiNodes && modelConnections.length === 0 ? (
             <div className="rounded-[20px] border border-sky-400/20 bg-sky-400/10 px-4 py-3 text-sm leading-6 text-sky-100">
-              This flow contains AI nodes, but Forge does not have a model connection yet.
-              Open Settings &gt; Models, add one connection, then come back and run the
-              flow.
+              This flow contains AI nodes, but Forge does not have a model
+              connection yet. Open Settings &gt; Models, add one connection,
+              then come back and run the flow.
             </div>
           ) : null}
           {publicInputs.length > 0 ? (
@@ -3509,7 +3788,10 @@ export function WorkbenchFlowEditor({
                   <FlowField
                     key={inputDefinition.key}
                     label={inputDefinition.label}
-                    description={inputDefinition.description || "Typed input for this flow."}
+                    description={
+                      inputDefinition.description ||
+                      "Typed input for this flow."
+                    }
                   >
                     {inputDefinition.kind === "boolean" ? (
                       <label className="flex items-center gap-2 text-sm text-white/68">
@@ -3528,9 +3810,11 @@ export function WorkbenchFlowEditor({
                     ) : inputDefinition.kind === "number" ? (
                       <input
                         type="number"
-                        value={typeof runInputs[inputDefinition.key] === "number"
-                          ? String(runInputs[inputDefinition.key])
-                          : ""}
+                        value={
+                          typeof runInputs[inputDefinition.key] === "number"
+                            ? String(runInputs[inputDefinition.key])
+                            : ""
+                        }
                         onChange={(event) =>
                           setRunInputs((current) => ({
                             ...current,
@@ -3556,7 +3840,9 @@ export function WorkbenchFlowEditor({
                       inputDefinition.kind === "entity" ? (
                       <textarea
                         rows={4}
-                        value={formatWorkbenchParamValue(runInputs[inputDefinition.key])}
+                        value={formatWorkbenchParamValue(
+                          runInputs[inputDefinition.key]
+                        )}
                         onChange={(event) => {
                           const raw = event.target.value;
                           let parsed: unknown = raw;
@@ -3579,16 +3865,20 @@ export function WorkbenchFlowEditor({
                       />
                     ) : (
                       <input
-                        value={typeof runInputs[inputDefinition.key] === "string"
-                          ? (runInputs[inputDefinition.key] as string)
-                          : ""}
+                        value={
+                          typeof runInputs[inputDefinition.key] === "string"
+                            ? (runInputs[inputDefinition.key] as string)
+                            : ""
+                        }
                         onChange={(event) =>
                           setRunInputs((current) => ({
                             ...current,
                             [inputDefinition.key]: event.target.value
                           }))
                         }
-                        placeholder={inputDefinition.exampleValue || inputDefinition.label}
+                        placeholder={
+                          inputDefinition.exampleValue || inputDefinition.label
+                        }
                         className={WORKBENCH_FIELD_CLASS}
                       />
                     )}
@@ -3682,7 +3972,9 @@ export function WorkbenchFlowEditor({
                         <span>{new Date(run.createdAt).toLocaleString()}</span>
                       </div>
                       <div className="mt-2 text-sm text-white/80">
-                        {run.result?.primaryText ?? run.error ?? "No output yet."}
+                        {run.result?.primaryText ??
+                          run.error ??
+                          "No output yet."}
                       </div>
                     </button>
                   ))}
@@ -3692,10 +3984,14 @@ export function WorkbenchFlowEditor({
                 <div className="rounded-[20px] border border-white/8 bg-white/[0.04] p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3 text-[12px] text-white/50">
                     <span>{selectedRun.mode}</span>
-                    <span>{new Date(selectedRun.createdAt).toLocaleString()}</span>
+                    <span>
+                      {new Date(selectedRun.createdAt).toLocaleString()}
+                    </span>
                   </div>
                   <div className="mt-3 text-sm leading-6 text-white/82">
-                    {selectedRun.result?.primaryText ?? selectedRun.error ?? "No output yet."}
+                    {selectedRun.result?.primaryText ??
+                      selectedRun.error ??
+                      "No output yet."}
                   </div>
                   {selectedRun.result?.outputs ? (
                     <details className="mt-3 rounded-[16px] bg-black/20 p-3">
@@ -3729,7 +4025,9 @@ export function WorkbenchFlowEditor({
                           >
                             <div className="flex items-center justify-between gap-3">
                               <div>
-                                <div className="text-sm text-white">{node.label}</div>
+                                <div className="text-sm text-white">
+                                  {node.label}
+                                </div>
                                 <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">
                                   {node.nodeType}
                                 </div>
@@ -3743,25 +4041,43 @@ export function WorkbenchFlowEditor({
                       </div>
                     </div>
                     <div className="rounded-[20px] border border-white/8 bg-white/[0.04] p-4">
-                      {selectedNodeResult || selectedNodeResultQuery.data?.nodeResult ? (
+                      {selectedNodeResult ||
+                      selectedNodeResultQuery.data?.nodeResult ? (
                         <>
                           <div className="flex flex-wrap items-center justify-between gap-3">
                             <div>
                               <div className="text-sm font-medium text-white">
-                                {(selectedNodeResultQuery.data?.nodeResult ?? selectedNodeResult)?.label}
+                                {
+                                  (
+                                    selectedNodeResultQuery.data?.nodeResult ??
+                                    selectedNodeResult
+                                  )?.label
+                                }
                               </div>
                               <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
-                                {(selectedNodeResultQuery.data?.nodeResult ?? selectedNodeResult)?.nodeType}
+                                {
+                                  (
+                                    selectedNodeResultQuery.data?.nodeResult ??
+                                    selectedNodeResult
+                                  )?.nodeType
+                                }
                               </div>
                             </div>
                             <div className="rounded-full bg-white/[0.05] px-3 py-1 text-[11px] text-white/56">
+                              {
+                                (
+                                  (
+                                    selectedNodeResultQuery.data?.nodeResult ??
+                                    selectedNodeResult
+                                  )?.tools ?? []
+                                ).length
+                              }{" "}
+                              tool
                               {(
-                                (selectedNodeResultQuery.data?.nodeResult ?? selectedNodeResult)?.tools ??
-                                []
-                              ).length} tool
-                              {(
-                                (selectedNodeResultQuery.data?.nodeResult ?? selectedNodeResult)?.tools ??
-                                []
+                                (
+                                  selectedNodeResultQuery.data?.nodeResult ??
+                                  selectedNodeResult
+                                )?.tools ?? []
                               ).length === 1
                                 ? ""
                                 : "s"}
@@ -3774,7 +4090,10 @@ export function WorkbenchFlowEditor({
                               </summary>
                               <pre className="mt-3 overflow-auto whitespace-pre-wrap text-[12px] leading-5 text-white/66">
                                 {JSON.stringify(
-                                  (selectedNodeResultQuery.data?.nodeResult ?? selectedNodeResult)?.input ?? [],
+                                  (
+                                    selectedNodeResultQuery.data?.nodeResult ??
+                                    selectedNodeResult
+                                  )?.input ?? [],
                                   null,
                                   2
                                 )}
@@ -3786,7 +4105,10 @@ export function WorkbenchFlowEditor({
                               </summary>
                               <pre className="mt-3 overflow-auto whitespace-pre-wrap text-[12px] leading-5 text-white/66">
                                 {JSON.stringify(
-                                  (selectedNodeResultQuery.data?.nodeResult ?? selectedNodeResult)?.outputMap ?? {},
+                                  (
+                                    selectedNodeResultQuery.data?.nodeResult ??
+                                    selectedNodeResult
+                                  )?.outputMap ?? {},
                                   null,
                                   2
                                 )}
@@ -3798,7 +4120,10 @@ export function WorkbenchFlowEditor({
                               </summary>
                               <pre className="mt-3 overflow-auto whitespace-pre-wrap text-[12px] leading-5 text-white/66">
                                 {JSON.stringify(
-                                  (selectedNodeResultQuery.data?.nodeResult ?? selectedNodeResult)?.payload ?? null,
+                                  (
+                                    selectedNodeResultQuery.data?.nodeResult ??
+                                    selectedNodeResult
+                                  )?.payload ?? null,
                                   null,
                                   2
                                 )}
@@ -3808,7 +4133,8 @@ export function WorkbenchFlowEditor({
                         </>
                       ) : (
                         <div className="text-sm text-white/56">
-                          Pick a node result to inspect its resolved inputs and outputs.
+                          Pick a node result to inspect its resolved inputs and
+                          outputs.
                         </div>
                       )}
                     </div>
@@ -3825,7 +4151,8 @@ export function WorkbenchFlowEditor({
           </div>
         ) : (
           <div className="text-sm text-white/56">
-            Run the flow once to inspect its published outputs and node-level results here.
+            Run the flow once to inspect its published outputs and node-level
+            results here.
           </div>
         )}
       </WorkbenchDialog>

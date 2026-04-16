@@ -2,12 +2,22 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { SchemaBadge } from "@/components/psyche/schema-badge";
-import { FlowField, QuestionFlowDialog, type QuestionFlowStep } from "@/components/flows/question-flow-dialog";
+import {
+  FlowField,
+  QuestionFlowDialog,
+  type QuestionFlowStep
+} from "@/components/flows/question-flow-dialog";
 import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
 import { AtlasPanel } from "@/components/psyche/atlas-panel";
-import { EntityLinkMultiSelect, type EntityLinkOption } from "@/components/psyche/entity-link-multiselect";
+import {
+  EntityLinkMultiSelect,
+  type EntityLinkOption
+} from "@/components/psyche/entity-link-multiselect";
 import { PsycheSectionNav } from "@/components/psyche/psyche-section-nav";
-import { psycheFocusClass, usePsycheFocusTarget } from "@/components/psyche/use-psyche-focus-target";
+import {
+  psycheFocusClass,
+  usePsycheFocusTarget
+} from "@/components/psyche/use-psyche-focus-target";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
@@ -22,9 +32,35 @@ import { UserSelectField } from "@/components/ui/user-select-field";
 import { prependEntityToCollection } from "@/lib/query-cache";
 import { getEntityNotesSummary } from "@/lib/note-helpers";
 import { beliefEntrySchema, type BeliefEntryInput } from "@/lib/psyche-schemas";
-import type { Behavior, BeliefEntry, ModeProfile, PsycheValue, SchemaCatalogEntry, TriggerReport } from "@/lib/psyche-types";
-import { findSchemaForLink, getSchemaFamilyLabel, getSchemaTypeHelpText, getSchemaTypeLabel, getSchemaVisual } from "@/lib/schema-visuals";
-import { createBehavior, createBelief, createMode, createPsycheValue, createTriggerReport, listBehaviors, listBeliefs, listModes, listPsycheValues, listSchemaCatalog, listTriggerReports, patchBelief } from "@/lib/api";
+import type {
+  Behavior,
+  BeliefEntry,
+  ModeProfile,
+  PsycheValue,
+  SchemaCatalogEntry,
+  TriggerReport
+} from "@/lib/psyche-types";
+import {
+  findSchemaForLink,
+  getSchemaFamilyLabel,
+  getSchemaTypeHelpText,
+  getSchemaTypeLabel,
+  getSchemaVisual
+} from "@/lib/schema-visuals";
+import {
+  createBehavior,
+  createBelief,
+  createMode,
+  createPsycheValue,
+  createTriggerReport,
+  listBehaviors,
+  listBeliefs,
+  listModes,
+  listPsycheValues,
+  listSchemaCatalog,
+  listTriggerReports,
+  patchBelief
+} from "@/lib/api";
 import {
   buildOwnedEntitySearchText,
   formatOwnedEntityDescription,
@@ -78,12 +114,18 @@ function countSchemaLinks({
   behaviors: Behavior[];
   reports: TriggerReport[];
 }) {
-  const beliefCount = beliefs.filter((belief) => belief.schemaId === schema.id).length;
-  const behaviorCount = behaviors.filter((behavior) => behavior.linkedSchemaIds.includes(schema.id)).length;
-  const reportCount = reports.filter((report) => report.schemaLinks.some((entry) => {
-    const linkedSchema = findSchemaForLink(entry, [schema]);
-    return linkedSchema?.id === schema.id;
-  })).length;
+  const beliefCount = beliefs.filter(
+    (belief) => belief.schemaId === schema.id
+  ).length;
+  const behaviorCount = behaviors.filter((behavior) =>
+    behavior.linkedSchemaIds.includes(schema.id)
+  ).length;
+  const reportCount = reports.filter((report) =>
+    report.schemaLinks.some((entry) => {
+      const linkedSchema = findSchemaForLink(entry, [schema]);
+      return linkedSchema?.id === schema.id;
+    })
+  ).length;
   return {
     beliefCount,
     behaviorCount,
@@ -118,38 +160,74 @@ function SchemaSection({
   const visual = getSchemaVisual(schemas[0].schemaType);
 
   return (
-    <section className={`min-w-0 grid gap-4 rounded-[30px] border p-4 md:p-5 ${visual.sectionTone}`}>
+    <section
+      className={`min-w-0 grid gap-4 rounded-[30px] border p-4 md:p-5 ${visual.sectionTone}`}
+    >
       <div className="flex min-w-0 flex-col items-start gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
         <div className="grid min-w-0 gap-2">
-          <div className={`flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] ${visual.sectionEyebrow}`}>
+          <div
+            className={`flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] ${visual.sectionEyebrow}`}
+          >
             <span>{title}</span>
-            {titleHelp ? <InfoTooltip content={titleHelp} label={`Explain ${title.toLowerCase()}`} /> : null}
+            {titleHelp ? (
+              <InfoTooltip
+                content={titleHelp}
+                label={`Explain ${title.toLowerCase()}`}
+              />
+            ) : null}
           </div>
-          <div className="max-w-3xl text-sm leading-6 text-white/60">{description}</div>
+          <div className="max-w-3xl text-sm leading-6 text-white/60">
+            {description}
+          </div>
         </div>
         <Badge>{schemas.length} schemas</Badge>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
         {schemas.map((schema) => {
-          const stats = countSchemaLinks({ schema, beliefs, behaviors, reports });
-          const schemaBeliefs = beliefs.filter((belief) => belief.schemaId === schema.id);
+          const stats = countSchemaLinks({
+            schema,
+            beliefs,
+            behaviors,
+            reports
+          });
+          const schemaBeliefs = beliefs.filter(
+            (belief) => belief.schemaId === schema.id
+          );
           const schemaVisual = getSchemaVisual(schema.schemaType);
 
           return (
-            <div key={schema.id} className={`min-w-0 rounded-[26px] border p-5 ${schemaVisual.cardTone}`}>
+            <div
+              key={schema.id}
+              className={`min-w-0 rounded-[26px] border p-5 ${schemaVisual.cardTone}`}
+            >
               <div className="flex min-w-0 flex-col items-start gap-3 sm:flex-row sm:justify-between">
                 <div className="min-w-0">
-                  <SchemaBadge label={schema.title} schemaType={schema.schemaType} />
-                  <div className="mt-3 text-sm text-white/46">{getSchemaFamilyLabel(schema.family)}</div>
-                  <div className="mt-2 text-sm leading-6 text-white/62">{schema.description}</div>
+                  <SchemaBadge
+                    label={schema.title}
+                    schemaType={schema.schemaType}
+                  />
+                  <div className="mt-3 text-sm text-white/46">
+                    {getSchemaFamilyLabel(schema.family)}
+                  </div>
+                  <div className="mt-2 text-sm leading-6 text-white/62">
+                    {schema.description}
+                  </div>
                 </div>
-                <Badge>{stats.total} {schemaVisual.countLabel}</Badge>
+                <Badge>
+                  {stats.total} {schemaVisual.countLabel}
+                </Badge>
               </div>
               <div className="mt-4 flex flex-wrap gap-2">
-                <Badge className="bg-white/[0.06] text-white/68">{stats.beliefCount} beliefs</Badge>
-                <Badge className="bg-white/[0.06] text-white/68">{stats.behaviorCount} behaviors</Badge>
-                <Badge className="bg-white/[0.06] text-white/68">{stats.reportCount} reports</Badge>
+                <Badge className="bg-white/[0.06] text-white/68">
+                  {stats.beliefCount} beliefs
+                </Badge>
+                <Badge className="bg-white/[0.06] text-white/68">
+                  {stats.behaviorCount} behaviors
+                </Badge>
+                <Badge className="bg-white/[0.06] text-white/68">
+                  {stats.reportCount} reports
+                </Badge>
               </div>
               <div className="mt-4 grid gap-3">
                 {schemaBeliefs.length > 0 ? (
@@ -157,7 +235,9 @@ function SchemaSection({
                     {`${schemaBeliefs.length} ${schemaVisual.linkSummary}${schemaBeliefs.length === 1 ? "" : "s"} live here.`}
                   </div>
                 ) : (
-                  <div className="rounded-[18px] bg-white/[0.03] p-4 text-sm leading-6 text-white/46">{schemaVisual.emptyCopy}</div>
+                  <div className="rounded-[18px] bg-white/[0.03] p-4 text-sm leading-6 text-white/46">
+                    {schemaVisual.emptyCopy}
+                  </div>
                 )}
                 {schemaBeliefs.slice(0, 2).map((belief) => (
                   <button
@@ -166,8 +246,13 @@ function SchemaSection({
                     className="rounded-[20px] bg-white/[0.04] p-4 text-left transition hover:bg-white/[0.08]"
                     onClick={() => onOpenBelief(belief)}
                   >
-                    <div className="font-medium text-white">{belief.statement}</div>
-                    <div className="mt-2 text-sm leading-6 text-white/60">{belief.flexibleAlternative || "No flexible alternative recorded yet."}</div>
+                    <div className="font-medium text-white">
+                      {belief.statement}
+                    </div>
+                    <div className="mt-2 text-sm leading-6 text-white/60">
+                      {belief.flexibleAlternative ||
+                        "No flexible alternative recorded yet."}
+                    </div>
                   </button>
                 ))}
               </div>
@@ -187,12 +272,30 @@ export function PsycheSchemasBeliefsPage() {
   const [editingBelief, setEditingBelief] = useState<BeliefEntry | null>(null);
   const [draft, setDraft] = useState<BeliefEntryInput>(DEFAULT_BELIEF_INPUT);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const schemasQuery = useQuery({ queryKey: ["forge-psyche-schema-catalog"], queryFn: listSchemaCatalog });
-  const beliefsQuery = useQuery({ queryKey: ["forge-psyche-beliefs"], queryFn: listBeliefs });
-  const behaviorsQuery = useQuery({ queryKey: ["forge-psyche-behaviors"], queryFn: listBehaviors });
-  const modesQuery = useQuery({ queryKey: ["forge-psyche-modes"], queryFn: listModes });
-  const valuesQuery = useQuery({ queryKey: ["forge-psyche-values"], queryFn: listPsycheValues });
-  const reportsQuery = useQuery({ queryKey: ["forge-psyche-reports"], queryFn: listTriggerReports });
+  const schemasQuery = useQuery({
+    queryKey: ["forge-psyche-schema-catalog"],
+    queryFn: listSchemaCatalog
+  });
+  const beliefsQuery = useQuery({
+    queryKey: ["forge-psyche-beliefs"],
+    queryFn: listBeliefs
+  });
+  const behaviorsQuery = useQuery({
+    queryKey: ["forge-psyche-behaviors"],
+    queryFn: listBehaviors
+  });
+  const modesQuery = useQuery({
+    queryKey: ["forge-psyche-modes"],
+    queryFn: listModes
+  });
+  const valuesQuery = useQuery({
+    queryKey: ["forge-psyche-values"],
+    queryFn: listPsycheValues
+  });
+  const reportsQuery = useQuery({
+    queryKey: ["forge-psyche-reports"],
+    queryFn: listTriggerReports
+  });
 
   const schemas = schemasQuery.data?.schemas ?? [];
   const beliefs = beliefsQuery.data?.beliefs ?? [];
@@ -240,23 +343,28 @@ export function PsycheSchemasBeliefsPage() {
   const valueOptions: EntityLinkOption[] = values.map((entry: PsycheValue) => ({
     value: entry.id,
     label: formatOwnedEntityOptionLabel(entry.title, entry.user),
-    description: formatOwnedEntityDescription(entry.valuedDirection, entry.user),
+    description: formatOwnedEntityDescription(
+      entry.valuedDirection,
+      entry.user
+    ),
     searchText: buildOwnedEntitySearchText(
       [entry.title, entry.valuedDirection, entry.description],
       entry
     ),
     kind: "value"
   }));
-  const behaviorOptions: EntityLinkOption[] = behaviors.map((behavior: Behavior) => ({
-    value: behavior.id,
-    label: formatOwnedEntityOptionLabel(behavior.title, behavior.user),
-    description: formatOwnedEntityDescription(behavior.kind, behavior.user),
-    searchText: buildOwnedEntitySearchText(
-      [behavior.title, behavior.kind, behavior.description],
-      behavior
-    ),
-    kind: "behavior"
-  }));
+  const behaviorOptions: EntityLinkOption[] = behaviors.map(
+    (behavior: Behavior) => ({
+      value: behavior.id,
+      label: formatOwnedEntityOptionLabel(behavior.title, behavior.user),
+      description: formatOwnedEntityDescription(behavior.kind, behavior.user),
+      searchText: buildOwnedEntitySearchText(
+        [behavior.title, behavior.kind, behavior.description],
+        behavior
+      ),
+      kind: "behavior"
+    })
+  );
   const modeOptions: EntityLinkOption[] = modes.map((mode: ModeProfile) => ({
     value: mode.id,
     label: formatOwnedEntityOptionLabel(mode.title, mode.user),
@@ -270,22 +378,33 @@ export function PsycheSchemasBeliefsPage() {
     ),
     kind: "mode"
   }));
-  const reportOptions: EntityLinkOption[] = reports.map((report: TriggerReport) => ({
-    value: report.id,
-    label: formatOwnedEntityOptionLabel(report.title, report.user),
-    description: formatOwnedEntityDescription(
-      report.customEventType || report.eventSituation,
-      report.user
-    ),
-    searchText: buildOwnedEntitySearchText(
-      [report.title, report.customEventType, report.eventSituation],
-      report
-    ),
-    kind: "report"
-  }));
-  const schemaMap = useMemo(() => new Map(schemas.map((schema) => [schema.id, schema])), [schemas]);
-  const maladaptiveSchemas = useMemo(() => schemas.filter((schema) => schema.schemaType === "maladaptive"), [schemas]);
-  const adaptiveSchemas = useMemo(() => schemas.filter((schema) => schema.schemaType === "adaptive"), [schemas]);
+  const reportOptions: EntityLinkOption[] = reports.map(
+    (report: TriggerReport) => ({
+      value: report.id,
+      label: formatOwnedEntityOptionLabel(report.title, report.user),
+      description: formatOwnedEntityDescription(
+        report.customEventType || report.eventSituation,
+        report.user
+      ),
+      searchText: buildOwnedEntitySearchText(
+        [report.title, report.customEventType, report.eventSituation],
+        report
+      ),
+      kind: "report"
+    })
+  );
+  const schemaMap = useMemo(
+    () => new Map(schemas.map((schema) => [schema.id, schema])),
+    [schemas]
+  );
+  const maladaptiveSchemas = useMemo(
+    () => schemas.filter((schema) => schema.schemaType === "maladaptive"),
+    [schemas]
+  );
+  const adaptiveSchemas = useMemo(
+    () => schemas.filter((schema) => schema.schemaType === "adaptive"),
+    [schemas]
+  );
 
   const createLinkedValue = async (title: string) => {
     const { value } = await createPsycheValue({
@@ -299,9 +418,21 @@ export function PsycheSchemasBeliefsPage() {
       committedActions: [],
       userId: draft.userId
     });
-    prependEntityToCollection(queryClient, ["forge-psyche-values"], "values", value);
-    await queryClient.invalidateQueries({ queryKey: ["forge-psyche-overview"] });
-    return { value: value.id, label: value.title, description: value.valuedDirection, kind: "value" } satisfies EntityLinkOption;
+    prependEntityToCollection(
+      queryClient,
+      ["forge-psyche-values"],
+      "values",
+      value
+    );
+    await queryClient.invalidateQueries({
+      queryKey: ["forge-psyche-overview"]
+    });
+    return {
+      value: value.id,
+      label: value.title,
+      description: value.valuedDirection,
+      kind: "value"
+    } satisfies EntityLinkOption;
   };
 
   const createLinkedBehavior = async (title: string) => {
@@ -321,9 +452,21 @@ export function PsycheSchemasBeliefsPage() {
       linkedModeIds: [],
       userId: draft.userId
     });
-    prependEntityToCollection(queryClient, ["forge-psyche-behaviors"], "behaviors", behavior);
-    await queryClient.invalidateQueries({ queryKey: ["forge-psyche-overview"] });
-    return { value: behavior.id, label: behavior.title, description: behavior.kind, kind: "behavior" } satisfies EntityLinkOption;
+    prependEntityToCollection(
+      queryClient,
+      ["forge-psyche-behaviors"],
+      "behaviors",
+      behavior
+    );
+    await queryClient.invalidateQueries({
+      queryKey: ["forge-psyche-overview"]
+    });
+    return {
+      value: behavior.id,
+      label: behavior.title,
+      description: behavior.kind,
+      kind: "behavior"
+    } satisfies EntityLinkOption;
   };
 
   const createLinkedMode = async (title: string) => {
@@ -345,9 +488,21 @@ export function PsycheSchemasBeliefsPage() {
       linkedValueIds: [],
       userId: draft.userId
     });
-    prependEntityToCollection(queryClient, ["forge-psyche-modes"], "modes", mode);
-    await queryClient.invalidateQueries({ queryKey: ["forge-psyche-overview"] });
-    return { value: mode.id, label: mode.title, description: mode.archetype || mode.family, kind: "mode" } satisfies EntityLinkOption;
+    prependEntityToCollection(
+      queryClient,
+      ["forge-psyche-modes"],
+      "modes",
+      mode
+    );
+    await queryClient.invalidateQueries({
+      queryKey: ["forge-psyche-overview"]
+    });
+    return {
+      value: mode.id,
+      label: mode.title,
+      description: mode.archetype || mode.family,
+      kind: "mode"
+    } satisfies EntityLinkOption;
   };
 
   const createLinkedReport = async (title: string) => {
@@ -381,9 +536,21 @@ export function PsycheSchemasBeliefsPage() {
       nextMoves: [],
       userId: draft.userId
     });
-    prependEntityToCollection(queryClient, ["forge-psyche-reports"], "reports", report);
-    await queryClient.invalidateQueries({ queryKey: ["forge-psyche-overview"] });
-    return { value: report.id, label: report.title, description: report.customEventType || report.eventSituation, kind: "report" } satisfies EntityLinkOption;
+    prependEntityToCollection(
+      queryClient,
+      ["forge-psyche-reports"],
+      "reports",
+      report
+    );
+    await queryClient.invalidateQueries({
+      queryKey: ["forge-psyche-overview"]
+    });
+    return {
+      value: report.id,
+      label: report.title,
+      description: report.customEventType || report.eventSituation,
+      kind: "report"
+    } satisfies EntityLinkOption;
   };
 
   useEffect(() => {
@@ -398,7 +565,8 @@ export function PsycheSchemasBeliefsPage() {
       id: "lens",
       eyebrow: "Lens",
       title: "Choose the schema and belief script",
-      description: "Place the belief inside the right schema system, then write the actual inner line that tends to fire there.",
+      description:
+        "Place the belief inside the right schema system, then write the actual inner line that tends to fire there.",
       render: (value, setValue) => (
         <>
           <UserSelectField
@@ -418,26 +586,36 @@ export function PsycheSchemasBeliefsPage() {
             labelHelp="Schemas are the broader repeating themes. Beliefs are the personal scripts that fire inside those themes."
           >
             <div className="grid gap-4">
-              {([
+              {[
                 {
                   title: "Maladaptive schemas",
                   schemas: maladaptiveSchemas,
-                  description: "Recurring old patterns that tend to get activated and distort how the situation feels.",
+                  description:
+                    "Recurring old patterns that tend to get activated and distort how the situation feels.",
                   schemaType: "maladaptive" as const
                 },
                 {
                   title: "Adaptive schemas",
                   schemas: adaptiveSchemas,
-                  description: "Healthier stable themes you want to strengthen, trust, and live from more often.",
+                  description:
+                    "Healthier stable themes you want to strengthen, trust, and live from more often.",
                   schemaType: "adaptive" as const
                 }
-              ]).map((group) => {
+              ].map((group) => {
                 const visual = getSchemaVisual(group.schemaType);
                 return (
-                  <div key={group.schemaType} className={`rounded-[24px] border p-4 ${visual.cardTone}`}>
+                  <div
+                    key={group.schemaType}
+                    className={`rounded-[24px] border p-4 ${visual.cardTone}`}
+                  >
                     <div className="flex items-center gap-2">
-                      <div className="text-sm font-medium text-white">{group.title}</div>
-                      <InfoTooltip content={getSchemaTypeHelpText(group.schemaType)} label={`Explain ${getSchemaTypeLabel(group.schemaType)}`} />
+                      <div className="text-sm font-medium text-white">
+                        {group.title}
+                      </div>
+                      <InfoTooltip
+                        content={getSchemaTypeHelpText(group.schemaType)}
+                        label={`Explain ${getSchemaTypeLabel(group.schemaType)}`}
+                      />
                     </div>
                     <FieldHint className="mt-2">{group.description}</FieldHint>
                     <div className="mt-4 grid gap-2 sm:flex sm:flex-wrap">
@@ -465,7 +643,11 @@ export function PsycheSchemasBeliefsPage() {
             description="Write the sentence the mind tends to say in the moment."
             labelHelp="A belief script should sound like the actual inner line that shows up under pressure, not a formal summary."
           >
-            <Input value={value.statement} onChange={(event) => setValue({ statement: event.target.value })} placeholder="If they go quiet, I am already being left." />
+            <Input
+              value={value.statement}
+              onChange={(event) => setValue({ statement: event.target.value })}
+              placeholder="If they go quiet, I am already being left."
+            />
           </FlowField>
           <FlowField
             label="Belief type"
@@ -480,7 +662,9 @@ export function PsycheSchemasBeliefsPage() {
                   className={`rounded-[22px] border px-4 py-4 text-left transition ${value.beliefType === kind ? "border-white/20 bg-white/[0.12] text-white" : "border-white/8 bg-white/[0.04] text-white/62 hover:bg-white/[0.07]"}`}
                   onClick={() => setValue({ beliefType: kind })}
                 >
-                  {kind === "absolute" ? "Absolute: this is simply true" : "Conditional: if this happens, then..."}
+                  {kind === "absolute"
+                    ? "Absolute: this is simply true"
+                    : "Conditional: if this happens, then..."}
                 </button>
               ))}
             </div>
@@ -492,22 +676,43 @@ export function PsycheSchemasBeliefsPage() {
       id: "origin",
       eyebrow: "Origin",
       title: "Capture the origin and confidence of the script",
-      description: "This keeps the belief from turning into a generic note divorced from actual history.",
+      description:
+        "This keeps the belief from turning into a generic note divorced from actual history.",
       render: (value, setValue) => (
         <>
-          <FlowField label="Origin context" description="Capture where this script learned its force or usefulness.">
-            <Textarea value={value.originNote} onChange={(event) => setValue({ originNote: event.target.value })} placeholder="It got stronger in periods where silence usually meant anger, distance, or punishment." />
+          <FlowField
+            label="Origin context"
+            description="Capture where this script learned its force or usefulness."
+          >
+            <Textarea
+              value={value.originNote}
+              onChange={(event) => setValue({ originNote: event.target.value })}
+              placeholder="It got stronger in periods where silence usually meant anger, distance, or punishment."
+            />
           </FlowField>
           <FlowField
             label="Grip right now"
             description="How strongly does this belief feel true when it gets activated?"
             labelHelp="Grip is the felt strength of the script in the moment, not whether it is objectively true."
           >
-            <input type="range" min={0} max={100} value={value.confidence} onChange={(event) => setValue({ confidence: Number(event.target.value) })} />
-            <div className="text-sm text-white/48">{value.confidence}% grip</div>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={value.confidence}
+              onChange={(event) =>
+                setValue({ confidence: Number(event.target.value) })
+              }
+            />
+            <div className="text-sm text-white/48">
+              {value.confidence}% grip
+            </div>
           </FlowField>
           <div className="grid gap-4 md:grid-cols-2">
-            <FlowField label="Evidence for" description="Add one supporting memory, sign, or interpretation per line.">
+            <FlowField
+              label="Evidence for"
+              description="Add one supporting memory, sign, or interpretation per line."
+            >
               <Textarea
                 value={value.evidenceFor.join("\n")}
                 onChange={(event) =>
@@ -518,10 +723,15 @@ export function PsycheSchemasBeliefsPage() {
                       .filter(Boolean)
                   })
                 }
-                placeholder={"One line per sign\nThey stopped replying for days\nI was ignored when I asked directly"}
+                placeholder={
+                  "One line per sign\nThey stopped replying for days\nI was ignored when I asked directly"
+                }
               />
             </FlowField>
-            <FlowField label="Evidence against" description="Add one counterexample, nuance, or disconfirming sign per line.">
+            <FlowField
+              label="Evidence against"
+              description="Add one counterexample, nuance, or disconfirming sign per line."
+            >
               <Textarea
                 value={value.evidenceAgainst.join("\n")}
                 onChange={(event) =>
@@ -532,7 +742,9 @@ export function PsycheSchemasBeliefsPage() {
                       .filter(Boolean)
                   })
                 }
-                placeholder={"One line per counterpoint\nThey later explained they were overwhelmed\nOther people stay close without constant contact"}
+                placeholder={
+                  "One line per counterpoint\nThey later explained they were overwhelmed\nOther people stay close without constant contact"
+                }
               />
             </FlowField>
           </div>
@@ -543,7 +755,8 @@ export function PsycheSchemasBeliefsPage() {
       id: "repair",
       eyebrow: "Repair",
       title: "Define the flexible alternative and attach the wider system",
-      description: "The flexible alternative is the repair move; the links keep it attached to behaviors, values, modes, and reports.",
+      description:
+        "The flexible alternative is the repair move; the links keep it attached to behaviors, values, modes, and reports.",
       render: (value, setValue) => (
         <>
           <FlowField
@@ -551,9 +764,18 @@ export function PsycheSchemasBeliefsPage() {
             description="Write the steadier line you want available when the old script activates."
             labelHelp="A flexible alternative is not fake positivity. It is a truer, more workable belief that leaves room for uncertainty."
           >
-            <Textarea value={value.flexibleAlternative} onChange={(event) => setValue({ flexibleAlternative: event.target.value })} placeholder="Silence can mean many things. I can check the facts before deciding I am being left." />
+            <Textarea
+              value={value.flexibleAlternative}
+              onChange={(event) =>
+                setValue({ flexibleAlternative: event.target.value })
+              }
+              placeholder="Silence can mean many things. I can check the facts before deciding I am being left."
+            />
           </FlowField>
-          <FlowField label="Linked values" description="Choose the valued directions this belief interferes with most.">
+          <FlowField
+            label="Linked values"
+            description="Choose the valued directions this belief interferes with most."
+          >
             <EntityLinkMultiSelect
               options={valueOptions}
               selectedValues={value.linkedValueIds}
@@ -565,18 +787,26 @@ export function PsycheSchemasBeliefsPage() {
             />
           </FlowField>
           <div className="grid gap-4 md:grid-cols-3">
-            <FlowField label="Linked behaviors" description="Choose the moves this belief tends to trigger or justify.">
+            <FlowField
+              label="Linked behaviors"
+              description="Choose the moves this belief tends to trigger or justify."
+            >
               <EntityLinkMultiSelect
                 options={behaviorOptions}
                 selectedValues={value.linkedBehaviorIds}
-                onChange={(linkedBehaviorIds) => setValue({ linkedBehaviorIds })}
+                onChange={(linkedBehaviorIds) =>
+                  setValue({ linkedBehaviorIds })
+                }
                 placeholder="Search or create a behavior…"
                 emptyMessage="No behaviors match yet."
                 createLabel="Create behavior"
                 onCreate={createLinkedBehavior}
               />
             </FlowField>
-            <FlowField label="Linked modes" description="Choose the inner states that most often carry this script.">
+            <FlowField
+              label="Linked modes"
+              description="Choose the inner states that most often carry this script."
+            >
               <EntityLinkMultiSelect
                 options={modeOptions}
                 selectedValues={value.linkedModeIds}
@@ -587,7 +817,10 @@ export function PsycheSchemasBeliefsPage() {
                 onCreate={createLinkedMode}
               />
             </FlowField>
-            <FlowField label="Linked reports" description="Choose the reflective chains where this script has already shown up.">
+            <FlowField
+              label="Linked reports"
+              description="Choose the reflective chains where this script has already shown up."
+            >
               <EntityLinkMultiSelect
                 options={reportOptions}
                 selectedValues={value.linkedReportIds}
@@ -604,13 +837,47 @@ export function PsycheSchemasBeliefsPage() {
     }
   ];
 
-  if (schemasQuery.isLoading || beliefsQuery.isLoading || behaviorsQuery.isLoading || modesQuery.isLoading || valuesQuery.isLoading || reportsQuery.isLoading) {
-    return <LoadingState eyebrow="Schemas & beliefs" title="Loading schemas and beliefs" description="Getting schemas, beliefs, behaviors, modes, values, and linked reports ready." />;
+  if (
+    schemasQuery.isLoading ||
+    beliefsQuery.isLoading ||
+    behaviorsQuery.isLoading ||
+    modesQuery.isLoading ||
+    valuesQuery.isLoading ||
+    reportsQuery.isLoading
+  ) {
+    return (
+      <LoadingState
+        eyebrow="Schemas & beliefs"
+        title="Loading schemas and beliefs"
+        description="Getting schemas, beliefs, behaviors, modes, values, and linked reports ready."
+      />
+    );
   }
 
-  const routeError = schemasQuery.error ?? beliefsQuery.error ?? behaviorsQuery.error ?? modesQuery.error ?? valuesQuery.error ?? reportsQuery.error;
+  const routeError =
+    schemasQuery.error ??
+    beliefsQuery.error ??
+    behaviorsQuery.error ??
+    modesQuery.error ??
+    valuesQuery.error ??
+    reportsQuery.error;
   if (routeError) {
-    return <ErrorState eyebrow="Schemas & beliefs" error={routeError} onRetry={() => void Promise.all([schemasQuery.refetch(), beliefsQuery.refetch(), behaviorsQuery.refetch(), modesQuery.refetch(), valuesQuery.refetch(), reportsQuery.refetch()])} />;
+    return (
+      <ErrorState
+        eyebrow="Schemas & beliefs"
+        error={routeError}
+        onRetry={() =>
+          void Promise.all([
+            schemasQuery.refetch(),
+            beliefsQuery.refetch(),
+            behaviorsQuery.refetch(),
+            modesQuery.refetch(),
+            valuesQuery.refetch(),
+            reportsQuery.refetch()
+          ])
+        }
+      />
+    );
   }
 
   return (
@@ -642,7 +909,9 @@ export function PsycheSchemasBeliefsPage() {
           tone="violet"
         >
           {schemas.length === 0 ? (
-            <div className="text-sm text-white/56">Schema data is unavailable right now.</div>
+            <div className="text-sm text-white/56">
+              Schema data is unavailable right now.
+            </div>
           ) : (
             <div className="grid gap-5">
               <SchemaSection
@@ -695,10 +964,14 @@ export function PsycheSchemasBeliefsPage() {
               Add belief
             </Button>
             {beliefs.length === 0 ? (
-              <div className="text-sm text-white/56">Your beliefs will appear here after you add the first one.</div>
+              <div className="text-sm text-white/56">
+                Your beliefs will appear here after you add the first one.
+              </div>
             ) : (
               beliefs.map((belief) => {
-                const schema = belief.schemaId ? (schemaMap.get(belief.schemaId) ?? null) : null;
+                const schema = belief.schemaId
+                  ? (schemaMap.get(belief.schemaId) ?? null)
+                  : null;
                 const isFocused = focusedBeliefId === belief.id;
                 return (
                   <div
@@ -707,10 +980,24 @@ export function PsycheSchemasBeliefsPage() {
                     className={`rounded-[24px] border border-white/8 bg-white/[0.04] p-4 text-left transition hover:bg-white/[0.08] ${psycheFocusClass(isFocused)}`}
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div className="font-medium text-white">{belief.statement}</div>
+                      <div className="font-medium text-white">
+                        {belief.statement}
+                      </div>
                       <div className="flex flex-wrap items-center justify-end gap-2">
-                        {belief.user ? <UserBadge user={belief.user} compact /> : null}
-                        <EntityNoteCountLink entityType="belief_entry" entityId={belief.id} count={getEntityNotesSummary(notesSummaryByEntity, "belief_entry", belief.id).count} />
+                        {belief.user ? (
+                          <UserBadge user={belief.user} compact />
+                        ) : null}
+                        <EntityNoteCountLink
+                          entityType="belief_entry"
+                          entityId={belief.id}
+                          count={
+                            getEntityNotesSummary(
+                              notesSummaryByEntity,
+                              "belief_entry",
+                              belief.id
+                            ).count
+                          }
+                        />
                         <Badge>{belief.confidence}% grip</Badge>
                         <Button
                           variant="secondary"
@@ -725,12 +1012,32 @@ export function PsycheSchemasBeliefsPage() {
                         </Button>
                       </div>
                     </div>
-                    <div className="mt-2 text-sm leading-6 text-white/58">{belief.flexibleAlternative || "No flexible alternative recorded yet."}</div>
+                    <div className="mt-2 text-sm leading-6 text-white/58">
+                      {belief.flexibleAlternative ||
+                        "No flexible alternative recorded yet."}
+                    </div>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {schema ? <SchemaBadge label={schema.title} schemaType={schema.schemaType} compact showType /> : null}
-                      {modes.filter((mode) => belief.linkedModeIds.includes(mode.id)).slice(0, 2).map((mode) => (
-                        <EntityBadge key={mode.id} kind="mode" label={mode.title} compact />
-                      ))}
+                      {schema ? (
+                        <SchemaBadge
+                          label={schema.title}
+                          schemaType={schema.schemaType}
+                          compact
+                          showType
+                        />
+                      ) : null}
+                      {modes
+                        .filter((mode) =>
+                          belief.linkedModeIds.includes(mode.id)
+                        )
+                        .slice(0, 2)
+                        .map((mode) => (
+                          <EntityBadge
+                            key={mode.id}
+                            kind="mode"
+                            label={mode.title}
+                            compact
+                          />
+                        ))}
                     </div>
                   </div>
                 );
@@ -748,6 +1055,11 @@ export function PsycheSchemasBeliefsPage() {
         description="Use this guided flow to capture the belief, what seems to support it, and a more flexible alternative."
         value={draft}
         onChange={setDraft}
+        draftPersistenceKey={
+          editingBelief
+            ? `psyche.belief.${editingBelief.id}`
+            : "psyche.belief.new"
+        }
         steps={steps}
         submitLabel={editingBelief ? "Save belief" : "Create belief"}
         pending={saveMutation.isPending}
@@ -756,14 +1068,20 @@ export function PsycheSchemasBeliefsPage() {
           setSubmitError(null);
           const parsed = beliefEntrySchema.safeParse(draft);
           if (!parsed.success) {
-            setSubmitError("This belief still needs a statement before it can be saved.");
+            setSubmitError(
+              "This belief still needs a statement before it can be saved."
+            );
             return;
           }
 
           try {
             await saveMutation.mutateAsync(parsed.data);
           } catch (error) {
-            setSubmitError(error instanceof Error ? error.message : "Unable to save this belief right now.");
+            setSubmitError(
+              error instanceof Error
+                ? error.message
+                : "Unable to save this belief right now."
+            );
           }
         }}
       />

@@ -199,6 +199,7 @@ Surface rule:
   `questionnaire_instrument`, and use the run, clone, draft, and publish tools for
   questionnaire workflows.
 - Preferred mutation path for wiki content: use the wiki tools instead of batch CRUD.
+- Habit outcome writes through `/api/v1/habits/:id/check-ins` accept `status` plus optional `dateKey`, `note`, and `description`; if `description` is provided, it replaces the habit's stored `description` in the same write.
 - Preferred API path for Movement, Life Force, and Workbench: use the dedicated
   route families published in `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces`.
 - In the live onboarding catalog, those domains should read as

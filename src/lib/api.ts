@@ -2563,7 +2563,12 @@ export function deleteHabit(habitId: string) {
 
 export function createHabitCheckIn(
   habitId: string,
-  input: { dateKey?: string; status: "done" | "missed"; note?: string }
+  input: {
+    dateKey?: string;
+    status: "done" | "missed";
+    note?: string;
+    description?: string;
+  }
 ) {
   return request<{ habit: Habit; metrics: XpMetricsPayload }>(
     `/api/v1/habits/${habitId}/check-ins`,

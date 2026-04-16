@@ -1,7 +1,15 @@
 import { useEffect, useState } from "react";
-import { FlowChoiceGrid, FlowField, QuestionFlowDialog, type QuestionFlowStep } from "@/components/flows/question-flow-dialog";
+import {
+  FlowChoiceGrid,
+  FlowField,
+  QuestionFlowDialog,
+  type QuestionFlowStep
+} from "@/components/flows/question-flow-dialog";
 import { Input } from "@/components/ui/input";
-import { createAgentTokenSchema, type CreateAgentTokenInput } from "@/lib/schemas";
+import {
+  createAgentTokenSchema,
+  type CreateAgentTokenInput
+} from "@/lib/schemas";
 
 const FULL_OPERATOR_SCOPES = [
   "read",
@@ -16,15 +24,51 @@ const FULL_OPERATOR_SCOPES = [
 ] as const;
 
 const TOKEN_SCOPE_OPTIONS = [
-  { value: "read", label: "Read", description: "Inspect goals, projects, tasks, reviews, and metrics." },
-  { value: "write", label: "Write", description: "Create and update work through the versioned API." },
-  { value: "insights", label: "Insights", description: "Store structured findings, rationale, and feedback." },
-  { value: "rewards.manage", label: "Rewards", description: "Tune reward rules and issue explainable bonus XP grants." },
-  { value: "psyche.read", label: "Psyche read", description: "Read sensitive values, patterns, and trigger analyses." },
-  { value: "psyche.write", label: "Psyche write", description: "Create and update sensitive therapeutic records." },
-  { value: "psyche.note", label: "Psyche note", description: "Create and edit Markdown notes linked to reflective records." },
-  { value: "psyche.insight", label: "Psyche insight", description: "Store therapeutic insights on Psyche entities." },
-  { value: "psyche.mode", label: "Psyche mode", description: "Name, refine, and map mode profiles and guided mode results." }
+  {
+    value: "read",
+    label: "Read",
+    description: "Inspect goals, projects, tasks, reviews, and metrics."
+  },
+  {
+    value: "write",
+    label: "Write",
+    description: "Create and update work through the versioned API."
+  },
+  {
+    value: "insights",
+    label: "Insights",
+    description: "Store structured findings, rationale, and feedback."
+  },
+  {
+    value: "rewards.manage",
+    label: "Rewards",
+    description: "Tune reward rules and issue explainable bonus XP grants."
+  },
+  {
+    value: "psyche.read",
+    label: "Psyche read",
+    description: "Read sensitive values, patterns, and trigger analyses."
+  },
+  {
+    value: "psyche.write",
+    label: "Psyche write",
+    description: "Create and update sensitive therapeutic records."
+  },
+  {
+    value: "psyche.note",
+    label: "Psyche note",
+    description: "Create and edit Markdown notes linked to reflective records."
+  },
+  {
+    value: "psyche.insight",
+    label: "Psyche insight",
+    description: "Store therapeutic insights on Psyche entities."
+  },
+  {
+    value: "psyche.mode",
+    label: "Psyche mode",
+    description: "Name, refine, and map mode profiles and guided mode results."
+  }
 ] as const;
 
 type TokenPreset = "review" | "operator" | "autonomous" | "custom";
@@ -41,7 +85,11 @@ type TokenDraft = {
   scopes: string[];
 };
 
-function applyPreset(draft: TokenDraft, preset: TokenPreset, recommendedScopes: readonly string[]): TokenDraft {
+function applyPreset(
+  draft: TokenDraft,
+  preset: TokenPreset,
+  recommendedScopes: readonly string[]
+): TokenDraft {
   if (preset === "review") {
     return {
       ...draft,
@@ -118,12 +166,15 @@ export function AgentTokenFlowDialog({
 
   useEffect(() => {
     if (open) {
-      setDraft(buildInitialDraft(initialPreset, defaultAgentLabel, recommendedScopes));
+      setDraft(
+        buildInitialDraft(initialPreset, defaultAgentLabel, recommendedScopes)
+      );
       setSubmitError(null);
     }
   }, [open, initialPreset, defaultAgentLabel, recommendedScopes]);
 
-  const patch = (update: Partial<TokenDraft>) => setDraft((prev) => ({ ...prev, ...update }));
+  const patch = (update: Partial<TokenDraft>) =>
+    setDraft((prev) => ({ ...prev, ...update }));
 
   const steps: Array<QuestionFlowStep<TokenDraft>> = [
     {
@@ -211,7 +262,10 @@ export function AgentTokenFlowDialog({
                 <option value="observer">observer</option>
               </select>
             </FlowField>
-            <FlowField label="Description" description="Optional note about what this agent does.">
+            <FlowField
+              label="Description"
+              description="Optional note about what this agent does."
+            >
               <Input
                 value={value.description}
                 placeholder="Collaborative planning agent."
@@ -237,11 +291,26 @@ export function AgentTokenFlowDialog({
             <FlowChoiceGrid
               columns={3}
               value={value.trustLevel}
-              onChange={(next) => setValue({ trustLevel: next as TokenDraft["trustLevel"] })}
+              onChange={(next) =>
+                setValue({ trustLevel: next as TokenDraft["trustLevel"] })
+              }
               options={[
-                { value: "standard", label: "Standard", description: "Read-only by default, limited write surface." },
-                { value: "trusted", label: "Trusted", description: "Full write surface with policy guardrails active." },
-                { value: "autonomous", label: "Autonomous", description: "All checks bypassed — maximum capability." }
+                {
+                  value: "standard",
+                  label: "Standard",
+                  description: "Read-only by default, limited write surface."
+                },
+                {
+                  value: "trusted",
+                  label: "Trusted",
+                  description:
+                    "Full write surface with policy guardrails active."
+                },
+                {
+                  value: "autonomous",
+                  label: "Autonomous",
+                  description: "All checks bypassed — maximum capability."
+                }
               ]}
             />
           </FlowField>
@@ -252,11 +321,25 @@ export function AgentTokenFlowDialog({
             <FlowChoiceGrid
               columns={3}
               value={value.autonomyMode}
-              onChange={(next) => setValue({ autonomyMode: next as TokenDraft["autonomyMode"] })}
+              onChange={(next) =>
+                setValue({ autonomyMode: next as TokenDraft["autonomyMode"] })
+              }
               options={[
-                { value: "approval_required", label: "Approval required", description: "Every write action queues for your review." },
-                { value: "scoped_write", label: "Scoped write", description: "Acts freely within its assigned scopes." },
-                { value: "autonomous", label: "Autonomous", description: "No gates — full freedom to write." }
+                {
+                  value: "approval_required",
+                  label: "Approval required",
+                  description: "Every write action queues for your review."
+                },
+                {
+                  value: "scoped_write",
+                  label: "Scoped write",
+                  description: "Acts freely within its assigned scopes."
+                },
+                {
+                  value: "autonomous",
+                  label: "Autonomous",
+                  description: "No gates — full freedom to write."
+                }
               ]}
             />
           </FlowField>
@@ -267,11 +350,28 @@ export function AgentTokenFlowDialog({
             <FlowChoiceGrid
               columns={3}
               value={value.approvalMode}
-              onChange={(next) => setValue({ approvalMode: next as TokenDraft["approvalMode"] })}
+              onChange={(next) =>
+                setValue({ approvalMode: next as TokenDraft["approvalMode"] })
+              }
               options={[
-                { value: "approval_by_default", label: "Approve by default", description: "Everything needs a sign-off unless explicitly exempt." },
-                { value: "high_impact_only", label: "High impact only", description: "Routine writes pass through; high-stakes actions are held." },
-                { value: "none", label: "None", description: "No approval gates — actions execute immediately." }
+                {
+                  value: "approval_by_default",
+                  label: "Approve by default",
+                  description:
+                    "Everything needs a sign-off unless explicitly exempt."
+                },
+                {
+                  value: "high_impact_only",
+                  label: "High impact only",
+                  description:
+                    "Routine writes pass through; high-stakes actions are held."
+                },
+                {
+                  value: "none",
+                  label: "None",
+                  description:
+                    "No approval gates — actions execute immediately."
+                }
               ]}
             />
           </FlowField>
@@ -304,20 +404,25 @@ export function AgentTokenFlowDialog({
                   onClick={() => {
                     if (selected) {
                       if (value.scopes.length === 1) return;
-                      setValue({ scopes: value.scopes.filter((s) => s !== scope.value) });
+                      setValue({
+                        scopes: value.scopes.filter((s) => s !== scope.value)
+                      });
                     } else {
                       setValue({ scopes: [...value.scopes, scope.value] });
                     }
                   }}
                 >
                   <div className="font-medium">{scope.label}</div>
-                  <div className="mt-1 text-xs leading-5 text-white/58">{scope.description}</div>
+                  <div className="mt-1 text-xs leading-5 text-white/58">
+                    {scope.description}
+                  </div>
                 </button>
               );
             })}
           </div>
           <div className="mt-2 text-xs text-white/40">
-            {value.scopes.length} scope{value.scopes.length !== 1 ? "s" : ""} selected
+            {value.scopes.length} scope{value.scopes.length !== 1 ? "s" : ""}{" "}
+            selected
           </div>
         </FlowField>
       )
@@ -333,6 +438,7 @@ export function AgentTokenFlowDialog({
       description="Configure a new agent token step by step. The preset fills sensible defaults — adjust what you need."
       value={draft}
       onChange={setDraft}
+      draftPersistenceKey="settings.agent-token.new"
       steps={steps}
       submitLabel="Issue token"
       pending={pending}
@@ -353,7 +459,10 @@ export function AgentTokenFlowDialog({
 
         if (!payload.success) {
           const firstIssue = payload.error.issues[0];
-          setSubmitError(firstIssue?.message ?? "Check the agent name and at least one scope before issuing.");
+          setSubmitError(
+            firstIssue?.message ??
+              "Check the agent name and at least one scope before issuing."
+          );
           return;
         }
 
@@ -361,7 +470,11 @@ export function AgentTokenFlowDialog({
           await onSubmit(payload.data);
           onOpenChange(false);
         } catch (error) {
-          setSubmitError(error instanceof Error ? error.message : "Could not issue the token right now.");
+          setSubmitError(
+            error instanceof Error
+              ? error.message
+              : "Could not issue the token right now."
+          );
         }
       }}
     />

@@ -1,11 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import {
-  CircleCheckBig,
-  Cpu,
-  KeyRound,
-  Sparkles
-} from "lucide-react";
+import { CircleCheckBig, Cpu, KeyRound, Sparkles } from "lucide-react";
 import {
   FlowField,
   QuestionFlowDialog,
@@ -224,7 +219,9 @@ export function WikiLlmSetupModal({
     {
       id: "profile",
       eyebrow: "OpenAI profile",
-      title: profile ? "Update the wiki drafting profile" : "Create the wiki drafting profile",
+      title: profile
+        ? "Update the wiki drafting profile"
+        : "Create the wiki drafting profile",
       description:
         "Start with the identity and credentials Forge will use for wiki auto-ingest. The key stays in local encrypted storage.",
       render: (value, setValue) => (
@@ -255,7 +252,9 @@ export function WikiLlmSetupModal({
               value={value.apiKey}
               onChange={(event) => setValue({ apiKey: event.target.value })}
               type="password"
-              placeholder={profile?.secretId ? "Saved key already present" : "sk-..."}
+              placeholder={
+                profile?.secretId ? "Saved key already present" : "sk-..."
+              }
             />
           </FlowField>
         </>
@@ -368,7 +367,9 @@ export function WikiLlmSetupModal({
                 Advanced
               </div>
               <div className="mt-2 text-sm leading-6 text-white/56">
-                Leave these at the defaults unless you are intentionally routing through another compatible endpoint or customizing the drafting behavior.
+                Leave these at the defaults unless you are intentionally routing
+                through another compatible endpoint or customizing the drafting
+                behavior.
               </div>
             </div>
 
@@ -419,7 +420,9 @@ export function WikiLlmSetupModal({
                   <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">
                     Label
                   </div>
-                  <div className="mt-2 text-white">{value.label || "Untitled profile"}</div>
+                  <div className="mt-2 text-white">
+                    {value.label || "Untitled profile"}
+                  </div>
                 </div>
                 <div className="rounded-[18px] border border-white/8 bg-white/[0.03] px-4 py-3">
                   <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">
@@ -471,7 +474,9 @@ export function WikiLlmSetupModal({
                   <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">
                     Base URL
                   </div>
-                  <div className="mt-2 break-all text-white/72">{value.baseUrl}</div>
+                  <div className="mt-2 break-all text-white/72">
+                    {value.baseUrl}
+                  </div>
                 </div>
               </div>
             </div>
@@ -480,9 +485,12 @@ export function WikiLlmSetupModal({
           <div className="grid gap-3 rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <div className="text-sm font-semibold text-white">Connection check</div>
+                <div className="text-sm font-semibold text-white">
+                  Connection check
+                </div>
                 <div className="mt-1 text-sm leading-6 text-white/58">
-                  Test the exact model and control settings before you save them.
+                  Test the exact model and control settings before you save
+                  them.
                 </div>
               </div>
               <Button
@@ -535,6 +543,9 @@ export function WikiLlmSetupModal({
       description="Forge wiki auto-ingest uses the OpenAI Responses API to turn uploads into draft wiki pages and entity proposals before you review them."
       value={form}
       onChange={setForm}
+      draftPersistenceKey={
+        profile ? `settings.wiki-llm.${profile.id}` : "settings.wiki-llm.new"
+      }
       steps={steps}
       submitLabel={profile ? "Update profile" : "Save profile"}
       pending={saveMutation.isPending}

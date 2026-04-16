@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
-import { FlowField, QuestionFlowDialog } from "@/components/flows/question-flow-dialog";
+import {
+  FlowField,
+  QuestionFlowDialog
+} from "@/components/flows/question-flow-dialog";
 import { Input } from "@/components/ui/input";
 
 export function CalendarQuickRenameDialog({
@@ -35,12 +38,14 @@ export function CalendarQuickRenameDialog({
       description="Rename the event without reopening the full event guide."
       value={{ title }}
       onChange={(next) => setTitle(next.title)}
+      draftPersistenceKey={`calendar.quick-rename.${initialTitle}`}
       steps={[
         {
           id: "rename",
           eyebrow: "Rename",
           title: "Update the event title",
-          description: "Keep the rename fast and direct. Everything else on the event stays unchanged.",
+          description:
+            "Keep the rename fast and direct. Everything else on the event stays unchanged.",
           render: (value, setValue) => (
             <FlowField label="Event title">
               <Input

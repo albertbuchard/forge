@@ -45,15 +45,18 @@ function ThemePreviewCard({
         <div className="mt-2 font-display text-xl">{title}</div>
         <div className="mt-2 text-sm leading-6 opacity-72">{description}</div>
         <div className="mt-5 flex gap-2">
-          {[theme.primary, theme.secondary, theme.tertiary, theme.panelHigh].map(
-            (value) => (
-              <div
-                key={value}
-                className="h-9 flex-1 rounded-[14px] border border-black/10"
-                style={{ background: value }}
-              />
-            )
-          )}
+          {[
+            theme.primary,
+            theme.secondary,
+            theme.tertiary,
+            theme.panelHigh
+          ].map((value) => (
+            <div
+              key={value}
+              className="h-9 flex-1 rounded-[14px] border border-black/10"
+              style={{ background: value }}
+            />
+          ))}
         </div>
       </div>
     </div>
@@ -117,7 +120,8 @@ export function ThemeCustomizerDialog({
     const preview = getForgeThemePreview(preset);
     setDraft({
       ...preview,
-      label: draft.label.trim().length > 0 ? draft.label : `${preview.label} Custom`
+      label:
+        draft.label.trim().length > 0 ? draft.label : `${preview.label} Custom`
     });
   };
 
@@ -162,10 +166,15 @@ export function ThemeCustomizerDialog({
           <FlowField label="Starter preset">
             <FlowChoiceGrid
               value=""
-              onChange={(next) => loadPreset(next as keyof typeof forgeThemeCatalog)}
+              onChange={(next) =>
+                loadPreset(next as keyof typeof forgeThemeCatalog)
+              }
               options={(
                 Object.entries(forgeThemeCatalog) as Array<
-                  [keyof typeof forgeThemeCatalog, (typeof forgeThemeCatalog)[keyof typeof forgeThemeCatalog]]
+                  [
+                    keyof typeof forgeThemeCatalog,
+                    (typeof forgeThemeCatalog)[keyof typeof forgeThemeCatalog]
+                  ]
                 >
               ).map(([key, preset]) => ({
                 value: key,
@@ -341,6 +350,7 @@ export function ThemeCustomizerDialog({
         setDraft(next);
         setError(null);
       }}
+      draftPersistenceKey="settings.theme-customizer"
       steps={steps}
       error={error}
       onSubmit={async () => {

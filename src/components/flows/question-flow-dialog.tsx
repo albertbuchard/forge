@@ -1,6 +1,12 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode
+} from "react";
 import { ArrowLeft, ArrowRight, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FieldHint, InfoTooltip } from "@/components/ui/info-tooltip";
@@ -9,6 +15,9 @@ import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 const MOBILE_BREAKPOINT_QUERY = "(max-width: 1023px)";
+const QUESTION_FLOW_DRAFT_STORAGE_PREFIX = "forge.question-flow-draft";
+const QUESTION_FLOW_DRAFT_STORAGE_VERSION = 1;
+const QUESTION_FLOW_DRAFT_AUTOSAVE_INTERVAL_MS = 1000;
 
 export type QuestionFlowStep<TValue> = {
   id: string;
@@ -46,7 +55,9 @@ export function resolveQuestionFlowStepIndex({
     if (!initialStepId) {
       return 0;
     }
-    const nextIndex = steps.findIndex((candidate) => candidate.id === initialStepId);
+    const nextIndex = steps.findIndex(
+      (candidate) => candidate.id === initialStepId
+    );
     return nextIndex >= 0 ? nextIndex : 0;
   };
 
@@ -151,6 +162,91 @@ function useIsMobileFlow() {
   return isMobile;
 }
 
+type QuestionFlowDraftRecord = {
+  version: number;
+  baseline: string;
+  draft: string;
+  updatedAt: number;
+};
+
+function canUseQuestionFlowStorage() {
+  return (
+    typeof window !== "undefined" && typeof window.localStorage !== "undefined"
+  );
+}
+
+function buildQuestionFlowDraftStorageKey(draftPersistenceKey: string) {
+  return `${QUESTION_FLOW_DRAFT_STORAGE_PREFIX}.${draftPersistenceKey}`;
+}
+
+function serializeQuestionFlowValue(value: unknown) {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return null;
+  }
+}
+
+function readQuestionFlowDraftRecord(draftPersistenceKey: string) {
+  if (!canUseQuestionFlowStorage()) {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(
+      buildQuestionFlowDraftStorageKey(draftPersistenceKey)
+    );
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as Partial<QuestionFlowDraftRecord>;
+    if (
+      parsed.version !== QUESTION_FLOW_DRAFT_STORAGE_VERSION ||
+      typeof parsed.baseline !== "string" ||
+      typeof parsed.draft !== "string"
+    ) {
+      return null;
+    }
+
+    return parsed as QuestionFlowDraftRecord;
+  } catch {
+    return null;
+  }
+}
+
+function writeQuestionFlowDraftRecord(
+  draftPersistenceKey: string,
+  record: QuestionFlowDraftRecord
+) {
+  if (!canUseQuestionFlowStorage()) {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(
+      buildQuestionFlowDraftStorageKey(draftPersistenceKey),
+      JSON.stringify(record)
+    );
+  } catch {
+    // Ignore storage failures so the dialog stays usable.
+  }
+}
+
+function clearQuestionFlowDraftRecord(draftPersistenceKey: string) {
+  if (!canUseQuestionFlowStorage()) {
+    return;
+  }
+
+  try {
+    window.localStorage.removeItem(
+      buildQuestionFlowDraftStorageKey(draftPersistenceKey)
+    );
+  } catch {
+    // Ignore storage failures so the dialog stays usable.
+  }
+}
+
 export function FlowField({
   label,
   description,
@@ -245,7 +341,8 @@ export function QuestionFlowDialog<TValue>({
   error,
   resolveError,
   initialStepId,
-  contentClassName
+  contentClassName,
+  draftPersistenceKey
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -263,13 +360,21 @@ export function QuestionFlowDialog<TValue>({
   resolveError?: (stepId: string) => string | null | undefined;
   initialStepId?: string;
   contentClassName?: string;
+  draftPersistenceKey?: string;
 }) {
   const { t } = useI18n();
   const isMobile = useIsMobileFlow();
   const [stepIndex, setStepIndex] = useState(0);
   const previousOpenRef = useRef(open);
   const previousInitialStepIdRef = useRef(initialStepId);
+  const previousDraftOpenRef = useRef(open);
+  const restoredDraftKeyRef = useRef<string | null>(null);
+  const baselineSerializedRef = useRef<string | null>(null);
+  const lastPersistedSerializedRef = useRef<string | null>(null);
+  const valueRef = useRef(value);
   const step = steps[stepIndex];
+
+  valueRef.current = value;
 
   useEffect(() => {
     const wasOpen = previousOpenRef.current;
@@ -300,8 +405,112 @@ export function QuestionFlowDialog<TValue>({
   const resolvedError = step ? resolveError?.(step.id) : undefined;
   const visibleError = resolvedError === undefined ? error : resolvedError;
 
+  const persistDraft = useCallback(() => {
+    if (!draftPersistenceKey) {
+      return;
+    }
+
+    const baselineSerialized = baselineSerializedRef.current;
+    const draftSerialized = serializeQuestionFlowValue(valueRef.current);
+    if (!baselineSerialized || !draftSerialized) {
+      return;
+    }
+
+    if (draftSerialized === baselineSerialized) {
+      clearQuestionFlowDraftRecord(draftPersistenceKey);
+      lastPersistedSerializedRef.current = draftSerialized;
+      return;
+    }
+
+    if (lastPersistedSerializedRef.current === draftSerialized) {
+      return;
+    }
+
+    writeQuestionFlowDraftRecord(draftPersistenceKey, {
+      version: QUESTION_FLOW_DRAFT_STORAGE_VERSION,
+      baseline: baselineSerialized,
+      draft: draftSerialized,
+      updatedAt: Date.now()
+    });
+    lastPersistedSerializedRef.current = draftSerialized;
+  }, [draftPersistenceKey]);
+
+  useEffect(() => {
+    if (!open) {
+      restoredDraftKeyRef.current = null;
+      return;
+    }
+
+    if (!draftPersistenceKey) {
+      baselineSerializedRef.current = null;
+      lastPersistedSerializedRef.current = null;
+      return;
+    }
+
+    const currentSerialized = serializeQuestionFlowValue(value);
+    if (!currentSerialized) {
+      return;
+    }
+
+    if (restoredDraftKeyRef.current === draftPersistenceKey) {
+      return;
+    }
+
+    restoredDraftKeyRef.current = draftPersistenceKey;
+    baselineSerializedRef.current = currentSerialized;
+
+    const persistedDraft = readQuestionFlowDraftRecord(draftPersistenceKey);
+    if (
+      persistedDraft &&
+      persistedDraft.baseline === currentSerialized &&
+      persistedDraft.draft !== currentSerialized
+    ) {
+      try {
+        onChange(JSON.parse(persistedDraft.draft) as TValue);
+        lastPersistedSerializedRef.current = persistedDraft.draft;
+        return;
+      } catch {
+        clearQuestionFlowDraftRecord(draftPersistenceKey);
+      }
+    }
+
+    lastPersistedSerializedRef.current = currentSerialized;
+  }, [draftPersistenceKey, onChange, open, value]);
+
+  useEffect(() => {
+    if (!draftPersistenceKey || !open || !canUseQuestionFlowStorage()) {
+      return;
+    }
+
+    const autosaveHandle = window.setInterval(() => {
+      persistDraft();
+    }, QUESTION_FLOW_DRAFT_AUTOSAVE_INTERVAL_MS);
+
+    return () => window.clearInterval(autosaveHandle);
+  }, [draftPersistenceKey, open, persistDraft]);
+
+  useEffect(() => {
+    if (previousDraftOpenRef.current && !open) {
+      persistDraft();
+    }
+
+    previousDraftOpenRef.current = open;
+  }, [open, persistDraft]);
+
+  const changeStep = (nextStepIndex: number) => {
+    persistDraft();
+    setStepIndex(nextStepIndex);
+  };
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      persistDraft();
+    }
+    onOpenChange(nextOpen);
+  };
+
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+    <Dialog.Root open={open} onOpenChange={handleOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-[rgba(4,8,18,0.72)] backdrop-blur-xl" />
         <Dialog.Content
@@ -337,7 +546,9 @@ export function QuestionFlowDialog<TValue>({
                 </div>
               </div>
               <Dialog.Close asChild>
-                <ModalCloseButton aria-label={t("common.dialogs.closeDialog")} />
+                <ModalCloseButton
+                  aria-label={t("common.dialogs.closeDialog")}
+                />
               </Dialog.Close>
             </div>
           </div>
@@ -395,9 +606,7 @@ export function QuestionFlowDialog<TValue>({
                     type="button"
                     variant="secondary"
                     className="min-w-max px-3 text-[12px]"
-                    onClick={() =>
-                      setStepIndex((current) => Math.max(0, current - 1))
-                    }
+                    onClick={() => changeStep(Math.max(0, stepIndex - 1))}
                   >
                     <ArrowLeft className="size-4" />
                     Back
@@ -418,9 +627,7 @@ export function QuestionFlowDialog<TValue>({
                     type="button"
                     className="min-w-max px-3 text-[12px]"
                     onClick={() =>
-                      setStepIndex((current) =>
-                        Math.min(totalSteps - 1, current + 1)
-                      )
+                      changeStep(Math.min(totalSteps - 1, stepIndex + 1))
                     }
                   >
                     Continue
@@ -432,7 +639,10 @@ export function QuestionFlowDialog<TValue>({
                     className="min-w-max px-3 text-[12px]"
                     pending={pending}
                     pendingLabel={pendingLabel}
-                    onClick={() => void onSubmit()}
+                    onClick={() => {
+                      persistDraft();
+                      void onSubmit();
+                    }}
                   >
                     <Check className="size-4" />
                     {submitLabel}

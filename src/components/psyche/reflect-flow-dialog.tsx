@@ -1,10 +1,21 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FlowChoiceGrid, FlowField, QuestionFlowDialog, type QuestionFlowStep } from "@/components/flows/question-flow-dialog";
+import {
+  FlowChoiceGrid,
+  FlowField,
+  QuestionFlowDialog,
+  type QuestionFlowStep
+} from "@/components/flows/question-flow-dialog";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { EntityBadge } from "@/components/ui/entity-badge";
 
-type ReflectIntent = "trigger_report" | "behavior" | "belief" | "pattern" | "value" | "execution_tension";
+type ReflectIntent =
+  | "trigger_report"
+  | "behavior"
+  | "belief"
+  | "pattern"
+  | "value"
+  | "execution_tension";
 
 type ReflectDraft = {
   intent: ReflectIntent;
@@ -36,19 +47,48 @@ export function ReflectFlowDialog({
       id: "intent",
       eyebrow: "Reflect",
       title: "What do you want to reflect on?",
-      description: "Choose the entrypoint first. Forge will route you into the right guided flow instead of dropping you into a generic form.",
+      description:
+        "Choose the entrypoint first. Forge will route you into the right guided flow instead of dropping you into a generic form.",
       render: (value, setValue) => (
         <FlowChoiceGrid
           columns={3}
           value={value.intent}
           onChange={(intent) => setValue({ intent: intent as ReflectIntent })}
           options={[
-            { value: "trigger_report", label: "A situation", description: "Start a Spark-to-Pivot report about something that happened." },
-            { value: "behavior", label: "A behavior", description: "Trace an away move, committed action, or recovery path." },
-            { value: "belief", label: "A belief script", description: "Capture or refine the belief beneath the reaction." },
-            { value: "pattern", label: "A recurring pattern", description: "Map the loop, payoff, cost, and better response." },
-            { value: "value", label: "A blocked value", description: "Clarify which value is being challenged or needs support." },
-            { value: "execution_tension", label: "A goal tension", description: "Reflect on a goal, project, or task that carries friction." }
+            {
+              value: "trigger_report",
+              label: "A situation",
+              description:
+                "Start a Spark-to-Pivot report about something that happened."
+            },
+            {
+              value: "behavior",
+              label: "A behavior",
+              description:
+                "Trace an away move, committed action, or recovery path."
+            },
+            {
+              value: "belief",
+              label: "A belief script",
+              description: "Capture or refine the belief beneath the reaction."
+            },
+            {
+              value: "pattern",
+              label: "A recurring pattern",
+              description: "Map the loop, payoff, cost, and better response."
+            },
+            {
+              value: "value",
+              label: "A blocked value",
+              description:
+                "Clarify which value is being challenged or needs support."
+            },
+            {
+              value: "execution_tension",
+              label: "A goal tension",
+              description:
+                "Reflect on a goal, project, or task that carries friction."
+            }
           ]}
         />
       )
@@ -57,20 +97,38 @@ export function ReflectFlowDialog({
       id: "placement",
       eyebrow: "Placement",
       title: "Attach the reflection to the wider system",
-      description: "This keeps the reflection connected to values, behaviors, and live work instead of becoming an isolated note.",
+      description:
+        "This keeps the reflection connected to values, behaviors, and live work instead of becoming an isolated note.",
       render: (value, setValue) => (
         <div className="grid gap-4">
           <FlowField label="Goal / project / task tension">
             <div className="grid gap-3">
               <div className="flex flex-wrap gap-2">
-                <EntityBadge kind="goal" label="Goal" compact gradient={false} />
-                <EntityBadge kind="project" label="Project" compact gradient={false} />
-                <EntityBadge kind="task" label="Task" compact gradient={false} />
+                <EntityBadge
+                  kind="goal"
+                  label="Goal"
+                  compact
+                  gradient={false}
+                />
+                <EntityBadge
+                  kind="project"
+                  label="Project"
+                  compact
+                  gradient={false}
+                />
+                <EntityBadge
+                  kind="task"
+                  label="Task"
+                  compact
+                  gradient={false}
+                />
               </div>
               <select
                 className="rounded-[18px] border border-white/8 bg-white/6 px-4 py-3 text-sm text-white"
                 value={value.linkedGoalId}
-                onChange={(event) => setValue({ linkedGoalId: event.target.value })}
+                onChange={(event) =>
+                  setValue({ linkedGoalId: event.target.value })
+                }
               >
                 <option value="">No goal selected</option>
                 {shell.snapshot.goals.map((goal) => (
@@ -82,7 +140,9 @@ export function ReflectFlowDialog({
               <select
                 className="rounded-[18px] border border-white/8 bg-white/6 px-4 py-3 text-sm text-white"
                 value={value.linkedProjectId}
-                onChange={(event) => setValue({ linkedProjectId: event.target.value })}
+                onChange={(event) =>
+                  setValue({ linkedProjectId: event.target.value })
+                }
               >
                 <option value="">No project selected</option>
                 {shell.snapshot.dashboard.projects.map((project) => (
@@ -94,7 +154,9 @@ export function ReflectFlowDialog({
               <select
                 className="rounded-[18px] border border-white/8 bg-white/6 px-4 py-3 text-sm text-white"
                 value={value.linkedTaskId}
-                onChange={(event) => setValue({ linkedTaskId: event.target.value })}
+                onChange={(event) =>
+                  setValue({ linkedTaskId: event.target.value })
+                }
               >
                 <option value="">No task selected</option>
                 {shell.snapshot.tasks.slice(0, 40).map((task) => (
@@ -155,6 +217,7 @@ export function ReflectFlowDialog({
       description="Choose what you want to reflect on first. Forge will take you into the right guided flow instead of leaving you in a generic form."
       value={draft}
       onChange={setDraft}
+      draftPersistenceKey="psyche.reflect.launcher"
       steps={steps}
       submitLabel="Open guided reflection"
       onSubmit={launch}

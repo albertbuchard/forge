@@ -112,6 +112,9 @@ Use this intake progression:
 5. For completed tasks, preserve modified files, work summary, and linked
    commits through `completionReport`.
 
+Do not ask for separate user-story references, target-file fields, pattern-ref
+fields, definition-of-done fields, or recommended-order fields. Keep rich
+context in `description` and keep AI execution guidance in `aiInstructions`.
 When placement matters, prefer one hierarchy-aware linking question that can
 select or create the right goal, project, issue, or parent work item from the
 same search-first flow.
@@ -438,9 +441,11 @@ Arc:
 1. Ask what this piece of work is trying to make true.
 2. Reflect the emerging boundary so the user can hear what is in scope.
 3. Ask what outcome would make it feel real or complete for now.
-4. Ask which goal it belongs under.
-5. Land on a working name once the scope is clear.
-6. Clarify status, owner, and notes only after the scope is clear.
+4. Ask what belongs inside the boundary and what can stay out if the scope still
+   feels muddy.
+5. Ask which goal it belongs under.
+6. Land on a working name once the scope is clear.
+7. Clarify status, owner, and notes only after the scope is clear.
 
 Helpful follow-up lanes:
 
@@ -580,9 +585,10 @@ note into a dumping ground.
 Arc:
 
 1. Ask what the note needs to preserve.
-2. Ask what entities it should stay attached to.
-3. Ask whether it should be durable or temporary.
-4. Ask about tags or author only if they will help retrieval or handoff.
+2. Ask what sentence future-you would need to recover from this note later.
+3. Ask what entities it should stay attached to.
+4. Ask whether it should be durable or temporary.
+5. Ask about tags or author only if they will help retrieval or handoff.
 
 Helpful follow-up lanes:
 
@@ -801,9 +807,11 @@ Arc:
 1. Ask what was observed.
 2. Reflect the moment without pretending it is already a finished interpretation.
 3. Ask what felt most important to name before it gets smoothed over or forgotten.
-4. Ask when it happened or became noticeable.
-5. Ask what it may connect to: pattern, belief, value, mode, task, project, or note.
-6. Ask for tags or extra context only if that will help later review.
+4. Ask for the smallest concrete slice if the observation still feels vague or
+   global.
+5. Ask when it happened or became noticeable.
+6. Ask what it may connect to: pattern, belief, value, mode, task, project, or note.
+7. Ask for tags or extra context only if that will help later review.
 
 If the user already gave the moment or timing, move straight to what they noticed most
 clearly instead of re-asking when.
@@ -961,7 +969,9 @@ Arc:
 2. Ask whether the focus is a stay, a trip, a place, a timeline window, or a selected span.
 3. Ask for the time window, place, or movement item that makes the question concrete.
 4. Ask what they are trying to notice, preserve, or answer through that movement context.
-5. Route to the dedicated movement read or write path once the surface is clear.
+5. Skip the meta lane question when the user already named the exact correction or
+   review target and only one ambiguity remains.
+6. Route to the dedicated movement read or write path once the surface is clear.
 
 Direct action rules:
 
@@ -976,6 +986,8 @@ Direct action rules:
 - When the user has already given the real answer, for example "I stayed home during
   that missing block", do not ask a broad review question again. Confirm only the
   interval or place if that is still ambiguous, then act.
+- When you do act on a concrete missing-gap correction, create the overlay and read
+  the relevant timeline back instead of leaving the correction ungrounded.
 
 Helpful follow-up lanes:
 
@@ -1028,7 +1040,11 @@ Arc:
 1. Ask whether the job is overview, profile change, weekday-template change, or fatigue signaling.
 2. Ask what part of the current energy picture feels most important or inaccurate.
 3. Ask what should stay true if they are changing profile or template assumptions.
-4. Route to the dedicated life-force path once the lane is clear.
+4. Ask whether the user is describing a stable weekly shape or just how today feels
+   when the lane is still blurred.
+5. If the user already named the life-force lane clearly, skip the meta lane question
+   and ask only for the specific weekday, profile field, or signal that still matters.
+6. Route to the dedicated life-force path once the lane is clear.
 
 Helpful follow-up lanes:
 
@@ -1069,7 +1085,9 @@ Arc:
 2. Ask which flow, slug, run, or node the request is about.
 3. Ask whether they need the flow contract, a run result, a published output, or a node result.
 4. Ask what the user is trying to learn, repair, or publish through that flow.
-5. Route to the dedicated workbench route family once the execution lane is clear.
+5. If the user already named the flow and action clearly, skip the meta lane
+   question and ask only for the missing run, node, or output scope.
+6. Route to the dedicated workbench route family once the execution lane is clear.
 
 Helpful follow-up lanes:
 
@@ -1144,8 +1162,9 @@ Arc:
 
 1. Ask what makes this item worth including in the catalog.
 2. Ask what catalog or domain it belongs to if that is still unclear.
-3. Ask for a short clarifying description only if the label would be ambiguous later.
-4. Ask about aliases or tags only if they help retrieval.
+3. Ask what would make the comparison confusing or unfair if the label stayed as-is.
+4. Ask for a short clarifying description only if the label would be ambiguous later.
+5. Ask about aliases or tags only if they help retrieval.
 
 Helpful follow-up lanes:
 
@@ -1200,12 +1219,10 @@ Arc:
 
 1. Ask what preference or taste question this item belongs to.
 2. Ask what domain or context it should live in.
-3. Ask whether the user is trying to save it as a comparison candidate or as a direct
-   signal such as favorite, veto, or compare-later.
-4. Ask what makes this item distinct enough to compare usefully only if it is still a
+3. Ask whether the user is saving a comparison candidate or a direct signal such as
+   favorite, veto, or compare-later.
+4. Ask what makes the item distinct enough to compare usefully only if it is still a
    comparison candidate.
-5. If the user is really trying to send a direct signal, ask only for the missing
-   detail and then act.
 
 Helpful follow-up lanes:
 
@@ -1236,7 +1253,9 @@ Arc:
 3. Ask what kind of honest moment or decision it should help someone answer before
    getting into item wording.
 4. Reflect the practical use case back in plain language.
-5. Move to draft creation once the purpose is clear.
+5. Ask what would make the instrument distinct instead of redundant if a near-duplicate
+   risk is visible.
+6. Move to draft creation once the purpose is clear.
 
 Helpful follow-up lanes:
 
@@ -1262,7 +1281,8 @@ Arc:
 
 1. Ask what the user wants from the run right now: start, continue, review, or finish.
 2. Ask which questionnaire or existing run this is about.
-3. Ask what feels most stuck, unfinished, or important if the run is already in progress.
+3. If the user wants to continue or finish, ask what feels most stuck, unfinished, or
+   important before asking for more content.
 4. If answering is still in progress, ask only for the next answer or note that matters.
 
 Helpful follow-up lanes:

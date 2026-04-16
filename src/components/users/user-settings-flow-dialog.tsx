@@ -298,18 +298,20 @@ export function UserSettingsFlowDialog({
                         <UserBadge user={grant.targetUser} />
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">
-                        {buildGrantCapabilitySummary(grant).map((capability) => (
-                          <Badge
-                            key={`${grant.id}-${capability.id}`}
-                            className={
-                              capability.enabled
-                                ? "bg-white/[0.08] text-white/74"
-                                : "bg-white/[0.04] text-white/38"
-                            }
-                          >
-                            {capability.label}
-                          </Badge>
-                        ))}
+                        {buildGrantCapabilitySummary(grant).map(
+                          (capability) => (
+                            <Badge
+                              key={`${grant.id}-${capability.id}`}
+                              className={
+                                capability.enabled
+                                  ? "bg-white/[0.08] text-white/74"
+                                  : "bg-white/[0.04] text-white/38"
+                              }
+                            >
+                              {capability.label}
+                            </Badge>
+                          )
+                        )}
                       </div>
                     </button>
                   ))
@@ -339,6 +341,9 @@ export function UserSettingsFlowDialog({
       description="Edit the user identity, clarify what this lane represents, and jump into relationship settings without crowding the page."
       value={draft}
       onChange={setDraft}
+      draftPersistenceKey={
+        user ? `users.settings.${user.id}` : "users.settings.new"
+      }
       steps={steps}
       submitLabel={user ? "Save user" : "Create user"}
       pending={pending}
