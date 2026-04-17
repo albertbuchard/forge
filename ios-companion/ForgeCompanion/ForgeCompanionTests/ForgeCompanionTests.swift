@@ -1921,6 +1921,58 @@ final class ForgeCompanionTests: XCTestCase {
         )
     }
 
+    func testMovementTimelineDetailSnapshotPreservesTimelineItemIdForRemoteActions() {
+        let segment = ForgeMovementTimelineSegment(
+            id: "box_remote_stay",
+            boxId: "box_remote_stay",
+            kind: "stay",
+            sourceKind: "automatic",
+            origin: "recorded",
+            editable: false,
+            startedAt: "2026-04-15T08:00:00.000Z",
+            endedAt: "2026-04-15T09:00:00.000Z",
+            trueStartedAt: nil,
+            trueEndedAt: nil,
+            visibleStartedAt: nil,
+            visibleEndedAt: nil,
+            durationSeconds: 3600,
+            laneSide: .left,
+            connectorFromLane: .left,
+            connectorToLane: .left,
+            title: "Stay",
+            subtitle: "Remote canonical stay",
+            placeLabel: nil,
+            tags: [],
+            syncSource: "canonical",
+            cursor: "cursor_remote_stay",
+            overrideCount: 0,
+            overriddenAutomaticBoxIds: [],
+            overriddenUserBoxIds: nil,
+            isFullyHidden: nil,
+            rawStayIds: ["stay_remote_1"],
+            rawTripIds: [],
+            rawPointCount: 0,
+            hasLegacyCorrections: false,
+            stay: nil,
+            trip: nil
+        )
+        let detail = ForgeMovementBoxDetail(
+            segment: segment,
+            rawStays: [],
+            rawTrips: [],
+            stayDetail: nil,
+            tripDetail: nil
+        )
+
+        let snapshot = MovementTimelineDetailSnapshot(
+            detail: detail,
+            itemId: "remote-stay-box_remote_stay"
+        )
+
+        XCTAssertEqual(snapshot.itemId, "remote-stay-box_remote_stay")
+        XCTAssertFalse(snapshot.editable)
+    }
+
     private func makeLocation(
         latitude: Double,
         longitude: Double,

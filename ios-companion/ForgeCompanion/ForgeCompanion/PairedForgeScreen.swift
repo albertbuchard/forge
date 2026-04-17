@@ -212,6 +212,9 @@ private struct MovementLifeTimelineView: View {
     @State private var detailLoading = false
     @State private var placeLabelDraft: MovementTimelinePlaceLabelDraft?
     @State private var placeDraft: MovementTimelinePlaceDraft?
+    @State private var queuedEditorDraft: MovementTimelineEditorDraft?
+    @State private var queuedPlaceLabelDraft: MovementTimelinePlaceLabelDraft?
+    @State private var queuedPlaceDraft: MovementTimelinePlaceDraft?
     @State private var scrolledToCurrent = false
     @State private var focusedVisibleId: String?
 
@@ -224,6 +227,14 @@ private struct MovementLifeTimelineView: View {
 
     private var isScreenshotPreview: Bool {
         appModel.screenshotScenario != nil
+    }
+
+    private var hasPresentedModal: Bool {
+        editorDraft != nil
+            || creatingDraft != nil
+            || detailSnapshot != nil
+            || placeLabelDraft != nil
+            || placeDraft != nil
     }
 
     var body: some View {
@@ -459,6 +470,21 @@ private struct MovementLifeTimelineView: View {
                 }
             }
         }
+        .onChange(of: editorDraft?.id) { _, _ in
+            flushQueuedModalIfPossible()
+        }
+        .onChange(of: creatingDraft?.id) { _, _ in
+            flushQueuedModalIfPossible()
+        }
+        .onChange(of: detailSnapshot?.id) { _, _ in
+            flushQueuedModalIfPossible()
+        }
+        .onChange(of: placeLabelDraft?.id) { _, _ in
+            flushQueuedModalIfPossible()
+        }
+        .onChange(of: placeDraft?.id) { _, _ in
+            flushQueuedModalIfPossible()
+        }
         .sheet(item: Binding<MovementTimelineEditorDraft?>(
             get: { creatingDraft ?? editorDraft },
             set: { nextValue in
@@ -492,20 +518,14 @@ private struct MovementLifeTimelineView: View {
                 loading: detailLoading,
                 definePlace: {
                     if let item = displayItems.first(where: { $0.id == snapshot.itemId }) {
-                        detailSnapshot = nil
                         openPlaceLabelDraft(for: item)
+                        detailSnapshot = nil
                     }
                 },
                 edit: {
-                    detailSnapshot = nil
                     if let item = displayItems.first(where: { $0.id == snapshot.itemId }) {
-                        if item.sourceKind == "automatic" {
-                            Task {
-                                await invalidateAutomaticItem(item)
-                            }
-                        } else {
-                            editorDraft = MovementTimelineEditorDraft(item: item)
-                        }
+                        openEditorDraft(for: item)
+                        detailSnapshot = nil
                     }
                 }
             )
@@ -521,8 +541,8 @@ private struct MovementLifeTimelineView: View {
                     await assignKnownPlace(place, to: draft.item)
                 },
                 createNewPlace: { labelHint in
-                    placeLabelDraft = nil
                     openPlaceDraft(for: draft.item, labelHint: labelHint)
+                    placeLabelDraft = nil
                 }
             )
             .presentationDetents([.medium, .large])
@@ -1030,14 +1050,48 @@ private struct MovementLifeTimelineView: View {
         }
     }
 
+    private func flushQueuedModalIfPossible() {
+        guard hasPresentedModal == false else {
+            return
+        }
+        if let draft = queuedEditorDraft {
+            queuedEditorDraft = nil
+            editorDraft = draft
+            return
+        }
+        if let draft = queuedPlaceLabelDraft {
+            queuedPlaceLabelDraft = nil
+            placeLabelDraft = draft
+            return
+        }
+        if let draft = queuedPlaceDraft {
+            queuedPlaceDraft = nil
+            placeDraft = draft
+        }
+    }
+
+    private func openEditorDraft(for item: MovementLifeTimelineItem) {
+        let draft = MovementTimelineEditorDraft(item: item)
+        if hasPresentedModal {
+            queuedEditorDraft = draft
+        } else {
+            editorDraft = draft
+        }
+    }
+
     private func openPlaceLabelDraft(for item: MovementLifeTimelineItem) {
         guard item.kind == .stay else {
             return
         }
-        placeLabelDraft = MovementTimelinePlaceLabelDraft(
+        let draft = MovementTimelinePlaceLabelDraft(
             item: item,
             query: item.placeLabel?.isEmpty == false ? item.placeLabel! : item.displayTitle
         )
+        if hasPresentedModal {
+            queuedPlaceLabelDraft = draft
+        } else {
+            placeLabelDraft = draft
+        }
     }
 
     private func openPlaceDraft(
@@ -1047,7 +1101,7 @@ private struct MovementLifeTimelineView: View {
         guard item.kind == .stay, let coordinate = item.coordinate else {
             return
         }
-        placeDraft = MovementTimelinePlaceDraft(
+        let draft = MovementTimelinePlaceDraft(
             itemId: item.id,
             label:
                 labelHint?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
@@ -1060,6 +1114,11 @@ private struct MovementLifeTimelineView: View {
             radiusMeters: item.stayRadiusMeters(using: appModel.movementStore),
             tags: item.tags
         )
+        if hasPresentedModal {
+            queuedPlaceDraft = draft
+        } else {
+            placeDraft = draft
+        }
     }
 
     private func rankedKnownPlaces(
@@ -1215,7 +1274,10 @@ private struct MovementLifeTimelineView: View {
                     boxId: boxId,
                     pairing: pairing
                 )
-                detailSnapshot = MovementTimelineDetailSnapshot(detail: detail)
+                detailSnapshot = MovementTimelineDetailSnapshot(
+                    detail: detail,
+                    itemId: item.id
+                )
                 return
             }
             detailSnapshot = MovementTimelineDetailSnapshot(
@@ -1247,24 +1309,33 @@ private struct MovementLifeTimelineView: View {
                 longitude: place.longitude
             )
 
-            if let item = displayItems.first(where: { $0.id == draft.itemId }) {
-                await assignKnownPlace(
-                    MovementSyncStore.StoredKnownPlace(
-                        id: place.id,
-                        externalUid: place.externalUid,
-                        label: place.label,
-                        aliases: place.aliases,
-                        latitude: place.latitude,
-                        longitude: place.longitude,
-                        radiusMeters: place.radiusMeters,
-                        categoryTags: place.categoryTags,
-                        visibility: place.visibility,
-                        wikiNoteId: place.wikiNoteId,
-                        metadata: [:]
-                    ),
-                    to: item
+            guard let item = displayItems.first(where: { $0.id == draft.itemId }) else {
+                throw NSError(
+                    domain: "MovementLifeTimeline",
+                    code: 10,
+                    userInfo: [
+                        NSLocalizedDescriptionKey:
+                            "Created the location, but the stay was no longer available to relabel. Refresh and try again."
+                    ]
                 )
             }
+
+            await assignKnownPlace(
+                MovementSyncStore.StoredKnownPlace(
+                    id: place.id,
+                    externalUid: place.externalUid,
+                    label: place.label,
+                    aliases: place.aliases,
+                    latitude: place.latitude,
+                    longitude: place.longitude,
+                    radiusMeters: place.radiusMeters,
+                    categoryTags: place.categoryTags,
+                    visibility: place.visibility,
+                    wikiNoteId: place.wikiNoteId,
+                    metadata: [:]
+                ),
+                to: item
+            )
 
             placeDraft = nil
         } catch {
@@ -1273,7 +1344,7 @@ private struct MovementLifeTimelineView: View {
     }
 }
 
-private struct MovementTimelineDetailCoordinate: Identifiable, Hashable {
+struct MovementTimelineDetailCoordinate: Identifiable, Hashable {
     let id: String
     let latitude: Double
     let longitude: Double
@@ -1330,7 +1401,7 @@ private struct MovementTimelinePlaceLabelDraft: Identifiable {
     }
 }
 
-private struct MovementTimelineDetailSnapshot: Identifiable {
+struct MovementTimelineDetailSnapshot: Identifiable {
     enum Kind {
         case stay
         case trip
@@ -1362,12 +1433,13 @@ private struct MovementTimelineDetailSnapshot: Identifiable {
     let maxSpeedMps: Double?
     let stopCount: Int?
     let canLabelPlace: Bool
+    let editable: Bool
 
     var id: String { itemId }
 
-    init(detail: ForgeMovementBoxDetail) {
+    init(detail: ForgeMovementBoxDetail, itemId: String) {
         let segment = detail.segment
-        self.itemId = "remote-\(segment.id)"
+        self.itemId = itemId
         self.title = segment.title
         self.subtitle = segment.subtitle
         self.kind = segment.kind == "stay" ? .stay : segment.kind == "trip" ? .trip : .missing
@@ -1437,6 +1509,7 @@ private struct MovementTimelineDetailSnapshot: Identifiable {
         self.maxSpeedMps = detail.tripDetail?.maxSpeedMps
         self.stopCount = detail.tripDetail?.stopCount
         self.canLabelPlace = kind == .stay
+        self.editable = segment.editable
     }
 
     @MainActor
@@ -1519,6 +1592,7 @@ private struct MovementTimelineDetailSnapshot: Identifiable {
         self.maxSpeedMps = trips.isEmpty ? nil : trips.compactMap(\.maxSpeedMps).max()
         self.stopCount = trips.isEmpty ? nil : trips.map { $0.stops.count }.reduce(0, +)
         self.canLabelPlace = kind == .stay
+        self.editable = item.editable
     }
 }
 
@@ -1544,14 +1618,14 @@ private struct MovementTimelinePlaceSheet: View {
                     )
                 }
             }
-            .navigationTitle("New Location")
+            .navigationTitle("Create Label")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel", action: close)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Save") {
+                    Button("Create") {
                         Task {
                             await save(draft)
                         }
@@ -1592,13 +1666,13 @@ private struct MovementTimelinePlaceLabelSheet: View {
                     }
                 }
 
-                Section("Search known places") {
-                    TextField("Search known places or type a new label", text: $draft.query)
+                Section("Label name") {
+                    TextField("Type a label name or pick an existing location", text: $draft.query)
                         .textInputAutocapitalization(.words)
                         .autocorrectionDisabled()
                 }
 
-                Section("Known locations") {
+                Section("Matching saved locations") {
                     if knownPlaces.isEmpty {
                         Text("No saved places match yet.")
                             .font(.system(size: 14, weight: .medium, design: .rounded))
@@ -1641,14 +1715,14 @@ private struct MovementTimelinePlaceLabelSheet: View {
                     }
                 }
             }
-            .navigationTitle("Label Location")
+            .navigationTitle("Set Location Label")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel", action: close)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(hasExactMatch == false && draft.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? "Create \"\(draft.query.trimmingCharacters(in: .whitespacesAndNewlines))\"" : "Create New") {
+                    Button(hasExactMatch == false && draft.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? "Create \"\(draft.query.trimmingCharacters(in: .whitespacesAndNewlines))\"" : "Create Label") {
                         createNewPlace(
                             draft.query.trimmingCharacters(in: .whitespacesAndNewlines)
                         )
@@ -1781,9 +1855,11 @@ private struct MovementTimelineDetailSheet: View {
             .navigationTitle(snapshot.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Edit", action: edit)
-                        .disabled(snapshot.kind == .missing)
+                if snapshot.editable {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Edit", action: edit)
+                            .disabled(snapshot.kind == .missing)
+                    }
                 }
             }
         }
