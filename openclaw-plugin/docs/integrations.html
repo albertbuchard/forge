@@ -152,15 +152,30 @@ openclaw forge health</code></pre>
         <section class="section" id="codex">
           <div class="section-heading">
             <p class="eyebrow">Codex</p>
-            <h2>Use Forge from Codex during in-repo work.</h2>
+            <h2>Use Forge from Codex through MCP.</h2>
           </div>
           <div class="card-grid two">
+            <article class="card">
+              <h3>Install from a local Forge checkout</h3>
+              <p>
+                Codex uses MCP, and the MCP configuration is shared across the
+                Codex CLI and IDE extension. The most reliable local setup is to
+                point Codex at Forge's repo-local MCP launcher script.
+              </p>
+              <pre><code>codex mcp add forge \
+  --env FORGE_ORIGIN=http://127.0.0.1 \
+  --env FORGE_PORT=4317 \
+  --env FORGE_ACTOR_LABEL=codex \
+  --env FORGE_TIMEOUT_MS=15000 \
+  -- /bin/zsh /absolute/path/to/forge/plugins/forge-codex/scripts/run-mcp.sh
+codex mcp list</code></pre>
+            </article>
             <article class="card">
               <h3>What it is for</h3>
               <p>
                 The Codex adapter lives in <code>plugins/forge-codex/</code> and is
-                intended for shared runtime work inside the repo rather than public
-                package distribution.
+                built for shared-runtime work against the same local Forge system
+                used by the browser, OpenClaw, and Hermes.
               </p>
             </article>
             <article class="card">
@@ -171,7 +186,28 @@ openclaw forge health</code></pre>
                 behavior.
               </p>
             </article>
+            <article class="card">
+              <h3>How to make it widely available</h3>
+              <p>
+                For broad public distribution, the better path is a hosted remote
+                MCP server over HTTPS with auth, so users can install Forge with
+                one command instead of cloning the repo first.
+              </p>
+              <pre><code>codex mcp add forge --url https://your-forge-mcp.example.com/mcp
+codex mcp list</code></pre>
+              <p>
+                That is the cleanest public install story for Codex today. The
+                repo-local launcher is ideal for contributors and local-first use,
+                but a remote MCP endpoint is what makes Forge easy to adopt at scale.
+              </p>
+            </article>
           </div>
+          <p style="margin-top: 18px">
+            The local launcher script is
+            <code>plugins/forge-codex/scripts/run-mcp.sh</code>, and the adapter
+            metadata lives in <code>plugins/forge-codex/.mcp.json</code> and
+            <code>plugins/forge-codex/.codex-plugin/plugin.json</code>.
+          </p>
         </section>
 
         <section class="section" id="ios">
@@ -223,6 +259,11 @@ openclaw forge health</code></pre>
             <li>
               <a href="https://github.com/albertbuchard/forge/blob/main/docs/hermes-plugin.md"
                 >Hermes plugin guide</a
+              >
+            </li>
+            <li>
+              <a href="https://github.com/albertbuchard/forge/blob/main/plugins/forge-codex/README.md"
+                >Codex MCP guide</a
               >
             </li>
             <li>

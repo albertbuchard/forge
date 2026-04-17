@@ -154,6 +154,21 @@ openclaw forge health</code></pre>
 ~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade ./plugins/forge-hermes</code></pre>
             </article>
             <article class="card">
+              <h3>Codex MCP</h3>
+              <p>
+                Use this when you want Forge tools inside Codex. Codex connects
+                to Forge through MCP, and the same MCP setup is shared by the
+                Codex CLI and IDE extension.
+              </p>
+              <pre><code>codex mcp add forge \
+  --env FORGE_ORIGIN=http://127.0.0.1 \
+  --env FORGE_PORT=4317 \
+  --env FORGE_ACTOR_LABEL=codex \
+  --env FORGE_TIMEOUT_MS=15000 \
+  -- /bin/zsh /absolute/path/to/forge/plugins/forge-codex/scripts/run-mcp.sh
+codex mcp list</code></pre>
+            </article>
+            <article class="card">
               <h3>Standalone repo runtime</h3>
               <p>
                 Use this when you want the full Forge app and API running
