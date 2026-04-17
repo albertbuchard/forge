@@ -77,7 +77,7 @@
     "graphology-layout-forceatlas2": "^0.10.1",
     "lucide-react": "^0.525.0",
     "node-ical": "^0.20.1",
-    "openclaw": "2026.4.8",
+    "openclaw": "2026.4.15",
     "qrcode": "^1.5.4",
     "react": "^19.1.0",
     "react-arborist": "^3.4.3",
