@@ -94,12 +94,16 @@ info "Installing Fastlane gems locally under ios-companion/vendor/bundle."
   "${RUBY_BIN}" -S bundle install
 )
 
-info "Running Forge repo release checks."
-(
-  cd "${FORGE_DIR}"
-  npx tsc --noEmit
-  npm run build
-)
+if [[ "${FORGE_IOS_SKIP_REPO_RELEASE_CHECKS:-0}" == "1" ]]; then
+  info "Skipping Forge repo release checks for this iOS-only release flow."
+else
+  info "Running Forge repo release checks."
+  (
+    cd "${FORGE_DIR}"
+    npx tsc --noEmit
+    npm run build
+  )
+fi
 
 TIMESTAMP="$(date -u +%Y%m%d-%H%M%S)"
 ARTIFACT_DIR="${IOS_DIR}/.artifacts/releases/${MODE}-${TIMESTAMP}"

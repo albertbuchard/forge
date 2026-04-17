@@ -1,3 +1,3 @@
-Forge Companion 1.0.3 fixes stay location labeling in the Life Timeline. You can now
+Forge Companion 1.0.4 fixes stay location labeling in the Life Timeline. You can now
 create a new location label from an unlabeled stay, save it successfully, and reopen
 stay details without the edit flow dismissing itself.

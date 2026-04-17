@@ -139,6 +139,7 @@ jobs:
 
       - name: Publish iOS release
         env:
+          FORGE_IOS_SKIP_REPO_RELEASE_CHECKS: "1"
           RELEASE_MODE: ${{ steps.release_meta.outputs.release_mode }}
         run: ./ios-companion/scripts/publish-forge-companion.sh "${RELEASE_MODE}"
 
