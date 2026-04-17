@@ -12,6 +12,7 @@ PLUGIN_PACKAGE_JSON="${PLUGIN_DIR}/package.json"
 PLUGIN_PACKAGE_LOCK_JSON="${PLUGIN_DIR}/package-lock.json"
 CODEX_PLUGIN_MANIFEST="${FORGE_DIR}/plugins/forge-codex/.codex-plugin/plugin.json"
 CODEX_RUNTIME_PACKAGE_JSON="${FORGE_DIR}/plugins/forge-codex/runtime/package.json"
+HERMES_PLUGIN_MANIFEST="${FORGE_DIR}/plugins/forge-hermes/plugin.yaml"
 SAFE_OPENCLAW_HOST_RANGE="2026.4.15"
 DEFAULT_FORGE_PORT=4317
 RELEASE_MODE="${FORGE_RELEASE_MODE:-full}"
@@ -184,6 +185,68 @@ switch (arg) {
   default:
     throw new Error(`Unsupported version bump: ${arg}`);
 }
+process.stdout.write(next.join("."));
+NODE
+}
+
+read_hermes_manifest_version() {
+  python3 - "$1" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+match = re.search(r"^version:\s*([0-9]+\.[0-9]+\.[0-9]+)\s*$", text, re.MULTILINE)
+if not match:
+    raise SystemExit(f"Missing version in {path}")
+sys.stdout.write(match.group(1))
+PY
+}
+
+resolve_shared_plugin_version() {
+  node --input-type=module - "$1" "$2" "$3" <<'NODE'
+const openclawVersion = process.argv[2];
+const hermesVersion = process.argv[3];
+const arg = process.argv[4];
+
+const parse = (value) => {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(value);
+  if (!match) throw new Error(`Current version is not semver: ${value}`);
+  return match.slice(1).map(Number);
+};
+
+if (/^\d+\.\d+\.\d+$/.test(arg)) {
+  process.stdout.write(arg);
+  process.exit(0);
+}
+
+const [major, minor, patch] = [openclawVersion, hermesVersion]
+  .map(parse)
+  .sort((a, b) => {
+    if (a[0] !== b[0]) return b[0] - a[0];
+    if (a[1] !== b[1]) return b[1] - a[1];
+    return b[2] - a[2];
+  })[0];
+
+const next = [major, minor, patch];
+switch (arg) {
+  case "patch":
+    next[2] += 1;
+    break;
+  case "minor":
+    next[1] += 1;
+    next[2] = 0;
+    break;
+  case "major":
+    next[0] += 1;
+    next[1] = 0;
+    next[2] = 0;
+    break;
+  default:
+    throw new Error(`Unsupported version bump: ${arg}`);
+}
+
 process.stdout.write(next.join("."));
 NODE
 }
@@ -362,13 +425,14 @@ main() {
   ORIGINAL_CODEX_PLUGIN_VERSION="$(read_json_version "${CODEX_PLUGIN_MANIFEST}")"
   ORIGINAL_CODEX_RUNTIME_VERSION="$(read_json_version "${CODEX_RUNTIME_PACKAGE_JSON}")"
 
-  local current_version next_version
+  local current_version hermes_version next_version
   current_version="$(read_json_version "${PLUGIN_PACKAGE_JSON}")"
+  hermes_version="$(read_hermes_manifest_version "${HERMES_PLUGIN_MANIFEST}")"
   if is_publish_from_tag_mode; then
     next_version="${bump_arg}"
     [[ "${next_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "publish-from-tag mode requires an exact semver version"
   else
-    next_version="$(resolve_next_version "${current_version}" "${bump_arg}")"
+    next_version="$(resolve_shared_plugin_version "${current_version}" "${hermes_version}" "${bump_arg}")"
     [[ "${next_version}" != "${current_version}" ]] || fail "next version matches current version (${current_version})"
     (
       cd "${FORGE_DIR}"

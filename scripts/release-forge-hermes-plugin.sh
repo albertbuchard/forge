@@ -12,6 +12,7 @@ HERMES_PLUGIN_PYTHON_DIST="${HERMES_PLUGIN_DIR}/python-dist"
 HERMES_PLUGIN_BUILD_DIR="${HERMES_PLUGIN_DIR}/build"
 HERMES_PLUGIN_EGG_INFO_DIR="${HERMES_PLUGIN_DIR}/forge_hermes_plugin.egg-info"
 HERMES_TAG_PREFIX="hermes-v"
+OPENCLAW_PLUGIN_PACKAGE_JSON="${FORGE_DIR}/openclaw-plugin/package.json"
 RELEASE_MODE="${FORGE_RELEASE_MODE:-full}"
 SKIP_UPLOAD="${FORGE_RELEASE_SKIP_UPLOAD:-0}"
 PACKAGING_VENV_DIR=""
@@ -189,6 +190,65 @@ if not match:
     raise SystemExit(f"Missing __version__ in {path}")
 sys.stdout.write(match.group(1))
 PY
+}
+
+read_json_version() {
+  node --input-type=module - "$1" <<'NODE'
+import fs from "node:fs";
+const path = process.argv[2];
+const value = JSON.parse(fs.readFileSync(path, "utf8"));
+if (typeof value.version !== "string") {
+  throw new Error(`Missing version in ${path}`);
+}
+process.stdout.write(value.version);
+NODE
+}
+
+resolve_shared_plugin_version() {
+  node --input-type=module - "$1" "$2" "$3" <<'NODE'
+const hermesVersion = process.argv[2];
+const openclawVersion = process.argv[3];
+const arg = process.argv[4];
+
+const parse = (value) => {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(value);
+  if (!match) throw new Error(`Current version is not semver: ${value}`);
+  return match.slice(1).map(Number);
+};
+
+if (/^\d+\.\d+\.\d+$/.test(arg)) {
+  process.stdout.write(arg);
+  process.exit(0);
+}
+
+const [major, minor, patch] = [hermesVersion, openclawVersion]
+  .map(parse)
+  .sort((a, b) => {
+    if (a[0] !== b[0]) return b[0] - a[0];
+    if (a[1] !== b[1]) return b[1] - a[1];
+    return b[2] - a[2];
+  })[0];
+
+const next = [major, minor, patch];
+switch (arg) {
+  case "patch":
+    next[2] += 1;
+    break;
+  case "minor":
+    next[1] += 1;
+    next[2] = 0;
+    break;
+  case "major":
+    next[0] += 1;
+    next[1] = 0;
+    next[2] = 0;
+    break;
+  default:
+    throw new Error(`Unsupported version bump: ${arg}`);
+}
+
+process.stdout.write(next.join("."));
+NODE
 }
 
 write_release_versions() {
@@ -415,14 +475,15 @@ main() {
   ORIGINAL_HERMES_MANIFEST_VERSION="$(read_manifest_version "${HERMES_PLUGIN_MANIFEST}")"
   ORIGINAL_HERMES_PACKAGE_VERSION="$(read_package_version "${HERMES_PLUGIN_PACKAGE_VERSION}")"
 
-  local current_version next_version
+  local current_version openclaw_version next_version
   current_version="${ORIGINAL_HERMES_MANIFEST_VERSION}"
+  openclaw_version="$(read_json_version "${OPENCLAW_PLUGIN_PACKAGE_JSON}")"
   [[ "${ORIGINAL_HERMES_PACKAGE_VERSION}" == "${current_version}" ]] || fail "Hermes plugin version surfaces are already misaligned"
   if is_publish_from_tag_mode; then
     next_version="${bump_arg}"
     [[ "${next_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "publish-from-tag mode requires an exact semver version"
   else
-    next_version="$(resolve_next_version "${current_version}" "${bump_arg}")"
+    next_version="$(resolve_shared_plugin_version "${current_version}" "${openclaw_version}" "${bump_arg}")"
     [[ "${next_version}" != "${current_version}" ]] || fail "next version matches current version (${current_version})"
     (
       cd "${FORGE_DIR}"
