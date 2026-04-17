@@ -238,6 +238,9 @@ def _fetch_startup_context_text() -> Optional[str]:
     lines.append(
         "- Forge tools are available in this session for live overview, search, linking, updates, and closeout work."
     )
+    lines.append(
+        "- Forge bundled skills are available for Forge workflow guidance plus entity and Psyche interview playbooks."
+    )
 
     if len(lines) == 1:
         return None
@@ -283,9 +286,6 @@ def build_startup_context(
     platform: str = "",
     **_kwargs: Any,
 ) -> Optional[Dict[str, str]]:
-    if not is_first_turn:
-        return None
-
     context_text = _cache_startup_context(session_id)
     if not context_text:
         return None

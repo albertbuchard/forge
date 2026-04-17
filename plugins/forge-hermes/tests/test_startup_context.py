@@ -30,7 +30,9 @@ def test_warm_startup_context_fetches_once_per_session(monkeypatch: pytest.Monke
     assert calls == ["fetch"]
 
 
-def test_build_startup_context_only_injects_on_first_turn(monkeypatch: pytest.MonkeyPatch):
+def test_build_startup_context_injects_cached_context_on_every_turn(
+    monkeypatch: pytest.MonkeyPatch,
+):
     tools.SESSION_STARTUP_CONTEXTS["telegram-session"] = (
         "Forge context for this session:\n- Operator: Albert"
     )
@@ -40,7 +42,9 @@ def test_build_startup_context_only_injects_on_first_turn(monkeypatch: pytest.Mo
 
     monkeypatch.setattr(tools, "_fetch_startup_context_text", fail_fetch)
 
-    assert tools.build_startup_context(session_id="telegram-session", is_first_turn=False) is None
+    assert tools.build_startup_context(session_id="telegram-session", is_first_turn=False) == {
+        "context": "Forge context for this session:\n- Operator: Albert"
+    }
     assert tools.build_startup_context(session_id="telegram-session", is_first_turn=True) == {
         "context": "Forge context for this session:\n- Operator: Albert"
     }
