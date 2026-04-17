@@ -9,6 +9,19 @@ import {
 } from "../runtime/dist/openclaw/plugin-entry-shared.js";
 import { registerForgePluginTools } from "../runtime/dist/openclaw/tools.js";
 
+function resolvePluginVersion() {
+  const pluginManifestPath = path.resolve(import.meta.dirname, "..", ".codex-plugin", "plugin.json");
+  try {
+    const parsed = JSON.parse(readFileSync(pluginManifestPath, "utf8"));
+    if (typeof parsed?.version === "string" && parsed.version.trim().length > 0) {
+      return parsed.version.trim();
+    }
+  } catch {
+    // Fall back to a stable placeholder if local metadata is unavailable.
+  }
+  return "0.1.0";
+}
+
 function normalizeEnvNumber(value, fallback) {
   if (!value) {
     return fallback;
@@ -106,7 +119,7 @@ async function main() {
   const server = new Server(
     {
       name: "forge-codex",
-      version: "0.1.0"
+      version: resolvePluginVersion()
     },
     {
       capabilities: {
