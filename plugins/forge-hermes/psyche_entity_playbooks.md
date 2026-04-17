@@ -314,6 +314,8 @@ Another strong shape when the user is getting abstract:
   detail into normalized fields.
 - Do not widen into adjacent entities until the current one has a working sentence the
   user recognizes.
+- Before asking for evidence, alternatives, or repair, check whether the current
+  working sentence feels accurate enough to be held.
 - Before saving, give a short working summary in the user's own language and ask
   whether it feels true enough.
 - A good final check is often:
@@ -345,6 +347,8 @@ If the entity is already clear:
 - reflect briefly
 - name the core meaning in the user's language
 - ask only for the one missing structural detail
+- do not ask for evidence, origin, or repair if one structural detail is all that is
+  missing
 - save without forcing extra exploration
 
 If the entity is not yet clear:
@@ -362,6 +366,8 @@ If the entity is not yet clear:
   naming, or next-step help.
 - When the user says the formulation lands, summarize it once in their language and
   move to the write.
+- When the user says the current wording misses, say what seems newly true before you
+  ask whether the old name still fits.
 - If another belief, value, pattern, mode, or note becomes visible, name it gently but
   do not switch containers unless the user wants to.
 

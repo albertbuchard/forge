@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -19,6 +20,9 @@ PACKAGE_DIR = Path(__file__).resolve().parent
 NODE_RUNTIME_HELPER = PACKAGE_DIR / "scripts" / "ensure-runtime.mjs"
 SESSION_COOKIES: Dict[str, str] = {}
 DEFAULT_HERMES_ACTOR_LABEL = "aurel (hermes)"
+SESSION_STARTUP_CONTEXTS: Dict[str, str] = {}
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -37,6 +41,255 @@ class ForgePluginError(RuntimeError):
     def __init__(self, code: str, message: str):
         super().__init__(message)
         self.code = code
+
+
+def _normalize_text(value: Any) -> str:
+    return " ".join(str(value or "").split()).strip()
+
+
+def _truncate_text(value: Any, limit: int = 96) -> str:
+    text = _normalize_text(value)
+    if len(text) <= limit:
+        return text
+    return f"{text[: max(0, limit - 1)].rstrip()}…"
+
+
+def _format_duration(seconds: Any) -> Optional[str]:
+    if not isinstance(seconds, (int, float)):
+        return None
+    total = max(0, int(round(float(seconds))))
+    hours, remainder = divmod(total, 3600)
+    minutes = remainder // 60
+    if hours and minutes:
+        return f"{hours}h {minutes}m"
+    if hours:
+        return f"{hours}h"
+    return f"{minutes}m"
+
+
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _safe_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _format_title_list(items: Any, limit: int = 2) -> Optional[str]:
+    labels: list[str] = []
+    overflow = 0
+    for entry in _safe_list(items):
+        title = _truncate_text(_safe_dict(entry).get("title"), 54)
+        if not title:
+            continue
+        if len(labels) < limit:
+            labels.append(title)
+        else:
+            overflow += 1
+    if not labels:
+        return None
+    if overflow:
+        labels.append(f"+{overflow} more")
+    return "; ".join(labels)
+
+
+def _resolve_operator_name(overview_body: Dict[str, Any], context_body: Dict[str, Any]) -> Optional[str]:
+    candidates = [
+        *_safe_list(_safe_dict(overview_body.get("operator")).get("activeProjects")),
+        *_safe_list(context_body.get("focusTasks")),
+        context_body.get("recommendedNextTask"),
+    ]
+    for candidate in candidates:
+        item = _safe_dict(candidate)
+        owner = _safe_dict(item.get("ownerUser"))
+        display_name = _normalize_text(owner.get("displayName") or owner.get("handle"))
+        if display_name:
+            return display_name
+    return None
+
+
+def _format_focus_line(context_body: Dict[str, Any]) -> Optional[str]:
+    recommended = _safe_dict(context_body.get("recommendedNextTask"))
+    if recommended:
+        title = _truncate_text(recommended.get("title"), 72)
+        if title:
+            parts = [title]
+            level = _normalize_text(recommended.get("level"))
+            priority = _normalize_text(recommended.get("priority"))
+            if level:
+                parts.append(level)
+            if priority:
+                parts.append(priority)
+            return " | ".join(parts)
+
+    focus_tasks = _safe_list(context_body.get("focusTasks"))
+    return _format_title_list(focus_tasks, limit=2)
+
+
+def _format_sleep_line(overview_body: Dict[str, Any]) -> Optional[str]:
+    sleep = _safe_dict(overview_body.get("sleep"))
+    latest = _safe_dict(sleep.get("latestNight"))
+    summary = _safe_dict(sleep.get("summary"))
+    latest_bits: list[str] = []
+    latest_duration = _format_duration(latest.get("asleepSeconds"))
+    if latest_duration:
+        latest_bits.append(latest_duration)
+    score = latest.get("score")
+    if isinstance(score, (int, float)):
+        latest_bits.append(f"score {int(score)}")
+    recovery = _normalize_text(latest.get("recoveryState") or latest.get("qualitativeState"))
+    if recovery:
+        latest_bits.append(recovery)
+
+    average_bits: list[str] = []
+    average_duration = _format_duration(summary.get("averageSleepSeconds"))
+    if average_duration:
+        average_bits.append(average_duration)
+    average_score = summary.get("averageSleepScore")
+    if isinstance(average_score, (int, float)):
+        average_bits.append(f"score {int(average_score)}")
+
+    sections: list[str] = []
+    if latest_bits:
+        sections.append(f"latest {' · '.join(latest_bits)}")
+    if average_bits:
+        sections.append(f"average {' · '.join(average_bits)}")
+    return "; ".join(sections) or None
+
+
+def _format_xp_line(overview_body: Dict[str, Any], context_body: Dict[str, Any]) -> Optional[str]:
+    metrics = _safe_dict(_safe_dict(overview_body.get("snapshot")).get("metrics"))
+    xp = _safe_dict(context_body.get("xp"))
+    parts: list[str] = []
+    level = metrics.get("level")
+    if isinstance(level, (int, float)):
+        parts.append(f"level {int(level)}")
+    weekly = metrics.get("weeklyXp")
+    if isinstance(weekly, (int, float)):
+        parts.append(f"weekly {int(weekly)} XP")
+    streak = metrics.get("streakDays")
+    if isinstance(streak, (int, float)):
+        parts.append(f"streak {int(streak)}d")
+    if not parts:
+        current_xp = xp.get("currentXp")
+        if isinstance(current_xp, (int, float)):
+            parts.append(f"{int(current_xp)} XP")
+    return " | ".join(parts) or None
+
+
+def _format_top_goals_line(overview_body: Dict[str, Any]) -> Optional[str]:
+    dashboard = _safe_dict(_safe_dict(overview_body.get("snapshot")).get("dashboard"))
+    return _format_title_list(dashboard.get("goals"), limit=2)
+
+
+def _format_active_projects_line(overview_body: Dict[str, Any], context_body: Dict[str, Any]) -> Optional[str]:
+    operator = _safe_dict(overview_body.get("operator"))
+    active_projects = operator.get("activeProjects") or context_body.get("activeProjects")
+    return _format_title_list(active_projects, limit=2)
+
+
+def _fetch_startup_context_text() -> Optional[str]:
+    try:
+        config = _ensure_runtime(_load_config())
+        overview_payload = _request_json(config, "GET", "/api/v1/operator/overview")
+        context_payload = _request_json(config, "GET", "/api/v1/operator/context")
+    except ForgePluginError as exc:
+        logger.warning("Forge Hermes startup context unavailable: %s", exc)
+        return None
+    except subprocess.TimeoutExpired:
+        logger.warning("Forge Hermes startup context timed out while booting the local runtime")
+        return None
+    except Exception as exc:  # pragma: no cover - defensive hook path
+        logger.exception("Unexpected Forge Hermes startup context failure: %s", exc)
+        return None
+
+    overview_body = _safe_dict(_safe_dict(overview_payload).get("overview"))
+    context_body = _safe_dict(_safe_dict(context_payload).get("context"))
+    if not overview_body and not context_body:
+        return None
+
+    lines = ["Forge context for this session:"]
+
+    operator_name = _resolve_operator_name(overview_body, context_body)
+    if operator_name:
+        lines.append(f"- Operator: {operator_name}")
+
+    top_goals = _format_top_goals_line(overview_body)
+    if top_goals:
+        lines.append(f"- Top goals: {top_goals}")
+
+    active_projects = _format_active_projects_line(overview_body, context_body)
+    if active_projects:
+        lines.append(f"- Active projects: {active_projects}")
+
+    focus_line = _format_focus_line(context_body)
+    if focus_line:
+        lines.append(f"- Focus: {focus_line}")
+
+    sleep_line = _format_sleep_line(overview_body)
+    if sleep_line:
+        lines.append(f"- Sleep: {sleep_line}")
+
+    xp_line = _format_xp_line(overview_body, context_body)
+    if xp_line:
+        lines.append(f"- XP: {xp_line}")
+
+    lines.append(f"- Forge web app: {config.web_app_url}")
+    lines.append(
+        "- Forge tools are available in this session for live overview, search, linking, updates, and closeout work."
+    )
+
+    if len(lines) == 1:
+        return None
+    return "\n".join(lines)
+
+
+def _cache_startup_context(session_id: str = "") -> Optional[str]:
+    cache_key = _normalize_text(session_id)
+    if cache_key and cache_key in SESSION_STARTUP_CONTEXTS:
+        return SESSION_STARTUP_CONTEXTS[cache_key]
+
+    context_text = _fetch_startup_context_text()
+    if context_text and cache_key:
+        SESSION_STARTUP_CONTEXTS[cache_key] = context_text
+    return context_text
+
+
+def warm_startup_context(
+    *,
+    session_id: str = "",
+    **_kwargs: Any,
+) -> None:
+    _cache_startup_context(session_id)
+
+
+def clear_startup_context(
+    *,
+    session_id: str = "",
+    **_kwargs: Any,
+) -> None:
+    cache_key = _normalize_text(session_id)
+    if cache_key:
+        SESSION_STARTUP_CONTEXTS.pop(cache_key, None)
+
+
+def build_startup_context(
+    *,
+    session_id: str = "",
+    user_message: str = "",
+    conversation_history: Optional[list[Any]] = None,
+    is_first_turn: bool = False,
+    model: str = "",
+    platform: str = "",
+    **_kwargs: Any,
+) -> Optional[Dict[str, str]]:
+    if not is_first_turn:
+        return None
+
+    context_text = _cache_startup_context(session_id)
+    if not context_text:
+        return None
+    return {"context": context_text}
 
 
 def _json_result(payload: Any) -> str:

@@ -9,7 +9,12 @@ from pathlib import Path
 from .catalog import TOOL_CATALOG
 from .config import ensure_plugin_config
 from .schemas import SCHEMAS
-from .tools import build_handler
+from .tools import (
+    build_handler,
+    build_startup_context,
+    clear_startup_context,
+    warm_startup_context,
+)
 from .version import __version__
 
 logger = logging.getLogger(__name__)
@@ -71,6 +76,13 @@ def register(ctx) -> None:
             schema=SCHEMAS[spec["name"]],
             handler=build_handler(spec["name"]),
         )
+
+    register_hook = getattr(ctx, "register_hook", None)
+    if callable(register_hook):
+        register_hook("on_session_start", warm_startup_context)
+        register_hook("pre_llm_call", build_startup_context)
+        register_hook("on_session_finalize", clear_startup_context)
+        register_hook("on_session_reset", clear_startup_context)
 
     _register_skill_bundle(ctx)
     logger.info("Registered Forge Hermes plugin with %s tools", len(TOOL_CATALOG))

@@ -53,6 +53,11 @@ Forge correctly, and gather only the structure that still matters.
   CRUD.
 - For specialized surfaces, ask what would make the answer or change useful before you
   ask route-shaped details such as provider, weekday, flow id, run id, or trip id.
+- When the user has already named a precise correction or review target, do not widen
+  back out into a meta lane question. Confirm only the missing route-selecting detail
+  and then act.
+- Once the route family is clear, say it plainly enough that another agent could follow
+  the same path without guessing.
 - Do not read schema fields out loud unless the user explicitly wants a checklist.
 - One focused question is the default. Ask two only when both questions serve the same
   job and the user is steady enough for it.
@@ -372,6 +377,10 @@ Connect:
   the next field.
 - For reusable or abstract records, it is often better to say "what this would help
   you decide later is..." before asking for the final wording.
+- For direct update or review requests, the next question should usually narrow the
+  saved object, timeframe, or route family, not reopen the whole meaning-making arc.
+- When the user already gave the correction in usable language, prefer "what still
+  needs deciding is..." over asking them to restate the whole situation.
 
 ## Ready-to-save check
 
@@ -813,6 +822,12 @@ Arc:
 6. Ask what it may connect to: pattern, belief, value, mode, task, project, or note.
 7. Ask for tags or extra context only if that will help later review.
 
+Route note:
+
+- `self_observation` is note-backed. Read the calendar first, then create or update an
+  observed `note` with `frontmatter.observedAt` instead of inventing a standalone CRUD
+  write.
+
 If the user already gave the moment or timing, move straight to what they noticed most
 clearly instead of re-asking when.
 
@@ -839,6 +854,12 @@ Arc:
 3. Ask what goal, project, task, habit, or Psyche record it should stay connected to.
 4. Ask about tags only if they will help later review.
 
+Route note:
+
+- For ordinary create, update, delete, or search work on `sleep_session`, stay on the
+  shared batch CRUD routes. Use the reflective review helper only when enriching one
+  already-known night after review.
+
 Ready to update when:
 
 - the reflective takeaway is clear
@@ -858,6 +879,12 @@ Arc:
 2. Ask whether the key layer is effort, mood, meaning, social context, or links.
 3. Ask what it connects to in Forge if links matter.
 4. Ask about tags only if they help later retrieval.
+
+Route note:
+
+- For ordinary create, update, delete, or search work on `workout_session`, stay on
+  the shared batch CRUD routes. Use the reflective review helper only when enriching
+  one already-known workout after review.
 
 Ready to update when:
 
@@ -1008,6 +1035,8 @@ Lane-to-route map:
   `/api/v1/movement/all-time`, `/api/v1/movement/places`, or `/api/v1/movement/selection`
 - inspect the full life timeline:
   `/api/v1/movement/timeline`
+- create or revise one saved place:
+  `/api/v1/movement/places` or `/api/v1/movement/places/:id`
 - inspect one trip:
   `/api/v1/movement/trips/:id`
 - fill a missing span:
@@ -1064,6 +1093,15 @@ Lane-to-route map:
 - log a real-time tired or recovered signal:
   `POST /api/v1/life-force/fatigue-signals`
 
+Direct action rules:
+
+- If the user is describing a durable baseline such as work capacity, recovery style,
+  or action-point assumptions, patch the profile instead of logging a fatigue signal.
+- If the user is describing how one weekday should usually feel, update that weekday
+  template instead of editing the profile.
+- If the user is describing right-now depletion or recovery, post a fatigue signal and
+  then read the overview back if they want to see the updated picture.
+
 Ready to act when:
 
 - the life-force lane is clear
@@ -1116,6 +1154,16 @@ Lane-to-route map:
   `/api/v1/workbench/flows/:id/nodes/:nodeId/output`
 - inspect available box inputs:
   `/api/v1/workbench/catalog/boxes`
+
+Direct action rules:
+
+- If the user needs the stable public contract of a flow, prefer the flow detail or
+  published-output routes before a run-history read.
+- If the user wants to execute a known saved flow, use `/api/v1/workbench/flows/:id/run`.
+- If the user wants payload-first execution without depending on a saved flow id, use
+  `/api/v1/workbench/run`.
+- If the user wants one node's latest successful output, do not browse old runs first
+  unless they explicitly want historical debugging.
 
 Ready to act when:
 

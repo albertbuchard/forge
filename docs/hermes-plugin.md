@@ -44,6 +44,9 @@ The Hermes adapter now follows the native Hermes plugin guide structure end to e
 - `tools.py`
 - bundled plugin skills with native registration when supported
 - `pyproject.toml` with a `hermes_agent.plugins` entry point
+- session-boundary hooks that warm and clear one cached Forge overview per
+  Hermes session, plus a `pre_llm_call` hook that injects that cached summary on
+  the first turn
 
 Its job is to expose the same curated Forge operating surface as the OpenClaw plugin:
 
@@ -107,7 +110,7 @@ Defaults:
 
 - origin: `http://127.0.0.1`
 - port: `4317` unless a preferred relocated localhost port was learned by the shared runtime helper
-- actor label: `hermes`
+- actor label: `aurel (hermes)`
 - timeout: `15000`
 - data root: `~/.hermes/forge`
 
@@ -156,6 +159,13 @@ When the Forge target is local and the server is not already healthy, the Hermes
 calls the packaged Forge local-runtime bootstrap helper built from the same runtime code
 OpenClaw ships. That means Hermes gets the same local port relocation, health checks,
 and storage-root mismatch protection without depending on repo-only imports at runtime.
+
+The plugin also uses Hermes' documented session hooks to warm one compact Forge
+summary when a session starts, then injects that cached summary on the first
+turn through `pre_llm_call`. That matches the intended `/new` discussion model:
+Telegram gets Forge overview and current-work context before the tool loop
+starts, but Hermes does not refetch a brand-new overview on every later turn in
+the same discussion.
 
 ## Shared Multi-user Setup
 

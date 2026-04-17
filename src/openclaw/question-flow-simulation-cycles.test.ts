@@ -81,6 +81,8 @@ describe("question flow simulation cycles", () => {
     expect(entityPlaybook).toMatch(/Operational record:/i);
     expect(entityPlaybook).toMatch(/trying to understand,\s*preserve,\s*decide,\s*schedule,\s*or change something/i);
     expect(entityPlaybook).toMatch(/Do not ask for separate user-story references/i);
+    expect(entityPlaybook).toMatch(/do not widen[\s\S]*meta lane question/i);
+    expect(entityPlaybook).toMatch(/another agent could follow[\s\S]*without guessing/i);
 
     for (const section of nonPsycheSections) {
       const sectionSlice = getSectionSlice(entityPlaybook, section);
@@ -105,11 +107,15 @@ describe("question flow simulation cycles", () => {
     expect(entityPlaybook).toMatch(/what sentence future-you would need to recover from this note later/i);
     expect(entityPlaybook).toMatch(/what belongs inside the boundary and what can stay out if the scope still[\s\S]*feels muddy/i);
     expect(entityPlaybook).toMatch(/smallest concrete slice if the observation still feels vague[\s\S]*global/i);
+    expect(entityPlaybook).toMatch(/self_observation[\s\S]*note-backed|note-backed[\s\S]*self_observation/i);
+    expect(entityPlaybook).toMatch(/sleep_session[\s\S]*shared batch CRUD routes|shared batch CRUD routes[\s\S]*sleep_session/i);
+    expect(entityPlaybook).toMatch(/workout_session[\s\S]*shared batch CRUD routes|shared batch CRUD routes[\s\S]*workout_session/i);
 
     expect(psychePlaybook).toMatch(/living center of the moment/i);
     expect(psychePlaybook).toMatch(/First reflection menu/i);
     expect(psychePlaybook).toMatch(/Permission pivots/i);
     expect(psychePlaybook).toMatch(/graspable enough/i);
+    expect(psychePlaybook).toMatch(/accurate enough to be held/i);
 
     const reflectiveNonPsyche = [
       "Goal",
@@ -144,9 +150,12 @@ describe("question flow simulation cycles", () => {
     expect(entityPlaybook).toMatch(/skip the meta lane question when the user already named[\s\S]*exact correction or[\s\S]*review target/i);
     expect(entityPlaybook).toMatch(/skip the meta lane[\s\S]*ask only for the missing run, node, or output scope/i);
     expect(entityPlaybook).toMatch(/skip the meta lane[\s\S]*ask only for the specific weekday, profile field, or signal/i);
+    expect(entityPlaybook).toMatch(/latest successful node output/i);
+    expect(entityPlaybook).toMatch(/user already gave the correction in usable language/i);
 
     expect(psychePlaybook).toMatch(/Change and save pivots/i);
     expect(psychePlaybook).toMatch(/When the user says the formulation lands/i);
+    expect(psychePlaybook).toMatch(/do not ask for evidence, origin, or repair[\s\S]*all that is[\s\S]*missing/i);
     expect(psychePlaybook).toMatch(/do not switch containers unless the user wants to/i);
     expect(psychePlaybook).toMatch(/say in plain language what makes you think/i);
   });

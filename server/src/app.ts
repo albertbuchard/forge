@@ -2767,6 +2767,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
     relationshipRules: [
       "Use batch CRUD for ordinary sleep_session create, update, delete, and search work.",
       "The direct PATCH route is still available when enriching an existing night with reflective notes after review.",
+      "Do not reach for the reflective helper when a normal batch create or patch already fits the job.",
       "Sleep deletions are immediate and do not go through the settings bin."
     ],
     searchHints: [
@@ -2859,6 +2860,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
     relationshipRules: [
       "Use batch CRUD for ordinary workout_session create, update, delete, and search work.",
       "The direct PATCH route remains useful for reflective enrichment after reviewing an existing imported or habit-generated workout.",
+      "Do not reach for the reflective helper when a normal batch create or patch already fits the job.",
       "Workout deletions are immediate and do not go through the settings bin."
     ],
     searchHints: [
@@ -3364,7 +3366,8 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       "Read and mutate it through the dedicated movement routes published under specializedDomainSurfaces."
     ],
     searchHints: [
-      "Clarify whether the user wants a behavioral query, one trip or place, a missing-gap overlay, a manual add or update, or a link before choosing the route."
+      "Clarify whether the user wants a behavioral query, one trip or place, a missing-gap overlay, a manual add or update, or a link before choosing the route.",
+      "If the user already named a concrete missing span, confirm only the remaining time or place ambiguity, then use the movement overlay route and read the timeline back."
     ],
     fieldGuide: []
   }),
@@ -3378,7 +3381,8 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       "Use the dedicated overview, profile, weekday-template, and fatigue-signal routes."
     ],
     searchHints: [
-      "Clarify whether the user wants explanation, durable model changes, or a real-time tired or recovered signal before choosing the route."
+      "Clarify whether the user wants explanation, durable model changes, or a real-time tired or recovered signal before choosing the route.",
+      "Separate durable profile assumptions, weekday-template edits, and right-now fatigue signals before choosing the mutation path."
     ],
     fieldGuide: []
   }),
@@ -3392,7 +3396,8 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       "Use the dedicated workbench flow, run, output, and node-result routes."
     ],
     searchHints: [
-      "Clarify whether the user wants flow discovery, editing, execution, published output, run inspection, or node-level output before choosing the route."
+      "Clarify whether the user wants flow discovery, editing, execution, published output, run inspection, or node-level output before choosing the route.",
+      "Distinguish flow contract, published output, run history, and latest-node-output questions before reaching for a route."
     ],
     fieldGuide: []
   }),
@@ -3406,7 +3411,8 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       "Mutate it by creating or updating a note with frontmatter.observedAt."
     ],
     searchHints: [
-      "Read the self-observation calendar before proposing new reflected notes or edits."
+      "Read the self-observation calendar before proposing new reflected notes or edits.",
+      "Write through note creation or note update with frontmatter.observedAt instead of inventing a standalone self-observation mutation route."
     ],
     fieldGuide: []
   }),
@@ -3455,16 +3461,19 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
   "Do not over-therapize logistical entities. For tasks, calendar events, work blocks, timeboxes, and task runs, one brief confirming sentence plus one question is usually enough.",
   "After each substantive answer, briefly say what is becoming clearer and ask only for the next thing that still changes the record shape or usefulness.",
   "For strategic, reflective, or emotionally meaningful non-Psyche records, ask what feels important to keep true before you ask for labels, dates, or taxonomy.",
-  "For reusable records such as tags, event types, emotion definitions, preference contexts, or questionnaires, ask what distinction or decision the record should help with before you ask for wording.",
-  "When useful, help the user name, define, and connect the record in that order: offer a working label, clarify what belongs inside it, then ask about links only after the record itself feels steady.",
-  "When the meaning is clearer than the wording, offer a tentative title or formulation yourself and invite correction instead of forcing the user to wordsmith alone.",
-  "Before saving, briefly summarize the working formulation in the user's own language when that would reduce ambiguity.",
+      "For reusable records such as tags, event types, emotion definitions, preference contexts, or questionnaires, ask what distinction or decision the record should help with before you ask for wording.",
+      "When useful, help the user name, define, and connect the record in that order: offer a working label, clarify what belongs inside it, then ask about links only after the record itself feels steady.",
+      "When the meaning is clearer than the wording, offer a tentative title or formulation yourself and invite correction instead of forcing the user to wordsmith alone.",
+      "For direct update or review requests, the next question should usually narrow the saved object, timeframe, or route family instead of reopening the whole meaning-making arc.",
+      "Before saving, briefly summarize the working formulation in the user's own language when that would reduce ambiguity.",
   "Once the record is clear enough to name, stop exploring broadly and ask only for the last structural detail that still matters.",
   "If the record is already clear enough to save, save it instead of performing a ceremonial extra question.",
   "If the user accepts the wording or record shape, move to the write instead of reopening the intake.",
   "When updating an entity, start with what is changing, what should stay true, and what prompted the update now.",
   "For action-heavy flows such as work adjustments, preference judgments, preference signals, and specialized Movement, Life Force, or Workbench work, first ask what the user is trying to understand, change, add, update, link, or run, then choose the dedicated action or surface route instead of forcing the request into generic CRUD.",
   "For specialized surfaces, ask what would make the answer or change useful before you ask route-shaped details such as provider, weekday, flow id, run id, or trip id.",
+  "When the user already named a precise correction or review target, do not widen back out into a meta lane question. Confirm only the missing route-selecting detail and then act.",
+  "Once the route family is clear, say it plainly enough that another agent could follow the same path without guessing.",
   "For Movement specifically, treat missing-data corrections as user-defined overlay boxes unless the user is editing an already-recorded stay or trip. When the user already gave a clear instruction like 'that missing block was home', act after only the last ambiguity is resolved."
 ] as const;
 
@@ -3675,6 +3684,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
       "Ask what felt most important to name before it gets smoothed over or forgotten.",
       "Ask for the smallest concrete slice if the observation still feels vague or global.",
       "Ask when it happened or became noticeable unless timing is already clear.",
+      "Remember that self-observation is note-backed and should be written through an observed note with frontmatter.observedAt.",
       "Ask what it may connect to: pattern, belief, value, mode, task, project, or note.",
       "Ask for tags or extra context only if that will help later review."
     ]
@@ -3688,6 +3698,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     askSequence: [
       "Ask what about the night feels worth capturing.",
       "Ask whether the main point is quality, pattern, context, meaning, or links.",
+      "Use the shared batch CRUD path for ordinary sleep_session create or update work, and reserve the reflective helper for enrichment after review.",
       "Ask what goal, project, task, habit, or Psyche record it should stay connected to.",
       "Ask about tags only if they will help later review."
     ]
@@ -3701,6 +3712,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     askSequence: [
       "Ask what about the session the user wants to preserve.",
       "Ask whether the key layer is effort, mood, meaning, social context, or links.",
+      "Use the shared batch CRUD path for ordinary workout_session create or update work, and reserve the reflective helper for enrichment after review.",
       "Ask what it connects to in Forge if links matter.",
       "Ask about tags only if they help later retrieval."
     ]
@@ -3825,6 +3837,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
       "Skip the meta lane question when the user already named the exact correction or review target and only one ambiguity remains.",
       "If the request is filling a missing-data gap, use a user-defined movement box rather than a raw stay or trip patch.",
       "If the request is repairing already-saved movement data, use the repair route that matches the saved object instead of treating it like a missing span.",
+      "When the user wants place creation or place cleanup, use the dedicated movement place routes rather than a generic entity mutation.",
       "When the user already gave a concrete correction like 'I stayed home during that missing block', confirm only the interval or place if needed, then create the overlay and read the timeline back."
     ]
   },
@@ -3840,6 +3853,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
       "Ask what should stay true if they are changing profile or template assumptions.",
       "Ask whether the user is describing a stable weekly shape or just how today feels when the lane is still blurred.",
       "If the user already named the life-force lane clearly, skip the meta lane question and ask only for the specific weekday, profile field, or signal that still matters.",
+      "If the request is about a durable baseline, use profile or weekday-template mutation rather than a fatigue signal; if it is about right now, prefer the fatigue-signal route.",
       "Route to the dedicated life-force path once the lane is clear."
     ]
   },
@@ -3855,6 +3869,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
       "Ask whether they need the flow contract, a run result, a published output, or a node result.",
       "Ask what the user is trying to learn, repair, or publish through that flow.",
       "If the user already named the flow and action clearly, skip the meta lane question and ask only for the missing run, node, or output scope.",
+      "Prefer flow detail or published-output reads for stable contracts, and use run or node-result routes only when the user is asking about execution history or debugging.",
       "Route to the dedicated workbench route family once the execution lane is clear."
     ]
   },
@@ -4995,7 +5010,8 @@ function buildAgentOnboardingPayload(request: {
           notes: [
             "Life Force is a focused domain surface, not a batch CRUD entity type.",
             "Use GET /api/v1/life-force for the current overview payload with stats, drains, recommendations, and current-curve state.",
-            "Patch the profile only for durable personal settings, update weekday templates only for the curve itself, and post fatigue signals for real-time tired or recovered observations."
+            "Patch the profile only for durable personal settings, update weekday templates only for the curve itself, and post fatigue signals for real-time tired or recovered observations.",
+            "If the user already knows they want a profile change, weekday-template edit, or right-now fatigue signal, skip the broad lane question and ask only for the missing weekday, profile field, or signal detail."
           ]
         },
         workbench: {
@@ -5026,7 +5042,8 @@ function buildAgentOnboardingPayload(request: {
           notes: [
             "Workbench is a dedicated execution surface, not a batch CRUD entity family.",
             "Use the flow routes when the agent needs stable public input contracts, published outputs, node-level results, or reusable execution history.",
-            "Prefer the dedicated output and node-result routes over reverse-engineering raw traces."
+            "Prefer the dedicated output and node-result routes over reverse-engineering raw traces.",
+            "If the user already named the flow and wants one output or one run, skip the broad lane question and ask only for the missing run, node, or output scope."
           ]
         }
       },
@@ -5219,6 +5236,12 @@ function buildAgentOnboardingPayload(request: {
       maxQuestionsPerTurn: 1,
       psycheExplorationRule:
         "When a Psyche entity needs understanding first, begin with one exploratory question before any working formulation, replacement belief, suggested title, or save pitch. Keep the opening reflection to one or two short sentences, stay in plain prose instead of bullets or numbered lists, keep that first reply short, do not mention Forge search or save structure yet, avoid colons or list-shaped phrasing, prefer what/when/how over why until the experience is grounded, wait for the user's answer before offering a fuller formulation, ask permission before moving from charged exploration into naming or challenge when needed, do not widen into adjacent entities until the current one has a working sentence the user recognizes, and once the lived experience is coherent stop deepening and help the user name it cleanly. If the user accepts the wording, move toward the save instead of reopening deeper exploration.",
+      specializedSurfaceRule:
+        "For Movement, Life Force, and Workbench, clarify the lane first, then name the dedicated route family in plain language and do not guess at a generic CRUD path. When the user already named a precise correction or review target, confirm only the route-selecting detail that is still missing.",
+      reviewShortcutRule:
+        "When the user is reviewing or correcting an existing record, narrow the saved object, timeframe, or route family first. Do not reopen the whole intake unless the user is actually redefining the record.",
+      readModelWriteRule:
+        "Self-observation is note-backed and should be written through observed notes with frontmatter.observedAt. Sleep and workout sessions stay on batch CRUD by default; use the reflective review helpers only when enriching one already-known record after review.",
       psycheOpeningQuestionRule:
         "Prefer a concrete opening question tied to the entity: ask when the value mattered, what happened the last time the pattern appeared, what cue or body signal came first before the behavior, what the belief starts saying about self or outcome, what feels most at risk inside the mode, what the part is trying to get the user to do or stop doing, or where the shift began in the incident. Reflect briefly before the question, choose one follow-up lane at a time, say what is becoming clearer before the next deeper question, and if several Psyche entities are visible hold the adjacent ones lightly until the main container is clear.",
       duplicateCheckRoute: "/api/v1/entities/search",

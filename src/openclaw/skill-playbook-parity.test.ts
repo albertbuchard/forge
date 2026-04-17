@@ -148,6 +148,11 @@ describe("forge skill playbook parity", () => {
     expect(entityPlaybook).toMatch(/offer one revised formulation yourself/i);
     expect(entityPlaybook).toMatch(/repeated moment back in plain language/i);
     expect(entityPlaybook).toMatch(/felt signature back in plain language/i);
+    expect(entityPlaybook).toMatch(/another agent could follow[\s\S]*without guessing/i);
+    expect(entityPlaybook).toMatch(/confirm only the missing route-selecting detail[\s\S]*then act/i);
+    expect(entityPlaybook).toMatch(/self_observation[\s\S]*note-backed|note-backed[\s\S]*self_observation/i);
+    expect(entityPlaybook).toMatch(/sleep_session[\s\S]*shared batch CRUD routes|shared batch CRUD routes[\s\S]*sleep_session/i);
+    expect(entityPlaybook).toMatch(/workout_session[\s\S]*shared batch CRUD routes|shared batch CRUD routes[\s\S]*workout_session/i);
     expect(entityPlaybook).toMatch(/## Preference Catalog/);
     expect(entityPlaybook).toMatch(/## Preference Catalog Item/);
     expect(entityPlaybook).toMatch(/## Preference Context/);
@@ -190,6 +195,8 @@ describe("forge skill playbook parity", () => {
     expect(psychePlaybook).toMatch(/what does it seem to prove in that moment/i);
     expect(psychePlaybook).toMatch(/Psyche update loop/i);
     expect(psychePlaybook).toMatch(/newly true, newly visible, or newly inaccurate/i);
+    expect(psychePlaybook).toMatch(/accurate enough to be held/i);
+    expect(psychePlaybook).toMatch(/do not ask for evidence, origin, or repair[\s\S]*all that is[\s\S]*missing/i);
     expect(psychePlaybook).toMatch(/Do not make the user prove the experience/i);
     expect(psychePlaybook).toMatch(/Do not widen into adjacent entities until the current one has a working sentence/i);
     expect(psychePlaybook).toMatch(/If the user says it lands, move toward the write/i);
@@ -321,6 +328,10 @@ describe("forge skill playbook parity", () => {
     expect(appSource).toMatch(/movementAutomaticBoxInvalidate:/);
     expect(appSource).toMatch(/movementTripPointUpdate:/);
     expect(appSource).toMatch(/workbenchFlows:/);
+    expect(appSource).toMatch(/specializedSurfaceRule:/);
+    expect(appSource).toMatch(/another agent could follow the same path without guessing/i);
+    expect(appSource).toMatch(/shared batch CRUD path for ordinary sleep_session create or update work/i);
+    expect(appSource).toMatch(/shared batch CRUD path for ordinary workout_session create or update work/i);
 
     expect(openApiSource).toMatch(/"workAdjustment"/);
     expect(openApiSource).toMatch(/"movement"/);

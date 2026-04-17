@@ -21,6 +21,10 @@ models, so Hermes can inspect recent nights, review workout context, enrich
 health sessions with reflective links, and work with file-first wiki pages.
 It also exposes a dedicated `forge_get_doctor` diagnostic tool for runtime and
 config-file health checks.
+It also warms a session-scoped Forge overview through Hermes' documented
+`on_session_start` hook and injects that cached summary on the first turn
+through `pre_llm_call`, so a fresh `/new` discussion starts with current
+operator context without refetching Forge on every later turn.
 
 Forge PM behavior Hermes should understand is:
 
@@ -70,6 +74,9 @@ If you want a non-editable wheel-style install instead:
 - the stable local web entrypoint stays `http://127.0.0.1:4317/forge/`; if the shared runtime is in dev mode it can supervise the Vite frontend behind that same URL instead of exposing `3027` directly
 - when port `4317` is busy and not explicitly pinned, the shared runtime helper can move Forge to the next free localhost port and remember that preferred port
 - if another Forge runtime is already serving the wrong storage root, startup fails loudly instead of attaching to the wrong database
+- Forge fetches one compact operator summary per Hermes session, caches it for
+  that session, injects it on the first turn, and clears it when the session is
+  finalized or reset
 
 ## Doctor And forge.json
 
