@@ -1929,6 +1929,24 @@ export function downloadDataExport(format) {
 export function listAgents() {
     return request("/api/v1/agents");
 }
+export function listAgentRuntimeSessions() {
+    return request("/api/v1/agents/sessions");
+}
+export function getAgentRuntimeSessionHistory(sessionId) {
+    return request(`/api/v1/agents/sessions/${sessionId}/history`);
+}
+export function reconnectAgentRuntimeSession(sessionId, note = "") {
+    return request(`/api/v1/agents/sessions/${sessionId}/reconnect`, {
+        method: "POST",
+        body: JSON.stringify({ note })
+    });
+}
+export function disconnectAgentRuntimeSession(sessionId, input = {}) {
+    return request(`/api/v1/agents/sessions/${sessionId}/disconnect`, {
+        method: "POST",
+        body: JSON.stringify(input)
+    });
+}
 export function getAgentOnboarding() {
     return request("/api/v1/agents/onboarding");
 }
@@ -2242,6 +2260,20 @@ export function claimTaskRun(taskId, input) {
         method: "POST",
         body: JSON.stringify(input)
     });
+}
+export function getGitHelperOverview() {
+    return request("/api/v1/git-helper/overview");
+}
+export function searchGitHelperRefs(input) {
+    const search = new URLSearchParams();
+    search.set("kind", input.kind);
+    if (input.query?.trim()) {
+        search.set("query", input.query.trim());
+    }
+    if (input.repository?.trim()) {
+        search.set("repository", input.repository.trim());
+    }
+    return request(`/api/v1/git-helper/search?${search.toString()}`);
 }
 export function heartbeatTaskRun(taskRunId, input) {
     return request(`/api/v1/task-runs/${taskRunId}/heartbeat`, {

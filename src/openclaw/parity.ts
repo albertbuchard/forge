@@ -53,6 +53,103 @@ export const FORGE_SUPPORTED_PLUGIN_API_ROUTES: ForgeSupportedPluginApiRoute[] =
     { method: "PATCH", path: "/api/v1/health/sleep/:id", purpose: "health" },
     { method: "GET", path: "/api/v1/health/fitness", purpose: "health" },
     { method: "PATCH", path: "/api/v1/health/workouts/:id", purpose: "health" },
+    { method: "GET", path: "/api/v1/movement/day", purpose: "health" },
+    { method: "GET", path: "/api/v1/movement/month", purpose: "health" },
+    { method: "GET", path: "/api/v1/movement/all-time", purpose: "health" },
+    { method: "GET", path: "/api/v1/movement/timeline", purpose: "health" },
+    { method: "GET", path: "/api/v1/movement/places", purpose: "health" },
+    { method: "POST", path: "/api/v1/movement/places", purpose: "health" },
+    { method: "PATCH", path: "/api/v1/movement/places/:id", purpose: "health" },
+    { method: "GET", path: "/api/v1/movement/trips/:id", purpose: "health" },
+    { method: "POST", path: "/api/v1/movement/selection", purpose: "health" },
+    { method: "GET", path: "/api/v1/movement/settings", purpose: "health" },
+    { method: "POST", path: "/api/v1/movement/user-boxes", purpose: "health" },
+    {
+      method: "POST",
+      path: "/api/v1/movement/user-boxes/preflight",
+      purpose: "health"
+    },
+    {
+      method: "PATCH",
+      path: "/api/v1/movement/user-boxes/:id",
+      purpose: "health"
+    },
+    {
+      method: "POST",
+      path: "/api/v1/movement/automatic-boxes/:id/invalidate",
+      purpose: "health"
+    },
+    { method: "PATCH", path: "/api/v1/movement/stays/:id", purpose: "health" },
+    { method: "PATCH", path: "/api/v1/movement/trips/:id", purpose: "health" },
+    {
+      method: "PATCH",
+      path: "/api/v1/movement/trips/:id/points/:pointId",
+      purpose: "health"
+    },
+    { method: "GET", path: "/api/v1/life-force", purpose: "health" },
+    { method: "PATCH", path: "/api/v1/life-force/profile", purpose: "health" },
+    {
+      method: "PUT",
+      path: "/api/v1/life-force/templates/:weekday",
+      purpose: "health"
+    },
+    {
+      method: "POST",
+      path: "/api/v1/life-force/fatigue-signals",
+      purpose: "health"
+    },
+    { method: "GET", path: "/api/v1/workbench/catalog/boxes", purpose: "work" },
+    { method: "GET", path: "/api/v1/workbench/flows", purpose: "work" },
+    { method: "POST", path: "/api/v1/workbench/flows", purpose: "work" },
+    { method: "GET", path: "/api/v1/workbench/flows/:id", purpose: "work" },
+    { method: "PATCH", path: "/api/v1/workbench/flows/:id", purpose: "work" },
+    { method: "DELETE", path: "/api/v1/workbench/flows/:id", purpose: "work" },
+    {
+      method: "GET",
+      path: "/api/v1/workbench/flows/by-slug/:slug",
+      purpose: "work"
+    },
+    {
+      method: "POST",
+      path: "/api/v1/workbench/flows/:id/run",
+      purpose: "work"
+    },
+    { method: "POST", path: "/api/v1/workbench/run", purpose: "work" },
+    {
+      method: "POST",
+      path: "/api/v1/workbench/flows/:id/chat",
+      purpose: "work"
+    },
+    {
+      method: "GET",
+      path: "/api/v1/workbench/flows/:id/output",
+      purpose: "work"
+    },
+    {
+      method: "GET",
+      path: "/api/v1/workbench/flows/:id/runs",
+      purpose: "work"
+    },
+    {
+      method: "GET",
+      path: "/api/v1/workbench/flows/:id/runs/:runId",
+      purpose: "work"
+    },
+    {
+      method: "GET",
+      path: "/api/v1/workbench/flows/:id/runs/:runId/nodes",
+      purpose: "work"
+    },
+    {
+      method: "GET",
+      path: "/api/v1/workbench/flows/:id/runs/:runId/nodes/:nodeId",
+      purpose: "work"
+    },
+    {
+      method: "GET",
+      path: "/api/v1/workbench/flows/:id/nodes/:nodeId/output",
+      purpose: "work"
+    },
     { method: "GET", path: "/api/v1/calendar/overview", purpose: "calendar" },
     {
       method: "GET",

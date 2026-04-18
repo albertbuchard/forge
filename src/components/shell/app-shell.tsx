@@ -134,6 +134,7 @@ import type {
   CalendarSchedulingRules,
   ForgeSnapshot,
   SettingsPayload,
+  TaskRun,
   UserSummary,
   WikiIngestJobPayload
 } from "@/lib/types";
@@ -172,6 +173,7 @@ type ShellContextValue = {
       plannedDurationSeconds?: number | null;
     }
   ) => Promise<void>;
+  stopTaskRun: (run: TaskRun) => Promise<void>;
   createGoal: (input: GoalMutationInput) => Promise<void>;
   createProject: (input: ProjectMutationInput) => Promise<void>;
   patchGoal: (goalId: string, patch: GoalMutationInput) => Promise<void>;
@@ -1566,6 +1568,7 @@ function ShellFrame({
     input: {
       timerMode: "planned" | "unlimited";
       plannedDurationSeconds: number | null;
+      gitContext: import("@/lib/types").TaskRunGitContext | null;
     }
   ) => Promise<void>;
   onCreateAndStartTask: (input: {
@@ -1574,6 +1577,7 @@ function ShellFrame({
     projectId: string;
     timerMode: "planned" | "unlimited";
     plannedDurationSeconds: number | null;
+    gitContext: import("@/lib/types").TaskRunGitContext | null;
   }) => Promise<void>;
   onFocusRun: (runId: string) => Promise<void>;
   onPauseRun: (runId: string) => Promise<void>;
@@ -2681,6 +2685,7 @@ export function AppShell() {
       projectId: string;
       timerMode: "planned" | "unlimited";
       plannedDurationSeconds: number | null;
+      gitContext: import("@/lib/types").TaskRunGitContext | null;
     }) => {
       const project = snapshotQuery.data?.dashboard.projects.find(
         (entry) => entry.id === input.projectId
@@ -2724,7 +2729,8 @@ export function AppShell() {
         plannedDurationSeconds: input.plannedDurationSeconds,
         isCurrent: true,
         leaseTtlSeconds: 1800,
-        note: ""
+        note: "",
+        gitContext: input.gitContext
       });
       if (!started) {
         throw new Error(
@@ -2849,6 +2855,16 @@ export function AppShell() {
         note: ""
       });
     },
+    stopTaskRun: async (run) => {
+      await releaseTaskRunMutation({
+        runId: run.id,
+        input: {
+          actor: run.actor,
+          note: run.note ?? ""
+        }
+      }).unwrap();
+      await refreshLegacySnapshotQueries();
+    },
     createGoal: async (input) => {
       await createGoalMutation(input).unwrap();
       await refreshLegacySnapshotQueries();
@@ -2918,7 +2934,8 @@ export function AppShell() {
                   plannedDurationSeconds: input.plannedDurationSeconds,
                   isCurrent: true,
                   leaseTtlSeconds: 1800,
-                  note: ""
+                  note: "",
+                  gitContext: input.gitContext
                 });
                 if (started) {
                   setStartWorkOpen(false);

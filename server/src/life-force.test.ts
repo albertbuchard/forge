@@ -325,6 +325,9 @@ test("life force integrates sleep, wake, movement, and planned calendar drains i
       title: "Deep work timebox",
       startsAt: `${dateKey}T14:00:00.000Z`,
       endsAt: `${dateKey}T16:00:00.000Z`,
+      status: "planned",
+      source: "manual",
+      overrideReason: null,
       userId: "user_operator"
     });
 
@@ -422,6 +425,9 @@ test("life force debits elapsed timeboxes, work blocks, and calendar containers 
       title: "Morning planning",
       startsAt: `${dateKey}T09:00:00.000Z`,
       endsAt: `${dateKey}T10:00:00.000Z`,
+      status: "planned",
+      source: "manual",
+      overrideReason: null,
       userId: "user_operator"
     });
 
@@ -441,6 +447,15 @@ test("life force debits elapsed timeboxes, work blocks, and calendar containers 
       title: "Hiring meeting",
       description: "",
       location: "",
+      place: {
+        label: "",
+        address: "",
+        timezone: "",
+        latitude: null,
+        longitude: null,
+        source: "",
+        externalPlaceId: ""
+      },
       startAt: `${dateKey}T11:00:00.000Z`,
       endAt: `${dateKey}T12:00:00.000Z`,
       timezone: "UTC",
@@ -506,6 +521,15 @@ test("life force gives calendar events precedence over overlapping work blocks f
       title: "Lunch consult",
       description: "",
       location: "",
+      place: {
+        label: "",
+        address: "",
+        timezone: "",
+        latitude: null,
+        longitude: null,
+        source: "",
+        externalPlaceId: ""
+      },
       startAt: `${dateKey}T13:00:00.000Z`,
       endAt: `${dateKey}T14:00:00.000Z`,
       timezone: "UTC",
@@ -606,6 +630,9 @@ test("life force honors custom calendar AP profiles and keeps rest or holiday bl
       title: "Custom AP timebox",
       startsAt: `${dateKey}T09:00:00.000Z`,
       endsAt: `${dateKey}T10:00:00.000Z`,
+      status: "planned",
+      source: "manual",
+      overrideReason: null,
       activityPresetKey: "admin",
       customSustainRateApPerHour: 7.25,
       userId: "user_operator"
@@ -629,6 +656,15 @@ test("life force honors custom calendar AP profiles and keeps rest or holiday bl
       title: "Free lunch but still an activity",
       description: "",
       location: "",
+      place: {
+        label: "",
+        address: "",
+        timezone: "",
+        latitude: null,
+        longitude: null,
+        source: "",
+        externalPlaceId: ""
+      },
       startAt: `${dateKey}T11:00:00.000Z`,
       endAt: `${dateKey}T12:00:00.000Z`,
       timezone: "UTC",

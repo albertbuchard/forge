@@ -2503,7 +2503,8 @@ function buildTimeboxAndWorkBlockDrains(
         why: "Elapsed timeboxes count toward today's Action Point spend when no richer timed source covered that window.",
         startsAt: row.starts_at,
         endsAt: elapsedWindow.endAt,
-        role: "background"
+        role: "background",
+        metadata: {}
       });
     }
     const remainingStartMs = Math.max(now.getTime(), Date.parse(row.starts_at));
@@ -2550,7 +2551,8 @@ function buildTimeboxAndWorkBlockDrains(
         why: "An active timebox still occupies current capacity even before live work logging starts.",
         startsAt: row.starts_at,
         endsAt: row.ends_at,
-        role: "background"
+        role: "background",
+        metadata: {}
       });
     }
   }
@@ -2714,7 +2716,8 @@ function buildCalendarDrains(
           why: "Busy calendar events debit today's AP when they were real containers and nothing richer occupied the same window.",
           startsAt: row.start_at,
           endsAt: elapsedWindow.endAt,
-          role: "background"
+          role: "background",
+          metadata: {}
         });
       }
       const remainingStartMs = Math.max(now.getTime(), Date.parse(row.start_at));
@@ -2732,7 +2735,8 @@ function buildCalendarDrains(
           why: "Busy calendar events reserve attention and social bandwidth even before deeper work is linked to them.",
           startsAt: row.start_at,
           endsAt: row.end_at,
-          role: "background"
+          role: "background",
+          metadata: {}
         });
       }
       if (
@@ -2751,7 +2755,8 @@ function buildCalendarDrains(
           why: "Calendar context occupies mental and social capacity even before task work is logged.",
           startsAt: row.start_at,
           endsAt: row.end_at,
-          role: "background"
+          role: "background",
+          metadata: {}
         });
       }
     }
@@ -3099,9 +3104,15 @@ export function buildLifeForcePayload(now = new Date(), userIds?: string[]): Lif
       continue;
     }
     if (contribution.entityType === "work_block") {
+      const metadata =
+        "metadata" in contribution &&
+        contribution.metadata &&
+        typeof contribution.metadata === "object"
+          ? contribution.metadata
+          : undefined;
       const templateId =
-        typeof contribution.metadata?.templateId === "string"
-          ? contribution.metadata.templateId
+        typeof metadata?.templateId === "string"
+          ? metadata.templateId
           : contribution.entityId;
       profileLookup.set(
         `${contribution.entityType}:${contribution.entityId}`,

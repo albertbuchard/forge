@@ -523,46 +523,64 @@ function defaultOutputsForNode(node) {
     if (node.data.outputs?.length) {
         return node.data.outputs.map((port) => normalizeWorkbenchPortDefinition(port));
     }
+    const port = (definition) => normalizeWorkbenchPortDefinition({
+        ...definition,
+        required: false,
+        expandableKeys: [],
+        shape: []
+    });
     switch (node.type) {
         case "user_input":
-            return [{ key: "message", label: "Message", kind: "text" }];
+            return [port({ key: "message", label: "Message", kind: "text" })];
         case "value":
-            return [{ key: "value", label: "Value", kind: "record" }];
+            return [port({ key: "value", label: "Value", kind: "record" })];
         case "merge":
-            return [{ key: "merged", label: "Merged context", kind: "context" }];
+            return [port({ key: "merged", label: "Merged context", kind: "context" })];
         case "template":
-            return [{ key: "rendered", label: "Rendered output", kind: "markdown" }];
+            return [port({ key: "rendered", label: "Rendered output", kind: "markdown" })];
         case "pick_key":
-            return [{ key: "selected", label: "Selected value", kind: "record" }];
+            return [port({ key: "selected", label: "Selected value", kind: "record" })];
         case "functor":
         case "chat":
-            return [{ key: "answer", label: "Answer", kind: "markdown" }];
+            return [port({ key: "answer", label: "Answer", kind: "markdown" })];
         case "output":
-            return [{ key: node.data.outputKey?.trim() || "result", label: "Published result", kind: "record" }];
+            return [
+                port({
+                    key: node.data.outputKey?.trim() || "result",
+                    label: "Published result",
+                    kind: "record"
+                })
+            ];
         case "box":
         case "box_input":
-            return [{ key: "summary", label: "Summary", kind: "summary" }];
+            return [port({ key: "summary", label: "Summary", kind: "summary" })];
     }
 }
 function defaultInputsForNode(node) {
     if (node.data.inputs?.length) {
         return node.data.inputs.map((port) => normalizeWorkbenchPortDefinition(port));
     }
+    const port = (definition) => normalizeWorkbenchPortDefinition({
+        ...definition,
+        required: false,
+        expandableKeys: [],
+        shape: []
+    });
     switch (node.type) {
         case "functor":
         case "chat":
-            return [{ key: "input", label: "Flow input", kind: "context" }];
+            return [port({ key: "input", label: "Flow input", kind: "context" })];
         case "merge":
             return [
-                { key: "left", label: "Left input", kind: "context" },
-                { key: "right", label: "Right input", kind: "context" }
+                port({ key: "left", label: "Left input", kind: "context" }),
+                port({ key: "right", label: "Right input", kind: "context" })
             ];
         case "template":
-            return [{ key: "input", label: "Template input", kind: "context" }];
+            return [port({ key: "input", label: "Template input", kind: "context" })];
         case "pick_key":
-            return [{ key: "object", label: "Source object", kind: "object" }];
+            return [port({ key: "object", label: "Source object", kind: "object" })];
         case "output":
-            return [{ key: "result", label: "Published result", kind: "record" }];
+            return [port({ key: "result", label: "Published result", kind: "record" })];
         default:
             return [];
     }
@@ -1527,6 +1545,7 @@ function migrateLegacyProcessor(processorId) {
         homeSurfaceId: processor.surfaceId,
         endpointEnabled: processor.endpointEnabled,
         graph,
+        publicInputs: [],
         legacyProcessorId: processor.id
     });
 }

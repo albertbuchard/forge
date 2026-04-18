@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import AdmZip from "adm-zip";
+import AdmZip, { type AdmZipEntry } from "adm-zip";
 import {
   accessSync,
   existsSync,
@@ -4198,7 +4198,7 @@ export async function processWikiIngestJob(
         const archive = new AdmZip(nextAsset.file_path);
         const entries = archive
           .getEntries()
-          .filter((entry) => !entry.isDirectory);
+          .filter((entry: AdmZipEntry) => !entry.isDirectory);
         for (const entry of entries) {
           const payload = entry.getData();
           const fileName = path.basename(entry.entryName);

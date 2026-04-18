@@ -483,7 +483,7 @@ function listMovementBoxRows(input) {
     }
     const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
     return getDatabase()
-        .prepare(`SELECT *
+        .prepare(`SELECT rowid AS sqlite_rowid, *
        FROM movement_boxes
        ${where}
        ORDER BY started_at ASC, ended_at ASC, created_at ASC`)
@@ -491,7 +491,7 @@ function listMovementBoxRows(input) {
 }
 function getMovementBoxRow(id) {
     return getDatabase()
-        .prepare(`SELECT *
+        .prepare(`SELECT rowid AS sqlite_rowid, *
        FROM movement_boxes
        WHERE id = ?`)
         .get(id);
@@ -556,6 +556,14 @@ function normalizeMovementBoxSubtitle(row) {
         : "User-defined missing-data override.";
 }
 function mapMovementBoxRow(row) {
+    const metadata = {
+        ...movementBoxMetadata(row),
+        overrideRanges: movementBoxOverrideRanges(row),
+        overriddenStartedAt: row.overridden_started_at,
+        overriddenEndedAt: row.overridden_ended_at,
+        overriddenByBoxId: row.overridden_by_box_id,
+        isOverridden: row.is_overridden === 1
+    };
     return {
         id: row.id,
         boxId: row.id,
@@ -575,8 +583,8 @@ function mapMovementBoxRow(row) {
         placeLabel: row.place_label,
         anchorExternalUid: row.anchor_external_uid,
         tags: movementBoxTags(row),
-        distanceMeters: row.distance_meters ?? 0,
-        averageSpeedMps: row.average_speed_mps ?? 0,
+        distanceMeters: row.distance_meters,
+        averageSpeedMps: row.average_speed_mps,
         overrideCount: row.override_count,
         overriddenAutomaticBoxIds: movementBoxOverriddenAutomaticBoxIds(row),
         overriddenUserBoxIds: movementBoxOverriddenUserBoxIds(row),
@@ -585,14 +593,7 @@ function mapMovementBoxRow(row) {
         rawTripIds: movementBoxRawTripIds(row),
         rawPointCount: row.raw_point_count,
         hasLegacyCorrections: row.has_legacy_corrections === 1,
-        metadata: {
-            ...movementBoxMetadata(row),
-            overrideRanges: movementBoxOverrideRanges(row),
-            overriddenStartedAt: row.overridden_started_at,
-            overriddenEndedAt: row.overridden_ended_at,
-            overriddenByBoxId: row.overridden_by_box_id,
-            isOverridden: row.is_overridden === 1
-        },
+        metadata,
         createdAt: row.created_at,
         updatedAt: row.updated_at
     };
@@ -2068,18 +2069,21 @@ export function updateMovementPlace(placeId, patch, context) {
 function buildMovementTimelineTitleForStay(stay) {
     return stay.place?.label || stay.label || "Stay";
 }
-function buildMovementTimelineSubtitleForStay(stay) {
+function movementStayTags(stay) {
     const metricTags = Array.isArray(stay.metrics.tags)
         ? (stay.metrics.tags ?? [])
         : [];
     const metadataTags = Array.isArray(stay.metadata.tags)
         ? (stay.metadata.tags ?? [])
         : [];
-    const tags = uniqStrings([
+    return uniqStrings([
         ...(stay.place?.categoryTags ?? []),
         ...metricTags,
         ...metadataTags
     ]);
+}
+function buildMovementTimelineSubtitleForStay(stay) {
+    const tags = movementStayTags(stay);
     if (tags.length > 0) {
         return tags.join(" · ");
     }
@@ -2135,6 +2139,7 @@ function buildDerivedMovementGapSegment(input) {
         startedAt: input.startedAt,
         endedAt: input.endedAt,
         durationSeconds: durationSeconds(input.startedAt, input.endedAt),
+        payload: null,
         displacementMeters: input.displacementMeters ?? null,
         placeLabel: input.placeLabel ?? null,
         suppressedShortJump: input.suppressedShortJump ?? false,
@@ -2417,6 +2422,7 @@ function ensureProjectedMovementBoxCoverage(segments, options) {
         if (gapSeconds <= 0) {
             return null;
         }
+        const generatedAt = nowIso();
         const previousBoundary = previous
             ? options.resolveBoundary(previous, "end")
             : null;
@@ -2438,6 +2444,7 @@ function ensureProjectedMovementBoxCoverage(segments, options) {
                 durationSeconds: gapSeconds,
                 title: "Missing data",
                 subtitle: "No trusted movement signal for this period.",
+                anchorExternalUid: null,
                 placeLabel: previousBoundary?.placeLabel ?? nextBoundary?.placeLabel ?? null,
                 tags: ["missing-data"],
                 distanceMeters: null,
@@ -2450,7 +2457,9 @@ function ensureProjectedMovementBoxCoverage(segments, options) {
                 rawTripIds: [],
                 rawPointCount: 0,
                 hasLegacyCorrections: false,
-                metadata: { syncSource: "automatic" }
+                metadata: { syncSource: "automatic" },
+                createdAt: generatedAt,
+                updatedAt: generatedAt
             };
         }
         if (projectedBoundariesShareAnchor(previousBoundary, nextBoundary)) {
@@ -2474,6 +2483,7 @@ function ensureProjectedMovementBoxCoverage(segments, options) {
                     nextBoundary?.placeLabel ??
                     "Continued stay",
                 subtitle: "Short stationary gap carried forward into one continuous stay.",
+                anchorExternalUid: null,
                 placeLabel: previousBoundary?.placeLabel ?? nextBoundary?.placeLabel ?? null,
                 tags: ["continued_stay"],
                 distanceMeters: null,
@@ -2486,7 +2496,9 @@ function ensureProjectedMovementBoxCoverage(segments, options) {
                 rawTripIds: [],
                 rawPointCount: 0,
                 hasLegacyCorrections: false,
-                metadata: { syncSource: "automatic" }
+                metadata: { syncSource: "automatic" },
+                createdAt: generatedAt,
+                updatedAt: generatedAt
             };
         }
         const displacementMeters = projectedBoundaryDistanceMeters(previousBoundary, nextBoundary);
@@ -2511,6 +2523,7 @@ function ensureProjectedMovementBoxCoverage(segments, options) {
                 subtitle: gapSeconds < 5 * 60
                     ? "Short jump under five minutes suppressed into stay continuity."
                     : "Short gap repaired as a stay between known anchors.",
+                anchorExternalUid: null,
                 placeLabel: previousBoundary?.placeLabel ?? nextBoundary?.placeLabel ?? null,
                 tags: gapSeconds < 5 * 60
                     ? ["repaired_gap", "suppressed-short-jump"]
@@ -2525,7 +2538,9 @@ function ensureProjectedMovementBoxCoverage(segments, options) {
                 rawTripIds: [],
                 rawPointCount: 0,
                 hasLegacyCorrections: false,
-                metadata: { syncSource: "automatic" }
+                metadata: { syncSource: "automatic" },
+                createdAt: generatedAt,
+                updatedAt: generatedAt
             };
         }
         return {
@@ -2546,6 +2561,7 @@ function ensureProjectedMovementBoxCoverage(segments, options) {
                 previousBoundary?.placeLabel ??
                 "Repaired move",
             subtitle: "Short gap repaired as a move between known anchors.",
+            anchorExternalUid: null,
             placeLabel: nextBoundary?.placeLabel ?? previousBoundary?.placeLabel ?? null,
             tags: ["repaired_gap"],
             distanceMeters: displacementMeters,
@@ -2558,7 +2574,9 @@ function ensureProjectedMovementBoxCoverage(segments, options) {
             rawTripIds: [],
             rawPointCount: 0,
             hasLegacyCorrections: false,
-            metadata: { syncSource: "automatic" }
+            metadata: { syncSource: "automatic" },
+            createdAt: generatedAt,
+            updatedAt: generatedAt
         };
     };
     const withCoverage = [];
@@ -2715,6 +2733,7 @@ function recomputeMovementBoxOverrideState(userId) {
     const userRows = rows.filter((row) => row.source_kind === "user_defined");
     const orderedUserRows = [...userRows].sort((left, right) => right.updated_at.localeCompare(left.updated_at) ||
         right.created_at.localeCompare(left.created_at) ||
+        right.sqlite_rowid - left.sqlite_rowid ||
         right.id.localeCompare(left.id));
     const newerRows = [];
     for (const row of automaticRows) {
@@ -2861,7 +2880,7 @@ function migrateLegacyMovementCorrectionsToUserBoxes(userId) {
             subtitle: "Migrated user-defined stay correction.",
             placeLabel: patch.placeLabel ?? stay.place?.label ?? stay.label ?? null,
             anchorExternalUid: patch.placeExternalUid ?? stay.place?.externalUid ?? null,
-            tags: patch.tags ?? stay.tags,
+            tags: patch.tags ?? movementStayTags(stay),
             editable: true,
             legacyOriginKey: `stay-override:${row.stay_external_uid}`,
             metadata: {
@@ -4478,7 +4497,7 @@ export function getMovementDayDetail(input) {
         date: targetDate,
         settings: getMovementSettings(input.userIds),
         summary: {
-            totalDistanceMeters: round(allSegments.reduce((sum, segment) => sum + (segment.kind === "trip" ? segment.distanceMeters : 0), 0)),
+            totalDistanceMeters: round(allSegments.reduce((sum, segment) => sum + (segment.kind === "trip" ? (segment.distanceMeters ?? 0) : 0), 0)),
             totalMovingSeconds: allSegments.reduce((sum, segment) => sum + (segment.kind === "trip" ? segment.durationSeconds : 0), 0),
             totalIdleSeconds: allSegments.reduce((sum, segment) => sum + (segment.kind === "stay" ? segment.durationSeconds : 0), 0),
             tripCount: allSegments.filter((segment) => segment.kind === "trip").length,

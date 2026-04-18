@@ -148,6 +148,9 @@ Psyche interview rule:
 - In that first exploratory turn, ask only one question, do not search Forge or mention whether a matching entity exists, and avoid openings like "This sounds like" or "What you're describing is".
 - In that first exploratory turn, prefer exactly two sentences: one brief empathic reflection and one concrete question. Avoid colons because they tend to trigger list-like answers.
 - Follow the preferred opening-question patterns in [`psyche_entity_playbooks.md`](./psyche_entity_playbooks.md) when they fit the entity the user is exploring.
+- If the user already offers a usable belief sentence, value phrase, or mode name,
+  refine from their wording first instead of replacing it with a cleaner label too
+  early.
 - When the conversation reveals an adjacent entity such as a linked belief, mode, value, pattern, or note, name that gently and ask whether the user wants to map it too.
 - If nuance matters, preserve it in a linked Markdown `note` instead of forcing every detail into normalized fields.
 - If the user shows imminent risk of self-harm, suicide, violence, inability to stay safe, or severe disorientation, stop normal intake and prioritize urgent human support or emergency help instead.
@@ -374,6 +377,9 @@ Use the dedicated domain routes for specialized surfaces that are not simple bat
 - If the user says something as explicit as "that missing block was me staying home", do not reopen broad intake. Confirm the interval or place only if it is still ambiguous, then create the overlay and read the timeline back.
 - Life Force lives under `/api/v1/life-force*`. Use `GET /api/v1/life-force` for the current energy overview, `PATCH /api/v1/life-force/profile` for durable profile changes, `PUT /api/v1/life-force/templates/:weekday` for weekday curve edits, and `POST /api/v1/life-force/fatigue-signals` for real-time tired or recovered signals.
 - Workbench lives under `/api/v1/workbench/*`. Use those dedicated routes for flow catalog reads, flow CRUD, runs, published outputs, node results, and latest-node-output reads instead of trying to force Workbench through the batch entity routes.
+- If you need the OpenClaw HTTP mirror instead of the raw Forge runtime path, the
+  same specialized families are exposed under `/forge/v1/movement/*`,
+  `/forge/v1/life-force/*`, and `/forge/v1/workbench/*`.
 - Workbench lane hints:
   use `/api/v1/workbench/flows` for flow catalog and CRUD,
   `/api/v1/workbench/flows/:id/run` or `/api/v1/workbench/run` for execution,

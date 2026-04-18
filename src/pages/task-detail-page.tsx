@@ -12,6 +12,7 @@ import {
   Clock3,
   Files,
   GitBranch,
+  GitPullRequest,
   Pencil,
   Play,
   Sparkles,
@@ -1805,6 +1806,27 @@ export function TaskDetailPage() {
                   <div className="font-medium text-white">{run.actor}</div>
                   <Badge>{describeRunStatus(run.status)}</Badge>
                 </div>
+                {run.gitContext?.branch || run.gitContext?.pullRequestNumber ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {run.gitContext?.branch ? (
+                      <Badge className="bg-sky-500/12 text-sky-100">
+                        <GitBranch className="mr-1 size-3" />
+                        {run.gitContext.branch}
+                      </Badge>
+                    ) : null}
+                    {run.gitContext?.pullRequestNumber ? (
+                      <Badge className="bg-fuchsia-500/12 text-fuchsia-100">
+                        <GitPullRequest className="mr-1 size-3" />
+                        PR #{run.gitContext.pullRequestNumber}
+                      </Badge>
+                    ) : null}
+                    {run.gitContext?.repository ? (
+                      <Badge className="bg-white/[0.08] text-white/68">
+                        {run.gitContext.repository}
+                      </Badge>
+                    ) : null}
+                  </div>
+                ) : null}
                 <div className="mt-2 text-sm text-white/58">
                   {run.note || t("common.labels.noRunNote")}
                 </div>

@@ -753,6 +753,7 @@ export function KanbanPage() {
           <ExecutionBoard
             tasks={filteredTasks}
             projects={filteredProjects}
+            activeRuns={shell.snapshot.activeTaskRuns}
             goals={shell.snapshot.goals}
             tags={shell.snapshot.tags}
             notesSummaryByEntity={shell.snapshot.dashboard.notesSummaryByEntity}
@@ -784,6 +785,13 @@ export function KanbanPage() {
               setSelectedTaskId(taskId);
               await queryClient.invalidateQueries({
                 queryKey: ["task-context", taskId]
+              });
+            }}
+            onStopTask={async (run) => {
+              await shell.stopTaskRun(run);
+              setSelectedTaskId(run.taskId);
+              await queryClient.invalidateQueries({
+                queryKey: ["task-context", run.taskId]
               });
             }}
             onSelectTask={(taskId) => {

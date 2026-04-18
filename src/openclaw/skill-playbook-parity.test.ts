@@ -77,6 +77,9 @@ describe("forge skill playbook parity", () => {
     expect(openclawSkill).toMatch(/\/api\/v1\/movement/i);
     expect(openclawSkill).toMatch(/\/api\/v1\/life-force/i);
     expect(openclawSkill).toMatch(/\/api\/v1\/workbench/i);
+    expect(openclawSkill).toMatch(/\/forge\/v1\/movement/i);
+    expect(openclawSkill).toMatch(/\/forge\/v1\/life-force/i);
+    expect(openclawSkill).toMatch(/\/forge\/v1\/workbench/i);
     expect(openclawSkill).toMatch(/forge_adjust_work_minutes/);
     expect(openclawSkill).toMatch(/forge_submit_preferences_judgment/);
     expect(openclawSkill).toMatch(/forge_submit_preferences_signal/);
@@ -104,6 +107,7 @@ describe("forge skill playbook parity", () => {
     expect(codexSkill).toMatch(/\/api\/v1\/movement\/automatic-boxes\/:id\/invalidate/i);
     expect(codexSkill).toMatch(/\/api\/v1\/life-force\/profile/i);
     expect(codexSkill).toMatch(/\/api\/v1\/workbench\/flows\/:id\/run/i);
+    expect(codexSkill).toMatch(/\/forge\/v1\/movement/i);
     expect(codexSkill).toMatch(/forge_adjust_work_minutes/);
     expect(codexSkill).toMatch(/preference_judgment/i);
     expect(codexSkill).toMatch(/preference_signal/i);

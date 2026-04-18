@@ -701,7 +701,7 @@ function collectRequiredTopLevelFields(schema: CrudEntitySchema) {
   if (!(unwrapped instanceof z.ZodObject)) {
     return [];
   }
-  return Object.entries(unwrapped.shape)
+  return Object.entries(unwrapped.shape as z.ZodRawShape)
     .filter(([, fieldSchema]) => isRequiredField(fieldSchema))
     .map(([key]) => key)
     .sort();
@@ -712,7 +712,7 @@ function extractAllowedTopLevelFields(schema: CrudEntitySchema) {
   if (!(unwrapped instanceof z.ZodObject)) {
     return [];
   }
-  return Object.keys(unwrapped.shape).sort();
+  return Object.keys(unwrapped.shape as z.ZodRawShape).sort();
 }
 
 function buildExampleValue(schema: z.ZodTypeAny): unknown {
@@ -743,7 +743,9 @@ function buildExampleValue(schema: z.ZodTypeAny): unknown {
   }
   if (unwrapped instanceof z.ZodObject) {
     const objectValue: Record<string, unknown> = {};
-    for (const [key, fieldSchema] of Object.entries(unwrapped.shape)) {
+    for (const [key, fieldSchema] of Object.entries(
+      unwrapped.shape as z.ZodRawShape
+    )) {
       if (!isRequiredField(fieldSchema)) {
         continue;
       }
@@ -761,8 +763,9 @@ function buildMinimalExamplePayload(schema: CrudEntitySchema) {
   }
   const requiredFields = collectRequiredTopLevelFields(schema);
   const example: Record<string, unknown> = {};
+  const shape = unwrapped.shape as z.ZodRawShape;
   for (const field of requiredFields) {
-    example[field] = buildExampleValue(unwrapped.shape[field]);
+    example[field] = buildExampleValue(shape[field]!);
   }
   return example;
 }

@@ -714,17 +714,17 @@ async function runHelper<T extends Record<string, unknown>>(
 
     switch (payload.command) {
       case "auth_status":
-        return { status } as T;
+        return { status } as unknown as T;
       case "request_access":
         return {
           granted: mock.granted ?? status === "full_access",
           status
-        } as T;
+        } as unknown as T;
       case "discover":
         return {
           status,
           sources: mock.sources ?? []
-        } as T;
+        } as unknown as T;
       case "list_events": {
         const calendarIds = Array.isArray(payload.calendarIds)
           ? payload.calendarIds.filter((value): value is string => typeof value === "string")
@@ -733,7 +733,7 @@ async function runHelper<T extends Record<string, unknown>>(
           events: (mock.events ?? []).filter((event) =>
             calendarIds.includes(event.calendarId)
           )
-        } as T;
+        } as unknown as T;
       }
       case "ensure_forge_calendar": {
         const sourceId =
@@ -745,7 +745,7 @@ async function runHelper<T extends Record<string, unknown>>(
         if (!forgeCalendar) {
           throw new Error("Mock macOS local source is missing a Forge calendar.");
         }
-        return { calendar: forgeCalendar } as T;
+        return { calendar: forgeCalendar } as unknown as T;
       }
       case "upsert_event": {
         const eventId =
@@ -767,10 +767,10 @@ async function runHelper<T extends Record<string, unknown>>(
             occurrenceDate: null,
             lastModifiedAt: new Date().toISOString()
           }
-        } as T;
+        } as unknown as T;
       }
       case "delete_event":
-        return { deleted: true } as T;
+        return { deleted: true } as unknown as T;
       default:
         throw new Error(`Unknown mock macOS helper command ${String(payload.command)}`);
     }

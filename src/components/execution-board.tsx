@@ -7,15 +7,21 @@ import {
   type ReactNode
 } from "react";
 import {
+  Bot,
   ArrowUpRight,
   ChevronDown,
   ChevronUp,
+  Files,
+  GitBranch,
+  GitPullRequest,
   Link2,
+  ListTodo,
   MoreHorizontal,
   Pencil,
   Play,
   PlusCircle,
   Scissors,
+  Square,
   Trash2
 } from "lucide-react";
 import {
@@ -44,7 +50,8 @@ import { getEntityVisual } from "@/lib/entity-visuals";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 import { getEntityNotesSummary } from "@/lib/note-helpers";
-import type { Goal, ProjectSummary, Tag, Task, TaskStatus } from "@/lib/types";
+import { getTaskExecutionSummary } from "@/lib/task-execution-summary";
+import type { Goal, ProjectSummary, Tag, Task, TaskRun, TaskStatus } from "@/lib/types";
 import type { NotesSummaryByEntity } from "@/lib/types";
 import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
 import {
@@ -62,6 +69,7 @@ type BoardItem =
       task: Task;
       goal: Goal | undefined;
       tags: Tag[];
+      activeRun: TaskRun | null;
     }
   | {
       kind: "project";
@@ -140,10 +148,34 @@ export const laneFirstCollision: CollisionDetection = (args) => {
   return closestCorners(args);
 };
 
+function formatTaskRunClusterLabel(run: TaskRun | null, branch: string | null) {
+  if (branch && branch.trim().length > 0) {
+    return branch;
+  }
+  if (run?.actor) {
+    return `${run.actor} session`;
+  }
+  return "Active work";
+}
+
+function formatTaskRunClusterDetail(
+  run: TaskRun | null,
+  repository: string | null
+) {
+  const parts = [run?.actor ?? null, repository];
+  return parts.filter(Boolean).join(" · ");
+}
+
+function stopCardNavigation(event: ReactMouseEvent<HTMLElement>) {
+  event.preventDefault();
+  event.stopPropagation();
+}
+
 function TaskCardShell({
   task,
   goal,
   tags,
+  activeRun,
   isSelected,
   isDragging = false,
   isOverlay = false,
@@ -154,6 +186,7 @@ function TaskCardShell({
   isMobile = false,
   onSelect,
   onStartTask,
+  onStopTask,
   onQuickReopen,
   onStepTask,
   onSplitTask,
@@ -163,6 +196,7 @@ function TaskCardShell({
   task: Task;
   goal: Goal | undefined;
   tags: Tag[];
+  activeRun?: TaskRun | null;
   isSelected: boolean;
   isDragging?: boolean;
   isOverlay?: boolean;
@@ -173,6 +207,7 @@ function TaskCardShell({
   isMobile?: boolean;
   onSelect: (taskId: string) => void;
   onStartTask?: (taskId: string) => Promise<void>;
+  onStopTask?: (run: TaskRun) => Promise<void>;
   onQuickReopen?: (taskId: string) => Promise<void>;
   onStepTask?: (taskId: string, direction: "previous" | "next") => Promise<void>;
   onSplitTask?: (taskId: string) => void;
@@ -183,6 +218,8 @@ function TaskCardShell({
   notesSummaryByEntity?: NotesSummaryByEntity;
 }) {
   const { t, formatDate } = useI18n();
+  const executionSummary = getTaskExecutionSummary(task, activeRun ?? null);
+  const stepSummary = executionSummary.stepSummary;
   const previousStatus = LANE_ORDER[LANE_ORDER.indexOf(task.status) - 1] ?? null;
   const nextStatus = LANE_ORDER[LANE_ORDER.indexOf(task.status) + 1] ?? null;
   const noteCount = getEntityNotesSummary(notesSummaryByEntity, "task", task.id).count;
@@ -196,6 +233,19 @@ function TaskCardShell({
     task.dueDate && !Number.isNaN(Date.parse(task.dueDate))
       ? formatDate(task.dueDate)
       : "No due date";
+  const stepProgress =
+    stepSummary && stepSummary.total > 0
+      ? Math.max(
+          8,
+          Math.round((stepSummary.completed / stepSummary.total) * 100)
+        )
+      : null;
+  const branchLabel = executionSummary.git.branch;
+  const branchUrl = executionSummary.git.branchUrl;
+  const pullRequestLabel = executionSummary.git.pullRequestNumber
+    ? `PR #${executionSummary.git.pullRequestNumber}`
+    : null;
+  const pullRequestUrl = executionSummary.git.pullRequestUrl;
 
   return (
     <article
@@ -236,6 +286,15 @@ function TaskCardShell({
           <Badge size="xs" className="shrink-0 text-[10px] text-[var(--tertiary)]">
             {task.priority}
           </Badge>
+          {executionSummary.actor ? (
+            <Badge
+              size="xs"
+              className="shrink-0 bg-cyan-400/12 text-cyan-100"
+            >
+              <Bot className="mr-1 size-3" />
+              {executionSummary.actor}
+            </Badge>
+          ) : null}
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
           {onOpenMenu ? (
@@ -282,7 +341,20 @@ function TaskCardShell({
               </button>
             </div>
           ) : null}
-          {task.status !== "done" ? (
+          {activeRun ? (
+            <button
+              type="button"
+              aria-label={`Stop work on ${task.title}`}
+              className="inline-flex size-8 items-center justify-center rounded-full bg-rose-500/16 text-rose-200 transition hover:bg-rose-500/24"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                void onStopTask?.(activeRun);
+              }}
+            >
+              <Square className="size-3.5 fill-current" />
+            </button>
+          ) : task.status !== "done" ? (
             <button
               type="button"
               aria-label={`Start work on ${task.title}`}
@@ -316,6 +388,107 @@ function TaskCardShell({
       </div>
       <EntityName kind={entityKind} label={task.title} className="max-w-full" lines={3} labelClassName="[overflow-wrap:anywhere]" />
       <p className="mt-1.5 line-clamp-3 [overflow-wrap:anywhere] text-[12px] leading-5 text-white/62">{task.description || t("common.executionBoard.noExecutionNote")}</p>
+      {stepSummary ? (
+        <div className="mt-3 rounded-[16px] border border-white/8 bg-white/[0.045] p-3">
+          <div className="flex items-center justify-between gap-3 text-[11px] text-white/58">
+            <span className="inline-flex items-center gap-1.5">
+              <ListTodo className="size-3.5 text-sky-200" />
+              {stepSummary.total} step{stepSummary.total === 1 ? "" : "s"}
+            </span>
+            <span className="tabular-nums text-white/72">
+              {stepSummary.completed}/{stepSummary.total}
+            </span>
+          </div>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/8">
+            <div
+              className="h-full rounded-full bg-[linear-gradient(90deg,rgba(56,189,248,0.96),rgba(125,211,252,0.62))]"
+              style={{ width: `${stepProgress ?? 0}%` }}
+            />
+          </div>
+          <div className="mt-2 grid gap-1.5">
+            {stepSummary.items.slice(0, 2).map((item) => (
+              <div
+                key={`${task.id}-${item}`}
+                className="truncate text-[11px] text-white/55"
+              >
+                {item}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      <div className="mt-2.5 flex min-w-0 flex-wrap gap-1.5">
+        {branchLabel ? (
+          branchUrl ? (
+            <a
+              href={branchUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-full border border-sky-300/18 bg-sky-400/12 px-2.5 py-1 text-[11px] text-sky-50 transition hover:bg-sky-400/18"
+              onClick={stopCardNavigation}
+            >
+              <GitBranch className="size-3.5 shrink-0" />
+              <span className="truncate">{branchLabel}</span>
+            </a>
+          ) : (
+            <Badge
+              size="xs"
+              className="min-w-0 max-w-full bg-sky-400/12 text-sky-50"
+            >
+              <GitBranch className="mr-1 size-3" />
+              <span className="truncate">{branchLabel}</span>
+            </Badge>
+          )
+        ) : null}
+        {pullRequestLabel ? (
+          pullRequestUrl ? (
+            <a
+              href={pullRequestUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-full border border-fuchsia-300/18 bg-fuchsia-400/12 px-2.5 py-1 text-[11px] text-fuchsia-50 transition hover:bg-fuchsia-400/18"
+              onClick={stopCardNavigation}
+            >
+              <GitPullRequest className="size-3.5 shrink-0" />
+              <span className="truncate">{pullRequestLabel}</span>
+            </a>
+          ) : (
+            <Badge
+              size="xs"
+              className="bg-fuchsia-400/12 text-fuchsia-50"
+            >
+              <GitPullRequest className="mr-1 size-3" />
+              {pullRequestLabel}
+            </Badge>
+          )
+        ) : null}
+        {executionSummary.changedFileCount > 0 ? (
+          <Badge size="xs" className="bg-amber-400/12 text-amber-50">
+            <Files className="mr-1 size-3" />
+            {executionSummary.changedFileCount} file
+            {executionSummary.changedFileCount === 1 ? "" : "s"}
+          </Badge>
+        ) : null}
+        {executionSummary.git.repository ? (
+          <Badge size="xs" className="bg-white/8 text-white/70">
+            {executionSummary.git.repository}
+          </Badge>
+        ) : null}
+      </div>
+      {executionSummary.changedFilesPreview.length > 0 ? (
+        <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+          {executionSummary.changedFilesPreview.map((file) => (
+            <Badge
+              key={file}
+              size="xs"
+              wrap
+              className="min-w-0 max-w-full bg-white/[0.06] font-mono text-[10px] text-white/65"
+            >
+              {file}
+            </Badge>
+          ))}
+        </div>
+      ) : null}
       <div className="mt-2.5 flex min-w-0 flex-wrap gap-1.5">
         {goal ? (
           <EntityBadge
@@ -382,10 +555,12 @@ function SortableTaskCard(props: {
   task: Task;
   goal: Goal | undefined;
   tags: Tag[];
+  activeRun: TaskRun | null;
   isSelected: boolean;
   isMobile?: boolean;
   onSelect: (taskId: string) => void;
   onStartTask?: (taskId: string) => Promise<void>;
+  onStopTask?: (run: TaskRun) => Promise<void>;
   onQuickReopen?: (taskId: string) => Promise<void>;
   onStepTask?: (taskId: string, direction: "previous" | "next") => Promise<void>;
   onSplitTask?: (taskId: string) => void;
@@ -414,6 +589,7 @@ function SortableTaskCard(props: {
       isDragging={isDragging}
       isMobile={props.isMobile}
       onStartTask={props.onStartTask}
+      onStopTask={props.onStopTask}
       onStepTask={props.onStepTask}
       onSplitTask={props.onSplitTask}
       notesSummaryByEntity={props.notesSummaryByEntity}
@@ -700,6 +876,33 @@ function LaneDropzone({
   );
 }
 
+function InProgressCluster({
+  title,
+  detail,
+  children
+}: {
+  title: string;
+  detail: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rounded-[20px] border border-cyan-300/20 bg-[linear-gradient(180deg,rgba(34,211,238,0.11),rgba(11,23,34,0.34))] p-2.5 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.08)]">
+      <div className="mb-2 flex items-start justify-between gap-3 px-1">
+        <div className="min-w-0">
+          <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-cyan-100/86">
+            <GitBranch className="size-3.5" />
+            <span className="truncate">{title}</span>
+          </div>
+          {detail ? (
+            <div className="mt-1 text-[11px] text-white/45">{detail}</div>
+          ) : null}
+        </div>
+      </div>
+      <div className="grid gap-2">{children}</div>
+    </div>
+  );
+}
+
 function TrashDropzone({
   droppableId,
   title,
@@ -754,6 +957,7 @@ function TrashDropzone({
 export function ExecutionBoard({
   tasks,
   projects = [],
+  activeRuns = [],
   goals,
   tags,
   selectedTaskId,
@@ -761,6 +965,7 @@ export function ExecutionBoard({
   onMoveProject,
   onSelectTask,
   onStartTask,
+  onStopTask,
   onQuickReopenTask,
   onDeleteTask,
   onOpenProject,
@@ -777,6 +982,7 @@ export function ExecutionBoard({
 }: {
   tasks: Task[];
   projects?: ProjectSummary[];
+  activeRuns?: TaskRun[];
   goals: Goal[];
   tags: Tag[];
   selectedTaskId: string | null;
@@ -787,6 +993,7 @@ export function ExecutionBoard({
   ) => Promise<void>;
   onSelectTask: (taskId: string) => void;
   onStartTask?: (taskId: string) => Promise<void>;
+  onStopTask?: (run: TaskRun) => Promise<void>;
   onQuickReopenTask?: (taskId: string) => Promise<void>;
   onDeleteTask?: (taskId: string) => Promise<void>;
   onOpenProject?: (projectId: string) => void;
@@ -865,6 +1072,19 @@ export function ExecutionBoard({
       }),
     [optimisticProjectStatuses, projects]
   );
+  const activeRunByTaskId = useMemo(() => {
+    const lookup = new Map<string, TaskRun>();
+    for (const run of activeRuns) {
+      if (run.status !== "active") {
+        continue;
+      }
+      const current = lookup.get(run.taskId);
+      if (!current || run.isCurrent || run.updatedAt > current.updatedAt) {
+        lookup.set(run.taskId, run);
+      }
+    }
+    return lookup;
+  }, [activeRuns]);
   const boardItems = useMemo<BoardItem[]>(
     () => [
       ...boardProjects.map((project) => ({
@@ -882,10 +1102,11 @@ export function ExecutionBoard({
         goal: goals.find((goal) => goal.id === task.goalId),
         tags: task.tagIds
           .map((tagId) => tags.find((tag) => tag.id === tagId))
-          .filter(Boolean) as Tag[]
+          .filter(Boolean) as Tag[],
+        activeRun: activeRunByTaskId.get(task.id) ?? null
       }))
     ],
-    [boardProjects, boardTasks, goals, tags]
+    [activeRunByTaskId, boardProjects, boardTasks, goals, tags]
   );
   const activeBoardItem = activeTaskId
     ? boardItems.find((item) => item.id === activeTaskId) ?? null
@@ -1011,6 +1232,170 @@ export function ExecutionBoard({
     onOpenProject,
     onOpenTask
   ]);
+
+  function renderLaneItems(laneItems: BoardItem[]) {
+    if (laneItems.length === 0) {
+      return (
+        <div className="w-full max-w-full rounded-[18px] border border-dashed border-white/8 px-4 py-8 text-center text-sm text-white/35">
+          {t("common.executionBoard.emptyLane")}
+        </div>
+      );
+    }
+
+    if (laneItems[0]?.status !== "in_progress") {
+      return laneItems.map((item) =>
+        item.kind === "task" ? (
+          <SortableTaskCard
+            key={item.task.id}
+            sortableId={`${boardInstanceId}:task:${item.task.id}`}
+            task={item.task}
+            goal={item.goal}
+            tags={item.tags}
+            activeRun={item.activeRun}
+            isSelected={selectedTaskId === item.task.id}
+            isMobile={isMobileBoard}
+            onSelect={onSelectTask}
+            onStartTask={onStartTask}
+            onStopTask={onStopTask}
+            onQuickReopen={onQuickReopenTask}
+            onStepTask={handleStepTask}
+            onOpenMenu={openTaskMenu}
+            onSplitTask={onSplitTask}
+            notesSummaryByEntity={notesSummaryByEntity}
+          />
+        ) : (
+          <SortableProjectCard
+            key={item.project.id}
+            sortableId={`${boardInstanceId}:project:${item.project.id}`}
+            project={item.project}
+            goal={item.goal}
+            isMobile={isMobileBoard}
+            onStepProject={handleStepProject}
+            onOpenMenu={openProjectMenu}
+          />
+        )
+      );
+    }
+
+    const clusters = new Map<
+      string,
+      {
+        title: string;
+        detail: string;
+        items: BoardItem[];
+      }
+    >();
+
+    for (const item of laneItems) {
+      if (item.kind !== "task" || !item.activeRun) {
+        const fallback = clusters.get("ungrouped");
+        if (fallback) {
+          fallback.items.push(item);
+        } else {
+          clusters.set("ungrouped", {
+            title: "Active work",
+            detail: "Tasks in progress without a tracked branch",
+            items: [item]
+          });
+        }
+        continue;
+      }
+
+      const summary = getTaskExecutionSummary(item.task, item.activeRun);
+      const key = [
+        item.activeRun.actor,
+        summary.git.repository ?? "",
+        summary.git.branch ?? ""
+      ].join("::");
+      const existing = clusters.get(key);
+      if (existing) {
+        existing.items.push(item);
+        continue;
+      }
+      clusters.set(key, {
+        title: formatTaskRunClusterLabel(item.activeRun, summary.git.branch),
+        detail: formatTaskRunClusterDetail(
+          item.activeRun,
+          summary.git.repository
+        ),
+        items: [item]
+      });
+    }
+
+    return Array.from(clusters.entries()).map(([key, cluster]) => {
+      if (key === "ungrouped") {
+        return cluster.items.map((item) =>
+          item.kind === "task" ? (
+            <SortableTaskCard
+              key={item.task.id}
+              sortableId={`${boardInstanceId}:task:${item.task.id}`}
+              task={item.task}
+              goal={item.goal}
+              tags={item.tags}
+              activeRun={item.activeRun}
+              isSelected={selectedTaskId === item.task.id}
+              isMobile={isMobileBoard}
+              onSelect={onSelectTask}
+              onStartTask={onStartTask}
+              onStopTask={onStopTask}
+              onQuickReopen={onQuickReopenTask}
+              onStepTask={handleStepTask}
+              onOpenMenu={openTaskMenu}
+              onSplitTask={onSplitTask}
+              notesSummaryByEntity={notesSummaryByEntity}
+            />
+          ) : (
+            <SortableProjectCard
+              key={item.project.id}
+              sortableId={`${boardInstanceId}:project:${item.project.id}`}
+              project={item.project}
+              goal={item.goal}
+              isMobile={isMobileBoard}
+              onStepProject={handleStepProject}
+              onOpenMenu={openProjectMenu}
+            />
+          )
+        );
+      }
+
+      return (
+        <InProgressCluster key={key} title={cluster.title} detail={cluster.detail}>
+          {cluster.items.map((item) =>
+            item.kind === "task" ? (
+              <SortableTaskCard
+                key={item.task.id}
+                sortableId={`${boardInstanceId}:task:${item.task.id}`}
+                task={item.task}
+                goal={item.goal}
+                tags={item.tags}
+                activeRun={item.activeRun}
+                isSelected={selectedTaskId === item.task.id}
+                isMobile={isMobileBoard}
+                onSelect={onSelectTask}
+                onStartTask={onStartTask}
+                onStopTask={onStopTask}
+                onQuickReopen={onQuickReopenTask}
+                onStepTask={handleStepTask}
+                onOpenMenu={openTaskMenu}
+                onSplitTask={onSplitTask}
+                notesSummaryByEntity={notesSummaryByEntity}
+              />
+            ) : (
+              <SortableProjectCard
+                key={item.project.id}
+                sortableId={`${boardInstanceId}:project:${item.project.id}`}
+                project={item.project}
+                goal={item.goal}
+                isMobile={isMobileBoard}
+                onStepProject={handleStepProject}
+                onOpenMenu={openProjectMenu}
+              />
+            )
+          )}
+        </InProgressCluster>
+      );
+    });
+  }
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
@@ -1352,41 +1737,7 @@ export function ExecutionBoard({
                     count={laneItems.length}
                     dragging={activeTaskId !== null}
                   >
-                    {laneItems.map((item) =>
-                      item.kind === "task" ? (
-                        <SortableTaskCard
-                          key={item.task.id}
-                          sortableId={`${boardInstanceId}:task:${item.task.id}`}
-                          task={item.task}
-                          goal={item.goal}
-                          tags={item.tags}
-                          isSelected={selectedTaskId === item.task.id}
-                          isMobile
-                          onSelect={onSelectTask}
-                          onStartTask={onStartTask}
-                          onQuickReopen={onQuickReopenTask}
-                          onStepTask={handleStepTask}
-                          onOpenMenu={openTaskMenu}
-                          onSplitTask={onSplitTask}
-                          notesSummaryByEntity={notesSummaryByEntity}
-                        />
-                      ) : (
-                        <SortableProjectCard
-                          key={item.project.id}
-                          sortableId={`${boardInstanceId}:project:${item.project.id}`}
-                          project={item.project}
-                          goal={item.goal}
-                          isMobile
-                          onStepProject={handleStepProject}
-                          onOpenMenu={openProjectMenu}
-                        />
-                      )
-                    )}
-                    {laneItems.length === 0 ? (
-                      <div className="w-full max-w-full rounded-[18px] border border-dashed border-white/8 px-4 py-8 text-center text-sm text-white/35">
-                        {t("common.executionBoard.emptyLane")}
-                      </div>
-                    ) : null}
+                    {renderLaneItems(laneItems)}
                   </LaneDropzone>
                 </SortableContext>
               );
@@ -1410,39 +1761,7 @@ export function ExecutionBoard({
                     count={laneItems.length}
                     dragging={activeTaskId !== null}
                   >
-                    {laneItems.map((item) =>
-                      item.kind === "task" ? (
-                        <SortableTaskCard
-                          key={item.task.id}
-                          sortableId={`${boardInstanceId}:task:${item.task.id}`}
-                          task={item.task}
-                          goal={item.goal}
-                          tags={item.tags}
-                          isSelected={selectedTaskId === item.task.id}
-                          onSelect={onSelectTask}
-                          onStartTask={onStartTask}
-                          onQuickReopen={onQuickReopenTask}
-                          onStepTask={handleStepTask}
-                          onOpenMenu={openTaskMenu}
-                          onSplitTask={onSplitTask}
-                          notesSummaryByEntity={notesSummaryByEntity}
-                        />
-                      ) : (
-                        <SortableProjectCard
-                          key={item.project.id}
-                          sortableId={`${boardInstanceId}:project:${item.project.id}`}
-                          project={item.project}
-                          goal={item.goal}
-                          onStepProject={handleStepProject}
-                          onOpenMenu={openProjectMenu}
-                        />
-                      )
-                    )}
-                    {laneItems.length === 0 ? (
-                      <div className="w-full max-w-full rounded-[18px] border border-dashed border-white/8 px-4 py-8 text-center text-sm text-white/35">
-                        {t("common.executionBoard.emptyLane")}
-                      </div>
-                    ) : null}
+                    {renderLaneItems(laneItems)}
                   </LaneDropzone>
                 </SortableContext>
               );
@@ -1458,6 +1777,7 @@ export function ExecutionBoard({
                 task={activeBoardItem.task}
                 goal={activeBoardItem.goal}
                 tags={activeBoardItem.tags}
+                activeRun={activeBoardItem.activeRun}
                 isSelected={selectedTaskId === activeBoardItem.task.id}
                 isDragging
                 isOverlay

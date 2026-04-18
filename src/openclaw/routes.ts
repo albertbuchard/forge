@@ -281,6 +281,340 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
       passthroughSearch("/api/v1/health/fitness", url)
   }),
   {
+    path: "/forge/v1/movement",
+    match: "prefix",
+    operations: [
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/movement\/day$/,
+        upstreamPath: "/api/v1/movement/day",
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/movement/day", url)
+      },
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/movement\/month$/,
+        upstreamPath: "/api/v1/movement/month",
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/movement/month", url)
+      },
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/movement\/all-time$/,
+        upstreamPath: "/api/v1/movement/all-time",
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/movement/all-time", url)
+      },
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/movement\/timeline$/,
+        upstreamPath: "/api/v1/movement/timeline",
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/movement/timeline", url)
+      },
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/movement\/places$/,
+        upstreamPath: "/api/v1/movement/places",
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/movement/places", url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/movement\/places$/,
+        upstreamPath: "/api/v1/movement/places",
+        requestBody: "json",
+        requiresToken: true,
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/movement/places", url)
+      },
+      {
+        method: "PATCH",
+        pattern: /^\/forge\/v1\/movement\/places\/([^/]+)$/,
+        upstreamPath: "/api/v1/movement/places/:id",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/movement/places/${match[1]}`, url)
+      },
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/movement\/trips\/([^/]+)$/,
+        upstreamPath: "/api/v1/movement/trips/:id",
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/movement/trips/${match[1]}`, url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/movement\/selection$/,
+        upstreamPath: "/api/v1/movement/selection",
+        requestBody: "json",
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/movement/selection", url)
+      },
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/movement\/settings$/,
+        upstreamPath: "/api/v1/movement/settings",
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/movement/settings", url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/movement\/user-boxes$/,
+        upstreamPath: "/api/v1/movement/user-boxes",
+        requestBody: "json",
+        requiresToken: true,
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/movement/user-boxes", url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/movement\/user-boxes\/preflight$/,
+        upstreamPath: "/api/v1/movement/user-boxes/preflight",
+        requestBody: "json",
+        requiresToken: true,
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/movement/user-boxes/preflight", url)
+      },
+      {
+        method: "PATCH",
+        pattern: /^\/forge\/v1\/movement\/user-boxes\/([^/]+)$/,
+        upstreamPath: "/api/v1/movement/user-boxes/:id",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/movement/user-boxes/${match[1]}`, url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/movement\/automatic-boxes\/([^/]+)\/invalidate$/,
+        upstreamPath: "/api/v1/movement/automatic-boxes/:id/invalidate",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(
+            `/api/v1/movement/automatic-boxes/${match[1]}/invalidate`,
+            url
+          )
+      },
+      {
+        method: "PATCH",
+        pattern: /^\/forge\/v1\/movement\/stays\/([^/]+)$/,
+        upstreamPath: "/api/v1/movement/stays/:id",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/movement/stays/${match[1]}`, url)
+      },
+      {
+        method: "PATCH",
+        pattern: /^\/forge\/v1\/movement\/trips\/([^/]+)$/,
+        upstreamPath: "/api/v1/movement/trips/:id",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/movement/trips/${match[1]}`, url)
+      },
+      {
+        method: "PATCH",
+        pattern: /^\/forge\/v1\/movement\/trips\/([^/]+)\/points\/([^/]+)$/,
+        upstreamPath: "/api/v1/movement/trips/:id/points/:pointId",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(
+            `/api/v1/movement/trips/${match[1]}/points/${match[2]}`,
+            url
+          )
+      }
+    ]
+  },
+  {
+    path: "/forge/v1/life-force",
+    match: "prefix",
+    operations: [
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/life-force$/,
+        upstreamPath: "/api/v1/life-force",
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/life-force", url)
+      },
+      {
+        method: "PATCH",
+        pattern: /^\/forge\/v1\/life-force\/profile$/,
+        upstreamPath: "/api/v1/life-force/profile",
+        requestBody: "json",
+        requiresToken: true,
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/life-force/profile", url)
+      },
+      {
+        method: "PUT",
+        pattern: /^\/forge\/v1\/life-force\/templates\/([^/]+)$/,
+        upstreamPath: "/api/v1/life-force/templates/:weekday",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/life-force/templates/${match[1]}`, url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/life-force\/fatigue-signals$/,
+        upstreamPath: "/api/v1/life-force/fatigue-signals",
+        requestBody: "json",
+        requiresToken: true,
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/life-force/fatigue-signals", url)
+      }
+    ]
+  },
+  {
+    path: "/forge/v1/workbench",
+    match: "prefix",
+    operations: [
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/workbench\/catalog\/boxes$/,
+        upstreamPath: "/api/v1/workbench/catalog/boxes",
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/workbench/catalog/boxes", url)
+      },
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/workbench\/flows$/,
+        upstreamPath: "/api/v1/workbench/flows",
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/workbench/flows", url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/workbench\/flows$/,
+        upstreamPath: "/api/v1/workbench/flows",
+        requestBody: "json",
+        requiresToken: true,
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/workbench/flows", url)
+      },
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/workbench\/flows\/by-slug\/([^/]+)$/,
+        upstreamPath: "/api/v1/workbench/flows/by-slug/:slug",
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(
+            `/api/v1/workbench/flows/by-slug/${match[1]}`,
+            url
+          )
+      },
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/workbench\/flows\/([^/]+)$/,
+        upstreamPath: "/api/v1/workbench/flows/:id",
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/workbench/flows/${match[1]}`, url)
+      },
+      {
+        method: "PATCH",
+        pattern: /^\/forge\/v1\/workbench\/flows\/([^/]+)$/,
+        upstreamPath: "/api/v1/workbench/flows/:id",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/workbench/flows/${match[1]}`, url)
+      },
+      {
+        method: "DELETE",
+        pattern: /^\/forge\/v1\/workbench\/flows\/([^/]+)$/,
+        upstreamPath: "/api/v1/workbench/flows/:id",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/workbench/flows/${match[1]}`, url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/workbench\/flows\/([^/]+)\/run$/,
+        upstreamPath: "/api/v1/workbench/flows/:id/run",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/workbench/flows/${match[1]}/run`, url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/workbench\/run$/,
+        upstreamPath: "/api/v1/workbench/run",
+        requestBody: "json",
+        requiresToken: true,
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/workbench/run", url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/workbench\/flows\/([^/]+)\/chat$/,
+        upstreamPath: "/api/v1/workbench/flows/:id/chat",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/workbench/flows/${match[1]}/chat`, url)
+      },
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/workbench\/flows\/([^/]+)\/output$/,
+        upstreamPath: "/api/v1/workbench/flows/:id/output",
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/workbench/flows/${match[1]}/output`, url)
+      },
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/workbench\/flows\/([^/]+)\/runs$/,
+        upstreamPath: "/api/v1/workbench/flows/:id/runs",
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/workbench/flows/${match[1]}/runs`, url)
+      },
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/workbench\/flows\/([^/]+)\/runs\/([^/]+)$/,
+        upstreamPath: "/api/v1/workbench/flows/:id/runs/:runId",
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(
+            `/api/v1/workbench/flows/${match[1]}/runs/${match[2]}`,
+            url
+          )
+      },
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/workbench\/flows\/([^/]+)\/runs\/([^/]+)\/nodes$/,
+        upstreamPath: "/api/v1/workbench/flows/:id/runs/:runId/nodes",
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(
+            `/api/v1/workbench/flows/${match[1]}/runs/${match[2]}/nodes`,
+            url
+          )
+      },
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/workbench\/flows\/([^/]+)\/runs\/([^/]+)\/nodes\/([^/]+)$/,
+        upstreamPath: "/api/v1/workbench/flows/:id/runs/:runId/nodes/:nodeId",
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(
+            `/api/v1/workbench/flows/${match[1]}/runs/${match[2]}/nodes/${match[3]}`,
+            url
+          )
+      },
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/workbench\/flows\/([^/]+)\/nodes\/([^/]+)\/output$/,
+        upstreamPath: "/api/v1/workbench/flows/:id/nodes/:nodeId/output",
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(
+            `/api/v1/workbench/flows/${match[1]}/nodes/${match[2]}/output`,
+            url
+          )
+      }
+    ]
+  },
+  {
     path: "/forge/v1/calendar",
     match: "prefix",
     operations: [
@@ -918,6 +1252,7 @@ export function buildRouteParityReport(
         (key) =>
           key.startsWith("GET /api/v1") ||
           key.startsWith("POST /api/v1") ||
+          key.startsWith("PUT /api/v1") ||
           key.startsWith("PATCH /api/v1") ||
           key.startsWith("DELETE /api/v1")
       )

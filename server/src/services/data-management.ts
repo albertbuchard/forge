@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, type Dirent } from "node:fs";
 import {
   cp,
   mkdir,
@@ -562,7 +562,7 @@ export async function listDataBackups(): Promise<DataBackupEntry[]> {
 }
 
 export async function createDataBackup(
-  input: CreateDataBackupInput = {},
+  input: CreateDataBackupInput = { note: "" },
   options: { mode?: DataBackupMode } = {}
 ): Promise<DataBackupEntry> {
   const parsed = createDataBackupSchema.parse(input);
@@ -724,9 +724,9 @@ function walkForForgeSqlite(rootDir: string, maxDepth = 5) {
     if (depth > maxDepth) {
       return;
     }
-    let entries: ReturnType<typeof readdirSync>;
+    let entries: Dirent[];
     try {
-      entries = readdirSync(dir, { withFileTypes: true });
+      entries = readdirSync(dir, { encoding: "utf8", withFileTypes: true });
     } catch {
       return;
     }

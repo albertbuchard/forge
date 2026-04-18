@@ -155,6 +155,7 @@ export function buildConnectorOutputCatalogEntry(input) {
                 description: "Published output record exposed by this Workbench flow.",
                 required: false,
                 expandableKeys: [],
+                shape: [],
                 modelName: "WorkbenchPublishedOutput"
             }
         ],
@@ -167,6 +168,7 @@ export function buildConnectorOutputCatalogEntry(input) {
                 description: "Published output record exposed by this Workbench flow.",
                 required: false,
                 expandableKeys: [],
+                shape: [],
                 modelName: "WorkbenchPublishedOutput"
             }
         ],

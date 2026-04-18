@@ -165,7 +165,15 @@ function toSettingsFileOverrideInput(input) {
         next.themePreference = input.themePreference;
     }
     if (input.customTheme !== undefined) {
-        next.customTheme = input.customTheme;
+        if (input.customTheme === null) {
+            next.customTheme = null;
+        }
+        else {
+            const parsedCustomTheme = customThemeSchema.safeParse(input.customTheme);
+            if (parsedCustomTheme.success) {
+                next.customTheme = parsedCustomTheme.data;
+            }
+        }
     }
     if (input.localePreference !== undefined) {
         next.localePreference = input.localePreference;
@@ -214,39 +222,37 @@ function toSettingsFileOverrideInput(input) {
         }
     }
     if (input.modelSettings?.forgeAgent) {
-        next.modelSettings = {
-            forgeAgent: {}
-        };
+        const forgeAgent = {};
         if (input.modelSettings.forgeAgent.basicChat) {
-            next.modelSettings.forgeAgent.basicChat = {};
+            forgeAgent.basicChat = {};
             if (input.modelSettings.forgeAgent.basicChat.connectionId !== undefined) {
-                next.modelSettings.forgeAgent.basicChat.connectionId =
+                forgeAgent.basicChat.connectionId =
                     input.modelSettings.forgeAgent.basicChat.connectionId;
             }
             if (input.modelSettings.forgeAgent.basicChat.model !== undefined) {
-                next.modelSettings.forgeAgent.basicChat.model =
+                forgeAgent.basicChat.model =
                     input.modelSettings.forgeAgent.basicChat.model;
             }
-            if (Object.keys(next.modelSettings.forgeAgent.basicChat).length === 0) {
-                delete next.modelSettings.forgeAgent.basicChat;
+            if (Object.keys(forgeAgent.basicChat).length === 0) {
+                delete forgeAgent.basicChat;
             }
         }
         if (input.modelSettings.forgeAgent.wiki) {
-            next.modelSettings.forgeAgent.wiki = {};
+            forgeAgent.wiki = {};
             if (input.modelSettings.forgeAgent.wiki.connectionId !== undefined) {
-                next.modelSettings.forgeAgent.wiki.connectionId =
+                forgeAgent.wiki.connectionId =
                     input.modelSettings.forgeAgent.wiki.connectionId;
             }
             if (input.modelSettings.forgeAgent.wiki.model !== undefined) {
-                next.modelSettings.forgeAgent.wiki.model =
+                forgeAgent.wiki.model =
                     input.modelSettings.forgeAgent.wiki.model;
             }
-            if (Object.keys(next.modelSettings.forgeAgent.wiki).length === 0) {
-                delete next.modelSettings.forgeAgent.wiki;
+            if (Object.keys(forgeAgent.wiki).length === 0) {
+                delete forgeAgent.wiki;
             }
         }
-        if (Object.keys(next.modelSettings.forgeAgent).length === 0) {
-            delete next.modelSettings;
+        if (Object.keys(forgeAgent).length > 0) {
+            next.modelSettings = { forgeAgent };
         }
     }
     return next;

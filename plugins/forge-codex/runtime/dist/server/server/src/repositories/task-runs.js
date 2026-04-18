@@ -11,6 +11,143 @@ import { taskRunClaimSchema, taskRunSchema } from "../types.js";
 function leaseExpiry(now, ttlSeconds) {
     return new Date(now.getTime() + ttlSeconds * 1000).toISOString();
 }
+function trimOrEmpty(value) {
+    return typeof value === "string" ? value.trim() : "";
+}
+function normalizePullRequestNumber(value) {
+    if (typeof value === "number" && Number.isInteger(value) && value > 0) {
+        return value;
+    }
+    if (typeof value === "string") {
+        const matched = value.match(/(\d+)/);
+        if (matched) {
+            const parsed = Number.parseInt(matched[1] ?? "", 10);
+            return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+        }
+    }
+    return null;
+}
+function buildGithubBranchUrl(repository, branch) {
+    if (!repository || !branch) {
+        return null;
+    }
+    return `https://github.com/${repository}/tree/${encodeURIComponent(branch)}`;
+}
+function buildGithubPullRequestUrl(repository, pullRequestNumber) {
+    if (!repository || !pullRequestNumber) {
+        return null;
+    }
+    return `https://github.com/${repository}/pull/${pullRequestNumber}`;
+}
+function buildGithubCompareUrl(repository, baseBranch, branch) {
+    if (!repository || !baseBranch || !branch) {
+        return null;
+    }
+    return `https://github.com/${repository}/compare/${encodeURIComponent(baseBranch)}...${encodeURIComponent(branch)}`;
+}
+function readTaskGitRefContext(taskId) {
+    const task = getTaskById(taskId);
+    if (!task) {
+        return null;
+    }
+    const branchRef = task.gitRefs.find((ref) => ref.refType === "branch") ?? null;
+    const pullRequestRef = task.gitRefs.find((ref) => ref.refType === "pull_request") ?? null;
+    const provider = trimOrEmpty(branchRef?.provider) ||
+        trimOrEmpty(pullRequestRef?.provider) ||
+        "";
+    const repository = trimOrEmpty(branchRef?.repository) ||
+        trimOrEmpty(pullRequestRef?.repository) ||
+        "";
+    const branch = trimOrEmpty(branchRef?.refValue);
+    const pullRequestNumber = normalizePullRequestNumber(pullRequestRef?.refValue ?? pullRequestRef?.displayTitle);
+    if (!provider &&
+        !repository &&
+        !branch &&
+        !branchRef?.url &&
+        !pullRequestRef?.url &&
+        !pullRequestNumber) {
+        return null;
+    }
+    return {
+        provider,
+        repository,
+        branch,
+        branchUrl: branchRef?.url ?? null,
+        pullRequestUrl: pullRequestRef?.url ?? null,
+        pullRequestNumber
+    };
+}
+function normalizeTaskRunGitContext(taskId, input) {
+    const fallback = readTaskGitRefContext(taskId);
+    const provider = trimOrEmpty(input?.provider) || trimOrEmpty(fallback?.provider) || "";
+    const repository = trimOrEmpty(input?.repository) || trimOrEmpty(fallback?.repository) || "";
+    const branch = trimOrEmpty(input?.branch) || trimOrEmpty(fallback?.branch) || "";
+    const baseBranch = trimOrEmpty(input?.baseBranch) || "main";
+    const pullRequestNumber = normalizePullRequestNumber(input?.pullRequestNumber) ??
+        normalizePullRequestNumber(fallback?.pullRequestNumber);
+    const branchUrl = input?.branchUrl ??
+        fallback?.branchUrl ??
+        (provider === "github"
+            ? buildGithubBranchUrl(repository, branch)
+            : null);
+    const pullRequestUrl = input?.pullRequestUrl ??
+        fallback?.pullRequestUrl ??
+        (provider === "github"
+            ? buildGithubPullRequestUrl(repository, pullRequestNumber)
+            : null);
+    const compareUrl = input?.compareUrl ??
+        (provider === "github"
+            ? buildGithubCompareUrl(repository, baseBranch, branch)
+            : null);
+    if (!provider &&
+        !repository &&
+        !branch &&
+        !branchUrl &&
+        !pullRequestUrl &&
+        !pullRequestNumber &&
+        !compareUrl) {
+        return null;
+    }
+    return {
+        provider,
+        repository,
+        branch,
+        baseBranch,
+        branchUrl,
+        pullRequestUrl,
+        pullRequestNumber,
+        compareUrl
+    };
+}
+function mapTaskRunGitContext(row) {
+    const provider = trimOrEmpty(row.git_provider);
+    const repository = trimOrEmpty(row.git_repository);
+    const branch = trimOrEmpty(row.git_branch);
+    const baseBranch = trimOrEmpty(row.git_base_branch) || "main";
+    const branchUrl = row.git_branch_url ?? null;
+    const pullRequestUrl = row.git_pull_request_url ?? null;
+    const pullRequestNumber = normalizePullRequestNumber(row.git_pull_request_number);
+    const compareUrl = row.git_compare_url ?? null;
+    if (!provider &&
+        !repository &&
+        !branch &&
+        !branchUrl &&
+        !pullRequestUrl &&
+        !pullRequestNumber &&
+        !compareUrl) {
+        return null;
+    }
+    return {
+        provider,
+        repository,
+        branch,
+        baseBranch,
+        branchUrl,
+        pullRequestUrl,
+        pullRequestNumber,
+        compareUrl
+    };
+}
 function selectClause() {
     return `SELECT
     task_runs.id,
@@ -29,6 +166,14 @@ function selectClause() {
     task_runs.released_at,
     task_runs.timed_out_at,
     task_runs.override_reason,
+    task_runs.git_provider,
+    task_runs.git_repository,
+    task_runs.git_branch,
+    task_runs.git_base_branch,
+    task_runs.git_branch_url,
+    task_runs.git_pull_request_url,
+    task_runs.git_pull_request_number,
+    task_runs.git_compare_url,
     task_runs.updated_at,
     tasks.title AS task_title
    FROM task_runs
@@ -56,6 +201,7 @@ function readExecutionConfig() {
 function mapTaskRun(row, now = new Date(), cached = computeWorkTime(now)) {
     const metric = cached.runMetrics.get(row.id);
     const task = getTaskById(row.task_id);
+    const gitContext = mapTaskRunGitContext(row);
     return taskRunSchema.parse({
         id: row.id,
         taskId: row.task_id,
@@ -78,6 +224,7 @@ function mapTaskRun(row, now = new Date(), cached = computeWorkTime(now)) {
         releasedAt: row.released_at,
         timedOutAt: row.timed_out_at,
         overrideReason: row.override_reason ?? null,
+        ...(gitContext ? { gitContext } : {}),
         updatedAt: row.updated_at,
         userId: task?.userId ?? null,
         user: task?.user ?? null
@@ -316,11 +463,14 @@ export function claimTaskRun(taskId, input, now = new Date(), activity = { sourc
                 throw new HttpError(409, "task_run_conflict", `Task ${taskId} already has an active timer owned by ${existing.actor}.`, buildTaskRunErrorDetails(existing, now, { requestedActor: parsedInput.actor }));
             }
             const nextExpiry = leaseExpiry(now, parsedInput.leaseTtlSeconds);
+            const gitContext = normalizeTaskRunGitContext(taskId, parsedInput.gitContext);
             getDatabase()
                 .prepare(`UPDATE task_runs
-           SET timer_mode = ?, planned_duration_seconds = ?, is_current = ?, heartbeat_at = ?, lease_expires_at = ?, lease_ttl_seconds = ?, note = ?, override_reason = ?, updated_at = ?
+           SET timer_mode = ?, planned_duration_seconds = ?, is_current = ?, heartbeat_at = ?, lease_expires_at = ?, lease_ttl_seconds = ?, note = ?, override_reason = ?,
+               git_provider = ?, git_repository = ?, git_branch = ?, git_base_branch = ?, git_branch_url = ?, git_pull_request_url = ?, git_pull_request_number = ?, git_compare_url = ?,
+               updated_at = ?
            WHERE id = ?`)
-                .run(parsedInput.timerMode, parsedInput.plannedDurationSeconds, existing.is_current, nowIso, nextExpiry, parsedInput.leaseTtlSeconds, parsedInput.note, parsedInput.overrideReason ?? null, nowIso, existing.id);
+                .run(parsedInput.timerMode, parsedInput.plannedDurationSeconds, existing.is_current, nowIso, nextExpiry, parsedInput.leaseTtlSeconds, parsedInput.note, parsedInput.overrideReason ?? null, gitContext?.provider ?? "", gitContext?.repository ?? "", gitContext?.branch ?? "", gitContext?.baseBranch ?? "main", gitContext?.branchUrl ?? null, gitContext?.pullRequestUrl ?? null, gitContext?.pullRequestNumber ?? null, gitContext?.compareUrl ?? null, nowIso, existing.id);
             maybeSetCurrentRun(parsedInput.actor, existing.id, parsedInput.isCurrent, now);
             touchTaskInProgress(taskId, parsedInput.actor, activity.source);
             recordActivityEvent({
@@ -336,7 +486,9 @@ export function claimTaskRun(taskId, input, now = new Date(), activity = { sourc
                     leaseTtlSeconds: parsedInput.leaseTtlSeconds,
                     timerMode: parsedInput.timerMode,
                     plannedDurationSeconds: parsedInput.plannedDurationSeconds,
-                    overrideReason: parsedInput.overrideReason ?? null
+                    overrideReason: parsedInput.overrideReason ?? null,
+                    gitBranch: gitContext?.branch ?? null,
+                    gitRepository: gitContext?.repository ?? null
                 }
             });
             heartbeatTaskRunTimebox(existing.id, {
@@ -353,12 +505,15 @@ export function claimTaskRun(taskId, input, now = new Date(), activity = { sourc
         enforceActiveRunLimit(parsedInput.actor, taskId, now);
         const runId = `run_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
         const expiry = leaseExpiry(now, parsedInput.leaseTtlSeconds);
+        const gitContext = normalizeTaskRunGitContext(taskId, parsedInput.gitContext);
         getDatabase()
             .prepare(`INSERT INTO task_runs (
-          id, task_id, actor, status, timer_mode, planned_duration_seconds, is_current, note, lease_ttl_seconds, claimed_at, heartbeat_at, lease_expires_at, override_reason, updated_at
+          id, task_id, actor, status, timer_mode, planned_duration_seconds, is_current, note, lease_ttl_seconds, claimed_at, heartbeat_at, lease_expires_at, override_reason,
+          git_provider, git_repository, git_branch, git_base_branch, git_branch_url, git_pull_request_url, git_pull_request_number, git_compare_url,
+          updated_at
          )
-         VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-            .run(runId, taskId, parsedInput.actor, parsedInput.timerMode, parsedInput.plannedDurationSeconds, 0, parsedInput.note, parsedInput.leaseTtlSeconds, nowIso, nowIso, expiry, parsedInput.overrideReason ?? null, nowIso);
+         VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+            .run(runId, taskId, parsedInput.actor, parsedInput.timerMode, parsedInput.plannedDurationSeconds, 0, parsedInput.note, parsedInput.leaseTtlSeconds, nowIso, nowIso, expiry, parsedInput.overrideReason ?? null, gitContext?.provider ?? "", gitContext?.repository ?? "", gitContext?.branch ?? "", gitContext?.baseBranch ?? "main", gitContext?.branchUrl ?? null, gitContext?.pullRequestUrl ?? null, gitContext?.pullRequestNumber ?? null, gitContext?.compareUrl ?? null, nowIso);
         maybeSetCurrentRun(parsedInput.actor, runId, parsedInput.isCurrent, now);
         touchTaskInProgress(taskId, parsedInput.actor, activity.source);
         const run = mapTaskRun(requireRun(runId), now);
@@ -386,7 +541,9 @@ export function claimTaskRun(taskId, input, now = new Date(), activity = { sourc
                 leaseTtlSeconds: run.leaseTtlSeconds,
                 timerMode: run.timerMode,
                 plannedDurationSeconds: run.plannedDurationSeconds,
-                overrideReason: parsedInput.overrideReason ?? null
+                overrideReason: parsedInput.overrideReason ?? null,
+                gitBranch: gitContext?.branch ?? null,
+                gitRepository: gitContext?.repository ?? null
             }
         });
         recordTaskRunStartReward(run.id, run.taskId, run.actor, activity.source);
@@ -404,11 +561,16 @@ export function heartbeatTaskRun(taskRunId, input, now = new Date(), activity = 
         const nowIso = now.toISOString();
         const nextExpiry = leaseExpiry(now, input.leaseTtlSeconds);
         const note = input.note ?? current.note;
+        const gitContext = input.gitContext === undefined
+            ? mapTaskRunGitContext(current)
+            : normalizeTaskRunGitContext(current.task_id, input.gitContext);
         getDatabase()
             .prepare(`UPDATE task_runs
-         SET heartbeat_at = ?, lease_expires_at = ?, lease_ttl_seconds = ?, note = ?, override_reason = ?, updated_at = ?
+         SET heartbeat_at = ?, lease_expires_at = ?, lease_ttl_seconds = ?, note = ?, override_reason = ?,
+             git_provider = ?, git_repository = ?, git_branch = ?, git_base_branch = ?, git_branch_url = ?, git_pull_request_url = ?, git_pull_request_number = ?, git_compare_url = ?,
+             updated_at = ?
          WHERE id = ?`)
-            .run(nowIso, nextExpiry, input.leaseTtlSeconds, note, input.overrideReason ?? current.override_reason, nowIso, taskRunId);
+            .run(nowIso, nextExpiry, input.leaseTtlSeconds, note, input.overrideReason ?? current.override_reason, gitContext?.provider ?? "", gitContext?.repository ?? "", gitContext?.branch ?? "", gitContext?.baseBranch ?? "main", gitContext?.branchUrl ?? null, gitContext?.pullRequestUrl ?? null, gitContext?.pullRequestNumber ?? null, gitContext?.compareUrl ?? null, nowIso, taskRunId);
         const run = mapTaskRun({
             ...current,
             heartbeat_at: nowIso,
@@ -416,6 +578,14 @@ export function heartbeatTaskRun(taskRunId, input, now = new Date(), activity = 
             lease_ttl_seconds: input.leaseTtlSeconds,
             note,
             override_reason: input.overrideReason ?? current.override_reason,
+            git_provider: gitContext?.provider ?? "",
+            git_repository: gitContext?.repository ?? "",
+            git_branch: gitContext?.branch ?? "",
+            git_base_branch: gitContext?.baseBranch ?? "main",
+            git_branch_url: gitContext?.branchUrl ?? null,
+            git_pull_request_url: gitContext?.pullRequestUrl ?? null,
+            git_pull_request_number: gitContext?.pullRequestNumber ?? null,
+            git_compare_url: gitContext?.compareUrl ?? null,
             updated_at: nowIso
         }, now);
         recordActivityEvent({
@@ -429,7 +599,9 @@ export function heartbeatTaskRun(taskRunId, input, now = new Date(), activity = 
             metadata: {
                 taskId: run.taskId,
                 leaseTtlSeconds: run.leaseTtlSeconds,
-                overrideReason: input.overrideReason ?? null
+                overrideReason: input.overrideReason ?? null,
+                gitBranch: gitContext?.branch ?? null,
+                gitRepository: gitContext?.repository ?? null
             }
         });
         heartbeatTaskRunTimebox(taskRunId, {

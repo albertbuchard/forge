@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { CheckCheck, Clock3, PauseCircle, Play, Square, Timer } from "lucide-react";
+import { CheckCheck, Clock3, GitBranch, GitPullRequest, PauseCircle, Play, Square, Timer } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -265,6 +265,22 @@ export function TaskTimerRailPanel({
                     <span>Unlimited session</span>
                   )}
                 </div>
+                {current.run.gitContext?.branch || current.run.gitContext?.pullRequestNumber ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {current.run.gitContext?.branch ? (
+                      <Badge tone="meta">
+                        <GitBranch className="mr-1 size-3" />
+                        {current.run.gitContext.branch}
+                      </Badge>
+                    ) : null}
+                    {current.run.gitContext?.pullRequestNumber ? (
+                      <Badge tone="meta">
+                        <GitPullRequest className="mr-1 size-3" />
+                        PR #{current.run.gitContext.pullRequestNumber}
+                      </Badge>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
 
               <div className="flex flex-wrap gap-2">

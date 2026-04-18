@@ -13,5 +13,11 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src", "vite.config.ts", "eslint.config.js", "vitest.setup.ts"]
+  "include": [
+    "src",
+    "server/src/**/*.d.ts",
+    "vite.config.ts",
+    "eslint.config.js",
+    "vitest.setup.ts"
+  ]
 }

@@ -1604,6 +1604,9 @@ async function publishTaskTimeboxes(state, forgeCalendarUrl, connectionId) {
 async function syncDiscoveredState(connectionId, credentials) {
     const state = await createProviderClient(credentials);
     if (state.mode === "macos_local") {
+        if (credentials.provider !== "macos_local") {
+            throw new Error("Forge expected macOS-local credentials for this provider state.");
+        }
         const selected = new Set(credentials.selectedCalendarUrls.map((value) => normalizeUrl(value)));
         const forgeCalendarUrl = normalizeOptionalUrl(credentials.forgeCalendarUrl);
         for (const calendar of state.calendars) {
@@ -1753,6 +1756,9 @@ function toStoredCredentials(input, forgeCalendarUrl) {
     if (input.provider === "microsoft" || input.provider === "google") {
         throw new Error(`${input.provider === "google" ? "Google Calendar" : "Exchange Online"} connections must be created from a completed OAuth sign-in session.`);
     }
+    if (input.provider === "macos_local") {
+        throw new Error("macOS local calendar connections use the dedicated creation path.");
+    }
     if (input.provider === "apple") {
         return {
             provider: "apple",
@@ -1870,6 +1876,9 @@ function requireActiveConnection(connectionId) {
 function toDiscoveryCredentials(input) {
     if (input.provider === "microsoft" || input.provider === "google") {
         throw new Error(`${input.provider === "google" ? "Google Calendar" : "Exchange Online"} discovery now uses the guided OAuth sign-in flow.`);
+    }
+    if (input.provider === "macos_local") {
+        throw new Error("macOS local calendars are discovered from the dedicated local calendar flow.");
     }
     if (input.provider === "apple") {
         return {

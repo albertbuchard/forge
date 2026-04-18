@@ -6,6 +6,7 @@ import {
   QuestionFlowDialog,
   type QuestionFlowStep
 } from "@/components/flows/question-flow-dialog";
+import { GitRefPicker } from "@/components/git-ref-picker";
 import { defaultGoalValues } from "@/components/goal-dialog";
 import { InlineNoteFields } from "@/components/notes/inline-note-fields";
 import { defaultProjectValues } from "@/components/project-dialog";
@@ -84,6 +85,19 @@ function buildCompletionReport(options: {
     workSummary: options.workSummary,
     linkedGitRefIds: options.linkedGitRefIds
   };
+}
+
+function syncCompletionReportGitRefs(
+  gitRefs: QuickTaskInput["gitRefs"],
+  current: QuickTaskInput["completionReport"]
+) {
+  return buildCompletionReport({
+    modifiedFiles: current?.modifiedFiles ?? [],
+    workSummary: current?.workSummary ?? "",
+    linkedGitRefIds: gitRefs
+      .map((ref) => ref.id)
+      .filter((refId): refId is string => typeof refId === "string")
+  });
 }
 
 type AnchorKind = "goal" | "project" | "issue" | "task";
@@ -1402,41 +1416,18 @@ export function TaskDialog({
                   placeholder="src/pages/kanban-page.tsx&#10;server/src/repositories/tasks.ts"
                 />
               </FlowField>
-              <FlowField label="Associated commits">
-                <Textarea
-                  value={value.gitRefs
-                    .filter((ref) => ref.refType === "commit")
-                    .map((ref) => ref.refValue)
-                    .join("\n")}
-                  onChange={(event) => {
-                    const commitRefs = parseMultilineList(
-                      event.target.value
-                    ).map((refValue, index) => ({
-                      id: `draft-commit-${index + 1}`,
-                      refType: "commit" as const,
-                      provider: "git",
-                      repository: "",
-                      refValue,
-                      url: null,
-                      displayTitle: ""
-                    }));
-                    const nextGitRefs = [
-                      ...value.gitRefs.filter(
-                        (ref) => ref.refType !== "commit"
-                      ),
-                      ...commitRefs
-                    ];
+              <FlowField label="Git links">
+                <GitRefPicker
+                  selectedRefs={value.gitRefs}
+                  onChange={(gitRefs) =>
                     setValue({
-                      gitRefs: nextGitRefs,
-                      completionReport: buildCompletionReport({
-                        modifiedFiles:
-                          value.completionReport?.modifiedFiles ?? [],
-                        workSummary: value.completionReport?.workSummary ?? "",
-                        linkedGitRefIds: commitRefs.map((ref) => ref.id ?? "")
-                      })
-                    });
-                  }}
-                  placeholder="abc1234&#10;def5678"
+                      gitRefs,
+                      completionReport: syncCompletionReportGitRefs(
+                        gitRefs,
+                        value.completionReport
+                      )
+                    })
+                  }
                 />
               </FlowField>
             </>

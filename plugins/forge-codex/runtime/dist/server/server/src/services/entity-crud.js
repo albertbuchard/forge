@@ -494,8 +494,9 @@ function buildMinimalExamplePayload(schema) {
     }
     const requiredFields = collectRequiredTopLevelFields(schema);
     const example = {};
+    const shape = unwrapped.shape;
     for (const field of requiredFields) {
-        example[field] = buildExampleValue(unwrapped.shape[field]);
+        example[field] = buildExampleValue(shape[field]);
     }
     return example;
 }

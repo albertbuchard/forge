@@ -59,15 +59,16 @@ export async function syncLocalAdapterDataRoots(dataRoot) {
         const entries = plugins.entries && typeof plugins.entries === "object"
             ? { ...plugins.entries }
             : {};
-        const currentEntry = entries["forge-openclaw-plugin"] &&
-            typeof entries["forge-openclaw-plugin"] === "object"
-            ? { ...entries["forge-openclaw-plugin"] }
+        const currentEntryValue = entries["forge-openclaw-plugin"];
+        const currentEntry = currentEntryValue && typeof currentEntryValue === "object"
+            ? { ...currentEntryValue }
             : { enabled: true };
-        const currentConfig = currentEntry.config && typeof currentEntry.config === "object"
-            ? { ...currentEntry.config }
+        const currentConfigValue = currentEntry["config"];
+        const currentConfig = currentConfigValue && typeof currentConfigValue === "object"
+            ? { ...currentConfigValue }
             : {};
         currentConfig.dataRoot = resolved;
-        currentEntry.config = currentConfig;
+        currentEntry["config"] = currentConfig;
         entries["forge-openclaw-plugin"] = currentEntry;
         plugins.entries = entries;
         return {

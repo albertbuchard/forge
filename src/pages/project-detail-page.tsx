@@ -692,6 +692,7 @@ export function ProjectDetailPage() {
 
       <ExecutionBoard
         tasks={payload.tasks}
+        activeRuns={shell.snapshot.activeTaskRuns}
         goals={shell.snapshot.goals}
         tags={shell.snapshot.tags}
         notesSummaryByEntity={notesSummaryByEntity}
@@ -703,6 +704,15 @@ export function ProjectDetailPage() {
           });
         }}
         onSelectTask={(taskId) => navigate(`/tasks/${taskId}`)}
+        onStopTask={async (run) => {
+          await shell.stopTaskRun(run);
+          await queryClient.invalidateQueries({
+            queryKey: ["project-board", params.projectId]
+          });
+          await queryClient.invalidateQueries({
+            queryKey: ["task-context", run.taskId]
+          });
+        }}
         onQuickReopenTask={async (taskId) => {
           await reopenMutation.mutateAsync(taskId);
         }}

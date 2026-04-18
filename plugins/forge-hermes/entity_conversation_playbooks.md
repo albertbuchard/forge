@@ -53,6 +53,9 @@ Forge correctly, and gather only the structure that still matters.
   CRUD.
 - For specialized surfaces, ask what would make the answer or change useful before you
   ask route-shaped details such as provider, weekday, flow id, run id, or trip id.
+- For specialized surfaces, start from the user's real job in plain language, then
+  narrow to the route family. Do not open with a route menu unless the user already
+  named the exact object and action.
 - When the user has already named a precise correction or review target, do not widen
   back out into a meta lane question. Confirm only the missing route-selecting detail
   and then act.
@@ -992,13 +995,16 @@ another Forge record before choosing the dedicated route family.
 
 Arc:
 
-1. Ask whether the user is trying to query behavior, add something manually, update an existing movement item, or link movement to another Forge entity.
-2. Ask whether the focus is a stay, a trip, a place, a timeline window, or a selected span.
-3. Ask for the time window, place, or movement item that makes the question concrete.
-4. Ask what they are trying to notice, preserve, or answer through that movement context.
-5. Skip the meta lane question when the user already named the exact correction or
+1. Ask what they are trying to make clearer, repair, or preserve about where they
+   were before you narrow to the exact movement lane.
+2. Ask whether the user is trying to query behavior, add something manually, update
+   an existing movement item, or link movement to another Forge entity.
+3. Ask whether the focus is a stay, a trip, a place, a timeline window, or a selected span.
+4. Ask for the time window, place, or movement item that makes the question concrete.
+5. Ask what they are trying to notice, preserve, or answer through that movement context.
+6. Skip the meta lane question when the user already named the exact correction or
    review target and only one ambiguity remains.
-6. Route to the dedicated movement read or write path once the surface is clear.
+7. Route to the dedicated movement read or write path once the surface is clear.
 
 Direct action rules:
 
@@ -1057,7 +1063,7 @@ Ready to act when:
 
 Preferred opening question:
 
-- "Are you trying to understand where you stayed and traveled, change one stay or trip, or answer a question about your movement behavior?"
+- "What are you trying to make clearer or correct about where you stayed and traveled?"
 
 ## Life Force
 
@@ -1066,14 +1072,16 @@ profile assumptions, edit weekday curves, or log a real-time fatigue signal.
 
 Arc:
 
-1. Ask whether the job is overview, profile change, weekday-template change, or fatigue signaling.
-2. Ask what part of the current energy picture feels most important or inaccurate.
-3. Ask what should stay true if they are changing profile or template assumptions.
-4. Ask whether the user is describing a stable weekly shape or just how today feels
+1. Ask what feels off, important, or worth tracking in their energy picture before
+   you reduce it to one life-force lane.
+2. Ask whether the job is overview, profile change, weekday-template change, or fatigue signaling.
+3. Ask what part of the current energy picture feels most important or inaccurate.
+4. Ask what should stay true if they are changing profile or template assumptions.
+5. Ask whether the user is describing a stable weekly shape or just how today feels
    when the lane is still blurred.
-5. If the user already named the life-force lane clearly, skip the meta lane question
+6. If the user already named the life-force lane clearly, skip the meta lane question
    and ask only for the specific weekday, profile field, or signal that still matters.
-6. Route to the dedicated life-force path once the lane is clear.
+7. Route to the dedicated life-force path once the lane is clear.
 
 Helpful follow-up lanes:
 
@@ -1110,7 +1118,7 @@ Ready to act when:
 
 Preferred opening question:
 
-- "Do you want to understand the current energy picture, change how Forge models it, or log how you feel right now?"
+- "What feels most off, important, or worth tracking in your energy picture right now?"
 
 ## Workbench
 
@@ -1119,10 +1127,11 @@ results so the agent uses the dedicated workbench contract instead of vague CRUD
 
 Arc:
 
-1. Ask whether the job is flow discovery, one flow edit, execution, run history, published output, node-level inspection, or latest-node-output lookup.
-2. Ask which flow, slug, run, or node the request is about.
-3. Ask whether they need the flow contract, a run result, a published output, or a node result.
-4. Ask what the user is trying to learn, repair, or publish through that flow.
+1. Ask what they are trying to learn, repair, publish, or run through Workbench
+   before you narrow to flow discovery, editing, execution, or results.
+2. Ask whether the job is flow discovery, one flow edit, execution, run history, published output, node-level inspection, or latest-node-output lookup.
+3. Ask which flow, slug, run, or node the request is about.
+4. Ask whether they need the flow contract, a run result, a published output, or a node result.
 5. If the user already named the flow and action clearly, skip the meta lane
    question and ask only for the missing run, node, or output scope.
 6. Route to the dedicated workbench route family once the execution lane is clear.
@@ -1173,7 +1182,7 @@ Ready to act when:
 
 Preferred opening question:
 
-- "Are you trying to inspect a flow, change it, run it, or inspect one run's outputs?"
+- "What are you trying to inspect a flow, change it, run it, or publish from Workbench?"
 
 ## Preference Catalog
 

@@ -87,6 +87,7 @@ test("createDataBackup captures the database, schema, wiki files, and secrets ke
   const dataRoot = await createRuntimeRoot("forge-data-backup-");
 
   try {
+    const baselineTagCount = listTagIds().length;
     insertTag("tag_backup", "Backup");
     await writeRuntimeArtifacts(dataRoot, "backup");
     await updateDataManagementSettings({
@@ -101,7 +102,7 @@ test("createDataBackup captures the database, schema, wiki files, and secrets ke
     const archiveEntries = archive.getEntries().map((entry) => entry.entryName);
 
     assert.equal(backups.length, 1);
-    assert.equal(backup.counts.tags, 1);
+    assert.equal(backup.counts.tags, baselineTagCount + 1);
     assert.equal(backup.includesWiki, true);
     assert.equal(backup.includesSecretsKey, true);
     assert.ok(archiveEntries.includes("forge.sqlite"));
@@ -120,6 +121,7 @@ test("restoreDataBackup rolls the database and runtime files back to the selecte
 
   try {
     insertTag("tag_before_restore", "Before restore");
+    const expectedTagIds = listTagIds();
     await writeRuntimeArtifacts(dataRoot, "before");
     await updateDataManagementSettings({
       backupDirectory: path.join(dataRoot, "backups"),
@@ -133,7 +135,7 @@ test("restoreDataBackup rolls the database and runtime files back to the selecte
 
     await restoreDataBackup(backup.id, { createSafetyBackup: false });
 
-    assert.deepEqual(listTagIds(), ["tag_before_restore"]);
+    assert.deepEqual(listTagIds(), expectedTagIds);
     assert.equal(
       await readFile(path.join(dataRoot, "wiki", "index.md"), "utf8"),
       "# Wiki before\n"
@@ -286,6 +288,7 @@ test("switchDataRoot can both move the current data and adopt an existing data f
     closeDatabase();
     await initializeDatabase();
     insertTag("tag_switch_current", "Current");
+    const expectedMovedTagIds = listTagIds();
     await writeRuntimeArtifacts(currentRoot, "current");
     await updateDataManagementSettings({
       backupDirectory: path.join(currentRoot, "backups"),
@@ -310,7 +313,7 @@ test("switchDataRoot can both move the current data and adopt an existing data f
     );
 
     assert.equal(getEffectiveDataRoot(), movedRoot);
-    assert.deepEqual(listTagIds(), ["tag_switch_current"]);
+    assert.deepEqual(listTagIds(), expectedMovedTagIds);
     assert.equal(existsSync(path.join(movedRoot, "forge.sqlite")), true);
     assert.equal(existsSync(path.join(movedRoot, "wiki", "index.md")), true);
     assert.equal(
@@ -322,6 +325,7 @@ test("switchDataRoot can both move the current data and adopt an existing data f
     closeDatabase();
     await initializeDatabase();
     insertTag("tag_switch_adopted", "Adopted");
+    const expectedAdoptedTagIds = listTagIds();
 
     configureDatabase({ dataRoot: movedRoot, seedDemoData: false });
     closeDatabase();
@@ -344,7 +348,7 @@ test("switchDataRoot can both move the current data and adopt an existing data f
     );
 
     assert.equal(getEffectiveDataRoot(), adoptedRoot);
-    assert.deepEqual(listTagIds(), ["tag_switch_adopted"]);
+    assert.deepEqual(listTagIds(), expectedAdoptedTagIds);
     assert.deepEqual(persistedRoots, [movedRoot, adoptedRoot]);
     assert.deepEqual(syncedRoots, [movedRoot, adoptedRoot]);
   } finally {

@@ -405,7 +405,7 @@ export async function listDataBackups() {
     }
     return backups;
 }
-export async function createDataBackup(input = {}, options = {}) {
+export async function createDataBackup(input = { note: "" }, options = {}) {
     const parsed = createDataBackupSchema.parse(input);
     const mode = dataBackupModeSchema.parse(options.mode ?? "manual");
     const settings = resolveCurrentDataManagementSettings();
@@ -544,7 +544,7 @@ function walkForForgeSqlite(rootDir, maxDepth = 5) {
         }
         let entries;
         try {
-            entries = readdirSync(dir, { withFileTypes: true });
+            entries = readdirSync(dir, { encoding: "utf8", withFileTypes: true });
         }
         catch {
             return;

@@ -123,6 +123,9 @@ Surface rule:
   one question, and avoid naming a finished diagnosis-like formulation.
 - Reflect before the next question. Earn the formulation gradually from the user's own
   words.
+- If the user already offers a usable belief sentence, value phrase, or mode name,
+  refine from their wording first instead of replacing it with a cleaner label too
+  early.
 - For Psyche updates, start with what feels newly true, newly visible, or newly
   inaccurate, then ask what should stay true before you change the wording or links.
 - When a belief, mode, value, pattern, or note becomes visible alongside the main
@@ -223,6 +226,9 @@ Surface rule:
   execution uses `/api/v1/workbench/flows/:id/run` or `/api/v1/workbench/run`,
   published outputs use `/api/v1/workbench/flows/:id/output`, and per-run or per-node
   inspection uses the run and node-result routes under `/api/v1/workbench/flows/:id`.
+- When the request is routed through the OpenClaw HTTP proxy instead of direct Forge
+  runtime access, those same specialized families are mirrored under
+  `/forge/v1/movement/*`, `/forge/v1/life-force/*`, and `/forge/v1/workbench/*`.
 - Exact create-shape expectations live in `forge_get_agent_onboarding`. Use its
   `entityCatalog` as the schema source of truth for `minimumCreateFields`,
   `fieldGuide`, examples, classification, and preferred mutation path.

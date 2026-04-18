@@ -43,6 +43,11 @@ async function loadOnboardingPayload() {
       readModelOnlySurfaces: Record<string, string>;
     };
     interactionGuidance: Record<string, string>;
+    connectionGuides?: {
+      openclaw?: {
+        verifyCommands?: string[];
+      };
+    };
   };
 }
 
@@ -218,7 +223,7 @@ describe("forge onboarding contract", () => {
     expect(onboarding.interactionGuidance).toEqual(
       expect.objectContaining({
         specializedSurfaceRule: expect.stringMatching(
-          /Movement, Life Force, and Workbench/i
+          /Movement, Life Force, and Workbench[\s\S]*\/forge\/v1\/movement[\s\S]*\/forge\/v1\/life-force[\s\S]*\/forge\/v1\/workbench/i
         ),
         reviewShortcutRule: expect.stringMatching(
           /reviewing or correcting an existing record/i
@@ -227,6 +232,17 @@ describe("forge onboarding contract", () => {
           /Self-observation is note-backed[\s\S]*Sleep and workout sessions stay on batch CRUD by default/i
         )
       })
+    );
+  });
+
+  it("keeps the OpenClaw connection guide aligned with the repo-local install path", async () => {
+    const onboarding = await loadOnboardingPayload();
+    expect(
+      onboarding.connectionGuides?.openclaw?.verifyCommands ?? []
+    ).toEqual(
+      expect.arrayContaining([
+        "openclaw plugins install ./projects/forge/openclaw-plugin"
+      ])
     );
   });
 });

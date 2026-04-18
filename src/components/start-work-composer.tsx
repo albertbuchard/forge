@@ -7,12 +7,18 @@ import { EntityBadge } from "@/components/ui/entity-badge";
 import { EntityName } from "@/components/ui/entity-name";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import type { ProjectSummary, Task, TimeAccountingMode } from "@/lib/types";
+import type {
+  ProjectSummary,
+  Task,
+  TaskRunGitContext,
+  TimeAccountingMode
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type TimerStartInput = {
   timerMode: "planned" | "unlimited";
   plannedDurationSeconds: number | null;
+  gitContext: TaskRunGitContext | null;
 };
 
 type StartWorkComposerProps = {
@@ -35,6 +41,7 @@ type StartWorkComposerProps = {
     projectId: string;
     timerMode: "planned" | "unlimited";
     plannedDurationSeconds: number | null;
+    gitContext: TaskRunGitContext | null;
   }) => Promise<void>;
 };
 
@@ -68,6 +75,8 @@ function StartWorkComposerBody({
   const [projectId, setProjectId] = useState(defaultProjectId ?? "");
   const [timerMode, setTimerMode] = useState<"planned" | "unlimited">("planned");
   const [plannedMinutes, setPlannedMinutes] = useState("20");
+  const [gitRepository, setGitRepository] = useState("");
+  const [gitBranch, setGitBranch] = useState("");
 
   useEffect(() => {
     setMode(initialTaskId ? "existing" : "new");
@@ -78,6 +87,8 @@ function StartWorkComposerBody({
     setProjectId(defaultProjectId ?? "");
     setTimerMode("planned");
     setPlannedMinutes("20");
+    setGitRepository("");
+    setGitBranch("");
   }, [defaultProjectId, initialTaskId]);
 
   const sortedTasks = useMemo(
@@ -120,6 +131,29 @@ function StartWorkComposerBody({
 
   const selectedProject = useMemo(() => projects.find((project) => project.id === projectId) ?? null, [projectId, projects]);
   const plannedDurationSeconds = timerMode === "planned" ? Math.max(60, (Number.parseInt(plannedMinutes, 10) || 20) * 60) : null;
+  const gitContext = useMemo<TaskRunGitContext | null>(() => {
+    const repository = gitRepository.trim();
+    const branch = gitBranch.trim();
+    if (!repository && !branch) {
+      return null;
+    }
+    return {
+      provider: "github",
+      repository,
+      branch,
+      baseBranch: "main",
+      branchUrl:
+        repository && branch
+          ? `https://github.com/${repository}/tree/${encodeURIComponent(branch)}`
+          : null,
+      pullRequestUrl: null,
+      pullRequestNumber: null,
+      compareUrl:
+        repository && branch
+          ? `https://github.com/${repository}/compare/main...${encodeURIComponent(branch)}`
+          : null
+    };
+  }, [gitBranch, gitRepository]);
   const canSubmit = mode === "existing" ? Boolean(selectedTaskId) : Boolean(title.trim() && projectId);
   const policyLabel =
     timeAccountingMode === "split"
@@ -291,6 +325,33 @@ function StartWorkComposerBody({
         </div>
       </div>
 
+      <div className="grid gap-3 rounded-[20px] border border-white/8 bg-white/[0.03] p-4">
+        <div>
+          <div className="type-label text-white/45">GitHub context</div>
+          <div className="mt-2 text-sm leading-6 text-white/56">
+            Optional. Record the repository and branch for this work session so the project board can show the live agent branch.
+          </div>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <label className="grid gap-2">
+            <span className="type-label text-white/45">Repository</span>
+            <Input
+              value={gitRepository}
+              onChange={(event) => setGitRepository(event.target.value)}
+              placeholder="owner/repo"
+            />
+          </label>
+          <label className="grid gap-2">
+            <span className="type-label text-white/45">Branch</span>
+            <Input
+              value={gitBranch}
+              onChange={(event) => setGitBranch(event.target.value)}
+              placeholder="agent/board-redesign"
+            />
+          </label>
+        </div>
+      </div>
+
       {errorMessage ? <div className="rounded-[18px] bg-rose-500/10 px-4 py-3 text-sm leading-6 text-rose-200">{errorMessage}</div> : null}
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/6 pt-4">
@@ -312,7 +373,11 @@ function StartWorkComposerBody({
                 return;
               }
               if (mode === "existing" && selectedTaskId) {
-                await onStartExisting(selectedTaskId, { timerMode, plannedDurationSeconds });
+                await onStartExisting(selectedTaskId, {
+                  timerMode,
+                  plannedDurationSeconds,
+                  gitContext
+                });
                 return;
               }
               await onCreateAndStart({
@@ -320,7 +385,8 @@ function StartWorkComposerBody({
                 description: description.trim(),
                 projectId,
                 timerMode,
-                plannedDurationSeconds
+                plannedDurationSeconds,
+                gitContext
               });
             }}
           >

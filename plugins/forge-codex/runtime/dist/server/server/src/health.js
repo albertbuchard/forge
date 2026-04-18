@@ -124,6 +124,10 @@ export const createCompanionPairingSessionSchema = z.object({
         "watch-ready"
     ])
 });
+const COMPANION_VERIFIED_PAIRING_TTL_MS = 10 * 365 * 24 * 60 * 60 * 1000;
+function nextVerifiedCompanionPairingExpiry(now) {
+    return new Date(now.getTime() + COMPANION_VERIFIED_PAIRING_TTL_MS).toISOString();
+}
 export const revokeAllCompanionPairingSessionsSchema = z.object({
     userIds: z.array(z.string().trim().min(1)).default([]),
     includeRevoked: z.boolean().default(false)
@@ -1440,6 +1444,7 @@ export function verifyCompanionPairing(payload) {
     const parsed = verifyCompanionPairingSchema.parse(payload);
     const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
     const now = nowIso();
+    const renewedExpiry = nextVerifiedCompanionPairingExpiry(new Date());
     const nextStatus = pairing.status === "healthy" ||
         pairing.status === "stale" ||
         pairing.status === "permission_denied"
@@ -1448,9 +1453,9 @@ export function verifyCompanionPairing(payload) {
     getDatabase()
         .prepare(`UPDATE companion_pairing_sessions
        SET status = ?, device_name = ?, platform = ?, app_version = ?,
-           last_seen_at = ?, paired_at = COALESCE(paired_at, ?), updated_at = ?
+           last_seen_at = ?, paired_at = COALESCE(paired_at, ?), expires_at = ?, updated_at = ?
        WHERE id = ?`)
-        .run(nextStatus, parsed.device.name, parsed.device.platform, parsed.device.appVersion, now, now, now, pairing.id);
+        .run(nextStatus, parsed.device.name, parsed.device.platform, parsed.device.appVersion, now, now, renewedExpiry, now, pairing.id);
     if (parsed.device.name.trim().length > 0) {
         const duplicateRows = getDatabase()
             .prepare(`SELECT *

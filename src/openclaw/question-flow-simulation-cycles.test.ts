@@ -155,6 +155,9 @@ describe("question flow simulation cycles", () => {
 
     expect(psychePlaybook).toMatch(/Change and save pivots/i);
     expect(psychePlaybook).toMatch(/When the user says the formulation lands/i);
+    expect(psychePlaybook).toMatch(
+      /When the user offers their own sentence[\s\S]*stay inside that sentence first/i
+    );
     expect(psychePlaybook).toMatch(/do not ask for evidence, origin, or repair[\s\S]*all that is[\s\S]*missing/i);
     expect(psychePlaybook).toMatch(/do not switch containers unless the user wants to/i);
     expect(psychePlaybook).toMatch(/say in plain language what makes you think/i);
