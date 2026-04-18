@@ -1,6 +1,5 @@
-Forge Companion 1.0.8 keeps verified pairings long-lived, auto-renews stale
-movement sessions before stay edits or labeling, fixes Life Timeline modal
-handoffs, and lets you create and save a new location label directly from an
-unlabeled stay while editing stay details normally again. This release also
-fixes the GitHub Actions TestFlight path to archive through App Store Connect
-authentication instead of requiring a local Xcode account on the runner.
+Forge Companion 1.0.9 fixes the iOS location creation flow from unlabeled
+stays: the second modal now saves correctly, closes after creation, reapplies
+the new label to the stay, and stops preloading irrelevant repair/system tags
+into the location form. This keeps the location draft focused on the place
+name, coordinates, and optional category tags.
