@@ -1921,6 +1921,37 @@ final class ForgeCompanionTests: XCTestCase {
         )
     }
 
+    func testSeededCategoryTagsForNewPlaceExcludesSystemRepairTags() {
+        let startedAt = Date(timeIntervalSince1970: 1_775_000_000)
+        let item = MovementLifeTimelineItem(
+            id: "local-stay-item",
+            source: .derived("repaired-gap-stay"),
+            kind: .stay,
+            title: "Stay",
+            subtitle: "Repaired stay",
+            placeLabel: nil,
+            tags: ["movement", "stay", "repaired_from_trip", "boundary-incomplete", "home", "coffee"],
+            syncSource: "local derived",
+            startedAtDate: startedAt,
+            endedAtDate: startedAt.addingTimeInterval(3600),
+            durationSeconds: 3600,
+            laneSide: .left,
+            connectorFromLane: .left,
+            connectorToLane: .left,
+            distanceMeters: nil,
+            averageSpeedMps: nil,
+            rawStayIds: ["stay_local_1"],
+            origin: .repairedGap,
+            editable: true,
+            isCurrent: false
+        )
+
+        XCTAssertEqual(
+            movementTimelineSeededCategoryTagsForNewPlace(from: item),
+            ["home", "coffee"]
+        )
+    }
+
     func testMovementTimelineDetailSnapshotPreservesTimelineItemIdForRemoteActions() {
         let segment = ForgeMovementTimelineSegment(
             id: "box_remote_stay",

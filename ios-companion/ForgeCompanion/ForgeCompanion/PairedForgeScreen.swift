@@ -1089,7 +1089,7 @@ private struct MovementLifeTimelineView: View {
             return
         }
         let draft = MovementTimelinePlaceDraft(
-            itemId: item.id,
+            item: item,
             label:
                 labelHint?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
                 ? labelHint!.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1099,7 +1099,7 @@ private struct MovementLifeTimelineView: View {
             latitude: coordinate.latitude,
             longitude: coordinate.longitude,
             radiusMeters: item.stayRadiusMeters(using: appModel.movementStore),
-            tags: item.tags
+            tags: movementTimelineSeededCategoryTagsForNewPlace(from: item)
         )
         if hasPresentedModal {
             queuedPlaceDraft = draft
@@ -1158,6 +1158,7 @@ private struct MovementLifeTimelineView: View {
             }
     }
 
+    @MainActor
     private func assignKnownPlace(
         _ place: MovementSyncStore.StoredKnownPlace,
         to item: MovementLifeTimelineItem
@@ -1287,6 +1288,7 @@ private struct MovementLifeTimelineView: View {
         }
     }
 
+    @MainActor
     private func savePlaceDraft(_ draft: MovementTimelinePlaceDraft) async {
         do {
             let place = try await performMovementOperation(
@@ -1299,17 +1301,6 @@ private struct MovementLifeTimelineView: View {
                     longitude: draft.longitude,
                     categoryTags: draft.tags,
                     pairing: pairing
-                )
-            }
-
-            guard let item = displayItems.first(where: { $0.id == draft.itemId }) else {
-                throw NSError(
-                    domain: "MovementLifeTimeline",
-                    code: 10,
-                    userInfo: [
-                        NSLocalizedDescriptionKey:
-                            "Created the location, but the stay was no longer available to relabel. Refresh and try again."
-                    ]
                 )
             }
 
@@ -1329,7 +1320,7 @@ private struct MovementLifeTimelineView: View {
             appModel.movementStore.storeKnownPlace(storedPlace)
 
             placeDraft = nil
-            await assignKnownPlace(storedPlace, to: item)
+            await assignKnownPlace(storedPlace, to: draft.item)
         } catch {
             loadError = error.localizedDescription
         }
@@ -1410,8 +1401,42 @@ func movementTimelinePlaceLabelOperation(
     }
 }
 
+func movementTimelineSeededCategoryTagsForNewPlace(
+    from item: MovementLifeTimelineItem
+) -> [String] {
+    let blockedTags: Set<String> = [
+        "movement",
+        "stay",
+        "trip",
+        "continued-stay",
+        "repaired-gap",
+        "repaired-from-trip",
+        "repaired_from_trip",
+        "suppressed-short-jump",
+        "under-distance-threshold",
+        "boundary-incomplete",
+        "trailing-gap"
+    ]
+    return item.tags.filter { tag in
+        let normalized = tag
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "_", with: "-")
+        guard normalized.isEmpty == false else {
+            return false
+        }
+        if blockedTags.contains(normalized) {
+            return false
+        }
+        if normalized.hasPrefix("repaired-") {
+            return false
+        }
+        return true
+    }
+}
+
 private struct MovementTimelinePlaceDraft: Identifiable {
-    let itemId: String
+    let item: MovementLifeTimelineItem
     var label: String
     var latitude: Double
     var longitude: Double
@@ -1419,7 +1444,7 @@ private struct MovementTimelinePlaceDraft: Identifiable {
     var tags: [String]
 
     var id: String {
-        itemId
+        item.id
     }
 }
 
@@ -1639,17 +1664,21 @@ private struct MovementTimelinePlaceSheet: View {
                     TextField("Label", text: $draft.label)
                     TextField("Latitude", value: $draft.latitude, format: .number.precision(.fractionLength(6)))
                     TextField("Longitude", value: $draft.longitude, format: .number.precision(.fractionLength(6)))
+                }
+                Section("Optional details") {
                     TextField("Radius meters", value: $draft.radiusMeters, format: .number.precision(.fractionLength(0)))
                     TextField(
-                        "Tags",
+                        "Category tags",
                         text: Binding(
                             get: { draft.tags.joined(separator: ", ") },
                             set: { draft.tags = $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { $0.isEmpty == false } }
                         )
                     )
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
                 }
             }
-            .navigationTitle("Create Label")
+            .navigationTitle("Create Location")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
