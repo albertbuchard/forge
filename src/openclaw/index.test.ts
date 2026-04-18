@@ -227,6 +227,16 @@ describe("forge openclaw plugin", () => {
     const tools: ToolCall[] = [];
     const hooks: HookCall[] = [];
     const services: ServiceCall[] = [];
+    let cliOptions:
+      | {
+          commands?: string[];
+          descriptors?: {
+            name: string;
+            description: string;
+            hasSubcommands?: boolean;
+          }[];
+        }
+      | undefined;
     const program = createCommand("root");
 
     registerForgePlugin({
@@ -251,7 +261,8 @@ describe("forge openclaw plugin", () => {
       registerService(service) {
         services.push(service as ServiceCall);
       },
-      registerCli(registrar) {
+      registerCli(registrar, options) {
+        cliOptions = options;
         registrar({
           program: program as never,
           config: {} as never,
@@ -266,6 +277,16 @@ describe("forge openclaw plugin", () => {
     });
 
     expect(routes).toHaveLength(FORGE_PLUGIN_ROUTE_GROUPS.length);
+    expect(cliOptions).toEqual({
+      commands: ["forge"],
+      descriptors: [
+        {
+          name: "forge",
+          description: "Inspect and operate Forge through the OpenClaw plugin",
+          hasSubcommands: true
+        }
+      ]
+    });
     expect(hooks).toEqual([
       {
         events: "agent:bootstrap",

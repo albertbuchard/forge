@@ -42,6 +42,11 @@ export type ForgeCliRegistrarContext = {
         debug?(message: string): void;
     };
 };
+export type ForgeCliCommandDescriptor = {
+    name: string;
+    description: string;
+    hasSubcommands?: boolean;
+};
 export type ForgePluginServiceContext = {
     config?: unknown;
     workspaceDir?: string;
@@ -77,6 +82,7 @@ export type ForgePluginRegistrationApi = {
     }): void;
     registerCli?(registrar: (context: ForgeCliRegistrarContext) => void, options?: {
         commands?: string[];
+        descriptors?: ForgeCliCommandDescriptor[];
     }): void;
     registerService?(service: ForgeRegisteredService): void;
 };

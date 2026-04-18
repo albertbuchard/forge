@@ -1158,5 +1158,14 @@ export function registerForgePluginCli(api, config) {
             .action(async () => {
             console.log(JSON.stringify(await runRouteCheck(config), null, 2));
         });
-    }, { commands: ["forge"] });
+    }, {
+        commands: ["forge"],
+        descriptors: [
+            {
+                name: "forge",
+                description: "Inspect and operate Forge through the OpenClaw plugin",
+                hasSubcommands: true
+            }
+        ]
+    });
 }
