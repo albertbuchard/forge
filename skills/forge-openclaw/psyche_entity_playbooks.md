@@ -350,6 +350,9 @@ If the entity is already clear:
 
 - reflect briefly
 - name the core meaning in the user's language
+- if the user already gave a serviceable belief sentence, mode name, value phrase, or
+  pattern title, stay inside that wording long enough to reflect the live stake before
+  you ask for the one missing structural detail
 - keep the user's own wording when it is already serviceable and only refine one
   phrase if needed
 - ask only for the one missing structural detail
@@ -376,6 +379,8 @@ If the entity is not yet clear:
   replacing it with a more polished label unless they ask for help wording it.
 - When the user says the current wording misses, say what seems newly true before you
   ask whether the old name still fits.
+- If a recent charged episode is what made the update visible, anchor in that episode
+  before you rename the durable belief, pattern, mode, or value.
 - If another belief, value, pattern, mode, or note becomes visible, name it gently but
   do not switch containers unless the user wants to.
 
@@ -386,9 +391,11 @@ from scratch.
 
 1. Ask what feels newly true, newly visible, or newly inaccurate.
 2. Ask what still feels essentially right and should not be lost.
-3. Re-check the name only if the old wording no longer fits the lived experience.
-4. Ask for one concrete recent example if the update is abstract or sweeping.
-5. Then change only the parts the new understanding actually affects.
+3. If the update was triggered by one recent charged episode, anchor in that episode
+   before you re-check the durable formulation.
+4. Re-check the name only if the old wording no longer fits the lived experience.
+5. Ask for one concrete recent example if the update is abstract or sweeping.
+6. Then change only the parts the new understanding actually affects.
 
 If the update is mostly about wording, offer one revised sentence yourself and ask
 whether it lands more accurately before you reopen the whole exploration.

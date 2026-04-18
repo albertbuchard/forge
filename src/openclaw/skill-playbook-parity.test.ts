@@ -93,6 +93,7 @@ describe("forge skill playbook parity", () => {
     expect(hermesSkill).toMatch(/Batch CRUD is the default for simple entities/i);
     expect(hermesSkill).toMatch(/route jungle|one-route-per-entity/i);
     expect(hermesSkill).toMatch(/specializedDomainSurfaces/i);
+    expect(hermesSkill).toMatch(/read the relevant specialized view back/i);
     expect(hermesSkill).toMatch(/work_adjustment/i);
     expect(hermesSkill).toMatch(/preference_judgment/i);
     expect(hermesSkill).toMatch(/preference_signal/i);
@@ -103,6 +104,7 @@ describe("forge skill playbook parity", () => {
     expect(codexSkill).toMatch(/hundreds of individual CRUD routes|route jungle/i);
     expect(codexSkill).toMatch(/specializedDomainSurfaces/i);
     expect(codexSkill).toMatch(/specialized_domain_surface/i);
+    expect(codexSkill).toMatch(/relevant[\s\S]*specialized view back/i);
     expect(codexSkill).toMatch(/\/api\/v1\/movement\/day/i);
     expect(codexSkill).toMatch(/\/api\/v1\/movement\/automatic-boxes\/:id\/invalidate/i);
     expect(codexSkill).toMatch(/\/api\/v1\/life-force\/profile/i);
@@ -199,6 +201,7 @@ describe("forge skill playbook parity", () => {
     expect(psychePlaybook).toMatch(/what does it seem to prove in that moment/i);
     expect(psychePlaybook).toMatch(/Psyche update loop/i);
     expect(psychePlaybook).toMatch(/newly true, newly visible, or newly inaccurate/i);
+    expect(psychePlaybook).toMatch(/charged episode[\s\S]*before you rename the durable|recent charged episode[\s\S]*before you re-check the durable/i);
     expect(psychePlaybook).toMatch(/accurate enough to be held/i);
     expect(psychePlaybook).toMatch(/do not ask for evidence, origin, or repair[\s\S]*all that is[\s\S]*missing/i);
     expect(psychePlaybook).toMatch(/Do not make the user prove the experience/i);

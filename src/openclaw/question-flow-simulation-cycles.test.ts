@@ -145,18 +145,25 @@ describe("question flow simulation cycles", () => {
     expect(entityPlaybook).toMatch(/revise the working formulation once/i);
     expect(entityPlaybook).toMatch(/what this would help[\s\S]*decide later is/i);
     expect(entityPlaybook).toMatch(/repair or revise one saved overlay/i);
+    expect(entityPlaybook).toMatch(/delete one saved overlay/i);
+    expect(entityPlaybook).toMatch(/inspect one saved movement box before repairing it/i);
     expect(entityPlaybook).toMatch(/public input contract or a published output/i);
+    expect(entityPlaybook).toMatch(/send one follow-up message into a saved flow chat/i);
     expect(entityPlaybook).toMatch(/do not ask a broad review question again/i);
     expect(entityPlaybook).toMatch(/skip the meta lane question when the user already named[\s\S]*exact correction or[\s\S]*review target/i);
     expect(entityPlaybook).toMatch(/skip the meta lane[\s\S]*ask only for the missing run, node, or output scope/i);
     expect(entityPlaybook).toMatch(/skip the meta lane[\s\S]*ask only for the specific weekday, profile field, or signal/i);
     expect(entityPlaybook).toMatch(/latest successful node output/i);
     expect(entityPlaybook).toMatch(/user already gave the correction in usable language/i);
+    expect(entityPlaybook).toMatch(/read the overview back when the user is[\s\S]*practical impact of the change/i);
 
     expect(psychePlaybook).toMatch(/Change and save pivots/i);
     expect(psychePlaybook).toMatch(/When the user says the formulation lands/i);
     expect(psychePlaybook).toMatch(
       /When the user offers their own sentence[\s\S]*stay inside that sentence first/i
+    );
+    expect(psychePlaybook).toMatch(
+      /recent charged episode[\s\S]*before you rename the durable/i
     );
     expect(psychePlaybook).toMatch(/do not ask for evidence, origin, or repair[\s\S]*all that is[\s\S]*missing/i);
     expect(psychePlaybook).toMatch(/do not switch containers unless the user wants to/i);

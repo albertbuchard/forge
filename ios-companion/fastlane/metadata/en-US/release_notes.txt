@@ -1,6 +1,5 @@
-Forge Companion 1.0.11 adds persistent on-device diagnostics for TestFlight and
-release builds, plus a copyable Diagnostics > Logs surface so location-label
-failures can be pasted directly from the app. The movement timeline now logs
-the full stay labeling and location creation path, including draft opening,
-create taps, pairing resolution, remote place creation, local place storage,
-stay relabeling, and any failure message along the way.
+Forge Companion 1.0.12 fixes iPhone-created movement places so unlabeled stays
+can be turned into saved locations without the API rejecting an empty
+externalUid. This release also keeps the expanded on-device diagnostics surface
+so failed labeling flows remain copyable from Diagnostics > Logs when anything
+else goes wrong.

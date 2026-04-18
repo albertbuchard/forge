@@ -36,6 +36,8 @@ persisting `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`,
 Sound like a grounded therapist-like collaborator for Psyche work: reflect briefly,
 stay accurate, ask one lane question at a time, and start updates with what feels
 newly true versus what should stay true.
+If a fresh episode is what made a Psyche update visible, anchor in that episode
+before renaming the durable belief, pattern, mode, or value.
 For all other entity creation and update flows, use
 [`entity_conversation_playbooks.md`](./entity_conversation_playbooks.md) before you
 fall back to field-by-field intake. When the user is vague, ask for one small concrete
@@ -141,6 +143,8 @@ When Hermes is trying to find the right wiki record, use these search patterns:
 6. Use the health tools for sleep and sports review and reflective enrichment:
    `forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_update_sleep_session`, `forge_update_workout_session`.
 7. Movement, Life Force, and Workbench are specialized Forge API surfaces rather than simple batch entities. When Hermes needs those domains, read `forge_get_agent_onboarding` and follow `entityRouteModel.specializedDomainSurfaces` for the dedicated route families.
+   After a concrete correction there, read the relevant specialized view back when the
+   user is trying to understand the result rather than only store it.
 8. Treat narrow calendar helpers as convenience helpers, not the default architecture:
    `forge_create_work_block_template` and `forge_create_task_timebox` are fine, but Hermes should still prefer the generic batch entity routes when practical.
 9. Use the task-run tools for truthful live work:

@@ -128,6 +128,8 @@ Surface rule:
   early.
 - For Psyche updates, start with what feels newly true, newly visible, or newly
   inaccurate, then ask what should stay true before you change the wording or links.
+- If a fresh episode is what made a Psyche update visible, anchor in that episode
+  before renaming the durable belief, pattern, mode, or value.
 - When a belief, mode, value, pattern, or note becomes visible alongside the main
   entity, name that gently and ask whether the user wants to map it too.
 - If the user shows imminent risk of self-harm, suicide, violence, inability to stay
@@ -205,6 +207,9 @@ Surface rule:
 - Habit outcome writes through `/api/v1/habits/:id/check-ins` accept `status` plus optional `dateKey`, `note`, and `description`; if `description` is provided, it replaces the habit's stored `description` in the same write.
 - Preferred API path for Movement, Life Force, and Workbench: use the dedicated
   route families published in `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces`.
+- After a concrete Movement, Life Force, or Workbench correction, read the relevant
+  specialized view back when the user is trying to understand the result rather than
+  only store it.
 - In the live onboarding catalog, those domains should read as
   `specialized_domain_surface`, not as read-only leftovers. If the classification and
   route family disagree, trust the specialized route family and fix the contract

@@ -141,6 +141,7 @@ Psyche interview rule:
 - Sound professionally warm and therapist-like: grounded, accurate, reflective, and intentional, not clinical, vague, or lecture-like.
 - After the first real answer, choose one follow-up lane at a time: situation, sequence, meaning, protection, cost, longing/value, or tentative name.
 - For Psyche updates, start with what feels newly true, newly visible, or newly inaccurate, then ask what should stay true before changing the formulation.
+- If a fresh episode is what made a Psyche update visible, anchor in that episode before renaming the durable belief, pattern, mode, or value.
 - If the user says they want help understanding a Psyche issue before saving it, ask one orienting question first instead of jumping straight into a full interpretation, diagnosis-like label, save suggestion, replacement belief, or suggested title.
 - In that first exploratory turn, keep the reflection to one or two short sentences, avoid numbered lists or schema dumps, and wait for the user's answer before offering a fuller formulation.
 - In that first exploratory turn, stay in plain prose, end with one question, and do not mention Forge fields or save formatting yet unless the user interrupts to save immediately.
@@ -386,6 +387,7 @@ Use the dedicated domain routes for specialized surfaces that are not simple bat
   `/api/v1/workbench/flows/:id/output` for published outputs, and the run/node routes
   under `/api/v1/workbench/flows/:id` for run history and node-level inspection.
 - If you are unsure which specialized route family applies, check `forge_get_agent_onboarding` and use its `entityRouteModel.specializedDomainSurfaces` section before guessing.
+- After a concrete Movement, Life Force, or Workbench correction, read the relevant specialized view back when the user is trying to understand the result rather than only store it.
 
 Use live work tools for `task_run`:
 `forge_log_work`, `forge_start_task_run`, `forge_heartbeat_task_run`, `forge_focus_task_run`, `forge_complete_task_run`, `forge_release_task_run`

@@ -51,9 +51,9 @@ describe("question flow quality coverage", () => {
       ["Calendar Connection", /calendar provider are you trying to connect/i, /workflow they are trying to unlock/i],
       ["Preference Judgment", /comparison are you actually trying to settle/i, /pairwise preference decision/i],
       ["Preference Signal", /remember about this item right now/i, /favorite, veto, bookmark,[\s\S]*compare-later/i],
-      ["Movement", /stayed and traveled/i, /dedicated movement read or write path/i],
-      ["Life Force", /current energy picture/i, /dedicated life-force path/i],
-      ["Workbench", /inspect a flow, change it, run it/i, /dedicated workbench route family/i],
+      ["Movement", /understand, correct, or preserve/i, /dedicated movement read or write path/i],
+      ["Life Force", /energy picture right now/i, /dedicated life-force path/i],
+      ["Workbench", /inspect, change, run, or publish/i, /dedicated workbench route family/i],
       ["Preference Catalog", /decision or taste question should this catalog help with/i, /comparison pool/i],
       ["Preference Catalog Item", /meaningfully worth comparing/i, /clear and fair/i],
       ["Preference Context", /treat your preferences differently here/i, /inside versus outside/i],
@@ -121,6 +121,17 @@ describe("question flow quality coverage", () => {
     expect(entityPlaybook).toMatch(
       /what workflow they are trying to unlock/i
     );
+    expect(entityPlaybook).toMatch(
+      /read the overview back if they want to see the updated picture/i
+    );
+    expect(entityPlaybook).toMatch(
+      /read[\s\S]*relevant timeline back instead of leaving the correction ungrounded/i
+    );
+    expect(entityPlaybook).toMatch(
+      /inspect one already-saved movement correction before editing/i
+    );
+    expect(entityPlaybook).toMatch(/DELETE \/api\/v1\/movement\/user-boxes\/:id/i);
+    expect(entityPlaybook).toMatch(/send one follow-up message into a saved flow chat/i);
     expect(entityPlaybook).toMatch(
       /what felt most important to name before it gets smoothed over or forgotten/i
     );

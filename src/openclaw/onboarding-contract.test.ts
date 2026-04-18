@@ -165,6 +165,7 @@ describe("forge onboarding contract", () => {
         month: "/api/v1/movement/month",
         allTime: "/api/v1/movement/all-time",
         timeline: "/api/v1/movement/timeline",
+        boxDetail: "/api/v1/movement/boxes/:id",
         places: "/api/v1/movement/places",
         tripDetail: "/api/v1/movement/trips/:id",
         selection: "/api/v1/movement/selection"
@@ -172,10 +173,15 @@ describe("forge onboarding contract", () => {
     );
     expect(routeModel.specializedDomainSurfaces.movement.writeRoutes).toEqual(
       expect.objectContaining({
+        settingsUpdate: "/api/v1/movement/settings",
         userBoxPreflight: "/api/v1/movement/user-boxes/preflight",
         userBoxCreate: "/api/v1/movement/user-boxes",
+        userBoxDelete: "/api/v1/movement/user-boxes/:id",
         automaticBoxInvalidate:
-          "/api/v1/movement/automatic-boxes/:id/invalidate"
+          "/api/v1/movement/automatic-boxes/:id/invalidate",
+        stayDelete: "/api/v1/movement/stays/:id",
+        tripDelete: "/api/v1/movement/trips/:id",
+        tripPointDelete: "/api/v1/movement/trips/:id/points/:pointId"
       })
     );
 
@@ -223,7 +229,7 @@ describe("forge onboarding contract", () => {
     expect(onboarding.interactionGuidance).toEqual(
       expect.objectContaining({
         specializedSurfaceRule: expect.stringMatching(
-          /Movement, Life Force, and Workbench[\s\S]*\/forge\/v1\/movement[\s\S]*\/forge\/v1\/life-force[\s\S]*\/forge\/v1\/workbench/i
+          /Movement, Life Force, and Workbench[\s\S]*read the relevant specialized view back[\s\S]*\/forge\/v1\/movement[\s\S]*\/forge\/v1\/life-force[\s\S]*\/forge\/v1\/workbench/i
         ),
         reviewShortcutRule: expect.stringMatching(
           /reviewing or correcting an existing record/i

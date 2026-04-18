@@ -1016,6 +1016,11 @@ Direct action rules:
   traveled.
 - Use raw `PATCH /api/v1/movement/stays/:id` or `/api/v1/movement/trips/:id` only for
   editing an already-recorded stay or trip, not for filling a missing span.
+- If the user wants to undo or remove one manual overlay, delete the saved
+  user-defined box instead of patching a recorded stay or trip.
+- If the user wants to inspect one already-saved movement correction before editing
+  it, read the box detail first so the follow-up write stays grounded in the saved
+  object.
 - When the user has already given the real answer, for example "I stayed home during
   that missing block", do not ask a broad review question again. Confirm only the
   interval or place if that is still ambiguous, then act.
@@ -1045,14 +1050,20 @@ Lane-to-route map:
   `/api/v1/movement/places` or `/api/v1/movement/places/:id`
 - inspect one trip:
   `/api/v1/movement/trips/:id`
+- inspect one saved movement box before repairing it:
+  `/api/v1/movement/boxes/:id`
 - fill a missing span:
   `/api/v1/movement/user-boxes/preflight` then `/api/v1/movement/user-boxes`
 - repair or revise one saved overlay:
   `/api/v1/movement/user-boxes/:id`
+- delete one saved overlay:
+  `DELETE /api/v1/movement/user-boxes/:id`
 - repair one recorded automatic box:
   `/api/v1/movement/automatic-boxes/:id/invalidate`
 - edit an already-recorded stay, trip, or trip point:
   `/api/v1/movement/stays/:id`, `/api/v1/movement/trips/:id`, or `/api/v1/movement/trips/:id/points/:pointId`
+- delete an already-recorded stay, trip, or trip point:
+  `DELETE /api/v1/movement/stays/:id`, `DELETE /api/v1/movement/trips/:id`, or `DELETE /api/v1/movement/trips/:id/points/:pointId`
 
 Ready to act when:
 
@@ -1063,7 +1074,7 @@ Ready to act when:
 
 Preferred opening question:
 
-- "What are you trying to make clearer or correct about where you stayed and traveled?"
+- "What are you trying to understand, correct, or preserve about where you stayed and traveled?"
 
 ## Life Force
 
@@ -1109,6 +1120,8 @@ Direct action rules:
   template instead of editing the profile.
 - If the user is describing right-now depletion or recovery, post a fatigue signal and
   then read the overview back if they want to see the updated picture.
+- After a profile or weekday-template change, read the overview back when the user is
+  trying to understand the practical impact of the change, not just store it silently.
 
 Ready to act when:
 
@@ -1118,7 +1131,7 @@ Ready to act when:
 
 Preferred opening question:
 
-- "What feels most off, important, or worth tracking in your energy picture right now?"
+- "What feels most off, important, or worth understanding in your energy picture right now?"
 
 ## Workbench
 
@@ -1153,6 +1166,8 @@ Lane-to-route map:
   `/api/v1/workbench/flows/:id/run`
 - run from a payload-first contract:
   `/api/v1/workbench/run`
+- send one follow-up message into a saved flow chat:
+  `/api/v1/workbench/flows/:id/chat`
 - inspect published output or run history:
   `/api/v1/workbench/flows/:id/output` or `/api/v1/workbench/flows/:id/runs`
 - inspect one run or node result:
@@ -1173,6 +1188,8 @@ Direct action rules:
   `/api/v1/workbench/run`.
 - If the user wants one node's latest successful output, do not browse old runs first
   unless they explicitly want historical debugging.
+- If the user wants to understand what inputs a flow can accept before editing or
+  running it, read the box catalog or flow detail before asking for a payload.
 
 Ready to act when:
 
@@ -1182,7 +1199,7 @@ Ready to act when:
 
 Preferred opening question:
 
-- "What are you trying to inspect a flow, change it, run it, or publish from Workbench?"
+- "What are you trying to inspect, change, run, or publish through Workbench?"
 
 ## Preference Catalog
 
