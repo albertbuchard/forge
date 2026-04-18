@@ -3,12 +3,13 @@ default_platform(:ios)
 require "json"
 require "yaml"
 require "base64"
+require "cfpropertylist"
 require "fileutils"
 require "shellwords"
 
 platform :ios do
   before_all do |_lane, _options|
-    setup_ci if ENV["CI"]
+    setup_ci if ENV["CI"] && ci_uses_fastlane_setup?
   end
 
   desc "Validate Forge Companion release inputs and produce a local archive without uploading"
@@ -365,6 +366,12 @@ def validate_release_inputs!(config:, mode:, require_api_key:)
   metadata_state
 end
 
+def ci_uses_fastlane_setup?
+  return false unless ENV["CI"]
+
+  ENV["FORGE_IOS_SKIP_FASTLANE_SETUP_CI"] != "1"
+end
+
 def prepare_artifact_dir(raw_path, mode:)
   return raw_path if raw_path && !raw_path.to_s.strip.empty? && FileUtils.mkdir_p(raw_path)
 
@@ -395,7 +402,127 @@ rescue StandardError
   Actions.sh("/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' #{Shellwords.escape(info_plist_path)}", log: false).strip
 end
 
+def release_target_bundle_ids
+  {
+    "ForgeCompanion" => read_build_setting(target_name: "ForgeCompanion", key: "PRODUCT_BUNDLE_IDENTIFIER"),
+    "ForgeWatch Watch App" => read_build_setting(target_name: "ForgeWatch Watch App", key: "PRODUCT_BUNDLE_IDENTIFIER"),
+    "ForgeWatchExtension" => read_build_setting(target_name: "ForgeWatchExtension", key: "PRODUCT_BUNDLE_IDENTIFIER"),
+    "ForgeScreenTimeReportExtension" => read_build_setting(target_name: "ForgeScreenTimeReportExtension", key: "PRODUCT_BUNDLE_IDENTIFIER")
+  }
+end
+
+def provisioning_profile_directory
+  configured = ENV["FORGE_IOS_PROVISIONING_PROFILE_DIR"].to_s.strip
+  return configured unless configured.empty?
+
+  File.expand_path("~/Library/MobileDevice/Provisioning Profiles")
+end
+
+def provisioning_profile_bundle_id(plist)
+  application_identifier = plist.dig("Entitlements", "application-identifier").to_s
+  _team_id, bundle_id = application_identifier.split(".", 2)
+  bundle_id.to_s
+end
+
+def installed_provisioning_profiles
+  profile_dir = provisioning_profile_directory
+  return [] unless Dir.exist?(profile_dir)
+
+  Dir.glob(File.join(profile_dir, "*.mobileprovision")).sort.filter_map do |path|
+    decoded = Actions.sh("security cms -D -i #{Shellwords.escape(path)}", log: false)
+    plist = CFPropertyList.native_types(CFPropertyList::List.new(data: decoded).value)
+    bundle_id = provisioning_profile_bundle_id(plist)
+    next if bundle_id.empty?
+
+    {
+      path: path,
+      uuid: plist["UUID"].to_s,
+      name: plist["Name"].to_s,
+      bundle_id: bundle_id,
+      team_ids: Array(plist["TeamIdentifier"]).map(&:to_s),
+      get_task_allow: plist.dig("Entitlements", "get-task-allow") == true,
+      provisioned_devices: Array(plist["ProvisionedDevices"]).map(&:to_s)
+    }
+  rescue StandardError => error
+    UI.important("Skipping unreadable provisioning profile #{path}: #{error.message}")
+    nil
+  end
+end
+
+def app_store_profile?(profile)
+  profile[:get_task_allow] == false && profile[:provisioned_devices].empty?
+end
+
+def provisioning_profile_matches_bundle_id?(profile, bundle_id)
+  File.fnmatch(profile[:bundle_id], bundle_id)
+end
+
+def select_release_profile_for_bundle_id(bundle_id, profiles)
+  exact_distribution = profiles.find { |profile| profile[:bundle_id] == bundle_id && app_store_profile?(profile) }
+  return exact_distribution if exact_distribution
+
+  wildcard_distribution = profiles.find do |profile|
+    profile[:bundle_id].include?("*") && app_store_profile?(profile) && provisioning_profile_matches_bundle_id?(profile, bundle_id)
+  end
+  return wildcard_distribution if wildcard_distribution
+
+  exact_any = profiles.find { |profile| profile[:bundle_id] == bundle_id }
+  return exact_any if exact_any
+
+  profiles.find do |profile|
+    profile[:bundle_id].include?("*") && provisioning_profile_matches_bundle_id?(profile, bundle_id)
+  end
+end
+
+def configure_manual_release_signing_if_available!
+  return nil if ENV["FORGE_IOS_SIGNING_KEYCHAIN_PATH"].to_s.strip.empty?
+
+  profiles = installed_provisioning_profiles
+  UI.user_error!("CI signing assets were configured, but no provisioning profiles were installed in #{provisioning_profile_directory}.") if profiles.empty?
+
+  bundle_ids = release_target_bundle_ids
+  selected_profiles = {}
+  profile_names_by_bundle_id = {}
+
+  bundle_ids.each do |target_name, bundle_id|
+    profile = select_release_profile_for_bundle_id(bundle_id, profiles)
+    UI.user_error!("No installed provisioning profile matches bundle id #{bundle_id} for target #{target_name}.") unless profile
+    UI.user_error!("Provisioning profile #{profile[:name]} for #{bundle_id} is not a distribution/App Store profile.") unless app_store_profile?(profile)
+
+    selected_profiles[target_name] = profile
+    profile_names_by_bundle_id[bundle_id] = profile[:name]
+  end
+
+  update_code_signing_settings(
+    use_automatic_signing: false,
+    path: xcode_project_path,
+    team_id: ENV.fetch("FORGE_APPLE_TEAM_ID", "KZ65F7924F"),
+    code_sign_identity: "Apple Distribution",
+    build_configurations: ["Release"],
+    sdk: "iphoneos*",
+    targets: selected_profiles.keys
+  )
+
+  selected_profiles.each do |target_name, profile|
+    update_project_provisioning(
+      xcodeproj: xcode_project_path,
+      target_filter: "^#{Regexp.escape(target_name)}$",
+      build_configuration: "Release",
+      profile: profile[:path],
+      code_signing_identity: "Apple Distribution"
+    )
+  end
+
+  {
+    signingStyle: "manual",
+    provisioningProfiles: profile_names_by_bundle_id,
+    signingCertificate: "Apple Distribution",
+    teamID: ENV.fetch("FORGE_APPLE_TEAM_ID", "KZ65F7924F")
+  }
+end
+
 def build_release_archive!(artifact_dir:, archive_path:, marketing_version:, bump_build_number:)
+  export_options = configure_manual_release_signing_if_available!
   build_ios_app(
     project: xcode_project_path,
     scheme: scheme_name,
@@ -410,7 +537,9 @@ def build_release_archive!(artifact_dir:, archive_path:, marketing_version:, bum
     disable_xcpretty: true,
     xcargs: "-allowProvisioningUpdates",
     export_xcargs: "-allowProvisioningUpdates",
-    export_team_id: ENV.fetch("FORGE_APPLE_TEAM_ID", "KZ65F7924F")
+    export_team_id: ENV.fetch("FORGE_APPLE_TEAM_ID", "KZ65F7924F"),
+    export_options: export_options,
+    skip_profile_detection: !export_options.nil?
   )
 end
 

@@ -94,6 +94,9 @@ jobs:
           security import "${CERTIFICATE_PATH}" -P "${P12_PASSWORD}" -A -t cert -f pkcs12 -k "${KEYCHAIN_PATH}"
           security set-key-partition-list -S apple-tool:,apple: -k "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
           security list-keychain -d user -s "${KEYCHAIN_PATH}"
+          echo "FORGE_IOS_SIGNING_KEYCHAIN_PATH=${KEYCHAIN_PATH}" >> "${GITHUB_ENV}"
+          echo "FORGE_IOS_SIGNING_KEYCHAIN_PASSWORD=${KEYCHAIN_PASSWORD}" >> "${GITHUB_ENV}"
+          echo "FORGE_IOS_SKIP_FASTLANE_SETUP_CI=1" >> "${GITHUB_ENV}"
 
           if [[ -n "${PROVISIONING_PROFILES_BASE64}" ]]; then
             mkdir -p "${HOME}/Library/MobileDevice/Provisioning Profiles"
@@ -106,6 +109,8 @@ jobs:
               profile_index=$((profile_index + 1))
             done <<< "${PROVISIONING_PROFILES_BASE64}"
           fi
+
+          echo "FORGE_IOS_PROVISIONING_PROFILE_DIR=${HOME}/Library/MobileDevice/Provisioning Profiles" >> "${GITHUB_ENV}"
 
       - name: Write release environment file
         env:
