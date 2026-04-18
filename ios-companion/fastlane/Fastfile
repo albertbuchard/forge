@@ -6,6 +6,7 @@ require "base64"
 require "cfpropertylist"
 require "fileutils"
 require "shellwords"
+require "tmpdir"
 
 platform :ios do
   before_all do |_lane, _options|
@@ -368,6 +369,7 @@ end
 
 def ci_uses_fastlane_setup?
   return false unless ENV["CI"]
+  return false if asc_api_key_available?
 
   ENV["FORGE_IOS_SKIP_FASTLANE_SETUP_CI"] != "1"
 end
@@ -400,6 +402,41 @@ rescue StandardError
   info_plist_path = File.join(project_dir, "ForgeCompanion", "Info.plist")
   UI.important("Falling back to #{info_plist_path} for CFBundleVersion because agvtool is unavailable")
   Actions.sh("/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' #{Shellwords.escape(info_plist_path)}", log: false).strip
+end
+
+def asc_api_key_available?
+  key_id = ENV["FORGE_ASC_KEY_ID"].to_s.strip
+  issuer_id = ENV["FORGE_ASC_ISSUER_ID"].to_s.strip
+  key_path = ENV["FORGE_ASC_KEY_PATH"].to_s.strip
+  key_content_base64 = ENV["FORGE_ASC_KEY_CONTENT_BASE64"].to_s.strip
+
+  return false if key_id.empty? || issuer_id.empty?
+
+  !key_path.empty? || !key_content_base64.empty?
+end
+
+def xcode_authentication_key_path
+  return "" unless asc_api_key_available?
+
+  key_path = ENV["FORGE_ASC_KEY_PATH"].to_s.strip
+  return key_path unless key_path.empty?
+
+  @xcode_authentication_key_path ||= begin
+    generated_path = File.join(Dir.tmpdir, "forge-app-store-connect-auth-key-#{ENV.fetch("FORGE_ASC_KEY_ID")}.p8")
+    File.write(generated_path, Base64.decode64(ENV.fetch("FORGE_ASC_KEY_CONTENT_BASE64")))
+    File.chmod(0o600, generated_path)
+    generated_path
+  end
+end
+
+def xcode_authentication_xcargs
+  return "" unless asc_api_key_available?
+
+  [
+    "-authenticationKeyPath #{Shellwords.escape(xcode_authentication_key_path)}",
+    "-authenticationKeyID #{Shellwords.escape(ENV.fetch("FORGE_ASC_KEY_ID"))}",
+    "-authenticationKeyIssuerID #{Shellwords.escape(ENV.fetch("FORGE_ASC_ISSUER_ID"))}"
+  ].join(" ")
 end
 
 def release_target_bundle_ids
@@ -521,8 +558,33 @@ def configure_manual_release_signing_if_available!
   }
 end
 
+def configure_automatic_release_signing!
+  update_code_signing_settings(
+    use_automatic_signing: true,
+    path: xcode_project_path,
+    team_id: ENV.fetch("FORGE_APPLE_TEAM_ID", "KZ65F7924F"),
+    build_configurations: ["Release"],
+    targets: release_target_bundle_ids.keys
+  )
+  nil
+end
+
+def configure_release_signing!
+  if ENV["FORGE_IOS_SIGNING_KEYCHAIN_PATH"].to_s.strip.empty?
+    UI.message("Using Xcode-managed automatic signing for Release archive")
+    return configure_automatic_release_signing!
+  end
+
+  UI.message("Using manual Release signing from installed CI keychain and provisioning profiles")
+  configure_manual_release_signing_if_available!
+end
+
 def build_release_archive!(artifact_dir:, archive_path:, marketing_version:, bump_build_number:)
-  export_options = configure_manual_release_signing_if_available!
+  export_options = configure_release_signing!
+  xcargs = [
+    "-allowProvisioningUpdates",
+    xcode_authentication_xcargs
+  ].reject(&:empty?).join(" ")
   build_ios_app(
     project: xcode_project_path,
     scheme: scheme_name,
@@ -535,8 +597,7 @@ def build_release_archive!(artifact_dir:, archive_path:, marketing_version:, bum
     include_symbols: true,
     include_bitcode: false,
     disable_xcpretty: true,
-    xcargs: "-allowProvisioningUpdates",
-    export_xcargs: "-allowProvisioningUpdates",
+    xcargs: xcargs,
     export_team_id: ENV.fetch("FORGE_APPLE_TEAM_ID", "KZ65F7924F"),
     export_options: export_options,
     skip_profile_detection: !export_options.nil?
