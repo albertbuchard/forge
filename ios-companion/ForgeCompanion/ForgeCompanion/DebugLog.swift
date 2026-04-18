@@ -1,6 +1,18 @@
 import Combine
 import Foundation
 
+private let companionDebugLogDisplayFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "HH:mm:ss"
+    return formatter
+}()
+
+private let companionDebugLogExportFormatter: ISO8601DateFormatter = {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return formatter
+}()
+
 struct CompanionDebugLogEntry: Codable, Identifiable, Hashable {
     let id: String
     let timestamp: Date
@@ -8,7 +20,15 @@ struct CompanionDebugLogEntry: Codable, Identifiable, Hashable {
     let message: String
 
     var formattedTimestamp: String {
-        CompanionDebugLogStore.displayFormatter.string(from: timestamp)
+        companionDebugLogDisplayFormatter.string(from: timestamp)
+    }
+
+    var exportTimestamp: String {
+        companionDebugLogExportFormatter.string(from: timestamp)
+    }
+
+    var exportLine: String {
+        "[\(exportTimestamp)][\(scope)] \(message)"
     }
 }
 
@@ -16,17 +36,11 @@ struct CompanionDebugLogEntry: Codable, Identifiable, Hashable {
 final class CompanionDebugLogStore: ObservableObject {
     static let shared = CompanionDebugLogStore()
 
-    static let displayFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm:ss"
-        return formatter
-    }()
-
     private enum StorageKeys {
         static let entries = "forge_companion_debug_log_entries"
     }
 
-    private let maxEntries = 400
+    private let maxEntries = 1500
 
     @Published private(set) var entries: [CompanionDebugLogEntry] = []
 
@@ -58,6 +72,20 @@ final class CompanionDebugLogStore: ObservableObject {
         UserDefaults.standard.removeObject(forKey: StorageKeys.entries)
     }
 
+    func renderPlainText() -> String {
+        Self.renderPlainText(entries: entries)
+    }
+
+    static func renderPlainText(entries: [CompanionDebugLogEntry]) -> String {
+        guard entries.isEmpty == false else {
+            return "No Forge Companion diagnostic logs captured."
+        }
+        return entries
+            .reversed()
+            .map(\.exportLine)
+            .joined(separator: "\n")
+    }
+
     private func persist() {
         guard let data = try? JSONEncoder().encode(entries) else {
             return
@@ -68,12 +96,9 @@ final class CompanionDebugLogStore: ObservableObject {
 
 nonisolated
 func companionDebugLog(_ scope: String, _ message: @autoclosure () -> String) {
-#if DEBUG
     let renderedMessage = message()
     let timestamp = Date()
-    let formatter = ISO8601DateFormatter()
-    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    let renderedTimestamp = formatter.string(from: timestamp)
+    let renderedTimestamp = companionDebugLogExportFormatter.string(from: timestamp)
     print("[ForgeCompanion][\(renderedTimestamp)][\(scope)] \(renderedMessage)")
     Task { @MainActor in
         CompanionDebugLogStore.shared.record(
@@ -82,5 +107,4 @@ func companionDebugLog(_ scope: String, _ message: @autoclosure () -> String) {
             timestamp: timestamp
         )
     }
-#endif
 }

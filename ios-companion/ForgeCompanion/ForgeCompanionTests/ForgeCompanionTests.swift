@@ -2048,6 +2048,31 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(store.knownPlaces.first?.categoryTags, ["work", "hq"])
     }
 
+    func testCompanionDebugLogPlainTextExportUsesChronologicalLines() {
+        let earlier = CompanionDebugLogEntry(
+            id: "log_earlier",
+            timestamp: makeDate("2026-04-18T10:00:00.000Z"),
+            scope: "MovementLifeTimeline",
+            message: "openPlaceLabelDraft item=stay_1 initialQuery=Home"
+        )
+        let later = CompanionDebugLogEntry(
+            id: "log_later",
+            timestamp: makeDate("2026-04-18T10:00:05.500Z"),
+            scope: "MovementLifeTimeline",
+            message: "savePlaceDraft failed item=stay_1 label=Home error=Request timed out"
+        )
+
+        let rendered = CompanionDebugLogStore.renderPlainText(entries: [later, earlier])
+
+        XCTAssertEqual(
+            rendered,
+            """
+            [2026-04-18T10:00:00.000Z][MovementLifeTimeline] openPlaceLabelDraft item=stay_1 initialQuery=Home
+            [2026-04-18T10:00:05.500Z][MovementLifeTimeline] savePlaceDraft failed item=stay_1 label=Home error=Request timed out
+            """
+        )
+    }
+
     private func makeLocation(
         latitude: Double,
         longitude: Double,

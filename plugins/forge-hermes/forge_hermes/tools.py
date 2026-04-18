@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import atexit
 import json
 import logging
 import os
 import shutil
 import subprocess
+import sys
+import threading
+import time
 import getpass
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,9 +26,12 @@ NODE_RUNTIME_HELPER = PACKAGE_DIR / "scripts" / "ensure-runtime.mjs"
 SESSION_COOKIES: Dict[str, str] = {}
 DEFAULT_HERMES_ACTOR_LABEL = ""
 DEFAULT_HERMES_RUNTIME_AGENT_LABEL = "Forge Hermes"
+DEFAULT_HERMES_GATEWAY_SESSION_KEY = "gateway:main"
 SESSION_STARTUP_CONTEXTS: Dict[str, str] = {}
 SESSION_RUNTIME_IDS: Dict[str, str] = {}
 SESSION_ACTOR_LABELS: Dict[str, str] = {}
+GATEWAY_RUNTIME_THREAD: Optional[threading.Thread] = None
+GATEWAY_RUNTIME_STOP: Optional[threading.Event] = None
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +59,15 @@ def _fallback_actor_label() -> str:
     except Exception:
         candidate = ""
     return candidate or "Local Operator"
+
+
+def _is_gateway_process() -> bool:
+    argv = [part.lower() for part in sys.argv[1:]]
+    return "gateway" in argv
+
+
+def _gateway_runtime_session_key() -> str:
+    return DEFAULT_HERMES_GATEWAY_SESSION_KEY
 
 
 class ForgePluginError(RuntimeError):
@@ -412,6 +428,89 @@ def _disconnect_runtime_session(
         SESSION_RUNTIME_IDS.pop(cache_key, None)
         if config is not None:
             SESSION_ACTOR_LABELS.pop(config.base_url.rstrip("/"), None)
+
+
+def _gateway_runtime_presence_loop(stop_event: threading.Event) -> None:
+    session_key = _gateway_runtime_session_key()
+    while not stop_event.wait(60):
+        _heartbeat_runtime_session(
+            session_key,
+            summary="Hermes gateway heartbeat.",
+            metadata={
+                "gateway": True,
+                "pid": os.getpid(),
+                "argv": sys.argv,
+            },
+        )
+
+
+def stop_gateway_runtime_presence() -> None:
+    global GATEWAY_RUNTIME_THREAD, GATEWAY_RUNTIME_STOP
+
+    stop_event = GATEWAY_RUNTIME_STOP
+    thread = GATEWAY_RUNTIME_THREAD
+    if stop_event is None:
+        return
+
+    stop_event.set()
+    if thread and thread.is_alive() and thread is not threading.current_thread():
+        thread.join(timeout=2)
+
+    _disconnect_runtime_session(
+        _gateway_runtime_session_key(),
+        note="Hermes gateway stopped.",
+    )
+    GATEWAY_RUNTIME_THREAD = None
+    GATEWAY_RUNTIME_STOP = None
+
+
+def start_gateway_runtime_presence() -> None:
+    global GATEWAY_RUNTIME_THREAD, GATEWAY_RUNTIME_STOP
+
+    if not _is_gateway_process():
+        return
+    if GATEWAY_RUNTIME_THREAD and GATEWAY_RUNTIME_THREAD.is_alive():
+        return
+
+    session_key = _gateway_runtime_session_key()
+    _register_runtime_session(session_key)
+    _append_runtime_session_event(
+        session_key,
+        event_type="gateway_started",
+        title="Gateway started",
+        summary="Hermes registered the gateway as a live Forge runtime session.",
+        metadata={
+            "gateway": True,
+            "pid": os.getpid(),
+            "argv": sys.argv,
+        },
+    )
+    _heartbeat_runtime_session(
+        session_key,
+        summary="Hermes gateway heartbeat.",
+        metadata={
+            "gateway": True,
+            "pid": os.getpid(),
+            "argv": sys.argv,
+            "startedAt": int(time.time()),
+        },
+    )
+
+    stop_event = threading.Event()
+    thread = threading.Thread(
+        target=_gateway_runtime_presence_loop,
+        args=(stop_event,),
+        name="forge-hermes-gateway-heartbeat",
+        daemon=True,
+    )
+    GATEWAY_RUNTIME_STOP = stop_event
+    GATEWAY_RUNTIME_THREAD = thread
+    thread.start()
+    atexit.register(stop_gateway_runtime_presence)
+
+
+def warm_gateway_runtime_presence(**_kwargs: Any) -> None:
+    start_gateway_runtime_presence()
 
 
 def warm_startup_context(

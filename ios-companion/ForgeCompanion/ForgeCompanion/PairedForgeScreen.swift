@@ -1042,16 +1042,28 @@ private struct MovementLifeTimelineView: View {
             return
         }
         if let draft = queuedEditorDraft {
+            companionDebugLog(
+                "MovementLifeTimeline",
+                "flushQueuedModal presenting queued editor item=\(movementTimelineLogDescriptor(for: draft.item))"
+            )
             queuedEditorDraft = nil
             editorDraft = draft
             return
         }
         if let draft = queuedPlaceLabelDraft {
+            companionDebugLog(
+                "MovementLifeTimeline",
+                "flushQueuedModal presenting queued place-label item=\(movementTimelineLogDescriptor(for: draft.item)) query=\(draft.query)"
+            )
             queuedPlaceLabelDraft = nil
             placeLabelDraft = draft
             return
         }
         if let draft = queuedPlaceDraft {
+            companionDebugLog(
+                "MovementLifeTimeline",
+                "flushQueuedModal presenting queued place-create item=\(movementTimelineLogDescriptor(for: draft.item)) label=\(draft.label)"
+            )
             queuedPlaceDraft = nil
             placeDraft = draft
         }
@@ -1059,6 +1071,10 @@ private struct MovementLifeTimelineView: View {
 
     private func openEditorDraft(for item: MovementLifeTimelineItem) {
         let draft = MovementTimelineEditorDraft(item: item)
+        companionDebugLog(
+            "MovementLifeTimeline",
+            "openEditorDraft item=\(movementTimelineLogDescriptor(for: item)) queued=\(hasPresentedModal)"
+        )
         if hasPresentedModal {
             queuedEditorDraft = draft
         } else {
@@ -1068,11 +1084,19 @@ private struct MovementLifeTimelineView: View {
 
     private func openPlaceLabelDraft(for item: MovementLifeTimelineItem) {
         guard item.kind == .stay else {
+            companionDebugLog(
+                "MovementLifeTimeline",
+                "openPlaceLabelDraft skipped unsupported item=\(movementTimelineLogDescriptor(for: item))"
+            )
             return
         }
         let draft = MovementTimelinePlaceLabelDraft(
             item: item,
             query: item.placeLabel?.isEmpty == false ? item.placeLabel! : item.displayTitle
+        )
+        companionDebugLog(
+            "MovementLifeTimeline",
+            "openPlaceLabelDraft item=\(movementTimelineLogDescriptor(for: item)) initialQuery=\(draft.query) queued=\(hasPresentedModal)"
         )
         if hasPresentedModal {
             queuedPlaceLabelDraft = draft
@@ -1086,6 +1110,10 @@ private struct MovementLifeTimelineView: View {
         labelHint: String? = nil
     ) {
         guard item.kind == .stay, let coordinate = item.coordinate else {
+            companionDebugLog(
+                "MovementLifeTimeline",
+                "openPlaceDraft skipped unsupported item=\(movementTimelineLogDescriptor(for: item))"
+            )
             return
         }
         let draft = MovementTimelinePlaceDraft(
@@ -1095,11 +1123,15 @@ private struct MovementLifeTimelineView: View {
                 ? labelHint!.trimmingCharacters(in: .whitespacesAndNewlines)
                 : item.placeLabel?.isEmpty == false
                     ? item.placeLabel!
-                    : item.displayTitle,
+                : item.displayTitle,
             latitude: coordinate.latitude,
             longitude: coordinate.longitude,
             radiusMeters: item.stayRadiusMeters(using: appModel.movementStore),
             tags: movementTimelineSeededCategoryTagsForNewPlace(from: item)
+        )
+        companionDebugLog(
+            "MovementLifeTimeline",
+            "openPlaceDraft item=\(movementTimelineLogDescriptor(for: item)) label=\(draft.label) latitude=\(draft.latitude) longitude=\(draft.longitude) radius=\(draft.radiusMeters) tags=\(draft.tags.joined(separator: "|")) queued=\(hasPresentedModal)"
         )
         if hasPresentedModal {
             queuedPlaceDraft = draft
@@ -1164,12 +1196,17 @@ private struct MovementLifeTimelineView: View {
         to item: MovementLifeTimelineItem
     ) async {
         do {
+            let operation = movementTimelinePlaceLabelOperation(for: item)
+            companionDebugLog(
+                "MovementLifeTimeline",
+                "assignKnownPlace start item=\(movementTimelineLogDescriptor(for: item)) place=\(knownPlaceLogDescriptor(place)) operation=\(movementTimelinePlaceLabelOperationLabel(operation))"
+            )
             let payload = makePlaceLabelUserBoxPayload(
                 for: item,
                 placeLabel: place.label,
                 metadataSource: "companion-place-label"
             )
-            switch movementTimelinePlaceLabelOperation(for: item) {
+            switch operation {
             case .patchUserBox(let boxId):
                 _ = try await performMovementOperation(
                     reason: "life-timeline-assign-known-place-patch",
@@ -1209,9 +1246,17 @@ private struct MovementLifeTimelineView: View {
                 )
             }
 
+            companionDebugLog(
+                "MovementLifeTimeline",
+                "assignKnownPlace complete item=\(movementTimelineLogDescriptor(for: item)) place=\(knownPlaceLogDescriptor(place)) linkedStayIds=\(item.linkableStayIds(using: appModel.movementStore).joined(separator: "|"))"
+            )
             placeLabelDraft = nil
             await reload()
         } catch {
+            companionDebugLog(
+                "MovementLifeTimeline",
+                "assignKnownPlace failed item=\(movementTimelineLogDescriptor(for: item)) place=\(knownPlaceLogDescriptor(place)) error=\(error.localizedDescription)"
+            )
             loadError = error.localizedDescription
         }
     }
@@ -1263,6 +1308,10 @@ private struct MovementLifeTimelineView: View {
         detailLoading = true
         defer { detailLoading = false }
         do {
+            companionDebugLog(
+                "MovementLifeTimeline",
+                "openDetail start item=\(movementTimelineLogDescriptor(for: item))"
+            )
             if let boxId = item.boxId {
                 let detail = try await performMovementOperation(
                     reason: "life-timeline-open-detail",
@@ -1277,13 +1326,25 @@ private struct MovementLifeTimelineView: View {
                     detail: detail,
                     itemId: item.id
                 )
+                companionDebugLog(
+                    "MovementLifeTimeline",
+                    "openDetail remote success item=\(movementTimelineLogDescriptor(for: item)) boxId=\(boxId)"
+                )
                 return
             }
             detailSnapshot = MovementTimelineDetailSnapshot(
                 item: item,
                 movementStore: appModel.movementStore
             )
+            companionDebugLog(
+                "MovementLifeTimeline",
+                "openDetail local success item=\(movementTimelineLogDescriptor(for: item))"
+            )
         } catch {
+            companionDebugLog(
+                "MovementLifeTimeline",
+                "openDetail failed item=\(movementTimelineLogDescriptor(for: item)) error=\(error.localizedDescription)"
+            )
             loadError = error.localizedDescription
         }
     }
@@ -1291,6 +1352,10 @@ private struct MovementLifeTimelineView: View {
     @MainActor
     private func savePlaceDraft(_ draft: MovementTimelinePlaceDraft) async {
         do {
+            companionDebugLog(
+                "MovementLifeTimeline",
+                "savePlaceDraft start item=\(movementTimelineLogDescriptor(for: draft.item)) label=\(draft.label) latitude=\(draft.latitude) longitude=\(draft.longitude) radius=\(draft.radiusMeters) tags=\(draft.tags.joined(separator: "|"))"
+            )
             let place = try await performMovementOperation(
                 reason: "life-timeline-save-place",
                 reconnectMessage: "Reconnect to Forge before creating locations."
@@ -1318,10 +1383,18 @@ private struct MovementLifeTimelineView: View {
                 metadata: [:]
             )
             appModel.movementStore.storeKnownPlace(storedPlace)
+            companionDebugLog(
+                "MovementLifeTimeline",
+                "savePlaceDraft created remote place item=\(movementTimelineLogDescriptor(for: draft.item)) place=\(knownPlaceLogDescriptor(storedPlace))"
+            )
 
             placeDraft = nil
             await assignKnownPlace(storedPlace, to: draft.item)
         } catch {
+            companionDebugLog(
+                "MovementLifeTimeline",
+                "savePlaceDraft failed item=\(movementTimelineLogDescriptor(for: draft.item)) label=\(draft.label) error=\(error.localizedDescription)"
+            )
             loadError = error.localizedDescription
         }
     }
@@ -1332,12 +1405,20 @@ private struct MovementLifeTimelineView: View {
     ) async throws -> PairingPayload {
         let resolvedPairing = await appModel.ensureActivePairingIfPossible(reason: reason) ?? appModel.pairing
         guard let pairing = resolvedPairing else {
+            companionDebugLog(
+                "MovementLifeTimeline",
+                "resolveMovementPairing missing reason=\(reason)"
+            )
             throw NSError(
                 domain: "MovementLifeTimeline",
                 code: 1,
                 userInfo: [NSLocalizedDescriptionKey: reconnectMessage]
             )
         }
+        companionDebugLog(
+            "MovementLifeTimeline",
+            "resolveMovementPairing success reason=\(reason) session=\(pairing.sessionId) expiresAt=\(pairing.expiresAt)"
+        )
         return pairing
     }
 
@@ -1346,13 +1427,23 @@ private struct MovementLifeTimelineView: View {
         reconnectMessage: String,
         operation: (PairingPayload) async throws -> Result
     ) async throws -> Result {
+        companionDebugLog("MovementLifeTimeline", "performMovementOperation start reason=\(reason)")
         let pairing = try await resolveMovementPairing(
             reason: reason,
             reconnectMessage: reconnectMessage
         )
         do {
-            return try await operation(pairing)
+            let result = try await operation(pairing)
+            companionDebugLog(
+                "MovementLifeTimeline",
+                "performMovementOperation success reason=\(reason) session=\(pairing.sessionId)"
+            )
+            return result
         } catch {
+            companionDebugLog(
+                "MovementLifeTimeline",
+                "performMovementOperation failed reason=\(reason) session=\(pairing.sessionId) error=\(error.localizedDescription)"
+            )
             guard error.localizedDescription.localizedCaseInsensitiveContains("pairing session expired"),
                   let renewedPairing = await appModel.ensureActivePairingIfPossible(
                     reason: "\(reason)-expired",
@@ -1361,7 +1452,56 @@ private struct MovementLifeTimelineView: View {
             else {
                 throw error
             }
-            return try await operation(renewedPairing)
+            companionDebugLog(
+                "MovementLifeTimeline",
+                "performMovementOperation renewing pairing reason=\(reason) oldSession=\(pairing.sessionId) newSession=\(renewedPairing.sessionId)"
+            )
+            let result = try await operation(renewedPairing)
+            companionDebugLog(
+                "MovementLifeTimeline",
+                "performMovementOperation renewed success reason=\(reason) session=\(renewedPairing.sessionId)"
+            )
+            return result
+        }
+    }
+
+    private func movementTimelineLogDescriptor(for item: MovementLifeTimelineItem) -> String {
+        let coordinateLabel: String
+        if let coordinate = item.coordinate {
+            coordinateLabel = "\(coordinate.latitude),\(coordinate.longitude)"
+        } else {
+            coordinateLabel = "nil"
+        }
+        return "id=\(item.id) kind=\(movementTimelineKindLabel(item.kind)) source=\(item.sourceKind) boxId=\(item.boxId ?? "nil") title=\(item.displayTitle) placeLabel=\(item.placeLabel ?? "nil") coordinate=\(coordinateLabel)"
+    }
+
+    private func knownPlaceLogDescriptor(_ place: MovementSyncStore.StoredKnownPlace) -> String {
+        "id=\(place.id) externalUid=\(place.externalUid) label=\(place.label) latitude=\(place.latitude) longitude=\(place.longitude) tags=\(place.categoryTags.joined(separator: "|"))"
+    }
+
+    private func movementTimelinePlaceLabelOperationLabel(
+        _ operation: MovementTimelinePlaceLabelOperation
+    ) -> String {
+        switch operation {
+        case .createUserBox:
+            return "createUserBox"
+        case .patchUserBox(let boxId):
+            return "patchUserBox(\(boxId))"
+        case .unsupported:
+            return "unsupported"
+        }
+    }
+
+    private func movementTimelineKindLabel(_ kind: MovementLifeTimelineItem.Kind) -> String {
+        switch kind {
+        case .stay:
+            return "stay"
+        case .trip:
+            return "trip"
+        case .missing:
+            return "missing"
+        case .anchor:
+            return "anchor"
         }
     }
 }
@@ -1682,10 +1822,20 @@ private struct MovementTimelinePlaceSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel", action: close)
+                    Button("Cancel") {
+                        companionDebugLog(
+                            "MovementLifeTimeline",
+                            "place create cancel item=\(draft.item.id) label=\(draft.label)"
+                        )
+                        close()
+                    }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Create") {
+                        companionDebugLog(
+                            "MovementLifeTimeline",
+                            "place create tap item=\(draft.item.id) label=\(draft.label) latitude=\(draft.latitude) longitude=\(draft.longitude) radius=\(draft.radiusMeters) tags=\(draft.tags.joined(separator: "|"))"
+                        )
                         Task {
                             await save(draft)
                         }
@@ -1740,6 +1890,10 @@ private struct MovementTimelinePlaceLabelSheet: View {
                     } else {
                         ForEach(knownPlaces) { place in
                             Button {
+                                companionDebugLog(
+                                    "MovementLifeTimeline",
+                                    "place label select-known tap item=\(draft.item.id) place=\(place.label) externalUid=\(place.externalUid)"
+                                )
                                 Task {
                                     await selectPlace(place)
                                 }
@@ -1779,10 +1933,20 @@ private struct MovementTimelinePlaceLabelSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel", action: close)
+                    Button("Cancel") {
+                        companionDebugLog(
+                            "MovementLifeTimeline",
+                            "place label cancel item=\(draft.item.id) query=\(draft.query)"
+                        )
+                        close()
+                    }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(hasExactMatch == false && draft.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? "Create \"\(draft.query.trimmingCharacters(in: .whitespacesAndNewlines))\"" : "Create Label") {
+                        companionDebugLog(
+                            "MovementLifeTimeline",
+                            "place label create-new tap item=\(draft.item.id) query=\(draft.query.trimmingCharacters(in: .whitespacesAndNewlines)) hasExactMatch=\(hasExactMatch)"
+                        )
                         createNewPlace(
                             draft.query.trimmingCharacters(in: .whitespacesAndNewlines)
                         )

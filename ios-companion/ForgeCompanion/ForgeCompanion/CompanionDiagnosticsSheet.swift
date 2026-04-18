@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct CompanionDiagnosticsSheet: View {
     @EnvironmentObject private var appModel: CompanionAppModel
@@ -7,6 +8,7 @@ struct CompanionDiagnosticsSheet: View {
     let close: () -> Void
 
     @State private var selectedTab: DiagnosticsTab = .overview
+    @State private var copyStatusMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -43,9 +45,16 @@ struct CompanionDiagnosticsSheet: View {
                         .foregroundStyle(CompanionStyle.textPrimary)
                 }
                 if selectedTab == .logs {
-                    ToolbarItem(placement: .topBarTrailing) {
+                    ToolbarItemGroup(placement: .topBarTrailing) {
+                        Button("Copy") {
+                            copyLogsToPasteboard()
+                        }
+                        .foregroundStyle(CompanionStyle.accentStrong)
+
                         Button("Clear") {
                             logStore.clear()
+                            copyStatusMessage = "Cleared local diagnostic logs."
+                            companionDebugLog("CompanionDiagnostics", "cleared diagnostic logs")
                         }
                         .foregroundStyle(CompanionStyle.accentStrong)
                     }
@@ -237,10 +246,23 @@ struct CompanionDiagnosticsSheet: View {
     private var logsContent: some View {
         VStack(spacing: 14) {
             CompanionSectionCard {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 10) {
                     sectionTitle("General logs")
                     overviewMetricRow("Entries", "\(logStore.entries.count)")
-                    mutedBody("These are the native companion debug logs that normally only show up in Xcode.")
+                    mutedBody("These logs are now persisted on-device for release and TestFlight builds, so you can copy them out of Settings without Xcode.")
+                    Button {
+                        copyLogsToPasteboard()
+                    } label: {
+                        Label("Copy diagnostic logs", systemImage: "doc.on.doc")
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .foregroundStyle(CompanionStyle.accentStrong)
+                    }
+                    if let copyStatusMessage {
+                        Text(copyStatusMessage)
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundStyle(CompanionStyle.textSecondary)
+                            .textSelection(.enabled)
+                    }
                 }
             }
 
@@ -383,6 +405,16 @@ struct CompanionDiagnosticsSheet: View {
             return "\(String(format: "%.1f", meters / 1000)) km"
         }
         return "\(Int(meters.rounded())) m"
+    }
+
+    private func copyLogsToPasteboard() {
+        let renderedLogs = logStore.renderPlainText()
+        UIPasteboard.general.string = renderedLogs
+        copyStatusMessage = "Copied \(logStore.entries.count) diagnostic log entr\(logStore.entries.count == 1 ? "y" : "ies")."
+        companionDebugLog(
+            "CompanionDiagnostics",
+            "copied diagnostic logs entries=\(logStore.entries.count)"
+        )
     }
 }
 

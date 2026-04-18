@@ -375,6 +375,10 @@ final class MovementSyncStore: NSObject, ObservableObject, @preconcurrency CLLoc
             companionDebugLog("MovementSyncStore", "addKnownPlace skipped no coordinates")
             return nil
         }
+        companionDebugLog(
+            "MovementSyncStore",
+            "addKnownPlace label=\(label) latitude=\(resolvedLatitude) longitude=\(resolvedLongitude) tags=\(categoryTags.joined(separator: "|"))"
+        )
         let place = StoredKnownPlace(
             id: "place_\(UUID().uuidString.lowercased())",
             externalUid: "ios-place-\(UUID().uuidString.lowercased())",
@@ -390,16 +394,28 @@ final class MovementSyncStore: NSObject, ObservableObject, @preconcurrency CLLoc
         )
         knownPlaces = [place] + knownPlaces.filter { $0.label != place.label }
         persistState()
+        companionDebugLog(
+            "MovementSyncStore",
+            "addKnownPlace stored externalUid=\(place.externalUid) totalKnownPlaces=\(knownPlaces.count)"
+        )
         return place
     }
 
     func storeKnownPlace(_ place: StoredKnownPlace) {
+        companionDebugLog(
+            "MovementSyncStore",
+            "storeKnownPlace start id=\(place.id) externalUid=\(place.externalUid) label=\(place.label) tags=\(place.categoryTags.joined(separator: "|"))"
+        )
         let placeKey = knownPlaceKey(for: place)
         knownPlaces = deduplicatedKnownPlaces(
             [place] + knownPlaces.filter { knownPlaceKey(for: $0) != placeKey },
             context: .localMutation
         )
         persistState()
+        companionDebugLog(
+            "MovementSyncStore",
+            "storeKnownPlace complete externalUid=\(place.externalUid) totalKnownPlaces=\(knownPlaces.count)"
+        )
     }
 
     func mergeBootstrap(_ bootstrap: SyncReceipt.MovementBootstrapEnvelope?) {
@@ -1462,6 +1478,7 @@ final class MovementSyncStore: NSObject, ObservableObject, @preconcurrency CLLoc
         placeExternalUid: String
     ) {
         guard let index = storedStays.firstIndex(where: { $0.id == id }) else {
+            companionDebugLog("MovementSyncStore", "updateLocalStay skipped missing id=\(id)")
             return
         }
         storedStays[index].label = label
@@ -1469,15 +1486,24 @@ final class MovementSyncStore: NSObject, ObservableObject, @preconcurrency CLLoc
         storedStays[index].placeExternalUid = placeExternalUid
         storedStays[index].tags = tags
         persistState()
+        companionDebugLog(
+            "MovementSyncStore",
+            "updateLocalStay id=\(id) label=\(label) placeLabel=\(placeLabel) placeExternalUid=\(placeExternalUid) tags=\(tags.joined(separator: "|"))"
+        )
     }
 
     func updateLocalTrip(id: String, label: String, tags: [String]) {
         guard let index = storedTrips.firstIndex(where: { $0.id == id }) else {
+            companionDebugLog("MovementSyncStore", "updateLocalTrip skipped missing id=\(id)")
             return
         }
         storedTrips[index].label = label
         storedTrips[index].tags = tags
         persistState()
+        companionDebugLog(
+            "MovementSyncStore",
+            "updateLocalTrip id=\(id) label=\(label) tags=\(tags.joined(separator: "|"))"
+        )
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {

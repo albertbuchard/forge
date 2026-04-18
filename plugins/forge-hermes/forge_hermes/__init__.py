@@ -13,6 +13,7 @@ from .tools import (
     build_handler,
     build_startup_context,
     clear_startup_context,
+    warm_gateway_runtime_presence,
     warm_startup_context,
 )
 from .version import __version__
@@ -79,6 +80,7 @@ def register(ctx) -> None:
 
     register_hook = getattr(ctx, "register_hook", None)
     if callable(register_hook):
+        register_hook("gateway:startup", warm_gateway_runtime_presence)
         register_hook("on_session_start", warm_startup_context)
         register_hook("pre_llm_call", build_startup_context)
         register_hook("on_session_finalize", clear_startup_context)
