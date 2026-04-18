@@ -503,6 +503,9 @@ export function disconnectAgentRuntimeSession(sessionId, input) {
         if (!row) {
             return null;
         }
+        if (!ensureCurrentSessionInstance(row, parsed.externalSessionId)) {
+            return mapSession(row);
+        }
         const now = new Date().toISOString();
         getDatabase()
             .prepare(`UPDATE agent_runtime_sessions
