@@ -849,7 +849,52 @@ export interface TaskRun extends OwnedEntity {
   releasedAt: string | null;
   timedOutAt: string | null;
   overrideReason: string | null;
+  gitContext?: TaskRunGitContext | null;
   updatedAt: string;
+}
+
+export interface TaskRunGitContext {
+  provider: string;
+  repository: string;
+  branch: string;
+  baseBranch: string;
+  branchUrl: string | null;
+  pullRequestUrl: string | null;
+  pullRequestNumber: number | null;
+  compareUrl: string | null;
+}
+
+export type GitHelperSearchKind = "branch" | "commit" | "pull_request";
+
+export interface GitHelperRef {
+  key: string;
+  refType: WorkItemGitRefType;
+  provider: string;
+  repository: string;
+  refValue: string;
+  url: string | null;
+  displayTitle: string;
+  subtitle: string;
+}
+
+export interface GitHelperOverview {
+  repoRoot: string;
+  provider: string;
+  repository: string;
+  currentBranch: string | null;
+  baseBranch: string;
+  branches: GitHelperRef[];
+  commits: GitHelperRef[];
+  pullRequests: GitHelperRef[];
+  warnings: string[];
+}
+
+export interface GitHelperSearchResponse {
+  provider: string;
+  repository: string;
+  kind: GitHelperSearchKind;
+  refs: GitHelperRef[];
+  warnings: string[];
 }
 
 export interface CalendarConnection {
@@ -2155,12 +2200,14 @@ export interface TaskRunClaimInput {
   isCurrent?: boolean;
   leaseTtlSeconds: number;
   note: string;
+  gitContext?: TaskRunGitContext | null;
 }
 
 export interface TaskRunHeartbeatInput {
   actor?: string;
   leaseTtlSeconds: number;
   note?: string;
+  gitContext?: TaskRunGitContext | null;
 }
 
 export interface TaskRunFinishInput {
@@ -2354,6 +2401,69 @@ export interface AgentIdentity {
   activeTokenCount: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface AgentRuntimeReconnectPlan {
+  summary: string;
+  commands: string[];
+  notes: string[];
+  automationSupported: boolean;
+}
+
+export interface AgentRuntimeSessionEvent {
+  id: string;
+  sessionId: string;
+  eventType: string;
+  level: "info" | "warning" | "error";
+  title: string;
+  summary: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface AgentRuntimeSession {
+  id: string;
+  agentId: string | null;
+  agentLabel: string;
+  agentType: string;
+  provider: "openclaw" | "hermes" | "codex";
+  sessionKey: string;
+  sessionLabel: string;
+  actorLabel: string;
+  connectionMode:
+    | "operator_session"
+    | "managed_token"
+    | "plugin"
+    | "mcp"
+    | "api_server"
+    | "unknown";
+  status: "connected" | "stale" | "reconnecting" | "disconnected" | "error";
+  alive: boolean;
+  baseUrl: string | null;
+  webUrl: string | null;
+  dataRoot: string | null;
+  externalSessionId: string | null;
+  staleAfterSeconds: number;
+  reconnectCount: number;
+  reconnectRequestedAt: string | null;
+  lastError: string | null;
+  lastSeenAt: string;
+  lastHeartbeatAt: string;
+  startedAt: string;
+  endedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  metadata: Record<string, unknown>;
+  recentEvents: AgentRuntimeSessionEvent[];
+  eventCount: number;
+  actionCount: number;
+  reconnectPlan: AgentRuntimeReconnectPlan;
+}
+
+export interface AgentRuntimeSessionHistory {
+  session: AgentRuntimeSession;
+  events: AgentRuntimeSessionEvent[];
+  actions: AgentAction[];
 }
 
 export type AiModelProvider =
@@ -3225,6 +3335,16 @@ export interface AgentOnboardingPayload {
     source: string;
     actor: string;
   };
+  sessionRegistry: {
+    summary: string;
+    registerUrl: string;
+    heartbeatUrl: string;
+    eventsUrl: string;
+    historyUrlTemplate: string;
+    reconnectUrlTemplate: string;
+    disconnectUrlTemplate: string;
+    recommendedHeartbeatSeconds: number;
+  };
   conceptModel: {
     goal: string;
     project: string;
@@ -3300,6 +3420,12 @@ export interface AgentOnboardingPayload {
       configNotes: string[];
     };
     hermes: {
+      label: string;
+      installSteps: string[];
+      verifyCommands: string[];
+      configNotes: string[];
+    };
+    codex: {
       label: string;
       installSteps: string[];
       verifyCommands: string[];

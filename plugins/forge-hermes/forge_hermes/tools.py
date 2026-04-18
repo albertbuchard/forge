@@ -21,6 +21,7 @@ NODE_RUNTIME_HELPER = PACKAGE_DIR / "scripts" / "ensure-runtime.mjs"
 SESSION_COOKIES: Dict[str, str] = {}
 DEFAULT_HERMES_ACTOR_LABEL = "aurel (hermes)"
 SESSION_STARTUP_CONTEXTS: Dict[str, str] = {}
+SESSION_RUNTIME_IDS: Dict[str, str] = {}
 
 logger = logging.getLogger(__name__)
 
@@ -258,12 +259,146 @@ def _cache_startup_context(session_id: str = "") -> Optional[str]:
     return context_text
 
 
+def _register_runtime_session(session_id: str = "") -> Optional[str]:
+    cache_key = _normalize_text(session_id)
+    if not cache_key:
+        return None
+    existing = SESSION_RUNTIME_IDS.get(cache_key)
+    if existing:
+        return existing
+
+    try:
+        config = _ensure_runtime(_load_config())
+        payload = _request_json(
+            config,
+            "POST",
+            "/api/v1/agents/sessions",
+            body={
+                "provider": "hermes",
+                "agentLabel": config.actor_label,
+                "agentType": "hermes",
+                "actorLabel": config.actor_label,
+                "sessionKey": cache_key,
+                "sessionLabel": cache_key,
+                "connectionMode": "managed_token"
+                if config.api_token
+                else "operator_session",
+                "baseUrl": config.base_url,
+                "webUrl": config.web_app_url,
+                "dataRoot": config.data_root or None,
+                "staleAfterSeconds": 120,
+                "metadata": {"hermesSessionId": cache_key},
+            },
+        )
+        session = _safe_dict(payload).get("session")
+        session_id_value = _normalize_text(_safe_dict(session).get("id"))
+        if session_id_value:
+            SESSION_RUNTIME_IDS[cache_key] = session_id_value
+            return session_id_value
+    except Exception:
+        logger.exception("Forge Hermes runtime session registration failed")
+    return None
+
+
+def _heartbeat_runtime_session(
+    session_id: str = "",
+    summary: str = "",
+    metadata: Optional[Dict[str, Any]] = None,
+) -> None:
+    cache_key = _normalize_text(session_id)
+    if not cache_key:
+        return
+    try:
+        config = _ensure_runtime(_load_config())
+        _request_json(
+            config,
+            "POST",
+            "/api/v1/agents/sessions/heartbeat",
+            body={
+                "provider": "hermes",
+                "sessionKey": cache_key,
+                "summary": summary,
+                "metadata": metadata or {},
+            },
+        )
+    except Exception:
+        logger.exception("Forge Hermes runtime session heartbeat failed")
+
+
+def _append_runtime_session_event(
+    session_id: str = "",
+    *,
+    event_type: str,
+    title: str,
+    summary: str = "",
+    metadata: Optional[Dict[str, Any]] = None,
+    level: str = "info",
+) -> None:
+    cache_key = _normalize_text(session_id)
+    if not cache_key:
+        return
+    try:
+        config = _ensure_runtime(_load_config())
+        _request_json(
+            config,
+            "POST",
+            "/api/v1/agents/sessions/events",
+            body={
+                "provider": "hermes",
+                "sessionKey": cache_key,
+                "eventType": event_type,
+                "title": title,
+                "summary": summary,
+                "metadata": metadata or {},
+                "level": level,
+            },
+        )
+    except Exception:
+        logger.exception("Forge Hermes runtime session event failed")
+
+
+def _disconnect_runtime_session(
+    session_id: str = "",
+    *,
+    note: str = "",
+    last_error: Optional[str] = None,
+) -> None:
+    cache_key = _normalize_text(session_id)
+    if not cache_key:
+        return
+    runtime_id = SESSION_RUNTIME_IDS.get(cache_key) or _register_runtime_session(cache_key)
+    if not runtime_id:
+        return
+    try:
+        config = _ensure_runtime(_load_config())
+        _request_json(
+            config,
+            "POST",
+            f"/api/v1/agents/sessions/{runtime_id}/disconnect",
+            body={
+                "note": note,
+                "lastError": last_error,
+            },
+        )
+    except Exception:
+        logger.exception("Forge Hermes runtime session disconnect failed")
+    finally:
+        SESSION_RUNTIME_IDS.pop(cache_key, None)
+
+
 def warm_startup_context(
     *,
     session_id: str = "",
     **_kwargs: Any,
 ) -> None:
+    _register_runtime_session(session_id)
     _cache_startup_context(session_id)
+    _append_runtime_session_event(
+        session_id,
+        event_type="session_started",
+        title="Session started",
+        summary="Hermes registered a live Forge agent session.",
+    )
 
 
 def clear_startup_context(
@@ -274,6 +409,10 @@ def clear_startup_context(
     cache_key = _normalize_text(session_id)
     if cache_key:
         SESSION_STARTUP_CONTEXTS.pop(cache_key, None)
+    _disconnect_runtime_session(
+        session_id,
+        note="Hermes finalized or reset the session.",
+    )
 
 
 def build_startup_context(
@@ -286,6 +425,15 @@ def build_startup_context(
     platform: str = "",
     **_kwargs: Any,
 ) -> Optional[Dict[str, str]]:
+    _heartbeat_runtime_session(
+        session_id,
+        summary=_truncate_text(user_message, 140),
+        metadata={
+            "platform": _normalize_text(platform),
+            "model": _normalize_text(model),
+            "isFirstTurn": bool(is_first_turn),
+        },
+    )
     context_text = _cache_startup_context(session_id)
     if not context_text:
         return None
@@ -660,14 +808,58 @@ TOOL_SPECS = {spec["name"]: spec for spec in TOOL_CATALOG}
 def build_handler(tool_name: str):
     def handler(args: Optional[Dict[str, Any]] = None, **_kwargs: Any) -> str:
         spec = TOOL_SPECS[tool_name]
+        session_id = _normalize_text(_kwargs.get("session_id"))
+        if session_id:
+            _append_runtime_session_event(
+                session_id,
+                event_type="tool_call",
+                title=f"Tool call: {tool_name}",
+                summary=_truncate_text(json.dumps(args or {}, ensure_ascii=False), 160),
+                metadata={"toolName": tool_name},
+            )
         try:
             payload = _execute_spec(spec, dict(args or {}))
+            if session_id:
+                _append_runtime_session_event(
+                    session_id,
+                    event_type="tool_result",
+                    title=f"Tool result: {tool_name}",
+                    summary="Forge returned a result to Hermes.",
+                    metadata={"toolName": tool_name},
+                )
             return _json_result(payload)
         except ForgePluginError as exc:
+            if session_id:
+                _append_runtime_session_event(
+                    session_id,
+                    event_type="tool_error",
+                    title=f"Tool error: {tool_name}",
+                    summary=str(exc),
+                    metadata={"toolName": tool_name},
+                    level="error",
+                )
             return _safe_error(exc.code, str(exc))
         except subprocess.TimeoutExpired:
+            if session_id:
+                _append_runtime_session_event(
+                    session_id,
+                    event_type="tool_error",
+                    title=f"Tool timeout: {tool_name}",
+                    summary="Timed out while waiting for the local Forge runtime.",
+                    metadata={"toolName": tool_name},
+                    level="error",
+                )
             return _safe_error("forge_runtime_timeout", "Timed out while waiting for the local Forge runtime.")
         except Exception as exc:  # pragma: no cover - final safety net for Hermes handlers
+            if session_id:
+                _append_runtime_session_event(
+                    session_id,
+                    event_type="tool_error",
+                    title=f"Tool error: {tool_name}",
+                    summary=str(exc),
+                    metadata={"toolName": tool_name},
+                    level="error",
+                )
             return _safe_error("forge_plugin_error", str(exc))
 
     return handler

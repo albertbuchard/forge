@@ -2194,6 +2194,142 @@ export function buildOpenApiDocument() {
     }
   };
 
+  const agentRuntimeReconnectPlan = {
+    type: "object",
+    additionalProperties: false,
+    required: ["summary", "commands", "notes", "automationSupported"],
+    properties: {
+      summary: { type: "string" },
+      commands: arrayOf({ type: "string" }),
+      notes: arrayOf({ type: "string" }),
+      automationSupported: { type: "boolean" }
+    }
+  };
+
+  const agentRuntimeSessionEvent = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "sessionId",
+      "eventType",
+      "level",
+      "title",
+      "summary",
+      "metadata",
+      "createdAt"
+    ],
+    properties: {
+      id: { type: "string" },
+      sessionId: { type: "string" },
+      eventType: { type: "string" },
+      level: { type: "string", enum: ["info", "warning", "error"] },
+      title: { type: "string" },
+      summary: { type: "string" },
+      metadata: { type: "object", additionalProperties: true },
+      createdAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const agentRuntimeSession = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "agentId",
+      "agentLabel",
+      "agentType",
+      "provider",
+      "sessionKey",
+      "sessionLabel",
+      "actorLabel",
+      "connectionMode",
+      "status",
+      "alive",
+      "baseUrl",
+      "webUrl",
+      "dataRoot",
+      "externalSessionId",
+      "staleAfterSeconds",
+      "reconnectCount",
+      "reconnectRequestedAt",
+      "lastError",
+      "lastSeenAt",
+      "lastHeartbeatAt",
+      "startedAt",
+      "endedAt",
+      "createdAt",
+      "updatedAt",
+      "metadata",
+      "recentEvents",
+      "eventCount",
+      "actionCount",
+      "reconnectPlan"
+    ],
+    properties: {
+      id: { type: "string" },
+      agentId: nullable({ type: "string" }),
+      agentLabel: { type: "string" },
+      agentType: { type: "string" },
+      provider: { type: "string", enum: ["openclaw", "hermes", "codex"] },
+      sessionKey: { type: "string" },
+      sessionLabel: { type: "string" },
+      actorLabel: { type: "string" },
+      connectionMode: {
+        type: "string",
+        enum: [
+          "operator_session",
+          "managed_token",
+          "plugin",
+          "mcp",
+          "api_server",
+          "unknown"
+        ]
+      },
+      status: {
+        type: "string",
+        enum: ["connected", "stale", "reconnecting", "disconnected", "error"]
+      },
+      alive: { type: "boolean" },
+      baseUrl: nullable({ type: "string" }),
+      webUrl: nullable({ type: "string" }),
+      dataRoot: nullable({ type: "string" }),
+      externalSessionId: nullable({ type: "string" }),
+      staleAfterSeconds: { type: "integer" },
+      reconnectCount: { type: "integer" },
+      reconnectRequestedAt: nullable({ type: "string", format: "date-time" }),
+      lastError: nullable({ type: "string" }),
+      lastSeenAt: { type: "string", format: "date-time" },
+      lastHeartbeatAt: { type: "string", format: "date-time" },
+      startedAt: { type: "string", format: "date-time" },
+      endedAt: nullable({ type: "string", format: "date-time" }),
+      createdAt: { type: "string", format: "date-time" },
+      updatedAt: { type: "string", format: "date-time" },
+      metadata: { type: "object", additionalProperties: true },
+      recentEvents: arrayOf({
+        $ref: "#/components/schemas/AgentRuntimeSessionEvent"
+      }),
+      eventCount: { type: "integer" },
+      actionCount: { type: "integer" },
+      reconnectPlan: {
+        $ref: "#/components/schemas/AgentRuntimeReconnectPlan"
+      }
+    }
+  };
+
+  const agentRuntimeSessionHistory = {
+    type: "object",
+    additionalProperties: false,
+    required: ["session", "events", "actions"],
+    properties: {
+      session: { $ref: "#/components/schemas/AgentRuntimeSession" },
+      events: arrayOf({
+        $ref: "#/components/schemas/AgentRuntimeSessionEvent"
+      }),
+      actions: arrayOf({ $ref: "#/components/schemas/AgentAction" })
+    }
+  };
+
   const insight = {
     type: "object",
     additionalProperties: false,
@@ -4136,6 +4272,10 @@ export function buildOpenApiDocument() {
         SettingsBinPayload: settingsBinPayload,
         BatchEntityResult: batchEntityResult,
         AgentIdentity: agentIdentity,
+        AgentRuntimeReconnectPlan: agentRuntimeReconnectPlan,
+        AgentRuntimeSessionEvent: agentRuntimeSessionEvent,
+        AgentRuntimeSession: agentRuntimeSession,
+        AgentRuntimeSessionHistory: agentRuntimeSessionHistory,
         AgentTokenSummary: agentTokenSummary,
         AgentTokenMutationResult: agentTokenMutationResult,
         Domain: domain,
@@ -8718,6 +8858,129 @@ export function buildOpenApiDocument() {
                 }
               },
               "Agent identities"
+            )
+          }
+        }
+      },
+      "/api/v1/agents/sessions": {
+        get: {
+          summary: "List registered live agent runtime sessions",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["sessions"],
+                properties: {
+                  sessions: arrayOf({
+                    $ref: "#/components/schemas/AgentRuntimeSession"
+                  })
+                }
+              },
+              "Agent runtime sessions"
+            )
+          }
+        },
+        post: {
+          summary: "Register or refresh a live agent runtime session",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["session"],
+                properties: {
+                  session: {
+                    $ref: "#/components/schemas/AgentRuntimeSession"
+                  }
+                }
+              },
+              "Registered agent runtime session"
+            )
+          }
+        }
+      },
+      "/api/v1/agents/sessions/heartbeat": {
+        post: {
+          summary: "Heartbeat an existing agent runtime session",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["session"],
+                properties: {
+                  session: {
+                    $ref: "#/components/schemas/AgentRuntimeSession"
+                  }
+                }
+              },
+              "Updated runtime session"
+            )
+          }
+        }
+      },
+      "/api/v1/agents/sessions/events": {
+        post: {
+          summary: "Append an event to an agent runtime session history",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["event"],
+                properties: {
+                  event: {
+                    $ref: "#/components/schemas/AgentRuntimeSessionEvent"
+                  }
+                }
+              },
+              "Recorded runtime session event"
+            )
+          }
+        }
+      },
+      "/api/v1/agents/sessions/{id}/history": {
+        get: {
+          summary: "Read one agent runtime session with event and action history",
+          responses: {
+            "200": jsonResponse(
+              { $ref: "#/components/schemas/AgentRuntimeSessionHistory" },
+              "Agent runtime session history"
+            )
+          }
+        }
+      },
+      "/api/v1/agents/sessions/{id}/reconnect": {
+        post: {
+          summary: "Mark a runtime session for reconnect and return its reconnect plan",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["session"],
+                properties: {
+                  session: {
+                    $ref: "#/components/schemas/AgentRuntimeSession"
+                  }
+                }
+              },
+              "Reconnect requested"
+            )
+          }
+        }
+      },
+      "/api/v1/agents/sessions/{id}/disconnect": {
+        post: {
+          summary: "Mark a runtime session disconnected",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["session"],
+                properties: {
+                  session: {
+                    $ref: "#/components/schemas/AgentRuntimeSession"
+                  }
+                }
+              },
+              "Disconnected session"
             )
           }
         }

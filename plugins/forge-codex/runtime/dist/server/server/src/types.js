@@ -213,6 +213,31 @@ export const approvalModeSchema = z.enum([
     "high_impact_only",
     "none"
 ]);
+export const agentRuntimeProviderSchema = z.enum([
+    "openclaw",
+    "hermes",
+    "codex"
+]);
+export const agentRuntimeConnectionModeSchema = z.enum([
+    "operator_session",
+    "managed_token",
+    "plugin",
+    "mcp",
+    "api_server",
+    "unknown"
+]);
+export const agentRuntimeSessionStatusSchema = z.enum([
+    "connected",
+    "stale",
+    "reconnecting",
+    "disconnected",
+    "error"
+]);
+export const agentRuntimeEventLevelSchema = z.enum([
+    "info",
+    "warning",
+    "error"
+]);
 export const insightOriginSchema = z.enum(["system", "user", "agent"]);
 export const insightStatusSchema = z.enum([
     "open",
@@ -485,6 +510,39 @@ const workItemGitRefSchema = z.object({
     displayTitle: trimmedString.default(""),
     createdAt: z.string(),
     updatedAt: z.string()
+});
+export const gitHelperSearchKindSchema = z.enum([
+    "branch",
+    "commit",
+    "pull_request"
+]);
+export const gitHelperRefSchema = z.object({
+    key: nonEmptyTrimmedString,
+    refType: workItemGitRefTypeSchema,
+    provider: trimmedString.default("git"),
+    repository: trimmedString.default(""),
+    refValue: nonEmptyTrimmedString,
+    url: trimmedString.nullable().default(null),
+    displayTitle: trimmedString.default(""),
+    subtitle: trimmedString.default("")
+});
+export const gitHelperOverviewSchema = z.object({
+    repoRoot: nonEmptyTrimmedString,
+    provider: trimmedString.default("git"),
+    repository: trimmedString.default(""),
+    currentBranch: trimmedString.nullable().default(null),
+    baseBranch: trimmedString.default("main"),
+    branches: z.array(gitHelperRefSchema),
+    commits: z.array(gitHelperRefSchema),
+    pullRequests: z.array(gitHelperRefSchema),
+    warnings: z.array(trimmedString).default([])
+});
+export const gitHelperSearchResponseSchema = z.object({
+    provider: trimmedString.default("git"),
+    repository: trimmedString.default(""),
+    kind: gitHelperSearchKindSchema,
+    refs: z.array(gitHelperRefSchema),
+    warnings: z.array(trimmedString).default([])
 });
 const completionReportSchema = z.object({
     modifiedFiles: z.array(z.string()).default([]),
@@ -820,6 +878,19 @@ export const taskRunSchema = z.object({
     releasedAt: z.string().nullable(),
     timedOutAt: z.string().nullable(),
     overrideReason: trimmedString.nullable().default(null),
+    gitContext: z
+        .object({
+        provider: trimmedString.default(""),
+        repository: trimmedString.default(""),
+        branch: trimmedString.default(""),
+        baseBranch: trimmedString.default("main"),
+        branchUrl: trimmedString.nullable().default(null),
+        pullRequestUrl: trimmedString.nullable().default(null),
+        pullRequestNumber: z.number().int().positive().nullable().default(null),
+        compareUrl: trimmedString.nullable().default(null)
+    })
+        .nullable()
+        .optional(),
     updatedAt: z.string(),
     ...ownershipShape
 });
@@ -1961,6 +2032,146 @@ export const agentIdentitySchema = z.object({
     createdAt: z.string(),
     updatedAt: z.string()
 });
+export const agentRuntimeReconnectPlanSchema = z.object({
+    summary: z.string(),
+    commands: z.array(z.string()),
+    notes: z.array(z.string()),
+    automationSupported: z.boolean()
+});
+export const agentRuntimeSessionEventSchema = z.object({
+    id: z.string(),
+    sessionId: z.string(),
+    eventType: z.string(),
+    level: agentRuntimeEventLevelSchema,
+    title: z.string(),
+    summary: z.string(),
+    metadata: z.record(z.string(), z.unknown()),
+    createdAt: z.string()
+});
+export const agentRuntimeSessionSchema = z.object({
+    id: z.string(),
+    agentId: z.string().nullable(),
+    agentLabel: z.string(),
+    agentType: z.string(),
+    provider: agentRuntimeProviderSchema,
+    sessionKey: z.string(),
+    sessionLabel: z.string(),
+    actorLabel: z.string(),
+    connectionMode: agentRuntimeConnectionModeSchema,
+    status: agentRuntimeSessionStatusSchema,
+    alive: z.boolean(),
+    baseUrl: z.string().nullable(),
+    webUrl: z.string().nullable(),
+    dataRoot: z.string().nullable(),
+    externalSessionId: z.string().nullable(),
+    staleAfterSeconds: z.number().int().positive(),
+    reconnectCount: z.number().int().nonnegative(),
+    reconnectRequestedAt: z.string().nullable(),
+    lastError: z.string().nullable(),
+    lastSeenAt: z.string(),
+    lastHeartbeatAt: z.string(),
+    startedAt: z.string(),
+    endedAt: z.string().nullable(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+    metadata: z.record(z.string(), z.unknown()),
+    recentEvents: z.array(agentRuntimeSessionEventSchema),
+    eventCount: z.number().int().nonnegative(),
+    actionCount: z.number().int().nonnegative(),
+    reconnectPlan: agentRuntimeReconnectPlanSchema
+});
+export const agentRuntimeSessionHistorySchema = z.object({
+    session: agentRuntimeSessionSchema,
+    events: z.array(agentRuntimeSessionEventSchema),
+    actions: z.array(z.lazy(() => agentActionSchema))
+});
+const agentRuntimeSessionLocatorBaseSchema = z.object({
+    sessionId: trimmedString.optional(),
+    provider: agentRuntimeProviderSchema.optional(),
+    sessionKey: trimmedString.optional()
+});
+const agentRuntimeSessionLocatorSchema = agentRuntimeSessionLocatorBaseSchema
+    .superRefine((value, context) => {
+    const hasSessionId = Boolean(value.sessionId?.trim());
+    const hasCompositeKey = Boolean(value.provider) && Boolean(value.sessionKey?.trim());
+    if (!hasSessionId && !hasCompositeKey) {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["sessionId"],
+            message: "Provide either sessionId or the provider + sessionKey locator."
+        });
+    }
+});
+export const createAgentRuntimeSessionSchema = z.object({
+    provider: agentRuntimeProviderSchema,
+    agentLabel: nonEmptyTrimmedString,
+    agentType: trimmedString.default("assistant"),
+    actorLabel: nonEmptyTrimmedString,
+    sessionKey: nonEmptyTrimmedString,
+    sessionLabel: trimmedString.default(""),
+    connectionMode: agentRuntimeConnectionModeSchema.default("unknown"),
+    baseUrl: trimmedString.nullable().default(null),
+    webUrl: trimmedString.nullable().default(null),
+    dataRoot: trimmedString.nullable().default(null),
+    externalSessionId: trimmedString.nullable().default(null),
+    staleAfterSeconds: z.coerce.number().int().positive().max(3600).default(120),
+    metadata: z.record(z.string(), z.unknown()).default({}),
+    status: z
+        .union([
+        z.literal("connected"),
+        z.literal("reconnecting"),
+        z.literal("error")
+    ])
+        .default("connected"),
+    lastError: trimmedString.nullable().default(null)
+});
+export const heartbeatAgentRuntimeSessionSchema = agentRuntimeSessionLocatorBaseSchema.extend({
+    status: z
+        .union([
+        z.literal("connected"),
+        z.literal("reconnecting"),
+        z.literal("error")
+    ])
+        .optional(),
+    summary: trimmedString.default(""),
+    metadata: z.record(z.string(), z.unknown()).default({}),
+    lastError: trimmedString.nullable().default(null)
+}).superRefine((value, context) => {
+    const hasSessionId = Boolean(value.sessionId?.trim());
+    const hasCompositeKey = Boolean(value.provider) && Boolean(value.sessionKey?.trim());
+    if (!hasSessionId && !hasCompositeKey) {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["sessionId"],
+            message: "Provide either sessionId or the provider + sessionKey locator."
+        });
+    }
+});
+export const createAgentRuntimeSessionEventSchema = agentRuntimeSessionLocatorBaseSchema.extend({
+    eventType: nonEmptyTrimmedString,
+    level: agentRuntimeEventLevelSchema.default("info"),
+    title: nonEmptyTrimmedString,
+    summary: trimmedString.default(""),
+    metadata: z.record(z.string(), z.unknown()).default({}),
+    status: agentRuntimeSessionStatusSchema.optional()
+}).superRefine((value, context) => {
+    const hasSessionId = Boolean(value.sessionId?.trim());
+    const hasCompositeKey = Boolean(value.provider) && Boolean(value.sessionKey?.trim());
+    if (!hasSessionId && !hasCompositeKey) {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["sessionId"],
+            message: "Provide either sessionId or the provider + sessionKey locator."
+        });
+    }
+});
+export const reconnectAgentRuntimeSessionSchema = z.object({
+    note: trimmedString.default("")
+});
+export const disconnectAgentRuntimeSessionSchema = z.object({
+    note: trimmedString.default(""),
+    lastError: trimmedString.nullable().default(null)
+});
 export const eventLogEntrySchema = z.object({
     id: z.string(),
     eventKind: z.string(),
@@ -3042,7 +3253,8 @@ export const taskRunClaimSchema = z
     isCurrent: z.coerce.boolean().default(true),
     leaseTtlSeconds: z.coerce.number().int().min(1).max(14400).default(900),
     note: trimmedString.default(""),
-    overrideReason: trimmedString.optional()
+    overrideReason: trimmedString.optional(),
+    gitContext: taskRunSchema.shape.gitContext.optional()
 })
     .superRefine((value, context) => {
     if (value.timerMode === "planned" &&
@@ -3066,7 +3278,8 @@ export const taskRunHeartbeatSchema = z.object({
     actor: nonEmptyTrimmedString.optional(),
     leaseTtlSeconds: z.coerce.number().int().min(1).max(14400).default(900),
     note: trimmedString.optional(),
-    overrideReason: trimmedString.optional()
+    overrideReason: trimmedString.optional(),
+    gitContext: taskRunSchema.shape.gitContext.optional()
 });
 export const taskRunFinishSchema = z.object({
     actor: nonEmptyTrimmedString.optional(),

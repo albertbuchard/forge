@@ -212,6 +212,70 @@ test("companion pairings collapse stale duplicates and support bulk revoke", asy
   }
 });
 
+test("verified companion pairings are promoted to a long-lived device session", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-companion-long-lived-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: {
+        userId: "user_operator"
+      }
+    });
+    assert.equal(createResponse.statusCode, 201);
+    const created = createResponse.json() as {
+      qrPayload: {
+        sessionId: string;
+        pairingToken: string;
+        expiresAt: string;
+      };
+    };
+
+    const pendingExpiry = Date.parse(created.qrPayload.expiresAt);
+    assert.ok(pendingExpiry > Date.now());
+
+    const verifyResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/pairing/verify",
+      payload: {
+        sessionId: created.qrPayload.sessionId,
+        pairingToken: created.qrPayload.pairingToken,
+        device: {
+          name: "Omar iPhone",
+          platform: "ios",
+          appVersion: "1.0",
+          sourceDevice: "iPhone"
+        }
+      }
+    });
+    assert.equal(verifyResponse.statusCode, 200);
+
+    const verifiedRow = getDatabase()
+      .prepare(
+        `SELECT status, expires_at
+         FROM companion_pairing_sessions
+         WHERE id = ?`
+      )
+      .get(created.qrPayload.sessionId) as
+      | { status: string; expires_at: string }
+      | undefined;
+
+    assert.ok(verifiedRow);
+    assert.equal(verifiedRow?.status, "paired");
+    assert.ok(Date.parse(verifiedRow!.expires_at) > pendingExpiry + 365 * 24 * 60 * 60 * 1000);
+  } finally {
+    await app.close();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("companion source routes reconcile desired and applied state and reject invalid source params", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-companion-source-state-")
@@ -7565,6 +7629,10 @@ test("openapi document exposes schema-backed versioned contracts", async () => {
     assert.ok(body.components?.schemas?.WeeklyReviewPayload);
     assert.ok(body.components?.schemas?.SettingsPayload);
     assert.ok(body.components?.schemas?.AgentIdentity);
+    assert.ok(body.components?.schemas?.AgentRuntimeReconnectPlan);
+    assert.ok(body.components?.schemas?.AgentRuntimeSessionEvent);
+    assert.ok(body.components?.schemas?.AgentRuntimeSession);
+    assert.ok(body.components?.schemas?.AgentRuntimeSessionHistory);
     assert.ok(body.components?.schemas?.Insight);
     assert.ok(body.components?.schemas?.Domain);
     assert.ok(body.components?.schemas?.PsycheValue);
@@ -7592,6 +7660,12 @@ test("openapi document exposes schema-backed versioned contracts", async () => {
     assert.ok(body.paths?.["/api/v1/context"]);
     assert.ok(body.paths?.["/api/v1/operator/context"]);
     assert.ok(body.paths?.["/api/v1/operator/overview"]);
+    assert.ok(body.paths?.["/api/v1/agents/sessions"]);
+    assert.ok(body.paths?.["/api/v1/agents/sessions/heartbeat"]);
+    assert.ok(body.paths?.["/api/v1/agents/sessions/events"]);
+    assert.ok(body.paths?.["/api/v1/agents/sessions/{id}/history"]);
+    assert.ok(body.paths?.["/api/v1/agents/sessions/{id}/reconnect"]);
+    assert.ok(body.paths?.["/api/v1/agents/sessions/{id}/disconnect"]);
     assert.ok(body.paths?.["/api/v1/domains"]);
     assert.ok(body.paths?.["/api/v1/psyche/overview"]);
     assert.ok(body.paths?.["/api/v1/psyche/values"]);
@@ -14650,17 +14724,7 @@ test("settings and local agent token management persist through the versioned AP
           requiredFields: string[];
           inputShape: string;
         }>;
-        verificationPaths: {
-          settingsBin: string;
-          batchSearch: string;
-          psycheSchemaCatalog: string;
-          psycheEventTypes: string;
-          psycheEmotions: string;
-          lifeForce: string;
-          movementTimeline: string;
-          movementAllTime: string;
-          workbenchFlows: string;
-        };
+        verificationPaths: Record<string, string>;
         recommendedPluginTools: {
           bootstrap: string[];
           readModels: string[];
@@ -16473,6 +16537,197 @@ test("session events and reward endpoints expose bounded ambient XP", async () =
         (entry) => entry.eventKind === "session.dwell_120_seconds"
       )
     );
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("agent runtime sessions register, heartbeat, and expose reconnect history", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-agent-runtime-sessions-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+
+    const registerResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/agents/sessions",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        provider: "codex",
+        agentLabel: "codex",
+        agentType: "codex",
+        actorLabel: "codex",
+        sessionKey: "codex-test-session",
+        sessionLabel: "Forge MCP server",
+        connectionMode: "mcp",
+        baseUrl: "http://127.0.0.1:4317",
+        webUrl: "http://127.0.0.1:4317/forge/",
+        metadata: {
+          pid: 12345
+        }
+      }
+    });
+    assert.equal(registerResponse.statusCode, 200);
+    const registerBody = registerResponse.json() as {
+      session: { id: string; status: string };
+    };
+    assert.equal(registerBody.session.status, "connected");
+
+    const createTokenResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/settings/tokens",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        label: "Codex runtime token",
+        agentLabel: "codex",
+        agentType: "codex",
+        scopes: ["write"],
+        autonomyMode: "scoped_write",
+        approvalMode: "none"
+      }
+    });
+    assert.equal(createTokenResponse.statusCode, 201);
+    const createTokenBody = createTokenResponse.json() as {
+      token: { token: string };
+    };
+
+    const heartbeatResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/agents/sessions/heartbeat",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        provider: "codex",
+        sessionKey: "codex-test-session",
+        summary: "Heartbeat from MCP test."
+      }
+    });
+    assert.equal(heartbeatResponse.statusCode, 200);
+
+    const eventResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/agents/sessions/events",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        provider: "codex",
+        sessionKey: "codex-test-session",
+        eventType: "tool_call",
+        title: "Tool call: forge_get_operator_overview",
+        summary: "Requested the operator overview."
+      }
+    });
+    assert.equal(eventResponse.statusCode, 200);
+
+    const actionResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/agent-actions",
+      headers: {
+        authorization: `Bearer ${createTokenBody.token.token}`
+      },
+      payload: {
+        actionType: "session_history_probe",
+        riskLevel: "low",
+        title: "Session history probe",
+        summary: "Record one action so the runtime history can expose it.",
+        payload: {
+          provider: "codex"
+        }
+      }
+    });
+    assert.equal(actionResponse.statusCode, 201);
+
+    const listResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/agents/sessions",
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(listResponse.statusCode, 200);
+    const listBody = listResponse.json() as {
+      sessions: Array<{
+        id: string;
+        provider: string;
+        actionCount: number;
+        recentEvents: Array<{ title: string }>;
+      }>;
+    };
+    assert.equal(listBody.sessions[0]?.provider, "codex");
+    assert.equal(listBody.sessions[0]?.actionCount, 1);
+    assert.ok(
+      listBody.sessions[0]?.recentEvents.some((event) =>
+        event.title.includes("forge_get_operator_overview")
+      )
+    );
+
+    const reconnectResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/agents/sessions/${registerBody.session.id}/reconnect`,
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        note: "Reconnect this MCP bridge."
+      }
+    });
+    assert.equal(reconnectResponse.statusCode, 200);
+    const reconnectBody = reconnectResponse.json() as {
+      session: { status: string; reconnectPlan: { commands: string[] } };
+    };
+    assert.equal(reconnectBody.session.status, "reconnecting");
+    assert.ok(reconnectBody.session.reconnectPlan.commands.length > 0);
+
+    const historyResponse = await app.inject({
+      method: "GET",
+      url: `/api/v1/agents/sessions/${registerBody.session.id}/history`,
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(historyResponse.statusCode, 200);
+    const historyBody = historyResponse.json() as {
+      events: Array<{ eventType: string }>;
+      actions: Array<{ actionType: string; title: string }>;
+    };
+    assert.ok(
+      historyBody.events.some((event) => event.eventType === "reconnect_requested")
+    );
+    assert.ok(
+      historyBody.actions.some(
+        (action) =>
+          action.actionType === "session_history_probe" &&
+          action.title === "Session history probe"
+      )
+    );
+
+    const disconnectResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/agents/sessions/${registerBody.session.id}/disconnect`,
+      headers: {
+        authorization: `Bearer ${createTokenBody.token.token}`
+      },
+      payload: {
+        note: "Disconnect through the managed runtime token."
+      }
+    });
+    assert.equal(disconnectResponse.statusCode, 200);
+    const disconnectBody = disconnectResponse.json() as {
+      session: { status: string; endedAt: string | null };
+    };
+    assert.equal(disconnectBody.session.status, "disconnected");
+    assert.ok(disconnectBody.session.endedAt);
   } finally {
     await app.close();
     closeDatabase();

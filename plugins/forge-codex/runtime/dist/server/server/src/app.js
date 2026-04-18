@@ -6,6 +6,7 @@ import { z, ZodError } from "zod";
 import { configureDatabase, configureDatabaseSeeding, getEffectiveDataRoot, resolveDataDir, resolveDatabasePathForDataRoot, runInTransaction } from "./db.js";
 import { HttpError, isHttpError } from "./errors.js";
 import { listActivityEvents, listActivityEventsForTask, recordActivityEvent, removeActivityEvent } from "./repositories/activity-events.js";
+import { appendAgentRuntimeSessionEvent, disconnectAgentRuntimeSession, getAgentRuntimeSessionHistory, heartbeatAgentRuntimeSession, listAgentRuntimeSessions, reconnectAgentRuntimeSession, registerAgentRuntimeSession } from "./repositories/agent-runtime-sessions.js";
 import { approveApprovalRequest, createAgentAction, createInsight, createInsightFeedback, deleteInsight, getInsightById, listAgentActions, listApprovalRequests, listInsights, rejectApprovalRequest, updateInsight } from "./repositories/collaboration.js";
 import { createAiConnector, deleteAiConnector, getAiConnectorById, getAiConnectorRunById, getAiConnectorRunNodeResult, getAiConnectorRunNodeResults, getLatestAiConnectorNodeOutput, getAiConnectorBySlug, getAiConnectorConversationForConnector, listAiConnectorRuns, listAiConnectors, runAiConnector, updateAiConnector } from "./repositories/ai-connectors.js";
 import { createAiProcessor, createAiProcessorLink, deleteAiProcessor, deleteAiProcessorLink, getAiProcessorById, getAiProcessorBySlug, listAiProcessors, getSurfaceProcessorGraph, runAiProcessor, updateAiProcessor } from "./repositories/ai-processors.js";
@@ -31,6 +32,7 @@ import { deleteAiModelConnection, getAiModelConnectionById, readModelConnectionC
 import { createTag, getTagById, listTags, updateTag } from "./repositories/tags.js";
 import { createUser, ensureSystemUsers, getDefaultUser, getUserById, listUserAccessGrants, listUserOwnershipSummaries, listUserXpSummaries, listUsers, resolveUserForMutation, updateUserAccessGrant, updateUser } from "./repositories/users.js";
 import { claimTaskRun, completeTaskRun, focusTaskRun, heartbeatTaskRun, listTaskRuns, recoverTimedOutTaskRuns, releaseTaskRun } from "./repositories/task-runs.js";
+import { getGitHelperOverview, searchGitHelperRefs } from "./services/git-helper.js";
 import { createTask, createTaskWithIdempotency, getTaskById, listTasks, splitTask, uncompleteTask, updateTask } from "./repositories/tasks.js";
 import { createWorkAdjustment } from "./repositories/work-adjustments.js";
 import { createCalendarEvent, createTaskTimebox, createWorkBlockTemplate, deleteCalendarEvent, deleteTaskTimebox, deleteWorkBlockTemplate, getCalendarConnectionById, getCalendarEventById, getTaskTimeboxById, getWorkBlockTemplateById, listCalendars, listCalendarEvents, listTaskTimeboxes, suggestTaskTimeboxes, listWorkBlockInstances, listWorkBlockTemplates, updateCalendarEvent, updateTaskTimebox, updateWorkBlockTemplate } from "./repositories/calendar.js";
@@ -54,7 +56,7 @@ import { PSYCHE_ENTITY_TYPES, createBehaviorSchema, createBeliefEntrySchema, cre
 import { createQuestionnaireInstrumentSchema, publishQuestionnaireVersionSchema, startQuestionnaireRunSchema, updateQuestionnaireRunSchema, updateQuestionnaireVersionSchema } from "./questionnaire-types.js";
 import { createPreferenceCatalogItemSchema, createPreferenceCatalogSchema, createPreferenceContextSchema, createPreferenceItemSchema, enqueueEntityPreferenceItemSchema, mergePreferenceContextsSchema, preferenceWorkspaceQuerySchema, startPreferenceGameSchema, submitAbsoluteSignalSchema, submitPairwiseJudgmentSchema, updatePreferenceCatalogItemSchema, updatePreferenceCatalogSchema, updatePreferenceContextSchema, updatePreferenceItemSchema, updatePreferenceScoreSchema } from "./preferences-types.js";
 import { createDataBackupSchema, dataExportQuerySchema, restoreDataBackupSchema, switchDataRootSchema, updateDataManagementSettingsSchema } from "./data-management-types.js";
-import { activityListQuerySchema, activitySourceSchema, createAgentActionSchema, createAgentTokenSchema, createAiConnectorSchema, createAiProcessorLinkSchema, createAiProcessorSchema, runAiConnectorSchema, writeSurfaceLayoutSchema, upsertAiModelConnectionSchema, testAiModelConnectionSchema, submitOpenAiCodexOauthManualCodeSchema, batchCreateEntitiesSchema, batchDeleteEntitiesSchema, batchRestoreEntitiesSchema, batchSearchEntitiesSchema, batchUpdateEntitiesSchema, createGoalSchema, createInsightFeedbackSchema, createInsightSchema, createStrategySchema, createUserSchema, createNoteSchema, createProjectSchema, createManualRewardGrantSchema, createCalendarEventSchema, createHabitCheckInSchema, createCalendarConnectionSchema, createDiagnosticLogSchema, discoverCalendarConnectionSchema, startGoogleCalendarOauthSchema, startMicrosoftCalendarOauthSchema, testMicrosoftCalendarOauthConfigurationSchema, createHabitSchema, createTaskTimeboxSchema, createWorkBlockTemplateSchema, createSessionEventSchema, createWorkAdjustmentSchema, createTagSchema, calendarOverviewQuerySchema, psycheObservationCalendarExportQuerySchema, notesListQuerySchema, updateTagSchema, createTaskSchema, diagnosticLogListQuerySchema, eventsListQuerySchema, operatorLogWorkSchema, projectBoardPayloadSchema, projectListQuerySchema, entityDeleteQuerySchema, removeActivityEventSchema, resolveApprovalRequestSchema, rewardsLedgerQuerySchema, habitListQuerySchema, taskContextPayloadSchema, taskRunClaimSchema, taskRunFocusSchema, taskRunFinishSchema, taskRunHeartbeatSchema, taskRunListQuerySchema, taskSplitCreateSchema, taskListQuerySchema, tagSuggestionRequestSchema, uncompleteTaskSchema, updateSettingsSchema, updateGoalSchema, updateHabitSchema, updateInsightSchema, updateStrategySchema, updateUserSchema, updateCalendarConnectionSchema, updateCalendarEventSchema, updateNoteSchema, updateProjectSchema, updateRewardRuleSchema, updateTaskTimeboxSchema, updateTaskSchema, lifeForceProfilePatchSchema, lifeForceTemplateUpdateSchema, fatigueSignalCreateSchema, updateUserAccessGrantSchema, updateWorkBlockTemplateSchema, updateAiConnectorSchema, updateAiProcessorSchema, runAiProcessorSchema, workAdjustmentResultSchema, finalizeWeeklyReviewResultSchema, goalListQuerySchema, recommendTaskTimeboxesSchema, strategyListQuerySchema } from "./types.js";
+import { activityListQuerySchema, activitySourceSchema, createAgentActionSchema, createAgentRuntimeSessionEventSchema, createAgentRuntimeSessionSchema, createAgentTokenSchema, createAiConnectorSchema, createAiProcessorLinkSchema, createAiProcessorSchema, runAiConnectorSchema, writeSurfaceLayoutSchema, upsertAiModelConnectionSchema, testAiModelConnectionSchema, submitOpenAiCodexOauthManualCodeSchema, batchCreateEntitiesSchema, batchDeleteEntitiesSchema, batchRestoreEntitiesSchema, batchSearchEntitiesSchema, batchUpdateEntitiesSchema, createGoalSchema, createInsightFeedbackSchema, createInsightSchema, createStrategySchema, createUserSchema, createNoteSchema, createProjectSchema, createManualRewardGrantSchema, createCalendarEventSchema, createHabitCheckInSchema, createCalendarConnectionSchema, createDiagnosticLogSchema, discoverCalendarConnectionSchema, startGoogleCalendarOauthSchema, startMicrosoftCalendarOauthSchema, testMicrosoftCalendarOauthConfigurationSchema, createHabitSchema, createTaskTimeboxSchema, createWorkBlockTemplateSchema, createSessionEventSchema, createWorkAdjustmentSchema, createTagSchema, calendarOverviewQuerySchema, psycheObservationCalendarExportQuerySchema, notesListQuerySchema, updateTagSchema, createTaskSchema, diagnosticLogListQuerySchema, disconnectAgentRuntimeSessionSchema, eventsListQuerySchema, heartbeatAgentRuntimeSessionSchema, operatorLogWorkSchema, projectBoardPayloadSchema, projectListQuerySchema, entityDeleteQuerySchema, removeActivityEventSchema, reconnectAgentRuntimeSessionSchema, resolveApprovalRequestSchema, rewardsLedgerQuerySchema, habitListQuerySchema, taskContextPayloadSchema, taskRunClaimSchema, taskRunFocusSchema, taskRunFinishSchema, taskRunHeartbeatSchema, taskRunListQuerySchema, taskSplitCreateSchema, taskListQuerySchema, tagSuggestionRequestSchema, uncompleteTaskSchema, updateSettingsSchema, updateGoalSchema, updateHabitSchema, updateInsightSchema, updateStrategySchema, updateUserSchema, updateCalendarConnectionSchema, updateCalendarEventSchema, updateNoteSchema, updateProjectSchema, updateRewardRuleSchema, updateTaskTimeboxSchema, updateTaskSchema, lifeForceProfilePatchSchema, lifeForceTemplateUpdateSchema, fatigueSignalCreateSchema, updateUserAccessGrantSchema, updateWorkBlockTemplateSchema, updateAiConnectorSchema, updateAiProcessorSchema, runAiProcessorSchema, workAdjustmentResultSchema, finalizeWeeklyReviewResultSchema, goalListQuerySchema, recommendTaskTimeboxesSchema, strategyListQuerySchema } from "./types.js";
 import { buildOpenApiDocument } from "./openapi.js";
 import { registerWebRoutes } from "./web.js";
 import { createManagerRuntime } from "./managers/runtime.js";
@@ -3787,23 +3789,27 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
         toolName: "forge_start_task_run",
         summary: "Start truthful live work on a task.",
         whenToUse: "Use when the user wants to begin working now.",
-        inputShape: '{ taskId: string, actor: string, timerMode?: "planned"|"unlimited", plannedDurationSeconds?: number|null, overrideReason?: string|null, isCurrent?: boolean, leaseTtlSeconds?: number, note?: string }',
+        inputShape: '{ taskId: string, actor: string, timerMode?: "planned"|"unlimited", plannedDurationSeconds?: number|null, overrideReason?: string|null, isCurrent?: boolean, leaseTtlSeconds?: number, note?: string, gitContext?: { provider?: string, repository?: string, branch?: string, baseBranch?: string, branchUrl?: string|null, pullRequestUrl?: string|null, pullRequestNumber?: number|null, compareUrl?: string|null }|null }',
         requiredFields: ["taskId", "actor"],
         notes: [
             "If timerMode is planned, plannedDurationSeconds is required.",
             "If timerMode is unlimited, plannedDurationSeconds must be null or omitted.",
-            "If calendar rules currently block the task, pass an explicit overrideReason to proceed and keep the exception auditable."
+            "If calendar rules currently block the task, pass an explicit overrideReason to proceed and keep the exception auditable.",
+            "Pass gitContext when the run is happening on a named branch so Forge can surface the active branch and GitHub links in the PM board."
         ],
-        example: '{"taskId":"task_123","actor":"aurel","timerMode":"planned","plannedDurationSeconds":1500,"overrideReason":"Protected creative block after clinic hours.","isCurrent":true,"leaseTtlSeconds":900,"note":"Starting focused writing block"}'
+        example: '{"taskId":"task_123","actor":"aurel","timerMode":"planned","plannedDurationSeconds":1500,"overrideReason":"Protected creative block after clinic hours.","isCurrent":true,"leaseTtlSeconds":900,"note":"Starting focused writing block","gitContext":{"provider":"github","repository":"aurel/forge","branch":"agent/task-123","baseBranch":"main"}}'
     },
     {
         toolName: "forge_heartbeat_task_run",
         summary: "Refresh an active run lease while work continues.",
         whenToUse: "Use periodically during ongoing live work.",
-        inputShape: "{ taskRunId: string, actor?: string, leaseTtlSeconds?: number, note?: string }",
+        inputShape: "{ taskRunId: string, actor?: string, leaseTtlSeconds?: number, note?: string, gitContext?: { provider?: string, repository?: string, branch?: string, baseBranch?: string, branchUrl?: string|null, pullRequestUrl?: string|null, pullRequestNumber?: number|null, compareUrl?: string|null }|null }",
         requiredFields: ["taskRunId"],
-        notes: ["Heartbeat extends the lease and can update the note."],
-        example: '{"taskRunId":"run_123","actor":"aurel","leaseTtlSeconds":900,"note":"Still in the block"}'
+        notes: [
+            "Heartbeat extends the lease and can update the note.",
+            "Heartbeat can also refresh gitContext when the active branch or PR changes during the run."
+        ],
+        example: '{"taskRunId":"run_123","actor":"aurel","leaseTtlSeconds":900,"note":"Still in the block","gitContext":{"provider":"github","repository":"aurel/forge","branch":"agent/task-123","pullRequestNumber":42}}'
     },
     {
         toolName: "forge_focus_task_run",
@@ -3892,6 +3898,16 @@ function buildAgentOnboardingPayload(request) {
             authorization: "Authorization: Bearer <forge-api-token>",
             source: "X-Forge-Source: agent",
             actor: "X-Forge-Actor: <agent-label>"
+        },
+        sessionRegistry: {
+            summary: "Adapters should register a live session when they boot, heartbeat it while active, append notable session events, and mark it disconnected when the session ends so Forge can show liveness and reconnect plans.",
+            registerUrl: `${origin}/api/v1/agents/sessions`,
+            heartbeatUrl: `${origin}/api/v1/agents/sessions/heartbeat`,
+            eventsUrl: `${origin}/api/v1/agents/sessions/events`,
+            historyUrlTemplate: `${origin}/api/v1/agents/sessions/:id/history`,
+            reconnectUrlTemplate: `${origin}/api/v1/agents/sessions/:id/reconnect`,
+            disconnectUrlTemplate: `${origin}/api/v1/agents/sessions/:id/disconnect`,
+            recommendedHeartbeatSeconds: 45
         },
         conceptModel: {
             goal: "Long-horizon direction or outcome. Goals anchor projects and sometimes tasks directly.",
@@ -4166,7 +4182,7 @@ function buildAgentOnboardingPayload(request) {
                 ],
                 verifyCommands: [
                     `curl -s ${origin}/api/v1/health`,
-                    "openclaw plugins install ./projects/forge",
+                    "openclaw plugins install ./projects/forge/openclaw-plugin",
                     "openclaw gateway restart"
                 ],
                 configNotes: [
@@ -4192,6 +4208,24 @@ function buildAgentOnboardingPayload(request) {
                     "Use a distinct actor label such as Albert (hermes) so Hermes-originated work stays obvious in Forge provenance.",
                     "Hermes uses the same multi-user scoping rules and should pass userIds intentionally when working across humans and bots.",
                     "The Forge relationship graph still decides whether Hermes may see, message, plan for, or affect another owner."
+                ]
+            },
+            codex: {
+                label: "Codex",
+                installSteps: [
+                    "Install or load the repo-local Forge Codex plugin so Codex can expose the Forge MCP server.",
+                    "Keep Codex pointed at the same Forge origin, port, and shared data root used by the rest of the local runtime.",
+                    "Restart the Codex session when the MCP bridge or bundled Forge runtime changes so the agent session re-registers cleanly."
+                ],
+                verifyCommands: [
+                    "codex mcp list",
+                    "codex",
+                    `curl -s ${origin}/api/v1/health`
+                ],
+                configNotes: [
+                    "The Forge Codex bridge shares MCP configuration across the Codex CLI and IDE extension.",
+                    "Use a distinct actor label such as Albert (codex) so Codex-originated work stays readable in Forge history.",
+                    "The Forge MCP bridge now self-registers as a live agent session and heartbeats while the MCP server process stays alive."
                 ]
             }
         },
@@ -4297,7 +4331,7 @@ function buildAgentOnboardingPayload(request) {
             saveSuggestionTone: "gentle_optional",
             maxQuestionsPerTurn: 1,
             psycheExplorationRule: "When a Psyche entity needs understanding first, begin with one exploratory question before any working formulation, replacement belief, suggested title, or save pitch. Keep the opening reflection to one or two short sentences, stay in plain prose instead of bullets or numbered lists, keep that first reply short, do not mention Forge search or save structure yet, avoid colons or list-shaped phrasing, prefer what/when/how over why until the experience is grounded, wait for the user's answer before offering a fuller formulation, ask permission before moving from charged exploration into naming or challenge when needed, do not widen into adjacent entities until the current one has a working sentence the user recognizes, and once the lived experience is coherent stop deepening and help the user name it cleanly. If the user accepts the wording, move toward the save instead of reopening deeper exploration.",
-            specializedSurfaceRule: "For Movement, Life Force, and Workbench, clarify the lane first, then name the dedicated route family in plain language and do not guess at a generic CRUD path. When the user already named a precise correction or review target, confirm only the route-selecting detail that is still missing.",
+            specializedSurfaceRule: "For Movement, Life Force, and Workbench, clarify the lane first, then name the dedicated route family in plain language and do not guess at a generic CRUD path. When the user already named a precise correction or review target, confirm only the route-selecting detail that is still missing. The canonical runtime routes stay under /api/v1/*, and the OpenClaw HTTP mirror exposes the same families under /forge/v1/movement, /forge/v1/life-force, and /forge/v1/workbench.",
             reviewShortcutRule: "When the user is reviewing or correcting an existing record, narrow the saved object, timeframe, or route family first. Do not reopen the whole intake unless the user is actually redefining the record.",
             readModelWriteRule: "Self-observation is note-backed and should be written through observed notes with frontmatter.observedAt. Sleep and workout sessions stay on batch CRUD by default; use the reflective review helpers only when enriching one already-known record after review.",
             psycheOpeningQuestionRule: "Prefer a concrete opening question tied to the entity: ask when the value mattered, what happened the last time the pattern appeared, what cue or body signal came first before the behavior, what the belief starts saying about self or outcome, what feels most at risk inside the mode, what the part is trying to get the user to do or stop doing, or where the shift began in the incident. Reflect briefly before the question, choose one follow-up lane at a time, say what is becoming clearer before the next deeper question, and if several Psyche entities are visible hold the adjacent ones lightly until the main container is clear.",
@@ -7377,6 +7411,21 @@ export async function buildServer(options = {}) {
             workItems: filterOwnedEntities("task", listTasks(query), userIds)
         };
     });
+    app.get("/api/v1/git-helper/overview", async () => ({
+        git: await getGitHelperOverview()
+    }));
+    app.get("/api/v1/git-helper/search", async (request) => {
+        const query = z
+            .object({
+            kind: z.enum(["branch", "commit", "pull_request"]),
+            query: z.string().optional(),
+            repository: z.string().optional()
+        })
+            .parse(request.query ?? {});
+        return {
+            git: await searchGitHelperRefs(query)
+        };
+    });
     app.get("/api/v1/calendar/overview", async (request) => {
         const query = calendarOverviewQuerySchema.parse(request.query ?? {});
         const now = new Date();
@@ -8065,6 +8114,72 @@ export async function buildServer(options = {}) {
     app.get("/api/v1/agents", async () => ({
         agents: listAgentIdentities()
     }));
+    app.get("/api/v1/agents/sessions", async (request) => {
+        requireOperatorSession(request.headers, {
+            route: "/api/v1/agents/sessions"
+        });
+        return { sessions: listAgentRuntimeSessions() };
+    });
+    app.post("/api/v1/agents/sessions", async (request) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/agents/sessions"
+        });
+        return {
+            session: registerAgentRuntimeSession(createAgentRuntimeSessionSchema.parse(request.body ?? {}))
+        };
+    });
+    app.post("/api/v1/agents/sessions/heartbeat", async (request) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/agents/sessions/heartbeat"
+        });
+        return {
+            session: heartbeatAgentRuntimeSession(heartbeatAgentRuntimeSessionSchema.parse(request.body ?? {}))
+        };
+    });
+    app.post("/api/v1/agents/sessions/events", async (request) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/agents/sessions/events"
+        });
+        return {
+            event: appendAgentRuntimeSessionEvent(createAgentRuntimeSessionEventSchema.parse(request.body ?? {}))
+        };
+    });
+    app.get("/api/v1/agents/sessions/:id/history", async (request, reply) => {
+        requireOperatorSession(request.headers, {
+            route: "/api/v1/agents/sessions/:id/history"
+        });
+        const { id } = request.params;
+        const history = getAgentRuntimeSessionHistory(id);
+        if (!history) {
+            reply.code(404);
+            return { error: "Agent runtime session not found" };
+        }
+        return history;
+    });
+    app.post("/api/v1/agents/sessions/:id/reconnect", async (request, reply) => {
+        requireOperatorSession(request.headers, {
+            route: "/api/v1/agents/sessions/:id/reconnect"
+        });
+        const { id } = request.params;
+        const session = reconnectAgentRuntimeSession(id, reconnectAgentRuntimeSessionSchema.parse(request.body ?? {}));
+        if (!session) {
+            reply.code(404);
+            return { error: "Agent runtime session not found" };
+        }
+        return { session };
+    });
+    app.post("/api/v1/agents/sessions/:id/disconnect", async (request, reply) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/agents/sessions/:id/disconnect"
+        });
+        const { id } = request.params;
+        const session = disconnectAgentRuntimeSession(id, disconnectAgentRuntimeSessionSchema.parse(request.body ?? {}));
+        if (!session) {
+            reply.code(404);
+            return { error: "Agent runtime session not found" };
+        }
+        return { session };
+    });
     app.get("/api/v1/agents/onboarding", async (request) => ({
         onboarding: buildAgentOnboardingPayload(request)
     }));

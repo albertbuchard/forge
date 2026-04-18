@@ -274,6 +274,30 @@ describe("forge openclaw plugin", () => {
           description:
             "Inject a live Forge workspace summary and People wiki snapshots into agent bootstrap context."
         }
+      },
+      {
+        events: "agent:bootstrap",
+        options: {
+          name: "forge-runtime-session-bootstrap",
+          description:
+            "Register the live OpenClaw session with Forge when bootstrap context is injected."
+        }
+      },
+      {
+        events: ["message:received", "message:sent", "session:compact:after"],
+        options: {
+          name: "forge-runtime-session-activity",
+          description:
+            "Heartbeat the Forge session registry and append activity events for incoming, outgoing, and compacted OpenClaw session traffic."
+        }
+      },
+      {
+        events: ["command:stop", "command:reset"],
+        options: {
+          name: "forge-runtime-session-shutdown",
+          description:
+            "Mark the Forge runtime session offline when OpenClaw stops or resets the local session."
+        }
       }
     ]);
     expect(routes.map((route) => route.path)).toEqual([
@@ -289,6 +313,9 @@ describe("forge openclaw plugin", () => {
       "/forge/v1/wiki/health",
       "/forge/v1/health/sleep",
       "/forge/v1/health/fitness",
+      "/forge/v1/movement",
+      "/forge/v1/life-force",
+      "/forge/v1/workbench",
       "/forge/v1/calendar",
       "/forge/v1/preferences/workspace",
       "/forge/v1/psyche/self-observation/calendar",

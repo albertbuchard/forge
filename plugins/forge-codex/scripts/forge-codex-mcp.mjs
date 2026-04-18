@@ -5,9 +5,14 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError } from "@modelcontextprotocol/sdk/types.js";
 import { Value } from "@sinclair/typebox/value";
 import {
-  resolveForgePluginConfig
-} from "../runtime/dist/openclaw/plugin-entry-shared.js";
+  callConfiguredForgeApi,
+  expectForgeSuccess
+} from "../runtime/dist/openclaw/api-client.js";
+import { ensureForgeRuntimeReady } from "../runtime/dist/openclaw/local-runtime.js";
+import { resolveForgePluginConfig } from "../runtime/dist/openclaw/plugin-entry-shared.js";
 import { registerForgePluginTools } from "../runtime/dist/openclaw/tools.js";
+
+const SESSION_PROVIDER = "codex";
 
 function resolvePluginVersion() {
   const pluginManifestPath = path.resolve(import.meta.dirname, "..", ".codex-plugin", "plugin.json");
@@ -64,6 +69,117 @@ function buildPluginConfigFromEnv() {
   });
 }
 
+async function postSessionEvent(config, path, body) {
+  const response = await callConfiguredForgeApi(config, {
+    method: "POST",
+    path,
+    body,
+    extraHeaders: {
+      "x-forge-source": "agent"
+    }
+  });
+  return expectForgeSuccess(response);
+}
+
+function createRuntimeSessionState(config) {
+  return {
+    id: null,
+    key: `codex-${process.pid}-${Date.now().toString(36)}`,
+    heartbeat: null,
+    connected: false,
+    config
+  };
+}
+
+async function registerRuntimeSession(state) {
+  try {
+    await ensureForgeRuntimeReady(state.config);
+    const payload = await postSessionEvent(state.config, "/api/v1/agents/sessions", {
+      provider: SESSION_PROVIDER,
+      agentLabel: state.config.actorLabel,
+      agentType: SESSION_PROVIDER,
+      actorLabel: state.config.actorLabel,
+      sessionKey: state.key,
+      sessionLabel: "Forge MCP server",
+      connectionMode: "mcp",
+      baseUrl: state.config.baseUrl,
+      webUrl: state.config.webAppUrl,
+      dataRoot: state.config.dataRoot || null,
+      staleAfterSeconds: 90,
+      metadata: {
+        pid: process.pid,
+        pluginVersion: resolvePluginVersion(),
+        cwd: process.cwd()
+      }
+    });
+    state.id =
+      payload && typeof payload === "object" && payload.session && typeof payload.session.id === "string"
+        ? payload.session.id
+        : null;
+    state.connected = Boolean(state.id);
+  } catch {
+    state.connected = false;
+  }
+}
+
+async function heartbeatRuntimeSession(state, summary = "", metadata = {}) {
+  if (!state.connected) {
+    return;
+  }
+  try {
+    await postSessionEvent(state.config, "/api/v1/agents/sessions/heartbeat", {
+      provider: SESSION_PROVIDER,
+      sessionKey: state.key,
+      summary,
+      metadata
+    });
+  } catch {
+    state.connected = false;
+  }
+}
+
+async function appendRuntimeSessionEvent(
+  state,
+  { eventType, title, summary = "", metadata = {}, level = "info" }
+) {
+  if (!state.connected) {
+    return;
+  }
+  try {
+    await postSessionEvent(state.config, "/api/v1/agents/sessions/events", {
+      provider: SESSION_PROVIDER,
+      sessionKey: state.key,
+      eventType,
+      title,
+      summary,
+      metadata,
+      level
+    });
+  } catch {
+    state.connected = false;
+  }
+}
+
+async function disconnectRuntimeSession(state, note, lastError = null) {
+  if (!state.connected || !state.id) {
+    return;
+  }
+  try {
+    await postSessionEvent(
+      state.config,
+      `/api/v1/agents/sessions/${state.id}/disconnect`,
+      {
+        note,
+        lastError
+      }
+    );
+  } catch {
+    // Ignore disconnect cleanup failures on process shutdown.
+  } finally {
+    state.connected = false;
+  }
+}
+
 function createToolRegistry(config) {
   const tools = [];
   const api = {
@@ -113,6 +229,21 @@ function maybeStructuredContent(details) {
 
 async function main() {
   const config = buildPluginConfigFromEnv();
+  const runtimeSession = createRuntimeSessionState(config);
+  await registerRuntimeSession(runtimeSession);
+  if (runtimeSession.connected) {
+    runtimeSession.heartbeat = setInterval(() => {
+      void heartbeatRuntimeSession(runtimeSession, "Codex MCP server heartbeat.", {
+        pid: process.pid
+      });
+    }, 45_000);
+    runtimeSession.heartbeat.unref?.();
+    await appendRuntimeSessionEvent(runtimeSession, {
+      eventType: "session_started",
+      title: "MCP server started",
+      summary: "Forge registered the Codex MCP bridge as a live agent session."
+    });
+  }
   const tools = createToolRegistry(config);
   const toolByName = new Map(tools.map((tool) => [tool.name, tool]));
 
@@ -153,12 +284,42 @@ async function main() {
     }
 
     try {
+      const startedAt = Date.now();
+      await heartbeatRuntimeSession(runtimeSession, `Tool call: ${request.params.name}`, {
+        toolName: request.params.name
+      });
+      await appendRuntimeSessionEvent(runtimeSession, {
+        eventType: "tool_call",
+        title: `Tool call: ${request.params.name}`,
+        summary: "Codex invoked a Forge MCP tool.",
+        metadata: {
+          toolName: request.params.name
+        }
+      });
       const result = await tool.execute(request.params.name, args);
+      await appendRuntimeSessionEvent(runtimeSession, {
+        eventType: "tool_result",
+        title: `Tool result: ${request.params.name}`,
+        summary: "Forge returned a result to Codex.",
+        metadata: {
+          toolName: request.params.name,
+          durationMs: Date.now() - startedAt
+        }
+      });
       return {
         content: toMcpContent(result),
         structuredContent: maybeStructuredContent(result.details)
       };
     } catch (error) {
+      await appendRuntimeSessionEvent(runtimeSession, {
+        eventType: "tool_error",
+        title: `Tool error: ${request.params.name}`,
+        summary: error instanceof Error ? error.message : String(error),
+        metadata: {
+          toolName: request.params.name
+        },
+        level: "error"
+      });
       return {
         content: [
           {
@@ -172,6 +333,23 @@ async function main() {
   });
 
   const transport = new StdioServerTransport();
+  const shutdown = async (signal) => {
+    if (runtimeSession.heartbeat) {
+      clearInterval(runtimeSession.heartbeat);
+      runtimeSession.heartbeat = null;
+    }
+    await disconnectRuntimeSession(
+      runtimeSession,
+      `Codex MCP server shutdown (${signal}).`
+    );
+    process.exit(0);
+  };
+  process.once("SIGINT", () => {
+    void shutdown("SIGINT");
+  });
+  process.once("SIGTERM", () => {
+    void shutdown("SIGTERM");
+  });
   await server.connect(transport);
 }
 

@@ -44,6 +44,11 @@ Forge now injects a live session-start bootstrap block into each newly created
 OpenClaw agent session through the plugin's `agent:bootstrap` hook. This is a
 session bootstrap, not a per-reply prompt mutation.
 
+Forge now also registers each active OpenClaw session into Forge's agent-session
+registry. The plugin updates liveness from message and compaction hooks, keeps a
+recent event timeline, and exposes reconnect guidance in `Settings -> Agents`
+when a session goes stale.
+
 The injected block includes:
 
 - the current Forge operator snapshot

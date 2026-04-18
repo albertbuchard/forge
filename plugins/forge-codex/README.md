@@ -12,6 +12,11 @@ therefore ships the Codex plugin metadata in
 definition in [`./.mcp.json`](./.mcp.json), and a local stdio bridge in
 [`./scripts/forge-codex-mcp.mjs`](./scripts/forge-codex-mcp.mjs).
 
+The MCP bridge now also registers itself into Forge's live agent-session
+registry when the server process starts. Forge can therefore show active Codex
+bridges next to OpenClaw and Hermes, track recent MCP activity, detect stale
+sessions, and surface reconnect guidance in `Settings -> Agents`.
+
 - start from the operator overview
 - search before creating duplicates
 - use batch entity tools for normal multi-entity work

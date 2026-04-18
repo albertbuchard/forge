@@ -7,6 +7,7 @@ import {
   getForgeRuntimeStatus,
   primeForgeRuntime
 } from "./local-runtime.js";
+import { registerForgeSessionRegistryHooks } from "./session-registry.js";
 import { registerForgePluginCli, registerForgePluginRoutes } from "./routes.js";
 import { registerForgeSessionBootstrapHook } from "./session-bootstrap.js";
 import { registerForgePluginTools } from "./tools.js";
@@ -219,6 +220,7 @@ export function registerForgePlugin(api: ForgePluginRegistrationApi) {
     primeForgeRuntime(config, api.logger);
   }
   registerForgeSessionBootstrapHook(api, config);
+  registerForgeSessionRegistryHooks(api, config);
   registerForgePluginRoutes(api, config);
   registerForgePluginCli(api, config);
   registerForgePluginTools(api, config);

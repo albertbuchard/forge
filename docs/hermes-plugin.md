@@ -169,6 +169,11 @@ therefore gets Forge overview and current-work context before the tool loop
 starts on a fresh `/new`, and later turns keep the same cached grounding
 without refetching a brand-new overview from Forge.
 
+The same session hooks now also register Hermes sessions into Forge's live
+agent-session registry. Forge can therefore keep a provider-aware session list,
+mark Hermes sessions stale when they stop heartbeating, preserve a short event
+timeline, and show reconnect guidance directly in `Settings -> Agents`.
+
 ## Shared Multi-user Setup
 
 Hermes works well as one participant in a shared Forge system, but the shared

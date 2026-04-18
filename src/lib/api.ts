@@ -10,6 +10,8 @@ import type {
   AgentAction,
   AgentOnboardingPayload,
   AgentIdentity,
+  AgentRuntimeSessionHistory,
+  AgentRuntimeSession,
   AgentTokenMutationResult,
   OperatorSession,
   CreateManualRewardGrantInput,
@@ -29,6 +31,9 @@ import type {
   DiagnosticLogEntry,
   EventLogEntry,
   FitnessViewData,
+  GitHelperOverview,
+  GitHelperSearchKind,
+  GitHelperSearchResponse,
   FinalizeWeeklyReviewResult,
   Goal,
   Habit,
@@ -3761,6 +3766,39 @@ export function listAgents() {
   return request<{ agents: AgentIdentity[] }>("/api/v1/agents");
 }
 
+export function listAgentRuntimeSessions() {
+  return request<{ sessions: AgentRuntimeSession[] }>("/api/v1/agents/sessions");
+}
+
+export function getAgentRuntimeSessionHistory(sessionId: string) {
+  return request<AgentRuntimeSessionHistory>(
+    `/api/v1/agents/sessions/${sessionId}/history`
+  );
+}
+
+export function reconnectAgentRuntimeSession(sessionId: string, note = "") {
+  return request<{ session: AgentRuntimeSession }>(
+    `/api/v1/agents/sessions/${sessionId}/reconnect`,
+    {
+      method: "POST",
+      body: JSON.stringify({ note })
+    }
+  );
+}
+
+export function disconnectAgentRuntimeSession(
+  sessionId: string,
+  input: { note?: string; lastError?: string | null } = {}
+) {
+  return request<{ session: AgentRuntimeSession }>(
+    `/api/v1/agents/sessions/${sessionId}/disconnect`,
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
 export function getAgentOnboarding() {
   return request<{ onboarding: AgentOnboardingPayload }>(
     "/api/v1/agents/onboarding"
@@ -4290,6 +4328,28 @@ export function claimTaskRun(taskId: string, input: TaskRunClaimInput) {
     method: "POST",
     body: JSON.stringify(input)
   });
+}
+
+export function getGitHelperOverview() {
+  return request<{ git: GitHelperOverview }>("/api/v1/git-helper/overview");
+}
+
+export function searchGitHelperRefs(input: {
+  kind: GitHelperSearchKind;
+  query?: string;
+  repository?: string;
+}) {
+  const search = new URLSearchParams();
+  search.set("kind", input.kind);
+  if (input.query?.trim()) {
+    search.set("query", input.query.trim());
+  }
+  if (input.repository?.trim()) {
+    search.set("repository", input.repository.trim());
+  }
+  return request<{ git: GitHelperSearchResponse }>(
+    `/api/v1/git-helper/search?${search.toString()}`
+  );
 }
 
 export function heartbeatTaskRun(
