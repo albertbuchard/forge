@@ -1,5 +1,6 @@
-Forge Companion 1.0.9 fixes the iOS location creation flow from unlabeled
+Forge Companion 1.0.10 fixes the iOS location creation flow from unlabeled
 stays: the second modal now saves correctly, closes after creation, reapplies
 the new label to the stay, and stops preloading irrelevant repair/system tags
 into the location form. This keeps the location draft focused on the place
-name, coordinates, and optional category tags.
+name, coordinates, and optional category tags. TestFlight releases now also
+skip the App Store media capture step instead of blocking on screenshot work.
