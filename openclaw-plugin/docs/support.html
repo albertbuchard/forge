@@ -4,6 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Forge Companion Support</title>
+    <meta
+      name="description"
+      content="Support for Forge and Forge Companion, including pairing, connectivity, HealthKit sync, movement capture, and where to find the right docs."
+    />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -40,36 +44,176 @@
           <span>Support</span>
         </div>
 
-        <header class="hero">
-        <p class="eyebrow">Support</p>
-        <h1>Support</h1>
-        <p class="lede">
-          If you need help with Forge Companion or the core Forge experience,
-          this page points you to the fastest support path. Common issues
-          include pairing, HealthKit permissions, movement capture, Tailscale
-          connectivity, and sync behavior.
-        </p>
-      </header>
+        <section class="hero split">
+          <div class="hero-card">
+            <p class="eyebrow">Support</p>
+            <h1>Get the fastest path to fixing pairing, sync, connectivity, or runtime problems.</h1>
+            <p class="lede">
+              Use this page when Forge or Forge Companion is not behaving as expected.
+              The common failure points are pairing, HealthKit permissions, shared
+              runtime configuration, Tailscale reachability, and local agent setup.
+            </p>
+          </div>
+          <aside class="hero-card">
+            <p class="eyebrow">Jump To</p>
+            <ul class="guide-list">
+              <li><a href="#first-checks">First checks</a></li>
+              <li><a href="#common-issues">Common issues</a></li>
+              <li><a href="#docs-map">Where to look next</a></li>
+              <li><a href="#contact">Support contact</a></li>
+            </ul>
+          </aside>
+        </section>
 
-      <section class="section">
-        <h2>Support Contact</h2>
-        <p>
-          Email:
-          <a href="mailto:albert.buchard@gmail.com">albert.buchard@gmail.com</a>
-        </p>
-      </section>
+        <section class="section" id="first-checks">
+          <div class="section-heading">
+            <p class="eyebrow">First Checks</p>
+            <h2>These are the fastest checks before you go deeper.</h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>Core runtime</h3>
+              <pre><code>openclaw forge health
+curl -I http://127.0.0.1:4317/api/v1/health
+curl -I http://127.0.0.1:4317/forge/</code></pre>
+              <p>
+                Confirm the Forge backend and mounted web app are reachable before
+                debugging agent or companion behavior.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Shared system shape</h3>
+              <pre><code>origin:   http://127.0.0.1
+port:     4317
+dataRoot: one shared location
+userId:   explicit on writes</code></pre>
+              <p>
+                Most confusing behavior comes from different surfaces pointing at
+                different Forge stores instead of one shared runtime.
+              </p>
+            </article>
+          </div>
+        </section>
 
-      <section class="section">
-        <h2>Helpful Links</h2>
-        <ul>
-          <li><a href="./">Forge Docs Home</a></li>
-          <li><a href="./features.html">Forge Features</a></li>
-          <li><a href="./integrations.html">Integrations and companion setup</a></li>
-          <li><a href="./reference.html">API Reference</a></li>
-          <li><a href="./privacy.html">Forge Companion Privacy Policy</a></li>
-          <li><a href="./terms.html">Forge Terms of Service</a></li>
-        </ul>
-      </section>
+        <section class="section" id="common-issues">
+          <div class="section-heading">
+            <p class="eyebrow">Common Issues</p>
+            <h2>Most support requests fall into one of these buckets.</h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>OpenClaw plugin does not load</h3>
+              <p>
+                Check whether <code>forge-openclaw-plugin</code> is present in
+                <code>plugins.allow</code> inside
+                <code>~/.openclaw/openclaw.json</code>. Some OpenClaw
+                <code>2026.4.x</code> builds also require the temporary npm-based
+                bypass documented in the integrations guide.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Companion pairs but does not sync</h3>
+              <p>
+                Verify that the iPhone companion and the browser are targeting the
+                same Forge origin and data root, then confirm Apple permissions for
+                HealthKit and local network access.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Tailscale route works for some pages only</h3>
+              <p>
+                Forge should stay mounted through the backend at
+                <code>http://127.0.0.1:4317/forge/</code>. Tailscale should proxy
+                <code>/forge</code> to that backend route, not directly to the Vite
+                dev server.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Agent surfaces disagree with the browser</h3>
+              <p>
+                Check origin, port, and especially <code>dataRoot</code> for
+                OpenClaw, Hermes, Codex, and the browser. If those differ, you are
+                looking at different Forge systems.
+              </p>
+            </article>
+          </div>
+          <figure class="shot" style="margin-top: 24px">
+            <img
+              src="./media/ios/04-diagnostics.png"
+              alt="Forge Companion diagnostics screen showing connection checks and sync details."
+            />
+            <figcaption>
+              The companion diagnostics view is the right place to inspect pairing,
+              connection, and sync state before escalating a mobile-side issue.
+            </figcaption>
+          </figure>
+        </section>
+
+        <section class="section" id="docs-map">
+          <div class="section-heading">
+            <p class="eyebrow">Where To Look Next</p>
+            <h2>Use the page that matches the kind of problem you are trying to solve.</h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3><a href="./integrations.html">Integrations guide</a></h3>
+              <p>
+                Best for OpenClaw, Hermes, Codex, shared-runtime setup, and iPhone
+                companion installation questions.
+              </p>
+            </article>
+            <article class="card">
+              <h3><a href="./development.html">Development guide</a></h3>
+              <p>
+                Best for local runtime commands, verification steps, and docs/API
+                generation details.
+              </p>
+            </article>
+            <article class="card">
+              <h3><a href="./features.html">Features guide</a></h3>
+              <p>
+                Best when the question is whether a behavior is part of the product
+                model or a misunderstanding of the intended UX.
+              </p>
+            </article>
+            <article class="card">
+              <h3><a href="./api/">API reference</a></h3>
+              <p>
+                Best for exact route paths, request shapes, response bodies, and
+                interactive inspection.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="contact">
+          <div class="section-heading">
+            <p class="eyebrow">Contact</p>
+            <h2>Use direct support when the docs do not cover the failure mode.</h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>Email support</h3>
+              <p>
+                <a href="mailto:albert.buchard@gmail.com">albert.buchard@gmail.com</a>
+              </p>
+              <p>
+                Include the surface that failed, the exact URL or route, the date,
+                and what you already checked.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Reference links</h3>
+              <ul class="guide-list">
+                <li><a href="./index.html">Docs home</a></li>
+                <li><a href="./integrations.html">Integrations</a></li>
+                <li><a href="./reference.html">API reference redirect</a></li>
+                <li><a href="./privacy.html">Privacy policy</a></li>
+                <li><a href="./terms.html">Terms of service</a></li>
+              </ul>
+            </article>
+          </div>
+        </section>
       </main>
     </div>
     <script type="module" src="./lightbox.js"></script>

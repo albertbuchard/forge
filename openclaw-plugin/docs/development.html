@@ -62,6 +62,7 @@
             <p class="eyebrow">Jump To</p>
             <ul class="guide-list">
               <li><a href="#local-development">Local development</a></li>
+              <li><a href="#workflow-model">Workflow model</a></li>
               <li><a href="#verification">Verification</a></li>
               <li><a href="#docs-pipeline">Docs pipeline</a></li>
               <li><a href="#release-adjacent">Release-adjacent commands</a></li>
@@ -102,6 +103,51 @@ npm run dev:openclaw-plugin-runtime</code></pre>
                 Set <code>FORGE_OPENCLAW_DEV=1</code> only during local development to
                 have that same entrypoint launch the source-backed autoreloading backend
                 on port <code>4317</code>.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="workflow-model">
+          <div class="section-heading">
+            <p class="eyebrow">Workflow Model</p>
+            <h2>Forge’s planning workflow belongs here, not on the landing page.</h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>Planning sequence</h3>
+              <p>
+                The canonical Forge planning flow is:
+                <strong>PRD -&gt; issues -&gt; tasks -&gt; subtasks when needed -&gt; closeout</strong>.
+                Projects are PRD-backed, issues are vertical slices, and tasks
+                should fit one focused AI session.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Execution modes</h3>
+              <p>
+                Issues can be <code>AFK</code> or <code>HITL</code>. Task
+                generation typically follows
+                <code>Schema -&gt; Logic -&gt; API -&gt; UI</code>, with tests
+                interleaved instead of deferred.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Lean work item contract</h3>
+              <p>
+                Detailed work lives mainly in <code>description</code> and
+                <code>aiInstructions</code>. Structured workflow fields stay
+                narrow: execution mode, acceptance criteria, blocker links, and
+                completion reports with modified files, work summary, and linked
+                git refs.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Git workflow default</h3>
+              <p>
+                Forge defaults to direct commits on <code>main</code>. Feature
+                branches and pull requests can exist, but the product and agent
+                docs should not assume them as the default execution model.
               </p>
             </article>
           </div>

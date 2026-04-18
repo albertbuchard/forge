@@ -6,7 +6,7 @@
     <title>Forge Guide</title>
     <meta
       name="description"
-      content="A practical guide to Forge: what it is, how it works, and how its planning, movement, sleep, health, and agent features fit together."
+      content="A practical guide to Forge: what it is, how to get started, and where to find the product, integration, and API docs."
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -56,46 +56,29 @@
               reflect, or connect Forge to your tools.
             </p>
             <p class="lede" style="margin-top: 14px">
-              Forge's planning model is explicit:
-              <strong>Goal &gt; Strategy &gt; Project &gt; Strategy &gt; Issue &gt; Task &gt; Subtask</strong>.
-              Projects are PRD-backed, issues are vertical slices, and tasks are
-              sized for one focused AI session.
-            </p>
-            <p class="lede" style="margin-top: 14px">
-              The PM workspace is also shared: one mixed board for projects,
-              issues, tasks, and subtasks, plus one compact hierarchy view with
-              shared search, visible-level multi-selects, hierarchy-aware
-              linking, and guided modal flows for create, move, link, and
-              closeout actions.
+              Forge keeps planning, execution, memory, health, and agent access
+              inside one shared runtime. Start with the setup that matches your
+              environment, then use the guide map below to go deeper into
+              features, engineering, integrations, or the API.
             </p>
             <div class="pill-row">
               <span class="pill">React 19 + Vite 6</span>
               <span class="pill secondary">Fastify 5 + OpenAPI 3.1</span>
               <span class="pill">SQLite + file-backed wiki</span>
-              <span class="pill secondary">Direct commits to main</span>
+              <span class="pill secondary">OpenClaw + Hermes + Codex</span>
             </div>
             <div class="hero-actions" style="margin-top: 18px">
-              <a
-                class="button primary"
-                href="./development.html#local-development"
-                >Run Forge locally</a
-              >
-              <a class="button" href="./api/">Open API reference</a>
+              <a class="button primary" href="#quick-start">Get started</a>
+              <a class="button" href="#guide-map">Browse docs</a>
             </div>
           </div>
 
           <aside class="hero-card">
-            <p class="eyebrow">Start Here</p>
+            <p class="eyebrow">Quick Links</p>
             <div class="link-row">
-              <a class="button" href="./features.html#execution"
-                >Plan and execute</a
-              >
-              <a class="button" href="./features.html#health"
-                >Health and reflection</a
-              >
-              <a class="button" href="./integrations.html#ios"
-                >iPhone companion</a
-              >
+              <a class="button" href="#quick-start">Getting started</a>
+              <a class="button" href="./features.html">Features</a>
+              <a class="button" href="./integrations.html">Integrations</a>
               <a class="button" href="./api/openapi.json">Raw OpenAPI JSON</a>
             </div>
             <div class="kpi-list">
@@ -117,8 +100,8 @@
 
         <section class="section" id="quick-start">
           <div class="section-heading">
-            <p class="eyebrow">Ways To Use Forge</p>
-            <h2>Pick the setup that matches how you want to work with Forge.</h2>
+            <p class="eyebrow">Getting Started</p>
+            <h2>Pick the setup that matches how you want to start using Forge.</h2>
           </div>
           <div class="card-grid three">
             <article class="card">
@@ -180,6 +163,108 @@ npm run dev</code></pre>
           </div>
         </section>
 
+        <section class="section" id="guide-map">
+          <div class="section-heading">
+            <p class="eyebrow">Guide Map</p>
+            <h2>Once Forge is running, use the docs in the order that fits your goal.</h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3><a href="./features.html">Features</a></h3>
+              <p>
+                Learn what you can do in Forge across planning, knowledge,
+                movement, sleep, health, and reflection.
+              </p>
+            </article>
+            <article class="card">
+              <h3><a href="./engineering.html">How Forge is built</a></h3>
+              <p>
+                Understand the architecture, storage model, runtime surfaces,
+                and technical stack.
+              </p>
+            </article>
+            <article class="card">
+              <h3><a href="./development.html">Run it yourself</a></h3>
+              <p>
+                Start Forge locally, verify the main app paths, and review the
+                contributor workflow model.
+              </p>
+            </article>
+            <article class="card">
+              <h3><a href="./integrations.html">Integrations</a></h3>
+              <p>
+                See how Forge connects to OpenClaw, Hermes, Codex, and the
+                iPhone companion without splitting your data into silos.
+              </p>
+            </article>
+            <article class="card">
+              <h3><a href="./api/">API reference</a></h3>
+              <p>
+                Interactive API explorer with route descriptions, typed
+                payloads, live Try it out support, and the downloadable
+                generated spec.
+              </p>
+            </article>
+            <article class="card">
+              <h3><a href="./support.html">Support</a></h3>
+              <p>
+                Get help with pairing, sync, HealthKit, movement history, and
+                the companion app.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-heading">
+            <p class="eyebrow">Product At A Glance</p>
+            <h2>These screenshots show the core Forge surfaces before you dive into the deeper docs.</h2>
+          </div>
+          <div class="card-grid two">
+            <figure class="shot feature-shot">
+              <img
+                src="./assets/forge-overview-dashboard.png"
+                alt="Forge overview dashboard showing execution, planning, memory, and health cards."
+              />
+              <figcaption>
+                The overview dashboard is the fastest way to understand the product:
+                active work, linked context, health signals, and reflection all show
+                up in one local-first runtime.
+              </figcaption>
+            </figure>
+            <figure class="shot feature-shot">
+              <img
+                src="./assets/forge-kanban-board.png"
+                alt="Forge Kanban board showing execution lanes and task controls."
+              />
+              <figcaption>
+                Execution stays operational instead of decorative, with lane movement,
+                owner scopes, and fast task actions directly in the board.
+              </figcaption>
+            </figure>
+            <figure class="shot feature-shot">
+              <img
+                src="./assets/forge-wiki-memory.png"
+                alt="Forge wiki memory view showing linked written context and shared notes."
+              />
+              <figcaption>
+                Notes and wiki memory stay close to execution, so context becomes part
+                of the system instead of getting stranded in external documents.
+              </figcaption>
+            </figure>
+            <figure class="shot feature-shot">
+              <img
+                src="./assets/forge-sleep-overview.png"
+                alt="Forge sleep overview showing the latest night summary and sleep calendar."
+              />
+              <figcaption>
+                Health surfaces such as sleep are first-class product areas, not side
+                widgets bolted onto a project tracker.
+              </figcaption>
+            </figure>
+          </div>
+        </section>
+
         <section class="section">
           <div class="section-heading">
             <p class="eyebrow">iPhone Companion</p>
@@ -233,65 +318,6 @@ npm run dev</code></pre>
                 <figcaption>Diagnostics, payloads, and logs</figcaption>
               </figure>
             </div>
-          </div>
-        </section>
-
-        <section class="section">
-          <div class="section-heading">
-            <p class="eyebrow">Guide Map</p>
-            <h2>Each page explains a different part of the Forge experience.</h2>
-          </div>
-          <div class="card-grid two">
-            <article class="card">
-              <h3><a href="./features.html">Features</a></h3>
-              <p>
-                Learn what you can do in Forge, from planning work to tracking
-                movement, sleep, knowledge, and reflection.
-              </p>
-            </article>
-            <article class="card">
-              <h3><a href="./engineering.html">How Forge is built</a></h3>
-              <p>
-                Understand the architecture, storage model, major surfaces, and
-                how the web app, API, and companion stay aligned.
-              </p>
-            </article>
-            <article class="card">
-              <h3><a href="./development.html">Run it yourself</a></h3>
-              <p>
-                Start Forge locally, verify the main app paths, and understand
-                how the docs and API reference are generated.
-              </p>
-            </article>
-            <article class="card">
-              <h3><a href="./integrations.html">Integrations</a></h3>
-              <p>
-                See how Forge connects to OpenClaw, Hermes, Codex, and the
-                iPhone companion without splitting your data into silos.
-              </p>
-            </article>
-            <article class="card">
-              <h3><a href="./api/">API reference</a></h3>
-              <p>
-                Interactive API explorer with route descriptions, typed
-                payloads, live Try it out support, and the downloadable
-                generated spec.
-              </p>
-            </article>
-            <article class="card">
-              <h3><a href="./support.html">Support</a></h3>
-              <p>
-                Get help with pairing, sync, HealthKit, movement history, and
-                the companion app.
-              </p>
-            </article>
-            <article class="card">
-              <h3><a href="./privacy.html">Privacy policy</a></h3>
-              <p>
-                Read how Forge Companion handles HealthKit, location, and
-                paired-device sync.
-              </p>
-            </article>
           </div>
         </section>
 
@@ -437,6 +463,18 @@ API docs: /forge/api/</code></pre>
             Forge brings planning, execution, knowledge, movement, sleep, and
             reflection into one local-first system that you can run yourself
             and connect to your own tools.
+          </p>
+          <p>
+            Docs:
+            <a href="./features.html">Features</a>
+            ·
+            <a href="./engineering.html">Engineering</a>
+            ·
+            <a href="./development.html">Development</a>
+            ·
+            <a href="./integrations.html">Integrations</a>
+            ·
+            <a href="./api/">API</a>
           </p>
           <p>
             Legal:
