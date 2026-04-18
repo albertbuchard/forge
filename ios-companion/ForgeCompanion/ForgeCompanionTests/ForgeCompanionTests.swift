@@ -2048,6 +2048,13 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(store.knownPlaces.first?.categoryTags, ["work", "hq"])
     }
 
+    func testForgeSyncClientGeneratedMovementPlaceExternalUidUsesIosPrefix() {
+        let externalUid = ForgeSyncClient.generatedMovementPlaceExternalUid()
+
+        XCTAssertTrue(externalUid.hasPrefix("ios-place-"))
+        XCTAssertGreaterThan(externalUid.count, "ios-place-".count)
+    }
+
     func testCompanionDebugLogPlainTextExportUsesChronologicalLines() {
         let earlier = CompanionDebugLogEntry(
             id: "log_earlier",

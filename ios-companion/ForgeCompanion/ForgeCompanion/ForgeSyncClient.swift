@@ -150,6 +150,10 @@ struct ForgeSyncClient {
         let place: ForgeMovementTimelinePlace
     }
 
+    static func generatedMovementPlaceExternalUid() -> String {
+        "ios-place-\(UUID().uuidString.lowercased())"
+    }
+
     private struct MovementUserBoxCreateRequest: Encodable {
         let sessionId: String
         let pairingToken: String
@@ -512,9 +516,10 @@ struct ForgeSyncClient {
         categoryTags: [String],
         pairing: PairingPayload
     ) async throws -> ForgeMovementTimelinePlace {
+        let externalUid = Self.generatedMovementPlaceExternalUid()
         companionDebugLog(
             "ForgeSyncClient",
-            "createMovementPlace start label=\(label)"
+            "createMovementPlace start label=\(label) externalUid=\(externalUid)"
         )
         let envelope: MovementPlaceEnvelope = try await sendRequest(
             path: "/mobile/movement/places",
@@ -523,7 +528,7 @@ struct ForgeSyncClient {
                 sessionId: pairing.sessionId,
                 pairingToken: pairing.pairingToken,
                 place: .init(
-                    externalUid: "",
+                    externalUid: externalUid,
                     label: label,
                     aliases: [],
                     latitude: latitude,
@@ -540,7 +545,7 @@ struct ForgeSyncClient {
         )
         companionDebugLog(
             "ForgeSyncClient",
-            "createMovementPlace success label=\(label) placeId=\(envelope.place.id)"
+            "createMovementPlace success label=\(label) externalUid=\(envelope.place.externalUid) placeId=\(envelope.place.id)"
         )
         return envelope.place
     }

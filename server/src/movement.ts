@@ -146,7 +146,7 @@ const linkedPersonSchema = z.object({
 });
 
 const movementPlaceInputSchema = z.object({
-  externalUid: z.string().trim().min(1).default(""),
+  externalUid: z.string().trim().default(""),
   label: z.string().trim().min(1),
   aliases: z.array(z.string().trim()).default([]),
   latitude: z.number().finite(),
@@ -2407,6 +2407,10 @@ function upsertMovementPlaceInternal(input: {
   place: z.infer<typeof movementPlaceInputSchema>;
 }) {
   const parsed = movementPlaceInputSchema.parse(input.place);
+  const externalUid =
+    parsed.externalUid.trim().length > 0
+      ? parsed.externalUid.trim()
+      : `movement-place-${randomUUID().replaceAll("-", "").slice(0, 20)}`;
   const now = nowIso();
   const existing =
     input.id && input.id.trim().length > 0
@@ -2417,7 +2421,7 @@ function upsertMovementPlaceInternal(input: {
              WHERE id = ?`
           )
           .get(input.id) as MovementPlaceRow | undefined)
-      : parsed.externalUid.trim().length > 0
+      : externalUid.length > 0
         ? (getDatabase()
             .prepare(
               `SELECT *
@@ -2426,7 +2430,7 @@ function upsertMovementPlaceInternal(input: {
                  AND source = ?
                  AND external_uid = ?`
             )
-            .get(input.userId, input.source, parsed.externalUid) as
+            .get(input.userId, input.source, externalUid) as
             | MovementPlaceRow
             | undefined)
         : undefined;
@@ -2458,7 +2462,7 @@ function upsertMovementPlaceInternal(input: {
     )
     .run(
       id,
-      parsed.externalUid,
+      externalUid,
       input.userId,
       parsed.label,
       JSON.stringify(uniqStrings(parsed.aliases)),

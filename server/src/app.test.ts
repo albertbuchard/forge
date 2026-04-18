@@ -3577,6 +3577,37 @@ test("movement sync stores places, stays, trips, and serves the movement workspa
     assert.equal(allTime.summary.tripCount, 2);
     assert.equal(allTime.summary.knownPlaceCount, 2);
 
+    const createMobilePlaceResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/movement/places",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        place: {
+          externalUid: "",
+          label: "Champel Station",
+          aliases: [],
+          latitude: 46.19279962751144,
+          longitude: 6.153637079935969,
+          radiusMeters: 100,
+          categoryTags: [],
+          visibility: "shared",
+          wikiNoteId: null,
+          linkedEntities: [],
+          linkedPeople: [],
+          metadata: {}
+        }
+      }
+    });
+    assert.equal(createMobilePlaceResponse.statusCode, 201);
+    const createdMobilePlace = (
+      createMobilePlaceResponse.json() as {
+        place: { label: string; externalUid: string };
+      }
+    ).place;
+    assert.equal(createdMobilePlace.label, "Champel Station");
+    assert.ok(createdMobilePlace.externalUid.length > 0);
+
     const secondObservationCalendarResponse = await app.inject({
       method: "GET",
       url:
