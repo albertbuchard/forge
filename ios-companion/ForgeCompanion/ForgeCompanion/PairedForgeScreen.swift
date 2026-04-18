@@ -470,21 +470,6 @@ private struct MovementLifeTimelineView: View {
                 }
             }
         }
-        .onChange(of: editorDraft?.id) { _, _ in
-            flushQueuedModalIfPossible()
-        }
-        .onChange(of: creatingDraft?.id) { _, _ in
-            flushQueuedModalIfPossible()
-        }
-        .onChange(of: detailSnapshot?.id) { _, _ in
-            flushQueuedModalIfPossible()
-        }
-        .onChange(of: placeLabelDraft?.id) { _, _ in
-            flushQueuedModalIfPossible()
-        }
-        .onChange(of: placeDraft?.id) { _, _ in
-            flushQueuedModalIfPossible()
-        }
         .sheet(item: Binding<MovementTimelineEditorDraft?>(
             get: { creatingDraft ?? editorDraft },
             set: { nextValue in
@@ -494,7 +479,7 @@ private struct MovementLifeTimelineView: View {
                     editorDraft = nextValue
                 }
             }
-        )) { draft in
+        ), onDismiss: flushQueuedModalIfPossible) { draft in
             MovementTimelineEditSheet(
                 draft: draft,
                 creating: creatingDraft != nil,
@@ -512,7 +497,7 @@ private struct MovementLifeTimelineView: View {
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
-        .sheet(item: $detailSnapshot) { snapshot in
+        .sheet(item: $detailSnapshot, onDismiss: flushQueuedModalIfPossible) { snapshot in
             MovementTimelineDetailSheet(
                 snapshot: snapshot,
                 loading: detailLoading,
@@ -532,7 +517,7 @@ private struct MovementLifeTimelineView: View {
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
-        .sheet(item: $placeLabelDraft) { draft in
+        .sheet(item: $placeLabelDraft, onDismiss: flushQueuedModalIfPossible) { draft in
             MovementTimelinePlaceLabelSheet(
                 draft: draft,
                 knownPlaces: rankedKnownPlaces(for: draft.item),
@@ -548,7 +533,7 @@ private struct MovementLifeTimelineView: View {
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
-        .sheet(item: $placeDraft) { draft in
+        .sheet(item: $placeDraft, onDismiss: flushQueuedModalIfPossible) { draft in
             MovementTimelinePlaceSheet(
                 draft: draft,
                 close: { placeDraft = nil },
@@ -870,18 +855,16 @@ private struct MovementLifeTimelineView: View {
             )
             switch draft.item.source {
             case .remoteUserBox(let boxId, _):
-                guard let pairing = appModel.pairing else {
-                    throw NSError(
-                        domain: "MovementLifeTimeline",
-                        code: 1,
-                        userInfo: [NSLocalizedDescriptionKey: "Reconnect to Forge before editing historical movement."]
+                _ = try await performMovementOperation(
+                    reason: "life-timeline-save-editor-patch",
+                    reconnectMessage: "Reconnect to Forge before editing historical movement."
+                ) { pairing in
+                    try await appModel.syncClient.patchMovementUserBox(
+                        boxId: boxId,
+                        patch: payload,
+                        pairing: pairing
                     )
                 }
-                _ = try await appModel.syncClient.patchMovementUserBox(
-                    boxId: boxId,
-                    patch: payload,
-                    pairing: pairing
-                )
                 await reload()
             case .remoteAutomatic:
                 throw NSError(
@@ -890,30 +873,26 @@ private struct MovementLifeTimelineView: View {
                     userInfo: [NSLocalizedDescriptionKey: "Automatic movement boxes cannot be edited. Invalidate them into missing data instead."]
                 )
             case .liveStay, .liveTrip:
-                guard let pairing = appModel.pairing else {
-                    throw NSError(
-                        domain: "MovementLifeTimeline",
-                        code: 1,
-                        userInfo: [NSLocalizedDescriptionKey: "Reconnect to Forge before editing historical movement."]
+                _ = try await performMovementOperation(
+                    reason: "life-timeline-save-editor-live",
+                    reconnectMessage: "Reconnect to Forge before editing historical movement."
+                ) { pairing in
+                    try await appModel.syncClient.createMovementUserBox(
+                        box: payload,
+                        pairing: pairing
                     )
                 }
-                _ = try await appModel.syncClient.createMovementUserBox(
-                    box: payload,
-                    pairing: pairing
-                )
                 await reload()
             case .derived:
-                guard let pairing = appModel.pairing else {
-                    throw NSError(
-                        domain: "MovementLifeTimeline",
-                        code: 1,
-                        userInfo: [NSLocalizedDescriptionKey: "Reconnect to Forge before creating a canonical movement box."]
+                _ = try await performMovementOperation(
+                    reason: "life-timeline-save-editor-derived",
+                    reconnectMessage: "Reconnect to Forge before creating a canonical movement box."
+                ) { pairing in
+                    try await appModel.syncClient.createMovementUserBox(
+                        box: payload,
+                        pairing: pairing
                     )
                 }
-                _ = try await appModel.syncClient.createMovementUserBox(
-                    box: payload,
-                    pairing: pairing
-                )
                 await reload()
             case .anchor:
                 break
@@ -960,9 +939,6 @@ private struct MovementLifeTimelineView: View {
     private func preflightEditor(
         _ draft: MovementTimelineEditorDraft
     ) async -> ForgeMovementUserBoxPreflight? {
-        guard let pairing = appModel.pairing else {
-            return nil
-        }
         let rangeStart = segments.first?.startedAt
         let rangeEnd = segments.last?.endedAt
         let excludeBoxId: String?
@@ -973,60 +949,68 @@ private struct MovementLifeTimelineView: View {
             excludeBoxId = nil
         }
         do {
-            return try await appModel.syncClient.preflightMovementUserBox(
-                draft: ForgeMovementUserBoxPreflightPayload(
-                    kind: draft.kind == .stay ? "stay" : draft.kind == .trip ? "trip" : "missing",
-                    startedAt: MovementTimelineFormatting.isoFormatter.string(from: draft.startedAt),
-                    endedAt: MovementTimelineFormatting.isoFormatter.string(from: draft.endedAt),
-                    title: draft.label.trimmingCharacters(in: .whitespacesAndNewlines),
-                    subtitle:
-                        draft.kind == .missing
-                        ? "User-defined missing-data override."
-                        : "User-defined movement box.",
-                    placeLabel: draft.kind == .trip ? nil : draft.placeLabel.trimmingCharacters(in: .whitespacesAndNewlines),
-                    anchorExternalUid: nil,
-                    tags: draft.tags
-                        .split(separator: ",")
-                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                        .filter { $0.isEmpty == false },
-                    distanceMeters: draft.kind == .trip ? 150 : nil,
-                    averageSpeedMps: nil,
-                    metadata: ["preflightFrom": "companion-life-timeline"],
-                    excludeBoxId: excludeBoxId,
-                    rangeStart: rangeStart,
-                    rangeEnd: rangeEnd
-                ),
-                pairing: pairing
-            )
+            return try await performMovementOperation(
+                reason: "life-timeline-preflight-editor",
+                reconnectMessage: "Reconnect to Forge before editing historical movement."
+            ) { pairing in
+                try await appModel.syncClient.preflightMovementUserBox(
+                    draft: ForgeMovementUserBoxPreflightPayload(
+                        kind: draft.kind == .stay ? "stay" : draft.kind == .trip ? "trip" : "missing",
+                        startedAt: MovementTimelineFormatting.isoFormatter.string(from: draft.startedAt),
+                        endedAt: MovementTimelineFormatting.isoFormatter.string(from: draft.endedAt),
+                        title: draft.label.trimmingCharacters(in: .whitespacesAndNewlines),
+                        subtitle:
+                            draft.kind == .missing
+                            ? "User-defined missing-data override."
+                            : "User-defined movement box.",
+                        placeLabel: draft.kind == .trip ? nil : draft.placeLabel.trimmingCharacters(in: .whitespacesAndNewlines),
+                        anchorExternalUid: nil,
+                        tags: draft.tags
+                            .split(separator: ",")
+                            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                            .filter { $0.isEmpty == false },
+                        distanceMeters: draft.kind == .trip ? 150 : nil,
+                        averageSpeedMps: nil,
+                        metadata: ["preflightFrom": "companion-life-timeline"],
+                        excludeBoxId: excludeBoxId,
+                        rangeStart: rangeStart,
+                        rangeEnd: rangeEnd
+                    ),
+                    pairing: pairing
+                )
+            }
         } catch {
             return nil
         }
     }
 
     private func invalidateAutomaticItem(_ item: MovementLifeTimelineItem) async {
-        guard case let .remoteAutomatic(boxId, _) = item.source,
-              let pairing = appModel.pairing
-        else {
+        guard case let .remoteAutomatic(boxId, _) = item.source else {
             return
         }
         do {
-            _ = try await appModel.syncClient.invalidateAutomaticMovementBox(
-                boxId: boxId,
-                payload: ForgeMovementUserBoxPayload(
-                    kind: nil,
-                    startedAt: nil,
-                    endedAt: nil,
-                    title: "User invalidated automatic movement",
-                    subtitle: "Overrides this automatic movement box with missing data.",
-                    placeLabel: nil,
-                    anchorExternalUid: nil,
-                    tags: ["user-invalidated", "missing-data"],
-                    distanceMeters: nil,
-                    averageSpeedMps: nil,
-                    metadata: ["invalidatedFrom": "companion-life-timeline"]
-                ),
-                pairing: pairing
-            )
+            _ = try await performMovementOperation(
+                reason: "life-timeline-invalidate-automatic",
+                reconnectMessage: "Reconnect to Forge before invalidating automatic movement."
+            ) { pairing in
+                try await appModel.syncClient.invalidateAutomaticMovementBox(
+                    boxId: boxId,
+                    payload: ForgeMovementUserBoxPayload(
+                        kind: nil,
+                        startedAt: nil,
+                        endedAt: nil,
+                        title: "User invalidated automatic movement",
+                        subtitle: "Overrides this automatic movement box with missing data.",
+                        placeLabel: nil,
+                        anchorExternalUid: nil,
+                        tags: ["user-invalidated", "missing-data"],
+                        distanceMeters: nil,
+                        averageSpeedMps: nil,
+                        metadata: ["invalidatedFrom": "companion-life-timeline"]
+                    ),
+                    pairing: pairing
+                )
+            }
             await reload()
         } catch {
             loadError = error.localizedDescription
@@ -1034,16 +1018,19 @@ private struct MovementLifeTimelineView: View {
     }
 
     private func deleteUserDefinedItem(_ item: MovementLifeTimelineItem) async {
-        guard case let .remoteUserBox(boxId, _) = item.source,
-              let pairing = appModel.pairing
-        else {
+        guard case let .remoteUserBox(boxId, _) = item.source else {
             return
         }
         do {
-            _ = try await appModel.syncClient.deleteMovementUserBox(
-                boxId: boxId,
-                pairing: pairing
-            )
+            _ = try await performMovementOperation(
+                reason: "life-timeline-delete-user-defined",
+                reconnectMessage: "Reconnect to Forge before deleting historical movement."
+            ) { pairing in
+                try await appModel.syncClient.deleteMovementUserBox(
+                    boxId: boxId,
+                    pairing: pairing
+                )
+            }
             await reload()
         } catch {
             loadError = error.localizedDescription
@@ -1175,10 +1162,6 @@ private struct MovementLifeTimelineView: View {
         _ place: MovementSyncStore.StoredKnownPlace,
         to item: MovementLifeTimelineItem
     ) async {
-        guard let pairing = appModel.pairing else {
-            loadError = "Reconnect to Forge before labeling stay locations."
-            return
-        }
         do {
             let payload = makePlaceLabelUserBoxPayload(
                 for: item,
@@ -1187,16 +1170,26 @@ private struct MovementLifeTimelineView: View {
             )
             switch movementTimelinePlaceLabelOperation(for: item) {
             case .patchUserBox(let boxId):
-                _ = try await appModel.syncClient.patchMovementUserBox(
-                    boxId: boxId,
-                    patch: payload,
-                    pairing: pairing
-                )
+                _ = try await performMovementOperation(
+                    reason: "life-timeline-assign-known-place-patch",
+                    reconnectMessage: "Reconnect to Forge before labeling stay locations."
+                ) { pairing in
+                    try await appModel.syncClient.patchMovementUserBox(
+                        boxId: boxId,
+                        patch: payload,
+                        pairing: pairing
+                    )
+                }
             case .createUserBox:
-                _ = try await appModel.syncClient.createMovementUserBox(
-                    box: payload,
-                    pairing: pairing
-                )
+                _ = try await performMovementOperation(
+                    reason: "life-timeline-assign-known-place-create",
+                    reconnectMessage: "Reconnect to Forge before labeling stay locations."
+                ) { pairing in
+                    try await appModel.syncClient.createMovementUserBox(
+                        box: payload,
+                        pairing: pairing
+                    )
+                }
             case .unsupported:
                 throw NSError(
                     domain: "MovementLifeTimeline",
@@ -1269,11 +1262,16 @@ private struct MovementLifeTimelineView: View {
         detailLoading = true
         defer { detailLoading = false }
         do {
-            if let boxId = item.boxId, let pairing = appModel.pairing {
-                let detail = try await appModel.syncClient.fetchMovementBoxDetail(
-                    boxId: boxId,
-                    pairing: pairing
-                )
+            if let boxId = item.boxId {
+                let detail = try await performMovementOperation(
+                    reason: "life-timeline-open-detail",
+                    reconnectMessage: "Reconnect to Forge before loading stay details."
+                ) { pairing in
+                    try await appModel.syncClient.fetchMovementBoxDetail(
+                        boxId: boxId,
+                        pairing: pairing
+                    )
+                }
                 detailSnapshot = MovementTimelineDetailSnapshot(
                     detail: detail,
                     itemId: item.id
@@ -1290,24 +1288,19 @@ private struct MovementLifeTimelineView: View {
     }
 
     private func savePlaceDraft(_ draft: MovementTimelinePlaceDraft) async {
-        guard let pairing = appModel.pairing else {
-            loadError = "Reconnect to Forge before creating locations."
-            return
-        }
         do {
-            let place = try await appModel.syncClient.createMovementPlace(
-                label: draft.label.trimmingCharacters(in: .whitespacesAndNewlines),
-                latitude: draft.latitude,
-                longitude: draft.longitude,
-                categoryTags: draft.tags,
-                pairing: pairing
-            )
-            _ = appModel.movementStore.addKnownPlace(
-                label: place.label,
-                categoryTags: place.categoryTags,
-                latitude: place.latitude,
-                longitude: place.longitude
-            )
+            let place = try await performMovementOperation(
+                reason: "life-timeline-save-place",
+                reconnectMessage: "Reconnect to Forge before creating locations."
+            ) { pairing in
+                try await appModel.syncClient.createMovementPlace(
+                    label: draft.label.trimmingCharacters(in: .whitespacesAndNewlines),
+                    latitude: draft.latitude,
+                    longitude: draft.longitude,
+                    categoryTags: draft.tags,
+                    pairing: pairing
+                )
+            }
 
             guard let item = displayItems.first(where: { $0.id == draft.itemId }) else {
                 throw NSError(
@@ -1320,26 +1313,64 @@ private struct MovementLifeTimelineView: View {
                 )
             }
 
-            await assignKnownPlace(
-                MovementSyncStore.StoredKnownPlace(
-                    id: place.id,
-                    externalUid: place.externalUid,
-                    label: place.label,
-                    aliases: place.aliases,
-                    latitude: place.latitude,
-                    longitude: place.longitude,
-                    radiusMeters: place.radiusMeters,
-                    categoryTags: place.categoryTags,
-                    visibility: place.visibility,
-                    wikiNoteId: place.wikiNoteId,
-                    metadata: [:]
-                ),
-                to: item
+            let storedPlace = MovementSyncStore.StoredKnownPlace(
+                id: place.id,
+                externalUid: place.externalUid,
+                label: place.label,
+                aliases: place.aliases,
+                latitude: place.latitude,
+                longitude: place.longitude,
+                radiusMeters: place.radiusMeters,
+                categoryTags: place.categoryTags,
+                visibility: place.visibility,
+                wikiNoteId: place.wikiNoteId,
+                metadata: [:]
             )
+            appModel.movementStore.storeKnownPlace(storedPlace)
 
             placeDraft = nil
+            await assignKnownPlace(storedPlace, to: item)
         } catch {
             loadError = error.localizedDescription
+        }
+    }
+
+    private func resolveMovementPairing(
+        reason: String,
+        reconnectMessage: String
+    ) async throws -> PairingPayload {
+        let resolvedPairing = await appModel.ensureActivePairingIfPossible(reason: reason) ?? appModel.pairing
+        guard let pairing = resolvedPairing else {
+            throw NSError(
+                domain: "MovementLifeTimeline",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: reconnectMessage]
+            )
+        }
+        return pairing
+    }
+
+    private func performMovementOperation<Result>(
+        reason: String,
+        reconnectMessage: String,
+        operation: (PairingPayload) async throws -> Result
+    ) async throws -> Result {
+        let pairing = try await resolveMovementPairing(
+            reason: reason,
+            reconnectMessage: reconnectMessage
+        )
+        do {
+            return try await operation(pairing)
+        } catch {
+            guard error.localizedDescription.localizedCaseInsensitiveContains("pairing session expired"),
+                  let renewedPairing = await appModel.ensureActivePairingIfPossible(
+                    reason: "\(reason)-expired",
+                    forceRenewal: true
+                  )
+            else {
+                throw error
+            }
+            return try await operation(renewedPairing)
         }
     }
 }

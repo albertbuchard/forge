@@ -241,6 +241,7 @@ final class MovementSyncStore: NSObject, ObservableObject, @preconcurrency CLLoc
     private enum KnownPlaceDeduplicationContext: String {
         case bootstrapLocal = "bootstrap_local"
         case bootstrapRemote = "bootstrap_remote"
+        case localMutation = "local_mutation"
         case persistedState = "persisted_state"
         case testingState = "testing_state"
     }
@@ -390,6 +391,15 @@ final class MovementSyncStore: NSObject, ObservableObject, @preconcurrency CLLoc
         knownPlaces = [place] + knownPlaces.filter { $0.label != place.label }
         persistState()
         return place
+    }
+
+    func storeKnownPlace(_ place: StoredKnownPlace) {
+        let placeKey = knownPlaceKey(for: place)
+        knownPlaces = deduplicatedKnownPlaces(
+            [place] + knownPlaces.filter { knownPlaceKey(for: $0) != placeKey },
+            context: .localMutation
+        )
+        persistState()
     }
 
     func mergeBootstrap(_ bootstrap: SyncReceipt.MovementBootstrapEnvelope?) {

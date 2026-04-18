@@ -1973,6 +1973,50 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertFalse(snapshot.editable)
     }
 
+    func testMovementStoreKeepsRemoteKnownPlaceIdentityWhenSavingCreatedLabel() {
+        let store = MovementSyncStore(testingState: nil)
+        let remotePlace = MovementSyncStore.StoredKnownPlace(
+            id: "place_remote_1",
+            externalUid: "remote-place-1",
+            label: "Forge Office",
+            aliases: [],
+            latitude: 46.5191,
+            longitude: 6.6323,
+            radiusMeters: 120,
+            categoryTags: ["work"],
+            visibility: "shared",
+            wikiNoteId: nil,
+            metadata: [:]
+        )
+
+        store.storeKnownPlace(remotePlace)
+
+        XCTAssertEqual(store.knownPlaces.count, 1)
+        XCTAssertEqual(store.knownPlaces.first?.externalUid, "remote-place-1")
+        XCTAssertEqual(store.knownPlaces.first?.label, "Forge Office")
+
+        store.storeKnownPlace(
+            MovementSyncStore.StoredKnownPlace(
+                id: "place_remote_1_updated",
+                externalUid: "remote-place-1",
+                label: "Forge HQ",
+                aliases: ["Office"],
+                latitude: 46.5191,
+                longitude: 6.6323,
+                radiusMeters: 140,
+                categoryTags: ["work", "hq"],
+                visibility: "shared",
+                wikiNoteId: nil,
+                metadata: [:]
+            )
+        )
+
+        XCTAssertEqual(store.knownPlaces.count, 1)
+        XCTAssertEqual(store.knownPlaces.first?.externalUid, "remote-place-1")
+        XCTAssertEqual(store.knownPlaces.first?.label, "Forge HQ")
+        XCTAssertEqual(store.knownPlaces.first?.categoryTags, ["work", "hq"])
+    }
+
     private func makeLocation(
         latitude: Double,
         longitude: Double,
