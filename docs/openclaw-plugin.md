@@ -325,7 +325,7 @@ Some recent OpenClaw versions can still block Forge during `plugins install`, ev
 
 ```bash
 npm install -g forge-openclaw-plugin
-node -e 'const cp=require("child_process"); const fs=require("fs"); const path=require("path"); const p=process.env.HOME+"/.openclaw/openclaw.json"; const j=JSON.parse(fs.readFileSync(p,"utf8")); const pluginPath=path.join(cp.execSync("npm root -g",{encoding:"utf8"}).trim(),"forge-openclaw-plugin"); j.plugins ??= {}; j.plugins.allow = Array.from(new Set([...(j.plugins.allow || []), "forge-openclaw-plugin"])); j.plugins.load ??= {}; j.plugins.load.paths = Array.from(new Set([...(j.plugins.load.paths || []), pluginPath])); j.plugins.entries ??= {}; j.plugins.entries["forge-openclaw-plugin"] = { enabled: true, config: { origin: "http://127.0.0.1", port: 4317, actorLabel: "aurel", timeoutMs: 15000 } }; fs.writeFileSync(p, JSON.stringify(j, null, 2)+"\n"); console.log("Configured", pluginPath);'
+node -e 'const cp=require("child_process"); const fs=require("fs"); const path=require("path"); const p=process.env.HOME+"/.openclaw/openclaw.json"; const j=JSON.parse(fs.readFileSync(p,"utf8")); const pluginPath=path.join(cp.execSync("npm root -g",{encoding:"utf8"}).trim(),"forge-openclaw-plugin"); j.plugins ??= {}; j.plugins.allow = Array.from(new Set([...(j.plugins.allow || []), "forge-openclaw-plugin"])); j.plugins.load ??= {}; j.plugins.load.paths = Array.from(new Set([...(j.plugins.load.paths || []), pluginPath])); j.plugins.entries ??= {}; j.plugins.entries["forge-openclaw-plugin"] = { enabled: true, config: { origin: "http://127.0.0.1", port: 4317, actorLabel: "", timeoutMs: 15000 } }; fs.writeFileSync(p, JSON.stringify(j, null, 2)+"\n"); console.log("Configured", pluginPath);'
 openclaw gateway restart
 openclaw plugins info forge-openclaw-plugin
 openclaw forge health
@@ -375,9 +375,9 @@ Example config:
         config: {
           origin: "http://127.0.0.1",
           port: 4317,
-          dataRoot: "/absolute/path/to/forge-data",
+          dataRoot: "~/.forge",
           apiToken: "",
-          actorLabel: "aurel",
+          actorLabel: "",
           timeoutMs: 15000
         }
       }
@@ -388,7 +388,9 @@ Example config:
 
 `origin` is the protocol + host without the port.
 `port` is split out explicitly so local collisions are easy to fix without rebuilding the whole URL.
-`dataRoot` is optional. Use it when you want the local Forge runtime to use a specific data folder instead of the runtime working directory.
+`dataRoot` is optional. Local installs now default to the shared Forge home at
+`~/.forge`. Override it only when you intentionally want a different shared
+database.
 
 Changing the data folder means changing this exact config entry:
 
@@ -416,6 +418,9 @@ openclaw gateway restart
 
 For localhost or Tailscale Forge instances, the plugin can bootstrap an operator session automatically.
 For pure localhost targets, it also auto-starts Forge if the local runtime is not already running.
+If `actorLabel` is blank, the plugin now inherits the effective operator label
+from that trusted bootstrap. Set `actorLabel` only when a bot or child agent
+should act under its own explicit identity.
 
 That means the fast path is:
 
@@ -638,7 +643,11 @@ The curated route contract is:
 
 ## Token creation
 
-Best path:
+Tokens are optional for trusted localhost and Tailscale operator-session flows.
+Use them when the target is remote, intentionally external, or when you want an
+explicit long-lived scoped credential for a bot.
+
+Best path when a token is actually needed:
 
 1. open Forge in the browser locally or over Tailscale
 2. go to `Settings` -> `Agents`

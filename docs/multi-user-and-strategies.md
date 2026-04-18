@@ -121,8 +121,8 @@ Recommended OpenClaw config shape:
         config: {
           origin: "http://127.0.0.1",
           port: 4317,
-          dataRoot: "/absolute/path/to/forge-data",
-          actorLabel: "openclaw",
+          dataRoot: "~/.forge",
+          actorLabel: "",
           apiToken: "",
           timeoutMs: 15000
         }
@@ -136,9 +136,12 @@ Important points:
 
 - `origin` is the protocol + host
 - `port` is stored separately
-- `dataRoot` should be explicit when several adapters are meant to share one
-  Forge database
-- `actorLabel` should identify the adapter or bot clearly in logs and activity
+- local adapters now share `~/.forge` by default, so you only need `dataRoot`
+  when you intentionally want a different shared database
+- leave `actorLabel` blank when the adapter should inherit the parent/operator
+  identity automatically
+- set `actorLabel` only when the adapter or sub-agent should act as a distinct
+  bot identity
 
 After install, also verify the OpenClaw allow-list repair step and the agent
 tool-card permissions so the agent can actually see Forge.
@@ -151,8 +154,8 @@ Recommended Hermes config at `~/.hermes/forge/config.json`:
 {
   "origin": "http://127.0.0.1",
   "port": 4317,
-  "dataRoot": "/absolute/path/to/forge-data",
-  "actorLabel": "hermes",
+  "dataRoot": "~/.forge",
+  "actorLabel": "",
   "timeoutMs": 15000
 }
 ```
@@ -161,7 +164,9 @@ Important points:
 
 - use the same `origin`, `port`, and `dataRoot` as OpenClaw if they are meant
   to share one Forge runtime
-- choose a distinct `actorLabel` so Hermes actions stay readable
+- leave `actorLabel` blank when Hermes should inherit the parent/operator user
+- choose a distinct `actorLabel` only when Hermes or a child agent should act
+  as its own bot identity
 - use `FORGE_API_TOKEN` when Hermes is writing to a remote protected runtime
 
 ## Browser And Standalone UI

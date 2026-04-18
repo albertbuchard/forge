@@ -7,6 +7,7 @@ import logging
 import os
 import shutil
 import subprocess
+import getpass
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -19,9 +20,11 @@ from .version import __version__
 PACKAGE_DIR = Path(__file__).resolve().parent
 NODE_RUNTIME_HELPER = PACKAGE_DIR / "scripts" / "ensure-runtime.mjs"
 SESSION_COOKIES: Dict[str, str] = {}
-DEFAULT_HERMES_ACTOR_LABEL = "aurel (hermes)"
+DEFAULT_HERMES_ACTOR_LABEL = ""
+DEFAULT_HERMES_RUNTIME_AGENT_LABEL = "Forge Hermes"
 SESSION_STARTUP_CONTEXTS: Dict[str, str] = {}
 SESSION_RUNTIME_IDS: Dict[str, str] = {}
+SESSION_ACTOR_LABELS: Dict[str, str] = {}
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +39,19 @@ class ForgeConfig:
     api_token: str
     actor_label: str
     timeout_ms: int
+
+
+def _resolve_runtime_agent_label() -> str:
+    candidate = _normalize_text(os.environ.get("FORGE_AGENT_LABEL"))
+    return candidate or DEFAULT_HERMES_RUNTIME_AGENT_LABEL
+
+
+def _fallback_actor_label() -> str:
+    try:
+        candidate = _normalize_text(getpass.getuser())
+    except Exception:
+        candidate = ""
+    return candidate or "Local Operator"
 
 
 class ForgePluginError(RuntimeError):
@@ -269,15 +285,16 @@ def _register_runtime_session(session_id: str = "") -> Optional[str]:
 
     try:
         config = _ensure_runtime(_load_config())
+        effective_actor_label = _resolve_effective_actor_label(config)
         payload = _request_json(
             config,
             "POST",
             "/api/v1/agents/sessions",
             body={
                 "provider": "hermes",
-                "agentLabel": config.actor_label,
+                "agentLabel": _resolve_runtime_agent_label(),
                 "agentType": "hermes",
-                "actorLabel": config.actor_label,
+                "actorLabel": effective_actor_label,
                 "sessionKey": cache_key,
                 "sessionLabel": cache_key,
                 "connectionMode": "managed_token"
@@ -286,8 +303,13 @@ def _register_runtime_session(session_id: str = "") -> Optional[str]:
                 "baseUrl": config.base_url,
                 "webUrl": config.web_app_url,
                 "dataRoot": config.data_root or None,
+                "externalSessionId": cache_key,
                 "staleAfterSeconds": 120,
-                "metadata": {"hermesSessionId": cache_key},
+                "metadata": {
+                    "hermesSessionId": cache_key,
+                    "singleton": True,
+                    "actorSource": "configured" if config.actor_label.strip() else "inherited",
+                },
             },
         )
         session = _safe_dict(payload).get("session")
@@ -317,6 +339,7 @@ def _heartbeat_runtime_session(
             body={
                 "provider": "hermes",
                 "sessionKey": cache_key,
+                "externalSessionId": cache_key,
                 "summary": summary,
                 "metadata": metadata or {},
             },
@@ -346,6 +369,7 @@ def _append_runtime_session_event(
             body={
                 "provider": "hermes",
                 "sessionKey": cache_key,
+                "externalSessionId": cache_key,
                 "eventType": event_type,
                 "title": title,
                 "summary": summary,
@@ -369,6 +393,7 @@ def _disconnect_runtime_session(
     runtime_id = SESSION_RUNTIME_IDS.get(cache_key) or _register_runtime_session(cache_key)
     if not runtime_id:
         return
+    config: Optional[ForgeConfig] = None
     try:
         config = _ensure_runtime(_load_config())
         _request_json(
@@ -377,6 +402,7 @@ def _disconnect_runtime_session(
             f"/api/v1/agents/sessions/{runtime_id}/disconnect",
             body={
                 "note": note,
+                "externalSessionId": cache_key,
                 "lastError": last_error,
             },
         )
@@ -384,6 +410,8 @@ def _disconnect_runtime_session(
         logger.exception("Forge Hermes runtime session disconnect failed")
     finally:
         SESSION_RUNTIME_IDS.pop(cache_key, None)
+        if config is not None:
+            SESSION_ACTOR_LABELS.pop(config.base_url.rstrip("/"), None)
 
 
 def warm_startup_context(
@@ -518,6 +546,24 @@ def _can_bootstrap_operator_session(base_url: str) -> bool:
     return hostname in {"localhost", "127.0.0.1", "::1"} or hostname.endswith(".ts.net") or _is_tailscale_ipv4(hostname)
 
 
+def _resolve_effective_actor_label(config: ForgeConfig) -> str:
+    explicit = _normalize_text(config.actor_label)
+    if explicit:
+        return explicit
+    session_actor = SESSION_ACTOR_LABELS.get(config.base_url.rstrip("/"), "")
+    if session_actor:
+        return session_actor
+    if not config.api_token and _can_bootstrap_operator_session(config.base_url):
+        try:
+            _ensure_operator_session_cookie(config)
+        except ForgePluginError:
+            pass
+        session_actor = SESSION_ACTOR_LABELS.get(config.base_url.rstrip("/"), "")
+        if session_actor:
+            return session_actor
+    return _fallback_actor_label()
+
+
 def _requires_remote_token(config: ForgeConfig, write: bool) -> bool:
     return write and not config.api_token and not _can_bootstrap_operator_session(config.base_url)
 
@@ -540,11 +586,12 @@ def _request_json(
         )
 
     timeout = max(1.0, config.timeout_ms / 1000.0)
+    actor_label = _resolve_effective_actor_label(config)
     headers = {
         "accept": "application/json",
         "x-forge-source": "agent",
         "x-forge-plugin-version": __version__,
-        "x-forge-actor": config.actor_label,
+        "x-forge-actor": actor_label,
     }
     if config.api_token:
         headers["authorization"] = f"Bearer {config.api_token}"
@@ -605,6 +652,7 @@ def _ensure_operator_session_cookie(config: ForgeConfig) -> str:
     try:
         with request.urlopen(req, timeout=max(1.0, config.timeout_ms / 1000.0)) as response:
             cookie_header = response.headers.get("Set-Cookie", "")
+            payload_text = response.read().decode("utf-8", errors="replace").strip()
     except Exception as exc:  # pragma: no cover - surfaced in handler output
         raise ForgePluginError(
             "forge_session_bootstrap_failed",
@@ -617,6 +665,14 @@ def _ensure_operator_session_cookie(config: ForgeConfig) -> str:
             "forge_session_bootstrap_failed",
             "Forge issued an unusable operator session cookie.",
         )
+    if payload_text:
+        try:
+            payload = json.loads(payload_text)
+            actor_label = _normalize_text(_safe_dict(_safe_dict(payload).get("session")).get("actorLabel"))
+            if actor_label:
+                SESSION_ACTOR_LABELS[key] = actor_label
+        except json.JSONDecodeError:
+            pass
     SESSION_COOKIES[key] = cookie
     return cookie
 

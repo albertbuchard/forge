@@ -35,8 +35,8 @@ If you want Forge to use a specific local data folder, set `dataRoot` in the plu
 
 Default data path:
 
-- normal npm/OpenClaw install: usually `~/.openclaw/extensions/forge-openclaw-plugin/forge.sqlite`
-- linked repo-local install: usually `<your-repo>/openclaw-plugin/forge.sqlite`
+- local installs now default to the shared Forge home at `~/.forge/forge.sqlite`
+- set `dataRoot` only when you intentionally want a different shared database
 
 If you want the data to live somewhere else for persistence or backup reasons, set `dataRoot` explicitly in the plugin config and restart the gateway.
 
@@ -116,8 +116,8 @@ Recommended shared setup:
 
 1. Run one shared Forge runtime.
 2. Point OpenClaw, Hermes, and the browser UI at that same runtime.
-3. Use one explicit `dataRoot` if several local adapters are meant to share one
-   Forge database.
+3. Let the default shared Forge home `~/.forge` stand unless you intentionally
+   want a different shared database.
 4. Create the human and bot users in `Settings -> Users`.
 5. Use `userId` on writes and `userIds` on reads.
 
@@ -130,8 +130,9 @@ Current sharing behavior is intentionally clear:
   tasks, notes, or strategy nodes
 
 If OpenClaw and Hermes are supposed to collaborate inside one Forge system, the
-important thing is not only matching `origin` and `port`. They should also
-share the same `dataRoot` when they are meant to use the same local database.
+important thing is not only matching `origin` and `port`. Local installs now
+converge on the same `~/.forge` data root automatically. Only override
+`dataRoot` when you deliberately want a different shared database.
 
 ## Strategies And Alignment Metrics
 
@@ -228,7 +229,7 @@ If the install path is blocked on your OpenClaw build, use this temporary npm by
 
 ```bash
 npm install -g forge-openclaw-plugin
-node -e 'const cp=require("child_process"); const fs=require("fs"); const path=require("path"); const p=process.env.HOME+"/.openclaw/openclaw.json"; const j=JSON.parse(fs.readFileSync(p,"utf8")); const pluginPath=path.join(cp.execSync("npm root -g",{encoding:"utf8"}).trim(),"forge-openclaw-plugin"); j.plugins ??= {}; j.plugins.allow = Array.from(new Set([...(j.plugins.allow || []), "forge-openclaw-plugin"])); j.plugins.load ??= {}; j.plugins.load.paths = Array.from(new Set([...(j.plugins.load.paths || []), pluginPath])); j.plugins.entries ??= {}; j.plugins.entries["forge-openclaw-plugin"] = { enabled: true, config: { origin: "http://127.0.0.1", port: 4317, actorLabel: "aurel", timeoutMs: 15000 } }; fs.writeFileSync(p, JSON.stringify(j, null, 2)+"\n"); console.log("Configured", pluginPath);'
+node -e 'const cp=require("child_process"); const fs=require("fs"); const path=require("path"); const p=process.env.HOME+"/.openclaw/openclaw.json"; const j=JSON.parse(fs.readFileSync(p,"utf8")); const pluginPath=path.join(cp.execSync("npm root -g",{encoding:"utf8"}).trim(),"forge-openclaw-plugin"); j.plugins ??= {}; j.plugins.allow = Array.from(new Set([...(j.plugins.allow || []), "forge-openclaw-plugin"])); j.plugins.load ??= {}; j.plugins.load.paths = Array.from(new Set([...(j.plugins.load.paths || []), pluginPath])); j.plugins.entries ??= {}; j.plugins.entries["forge-openclaw-plugin"] = { enabled: true, config: { origin: "http://127.0.0.1", port: 4317, actorLabel: "", timeoutMs: 15000 } }; fs.writeFileSync(p, JSON.stringify(j, null, 2)+"\n"); console.log("Configured", pluginPath);'
 openclaw gateway restart
 openclaw plugins info forge-openclaw-plugin
 openclaw forge health
@@ -258,7 +259,9 @@ Equivalent config:
       "forge-openclaw-plugin": {
         enabled: true,
         config: {
-          dataRoot: "/absolute/path/to/forge-data"
+          dataRoot: "~/.forge",
+          actorLabel: "",
+          apiToken: ""
         }
       }
     }
@@ -281,6 +284,12 @@ If you want to move the data folder, edit the same config entry and set:
   }
 }
 ```
+
+Recommended local behavior:
+
+- leave `actorLabel` blank so Forge can inherit the trusted local operator label automatically
+- leave `apiToken` blank for localhost and trusted Tailscale setups
+- leave `dataRoot` alone unless you intentionally want a different shared local Forge home
 
 ## Doctor And Runtime Config
 

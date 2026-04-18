@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { userInfo } from "node:os";
 import packageJson from "../../package.json" with { type: "json" };
 import { ensureForgeRuntimeReady } from "./local-runtime.js";
 
@@ -19,7 +20,12 @@ export type ForgePluginConfig = {
   timeoutMs: number;
 };
 
-const operatorSessionCookies = new Map<string, string>();
+type OperatorSessionState = {
+  cookie: string;
+  actorLabel: string | null;
+};
+
+const operatorSessionStates = new Map<string, OperatorSessionState>();
 
 export type CallForgeApiArgs = {
   baseUrl: string;
@@ -162,6 +168,25 @@ async function readResponseBody(response: Response, maxBytes = DEFAULT_RESPONSE_
   }
 }
 
+function readOperatorSessionActorLabel(payload: unknown) {
+  if (!isRecord(payload)) {
+    return null;
+  }
+  const session = payload.session;
+  if (!isRecord(session)) {
+    return null;
+  }
+  const actorLabel = session.actorLabel;
+  return typeof actorLabel === "string" && actorLabel.trim().length > 0
+    ? actorLabel.trim()
+    : null;
+}
+
+function fallbackActorLabel() {
+  const username = userInfo().username.trim();
+  return username.length > 0 ? username : "Local Operator";
+}
+
 function buildRequestHeaders(args: CallForgeApiArgs) {
   const headers: Record<string, string> = {
     accept: "application/json",
@@ -190,9 +215,9 @@ function buildRequestHeaders(args: CallForgeApiArgs) {
   return headers;
 }
 
-async function ensureOperatorSessionCookie(baseUrl: string, timeoutMs: number) {
+async function ensureOperatorSessionState(baseUrl: string, timeoutMs: number) {
   const origin = normalizeOriginUrl(baseUrl);
-  const cached = operatorSessionCookies.get(origin);
+  const cached = operatorSessionStates.get(origin);
   if (cached) {
     return cached;
   }
@@ -224,8 +249,13 @@ async function ensureOperatorSessionCookie(baseUrl: string, timeoutMs: number) {
         "Forge issued an unusable operator session cookie."
       );
     }
-    operatorSessionCookies.set(origin, cookie);
-    return cookie;
+    const body = await readResponseBody(response);
+    const state = {
+      cookie,
+      actorLabel: readOperatorSessionActorLabel(body)
+    };
+    operatorSessionStates.set(origin, state);
+    return state;
   } catch (error) {
     if (error instanceof ForgePluginError) {
       throw error;
@@ -240,6 +270,32 @@ async function ensureOperatorSessionCookie(baseUrl: string, timeoutMs: number) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+export async function resolveForgeActorLabel(args: Pick<CallForgeApiArgs, "baseUrl" | "apiToken" | "actorLabel" | "timeoutMs">) {
+  const explicitActorLabel = args.actorLabel?.trim();
+  if (explicitActorLabel) {
+    return explicitActorLabel;
+  }
+  if (!args.apiToken && canBootstrapOperatorSession(args.baseUrl)) {
+    const sessionState = await ensureOperatorSessionState(
+      args.baseUrl,
+      Math.max(1000, args.timeoutMs ?? 15_000)
+    );
+    if (sessionState.actorLabel) {
+      return sessionState.actorLabel;
+    }
+  }
+  return fallbackActorLabel();
+}
+
+export async function resolveConfiguredForgeActorLabel(config: ForgePluginConfig) {
+  return resolveForgeActorLabel({
+    baseUrl: config.baseUrl,
+    apiToken: config.apiToken,
+    actorLabel: config.actorLabel,
+    timeoutMs: config.timeoutMs
+  });
 }
 
 export async function callForgeApi(args: CallForgeApiArgs): Promise<ForgeProxyResponse> {
@@ -261,23 +317,27 @@ async function callForgeApiInternal(args: CallForgeApiArgs, retriedWithFreshSess
   const controller = new AbortController();
   const timeoutMs = Math.max(1000, args.timeoutMs ?? 15_000);
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  const sessionCookie = !args.apiToken && canBootstrapOperatorSession(args.baseUrl)
-    ? await ensureOperatorSessionCookie(args.baseUrl, timeoutMs)
+  const actorLabel = await resolveForgeActorLabel(args);
+  const sessionState = !args.apiToken && canBootstrapOperatorSession(args.baseUrl)
+    ? await ensureOperatorSessionState(args.baseUrl, timeoutMs)
     : null;
 
   try {
     const response = await fetch(new URL(args.path, normalizeBaseUrl(args.baseUrl)), {
       method: args.method,
       headers: {
-        ...buildRequestHeaders(args),
-        ...(sessionCookie ? { cookie: sessionCookie } : {})
+        ...buildRequestHeaders({
+          ...args,
+          actorLabel
+        }),
+        ...(sessionState ? { cookie: sessionState.cookie } : {})
       },
       body: args.body === undefined ? undefined : JSON.stringify(args.body),
       signal: controller.signal
     });
 
-    if (!args.apiToken && sessionCookie && response.status === 401 && !retriedWithFreshSession) {
-      operatorSessionCookies.delete(normalizeOriginUrl(args.baseUrl));
+    if (!args.apiToken && sessionState && response.status === 401 && !retriedWithFreshSession) {
+      operatorSessionStates.delete(normalizeOriginUrl(args.baseUrl));
       return callForgeApiInternal(args, true);
     }
 

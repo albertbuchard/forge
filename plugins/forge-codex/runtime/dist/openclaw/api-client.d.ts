@@ -35,6 +35,8 @@ export declare class ForgePluginError extends Error {
 export declare function buildForgeBaseUrl(origin: string, port: number): string;
 export declare function buildForgeWebAppUrl(origin: string, port: number): string;
 export declare function canBootstrapOperatorSession(baseUrl: string): boolean;
+export declare function resolveForgeActorLabel(args: Pick<CallForgeApiArgs, "baseUrl" | "apiToken" | "actorLabel" | "timeoutMs">): Promise<string>;
+export declare function resolveConfiguredForgeActorLabel(config: ForgePluginConfig): Promise<string>;
 export declare function callForgeApi(args: CallForgeApiArgs): Promise<ForgeProxyResponse>;
 export declare function callConfiguredForgeApi(config: ForgePluginConfig, args: CallConfiguredForgeApiArgs): Promise<ForgeProxyResponse>;
 export declare function readJsonRequestBody(request: IncomingMessage, options?: {

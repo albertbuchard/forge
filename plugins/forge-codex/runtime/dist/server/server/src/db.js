@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readdir, readFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
@@ -17,6 +18,7 @@ function dateOffsetIso(days) {
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const migrationsDir = path.join(projectRoot, "server", "migrations");
 const monorepoForgeDataRoot = path.resolve(projectRoot, "..", "..", "data", "forge");
+const userSharedForgeDataRoot = path.join(os.homedir(), ".forge");
 function resolveCanonicalDataDir(root = dataRoot) {
     return path.resolve(root);
 }
@@ -75,7 +77,7 @@ export function resolveDefaultDataRoot(currentWorkingDir = process.cwd()) {
     if (existsSync(monorepoForgeDataRoot)) {
         return monorepoForgeDataRoot;
     }
-    return path.resolve(currentWorkingDir);
+    return path.resolve(userSharedForgeDataRoot || currentWorkingDir);
 }
 let dataRoot = resolveDefaultDataRoot();
 let seedDemoDataEnabled = false;

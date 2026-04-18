@@ -27,7 +27,11 @@ function getConfigPath() {
 }
 
 function getDefaultDataRoot() {
-  return path.join(getHermesHome(), "forge");
+  const configured = process.env.FORGE_DATA_ROOT?.trim();
+  if (configured) {
+    return path.resolve(configured);
+  }
+  return path.join(homedir(), ".forge");
 }
 
 function readFileConfig() {
@@ -62,7 +66,7 @@ const rawConfig = {
   port: readEnvNumber("FORGE_PORT") ?? readConfigNumber(fileConfig.port),
   dataRoot: process.env.FORGE_DATA_ROOT ?? fileConfig.dataRoot ?? getDefaultDataRoot(),
   apiToken: process.env.FORGE_API_TOKEN ?? fileConfig.apiToken,
-  actorLabel: process.env.FORGE_ACTOR_LABEL ?? fileConfig.actorLabel ?? "hermes",
+  actorLabel: process.env.FORGE_ACTOR_LABEL ?? fileConfig.actorLabel ?? "",
   timeoutMs: readEnvNumber("FORGE_TIMEOUT_MS") ?? readConfigNumber(fileConfig.timeoutMs)
 };
 

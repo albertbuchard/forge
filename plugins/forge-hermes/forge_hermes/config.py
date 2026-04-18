@@ -22,11 +22,14 @@ def get_hermes_home() -> Path:
 
 
 def get_default_data_root() -> Path:
-    return get_hermes_home() / "forge"
+    configured = os.environ.get("FORGE_DATA_ROOT", "").strip()
+    if configured:
+        return Path(configured).expanduser().resolve()
+    return (Path.home() / ".forge").resolve()
 
 
 def get_config_path() -> Path:
-    return get_default_data_root() / "config.json"
+    return get_hermes_home() / "forge" / "config.json"
 
 
 def ensure_plugin_config() -> Path:

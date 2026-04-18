@@ -8,7 +8,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { Readable } from "node:stream";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ensureForgeRuntimeReady,
@@ -178,9 +178,9 @@ describe("forge openclaw plugin", () => {
         baseUrl: "http://127.0.0.1:4317",
         webAppUrl: "http://127.0.0.1:4317/forge/",
         portSource: "default",
-        dataRoot: "",
+        dataRoot: join(homedir(), ".forge"),
         apiToken: "",
-        actorLabel: "aurel (claw)",
+        actorLabel: "",
         timeoutMs: 15000
       });
     } finally {
@@ -213,9 +213,9 @@ describe("forge openclaw plugin", () => {
       baseUrl: "http://127.0.0.1:4318",
       webAppUrl: "http://127.0.0.1:4318/forge/",
       portSource: "preferred",
-      dataRoot: "",
+      dataRoot: join(homedir(), ".forge"),
       apiToken: "",
-      actorLabel: "aurel (claw)",
+      actorLabel: "",
       timeoutMs: 15000
     });
 

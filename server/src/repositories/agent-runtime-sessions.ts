@@ -295,6 +295,7 @@ function resolveSessionRow(locator: {
   sessionId?: string | null;
   provider?: string | null;
   sessionKey?: string | null;
+  externalSessionId?: string | null;
 }) {
   if (locator.sessionId?.trim()) {
     return getSessionRowById(locator.sessionId.trim());
@@ -306,6 +307,88 @@ function resolveSessionRow(locator: {
     );
   }
   return undefined;
+}
+
+function ensureCurrentSessionInstance(
+  row: AgentRuntimeSessionRow,
+  externalSessionId: string | null | undefined
+) {
+  const claimedExternalSessionId = normalizeText(externalSessionId);
+  const currentExternalSessionId = normalizeText(row.external_session_id);
+  if (
+    claimedExternalSessionId &&
+    currentExternalSessionId &&
+    claimedExternalSessionId !== currentExternalSessionId
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function disconnectSupersededSingletonSessions(
+  parsed: CreateAgentRuntimeSessionInput,
+  sessionId: string,
+  now: string
+) {
+  if (!parsed.metadata?.singleton) {
+    return;
+  }
+
+  const rows = getDatabase()
+    .prepare(
+      `SELECT
+         id, agent_id, agent_label, agent_type, provider, session_key, session_label, actor_label,
+         connection_mode, status, base_url, web_url, data_root, external_session_id,
+         stale_after_seconds, reconnect_count, reconnect_requested_at, last_error,
+         last_seen_at, last_heartbeat_at, started_at, ended_at, metadata_json,
+         created_at, updated_at
+       FROM agent_runtime_sessions
+       WHERE provider = ?
+         AND agent_label = ?
+         AND coalesce(base_url, '') = coalesce(?, '')
+         AND coalesce(data_root, '') = coalesce(?, '')
+         AND id <> ?`
+    )
+    .all(
+      parsed.provider,
+      parsed.agentLabel,
+      normalizeText(parsed.baseUrl),
+      normalizeText(parsed.dataRoot),
+      sessionId
+    ) as AgentRuntimeSessionRow[];
+
+  for (const row of rows) {
+    if (row.status === "disconnected" && row.ended_at) {
+      continue;
+    }
+    getDatabase()
+      .prepare(
+        `UPDATE agent_runtime_sessions
+         SET status = 'disconnected', last_error = ?, last_seen_at = ?, ended_at = ?, updated_at = ?
+         WHERE id = ?`
+      )
+      .run(
+        "Superseded by a newer singleton runtime bridge.",
+        now,
+        now,
+        now,
+        row.id
+      );
+    insertSessionEvent(
+      row.id,
+      {
+        eventType: "session_superseded",
+        level: "warning",
+        title: "Session superseded",
+        summary: `${parsed.provider} registered a newer singleton bridge and replaced this runtime session.`,
+        metadata: {
+          replacementSessionId: sessionId,
+          replacementSessionKey: parsed.sessionKey
+        }
+      },
+      now
+    );
+  }
 }
 
 function upsertRuntimeAgentIdentity(input: CreateAgentRuntimeSessionInput) {
@@ -511,6 +594,8 @@ export function registerAgentRuntimeSession(input: CreateAgentRuntimeSessionInpu
       }, now);
     }
 
+    disconnectSupersededSingletonSessions(parsed, sessionId, now);
+
     recordActivityEvent({
       entityType: "session",
       entityId: sessionId,
@@ -537,6 +622,9 @@ export function heartbeatAgentRuntimeSession(
     const row = resolveSessionRow(parsed);
     if (!row) {
       throw new Error("Agent runtime session not found.");
+    }
+    if (!ensureCurrentSessionInstance(row, parsed.externalSessionId)) {
+      return mapSession(row);
     }
     const now = new Date().toISOString();
     const nextStatus =
@@ -591,6 +679,19 @@ export function appendAgentRuntimeSessionEvent(
     const row = resolveSessionRow(parsed);
     if (!row) {
       throw new Error("Agent runtime session not found.");
+    }
+    if (!ensureCurrentSessionInstance(row, parsed.externalSessionId)) {
+      return mapEvent(
+        getDatabase()
+          .prepare(
+            `SELECT id, session_id, event_type, level, title, summary, metadata_json, created_at
+             FROM agent_runtime_session_events
+             WHERE session_id = ?
+             ORDER BY created_at DESC
+             LIMIT 1`
+          )
+          .get(row.id) as AgentRuntimeSessionEventRow
+      );
     }
     const now = new Date().toISOString();
     const mergedMetadata = {
@@ -694,6 +795,9 @@ export function disconnectAgentRuntimeSession(
     const row = getSessionRowById(sessionId);
     if (!row) {
       return null;
+    }
+    if (!ensureCurrentSessionInstance(row, parsed.externalSessionId)) {
+      return mapSession(row);
     }
     const now = new Date().toISOString();
     getDatabase()

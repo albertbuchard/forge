@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import path from "node:path";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -6,13 +8,15 @@ import { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError } fr
 import { Value } from "@sinclair/typebox/value";
 import {
   callConfiguredForgeApi,
-  expectForgeSuccess
+  expectForgeSuccess,
+  resolveConfiguredForgeActorLabel
 } from "../runtime/dist/openclaw/api-client.js";
 import { ensureForgeRuntimeReady } from "../runtime/dist/openclaw/local-runtime.js";
 import { resolveForgePluginConfig } from "../runtime/dist/openclaw/plugin-entry-shared.js";
 import { registerForgePluginTools } from "../runtime/dist/openclaw/tools.js";
 
 const SESSION_PROVIDER = "codex";
+const DEFAULT_RUNTIME_AGENT_LABEL = "Forge Codex";
 
 function resolvePluginVersion() {
   const pluginManifestPath = path.resolve(import.meta.dirname, "..", ".codex-plugin", "plugin.json");
@@ -55,7 +59,11 @@ function resolveSharedDataRoot() {
   if (existsSync(monorepoDataRoot)) {
     return monorepoDataRoot;
   }
-  return monorepoDataRoot;
+  return path.join(homedir(), ".forge");
+}
+
+function resolveRuntimeAgentLabel() {
+  return process.env.FORGE_AGENT_LABEL?.trim() || DEFAULT_RUNTIME_AGENT_LABEL;
 }
 
 function buildPluginConfigFromEnv() {
@@ -64,7 +72,7 @@ function buildPluginConfigFromEnv() {
     port: normalizeEnvNumber(process.env.FORGE_PORT, 4317),
     dataRoot: resolveSharedDataRoot(),
     apiToken: process.env.FORGE_API_TOKEN ?? "",
-    actorLabel: process.env.FORGE_ACTOR_LABEL ?? "codex",
+    actorLabel: process.env.FORGE_ACTOR_LABEL ?? "",
     timeoutMs: normalizeEnvNumber(process.env.FORGE_TIMEOUT_MS, 15_000)
   });
 }
@@ -81,10 +89,24 @@ async function postSessionEvent(config, path, body) {
   return expectForgeSuccess(response);
 }
 
+function createStableSessionKey(config) {
+  const fingerprint = createHash("sha1")
+    .update(JSON.stringify({
+      provider: SESSION_PROVIDER,
+      baseUrl: config.baseUrl,
+      dataRoot: config.dataRoot || "",
+      cwd: process.cwd()
+    }))
+    .digest("hex")
+    .slice(0, 12);
+  return `codex-${fingerprint}`;
+}
+
 function createRuntimeSessionState(config) {
   return {
     id: null,
-    key: `codex-${process.pid}-${Date.now().toString(36)}`,
+    key: createStableSessionKey(config),
+    instanceId: `codex-${process.pid}-${Date.now().toString(36)}`,
     heartbeat: null,
     connected: false,
     config
@@ -94,19 +116,23 @@ function createRuntimeSessionState(config) {
 async function registerRuntimeSession(state) {
   try {
     await ensureForgeRuntimeReady(state.config);
+    const actorLabel = await resolveConfiguredForgeActorLabel(state.config);
     const payload = await postSessionEvent(state.config, "/api/v1/agents/sessions", {
       provider: SESSION_PROVIDER,
-      agentLabel: state.config.actorLabel,
+      agentLabel: resolveRuntimeAgentLabel(),
       agentType: SESSION_PROVIDER,
-      actorLabel: state.config.actorLabel,
+      actorLabel,
       sessionKey: state.key,
-      sessionLabel: "Forge MCP server",
+      sessionLabel: "Forge Codex bridge",
       connectionMode: "mcp",
       baseUrl: state.config.baseUrl,
       webUrl: state.config.webAppUrl,
       dataRoot: state.config.dataRoot || null,
+      externalSessionId: state.instanceId,
       staleAfterSeconds: 90,
       metadata: {
+        singleton: true,
+        instanceId: state.instanceId,
         pid: process.pid,
         pluginVersion: resolvePluginVersion(),
         cwd: process.cwd()
@@ -130,6 +156,7 @@ async function heartbeatRuntimeSession(state, summary = "", metadata = {}) {
     await postSessionEvent(state.config, "/api/v1/agents/sessions/heartbeat", {
       provider: SESSION_PROVIDER,
       sessionKey: state.key,
+      externalSessionId: state.instanceId,
       summary,
       metadata
     });
@@ -149,6 +176,7 @@ async function appendRuntimeSessionEvent(
     await postSessionEvent(state.config, "/api/v1/agents/sessions/events", {
       provider: SESSION_PROVIDER,
       sessionKey: state.key,
+      externalSessionId: state.instanceId,
       eventType,
       title,
       summary,
@@ -170,6 +198,7 @@ async function disconnectRuntimeSession(state, note, lastError = null) {
       `/api/v1/agents/sessions/${state.id}/disconnect`,
       {
         note,
+        externalSessionId: state.instanceId,
         lastError
       }
     );

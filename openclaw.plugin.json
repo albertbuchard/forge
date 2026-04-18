@@ -19,8 +19,8 @@
     },
     "dataRoot": {
       "label": "Forge Data Root",
-      "help": "Optional absolute folder path for Forge data. Use this when you want Forge to read and write a specific data directory instead of the runtime working directory.",
-      "placeholder": "/Users/you/forge-data",
+      "help": "Absolute folder path for the shared Forge home. Local installs default to ~/.forge so OpenClaw, Hermes, and Codex automatically meet in one runtime.",
+      "placeholder": "~/.forge",
       "advanced": true
     },
     "apiToken": {
@@ -31,8 +31,8 @@
     },
     "actorLabel": {
       "label": "Actor Label",
-      "help": "Recorded in Forge provenance headers for plugin-originated writes.",
-      "placeholder": "aurel"
+      "help": "Optional acting user label for provenance. Leave blank to inherit the local operator session label, or set one when a child agent should announce itself under a specific user.",
+      "placeholder": "Inherited from Forge operator session"
     },
     "timeoutMs": {
       "label": "Request Timeout (ms)",
@@ -58,8 +58,8 @@
       },
       "dataRoot": {
         "type": "string",
-        "default": "",
-        "description": "Optional absolute path for the Forge data folder root. Leave blank to use the runtime working directory."
+        "default": "~/.forge",
+        "description": "Absolute path for the shared Forge data root. Defaults to ~/.forge so local OpenClaw, Hermes, and Codex installs converge on one runtime."
       },
       "apiToken": {
         "type": "string",
@@ -68,8 +68,8 @@
       },
       "actorLabel": {
         "type": "string",
-        "default": "aurel",
-        "description": "Actor label recorded in Forge provenance headers."
+        "default": "",
+        "description": "Optional acting user label recorded in Forge provenance headers. Leave blank to inherit the local operator session label automatically."
       },
       "timeoutMs": {
         "type": "integer",

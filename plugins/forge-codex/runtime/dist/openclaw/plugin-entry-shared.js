@@ -12,8 +12,11 @@ export const FORGE_PLUGIN_NAME = "Forge";
 export const FORGE_PLUGIN_DESCRIPTION = "Curated OpenClaw adapter for the Forge collaboration API, UI entrypoint, and localhost auto-start runtime.";
 export const DEFAULT_FORGE_ORIGIN = "http://127.0.0.1";
 export const DEFAULT_FORGE_PORT = 4317;
-export const DEFAULT_OPENCLAW_ACTOR_LABEL = "aurel (claw)";
+export const DEFAULT_OPENCLAW_ACTOR_LABEL = "";
 const LOCAL_HOSTNAMES = new Set(["127.0.0.1", "localhost", "::1"]);
+function defaultSharedForgeHome() {
+    return path.join(homedir(), ".forge");
+}
 function normalizeString(value, fallback) {
     return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
 }
@@ -45,9 +48,12 @@ function normalizeTimeout(value, fallback) {
 }
 function normalizeDataRoot(value) {
     if (typeof value !== "string" || value.trim().length === 0) {
-        return "";
+        return path.resolve(defaultSharedForgeHome());
     }
     return path.resolve(value.trim());
+}
+function normalizeOptionalString(value) {
+    return typeof value === "string" ? value.trim() : "";
 }
 function isLocalOrigin(origin) {
     try {
@@ -91,7 +97,7 @@ export function resolveForgePluginConfig(pluginConfig) {
         portSource: hasConfiguredPort ? "configured" : preferredPort !== null ? "preferred" : "default",
         dataRoot: normalizeDataRoot(raw.dataRoot),
         apiToken: typeof raw.apiToken === "string" ? raw.apiToken.trim() : "",
-        actorLabel: normalizeString(raw.actorLabel, DEFAULT_OPENCLAW_ACTOR_LABEL),
+        actorLabel: normalizeOptionalString(raw.actorLabel),
         timeoutMs: normalizeTimeout(raw.timeoutMs, 15_000)
     };
 }
@@ -117,8 +123,8 @@ export const forgePluginConfigSchema = {
             },
             dataRoot: {
                 type: "string",
-                default: "",
-                description: "Optional absolute path for the Forge data folder root. Leave blank to use the runtime working directory."
+                default: "~/.forge",
+                description: "Absolute path for the shared Forge data root. Defaults to ~/.forge so local OpenClaw, Hermes, and Codex installs converge on one runtime."
             },
             apiToken: {
                 type: "string",
@@ -128,7 +134,7 @@ export const forgePluginConfigSchema = {
             actorLabel: {
                 type: "string",
                 default: DEFAULT_OPENCLAW_ACTOR_LABEL,
-                description: "Actor label recorded in Forge provenance headers."
+                description: "Optional acting user label recorded in Forge provenance headers. Leave blank to inherit the local operator session label automatically."
             },
             timeoutMs: {
                 type: "integer",
@@ -152,8 +158,8 @@ export const forgePluginConfigSchema = {
         },
         dataRoot: {
             label: "Forge Data Root",
-            help: "Optional absolute folder path for Forge data. Use this when you want Forge to read and write a specific data directory instead of the runtime working directory.",
-            placeholder: "/Users/you/forge-data",
+            help: "Absolute folder path for the shared Forge home. Local installs default to ~/.forge so OpenClaw, Hermes, and Codex automatically meet in one runtime.",
+            placeholder: "~/.forge",
             advanced: true
         },
         apiToken: {
@@ -164,8 +170,8 @@ export const forgePluginConfigSchema = {
         },
         actorLabel: {
             label: "Actor Label",
-            help: "Recorded in Forge provenance headers for plugin-originated writes. Use a distinct OpenClaw label such as <name> (claw).",
-            placeholder: DEFAULT_OPENCLAW_ACTOR_LABEL
+            help: "Optional acting user label for provenance. Leave blank to inherit the local operator session label, or set one when a child agent should announce itself under a specific user.",
+            placeholder: "Inherited from Forge operator session"
         },
         timeoutMs: {
             label: "Request Timeout (ms)",

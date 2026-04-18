@@ -1,7 +1,8 @@
 import { isAgentBootstrapEvent } from "openclaw/plugin-sdk/hook-runtime";
-import { callConfiguredForgeApi, expectForgeSuccess } from "./api-client.js";
+import { callConfiguredForgeApi, expectForgeSuccess, resolveConfiguredForgeActorLabel } from "./api-client.js";
 const SESSION_IDS = new Map();
 const SESSION_PROVIDER = "openclaw";
+const DEFAULT_RUNTIME_AGENT_LABEL = "Forge OpenClaw";
 function isRecord(value) {
     return typeof value === "object" && value !== null;
 }
@@ -31,22 +32,27 @@ function getAgentBootstrapMetadata(event) {
     };
 }
 async function registerSession(config, sessionKey, metadata) {
+    const actorLabel = await resolveConfiguredForgeActorLabel(config);
     const response = await callConfiguredForgeApi(config, {
         method: "POST",
         path: "/api/v1/agents/sessions",
         body: {
             provider: SESSION_PROVIDER,
-            agentLabel: config.actorLabel,
+            agentLabel: process.env.FORGE_AGENT_LABEL?.trim() || DEFAULT_RUNTIME_AGENT_LABEL,
             agentType: SESSION_PROVIDER,
-            actorLabel: config.actorLabel,
+            actorLabel,
             sessionKey,
             sessionLabel: sessionKey,
             connectionMode: config.apiToken ? "managed_token" : "operator_session",
             baseUrl: config.baseUrl,
             webUrl: config.webAppUrl,
             dataRoot: config.dataRoot || null,
+            externalSessionId: sessionKey,
             staleAfterSeconds: 120,
-            metadata
+            metadata: {
+                ...metadata,
+                actorSource: config.actorLabel.trim().length > 0 ? "configured" : "inherited"
+            }
         }
     });
     const body = expectForgeSuccess(response);
@@ -64,6 +70,7 @@ async function heartbeatSession(config, sessionKey, summary = "", metadata = {})
         body: {
             provider: SESSION_PROVIDER,
             sessionKey,
+            externalSessionId: sessionKey,
             summary,
             metadata
         }
@@ -77,6 +84,7 @@ async function appendSessionEvent(config, sessionKey, input) {
         body: {
             provider: SESSION_PROVIDER,
             sessionKey,
+            externalSessionId: sessionKey,
             eventType: input.eventType,
             title: input.title,
             summary: input.summary ?? "",
@@ -95,7 +103,8 @@ async function disconnectSession(config, sessionKey, note) {
         method: "POST",
         path: `/api/v1/agents/sessions/${sessionId}/disconnect`,
         body: {
-            note
+            note,
+            externalSessionId: sessionKey
         }
     });
     expectForgeSuccess(response);

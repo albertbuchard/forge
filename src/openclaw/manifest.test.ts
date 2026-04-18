@@ -24,7 +24,8 @@ describe("forge plugin manifest", () => {
       properties: {
         origin: expect.objectContaining({ default: "http://127.0.0.1" }),
         port: expect.objectContaining({ default: 4317 }),
-        dataRoot: expect.objectContaining({ default: "" })
+        dataRoot: expect.objectContaining({ default: "~/.forge" }),
+        actorLabel: expect.objectContaining({ default: "" })
       }
     });
   });

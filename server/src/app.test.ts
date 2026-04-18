@@ -16561,16 +16561,18 @@ test("agent runtime sessions register, heartbeat, and expose reconnect history",
       },
       payload: {
         provider: "codex",
-        agentLabel: "codex",
+        agentLabel: "Forge Codex",
         agentType: "codex",
-        actorLabel: "codex",
+        actorLabel: "Albert",
         sessionKey: "codex-test-session",
         sessionLabel: "Forge MCP server",
         connectionMode: "mcp",
         baseUrl: "http://127.0.0.1:4317",
         webUrl: "http://127.0.0.1:4317/forge/",
+        externalSessionId: "codex-instance-a",
         metadata: {
-          pid: 12345
+          pid: 12345,
+          singleton: true
         }
       }
     });
@@ -16588,7 +16590,7 @@ test("agent runtime sessions register, heartbeat, and expose reconnect history",
       },
       payload: {
         label: "Codex runtime token",
-        agentLabel: "codex",
+        agentLabel: "Forge Codex",
         agentType: "codex",
         scopes: ["write"],
         autonomyMode: "scoped_write",
@@ -16609,6 +16611,7 @@ test("agent runtime sessions register, heartbeat, and expose reconnect history",
       payload: {
         provider: "codex",
         sessionKey: "codex-test-session",
+        externalSessionId: "codex-instance-a",
         summary: "Heartbeat from MCP test."
       }
     });
@@ -16623,6 +16626,7 @@ test("agent runtime sessions register, heartbeat, and expose reconnect history",
       payload: {
         provider: "codex",
         sessionKey: "codex-test-session",
+        externalSessionId: "codex-instance-a",
         eventType: "tool_call",
         title: "Tool call: forge_get_operator_overview",
         summary: "Requested the operator overview."
@@ -16719,7 +16723,8 @@ test("agent runtime sessions register, heartbeat, and expose reconnect history",
         authorization: `Bearer ${createTokenBody.token.token}`
       },
       payload: {
-        note: "Disconnect through the managed runtime token."
+        note: "Disconnect through the managed runtime token.",
+        externalSessionId: "codex-instance-a"
       }
     });
     assert.equal(disconnectResponse.statusCode, 200);
@@ -16728,6 +16733,106 @@ test("agent runtime sessions register, heartbeat, and expose reconnect history",
     };
     assert.equal(disconnectBody.session.status, "disconnected");
     assert.ok(disconnectBody.session.endedAt);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("singleton codex runtime sessions supersede older bridges and ignore stale disconnects", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-agent-runtime-singleton-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+
+    const firstRegister = await app.inject({
+      method: "POST",
+      url: "/api/v1/agents/sessions",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        provider: "codex",
+        agentLabel: "Forge Codex",
+        agentType: "codex",
+        actorLabel: "Albert",
+        sessionKey: "codex-shared-bridge",
+        sessionLabel: "Forge Codex bridge",
+        connectionMode: "mcp",
+        baseUrl: "http://127.0.0.1:4317",
+        webUrl: "http://127.0.0.1:4317/forge/",
+        externalSessionId: "codex-instance-a",
+        metadata: {
+          singleton: true
+        }
+      }
+    });
+    assert.equal(firstRegister.statusCode, 200);
+    const firstBody = firstRegister.json() as {
+      session: { id: string; status: string };
+    };
+
+    const secondRegister = await app.inject({
+      method: "POST",
+      url: "/api/v1/agents/sessions",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        provider: "codex",
+        agentLabel: "Forge Codex",
+        agentType: "codex",
+        actorLabel: "Albert",
+        sessionKey: "codex-shared-bridge",
+        sessionLabel: "Forge Codex bridge",
+        connectionMode: "mcp",
+        baseUrl: "http://127.0.0.1:4317",
+        webUrl: "http://127.0.0.1:4317/forge/",
+        externalSessionId: "codex-instance-b",
+        metadata: {
+          singleton: true
+        }
+      }
+    });
+    assert.equal(secondRegister.statusCode, 200);
+
+    const staleDisconnect = await app.inject({
+      method: "POST",
+      url: `/api/v1/agents/sessions/${firstBody.session.id}/disconnect`,
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        note: "Old bridge shutting down.",
+        externalSessionId: "codex-instance-a"
+      }
+    });
+    assert.equal(staleDisconnect.statusCode, 200);
+    const staleDisconnectBody = staleDisconnect.json() as {
+      session: { status: string; endedAt: string | null; externalSessionId: string | null };
+    };
+    assert.equal(staleDisconnectBody.session.status, "connected");
+    assert.equal(staleDisconnectBody.session.endedAt, null);
+    assert.equal(staleDisconnectBody.session.externalSessionId, "codex-instance-b");
+
+    const historyResponse = await app.inject({
+      method: "GET",
+      url: `/api/v1/agents/sessions/${firstBody.session.id}/history`,
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(historyResponse.statusCode, 200);
+    const historyBody = historyResponse.json() as {
+      events: Array<{ eventType: string }>;
+    };
+    assert.ok(
+      historyBody.events.some((event) => event.eventType === "session_registered")
+    );
   } finally {
     await app.close();
     closeDatabase();

@@ -90,9 +90,9 @@ If you want a non-editable install instead, use:
 ```
 
 The generated config file is also the durable user-editable settings surface for the
-Hermes plugin. By default it gives Forge its own runtime storage root at
-`~/.hermes/forge`, so the local Hermes adapter does not write into the repo working
-directory by accident.
+Hermes plugin. By default it points at the shared local Forge home at
+`~/.forge`, so Hermes can collaborate with OpenClaw, Codex, and the browser
+without extra per-adapter storage setup.
 
 ## Configuration
 
@@ -110,9 +110,9 @@ Defaults:
 
 - origin: `http://127.0.0.1`
 - port: `4317` unless a preferred relocated localhost port was learned by the shared runtime helper
-- actor label: `aurel (hermes)`
+- actor label: blank, which means "inherit the trusted local operator label when available"
 - timeout: `15000`
-- data root: `~/.hermes/forge`
+- data root: `~/.forge`
 
 If you want to move the data elsewhere, edit `~/.hermes/forge/config.json`:
 
@@ -184,8 +184,9 @@ notes:
 
 - point both at the same `origin`
 - point both at the same `port`
-- point both at the same `dataRoot` when using a local runtime
-- give Hermes a clear `actorLabel`
+- point both at the same `dataRoot` when using a local runtime, or simply leave the default `~/.forge`
+- leave `actorLabel` blank when Hermes should inherit the local operator
+- set `actorLabel` only when Hermes or a spawned sub-agent should act as a specific bot
 
 Forge's multi-user model is explicit:
 

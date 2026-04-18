@@ -108,7 +108,7 @@ describe("openclaw api client", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ session: { id: "ses_local" } }), {
+        new Response(JSON.stringify({ session: { id: "ses_local", actorLabel: "Albert" } }), {
           status: 200,
           headers: {
             "content-type": "application/json",
@@ -126,7 +126,6 @@ describe("openclaw api client", () => {
 
     await callForgeApi({
       baseUrl: "http://127.0.0.1:4317",
-      actorLabel: "aurel",
       timeoutMs: 4000,
       method: "POST",
       path: "/api/v1/entities/search",
@@ -142,7 +141,7 @@ describe("openclaw api client", () => {
     expect(init.headers).toMatchObject({
       cookie: "forge_operator_session=fg_session_cookie",
       "x-forge-source": "openclaw",
-      "x-forge-actor": "aurel",
+      "x-forge-actor": "Albert",
       "content-type": "application/json"
     });
   });

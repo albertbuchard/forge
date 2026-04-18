@@ -2088,7 +2088,8 @@ export const agentRuntimeSessionHistorySchema = z.object({
 const agentRuntimeSessionLocatorBaseSchema = z.object({
     sessionId: trimmedString.optional(),
     provider: agentRuntimeProviderSchema.optional(),
-    sessionKey: trimmedString.optional()
+    sessionKey: trimmedString.optional(),
+    externalSessionId: trimmedString.nullable().optional()
 });
 const agentRuntimeSessionLocatorSchema = agentRuntimeSessionLocatorBaseSchema
     .superRefine((value, context) => {
@@ -2170,6 +2171,7 @@ export const reconnectAgentRuntimeSessionSchema = z.object({
 });
 export const disconnectAgentRuntimeSessionSchema = z.object({
     note: trimmedString.default(""),
+    externalSessionId: trimmedString.nullable().default(null),
     lastError: trimmedString.nullable().default(null)
 });
 export const eventLogEntrySchema = z.object({

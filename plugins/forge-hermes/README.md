@@ -50,7 +50,8 @@ From the Forge repo:
 That installs the package into Hermes' own Python environment through `pip`, keeps the
 live code pointed at this local dev folder, creates
 `~/.hermes/forge/config.json` automatically on first plugin load if it is missing, and defaults the Forge runtime data root to
-`~/.hermes/forge` so local Hermes usage does not write into the repo root.
+the shared local Forge home at `~/.forge` so Hermes, OpenClaw, Codex, and the
+browser converge on the same local runtime out of the box.
 
 Use `~/.hermes/hermes-agent/venv/bin/python` so the package lands in the Python
 environment Hermes actually runs and Hermes can discover Forge through the package
@@ -67,8 +68,8 @@ If you want a non-editable wheel-style install instead:
 ## Runtime behavior
 
 - defaults to `FORGE_ORIGIN=http://127.0.0.1` and `FORGE_PORT=4317`
-- defaults `FORGE_ACTOR_LABEL` to `aurel (hermes)`
-- defaults `FORGE_DATA_ROOT` to `~/.hermes/forge`
+- defaults `FORGE_ACTOR_LABEL` to blank and inherits the trusted local operator label when available
+- defaults `FORGE_DATA_ROOT` to `~/.forge`
 - supports `FORGE_API_TOKEN` for remote or explicitly scoped access
 - supports `FORGE_DATA_ROOT` when you want Forge to use a specific local data folder
 - when Forge is local and not already running, the plugin calls the repo's tested Forge local-runtime bootstrap helper instead of maintaining a separate startup implementation
@@ -114,8 +115,9 @@ If you want Hermes to share the same Forge users and records:
 
 - use the same `FORGE_ORIGIN`
 - use the same `FORGE_PORT`
-- use the same `FORGE_DATA_ROOT` for local shared storage
-- give Hermes its own `FORGE_ACTOR_LABEL`, ideally a human-readable label such as `Albert (hermes)`
+- leave the default `FORGE_DATA_ROOT=~/.forge` unless you intentionally want a different shared local database
+- leave `FORGE_ACTOR_LABEL` blank when Hermes should inherit the local operator automatically
+- set `FORGE_ACTOR_LABEL` only when Hermes or a spawned sub-agent should act as a specific bot
 
 Forge's ownership model is explicit:
 
@@ -125,7 +127,10 @@ Forge's ownership model is explicit:
 - cross-user links are allowed
 
 That is what lets a Hermes bot own its own tasks or strategies while still
-supporting human-owned goals and projects in the same Forge runtime.
+supporting human-owned goals and projects in the same Forge runtime. Forge now
+also separates runtime bridge identity from acting user identity, so the live
+session list can show one stable Hermes bridge while writes still attribute to
+the effective human or bot actor.
 
 ## Preferences Workspace
 
@@ -187,5 +192,5 @@ plugin with the newer documentation.
 ## Notes
 
 - the recommended install path is now pip-based Hermes entry-point discovery, not the old folder-plugin symlink
-- edit `~/.hermes/forge/config.json` if you want to move the data root or pin a different local port
+- edit `~/.hermes/forge/config.json` if you want to move the shared data root or pin a different local port
 - bundled skills prefer native plugin registration and only copy into `~/.hermes/skills/forge-hermes/` as a compatibility fallback on older Hermes runtimes
