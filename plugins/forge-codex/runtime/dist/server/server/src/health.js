@@ -838,6 +838,55 @@ function listSleepRows(userIds) {
        ORDER BY started_at DESC`)
         .all(...params);
 }
+export function getSleepTimelineOverlaysForRange(input) {
+    const rangeStartMs = Date.parse(input.startedAt);
+    const rangeEndMs = Date.parse(input.endedAt);
+    if (Number.isNaN(rangeStartMs) ||
+        Number.isNaN(rangeEndMs) ||
+        rangeEndMs <= rangeStartMs) {
+        return [];
+    }
+    return listSleepRows(input.userIds)
+        .map((row) => mapSleepSession(row))
+        .filter((session) => {
+        const sessionStartMs = Date.parse(session.startedAt);
+        const sessionEndMs = Date.parse(session.endedAt);
+        if (Number.isNaN(sessionStartMs) || Number.isNaN(sessionEndMs)) {
+            return false;
+        }
+        return sessionStartMs < rangeEndMs && sessionEndMs > rangeStartMs;
+    })
+        .sort((left, right) => {
+        const startedDelta = Date.parse(left.startedAt) - Date.parse(right.startedAt);
+        if (startedDelta !== 0) {
+            return startedDelta;
+        }
+        const endedDelta = Date.parse(left.endedAt) - Date.parse(right.endedAt);
+        if (endedDelta !== 0) {
+            return endedDelta;
+        }
+        return left.id.localeCompare(right.id);
+    })
+        .map((session) => {
+        const derived = session.derived;
+        return {
+            id: session.id,
+            externalUid: session.externalUid,
+            startedAt: session.startedAt,
+            endedAt: session.endedAt,
+            localDateKey: session.localDateKey,
+            sourceTimezone: session.sourceTimezone,
+            asleepSeconds: session.asleepSeconds,
+            timeInBedSeconds: session.timeInBedSeconds,
+            sleepScore: session.sleepScore,
+            regularityScore: session.regularityScore,
+            efficiency: typeof derived?.efficiency === "number" ? derived.efficiency : null,
+            recoveryState: typeof derived?.recoveryState === "string"
+                ? derived.recoveryState
+                : null
+        };
+    });
+}
 function listWorkoutRows(userIds) {
     const params = [];
     const where = userIds && userIds.length > 0

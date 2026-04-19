@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { forgeCustomThemeSchema, forgeThemePreferenceSchema } from "@/lib/theme-system";
+import { forgeCustomThemeSchema, forgeThemePreferenceSchema } from "./theme-system.js";
 export const appLocaleSchema = z.enum(["en", "fr"]);
 export const inlineCreateNoteSchema = z.object({
     contentMarkdown: z.string().trim().min(1, "Note content is required"),

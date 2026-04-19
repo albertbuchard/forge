@@ -379,6 +379,8 @@ If the entity is not yet clear:
   replacing it with a more polished label unless they ask for help wording it.
 - When the user says the current wording misses, say what seems newly true before you
   ask whether the old name still fits.
+- Before you revise a durable formulation, say what the old wording was trying to
+  hold and what the new episode or evidence changes.
 - If a recent charged episode is what made the update visible, anchor in that episode
   before you rename the durable belief, pattern, mode, or value.
 - If another belief, value, pattern, mode, or note becomes visible, name it gently but
@@ -403,6 +405,12 @@ whether it lands more accurately before you reopen the whole exploration.
 Good update opener:
 
 - "Before we change it, what feels newly true about this now, and what still feels basically right?"
+
+Other strong update openers:
+
+- "What about the old wording no longer lands, and what still feels true inside it?"
+- "If this update comes from one fresh moment, what happened there that changed how this record feels?"
+- "Do you want to revise the whole formulation, or only the part that now feels inaccurate?"
 
 ## Safety rule
 

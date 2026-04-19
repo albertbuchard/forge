@@ -16,11 +16,7 @@ export function useShellTaskHeartbeat({
       return;
     }
 
-    const timer = window.setInterval(() => {
-      if (document.visibilityState !== "visible") {
-        return;
-      }
-
+    const sendHeartbeats = () => {
       for (const run of snapshot.activeTaskRuns) {
         void heartbeatTaskRun({
           runId: run.id,
@@ -31,8 +27,31 @@ export function useShellTaskHeartbeat({
           }
         }).unwrap().catch(() => undefined);
       }
+    };
+
+    const timer = window.setInterval(() => {
+      sendHeartbeats();
     }, 30_000);
 
-    return () => window.clearInterval(timer);
+    const handleVisibilityChange = () => {
+      sendHeartbeats();
+    };
+    const handleWindowFocus = () => {
+      sendHeartbeats();
+    };
+    const handlePageHide = () => {
+      sendHeartbeats();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", handleWindowFocus);
+    window.addEventListener("pagehide", handlePageHide);
+
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", handleWindowFocus);
+      window.removeEventListener("pagehide", handlePageHide);
+    };
   }, [heartbeatTaskRun, settings, snapshot]);
 }

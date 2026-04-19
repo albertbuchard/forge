@@ -23,7 +23,13 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/page-state";
 import { UserBadge } from "@/components/ui/user-badge";
-import { deleteTask, patchTask, splitTask, uncompleteTask } from "@/lib/api";
+import {
+  createWorkAdjustment,
+  deleteTask,
+  patchTask,
+  splitTask,
+  uncompleteTask
+} from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { getSingleSelectedUserId } from "@/lib/user-ownership";
@@ -501,6 +507,10 @@ export function KanbanPage() {
     mutationFn: (taskId: string) => deleteTask(taskId),
     onSuccess: invalidateBoard
   });
+  const workAdjustmentMutation = useMutation({
+    mutationFn: createWorkAdjustment,
+    onSuccess: invalidateBoard
+  });
   const splitTaskMutation = useMutation({
     mutationFn: ({
       taskId,
@@ -913,6 +923,7 @@ export function KanbanPage() {
         initialStepId={taskDialogInitialStepId}
         defaultUserId={editingTask?.userId ?? defaultUserId}
         onRefreshEntities={shell.refresh}
+        currentCreditedSeconds={editingTask?.time.totalCreditedSeconds}
         onOpenChange={(open) => {
           if (!open) {
             setEditingTaskId(null);
@@ -920,6 +931,13 @@ export function KanbanPage() {
             setTaskDialogInitialStepId(undefined);
           }
         }}
+        onAdjustTrackedTime={
+          editingTask
+            ? async (input) => {
+                await workAdjustmentMutation.mutateAsync(input);
+              }
+            : undefined
+        }
         onSubmit={async (input, taskId) => {
           if (taskId) {
             await updateTaskMutation.mutateAsync({ taskId, patch: input });

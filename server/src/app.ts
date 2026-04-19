@@ -5152,10 +5152,12 @@ function buildAgentOnboardingPayload(request: {
         verifyCommands: [
           `curl -s ${origin}/api/v1/health`,
           "openclaw plugins install ./projects/forge/openclaw-plugin",
+          "openclaw plugins info forge-openclaw-plugin",
           "openclaw gateway restart"
         ],
         configNotes: [
           "Localhost and Tailscale targets can usually use the operator-session path without a long-lived token.",
+          "If your current OpenClaw build blocks the repo-local install because of the package scanner, keep the repo folder on plugins.load.paths and verify that plugins info still points at the local Forge source path before continuing.",
           "Use a distinct actor label such as Albert (claw) so OpenClaw-originated work stays obvious in Forge provenance.",
           "Create each agent as a Forge bot user, then use userId or userIds in tool inputs whenever the agent should focus on one human, one bot, or a specific collaboration slice."
         ]
@@ -5638,14 +5640,19 @@ function syncEntityOwnerFromBody(options: {
 }
 
 function buildV1Context(userIds?: string[]) {
-  const goals = filterOwnedEntities("goal", listGoals(), userIds);
-  const tasks = filterOwnedEntities("task", listTasks(), userIds);
-  const habits = filterOwnedEntities("habit", listHabits(), userIds);
   const users = listUsers();
-  const dashboard = getDashboard({ userIds });
-  const selectedUsers =
+  const validUserIdSet = new Set(users.map((user) => user.id));
+  const scopedUserIds =
     userIds && userIds.length > 0
-      ? users.filter((user) => userIds.includes(user.id))
+      ? userIds.filter((userId) => validUserIdSet.has(userId))
+      : undefined;
+  const goals = filterOwnedEntities("goal", listGoals(), scopedUserIds);
+  const tasks = filterOwnedEntities("task", listTasks(), scopedUserIds);
+  const habits = filterOwnedEntities("habit", listHabits(), scopedUserIds);
+  const dashboard = getDashboard({ userIds: scopedUserIds });
+  const selectedUsers =
+    scopedUserIds && scopedUserIds.length > 0
+      ? users.filter((user) => scopedUserIds.includes(user.id))
       : users;
   return {
     meta: {
@@ -5657,23 +5664,23 @@ function buildV1Context(userIds?: string[]) {
     },
     metrics: buildGamificationProfile(goals, tasks, habits),
     dashboard,
-    overview: getOverviewContext(new Date(), { userIds }),
-    today: getTodayContext(new Date(), { userIds }),
-    risk: getRiskContext(new Date(), { userIds }),
+    overview: getOverviewContext(new Date(), { userIds: scopedUserIds }),
+    today: getTodayContext(new Date(), { userIds: scopedUserIds }),
+    risk: getRiskContext(new Date(), { userIds: scopedUserIds }),
     goals,
-    projects: listProjectSummaries({ userIds }),
+    projects: listProjectSummaries({ userIds: scopedUserIds }),
     tags: listTags(),
     tasks,
     habits,
     users,
-    strategies: listStrategies({ userIds }),
+    strategies: listStrategies({ userIds: scopedUserIds }),
     userScope: {
-      selectedUserIds: userIds ?? [],
+      selectedUserIds: scopedUserIds ?? [],
       selectedUsers
     },
     activeTaskRuns: listTaskRuns({ active: true, limit: 25 }),
     activity: dashboard.recentActivity,
-    lifeForce: buildLifeForcePayload(new Date(), userIds)
+    lifeForce: buildLifeForcePayload(new Date(), scopedUserIds)
   };
 }
 

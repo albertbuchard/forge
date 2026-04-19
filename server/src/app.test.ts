@@ -1893,6 +1893,32 @@ test("mobile health sync builds richer summaries and reconciles habit-generated 
   }
 });
 
+test("context ignores invalid scoped user ids instead of blanking the board", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-user-scope-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/context?userIds=user_missing"
+    });
+    assert.equal(response.statusCode, 200);
+    const context = response.json() as {
+      goals: Array<{ id: string }>;
+      tasks: Array<{ id: string }>;
+      userScope: { selectedUserIds: string[] };
+    };
+
+    assert.equal(context.userScope.selectedUserIds.length, 0);
+    assert.ok(context.goals.length > 0);
+    assert.ok(context.tasks.length > 0);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("mobile health sync accepts screen time warning paths and records warning diagnostics", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-mobile-health-screen-time-warning-")

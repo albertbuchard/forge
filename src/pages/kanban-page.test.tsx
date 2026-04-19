@@ -20,6 +20,7 @@ const { splitTaskMock, useForgeShellMock } = vi.hoisted(
 );
 
 vi.mock("@/lib/api", () => ({
+  createWorkAdjustment: vi.fn(),
   deleteTask: vi.fn(),
   patchTask: vi.fn(),
   splitTask: splitTaskMock,

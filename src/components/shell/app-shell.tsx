@@ -200,6 +200,47 @@ type ShellContextValue = {
   }) => void;
 };
 
+function sameSelectedUserIds(left: string[], right: string[]) {
+  return (
+    left.length === right.length && left.every((entry, index) => entry === right[index])
+  );
+}
+
+export function sanitizeSelectedUserIds(
+  selectedUserIds: string[],
+  users: UserSummary[]
+) {
+  if (selectedUserIds.length === 0 || users.length === 0) {
+    return selectedUserIds;
+  }
+  const validUserIds = new Set(users.map((user) => user.id));
+  return selectedUserIds.filter((userId) => validUserIds.has(userId));
+}
+
+export function buildStartTaskNowInput(
+  actor: string,
+  options: {
+    timerMode?: "planned" | "unlimited";
+    plannedDurationSeconds?: number | null;
+  } = {}
+) {
+  const timerMode = options.timerMode ?? "unlimited";
+  const plannedDurationSeconds =
+    options.plannedDurationSeconds === undefined
+      ? timerMode === "planned"
+        ? 20 * 60
+        : null
+      : options.plannedDurationSeconds;
+  return {
+    actor,
+    timerMode,
+    plannedDurationSeconds,
+    isCurrent: true,
+    leaseTtlSeconds: 1800,
+    note: ""
+  };
+}
+
 function getKnowledgeGraphNodeNotesHref(node: KnowledgeGraphNode) {
   switch (node.entityType) {
     case "workbench_flow":
@@ -2545,6 +2586,17 @@ export function AppShell() {
   }, [operatorSessionQuery.isSuccess, queryClient, selectedUserIds]);
 
   useEffect(() => {
+    const users = snapshotQuery.data?.users;
+    if (!users || selectedUserIds.length === 0) {
+      return;
+    }
+    const sanitized = sanitizeSelectedUserIds(selectedUserIds, users);
+    if (!sameSelectedUserIds(sanitized, selectedUserIds)) {
+      dispatch(setSelectedUserIdsAction(sanitized));
+    }
+  }, [dispatch, selectedUserIds, snapshotQuery.data?.users]);
+
+  useEffect(() => {
     if (routerLocation.pathname.startsWith("/knowledge-graph")) {
       return;
     }
@@ -2843,17 +2895,10 @@ export function AppShell() {
     },
     startTaskNow: async (taskId, options = {}) => {
       const operatorName = settingsQuery.data.settings.profile.operatorName;
-      await startTaskRunWithOverride(taskId, {
-        actor: operatorName,
-        timerMode: options.timerMode ?? "planned",
-        plannedDurationSeconds:
-          options.plannedDurationSeconds === undefined
-            ? 20 * 60
-            : options.plannedDurationSeconds,
-        isCurrent: true,
-        leaseTtlSeconds: 1800,
-        note: ""
-      });
+      await startTaskRunWithOverride(
+        taskId,
+        buildStartTaskNowInput(operatorName, options)
+      );
     },
     stopTaskRun: async (run) => {
       await releaseTaskRunMutation({

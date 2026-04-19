@@ -469,7 +469,9 @@ export function TaskDialog({
   initialStepId,
   defaultUserId = null,
   onRefreshEntities,
+  currentCreditedSeconds,
   onOpenChange,
+  onAdjustTrackedTime,
   onSubmit
 }: {
   open: boolean;
@@ -486,7 +488,14 @@ export function TaskDialog({
   initialStepId?: string;
   defaultUserId?: string | null;
   onRefreshEntities?: () => Promise<void> | void;
+  currentCreditedSeconds?: number;
   onOpenChange: (open: boolean) => void;
+  onAdjustTrackedTime?: (input: {
+    entityType: "task";
+    entityId: string;
+    deltaMinutes: number;
+    note?: string;
+  }) => Promise<void>;
   onSubmit: (input: QuickTaskInput, taskId?: string) => Promise<void>;
 }) {
   const { t } = useI18n();
@@ -507,6 +516,7 @@ export function TaskDialog({
   const [anchorCreatePendingId, setAnchorCreatePendingId] = useState<
     string | null
   >(null);
+  const [trackedMinutesDraft, setTrackedMinutesDraft] = useState(0);
 
   const updateFieldErrors = (errors: Record<string, string[] | undefined>) => {
     setFieldErrors(
@@ -528,6 +538,17 @@ export function TaskDialog({
     setAnchorHighlightedIndex(0);
     setAnchorError(null);
     setAnchorCreatePendingId(null);
+    setTrackedMinutesDraft(
+      editingTask
+        ? Math.max(
+            0,
+            Math.floor(
+              (currentCreditedSeconds ?? editingTask.time.totalCreditedSeconds) /
+                60
+            )
+          )
+        : 0
+    );
 
     setDraft(
       buildTaskDraft({
@@ -552,8 +573,21 @@ export function TaskDialog({
     open,
     safeProjects,
     safeUsers,
-    safeWorkItems
+    safeWorkItems,
+    currentCreditedSeconds
   ]);
+
+  const currentTrackedMinutes = editingTask
+    ? Math.max(
+        0,
+        Math.floor(
+          (currentCreditedSeconds ?? editingTask.time.totalCreditedSeconds) / 60
+        )
+      )
+    : 0;
+  const trackedMinutesDelta = editingTask
+    ? trackedMinutesDraft - currentTrackedMinutes
+    : 0;
 
   const selectedProject = useMemo(
     () =>
@@ -1322,6 +1356,24 @@ export function TaskDialog({
                 }
               />
             </FlowField>
+            {editingTask ? (
+              <FlowField
+                label="Tracked minutes"
+                labelHelp="Change the current credited work total without starting a live run. Forge records the difference as a work adjustment when you save."
+              >
+                <Input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={trackedMinutesDraft}
+                  onChange={(event) =>
+                    setTrackedMinutesDraft(
+                      Math.max(0, Math.trunc(Number(event.target.value) || 0))
+                    )
+                  }
+                />
+              </FlowField>
+            ) : null}
             <FlowField
               label="Action cost"
               labelHelp="Choose a simple AP band now. Advanced AP editing can happen later inside the task."
@@ -1345,6 +1397,14 @@ export function TaskDialog({
               />
             </FlowField>
           </div>
+          {editingTask ? (
+            <div className="rounded-[22px] border border-white/8 bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/62">
+              Currently recorded: {currentTrackedMinutes} min.{" "}
+              {trackedMinutesDelta === 0
+                ? "Saving this edit keeps the tracked total unchanged."
+                : `Saving this edit will ${trackedMinutesDelta > 0 ? "add" : "remove"} ${Math.abs(trackedMinutesDelta)} minute${Math.abs(trackedMinutesDelta) === 1 ? "" : "s"} from the task history.`}
+            </div>
+          ) : null}
           <FlowField label={t("common.dialogs.task.tags")}>
             <div className="flex flex-wrap gap-2">
               {safeTags.map((tag) => {
@@ -1482,6 +1542,10 @@ export function TaskDialog({
       error={submitError}
       onSubmit={async () => {
         setSubmitError(null);
+        if (editingTask && trackedMinutesDraft < 0) {
+          setSubmitError("Tracked minutes cannot be negative.");
+          return;
+        }
         const parsed = quickTaskSchema.safeParse(draft);
         if (!parsed.success) {
           updateFieldErrors(parsed.error.flatten().fieldErrors);
@@ -1495,6 +1559,14 @@ export function TaskDialog({
 
         try {
           await onSubmit(parsed.data, editingTask?.id);
+          if (editingTask && onAdjustTrackedTime && trackedMinutesDelta !== 0) {
+            await onAdjustTrackedTime({
+              entityType: "task",
+              entityId: editingTask.id,
+              deltaMinutes: trackedMinutesDelta,
+              note: "Adjusted from task editor."
+            });
+          }
           onOpenChange(false);
         } catch (error) {
           setSubmitError(

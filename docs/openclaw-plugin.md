@@ -319,6 +319,12 @@ openclaw gateway restart
 openclaw forge health
 ```
 
+If that repo-local install is blocked by the current OpenClaw package scanner, keep
+the repo folder on `plugins.load.paths`, verify
+`openclaw plugins info forge-openclaw-plugin` still resolves to the local Forge source
+path, then restart the gateway and re-run health. That preserves the repo-local plugin
+workflow without switching to the published package.
+
 Temporary bypass for some OpenClaw `2026.4.x` builds:
 
 Some recent OpenClaw versions can still block Forge during `plugins install`, even though Forge is a legitimate local-runtime plugin. The installer currently flags the package as dangerous because it launches the local Forge runtime and proxies to the localhost API. I am trying to get a better long-term install story upstream. Until then, the most reliable fallback is:

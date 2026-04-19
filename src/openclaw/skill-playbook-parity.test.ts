@@ -122,6 +122,7 @@ describe("forge skill playbook parity", () => {
     expect(entityPlaybook).toMatch(/Let each question have one job/i);
     expect(entityPlaybook).toMatch(/Question design rules/i);
     expect(entityPlaybook).toMatch(/Update loop/i);
+    expect(entityPlaybook).toMatch(/Update-first openers/i);
     expect(entityPlaybook).toMatch(/Task Run/i);
     expect(entityPlaybook).toMatch(/## Tag/);
     expect(entityPlaybook).toMatch(/offer a tentative title or summary/i);
@@ -200,6 +201,8 @@ describe("forge skill playbook parity", () => {
     expect(psychePlaybook).toMatch(/one brief reflection[\s\S]*one missing-detail question/i);
     expect(psychePlaybook).toMatch(/what does it seem to prove in that moment/i);
     expect(psychePlaybook).toMatch(/Psyche update loop/i);
+    expect(psychePlaybook).toMatch(/what the old wording was trying to[\s\S]*hold/i);
+    expect(psychePlaybook).toMatch(/revise the whole formulation, or only the part that now feels inaccurate/i);
     expect(psychePlaybook).toMatch(/newly true, newly visible, or newly inaccurate/i);
     expect(psychePlaybook).toMatch(/charged episode[\s\S]*before you rename the durable|recent charged episode[\s\S]*before you re-check the durable/i);
     expect(psychePlaybook).toMatch(/accurate enough to be held/i);

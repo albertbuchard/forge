@@ -61,7 +61,7 @@ import { buildOpenApiDocument } from "./openapi.js";
 import { registerWebRoutes } from "./web.js";
 import { createManagerRuntime } from "./managers/runtime.js";
 import { isManagerError } from "./managers/type-guards.js";
-import { createCompanionPairingSession, createCompanionPairingSessionSchema, createSleepSession, createSleepSessionSchema, createWorkoutSession, createWorkoutSessionSchema, deleteSleepSession, deleteWorkoutSession, getCompanionPairingSessionById, getCompanionOverview, getFitnessViewData, getSleepSessionById, getSleepSessionDetailById, getSleepViewData, getVitalsViewData, getWorkoutSessionById, ingestMobileHealthSync, mobileHealthSyncSchema, patchCompanionPairingSourceState, patchCompanionPairingSourceStateSchema, companionSourceKeySchema, requireValidPairing, revokeAllCompanionPairingSessions, revokeAllCompanionPairingSessionsSchema, revokeCompanionPairingSession, updateMobileCompanionSourceState, updateMobileCompanionSourceStateSchema, verifyCompanionPairing, verifyCompanionPairingSchema, updateSleepMetadata, updateSleepMetadataSchema, updateWorkoutMetadata, updateWorkoutMetadataSchema } from "./health.js";
+import { createCompanionPairingSession, createCompanionPairingSessionSchema, createSleepSession, createSleepSessionSchema, createWorkoutSession, createWorkoutSessionSchema, deleteSleepSession, deleteWorkoutSession, getCompanionPairingSessionById, getCompanionOverview, getFitnessViewData, getSleepSessionById, getSleepSessionDetailById, getSleepTimelineOverlaysForRange, getSleepViewData, getVitalsViewData, getWorkoutSessionById, ingestMobileHealthSync, mobileHealthSyncSchema, patchCompanionPairingSourceState, patchCompanionPairingSourceStateSchema, companionSourceKeySchema, requireValidPairing, revokeAllCompanionPairingSessions, revokeAllCompanionPairingSessionsSchema, revokeCompanionPairingSession, updateMobileCompanionSourceState, updateMobileCompanionSourceStateSchema, verifyCompanionPairing, verifyCompanionPairingSchema, updateSleepMetadata, updateSleepMetadataSchema, updateWorkoutMetadata, updateWorkoutMetadataSchema } from "./health.js";
 import { analyzeMovementUserBoxPreflight, createMovementUserBox, createMovementPlace, deleteMovementUserBox, getMovementAllTimeSummary, getMovementBoxDetail, getMovementDayDetail, getMovementMobileBootstrap, getMovementTimeline, getMovementSelectionAggregate, getMovementSettings, getMovementTripDetail, getMovementMonthSummary, invalidateAutomaticMovementBox, listMovementPlaces, movementAutomaticBoxInvalidateSchema, movementMobileBootstrapSchema, movementMobilePlaceMutationSchema, movementMobileStayPatchSchema, movementMobileUserBoxCreateSchema, movementMobileUserBoxPreflightSchema, movementMobileUserBoxPatchSchema, movementMobileAutomaticBoxInvalidateSchema, movementMobileTimelineSchema, movementPlaceMutationSchema, movementPlacePatchSchema, movementSelectionAggregateSchema, movementStayPatchSchema, movementTripPatchSchema, movementUserBoxCreateSchema, movementUserBoxPreflightSchema, movementUserBoxPatchSchema, movementSettingsPatchSchema, movementTimelineQuerySchema, movementTripPointPatchSchema, deleteMovementStay, deleteMovementTrip, deleteMovementTripPoint, updateMovementPlace, updateMovementSettings, updateMovementStay, updateMovementTrip, updateMovementUserBox, updateMovementTripPoint, resolveMovementTimelineSegmentForBox } from "./movement.js";
 import { getScreenTimeAllTimeSummary, getScreenTimeDayDetail, getScreenTimeMonthSummary, getScreenTimeSettings, screenTimeSettingsPatchSchema, updateScreenTimeSettings } from "./screen-time.js";
 import { assertWatchReady, buildWatchBootstrap, ingestWatchCaptureBatch, mobileWatchBootstrapSchema, mobileWatchCaptureBatchSchema, mobileWatchHabitCheckInSchema } from "./watch-mobile.js";
@@ -4198,10 +4198,12 @@ function buildAgentOnboardingPayload(request) {
                 verifyCommands: [
                     `curl -s ${origin}/api/v1/health`,
                     "openclaw plugins install ./projects/forge/openclaw-plugin",
+                    "openclaw plugins info forge-openclaw-plugin",
                     "openclaw gateway restart"
                 ],
                 configNotes: [
                     "Localhost and Tailscale targets can usually use the operator-session path without a long-lived token.",
+                    "If your current OpenClaw build blocks the repo-local install because of the package scanner, keep the repo folder on plugins.load.paths and verify that plugins info still points at the local Forge source path before continuing.",
                     "Use a distinct actor label such as Albert (claw) so OpenClaw-originated work stays obvious in Forge provenance.",
                     "Create each agent as a Forge bot user, then use userId or userIds in tool inputs whenever the agent should focus on one human, one bot, or a specific collaboration slice."
                 ]
@@ -4558,6 +4560,30 @@ function resolveScopedUserIds(query) {
     const unique = Array.from(new Set(values));
     return unique.length > 0 ? unique : undefined;
 }
+function attachMovementTimelineSleepOverlays(movement, userIds) {
+    const rangeStart = movement.segments.reduce((earliest, segment) => {
+        if (!earliest || Date.parse(segment.startedAt) < Date.parse(earliest)) {
+            return segment.startedAt;
+        }
+        return earliest;
+    }, null);
+    const rangeEnd = movement.segments.reduce((latest, segment) => {
+        if (!latest || Date.parse(segment.endedAt) > Date.parse(latest)) {
+            return segment.endedAt;
+        }
+        return latest;
+    }, null);
+    return {
+        ...movement,
+        sleepOverlays: rangeStart && rangeEnd
+            ? getSleepTimelineOverlaysForRange({
+                startedAt: rangeStart,
+                endedAt: rangeEnd,
+                userIds
+            })
+            : []
+    };
+}
 function readRequestedUserIdFromBody(body) {
     if (!body || typeof body !== "object" || Array.isArray(body)) {
         return undefined;
@@ -4581,13 +4607,17 @@ function syncEntityOwnerFromBody(options) {
     setEntityOwner(options.entityType, options.entityId, owner.id);
 }
 function buildV1Context(userIds) {
-    const goals = filterOwnedEntities("goal", listGoals(), userIds);
-    const tasks = filterOwnedEntities("task", listTasks(), userIds);
-    const habits = filterOwnedEntities("habit", listHabits(), userIds);
     const users = listUsers();
-    const dashboard = getDashboard({ userIds });
-    const selectedUsers = userIds && userIds.length > 0
-        ? users.filter((user) => userIds.includes(user.id))
+    const validUserIdSet = new Set(users.map((user) => user.id));
+    const scopedUserIds = userIds && userIds.length > 0
+        ? userIds.filter((userId) => validUserIdSet.has(userId))
+        : undefined;
+    const goals = filterOwnedEntities("goal", listGoals(), scopedUserIds);
+    const tasks = filterOwnedEntities("task", listTasks(), scopedUserIds);
+    const habits = filterOwnedEntities("habit", listHabits(), scopedUserIds);
+    const dashboard = getDashboard({ userIds: scopedUserIds });
+    const selectedUsers = scopedUserIds && scopedUserIds.length > 0
+        ? users.filter((user) => scopedUserIds.includes(user.id))
         : users;
     return {
         meta: {
@@ -4599,23 +4629,23 @@ function buildV1Context(userIds) {
         },
         metrics: buildGamificationProfile(goals, tasks, habits),
         dashboard,
-        overview: getOverviewContext(new Date(), { userIds }),
-        today: getTodayContext(new Date(), { userIds }),
-        risk: getRiskContext(new Date(), { userIds }),
+        overview: getOverviewContext(new Date(), { userIds: scopedUserIds }),
+        today: getTodayContext(new Date(), { userIds: scopedUserIds }),
+        risk: getRiskContext(new Date(), { userIds: scopedUserIds }),
         goals,
-        projects: listProjectSummaries({ userIds }),
+        projects: listProjectSummaries({ userIds: scopedUserIds }),
         tags: listTags(),
         tasks,
         habits,
         users,
-        strategies: listStrategies({ userIds }),
+        strategies: listStrategies({ userIds: scopedUserIds }),
         userScope: {
-            selectedUserIds: userIds ?? [],
+            selectedUserIds: scopedUserIds ?? [],
             selectedUsers
         },
         activeTaskRuns: listTaskRuns({ active: true, limit: 25 }),
         activity: dashboard.recentActivity,
-        lifeForce: buildLifeForcePayload(new Date(), userIds)
+        lifeForce: buildLifeForcePayload(new Date(), scopedUserIds)
     };
 }
 function buildXpMetricsPayload() {
@@ -5514,14 +5544,15 @@ export async function buildServer(options = {}) {
     });
     app.get("/api/v1/movement/timeline", async (request) => {
         const parsed = movementTimelineQuerySchema.parse(request.query ?? {});
+        const userIds = parsed.userIds.length > 0
+            ? parsed.userIds
+            : (resolveScopedUserIds(request.query) ?? []);
+        const movement = getMovementTimeline({
+            ...parsed,
+            userIds
+        });
         return {
-            movement: getMovementTimeline({
-                ...parsed,
-                userIds: parsed.userIds.length > 0
-                    ? parsed.userIds
-                    : (resolveScopedUserIds(request.query) ??
-                        [])
-            })
+            movement: attachMovementTimelineSleepOverlays(movement, userIds)
         };
     });
     app.get("/api/v1/movement/settings", async (request) => ({
@@ -5790,12 +5821,13 @@ export async function buildServer(options = {}) {
     app.post("/api/v1/mobile/movement/timeline", async (request) => {
         const parsed = movementMobileTimelineSchema.parse(request.body ?? {});
         const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+        const movement = getMovementTimeline({
+            before: parsed.before,
+            limit: parsed.limit,
+            userIds: [pairing.user_id]
+        });
         return {
-            movement: getMovementTimeline({
-                before: parsed.before,
-                limit: parsed.limit,
-                userIds: [pairing.user_id]
-            })
+            movement: attachMovementTimelineSleepOverlays(movement, [pairing.user_id])
         };
     });
     app.post("/api/v1/mobile/movement/boxes/:id/detail", async (request, reply) => {

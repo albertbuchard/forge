@@ -143,6 +143,8 @@ describe("question flow simulation cycles", () => {
   it("cycle 3: all flows close efficiently, preserve only helpful questions, and avoid reopening settled formulations", () => {
     expect(entityPlaybook).toMatch(/If no detail is still decision-relevant/i);
     expect(entityPlaybook).toMatch(/revise the working formulation once/i);
+    expect(entityPlaybook).toMatch(/What feels different enough now that this record needs to change/i);
+    expect(entityPlaybook).toMatch(/I can stay narrow here\. What is the one thing that no longer fits/i);
     expect(entityPlaybook).toMatch(/what this would help[\s\S]*decide later is/i);
     expect(entityPlaybook).toMatch(/repair or revise one saved overlay/i);
     expect(entityPlaybook).toMatch(/delete one saved overlay/i);
@@ -161,6 +163,12 @@ describe("question flow simulation cycles", () => {
     expect(psychePlaybook).toMatch(/When the user says the formulation lands/i);
     expect(psychePlaybook).toMatch(
       /When the user offers their own sentence[\s\S]*stay inside that sentence first/i
+    );
+    expect(psychePlaybook).toMatch(
+      /what the old wording was trying to[\s\S]*hold and what the new episode or evidence changes/i
+    );
+    expect(psychePlaybook).toMatch(
+      /Do you want to revise the whole formulation, or only the part that now feels inaccurate/i
     );
     expect(psychePlaybook).toMatch(
       /recent charged episode[\s\S]*before you rename the durable/i

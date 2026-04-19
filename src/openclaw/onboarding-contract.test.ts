@@ -27,7 +27,12 @@ async function loadOnboardingPayload() {
   expect(response.statusCode).toBe(200);
   await app.close();
   return response.json().onboarding as {
-    entityCatalog: Array<{ entityType: string; classification: string }>;
+    entityCatalog: Array<{
+      entityType: string;
+      classification: string;
+      preferredMutationPath: string | null;
+      preferredReadPath: string | null;
+    }>;
     entityRouteModel: {
       batchCrudEntities: string[];
       specializedCrudEntities: Record<string, Record<string, string>>;
@@ -46,6 +51,7 @@ async function loadOnboardingPayload() {
     connectionGuides?: {
       openclaw?: {
         verifyCommands?: string[];
+        configNotes?: string[];
       };
     };
   };
@@ -223,6 +229,137 @@ describe("forge onboarding contract", () => {
     );
   });
 
+  it("publishes the exact route posture for every required entity and specialized surface", async () => {
+    const onboarding = await loadOnboardingPayload();
+    const entityByType = new Map(
+      onboarding.entityCatalog.map((entry) => [entry.entityType, entry])
+    );
+
+    const batchCrudEntities = [
+      "goal",
+      "project",
+      "strategy",
+      "task",
+      "habit",
+      "tag",
+      "note",
+      "insight",
+      "calendar_event",
+      "work_block_template",
+      "task_timebox",
+      "preference_catalog",
+      "preference_catalog_item",
+      "preference_context",
+      "preference_item",
+      "questionnaire_instrument",
+      "sleep_session",
+      "workout_session",
+      "psyche_value",
+      "behavior_pattern",
+      "behavior",
+      "belief_entry",
+      "mode_profile",
+      "mode_guide_session",
+      "event_type",
+      "emotion_definition",
+      "trigger_report"
+    ] as const;
+
+    for (const entityType of batchCrudEntities) {
+      expect(entityByType.get(entityType)).toEqual(
+        expect.objectContaining({
+          classification: "batch_crud_entity",
+          preferredMutationPath:
+            "/api/v1/entities/create | /api/v1/entities/update | /api/v1/entities/delete | /api/v1/entities/search"
+        })
+      );
+    }
+
+    expect(entityByType.get("wiki_page")).toEqual(
+      expect.objectContaining({
+        classification: "specialized_crud_entity",
+        preferredMutationPath:
+          "Use /api/v1/wiki/pages with POST or PATCH for page CRUD.",
+        preferredReadPath: "/api/v1/wiki/pages/:id"
+      })
+    );
+    expect(entityByType.get("calendar_connection")).toEqual(
+      expect.objectContaining({
+        classification: "specialized_crud_entity",
+        preferredMutationPath:
+          "Use /api/v1/calendar/connections plus provider-specific setup flows.",
+        preferredReadPath: "/api/v1/calendar/connections"
+      })
+    );
+
+    expect(entityByType.get("task_run")).toEqual(
+      expect.objectContaining({
+        classification: "action_workflow_entity",
+        preferredReadPath: "/api/v1/operator/context"
+      })
+    );
+    expect(entityByType.get("work_adjustment")).toEqual(
+      expect.objectContaining({
+        classification: "action_workflow_entity",
+        preferredMutationPath:
+          "Use /api/v1/work-adjustments to apply an explicit operator adjustment."
+      })
+    );
+    expect(entityByType.get("preference_judgment")).toEqual(
+      expect.objectContaining({
+        classification: "action_workflow_entity",
+        preferredMutationPath:
+          "Use /api/v1/preferences/judgments to record one pairwise comparison."
+      })
+    );
+    expect(entityByType.get("preference_signal")).toEqual(
+      expect.objectContaining({
+        classification: "action_workflow_entity",
+        preferredMutationPath:
+          "Use /api/v1/preferences/signals to record one direct signal such as favorite or veto."
+      })
+    );
+    expect(entityByType.get("questionnaire_run")).toEqual(
+      expect.objectContaining({
+        classification: "action_workflow_entity",
+        preferredReadPath: "/api/v1/psyche/questionnaire-runs/:id"
+      })
+    );
+
+    expect(entityByType.get("self_observation")).toEqual(
+      expect.objectContaining({
+        classification: "read_model_only_surface",
+        preferredMutationPath:
+          "Read the calendar surface; mutate it by creating or updating note-backed observations with frontmatter.observedAt.",
+        preferredReadPath: "/api/v1/psyche/self-observation/calendar"
+      })
+    );
+    expect(entityByType.get("movement")).toEqual(
+      expect.objectContaining({
+        classification: "specialized_domain_surface",
+        preferredMutationPath:
+          "Use the dedicated Movement route family for day, month, all-time, timeline, places, trip detail, selection aggregates, overlays, and repair actions.",
+        preferredReadPath: "/api/v1/movement/timeline"
+      })
+    );
+    expect(entityByType.get("life_force")).toEqual(
+      expect.objectContaining({
+        classification: "specialized_domain_surface",
+        preferredMutationPath:
+          "Use the dedicated Life Force route family for overview, profile edits, weekday templates, and fatigue signals.",
+        preferredReadPath: "/api/v1/life-force"
+      })
+    );
+    expect(entityByType.get("workbench")).toEqual(
+      expect.objectContaining({
+        classification: "specialized_domain_surface",
+        preferredMutationPath:
+          "Use the dedicated Workbench route family for flow CRUD, execution, run history, published outputs, node results, and latest-node-output reads.",
+        preferredReadPath: "/api/v1/workbench/flows"
+      })
+    );
+  });
+
   it("publishes high-level interaction rules for review shortcuts and write-model selection", async () => {
     const onboarding = await loadOnboardingPayload();
 
@@ -247,7 +384,13 @@ describe("forge onboarding contract", () => {
       onboarding.connectionGuides?.openclaw?.verifyCommands ?? []
     ).toEqual(
       expect.arrayContaining([
-        "openclaw plugins install ./projects/forge/openclaw-plugin"
+        "openclaw plugins install ./projects/forge/openclaw-plugin",
+        "openclaw plugins info forge-openclaw-plugin"
+      ])
+    );
+    expect(onboarding.connectionGuides?.openclaw?.configNotes ?? []).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/plugins\.load\.paths/i)
       ])
     );
   });

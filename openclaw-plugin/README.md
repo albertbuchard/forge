@@ -249,6 +249,12 @@ openclaw gateway restart
 openclaw forge health
 ```
 
+If your current OpenClaw build blocks that repo-local install because of the package
+scanner, keep the repo folder on `plugins.load.paths`, make sure
+`openclaw plugins info forge-openclaw-plugin` still points at the local Forge source
+path, then restart the gateway and verify health. That fallback still keeps OpenClaw
+on the local code folder instead of switching to the published package.
+
 Equivalent config:
 
 ```json5

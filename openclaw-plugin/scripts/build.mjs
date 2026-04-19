@@ -145,6 +145,31 @@ function rewriteRelativeJsSpecifiers(source) {
     );
 }
 
+function resolveAliasJsSpecifier(filePath, specifier) {
+  if (!specifier.startsWith("@/")) {
+    return specifier;
+  }
+
+  const serverSrcRoot = path.join(pluginDistDir, "server", "src");
+  const targetPath = path.join(serverSrcRoot, specifier.slice(2));
+  const relativePath = path.relative(
+    path.dirname(filePath),
+    path.extname(targetPath) ? targetPath : `${targetPath}.js`
+  );
+  const normalized = relativePath.split(path.sep).join("/");
+  return normalized.startsWith(".") ? normalized : `./${normalized}`;
+}
+
+function rewriteAliasJsSpecifiers(filePath, source) {
+  return source
+    .replace(/((?:import|export)\s[^"'\n]*?\sfrom\s+["'])(@\/[^"']+)(["'])/g, (_match, prefix, specifier, suffix) =>
+      `${prefix}${resolveAliasJsSpecifier(filePath, specifier)}${suffix}`
+    )
+    .replace(/(import\s*\(\s*["'])(@\/[^"']+)(["']\s*\))/g, (_match, prefix, specifier, suffix) =>
+      `${prefix}${resolveAliasJsSpecifier(filePath, specifier)}${suffix}`
+    );
+}
+
 async function patchCompiledJsSpecifiers(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
   for (const entry of entries) {
@@ -158,7 +183,10 @@ async function patchCompiledJsSpecifiers(directory) {
     }
 
     const source = await readFile(fullPath, "utf8");
-    const rewritten = rewriteRelativeJsSpecifiers(source);
+    const rewritten = rewriteAliasJsSpecifiers(
+      fullPath,
+      rewriteRelativeJsSpecifiers(source)
+    );
     if (rewritten !== source) {
       await writeFile(fullPath, rewritten, "utf8");
     }

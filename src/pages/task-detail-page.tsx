@@ -1849,7 +1849,11 @@ export function TaskDetailPage() {
         editingTask={payload.task}
         defaultUserId={payload.task.userId ?? defaultUserId}
         onRefreshEntities={shell.refresh}
+        currentCreditedSeconds={payload.task.time.totalCreditedSeconds}
         onOpenChange={setDialogOpen}
+        onAdjustTrackedTime={async (input) => {
+          await workAdjustmentMutation.mutateAsync(input);
+        }}
         onSubmit={async (input, taskId) => {
           if (!taskId) {
             return;

@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { buildSidebarMetrics } from "@/components/shell/app-shell";
+import {
+  buildSidebarMetrics,
+  buildStartTaskNowInput,
+  sanitizeSelectedUserIds
+} from "@/components/shell/app-shell";
 import type { ForgeSnapshot } from "@/lib/types";
 
 function createSnapshot(): ForgeSnapshot {
@@ -187,6 +191,46 @@ describe("buildSidebarMetrics", () => {
       label: "Instant AP/h",
       compactValue: "1.7",
       expandedValue: "1.7 AP/h"
+    });
+  });
+});
+
+describe("sanitizeSelectedUserIds", () => {
+  it("drops stale persisted user filters that no longer exist in the snapshot", () => {
+    expect(
+      sanitizeSelectedUserIds(
+        ["user_missing", "user_operator"],
+        [
+          {
+            id: "user_operator",
+            kind: "human",
+            handle: "albert",
+            displayName: "Albert",
+            description: "",
+            accentColor: "#60a5fa",
+            createdAt: "2026-04-10T08:00:00.000Z",
+            updatedAt: "2026-04-10T08:00:00.000Z"
+          }
+        ]
+      )
+    ).toEqual(["user_operator"]);
+  });
+});
+
+describe("buildStartTaskNowInput", () => {
+  it("starts quick-launch work in unlimited mode unless a planned timer is requested", () => {
+    expect(buildStartTaskNowInput("Albert")).toMatchObject({
+      actor: "Albert",
+      timerMode: "unlimited",
+      plannedDurationSeconds: null,
+      leaseTtlSeconds: 1800
+    });
+    expect(
+      buildStartTaskNowInput("Albert", { timerMode: "planned" })
+    ).toMatchObject({
+      actor: "Albert",
+      timerMode: "planned",
+      plannedDurationSeconds: 1200
     });
   });
 });

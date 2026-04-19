@@ -416,6 +416,15 @@ Use this when the user is updating an existing record rather than creating a new
 If the current title or shape may no longer fit, offer one revised formulation yourself
 before asking the user to rewrite it from scratch.
 
+## Update-first openers
+
+Use these when the user is correcting or revising something that already exists.
+
+- "What feels different enough now that this record needs to change?"
+- "What still feels right and should stay intact while we update it?"
+- "If this is really one correction rather than a full rethink, what is the exact part you want changed?"
+- "I can stay narrow here. What is the one thing that no longer fits?"
+
 ## Goal
 
 Aim: clarify the direction and why it matters, not just produce a title.

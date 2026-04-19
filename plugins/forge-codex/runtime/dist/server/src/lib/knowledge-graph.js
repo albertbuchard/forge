@@ -1,5 +1,5 @@
-import { getEntityVisual, isEntityKind } from "@/lib/entity-visuals";
-import { KNOWLEDGE_GRAPH_HIERARCHY_LANES, KNOWLEDGE_GRAPH_HIERARCHY_ORDER, KNOWLEDGE_GRAPH_RELATION_FAMILY_LABELS, KNOWLEDGE_GRAPH_RELATION_LABELS, buildKnowledgeGraphNodeId } from "@/lib/knowledge-graph-types";
+import { getEntityVisual, isEntityKind } from "./entity-visuals.js";
+import { KNOWLEDGE_GRAPH_HIERARCHY_LANES, KNOWLEDGE_GRAPH_HIERARCHY_ORDER, KNOWLEDGE_GRAPH_RELATION_FAMILY_LABELS, KNOWLEDGE_GRAPH_RELATION_LABELS, buildKnowledgeGraphNodeId } from "./knowledge-graph-types.js";
 export function getKnowledgeGraphNodeVisual(node) {
     const kind = isEntityKind(node.entityKind) ? node.entityKind : "note";
     return getEntityVisual(kind);
