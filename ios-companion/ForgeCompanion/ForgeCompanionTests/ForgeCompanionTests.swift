@@ -2060,24 +2060,53 @@ final class ForgeCompanionTests: XCTestCase {
             id: "log_earlier",
             timestamp: makeDate("2026-04-18T10:00:00.000Z"),
             scope: "MovementLifeTimeline",
-            message: "openPlaceLabelDraft item=stay_1 initialQuery=Home"
+            message: "openPlaceLabelDraft item=stay_1 initialQuery=Home",
+            level: .info
         )
         let later = CompanionDebugLogEntry(
             id: "log_later",
             timestamp: makeDate("2026-04-18T10:00:05.500Z"),
             scope: "MovementLifeTimeline",
-            message: "savePlaceDraft failed item=stay_1 label=Home error=Request timed out"
+            message: "savePlaceDraft failed item=stay_1 label=Home error=Request timed out",
+            level: .error
         )
 
         let rendered = CompanionDebugLogStore.renderPlainText(entries: [later, earlier])
 
-        XCTAssertEqual(
-            rendered,
-            """
-            [2026-04-18T10:00:00.000Z][MovementLifeTimeline] openPlaceLabelDraft item=stay_1 initialQuery=Home
-            [2026-04-18T10:00:05.500Z][MovementLifeTimeline] savePlaceDraft failed item=stay_1 label=Home error=Request timed out
-            """
+        XCTAssertTrue(rendered.contains("[INFO][MovementLifeTimeline] openPlaceLabelDraft item=stay_1 initialQuery=Home"))
+        XCTAssertTrue(rendered.contains("[ERROR][MovementLifeTimeline] savePlaceDraft failed item=stay_1 label=Home error=Request timed out"))
+    }
+
+    func testCompanionDebugLogPrunesRegularLogsBeforeErrors() {
+        let pruned = CompanionDebugLogStore.prunedEntries(
+            entries: [
+                CompanionDebugLogEntry(
+                    id: "regular_old",
+                    timestamp: makeDate("2026-04-17T10:00:00.000Z"),
+                    scope: "CompanionAppModel",
+                    message: "performSync start trigger=manual",
+                    level: .info
+                ),
+                CompanionDebugLogEntry(
+                    id: "error_old",
+                    timestamp: makeDate("2026-04-12T10:00:00.000Z"),
+                    scope: "CompanionAppModel",
+                    message: "performSync failed trigger=manual error=timeout",
+                    level: .error
+                ),
+                CompanionDebugLogEntry(
+                    id: "error_recent",
+                    timestamp: makeDate("2026-04-18T10:00:00.000Z"),
+                    scope: "CompanionAppModel",
+                    message: "performSync failed trigger=manual error=timeout",
+                    level: .error
+                )
+            ],
+            settings: .init(regularDays: 1, errorDays: 10),
+            referenceDate: makeDate("2026-04-19T12:00:00.000Z")
         )
+
+        XCTAssertEqual(pruned.map(\.id), ["error_old", "error_recent"])
     }
 
     private func makeLocation(

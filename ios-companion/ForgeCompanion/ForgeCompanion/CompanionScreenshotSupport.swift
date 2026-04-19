@@ -379,7 +379,8 @@ enum CompanionScreenshotFixtures {
             store.record(
                 scope: scope,
                 message: message,
-                timestamp: referenceDate.addingTimeInterval(offset)
+                timestamp: referenceDate.addingTimeInterval(offset),
+                level: .info
             )
         }
     }

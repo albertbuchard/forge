@@ -1,5 +1,5 @@
-Forge Companion 1.0.12 fixes iPhone-created movement places so unlabeled stays
-can be turned into saved locations without the API rejecting an empty
-externalUid. This release also keeps the expanded on-device diagnostics surface
-so failed labeling flows remain copyable from Diagnostics > Logs when anything
-else goes wrong.
+Forge Companion 1.0.13 fixes stay relabeling across iPhone, web, and backend so
+selecting an existing saved location updates the canonical stay, warns before
+linking places more than 100 meters away, and teaches saved places from each
+confirmed coordinate. Diagnostics logs now support copy, clear, retention
+settings, and per-level filtering directly in the iPhone app.

@@ -37,6 +37,7 @@ import {
   getMovementTimeline,
   invalidateAutomaticMovementBox,
   listMovementPlaces,
+  patchMovementStay,
   preflightMovementUserBox,
   patchMovementUserBox
 } from "@/lib/api";
@@ -239,9 +240,7 @@ function distanceBetweenCoordinates(
 }
 
 function buildMovementPlaceSearchText(place: MovementKnownPlace) {
-  return normalizeSearchText(
-    [place.label, ...place.aliases, ...place.categoryTags].join(" ")
-  );
+  return normalizeSearchText([place.label, ...place.aliases].join(" "));
 }
 
 function hasRecordedTrip(
@@ -1377,7 +1376,7 @@ function MovementStayPlaceLabelDialog({
   segment: MovementTimelineSegment | null;
   places: MovementKnownPlace[];
   loading: boolean;
-  onSelectPlace: (place: MovementKnownPlace) => Promise<void>;
+  onSelectPlace: (place: MovementKnownPlace) => Promise<boolean>;
   onCreatePlace: (segment: MovementTimelineSegment, labelHint: string) => void;
 }) {
   const seed = segment ? movementPlaceSeedFromSegment(segment) : null;
@@ -1449,7 +1448,7 @@ function MovementStayPlaceLabelDialog({
                 Label stay location
               </Dialog.Title>
               <Dialog.Description className="mt-2 text-sm leading-6 text-white/62">
-                Search saved places first. If this stay is new, create a location from the
+                Search saved locations by name first. If this stay is new, create a location from the
                 stay center with latitude and longitude already filled in.
               </Dialog.Description>
             </div>
@@ -1497,7 +1496,7 @@ function MovementStayPlaceLabelDialog({
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search known places or type a new label"
+              placeholder="Type a location name or create a new one"
             />
             <div className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
               <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
@@ -1521,7 +1520,13 @@ function MovementStayPlaceLabelDialog({
                       <button
                         key={place.id}
                         type="button"
-                        onClick={() => void onSelectPlace(place).then(() => onOpenChange(false))}
+                        onClick={() =>
+                          void onSelectPlace(place).then((assigned) => {
+                            if (assigned) {
+                              onOpenChange(false);
+                            }
+                          })
+                        }
                         className="rounded-[18px] border border-white/8 bg-black/10 px-4 py-3 text-left transition hover:border-[var(--primary)]/40 hover:bg-white/[0.05]"
                       >
                         <div className="flex flex-wrap items-center gap-2">
@@ -2305,6 +2310,52 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
     );
   };
 
+  const persistRecordedStayPlaceLink = async (
+    segment: Extract<MovementTimelineSegment, { kind: "stay" }> & {
+      stay: NonNullable<Extract<MovementTimelineSegment, { kind: "stay" }>["stay"]>;
+    },
+    place: Pick<MovementKnownPlace, "externalUid" | "label">
+  ) => {
+    if (segment.rawStayIds.length === 0) {
+      throw new Error("This stay has no raw stay ids to relabel.");
+    }
+    await Promise.all(
+      segment.rawStayIds.map((stayId) =>
+        patchMovementStay(stayId, {
+          placeExternalUid: place.externalUid,
+          placeLabel: place.label
+        })
+      )
+    );
+  };
+
+  const confirmDistantPlaceSelection = (
+    segment: MovementTimelineSegment,
+    place: MovementKnownPlace
+  ) => {
+    const seed = movementPlaceSeedFromSegment(segment);
+    if (!seed) {
+      return true;
+    }
+    const distanceMeters = distanceBetweenCoordinates(
+      seed.latitude,
+      seed.longitude,
+      place.latitude,
+      place.longitude
+    );
+    if (distanceMeters <= 100) {
+      return true;
+    }
+    if (typeof window === "undefined" || typeof window.confirm !== "function") {
+      return true;
+    }
+    return window.confirm(
+      `"${place.label}" is ${distanceLabel(
+        distanceMeters
+      )} away from this stay's recorded center. Link it anyway?`
+    );
+  };
+
   const placeMutation = useMutation({
     mutationFn: async (input: {
       segment: MovementTimelineSegment | null;
@@ -2318,7 +2369,7 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
       const { segment, ...placeInput } = input;
       const response = await createMovementPlace(placeInput, userIds);
       if (segment && hasRecordedStay(segment)) {
-        await persistPlaceLabelOverride(segment, response.place);
+        await persistRecordedStayPlaceLink(segment, response.place);
       }
       return response;
     },
@@ -2331,12 +2382,24 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
       place: MovementKnownPlace;
     }) => {
       const { segment, place } = input;
-      if (!hasRecordedStay(segment)) {
-        throw new Error("Only recorded stays can be linked to a saved place.");
+      if (!confirmDistantPlaceSelection(segment, place)) {
+        return { assigned: false };
+      }
+      if (hasRecordedStay(segment)) {
+        await persistRecordedStayPlaceLink(segment, place);
+        return { assigned: true };
+      }
+      if (segment.kind !== "stay") {
+        throw new Error("Only stays can be linked to a saved place.");
       }
       await persistPlaceLabelOverride(segment, place);
+      return { assigned: true };
     },
-    onSuccess: invalidateMovementProjectionQueries
+    onSuccess: async (result) => {
+      if (result.assigned) {
+        await invalidateMovementProjectionQueries();
+      }
+    }
   });
 
   const deleteMutation = useMutation({
@@ -2769,12 +2832,13 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
         loading={movementPlacesQuery.isFetching}
         onSelectPlace={async (place) => {
           if (!placeLabelSegment) {
-            return;
+            return false;
           }
-          await assignPlaceMutation.mutateAsync({
+          const result = await assignPlaceMutation.mutateAsync({
             segment: placeLabelSegment,
             place
           });
+          return result.assigned;
         }}
         onCreatePlace={(segment, labelHint) => {
           openPlaceCreateFromLabelDialog(segment, labelHint);

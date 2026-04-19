@@ -3608,6 +3608,41 @@ test("movement sync stores places, stays, trips, and serves the movement workspa
     assert.equal(createdMobilePlace.label, "Champel Station");
     assert.ok(createdMobilePlace.externalUid.length > 0);
 
+    const homeStay = getDatabase()
+      .prepare(
+        `SELECT id
+         FROM movement_stays
+         WHERE external_uid = 'stay_home_morning'`
+      )
+      .get() as { id: string };
+    const mobileStayPatchResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/mobile/movement/stays/${homeStay.id}`,
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        patch: {
+          placeExternalUid: createdMobilePlace.externalUid,
+          placeLabel: createdMobilePlace.label
+        }
+      }
+    });
+    assert.equal(mobileStayPatchResponse.statusCode, 200);
+    const patchedMobileStay = mobileStayPatchResponse.json() as {
+      place: {
+        externalUid: string;
+        label: string;
+        metadata: Record<string, string>;
+        latitude: number;
+        longitude: number;
+      } | null;
+    };
+    assert.equal(patchedMobileStay.place?.externalUid, createdMobilePlace.externalUid);
+    assert.equal(patchedMobileStay.place?.label, "Champel Station");
+    assert.equal(patchedMobileStay.place?.metadata.distributionSampleCount, "2");
+    assert.ok((patchedMobileStay.place?.latitude ?? 0) > 46.19);
+    assert.ok((patchedMobileStay.place?.longitude ?? 0) > 6.15);
+
     const secondObservationCalendarResponse = await app.inject({
       method: "GET",
       url:

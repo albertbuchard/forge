@@ -1596,6 +1596,103 @@ function mapMovementPlace(row: MovementPlaceRow) {
   };
 }
 
+type MovementPlaceLearningState = {
+  sampleCount: number;
+  averageLatitude: number;
+  averageLongitude: number;
+  maxDistanceMeters: number;
+};
+
+function readMovementPlaceLearningState(
+  row: Pick<MovementPlaceRow, "latitude" | "longitude" | "metadata_json">
+): MovementPlaceLearningState {
+  const metadata = safeJsonParse<Record<string, unknown>>(row.metadata_json, {});
+  const sampleCount = Number(metadata.distributionSampleCount);
+  const averageLatitude = Number(metadata.distributionAverageLatitude);
+  const averageLongitude = Number(metadata.distributionAverageLongitude);
+  const maxDistanceMeters = Number(metadata.distributionMaxDistanceMeters);
+  return {
+    sampleCount:
+      Number.isFinite(sampleCount) && sampleCount >= 1 ? Math.floor(sampleCount) : 1,
+    averageLatitude:
+      Number.isFinite(averageLatitude) ? averageLatitude : row.latitude,
+    averageLongitude:
+      Number.isFinite(averageLongitude) ? averageLongitude : row.longitude,
+    maxDistanceMeters:
+      Number.isFinite(maxDistanceMeters) && maxDistanceMeters >= 0
+        ? maxDistanceMeters
+        : 0
+  };
+}
+
+function learnMovementPlaceObservation(input: {
+  placeId: string;
+  observation: { latitude: number; longitude: number };
+}) {
+  const existing = getDatabase()
+    .prepare(
+      `SELECT *
+       FROM movement_places
+       WHERE id = ?`
+    )
+    .get(input.placeId) as MovementPlaceRow | undefined;
+  if (!existing) {
+    return null;
+  }
+  const metadata = safeJsonParse<Record<string, unknown>>(existing.metadata_json, {});
+  const learning = readMovementPlaceLearningState(existing);
+  const nextSampleCount = learning.sampleCount + 1;
+  const nextAverageLatitude =
+    (learning.averageLatitude * learning.sampleCount + input.observation.latitude) /
+    nextSampleCount;
+  const nextAverageLongitude =
+    (learning.averageLongitude * learning.sampleCount + input.observation.longitude) /
+    nextSampleCount;
+  const observationDistance = haversineDistanceMeters(
+    { latitude: nextAverageLatitude, longitude: nextAverageLongitude },
+    input.observation
+  );
+  const nextMaxDistanceMeters = Math.max(
+    learning.maxDistanceMeters,
+    observationDistance
+  );
+  const nextRadiusMeters = Math.min(
+    2000,
+    Math.max(existing.radius_meters, Math.ceil(nextMaxDistanceMeters + 25))
+  );
+  const nextMetadata = {
+    ...metadata,
+    distributionSampleCount: String(nextSampleCount),
+    distributionAverageLatitude: nextAverageLatitude.toFixed(6),
+    distributionAverageLongitude: nextAverageLongitude.toFixed(6),
+    distributionMaxDistanceMeters: nextMaxDistanceMeters.toFixed(1),
+    distributionLastObservedAt: nowIso()
+  };
+  getDatabase()
+    .prepare(
+      `UPDATE movement_places
+       SET latitude = ?,
+           longitude = ?,
+           radius_meters = ?,
+           metadata_json = ?,
+           updated_at = ?
+       WHERE id = ?`
+    )
+    .run(
+      nextAverageLatitude,
+      nextAverageLongitude,
+      nextRadiusMeters,
+      JSON.stringify(nextMetadata),
+      nowIso(),
+      input.placeId
+    );
+  return mapMovementPlace(
+    getDatabase()
+      .prepare(`SELECT * FROM movement_places WHERE id = ?`)
+      .get(input.placeId) as MovementPlaceRow
+  );
+}
+
 function mapMovementStay(row: MovementStayRow, placesById: Map<string, ReturnType<typeof mapMovementPlace>>) {
   const note = row.published_note_id ? getNoteById(row.published_note_id) : null;
   const metrics = safeJsonParse<Record<string, unknown>>(row.metrics_json, {});
@@ -5342,6 +5439,9 @@ export function updateMovementStay(
     ...safeJsonParse<Record<string, unknown>>(existing.metadata_json, {}),
     ...(parsed.metadata ?? {})
   };
+  const shouldLearnPlaceObservation =
+    resolvedPlace !== null &&
+    (hasOwn(parsed, "placeId") || hasOwn(parsed, "placeExternalUid"));
   getDatabase()
     .prepare(
       `UPDATE movement_stays
@@ -5377,6 +5477,17 @@ export function updateMovementStay(
       stayId
     );
   reconcileMovementOverlapValidation(existing.user_id);
+  let learnedPlace = resolvedPlace ? mapMovementPlace(resolvedPlace) : null;
+  if (resolvedPlace && shouldLearnPlaceObservation) {
+    learnedPlace =
+      learnMovementPlaceObservation({
+        placeId: resolvedPlace.id,
+        observation: {
+          latitude: parsed.centerLatitude ?? existing.center_latitude,
+          longitude: parsed.centerLongitude ?? existing.center_longitude
+        }
+      }) ?? learnedPlace;
+  }
   const places = listMovementPlaceRows([existing.user_id]).map(mapMovementPlace);
   const placesById = new Map(places.map((place) => [place.id, place] as const));
   const updated = mapMovementStay(
@@ -5402,7 +5513,11 @@ export function updateMovementStay(
       durationSeconds: updated.durationSeconds
     }
   });
-  return updated;
+  return {
+    ...updated,
+    place:
+      learnedPlace && updated.placeId === learnedPlace.id ? learnedPlace : updated.place
+  };
 }
 
 export function updateMovementTrip(

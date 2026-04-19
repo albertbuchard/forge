@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -140,6 +140,7 @@ function renderTimeline(ui: ReactNode) {
 
 describe("MovementLifeTimeline", () => {
   beforeEach(() => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
     const fixtureSegments = loadSharedMovementFixture(
       "user_defined_missing_override"
     ).projectedTimeline;
@@ -489,19 +490,187 @@ describe("MovementLifeTimeline", () => {
     screen.getByRole("button", { name: /Lausanne Home/i }).click();
 
     await waitFor(() => {
-      expect(createMovementUserBoxMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          kind: "stay",
-          title: "Home",
-          placeLabel: "Lausanne Home",
-          startedAt: "2026-04-06T08:00:00.000Z",
-          endedAt: "2026-04-06T09:00:00.000Z",
-          metadata: { createdFrom: "movement-life-timeline-place-label" }
-        }),
-        ["user_operator"]
+      expect(patchMovementStayMock).toHaveBeenCalledWith("stay_home", {
+        placeExternalUid: "place_home",
+        placeLabel: "Lausanne Home"
+      });
+    });
+    expect(createMovementUserBoxMock).not.toHaveBeenCalled();
+  });
+
+  it("warns before linking a saved place that is more than 100 meters away", async () => {
+    vi.mocked(window.confirm).mockReturnValueOnce(false);
+    getMovementTimelineMock.mockResolvedValueOnce({
+      movement: {
+        segments: [
+          createSegment({
+            id: "segment_far_stay",
+            boxId: "segment_far_stay",
+            title: "Office",
+            placeLabel: null,
+            rawStayIds: ["stay_far"],
+            stay: {
+              id: "stay_far",
+              externalUid: "stay_far",
+              pairingSessionId: null,
+              userId: "user_operator",
+              placeId: null,
+              label: "Office",
+              status: "completed",
+              classification: "stationary",
+              startedAt: "2026-04-06T08:00:00.000Z",
+              endedAt: "2026-04-06T09:00:00.000Z",
+              durationSeconds: 3600,
+              centerLatitude: 46.5191,
+              centerLongitude: 6.6323,
+              radiusMeters: 120,
+              sampleCount: 3,
+              weather: {},
+              metrics: {},
+              metadata: {},
+              publishedNoteId: null,
+              createdAt: "2026-04-06T09:00:00.000Z",
+              updatedAt: "2026-04-06T09:00:00.000Z",
+              place: null,
+              note: null,
+              estimatedScreenTimeSeconds: 0,
+              pickupCount: 0,
+              notificationCount: 0,
+              topApps: [],
+              topCategories: []
+            }
+          })
+        ],
+        nextCursor: null,
+        hasMore: false,
+        invalidSegmentCount: 0
+      }
+    });
+    listMovementPlacesMock.mockResolvedValueOnce({
+      places: [
+        {
+          id: "place_far",
+          externalUid: "place_far",
+          userId: "user_operator",
+          label: "Distant Office",
+          aliases: ["HQ"],
+          latitude: 46.5305,
+          longitude: 6.645,
+          radiusMeters: 80,
+          categoryTags: ["workplace"],
+          visibility: "shared",
+          wikiNoteId: null,
+          linkedEntities: [],
+          linkedPeople: [],
+          metadata: {},
+          source: "test",
+          createdAt: "2026-04-06T09:00:00.000Z",
+          updatedAt: "2026-04-06T09:00:00.000Z",
+          wikiNote: null
+        }
+      ]
+    });
+
+    renderTimeline(<MovementLifeTimeline userIds={["user_operator"]} />);
+
+    expect(await screen.findByRole("button", { name: /Label location/i })).toBeInTheDocument();
+    screen.getByRole("button", { name: /Label location/i }).click();
+    (await screen.findByRole("button", { name: /Distant Office/i })).click();
+
+    await waitFor(() => {
+      expect(window.confirm).toHaveBeenCalledWith(
+        expect.stringContaining('"Distant Office" is')
       );
     });
     expect(patchMovementStayMock).not.toHaveBeenCalled();
+  });
+
+  it("filters saved locations by place name instead of category tag text", async () => {
+    getMovementTimelineMock.mockResolvedValueOnce({
+      movement: {
+        segments: [
+          createSegment({
+            id: "segment_filter_stay",
+            boxId: "segment_filter_stay",
+            title: "Library",
+            placeLabel: null,
+            rawStayIds: ["stay_filter"],
+            stay: {
+              id: "stay_filter",
+              externalUid: "stay_filter",
+              pairingSessionId: null,
+              userId: "user_operator",
+              placeId: null,
+              label: "Library",
+              status: "completed",
+              classification: "stationary",
+              startedAt: "2026-04-06T08:00:00.000Z",
+              endedAt: "2026-04-06T09:00:00.000Z",
+              durationSeconds: 3600,
+              centerLatitude: 46.5191,
+              centerLongitude: 6.6323,
+              radiusMeters: 120,
+              sampleCount: 3,
+              weather: {},
+              metrics: {},
+              metadata: {},
+              publishedNoteId: null,
+              createdAt: "2026-04-06T09:00:00.000Z",
+              updatedAt: "2026-04-06T09:00:00.000Z",
+              place: null,
+              note: null,
+              estimatedScreenTimeSeconds: 0,
+              pickupCount: 0,
+              notificationCount: 0,
+              topApps: [],
+              topCategories: []
+            }
+          })
+        ],
+        nextCursor: null,
+        hasMore: false,
+        invalidSegmentCount: 0
+      }
+    });
+    listMovementPlacesMock.mockResolvedValueOnce({
+      places: [
+        {
+          id: "place_library",
+          externalUid: "place_library",
+          userId: "user_operator",
+          label: "City Library",
+          aliases: ["Library"],
+          latitude: 46.5192,
+          longitude: 6.6322,
+          radiusMeters: 80,
+          categoryTags: ["workplace"],
+          visibility: "shared",
+          wikiNoteId: null,
+          linkedEntities: [],
+          linkedPeople: [],
+          metadata: {},
+          source: "test",
+          createdAt: "2026-04-06T09:00:00.000Z",
+          updatedAt: "2026-04-06T09:00:00.000Z",
+          wikiNote: null
+        }
+      ]
+    });
+
+    renderTimeline(<MovementLifeTimeline userIds={["user_operator"]} />);
+
+    expect(await screen.findByRole("button", { name: /Label location/i })).toBeInTheDocument();
+    screen.getByRole("button", { name: /Label location/i }).click();
+    expect(await screen.findByText(/Label stay location/i)).toBeInTheDocument();
+    const input = await screen.findByPlaceholderText(/Type a location name or create a new one/i);
+    fireEvent.change(input, { target: { value: "workplace" } });
+
+    await waitFor(() => {
+      expect(screen.getByText(/No saved place matches this stay yet\./i)).toBeInTheDocument();
+    });
+
+    fireEvent.change(input, { target: { value: "library" } });
+    expect(await screen.findByRole("button", { name: /City Library/i })).toBeInTheDocument();
   });
 
   it("opens a seeded new-place form from the stay label dialog", async () => {
@@ -578,17 +747,12 @@ describe("MovementLifeTimeline", () => {
       );
     });
     await waitFor(() => {
-      expect(createMovementUserBoxMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          kind: "stay",
-          title: "Home",
-          placeLabel: "Home",
-          metadata: { createdFrom: "movement-life-timeline-place-label" }
-        }),
-        ["user_operator"]
-      );
+      expect(patchMovementStayMock).toHaveBeenCalledWith("stay_home", {
+        placeExternalUid: "place_home",
+        placeLabel: "Home"
+      });
     });
-    expect(patchMovementStayMock).not.toHaveBeenCalled();
+    expect(createMovementUserBoxMock).not.toHaveBeenCalled();
   });
 
   it("shows the known location name directly in the stay box", async () => {

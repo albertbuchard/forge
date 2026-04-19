@@ -187,6 +187,10 @@ struct ForgeSyncClient {
         let patch: Patch
     }
 
+    private struct MovementStayPatchEnvelope: Decodable {
+        let place: ForgeMovementTimelinePlace?
+    }
+
     private struct MovementUserBoxPreflightEnvelope: Decodable {
         let preflight: ForgeMovementUserBoxPreflight
     }
@@ -578,12 +582,12 @@ struct ForgeSyncClient {
         placeExternalUid: String,
         placeLabel: String,
         pairing: PairingPayload
-    ) async throws {
+    ) async throws -> ForgeMovementTimelinePlace? {
         companionDebugLog(
             "ForgeSyncClient",
             "patchMovementStay start stay=\(stayId)"
         )
-        let _: EmptyEnvelope = try await sendRequest(
+        let envelope: MovementStayPatchEnvelope = try await sendRequest(
             path: "/mobile/movement/stays/\(stayId)",
             apiBaseUrl: pairing.apiBaseUrl,
             method: "PATCH",
@@ -600,6 +604,7 @@ struct ForgeSyncClient {
             "ForgeSyncClient",
             "patchMovementStay success stay=\(stayId)"
         )
+        return envelope.place
     }
 
     func submitWatchHabitCheckIn(

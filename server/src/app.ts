@@ -635,6 +635,7 @@ import {
   movementAutomaticBoxInvalidateSchema,
   movementMobileBootstrapSchema,
   movementMobilePlaceMutationSchema,
+  movementMobileStayPatchSchema,
   movementMobileUserBoxCreateSchema,
   movementMobileUserBoxPreflightSchema,
   movementMobileUserBoxPatchSchema,
@@ -7362,10 +7363,25 @@ export async function buildServer(
     }
   );
   app.patch("/api/v1/mobile/movement/stays/:id", async (request, reply) => {
-    reply.code(409);
+    const parsed = movementMobileStayPatchSchema.parse(request.body ?? {});
+    const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+    const { id } = request.params as { id: string };
+    const stay = updateMovementStay(
+      id,
+      parsed.patch,
+      {
+        actor: "Forge Companion",
+        source: "system"
+      },
+      { userId: pairing.user_id }
+    );
+    if (!stay) {
+      reply.code(404);
+      return { error: "Movement stay not found" };
+    }
     return {
-      error:
-        "Recorded stays are immutable in product UI. Create or edit a user-defined movement box instead."
+      stay,
+      place: stay.place
     };
   });
   app.patch("/api/v1/mobile/movement/trips/:id", async (request, reply) => {

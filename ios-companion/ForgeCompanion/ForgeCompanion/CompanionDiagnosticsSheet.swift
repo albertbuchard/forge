@@ -9,6 +9,7 @@ struct CompanionDiagnosticsSheet: View {
 
     @State private var selectedTab: DiagnosticsTab = .overview
     @State private var copyStatusMessage: String?
+    @State private var selectedLogLevels = Set(CompanionDebugLogLevel.allCases)
 
     var body: some View {
         NavigationStack {
@@ -54,13 +55,17 @@ struct CompanionDiagnosticsSheet: View {
                         Button("Clear") {
                             logStore.clear()
                             copyStatusMessage = "Cleared local diagnostic logs."
-                            companionDebugLog("CompanionDiagnostics", "cleared diagnostic logs")
+                            companionDebugLog("CompanionDiagnostics", level: .warn, "cleared diagnostic logs")
                         }
                         .foregroundStyle(CompanionStyle.accentStrong)
                     }
                 }
             }
         }
+    }
+
+    private var filteredLogEntries: [CompanionDebugLogEntry] {
+        logStore.entries.filter { selectedLogLevels.contains($0.level) }
     }
 
     private var overviewContent: some View {
@@ -248,8 +253,61 @@ struct CompanionDiagnosticsSheet: View {
             CompanionSectionCard {
                 VStack(alignment: .leading, spacing: 10) {
                     sectionTitle("General logs")
-                    overviewMetricRow("Entries", "\(logStore.entries.count)")
-                    mutedBody("These logs are now persisted on-device for release and TestFlight builds, so you can copy them out of Settings without Xcode.")
+                    overviewMetricRow("Visible", "\(filteredLogEntries.count)")
+                    overviewMetricRow("Stored", "\(logStore.entries.count)")
+                    mutedBody("Logs are persisted on-device for release and TestFlight builds. Normal logs auto-expire after \(logStore.retentionSettings.regularDays) day(s) by default, and errors after \(logStore.retentionSettings.errorDays) day(s).")
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Message types")
+                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                            .foregroundStyle(CompanionStyle.textMuted)
+                        let columns = [
+                            GridItem(.adaptive(minimum: 74), spacing: 8)
+                        ]
+                        LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
+                            ForEach(CompanionDebugLogLevel.allCases) { level in
+                                let selected = selectedLogLevels.contains(level)
+                                Button {
+                                    toggleLogLevel(level)
+                                } label: {
+                                    Text(level.label)
+                                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                                        .foregroundStyle(selected ? CompanionStyle.textPrimary : CompanionStyle.textSecondary)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 8)
+                                        .background(
+                                            selected
+                                                ? CompanionStyle.accentStrong.opacity(0.24)
+                                                : Color.white.opacity(0.05),
+                                            in: Capsule()
+                                        )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Retention")
+                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                            .foregroundStyle(CompanionStyle.textMuted)
+                        Stepper(
+                            value: Binding(
+                                get: { logStore.retentionSettings.regularDays },
+                                set: { logStore.updateRetentionSettings(regularDays: $0, errorDays: logStore.retentionSettings.errorDays) }
+                            ),
+                            in: 1...30
+                        ) {
+                            overviewMetricRow("Info/debug/warn days", "\(logStore.retentionSettings.regularDays)")
+                        }
+                        Stepper(
+                            value: Binding(
+                                get: { logStore.retentionSettings.errorDays },
+                                set: { logStore.updateRetentionSettings(regularDays: logStore.retentionSettings.regularDays, errorDays: $0) }
+                            ),
+                            in: 1...90
+                        ) {
+                            overviewMetricRow("Error days", "\(logStore.retentionSettings.errorDays)")
+                        }
+                    }
                     Button {
                         copyLogsToPasteboard()
                     } label: {
@@ -266,18 +324,24 @@ struct CompanionDiagnosticsSheet: View {
                 }
             }
 
-            if logStore.entries.isEmpty {
+            if filteredLogEntries.isEmpty {
                 CompanionSectionCard {
-                    mutedBody("No debug logs captured yet.")
+                    mutedBody(logStore.entries.isEmpty ? "No debug logs captured yet." : "No logs match the selected message types.")
                 }
             } else {
-                ForEach(logStore.entries) { entry in
+                ForEach(filteredLogEntries) { entry in
                     CompanionSectionCard {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack(alignment: .top, spacing: 10) {
                                 Text(entry.scope)
                                     .font(.system(size: 12, weight: .bold, design: .rounded))
                                     .foregroundStyle(CompanionStyle.accentStrong)
+                                Text(entry.level.label)
+                                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                                    .foregroundStyle(logLevelColor(entry.level))
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.white.opacity(0.05), in: Capsule())
                                 Spacer(minLength: 8)
                                 Text(entry.formattedTimestamp)
                                     .font(.system(size: 11, weight: .medium, design: .rounded))
@@ -408,13 +472,38 @@ struct CompanionDiagnosticsSheet: View {
     }
 
     private func copyLogsToPasteboard() {
-        let renderedLogs = logStore.renderPlainText()
+        let renderedLogs = logStore.renderPlainText(entries: filteredLogEntries)
         UIPasteboard.general.string = renderedLogs
-        copyStatusMessage = "Copied \(logStore.entries.count) diagnostic log entr\(logStore.entries.count == 1 ? "y" : "ies")."
+        copyStatusMessage = "Copied \(filteredLogEntries.count) diagnostic log entr\(filteredLogEntries.count == 1 ? "y" : "ies")."
         companionDebugLog(
             "CompanionDiagnostics",
-            "copied diagnostic logs entries=\(logStore.entries.count)"
+            "copied diagnostic logs visibleEntries=\(filteredLogEntries.count) storedEntries=\(logStore.entries.count)"
         )
+    }
+
+    private func toggleLogLevel(_ level: CompanionDebugLogLevel) {
+        if selectedLogLevels.contains(level) {
+            if selectedLogLevels.count == 1 {
+                selectedLogLevels = Set(CompanionDebugLogLevel.allCases)
+            } else {
+                selectedLogLevels.remove(level)
+            }
+        } else {
+            selectedLogLevels.insert(level)
+        }
+    }
+
+    private func logLevelColor(_ level: CompanionDebugLogLevel) -> Color {
+        switch level {
+        case .debug:
+            return CompanionStyle.textMuted
+        case .info:
+            return CompanionStyle.accentStrong
+        case .warn:
+            return Color(red: 1, green: 0.75, blue: 0.35)
+        case .error:
+            return CompanionStyle.destructive
+        }
     }
 }
 

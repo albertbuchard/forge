@@ -215,6 +215,7 @@ private struct MovementLifeTimelineView: View {
     @State private var queuedEditorDraft: MovementTimelineEditorDraft?
     @State private var queuedPlaceLabelDraft: MovementTimelinePlaceLabelDraft?
     @State private var queuedPlaceDraft: MovementTimelinePlaceDraft?
+    @State private var pendingPlaceAssignmentWarning: MovementTimelinePlaceAssignmentWarning?
     @State private var scrolledToCurrent = false
     @State private var focusedVisibleId: String?
 
@@ -523,7 +524,7 @@ private struct MovementLifeTimelineView: View {
                 knownPlaces: rankedKnownPlaces(for: draft.item),
                 close: { placeLabelDraft = nil },
                 selectPlace: { place in
-                    await assignKnownPlace(place, to: draft.item)
+                    await selectKnownPlace(place, for: draft.item)
                 },
                 createNewPlace: { labelHint in
                     openPlaceDraft(for: draft.item, labelHint: labelHint)
@@ -543,6 +544,20 @@ private struct MovementLifeTimelineView: View {
             )
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
+        }
+        .alert(item: $pendingPlaceAssignmentWarning) { warning in
+            Alert(
+                title: Text("Link distant saved location?"),
+                message: Text(
+                    "\"\(warning.place.label)\" is \(warning.formattedDistance) away from this stay's recorded center. Link it anyway?"
+                ),
+                primaryButton: .default(Text("Link location")) {
+                    Task {
+                        await assignKnownPlace(warning.place, to: warning.item)
+                    }
+                },
+                secondaryButton: .cancel()
+            )
         }
     }
 
@@ -1155,7 +1170,7 @@ private struct MovementLifeTimelineView: View {
                     return true
                 }
                 let haystack = (
-                    [place.label] + place.aliases + place.categoryTags
+                    [place.label] + place.aliases
                 )
                     .joined(separator: " ")
                     .lowercased()
@@ -1190,49 +1205,93 @@ private struct MovementLifeTimelineView: View {
             }
     }
 
+    private func placeAssignmentDistanceMeters(
+        from item: MovementLifeTimelineItem,
+        to place: MovementSyncStore.StoredKnownPlace
+    ) -> Double? {
+        guard let coordinate = item.coordinate else {
+            return nil
+        }
+        return CLLocation(
+            latitude: coordinate.latitude,
+            longitude: coordinate.longitude
+        ).distance(
+            from: CLLocation(latitude: place.latitude, longitude: place.longitude)
+        )
+    }
+
+    @MainActor
+    private func selectKnownPlace(
+        _ place: MovementSyncStore.StoredKnownPlace,
+        for item: MovementLifeTimelineItem
+    ) async {
+        if let distanceMeters = placeAssignmentDistanceMeters(from: item, to: place),
+           distanceMeters > 100
+        {
+            companionDebugLog(
+                "MovementLifeTimeline",
+                level: .warn,
+                "place label select-known warning item=\(movementTimelineLogDescriptor(for: item)) place=\(knownPlaceLogDescriptor(place)) distanceMeters=\(Int(distanceMeters.rounded()))"
+            )
+            pendingPlaceAssignmentWarning = MovementTimelinePlaceAssignmentWarning(
+                item: item,
+                place: place,
+                distanceMeters: distanceMeters
+            )
+            return
+        }
+        await assignKnownPlace(place, to: item)
+    }
+
     @MainActor
     private func assignKnownPlace(
         _ place: MovementSyncStore.StoredKnownPlace,
         to item: MovementLifeTimelineItem
     ) async {
         do {
-            let operation = movementTimelinePlaceLabelOperation(for: item)
-            companionDebugLog(
-                "MovementLifeTimeline",
-                "assignKnownPlace start item=\(movementTimelineLogDescriptor(for: item)) place=\(knownPlaceLogDescriptor(place)) operation=\(movementTimelinePlaceLabelOperationLabel(operation))"
-            )
-            let payload = makePlaceLabelUserBoxPayload(
-                for: item,
-                placeLabel: place.label,
-                metadataSource: "companion-place-label"
-            )
-            switch operation {
-            case .patchUserBox(let boxId):
-                _ = try await performMovementOperation(
-                    reason: "life-timeline-assign-known-place-patch",
-                    reconnectMessage: "Reconnect to Forge before labeling stay locations."
-                ) { pairing in
-                    try await appModel.syncClient.patchMovementUserBox(
-                        boxId: boxId,
-                        patch: payload,
-                        pairing: pairing
-                    )
-                }
-            case .createUserBox:
-                _ = try await performMovementOperation(
-                    reason: "life-timeline-assign-known-place-create",
-                    reconnectMessage: "Reconnect to Forge before labeling stay locations."
-                ) { pairing in
-                    try await appModel.syncClient.createMovementUserBox(
-                        box: payload,
-                        pairing: pairing
-                    )
-                }
-            case .unsupported:
+            let linkedStayIds = item.rawStayIds.filter { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false }
+            guard linkedStayIds.isEmpty == false else {
                 throw NSError(
                     domain: "MovementLifeTimeline",
                     code: 9,
-                    userInfo: [NSLocalizedDescriptionKey: "This stay cannot be relabeled."]
+                    userInfo: [NSLocalizedDescriptionKey: "This stay cannot be linked to a saved location."]
+                )
+            }
+            companionDebugLog(
+                "MovementLifeTimeline",
+                "assignKnownPlace start item=\(movementTimelineLogDescriptor(for: item)) place=\(knownPlaceLogDescriptor(place)) linkedStayIds=\(linkedStayIds.joined(separator: "|"))"
+            )
+            var learnedPlace: ForgeMovementTimelinePlace?
+            for stayId in linkedStayIds {
+                let patchedPlace = try await performMovementOperation(
+                    reason: "life-timeline-assign-known-place",
+                    reconnectMessage: "Reconnect to Forge before labeling stay locations."
+                ) { pairing in
+                    try await appModel.syncClient.patchMovementStay(
+                        stayId: stayId,
+                        placeExternalUid: place.externalUid,
+                        placeLabel: place.label,
+                        pairing: pairing
+                    )
+                }
+                learnedPlace = patchedPlace ?? learnedPlace
+            }
+
+            if let learnedPlace {
+                appModel.movementStore.storeKnownPlace(
+                    MovementSyncStore.StoredKnownPlace(
+                        id: learnedPlace.id,
+                        externalUid: learnedPlace.externalUid,
+                        label: learnedPlace.label,
+                        aliases: learnedPlace.aliases,
+                        latitude: learnedPlace.latitude,
+                        longitude: learnedPlace.longitude,
+                        radiusMeters: learnedPlace.radiusMeters,
+                        categoryTags: learnedPlace.categoryTags,
+                        visibility: learnedPlace.visibility,
+                        wikiNoteId: learnedPlace.wikiNoteId,
+                        metadata: [:]
+                    )
                 )
             }
 
@@ -1255,6 +1314,7 @@ private struct MovementLifeTimelineView: View {
         } catch {
             companionDebugLog(
                 "MovementLifeTimeline",
+                level: .error,
                 "assignKnownPlace failed item=\(movementTimelineLogDescriptor(for: item)) place=\(knownPlaceLogDescriptor(place)) error=\(error.localizedDescription)"
             )
             loadError = error.localizedDescription
@@ -1594,6 +1654,20 @@ private struct MovementTimelinePlaceLabelDraft: Identifiable {
 
     var id: String {
         item.id
+    }
+}
+
+private struct MovementTimelinePlaceAssignmentWarning: Identifiable {
+    let id = UUID()
+    let item: MovementLifeTimelineItem
+    let place: MovementSyncStore.StoredKnownPlace
+    let distanceMeters: Double
+
+    var formattedDistance: String {
+        if distanceMeters >= 1000 {
+            return String(format: "%.1f km", distanceMeters / 1000)
+        }
+        return "\(Int(distanceMeters.rounded())) m"
     }
 }
 
