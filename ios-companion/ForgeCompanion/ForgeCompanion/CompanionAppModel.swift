@@ -378,7 +378,7 @@ final class CompanionAppModel: ObservableObject {
 #if DEBUG
         if let screenshotScenario, screenshotScenario != .pairing {
             self.movementStore = MovementSyncStore(
-                testingState: CompanionScreenshotFixtures.movementState()
+                testingState: CompanionScreenshotFixtures.movementState(for: screenshotScenario)
             )
         } else {
             self.movementStore = MovementSyncStore()

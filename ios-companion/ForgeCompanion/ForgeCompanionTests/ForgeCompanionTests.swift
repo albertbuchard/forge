@@ -1691,6 +1691,75 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertTrue(overlaid[0].isSleepOverlay)
     }
 
+    func testRenderManagerFragmentsLongPostSleepBoxesIntoVirtualDisplaySlices() {
+        let formatter = ISO8601DateFormatter()
+        let baseItems = [
+            makeDisplayItem(
+                id: "home-overnight",
+                kind: .stay,
+                title: "Home",
+                placeLabel: "Home",
+                startedAt: formatter.date(from: "2026-04-19T02:15:00Z") ?? Date(),
+                endedAt: formatter.date(from: "2026-04-19T23:20:00Z") ?? Date(),
+                origin: .recorded
+            )
+        ]
+        let overlays = [
+            ForgeMovementTimelineSleepOverlay(
+                id: "sleep-1",
+                externalUid: "sleep-1",
+                startedAt: "2026-04-19T04:05:00Z",
+                endedAt: "2026-04-19T11:08:00Z",
+                localDateKey: "2026-04-19",
+                sourceTimezone: "Europe/Zurich",
+                asleepSeconds: 25_380,
+                timeInBedSeconds: 26_040,
+                sleepScore: 84,
+                regularityScore: 78,
+                efficiency: 0.94,
+                recoveryState: "rested"
+            )
+        ]
+
+        let renderState = MovementTimelineRenderManager.render(
+            baseItems: baseItems,
+            sleepOverlays: overlays,
+            referenceDate: formatter.date(from: "2026-04-19T23:20:00Z") ?? Date(),
+            sleepOverlayVisible: true
+        )
+
+        XCTAssertEqual(renderState.backgroundBands.count, 1)
+        XCTAssertTrue(renderState.items.contains(where: { $0.isSleepOverlay }))
+        XCTAssertFalse(
+            renderState.items.contains(where: { item in
+                item.isSleepOverlay == false && item.durationSeconds > 6 * 60 * 60
+            })
+        )
+        XCTAssertTrue(
+            renderState.items.contains(where: { item in
+                item.startedAtDate == formatter.date(from: "2026-04-19T11:08:01Z")
+            })
+        )
+    }
+
+    func testLifeTimelineScreenshotFixtureUsesLongPostSleepState() {
+        let state = CompanionScreenshotFixtures.movementState(for: .lifeTimeline)
+
+        XCTAssertEqual(state.knownPlaces.count, 1)
+        XCTAssertEqual(state.trips.count, 0)
+        XCTAssertEqual(state.stays.count, 3)
+        XCTAssertEqual(state.stays.last?.startedAt, makeDate("2026-04-19T09:08:00.000Z"))
+        XCTAssertEqual(state.stays.last?.endedAt, CompanionScreenshotFixtures.lifeTimelineReferenceDate)
+    }
+
+    func testLifeTimelineScreenshotFixtureProvidesOvernightSleepOverlay() {
+        let overlays = CompanionScreenshotFixtures.sleepTimelineOverlays(for: .lifeTimeline)
+
+        XCTAssertEqual(overlays.count, 1)
+        XCTAssertEqual(overlays.first?.startedAt, "2026-04-19T02:05:00.000Z")
+        XCTAssertEqual(overlays.first?.endedAt, "2026-04-19T09:08:00.000Z")
+    }
+
     func testViewportHourMarkersTrackCompressedSleepOverlayGeometry() throws {
         let formatter = ISO8601DateFormatter()
         let sleepItem = makeDisplayItem(

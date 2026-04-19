@@ -1,4 +1,4 @@
-Forge Companion 1.0.17 fixes the life-timeline sleep hour rail on iPhone.
-The background hour markers now track the same warped timeline geometry as the
-sleep and stay cards, so the visible start and end of each sleep box line up
-with the hours behind it.
+Forge Companion 1.0.18 hardens the iPhone life-timeline sleep overlay.
+Sleep now renders through a dedicated overlay pipeline with recalculated
+virtual fragments, adapted background bands, and simulator-verified screenshots
+that match the visible sleep slice above and below the affected stays.

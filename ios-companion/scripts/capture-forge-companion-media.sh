@@ -87,10 +87,12 @@ capture_scenario() {
   local wait_seconds="$3"
   local raw_path="$RAW_OUTPUT_DIR/$filename"
   local final_path="$FINAL_OUTPUT_DIR/$filename"
+  local screenshot_show_sleep_overlay="${FORGE_SCREENSHOT_SHOW_SLEEP_OVERLAY:-0}"
 
   echo "Capturing $scenario -> $final_path"
   xcrun simctl terminate "$SIMULATOR_UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
   SIMCTL_CHILD_FORGE_SCREENSHOT_SCENARIO="$scenario" \
+    SIMCTL_CHILD_FORGE_SCREENSHOT_SHOW_SLEEP_OVERLAY="$screenshot_show_sleep_overlay" \
     xcrun simctl launch "$SIMULATOR_UDID" "$BUNDLE_ID" >/dev/null
   sleep "$wait_seconds"
   xcrun simctl io "$SIMULATOR_UDID" screenshot "$raw_path" >/dev/null

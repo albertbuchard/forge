@@ -43,16 +43,21 @@ enum CompanionScreenshotScenario: String {
 
 enum CompanionScreenshotFixtures {
     static let referenceDate: Date = {
-        var components = DateComponents()
-        components.calendar = Calendar(identifier: .gregorian)
-        components.timeZone = TimeZone(identifier: "Europe/Zurich")
-        components.year = 2026
-        components.month = 4
-        components.day = 8
-        components.hour = 9
-        components.minute = 41
-        return components.date ?? Date()
+        makeDate(year: 2026, month: 4, day: 8, hour: 9, minute: 41)
     }()
+
+    static let lifeTimelineReferenceDate: Date = {
+        makeDate(year: 2026, month: 4, day: 19, hour: 23, minute: 20)
+    }()
+
+    static func referenceDate(for scenario: CompanionScreenshotScenario?) -> Date {
+        switch scenario {
+        case .lifeTimeline:
+            return lifeTimelineReferenceDate
+        default:
+            return referenceDate
+        }
+    }
 
     static func pairingPayload() -> PairingPayload {
         PairingPayload(
@@ -118,7 +123,22 @@ enum CompanionScreenshotFixtures {
         ]
     }
 
+    static func movementState(
+        for scenario: CompanionScreenshotScenario?
+    ) -> MovementSyncStore.PersistedState {
+        switch scenario {
+        case .lifeTimeline:
+            return lifeTimelineMovementState()
+        default:
+            return defaultMovementState()
+        }
+    }
+
     static func movementState() -> MovementSyncStore.PersistedState {
+        defaultMovementState()
+    }
+
+    private static func defaultMovementState() -> MovementSyncStore.PersistedState {
         let home = MovementSyncStore.StoredKnownPlace(
             id: "place_home",
             externalUid: "known-place-home",
@@ -325,6 +345,105 @@ enum CompanionScreenshotFixtures {
         )
     }
 
+    private static func lifeTimelineMovementState() -> MovementSyncStore.PersistedState {
+        let home = MovementSyncStore.StoredKnownPlace(
+            id: "place_home",
+            externalUid: "known-place-home",
+            label: "Home",
+            aliases: ["Apartment"],
+            latitude: 46.51997,
+            longitude: 6.63359,
+            radiusMeters: 90,
+            categoryTags: ["home"],
+            visibility: "private",
+            wikiNoteId: nil,
+            metadata: ["seeded": "true", "fixture": "life-timeline"]
+        )
+        let preSleepWarmupStay = MovementSyncStore.StoredStay(
+            id: "stay_warmup_home",
+            label: "Home",
+            status: "completed",
+            classification: "known_place",
+            startedAt: makeDate(year: 2026, month: 4, day: 19, hour: 2, minute: 5),
+            endedAt: makeDate(year: 2026, month: 4, day: 19, hour: 2, minute: 15),
+            centerLatitude: home.latitude,
+            centerLongitude: home.longitude,
+            radiusMeters: 72,
+            sampleCount: 6,
+            placeExternalUid: home.externalUid,
+            placeLabel: home.label,
+            tags: ["home", "overnight"],
+            metadata: ["seeded": "true", "fixture": "life-timeline"]
+        )
+        let preSleepHomeStay = MovementSyncStore.StoredStay(
+            id: "stay_presleep_home",
+            label: "Home",
+            status: "completed",
+            classification: "known_place",
+            startedAt: makeDate(year: 2026, month: 4, day: 19, hour: 2, minute: 15),
+            endedAt: makeDate(year: 2026, month: 4, day: 19, hour: 4, minute: 5),
+            centerLatitude: home.latitude,
+            centerLongitude: home.longitude,
+            radiusMeters: 88,
+            sampleCount: 14,
+            placeExternalUid: home.externalUid,
+            placeLabel: home.label,
+            tags: ["home", "settled"],
+            metadata: ["seeded": "true", "fixture": "life-timeline"]
+        )
+        let longPostSleepStay = MovementSyncStore.StoredStay(
+            id: "stay_postsleep_home",
+            label: "Home",
+            status: "active",
+            classification: "known_place",
+            startedAt: makeDate(year: 2026, month: 4, day: 19, hour: 11, minute: 8),
+            endedAt: lifeTimelineReferenceDate,
+            centerLatitude: home.latitude,
+            centerLongitude: home.longitude,
+            radiusMeters: 86,
+            sampleCount: 28,
+            placeExternalUid: home.externalUid,
+            placeLabel: home.label,
+            tags: ["home", "recovered"],
+            metadata: ["seeded": "true", "fixture": "life-timeline"]
+        )
+
+        return MovementSyncStore.PersistedState(
+            trackingEnabled: true,
+            publishMode: "auto_publish",
+            retentionMode: "aggregates_only",
+            knownPlaces: [home],
+            stays: [preSleepWarmupStay, preSleepHomeStay, longPostSleepStay],
+            trips: []
+        )
+    }
+
+    static func sleepTimelineOverlays(
+        for scenario: CompanionScreenshotScenario?
+    ) -> [ForgeMovementTimelineSleepOverlay] {
+        switch scenario {
+        case .lifeTimeline:
+            return [
+                ForgeMovementTimelineSleepOverlay(
+                    id: "screenshot-sleep-overlay-overnight",
+                    externalUid: "screenshot-sleep-overlay-overnight",
+                    startedAt: isoString(makeDate(year: 2026, month: 4, day: 19, hour: 4, minute: 5)),
+                    endedAt: isoString(makeDate(year: 2026, month: 4, day: 19, hour: 11, minute: 8)),
+                    localDateKey: "2026-04-19",
+                    sourceTimezone: "Europe/Zurich",
+                    asleepSeconds: 24_780,
+                    timeInBedSeconds: 25_380,
+                    sleepScore: 88,
+                    regularityScore: 79,
+                    efficiency: 0.95,
+                    recoveryState: "rested"
+                )
+            ]
+        default:
+            return sleepTimelineOverlays()
+        }
+    }
+
     static func sleepTimelineOverlays() -> [ForgeMovementTimelineSleepOverlay] {
         [
             ForgeMovementTimelineSleepOverlay(
@@ -417,6 +536,24 @@ enum CompanionScreenshotFixtures {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter.string(from: value)
+    }
+
+    private static func makeDate(
+        year: Int,
+        month: Int,
+        day: Int,
+        hour: Int,
+        minute: Int
+    ) -> Date {
+        var components = DateComponents()
+        components.calendar = Calendar(identifier: .gregorian)
+        components.timeZone = TimeZone(identifier: "Europe/Zurich")
+        components.year = year
+        components.month = month
+        components.day = day
+        components.hour = hour
+        components.minute = minute
+        return components.date ?? Date()
     }
 }
 
