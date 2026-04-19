@@ -27,6 +27,15 @@ enum CompanionScreenshotScenario: String {
         self == .diagnostics
     }
 
+    var showsSleepOverlayByDefault: Bool {
+#if DEBUG
+        self == .lifeTimeline
+            && ProcessInfo.processInfo.environment["FORGE_SCREENSHOT_SHOW_SLEEP_OVERLAY"] == "1"
+#else
+        false
+#endif
+    }
+
     var usesForgeCanvasPlaceholder: Bool {
         self != .pairing
     }
@@ -314,6 +323,25 @@ enum CompanionScreenshotFixtures {
             stays: [previousLongStay, groceryStay, ongoingStay],
             trips: [groceryTrip, returnTrip]
         )
+    }
+
+    static func sleepTimelineOverlays() -> [ForgeMovementTimelineSleepOverlay] {
+        [
+            ForgeMovementTimelineSleepOverlay(
+                id: "screenshot-sleep-overlay-1",
+                externalUid: "screenshot-sleep-overlay-1",
+                startedAt: isoString(referenceDate.addingTimeInterval(-60 * 60 * 4.1)),
+                endedAt: isoString(referenceDate.addingTimeInterval(-60 * 60 * 2.25)),
+                localDateKey: "2026-04-08",
+                sourceTimezone: "Europe/Zurich",
+                asleepSeconds: 6_540,
+                timeInBedSeconds: 7_020,
+                sleepScore: 84,
+                regularityScore: 78,
+                efficiency: 0.93,
+                recoveryState: "rested"
+            )
+        ]
     }
 
     static func syncReport() -> SyncReport {

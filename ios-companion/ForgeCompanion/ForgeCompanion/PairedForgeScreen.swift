@@ -220,6 +220,7 @@ private struct MovementLifeTimelineView: View {
     @State private var sleepOverlayVisible = false
     @State private var scrolledToCurrent = false
     @State private var focusedVisibleId: String?
+    @State private var pendingScrollTargetId: String?
 
     private var timelineReferenceDate: Date {
         if appModel.screenshotScenario != nil {
@@ -300,6 +301,11 @@ private struct MovementLifeTimelineView: View {
                                                 title: "Timeline load issue",
                                                 detail: loadError
                                             )
+                                        } else if sleepOverlayVisible && hasSleepOverlayInLoadedRange == false {
+                                            MovementTimelineStatusCard(
+                                                title: "No sleep shown yet",
+                                                detail: "No sleep session overlaps the currently loaded timeline range. Scroll further back to load older history."
+                                            )
                                         } else if loading && displayItems.isEmpty {
                                             MovementTimelineStatusCard(
                                                 title: "Loading movement history",
@@ -358,6 +364,17 @@ private struct MovementLifeTimelineView: View {
                             }
                         }
                         .coordinateSpace(name: "MovementLifeTimelineScroll")
+                        .onChange(of: pendingScrollTargetId) { _, nextValue in
+                            guard let nextValue else {
+                                return
+                            }
+                            DispatchQueue.main.async {
+                                withAnimation(.easeInOut(duration: 0.42)) {
+                                    reader.scrollTo(nextValue, anchor: .center)
+                                }
+                                pendingScrollTargetId = nil
+                            }
+                        }
                         .onPreferenceChange(MovementTimelineVisiblePositionKey.self) { values in
                             let center = proxy.size.height / 2
                             guard let nextFocusedId = values.min(by: { abs($0.value - center) < abs($1.value - center) })?.key else {
@@ -445,7 +462,28 @@ private struct MovementLifeTimelineView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 14) {
                         Button {
-                            sleepOverlayVisible.toggle()
+                            let nextValue = !sleepOverlayVisible
+                            sleepOverlayVisible = nextValue
+                            companionDebugLog(
+                                "MovementLifeTimeline",
+                                "sleep overlay toggle visible=\(nextValue) fetched=\(sleepOverlays.count) rendered=\(renderableSleepOverlayItems.count)"
+                            )
+                            guard nextValue else {
+                                return
+                            }
+                            guard let targetId = mostRelevantSleepOverlayId else {
+                                companionDebugLog(
+                                    "MovementLifeTimeline",
+                                    "sleep overlay toggle found no overlapping sleep session in loaded range"
+                                )
+                                return
+                            }
+                            selectedId = targetId
+                            pendingScrollTargetId = targetId
+                            companionDebugLog(
+                                "MovementLifeTimeline",
+                                "sleep overlay toggle scrolling to item=\(targetId)"
+                            )
                         } label: {
                             Image(systemName: sleepOverlayVisible ? "moon.stars.fill" : "moon.stars")
                                 .foregroundStyle(
@@ -603,29 +641,42 @@ private struct MovementLifeTimelineView: View {
             .compactMap(MovementLifeTimelineItem.init(remote:))
     }
 
-    private var displayItems: [MovementLifeTimelineItem] {
+    private var baseTimelineItemsForSleepOverlay: [MovementLifeTimelineItem] {
         let remoteItems = segments.compactMap(MovementLifeTimelineItem.init(remote:))
         let canonicalItems = remoteItems.isEmpty ? cachedCanonicalItems : remoteItems
         if canonicalItems.isEmpty == false {
-            let canonical = canonicalTimelineItems(
+            return canonicalTimelineItems(
                 canonicalItems,
                 liveOverlay: liveOverlayItem,
                 referenceDate: timelineReferenceDate
             )
-            let display = sleepOverlayVisible
-                ? sleepOverlayTimelineItems(
-                    canonical,
-                    overlays: sleepOverlays,
-                    referenceDate: timelineReferenceDate
-                )
-                : canonical
-            return display + [.currentAnchor(referenceDate: timelineReferenceDate)]
         }
         var localItems = localHistoricalItems
         if let liveOverlayItem {
             localItems.append(liveOverlayItem)
         }
-        let normalized = normalizedTimelineItems(localItems, referenceDate: timelineReferenceDate)
+        return normalizedTimelineItems(localItems, referenceDate: timelineReferenceDate)
+    }
+
+    private var renderableSleepOverlayItems: [MovementLifeTimelineItem] {
+        sleepOverlayTimelineItems(
+            baseTimelineItemsForSleepOverlay,
+            overlays: sleepOverlays,
+            referenceDate: timelineReferenceDate
+        )
+        .filter(\.isSleepOverlay)
+    }
+
+    private var hasSleepOverlayInLoadedRange: Bool {
+        renderableSleepOverlayItems.isEmpty == false
+    }
+
+    private var mostRelevantSleepOverlayId: String? {
+        renderableSleepOverlayItems.last?.id
+    }
+
+    private var displayItems: [MovementLifeTimelineItem] {
+        let normalized = baseTimelineItemsForSleepOverlay
         let display = sleepOverlayVisible
             ? sleepOverlayTimelineItems(
                 normalized,
@@ -777,7 +828,10 @@ private struct MovementLifeTimelineView: View {
         }
         if appModel.screenshotScenario != nil {
             segments = []
-            sleepOverlays = []
+            sleepOverlays = CompanionScreenshotFixtures.sleepTimelineOverlays()
+            if appModel.screenshotScenario?.showsSleepOverlayByDefault == true {
+                sleepOverlayVisible = true
+            }
             nextCursor = nil
             hasMore = false
             loadError = nil

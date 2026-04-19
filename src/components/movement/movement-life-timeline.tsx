@@ -2142,13 +2142,25 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
         new Date(left.startedAt).getTime() - new Date(right.startedAt).getTime()
     );
   }, [timelineQuery.data]);
+  const sleepDisplaySegments = useMemo(
+    () => applySleepOverlayToMovementSegments(segments, sleepOverlays),
+    [segments, sleepOverlays]
+  );
   const displaySegments = useMemo(
     () =>
       sleepOverlayVisible
-        ? applySleepOverlayToMovementSegments(segments, sleepOverlays)
+        ? sleepDisplaySegments
         : segments,
-    [segments, sleepOverlayVisible, sleepOverlays]
+    [segments, sleepDisplaySegments, sleepOverlayVisible]
   );
+  const renderedSleepSegments = useMemo(
+    () =>
+      sleepDisplaySegments.filter(
+        (segment) => segment.syncSource === "sleep overlay"
+      ),
+    [sleepDisplaySegments]
+  );
+  const mostRelevantSleepSegmentId = renderedSleepSegments.at(-1)?.id ?? null;
   const detailSegment = useMemo(
     () => displaySegments.find((segment) => segment.id === detailSegmentId) ?? null,
     [detailSegmentId, displaySegments]
@@ -2312,6 +2324,24 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
       setSelectedSegmentId(displaySegments.at(-1)?.id ?? null);
     }
   }, [displaySegments, selectedSegmentId]);
+
+  useEffect(() => {
+    if (!sleepOverlayVisible || !mostRelevantSleepSegmentId) {
+      return;
+    }
+    const targetIndex = displaySegments.findIndex(
+      (segment) => segment.id === mostRelevantSleepSegmentId
+    );
+    if (targetIndex < 0) {
+      return;
+    }
+    setSelectedSegmentId(mostRelevantSleepSegmentId);
+    requestAnimationFrame(() => {
+      rowVirtualizer.scrollToIndex(targetIndex, {
+        align: "center"
+      });
+    });
+  }, [displaySegments, mostRelevantSleepSegmentId, rowVirtualizer, sleepOverlayVisible]);
 
   const invalidateMovementProjectionQueries = async () => {
     await Promise.all([
@@ -2737,7 +2767,15 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
               variant="ghost"
               size="sm"
               className="h-8 rounded-full border border-white/10 bg-white/[0.04] px-3 text-white/72 hover:bg-white/[0.08] hover:text-white"
-              onClick={() => setSleepOverlayVisible((current) => !current)}
+              onClick={() =>
+                setSleepOverlayVisible((current) => {
+                  const nextValue = !current;
+                  if (nextValue && mostRelevantSleepSegmentId) {
+                    setSelectedSegmentId(mostRelevantSleepSegmentId);
+                  }
+                  return nextValue;
+                })
+              }
             >
               <MoonStar className="size-3.5" />
               {sleepOverlayVisible ? "Hide sleep" : "Show sleep"}
@@ -2762,6 +2800,12 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
             </Badge>
           </div>
         </div>
+        {sleepOverlayVisible && renderedSleepSegments.length === 0 ? (
+          <p className="mb-3 px-1 text-sm text-amber-100/80">
+            No sleep session overlaps the currently loaded timeline range yet.
+            Scroll further back to load older history.
+          </p>
+        ) : null}
         <div
           ref={scrollParentRef}
           onScroll={handleScroll}

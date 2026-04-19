@@ -1,4 +1,4 @@
-Forge Companion 1.0.15 adds a visual sleep overlay to the phone life timeline.
-You can now toggle sleep sessions on top of movement history, with the timeline
-temporarily slicing overlapping boxes into virtual fragments above and below the
-sleep window without changing or storing the underlying movement data.
+Forge Companion 1.0.16 fixes the phone life-timeline sleep overlay interaction.
+Turning on the sleep layer now jumps to the latest rendered sleep session in the
+loaded range, shows a clear message when no sleep overlaps are loaded yet, and
+includes a dedicated simulator screenshot fixture for visual verification.
