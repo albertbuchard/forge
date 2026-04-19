@@ -1,5 +1,5 @@
-Forge Companion 1.0.13 fixes stay relabeling across iPhone, web, and backend so
-selecting an existing saved location updates the canonical stay, warns before
-linking places more than 100 meters away, and teaches saved places from each
-confirmed coordinate. Diagnostics logs now support copy, clear, retention
-settings, and per-level filtering directly in the iPhone app.
+Forge Companion 1.0.14 finishes the stay relabeling fix by updating the live
+mobile movement backend path used by the iPhone app, so selecting an existing
+saved location or creating a new one can now attach to recorded stays instead
+of failing with the old immutable-stay error. Diagnostics log controls and
+location-distance warnings remain included from the previous release.
