@@ -2832,7 +2832,7 @@ private struct MovementTimelineMissingShape: View {
     }
 }
 
-private enum MovementTimelineViewportLayout {
+enum MovementTimelineViewportLayout {
     static let gridRowHeight: CGFloat = 64
     static let historyLeadHours: Int = 5
     static let futureGridHours: Int = 1
@@ -2845,7 +2845,7 @@ private enum MovementTimelineViewportLayout {
     }
 }
 
-private struct MovementTimelineViewportGridRowMetric {
+struct MovementTimelineViewportGridRowMetric {
     let item: MovementLifeTimelineItem
     let rowStart: CGFloat
     let rowHeight: CGFloat
@@ -2854,14 +2854,14 @@ private struct MovementTimelineViewportGridRowMetric {
     let boxBottom: CGFloat
 }
 
-private struct MovementTimelineHourMarker: Identifiable {
+struct MovementTimelineHourMarker: Identifiable {
     let id: String
     let y: CGFloat
     let label: String
     let strong: Bool
 }
 
-private func movementWarpDisplayRatio(_ ratio: CGFloat, severity: CGFloat) -> CGFloat {
+func movementWarpDisplayRatio(_ ratio: CGFloat, severity: CGFloat) -> CGFloat {
     let eased = ratio + ((sin((ratio - 0.5) * .pi) + 1) * 0.5) - ratio
     let centered = ratio - 0.5
     let cubicCompression =
@@ -2871,51 +2871,86 @@ private func movementWarpDisplayRatio(_ ratio: CGFloat, severity: CGFloat) -> CG
     return max(0, min(1, warped - (eased - ratio) * severity * 0.08))
 }
 
-private func nextMovementHourBoundary(after date: Date) -> Date {
+func nextMovementHourBoundary(after date: Date) -> Date {
     let calendar = Calendar.current
     let components = calendar.dateComponents([.year, .month, .day, .hour], from: date)
     let hourStart = calendar.date(from: components) ?? date
     return hourStart <= date ? hourStart.addingTimeInterval(3600) : hourStart
 }
 
-private func movementHourMarkers(
-    startedAt: Date,
-    endedAt: Date,
-    durationSeconds: Int,
-    displayHeight: CGFloat
-) -> [MovementTimelineHourMarker] {
-    let maxDisplaySeconds = 6.0 * 60.0 * 60.0
-    let duration = max(1, durationSeconds)
-    let durationInterval = max(1, endedAt.timeIntervalSince(startedAt))
-    let compressionSeverity = max(
-        0,
-        1 - min(1, maxDisplaySeconds / Double(duration))
-    )
-    var markers: [MovementTimelineHourMarker] = []
-    var cursor = nextMovementHourBoundary(after: startedAt)
-    while cursor < endedAt {
-        let ratio = CGFloat(cursor.timeIntervalSince(startedAt) / durationInterval)
-        let displayRatio =
-            duration > Int(maxDisplaySeconds)
-            ? movementWarpDisplayRatio(ratio, severity: CGFloat(compressionSeverity))
-            : ratio
-        let isStrong = Calendar.current.component(.hour, from: cursor) == 0
-        markers.append(
-            MovementTimelineHourMarker(
-                id: "segment-\(startedAt.timeIntervalSince1970)-\(cursor.timeIntervalSince1970)",
-                y: displayHeight * displayRatio,
-                label: isStrong
-                    ? cursor.formatted(Date.FormatStyle().day(.twoDigits).month(.twoDigits).year(.twoDigits))
-                    : cursor.formatted(Date.FormatStyle().hour(.twoDigits(amPM: .omitted))),
-                strong: isStrong
-            )
-        )
-        cursor = cursor.addingTimeInterval(3600)
-    }
-    return markers
+func movementViewportHourMarkerLabel(for date: Date) -> String {
+    let isStrong = Calendar.current.component(.hour, from: date) == 0
+    return isStrong
+        ? date.formatted(Date.FormatStyle().day(.twoDigits).month(.twoDigits).year(.twoDigits))
+        : date.formatted(Date.FormatStyle().hour(.twoDigits(amPM: .omitted)))
 }
 
-private func buildMovementViewportGridMetrics(
+func movementViewportDisplayRatio(
+    for item: MovementLifeTimelineItem,
+    at date: Date
+) -> CGFloat {
+    let maxDisplaySeconds = 6.0 * 60.0 * 60.0
+    let durationInterval = max(1, item.endedAtDate.timeIntervalSince(item.startedAtDate))
+    let rawRatio = CGFloat(date.timeIntervalSince(item.startedAtDate) / durationInterval)
+    guard item.durationSeconds > Int(maxDisplaySeconds) else {
+        return max(0, min(1, rawRatio))
+    }
+    let compressionSeverity = max(
+        0,
+        1 - min(1, maxDisplaySeconds / Double(max(1, item.durationSeconds)))
+    )
+    return movementWarpDisplayRatio(
+        max(0, min(1, rawRatio)),
+        severity: CGFloat(compressionSeverity)
+    )
+}
+
+func movementViewportYPosition(
+    for date: Date,
+    rows: [MovementTimelineViewportGridRowMetric],
+    rangeEnd: Date
+) -> CGFloat? {
+    guard let first = rows.first, let last = rows.last else {
+        return nil
+    }
+
+    if date < first.item.startedAtDate {
+        return first.boxTop
+            - CGFloat(first.item.startedAtDate.timeIntervalSince(date) / 3600)
+                * MovementTimelineViewportLayout.gridRowHeight
+    }
+
+    for index in rows.indices {
+        let row = rows[index]
+        if date >= row.item.startedAtDate && date <= row.item.endedAtDate {
+            return row.boxTop + row.displayHeight * movementViewportDisplayRatio(for: row.item, at: date)
+        }
+
+        let nextRow = index + 1 < rows.count ? rows[index + 1] : nil
+        let gapStart = row.item.endedAtDate
+        let gapEnd = nextRow?.item.startedAtDate ?? rangeEnd
+        if date > gapStart && date < gapEnd {
+            if let nextRow {
+                let gapDuration = max(1, gapEnd.timeIntervalSince(gapStart))
+                let ratio = date.timeIntervalSince(gapStart) / gapDuration
+                return row.boxBottom + (nextRow.boxTop - row.boxBottom) * CGFloat(ratio)
+            }
+            return row.boxBottom
+                + CGFloat(date.timeIntervalSince(gapStart) / 3600)
+                    * MovementTimelineViewportLayout.gridRowHeight
+        }
+    }
+
+    if date >= last.item.endedAtDate {
+        return last.boxBottom
+            + CGFloat(date.timeIntervalSince(last.item.endedAtDate) / 3600)
+                * MovementTimelineViewportLayout.gridRowHeight
+    }
+
+    return nil
+}
+
+func buildMovementViewportGridMetrics(
     items: [MovementLifeTimelineItem],
     viewportHeight: CGFloat,
     safeTopInset: CGFloat
@@ -2946,7 +2981,7 @@ private func buildMovementViewportGridMetrics(
     }
 }
 
-private func buildMovementViewportHourMarkers(
+func buildMovementViewportHourMarkers(
     items: [MovementLifeTimelineItem],
     viewportHeight: CGFloat,
     safeTopInset: CGFloat,
@@ -2962,95 +2997,26 @@ private func buildMovementViewportHourMarkers(
     }
 
     var markers: [MovementTimelineHourMarker] = []
-    let firstStart = first.item.startedAtDate
-    var leadHour = nextMovementHourBoundary(
-        after: firstStart.addingTimeInterval(
-            TimeInterval(-MovementTimelineViewportLayout.historyLeadHours * 3600)
-        )
+    let timelineStart = first.item.startedAtDate.addingTimeInterval(
+        TimeInterval(-MovementTimelineViewportLayout.historyLeadHours * 3600)
     )
-    while leadHour < firstStart {
-        let hoursBeforeStart = firstStart.timeIntervalSince(leadHour) / 3600
-        markers.append(
-            MovementTimelineHourMarker(
-                id: "lead-\(leadHour.timeIntervalSince1970)",
-                y: first.boxTop - CGFloat(hoursBeforeStart) * MovementTimelineViewportLayout.gridRowHeight,
-                label: Calendar.current.component(.hour, from: leadHour) == 0
-                    ? leadHour.formatted(Date.FormatStyle().day(.twoDigits).month(.twoDigits).year(.twoDigits))
-                    : leadHour.formatted(Date.FormatStyle().hour(.twoDigits(amPM: .omitted))),
-                strong: Calendar.current.component(.hour, from: leadHour) == 0
-            )
-        )
-        leadHour = leadHour.addingTimeInterval(3600)
-    }
-
-    for index in rows.indices {
-        let row = rows[index]
-        let itemMarkers = movementHourMarkers(
-            startedAt: row.item.startedAtDate,
-            endedAt: row.item.endedAtDate,
-            durationSeconds: row.item.durationSeconds,
-            displayHeight: row.displayHeight
-        ).map { marker in
-            MovementTimelineHourMarker(
-                id: "row-\(row.item.id)-\(marker.id)",
-                y: row.boxTop + marker.y,
-                label: marker.label,
-                strong: marker.strong
-            )
-        }
-        markers.append(contentsOf: itemMarkers)
-
-        if index + 1 < rows.count {
-            let nextRow = rows[index + 1]
-            let gapStart = row.item.endedAtDate
-            let gapEnd = nextRow.item.startedAtDate
-            let gapDuration = gapEnd.timeIntervalSince(gapStart)
-            if gapDuration > 0 {
-                var hour = nextMovementHourBoundary(after: gapStart)
-                while hour < gapEnd {
-                    let ratio = hour.timeIntervalSince(gapStart) / gapDuration
-                    let y = row.boxBottom + (nextRow.boxTop - row.boxBottom) * CGFloat(ratio)
-                    let isStrong = Calendar.current.component(.hour, from: hour) == 0
-                    markers.append(
-                        MovementTimelineHourMarker(
-                            id: "gap-\(row.item.id)-\(nextRow.item.id)-\(hour.timeIntervalSince1970)",
-                            y: y,
-                            label: isStrong
-                                ? hour.formatted(Date.FormatStyle().day(.twoDigits).month(.twoDigits).year(.twoDigits))
-                                : hour.formatted(Date.FormatStyle().hour(.twoDigits(amPM: .omitted))),
-                            strong: isStrong
-                        )
-                    )
-                    hour = hour.addingTimeInterval(3600)
-                }
-            }
-            continue
-        }
-
-        var trailingHour = nextMovementHourBoundary(after: row.item.endedAtDate)
-        while trailingHour <= rangeEnd {
-            let y = row.boxBottom + CGFloat(trailingHour.timeIntervalSince(row.item.endedAtDate) / 3600) * MovementTimelineViewportLayout.gridRowHeight
-            let isStrong = Calendar.current.component(.hour, from: trailingHour) == 0
+    var hour = nextMovementHourBoundary(after: timelineStart)
+    while hour <= rangeEnd {
+        if let y = movementViewportYPosition(for: hour, rows: rows, rangeEnd: rangeEnd) {
+            let isStrong = Calendar.current.component(.hour, from: hour) == 0
             markers.append(
                 MovementTimelineHourMarker(
-                    id: "tail-\(row.item.id)-\(trailingHour.timeIntervalSince1970)",
+                    id: "timeline-hour-\(hour.timeIntervalSince1970)",
                     y: y,
-                    label: isStrong
-                        ? trailingHour.formatted(Date.FormatStyle().day(.twoDigits).month(.twoDigits).year(.twoDigits))
-                        : trailingHour.formatted(Date.FormatStyle().hour(.twoDigits(amPM: .omitted))),
+                    label: movementViewportHourMarkerLabel(for: hour),
                     strong: isStrong
                 )
             )
-            trailingHour = trailingHour.addingTimeInterval(3600)
         }
+        hour = hour.addingTimeInterval(3600)
     }
 
-    return markers.sorted { left, right in
-        if left.y == right.y {
-            return left.label < right.label
-        }
-        return left.y < right.y
-    }
+    return markers
 }
 
 private struct MovementTimelineViewportGrid: View {

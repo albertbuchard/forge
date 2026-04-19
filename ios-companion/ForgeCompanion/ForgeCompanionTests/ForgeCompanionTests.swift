@@ -1691,6 +1691,70 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertTrue(overlaid[0].isSleepOverlay)
     }
 
+    func testViewportHourMarkersTrackCompressedSleepOverlayGeometry() throws {
+        let formatter = ISO8601DateFormatter()
+        let sleepItem = makeDisplayItem(
+            id: "sleep-overlay",
+            kind: .stay,
+            title: "Sleep",
+            placeLabel: nil,
+            startedAt: formatter.date(from: "2026-04-19T22:00:00Z") ?? Date(),
+            endedAt: formatter.date(from: "2026-04-20T06:30:00Z") ?? Date(),
+            durationSeconds: 30_600,
+            origin: .recorded
+        )
+
+        let rows = buildMovementViewportGridMetrics(
+            items: [sleepItem],
+            viewportHeight: 844,
+            safeTopInset: 0
+        )
+        let row = try XCTUnwrap(rows.first)
+        let rangeEnd = sleepItem.endedAtDate
+
+        let startY = try XCTUnwrap(
+            movementViewportYPosition(for: sleepItem.startedAtDate, rows: rows, rangeEnd: rangeEnd)
+        )
+        let midnightY = try XCTUnwrap(
+            movementViewportYPosition(
+                for: formatter.date(from: "2026-04-20T00:00:00Z") ?? Date(),
+                rows: rows,
+                rangeEnd: rangeEnd
+            )
+        )
+        let fourAmY = try XCTUnwrap(
+            movementViewportYPosition(
+                for: formatter.date(from: "2026-04-20T04:00:00Z") ?? Date(),
+                rows: rows,
+                rangeEnd: rangeEnd
+            )
+        )
+        let endY = try XCTUnwrap(
+            movementViewportYPosition(for: sleepItem.endedAtDate, rows: rows, rangeEnd: rangeEnd)
+        )
+
+        XCTAssertEqual(startY, row.boxTop, accuracy: 0.5)
+        XCTAssertEqual(endY, row.boxBottom, accuracy: 0.5)
+        XCTAssertGreaterThan(midnightY, startY)
+        XCTAssertGreaterThan(fourAmY, midnightY)
+        XCTAssertLessThan(fourAmY, endY)
+
+        let inBoxMarkers = buildMovementViewportHourMarkers(
+            items: [sleepItem],
+            viewportHeight: 844,
+            safeTopInset: 0,
+            rangeEnd: rangeEnd
+        )
+        .filter { $0.y >= row.boxTop - 0.5 && $0.y <= row.boxBottom + 0.5 }
+
+        XCTAssertFalse(inBoxMarkers.isEmpty)
+        XCTAssertTrue(
+            zip(inBoxMarkers, inBoxMarkers.dropFirst()).allSatisfy { previous, next in
+                next.y > previous.y
+            }
+        )
+    }
+
     func testMovementStoreCachesCanonicalProjectedBoxesFromBootstrap() {
         let projected = try! loadSharedMovementFixture(
             id: "user_defined_missing_override"

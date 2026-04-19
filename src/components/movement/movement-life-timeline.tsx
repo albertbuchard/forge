@@ -663,31 +663,79 @@ function warpDisplayRatio(ratio: number, severity: number) {
   return Math.max(0, Math.min(1, warped - (eased - ratio) * severity * 0.08));
 }
 
-function buildHourMarkers(segment: MovementTimelineSegment) {
+function timelineHourMarkerLabel(value: Date) {
+  return value.getHours() === 0
+    ? formatStickyDate(value.toISOString())
+    : formatHourMarker(value);
+}
+
+function segmentDisplayRatioAtHour(
+  segment: MovementTimelineSegment,
+  valueMs: number
+) {
   const endMs = new Date(segment.endedAt).getTime();
   const startMs = new Date(segment.startedAt).getTime();
   const durationMs = Math.max(1, endMs - startMs);
-  const markers = new Map<number, { ratio: number; label: string; strong: boolean }>();
-  let hourCursor = new Date(startMs);
-  hourCursor.setMinutes(0, 0, 0);
-  if (hourCursor.getTime() <= startMs) {
-    hourCursor = new Date(hourCursor.getTime() + 3_600_000);
+  const rawRatio = Math.max(0, Math.min(1, (valueMs - startMs) / durationMs));
+  if (segment.durationSeconds <= MAX_DISPLAY_SECONDS) {
+    return rawRatio;
   }
-  while (hourCursor.getTime() < endMs) {
-    const timeMs = hourCursor.getTime();
-    const ratio = Math.min(1, Math.max(0, (timeMs - startMs) / durationMs));
-    markers.set(timeMs, {
-      ratio,
-      label: hourCursor.getHours() === 0
-        ? formatStickyDate(hourCursor.toISOString())
-        : formatHourMarker(hourCursor),
-      strong: hourCursor.getHours() === 0
-    });
-    hourCursor = new Date(timeMs + 3_600_000);
+  const compressionSeverity = Math.max(
+    0,
+    1 - Math.min(1, MAX_DISPLAY_SECONDS / Math.max(1, segment.durationSeconds))
+  );
+  return warpDisplayRatio(rawRatio, compressionSeverity);
+}
+
+function timelineHourMarkerY(
+  rows: TimelineRowMetric[],
+  hourMs: number,
+  rangeEndMs: number
+) {
+  if (rows.length === 0) {
+    return null;
   }
-  return [...markers.entries()]
-    .sort((left, right) => left[0] - right[0])
-    .map(([, marker]) => marker);
+
+  const firstRow = rows[0]!;
+  if (hourMs < new Date(firstRow.segment.startedAt).getTime()) {
+    return (
+      firstRow.boxTop -
+      ((new Date(firstRow.segment.startedAt).getTime() - hourMs) / 3_600_000) *
+        GRID_ROW_HEIGHT
+    );
+  }
+
+  for (let index = 0; index < rows.length; index += 1) {
+    const row = rows[index]!;
+    const rowStartMs = new Date(row.segment.startedAt).getTime();
+    const rowEndMs = new Date(row.segment.endedAt).getTime();
+    if (hourMs >= rowStartMs && hourMs <= rowEndMs) {
+      return row.boxTop + segmentDisplayRatioAtHour(row.segment, hourMs) * row.displayHeight;
+    }
+
+    const nextRow = rows[index + 1] ?? null;
+    const gapEndMs = nextRow
+      ? new Date(nextRow.segment.startedAt).getTime()
+      : rangeEndMs;
+    if (hourMs > rowEndMs && hourMs < gapEndMs) {
+      if (nextRow) {
+        const gapDurationMs = Math.max(1, gapEndMs - rowEndMs);
+        const ratio = (hourMs - rowEndMs) / gapDurationMs;
+        return row.boxBottom + (nextRow.boxTop - row.boxBottom) * ratio;
+      }
+      return row.boxBottom + ((hourMs - rowEndMs) / 3_600_000) * GRID_ROW_HEIGHT;
+    }
+  }
+
+  const lastRow = rows[rows.length - 1]!;
+  const lastEndMs = new Date(lastRow.segment.endedAt).getTime();
+  if (hourMs >= lastEndMs) {
+    return (
+      lastRow.boxBottom + ((hourMs - lastEndMs) / 3_600_000) * GRID_ROW_HEIGHT
+    );
+  }
+
+  return null;
 }
 
 function nextHourBoundaryMs(valueMs: number) {
@@ -710,92 +758,22 @@ function buildTimelineHourMarkers(
   const firstStartMs = new Date(firstRow.segment.startedAt).getTime();
   for (
     let hourMs = nextHourBoundaryMs(firstStartMs - HISTORY_LEAD_HOURS * 3_600_000);
-    hourMs < firstStartMs;
+    hourMs <= rangeEndMs;
     hourMs += 3_600_000
   ) {
-    const y =
-      firstRow.boxTop - ((firstStartMs - hourMs) / 3_600_000) * GRID_ROW_HEIGHT;
+    const y = timelineHourMarkerY(rows, hourMs, rangeEndMs);
+    if (y === null) {
+      continue;
+    }
     const hourDate = new Date(hourMs);
     markers.push({
       y,
-      label:
-        hourDate.getHours() === 0
-          ? formatStickyDate(hourDate.toISOString())
-          : formatHourMarker(hourDate),
+      label: timelineHourMarkerLabel(hourDate),
       strong: hourDate.getHours() === 0
     });
   }
 
-  for (let index = 0; index < rows.length; index += 1) {
-    const row = rows[index]!;
-    const segment = row.segment;
-    const durationMs = Math.max(
-      1,
-      new Date(segment.endedAt).getTime() - new Date(segment.startedAt).getTime()
-    );
-    const compressionSeverity = Math.max(
-      0,
-      1 - Math.min(1, MAX_DISPLAY_SECONDS / Math.max(1, segment.durationSeconds))
-    );
-    for (const marker of buildHourMarkers(segment)) {
-      const displayRatio =
-        segment.durationSeconds > MAX_DISPLAY_SECONDS
-          ? warpDisplayRatio(marker.ratio, compressionSeverity)
-          : marker.ratio;
-      markers.push({
-        y: row.boxTop + displayRatio * row.displayHeight,
-        label: marker.label,
-        strong: marker.strong
-      });
-    }
-
-    const nextRow = rows[index + 1] ?? null;
-    if (nextRow) {
-      const gapStartMs = new Date(segment.endedAt).getTime();
-      const gapEndMs = new Date(nextRow.segment.startedAt).getTime();
-      const gapDurationMs = gapEndMs - gapStartMs;
-      if (gapDurationMs > 0) {
-        for (
-          let hourMs = nextHourBoundaryMs(gapStartMs);
-          hourMs < gapEndMs;
-          hourMs += 3_600_000
-        ) {
-          const ratio = (hourMs - gapStartMs) / gapDurationMs;
-          const y = row.boxBottom + (nextRow.boxTop - row.boxBottom) * ratio;
-          const hourDate = new Date(hourMs);
-          markers.push({
-            y,
-            label:
-              hourDate.getHours() === 0
-                ? formatStickyDate(hourDate.toISOString())
-                : formatHourMarker(hourDate),
-            strong: hourDate.getHours() === 0
-          });
-        }
-      }
-      continue;
-    }
-
-    const lastEndMs = new Date(segment.endedAt).getTime();
-    for (
-      let hourMs = nextHourBoundaryMs(lastEndMs);
-      hourMs <= rangeEndMs;
-      hourMs += 3_600_000
-    ) {
-      const y = row.boxBottom + ((hourMs - lastEndMs) / 3_600_000) * GRID_ROW_HEIGHT;
-      const hourDate = new Date(hourMs);
-      markers.push({
-        y,
-        label:
-          hourDate.getHours() === 0
-            ? formatStickyDate(hourDate.toISOString())
-            : formatHourMarker(hourDate),
-        strong: hourDate.getHours() === 0
-      });
-    }
-  }
-
-  return markers.sort((left, right) => left.y - right.y);
+  return markers;
 }
 
 function MovementTimelineViewportGrid({
