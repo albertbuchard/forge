@@ -12,6 +12,7 @@ import {
   ArrowUpRight,
   Database,
   MapPin,
+  MoonStar,
   PencilLine,
   Route,
   Save,
@@ -47,6 +48,7 @@ import type {
   MovementKnownPlace,
   MovementTimelineLaneSide,
   MovementTimelineSegment,
+  MovementTimelineSleepOverlay,
   MovementUserBoxPreflight
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -54,6 +56,10 @@ import {
   MovementPlaceEditorDialog,
   type MovementPlaceDraftSeed
 } from "@/components/movement/movement-place-editor-dialog";
+import {
+  applySleepOverlayToMovementSegments,
+  isSleepOverlaySegment
+} from "@/components/movement/movement-sleep-overlay";
 
 const TIMELINE_PAGE_SIZE = 24;
 const GRID_ROW_HEIGHT = 64;
@@ -341,6 +347,9 @@ function resolveStayDisplayTitle(
 }
 
 function displaySegmentTitle(segment: MovementTimelineSegment) {
+  if (isSleepOverlaySegment(segment)) {
+    return "Sleep";
+  }
   if (segment.kind === "missing") {
     return normalizeMissingSegmentTitle(segment);
   }
@@ -356,6 +365,9 @@ function displaySegmentTitle(segment: MovementTimelineSegment) {
 }
 
 function displaySegmentBadge(segment: MovementTimelineSegment) {
+  if (isSleepOverlaySegment(segment)) {
+    return "Sleep";
+  }
   if (hasRecordedTrip(segment)) {
     return segment.trip.travelMode === "walking" ? "Walk" : "Move";
   }
@@ -380,17 +392,22 @@ function lanePercent(side: MovementTimelineLaneSide | "center") {
 
 function segmentDisplayHeight(
   durationSeconds: number,
-  kind: MovementTimelineSegment["kind"]
+  kind: MovementTimelineSegment["kind"],
+  syncSource?: string
 ) {
   const cappedHours = Math.min(durationSeconds, MAX_DISPLAY_SECONDS) / 3600;
-  const minHeight = kind === "stay" ? 132 : 124;
-  const maxHeight = kind === "stay" ? 404 : 328;
+  const isSleep = syncSource === "sleep overlay";
+  const minHeight = isSleep ? 144 : kind === "stay" ? 132 : 124;
+  const maxHeight = isSleep ? 364 : kind === "stay" ? 404 : 328;
   const height = minHeight + cappedHours * 44;
   return Math.max(minHeight, Math.min(maxHeight, height));
 }
 
 function rowHeightForSegment(segment: MovementTimelineSegment) {
-  return Math.max(250, segmentDisplayHeight(segment.durationSeconds, segment.kind) + 130);
+  return Math.max(
+    250,
+    segmentDisplayHeight(segment.durationSeconds, segment.kind, segment.syncSource) + 130
+  );
 }
 
 function buildDraft(segment: MovementTimelineSegment): TimelineDraft {
@@ -945,12 +962,15 @@ function MovementTimelineDetailCard({
   onOpenDetail: () => void;
   onDefinePlace: () => void;
 }) {
+  const sleepOverlay = isSleepOverlaySegment(segment);
   return (
     <Card className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(9,14,26,0.98),rgba(5,9,19,0.95))] p-5 shadow-[0_24px_74px_rgba(0,0,0,0.34)]">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/40">
-            {segment.kind === "stay"
+            {sleepOverlay
+              ? "Sleep overlay"
+              : segment.kind === "stay"
               ? "Stay detail"
               : segment.kind === "trip"
                 ? "Move detail"
@@ -960,12 +980,16 @@ function MovementTimelineDetailCard({
           <div className="mt-3 flex flex-wrap gap-2">
             <Badge
               className={
-                segment.sourceKind === "user_defined"
+                sleepOverlay
+                  ? "bg-cyan-400/14 text-cyan-100"
+                  : segment.sourceKind === "user_defined"
                   ? "bg-fuchsia-400/12 text-fuchsia-100"
                   : "bg-white/[0.06] text-white/70"
               }
             >
-              {segment.sourceKind === "user_defined"
+              {sleepOverlay
+                ? "Virtual"
+                : segment.sourceKind === "user_defined"
                 ? segment.origin === "user_invalidated"
                   ? "User invalidated"
                   : "User-defined"
@@ -983,6 +1007,7 @@ function MovementTimelineDetailCard({
             onClick={onOpenDetail}
             variant="ghost"
             className="rounded-full border border-white/10 bg-white/[0.04] px-3 text-white/78 hover:bg-white/[0.08]"
+            disabled={sleepOverlay}
           >
             Details
           </Button>
@@ -991,7 +1016,7 @@ function MovementTimelineDetailCard({
             variant="ghost"
             className="size-9 rounded-full border border-white/10 bg-white/[0.04] text-white/78 hover:bg-white/[0.08]"
             aria-label="Edit movement segment"
-            disabled={segment.kind === "missing" || !segment.editable}
+            disabled={sleepOverlay || segment.kind === "missing" || !segment.editable}
           >
             <PencilLine className="size-4" />
           </Button>
@@ -1032,14 +1057,18 @@ function MovementTimelineDetailCard({
             ) : null}
           </>
         ) : null}
-        {resolveSegmentPlaceLabel(segment) ? (
+        {sleepOverlay ? (
+          <Badge className="bg-cyan-400/12 text-cyan-50">
+            {segment.subtitle}
+          </Badge>
+        ) : resolveSegmentPlaceLabel(segment) ? (
           <Badge className="bg-white/[0.08] text-white/74">
             {resolveSegmentPlaceLabel(segment)}
           </Badge>
         ) : null}
       </div>
 
-      {hasRecordedStay(segment) ? (
+      {hasRecordedStay(segment) && !sleepOverlay ? (
         <div className="mt-4 rounded-[18px] border border-sky-300/14 bg-sky-300/8 p-3">
           <div className="text-[11px] uppercase tracking-[0.18em] text-sky-100/66">
             Location label
@@ -1068,7 +1097,9 @@ function MovementTimelineDetailCard({
           </div>
           <div className="mt-2 text-sm leading-6 text-white/76">
             {segment.kind === "stay"
-              ? `Stay block from ${compactTimeLabel(segment.startedAt)} to ${compactTimeLabel(segment.endedAt)}.`
+              ? sleepOverlay
+                ? `Sleep overlay from ${compactTimeLabel(segment.startedAt)} to ${compactTimeLabel(segment.endedAt)}. Underlying movement boxes are sliced virtually while this overlay is visible.`
+                : `Stay block from ${compactTimeLabel(segment.startedAt)} to ${compactTimeLabel(segment.endedAt)}.`
               : segment.kind === "trip"
                 ? `Connector from ${resolveTripEndpoint(segment, "start").label} to ${resolveTripEndpoint(segment, "end").label}.`
                 : `No reliable movement signal reached Forge from ${compactTimeLabel(segment.startedAt)} to ${compactTimeLabel(segment.endedAt)}.`}
@@ -1079,7 +1110,9 @@ function MovementTimelineDetailCard({
             Projection model
           </div>
           <div className="mt-2 text-sm leading-6 text-white/76">
-            Raw phone measurements stay immutable. Forge derives automatic boxes from that raw movement evidence, then overlays user-defined boxes on top without mutating the imported raw data.
+            {sleepOverlay
+              ? "This sleep layer is visual only. Forge does not persist these split boxes; it temporarily slices the visible movement boxes around each sleep interval."
+              : "Raw phone measurements stay immutable. Forge derives automatic boxes from that raw movement evidence, then overlays user-defined boxes on top without mutating the imported raw data."}
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
             <Badge className="bg-white/[0.08] text-white/74">
@@ -1101,7 +1134,12 @@ function MovementTimelineDetailCard({
       </div>
 
       <div className="mt-5 flex flex-wrap items-center gap-2 text-sm text-white/56">
-        {hasRecordedStay(segment) ? (
+        {sleepOverlay ? (
+          <>
+            <MoonStar className="size-4 text-cyan-300" />
+            Sleep overlay
+          </>
+        ) : hasRecordedStay(segment) ? (
           <>
             <MapPin className="size-4 text-[var(--primary)]" />
             {segment.stay.place?.label ?? "No canonical place linked yet"}
@@ -1832,11 +1870,18 @@ function MovementTimelineRow({
   const lane = segment.laneSide;
   const detailSide = lane === "right" ? "left" : "right";
   const shiftX = selected ? (detailSide === "right" ? -176 : 176) : 0;
-  const displayHeight = segmentDisplayHeight(segment.durationSeconds, segment.kind);
+  const sleepOverlay = isSleepOverlaySegment(segment);
+  const displayHeight = segmentDisplayHeight(
+    segment.durationSeconds,
+    segment.kind,
+    segment.syncSource
+  );
   const minRowHeight = Math.max(240, displayHeight + 120);
   const staySurface =
     segment.kind === "stay"
-      ? "bg-[linear-gradient(180deg,rgba(98,130,238,0.22),rgba(18,34,79,0.22))] border-[rgba(152,208,255,0.24)]"
+      ? sleepOverlay
+        ? "bg-[linear-gradient(180deg,rgba(39,127,173,0.28),rgba(16,51,79,0.22))] border-[rgba(138,227,255,0.28)]"
+        : "bg-[linear-gradient(180deg,rgba(98,130,238,0.22),rgba(18,34,79,0.22))] border-[rgba(152,208,255,0.24)]"
       : "";
   const tripEndpoints =
     segment.kind === "trip"
@@ -1939,7 +1984,7 @@ function MovementTimelineRow({
               <div className="relative z-10 flex h-full flex-col justify-between p-5">
                 <div className="flex items-center justify-between gap-3">
                   <Badge tone="signal" className="bg-white/10 text-white/82">
-                    Stay
+                    {sleepOverlay ? "Sleep" : "Stay"}
                   </Badge>
                   <div className="text-xs tracking-[0.18em] text-white/46">
                     {formatDurationLabel(segment.durationSeconds)}
@@ -1949,10 +1994,18 @@ function MovementTimelineRow({
                   <div className="truncate font-display text-[1.12rem] tracking-[-0.04em] text-white">
                     {displaySegmentTitle(segment)}
                   </div>
-                  {segment.kind === "stay" && resolveSegmentPlaceLabel(segment) ? (
+                  {segment.kind === "stay" &&
+                  resolveSegmentPlaceLabel(segment) &&
+                  !sleepOverlay ? (
                     <div className="mt-3 flex flex-wrap gap-2">
                       <Badge className="max-w-full truncate bg-white/[0.08] text-white/76">
                         {resolveSegmentPlaceLabel(segment)}
+                      </Badge>
+                    </div>
+                  ) : sleepOverlay ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Badge className="max-w-full truncate bg-cyan-400/12 text-cyan-50">
+                        {segment.subtitle}
                       </Badge>
                     </div>
                   ) : null}
@@ -2010,6 +2063,7 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
   const [placeSeedSegmentId, setPlaceSeedSegmentId] = useState<string | null>(null);
   const [dataModalOpen, setDataModalOpen] = useState(false);
   const [reopenDataModalOnEditClose, setReopenDataModalOnEditClose] = useState(false);
+  const [sleepOverlayVisible, setSleepOverlayVisible] = useState(false);
   const [segmentQuery, setSegmentQuery] = useState("");
   const [selectedFilterIds, setSelectedFilterIds] = useState<string[]>([]);
   const [scrollTop, setScrollTop] = useState(0);
@@ -2076,9 +2130,28 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
     () => [...dataSegmentsDescending].reverse(),
     [dataSegmentsDescending]
   );
+  const sleepOverlays = useMemo(() => {
+    const byId = new Map<string, MovementTimelineSleepOverlay>();
+    for (const page of timelineQuery.data?.pages ?? []) {
+      for (const overlay of page.sleepOverlays ?? []) {
+        byId.set(overlay.id, overlay);
+      }
+    }
+    return [...byId.values()].sort(
+      (left, right) =>
+        new Date(left.startedAt).getTime() - new Date(right.startedAt).getTime()
+    );
+  }, [timelineQuery.data]);
+  const displaySegments = useMemo(
+    () =>
+      sleepOverlayVisible
+        ? applySleepOverlayToMovementSegments(segments, sleepOverlays)
+        : segments,
+    [segments, sleepOverlayVisible, sleepOverlays]
+  );
   const detailSegment = useMemo(
-    () => segments.find((segment) => segment.id === detailSegmentId) ?? null,
-    [detailSegmentId, segments]
+    () => displaySegments.find((segment) => segment.id === detailSegmentId) ?? null,
+    [detailSegmentId, displaySegments]
   );
   const detailQuery = useQuery({
     queryKey: ["forge-movement-box-detail", detailSegment?.boxId ?? null, ...userIds],
@@ -2099,7 +2172,7 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
     refetchOnWindowFocus: false
   });
   const futureTailHeight = useMemo(() => {
-    const latestEndedAt = segments[segments.length - 1]?.endedAt;
+    const latestEndedAt = displaySegments[displaySegments.length - 1]?.endedAt;
     if (!latestEndedAt) {
       return GRID_ROW_HEIGHT * FUTURE_GRID_HOURS;
     }
@@ -2109,11 +2182,15 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
       GRID_ROW_HEIGHT * FUTURE_GRID_HOURS,
       ((nowPlusOneHourMs - latestEndedMs) / 3_600_000) * GRID_ROW_HEIGHT
     );
-  }, [segments]);
+  }, [displaySegments]);
   const timelineRows = useMemo(() => {
     let cursor = CENTER_PADDING;
-    return segments.map((segment) => {
-      const displayHeight = segmentDisplayHeight(segment.durationSeconds, segment.kind);
+    return displaySegments.map((segment) => {
+      const displayHeight = segmentDisplayHeight(
+        segment.durationSeconds,
+        segment.kind,
+        segment.syncSource
+      );
       const rowHeight = rowHeightForSegment(segment);
       const rowStart = cursor;
       const boxTop = rowStart + SEGMENT_BOX_TOP;
@@ -2128,7 +2205,7 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
         boxBottom
       } satisfies TimelineRowMetric;
     });
-  }, [segments]);
+  }, [displaySegments]);
 
   useEffect(() => {
     if (!dataModalOpen) {
@@ -2146,27 +2223,28 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
   ]);
 
   const rowVirtualizer = useVirtualizer({
-    count: segments.length,
+    count: displaySegments.length,
     getScrollElement: () => scrollParentRef.current,
-    estimateSize: (index) => rowHeightForSegment(segments[index] ?? segments[0]!),
+    estimateSize: (index) =>
+      rowHeightForSegment(displaySegments[index] ?? displaySegments[0]!),
     overscan: 6,
     paddingStart: CENTER_PADDING,
     paddingEnd: futureTailHeight
   });
 
   useEffect(() => {
-    const latest = segments.at(-1);
+    const latest = displaySegments.at(-1);
     if (!autoSelectedRef.current && latest) {
       autoSelectedRef.current = true;
       setSelectedSegmentId(latest.id);
     }
-  }, [segments]);
+  }, [displaySegments]);
 
   useEffect(() => {
-    if (!initializedRef.current && segments.length > 0) {
+    if (!initializedRef.current && displaySegments.length > 0) {
       initializedRef.current = true;
       requestAnimationFrame(() => {
-        rowVirtualizer.scrollToIndex(segments.length - 1, {
+        rowVirtualizer.scrollToIndex(displaySegments.length - 1, {
           align: "center"
         });
         requestAnimationFrame(() => {
@@ -2178,7 +2256,7 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
 
     if (
       prependAnchorRef.current &&
-      segments.length > prependAnchorRef.current.count &&
+      displaySegments.length > prependAnchorRef.current.count &&
       scrollParentRef.current
     ) {
       const anchor = prependAnchorRef.current;
@@ -2193,7 +2271,7 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
         syncScrollMetrics();
       });
     }
-  }, [rowVirtualizer, segments.length]);
+  }, [displaySegments.length, rowVirtualizer]);
 
   useEffect(() => {
     const element = scrollParentRef.current;
@@ -2225,6 +2303,15 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
           }
     );
   }, [segments, selectedSegmentId]);
+
+  useEffect(() => {
+    if (!selectedSegmentId) {
+      return;
+    }
+    if (!displaySegments.some((segment) => segment.id === selectedSegmentId)) {
+      setSelectedSegmentId(displaySegments.at(-1)?.id ?? null);
+    }
+  }, [displaySegments, selectedSegmentId]);
 
   const invalidateMovementProjectionQueries = async () => {
     await Promise.all([
@@ -2588,7 +2675,7 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
     }
     if (element.scrollTop <= 960) {
       prependAnchorRef.current = {
-        count: segments.length,
+        count: displaySegments.length,
         size: rowVirtualizer.getTotalSize()
       };
       void timelineQuery.fetchNextPage();
@@ -2650,6 +2737,16 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
               variant="ghost"
               size="sm"
               className="h-8 rounded-full border border-white/10 bg-white/[0.04] px-3 text-white/72 hover:bg-white/[0.08] hover:text-white"
+              onClick={() => setSleepOverlayVisible((current) => !current)}
+            >
+              <MoonStar className="size-3.5" />
+              {sleepOverlayVisible ? "Hide sleep" : "Show sleep"}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 rounded-full border border-white/10 bg-white/[0.04] px-3 text-white/72 hover:bg-white/[0.08] hover:text-white"
               onClick={() => setDataModalOpen(true)}
             >
               <Database className="size-3.5" />
@@ -2661,7 +2758,7 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
               </Badge>
             ) : null}
             <Badge className="bg-white/[0.06] text-white/68">
-              {segments.length} loaded
+              {displaySegments.length} visible
             </Badge>
           </div>
         </div>
@@ -2681,9 +2778,9 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
             className="relative"
             style={{ height: `${contentHeight}px` }}
           >
-            <MovementTimelineHistoryCap segment={segments[0] ?? null} />
+            <MovementTimelineHistoryCap segment={displaySegments[0] ?? null} />
             {virtualRows.map((virtualRow) => {
-              const segment = segments[virtualRow.index];
+              const segment = displaySegments[virtualRow.index];
               if (!segment) {
                 return null;
               }

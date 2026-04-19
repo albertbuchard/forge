@@ -1595,6 +1595,102 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(normalizedEnd.timeIntervalSince1970, referenceDate.timeIntervalSince1970, accuracy: 1)
     }
 
+    func testSleepOverlayNormalizerSlicesMovementItemsWithoutPersistingFragments() throws {
+        let formatter = ISO8601DateFormatter()
+        let referenceDate = formatter.date(from: "2026-04-20T08:00:00Z") ?? Date()
+        let items = [
+            makeDisplayItem(
+                id: "stay-before",
+                kind: .stay,
+                title: "Home",
+                placeLabel: "Home",
+                startedAt: formatter.date(from: "2026-04-19T20:00:00Z") ?? Date(),
+                endedAt: formatter.date(from: "2026-04-19T23:00:00Z") ?? Date(),
+                origin: .recorded
+            ),
+            makeDisplayItem(
+                id: "trip-after",
+                kind: .trip,
+                title: "Move",
+                placeLabel: nil,
+                startedAt: formatter.date(from: "2026-04-20T06:00:00Z") ?? Date(),
+                endedAt: formatter.date(from: "2026-04-20T07:00:00Z") ?? Date(),
+                origin: .recorded
+            )
+        ]
+        let overlays = [
+            ForgeMovementTimelineSleepOverlay(
+                id: "sleep-1",
+                externalUid: "sleep-1",
+                startedAt: "2026-04-19T22:00:00Z",
+                endedAt: "2026-04-20T06:30:00Z",
+                localDateKey: "2026-04-20",
+                sourceTimezone: "Europe/Zurich",
+                asleepSeconds: 28_800,
+                timeInBedSeconds: 30_600,
+                sleepScore: 84,
+                regularityScore: 77,
+                efficiency: 0.94,
+                recoveryState: "rested"
+            )
+        ]
+
+        let overlaid = MovementTimelineSleepOverlayNormalizer.overlay(
+            items: items,
+            overlays: overlays,
+            referenceDate: referenceDate
+        )
+
+        XCTAssertEqual(overlaid.count, 3)
+        XCTAssertEqual(overlaid[0].startedAtDate, formatter.date(from: "2026-04-19T20:00:00Z"))
+        XCTAssertEqual(overlaid[0].endedAtDate, formatter.date(from: "2026-04-19T21:59:59Z"))
+        XCTAssertTrue(overlaid[1].isSleepOverlay)
+        XCTAssertEqual(overlaid[1].startedAtDate, formatter.date(from: "2026-04-19T22:00:00Z"))
+        XCTAssertEqual(overlaid[1].endedAtDate, formatter.date(from: "2026-04-20T06:30:00Z"))
+        XCTAssertEqual(overlaid[2].startedAtDate, formatter.date(from: "2026-04-20T06:30:01Z"))
+        XCTAssertEqual(overlaid[2].endedAtDate, formatter.date(from: "2026-04-20T07:00:00Z"))
+    }
+
+    func testSleepOverlayNormalizerHidesFullyCoveredBoxes() {
+        let overlays = [
+            ForgeMovementTimelineSleepOverlay(
+                id: "sleep-1",
+                externalUid: "sleep-1",
+                startedAt: "2026-04-19T22:00:00Z",
+                endedAt: "2026-04-20T06:30:00Z",
+                localDateKey: "2026-04-20",
+                sourceTimezone: "Europe/Zurich",
+                asleepSeconds: 28_800,
+                timeInBedSeconds: 30_600,
+                sleepScore: 84,
+                regularityScore: 77,
+                efficiency: 0.94,
+                recoveryState: "rested"
+            )
+        ]
+        let formatter = ISO8601DateFormatter()
+        let items = [
+            makeDisplayItem(
+                id: "covered-stay",
+                kind: .stay,
+                title: "Home",
+                placeLabel: "Home",
+                startedAt: formatter.date(from: "2026-04-19T23:00:00Z") ?? Date(),
+                endedAt: formatter.date(from: "2026-04-20T01:00:00Z") ?? Date(),
+                origin: .recorded
+            )
+        ]
+
+        let overlaid = MovementTimelineSleepOverlayNormalizer.overlay(
+            items: items,
+            overlays: overlays,
+            referenceDate: formatter.date(from: "2026-04-20T08:00:00Z") ?? Date()
+        )
+
+        XCTAssertEqual(overlaid.count, 1)
+        XCTAssertTrue(overlaid[0].isSleepOverlay)
+    }
+
     func testMovementStoreCachesCanonicalProjectedBoxesFromBootstrap() {
         let projected = try! loadSharedMovementFixture(
             id: "user_defined_missing_override"

@@ -679,8 +679,24 @@ enum MovementTimelineLaneSide: String, Codable {
 
 struct ForgeMovementTimelinePage: Codable {
     let segments: [ForgeMovementTimelineSegment]
+    let sleepOverlays: [ForgeMovementTimelineSleepOverlay]
     let nextCursor: String?
     let hasMore: Bool
+}
+
+struct ForgeMovementTimelineSleepOverlay: Codable, Hashable, Identifiable {
+    let id: String
+    let externalUid: String
+    let startedAt: String
+    let endedAt: String
+    let localDateKey: String
+    let sourceTimezone: String
+    let asleepSeconds: Int?
+    let timeInBedSeconds: Int?
+    let sleepScore: Int?
+    let regularityScore: Int?
+    let efficiency: Double?
+    let recoveryState: String?
 }
 
 struct ForgeMovementTimelinePlace: Codable, Hashable, Identifiable {

@@ -595,6 +595,7 @@ import {
   getFitnessViewData,
   getSleepSessionById,
   getSleepSessionDetailById,
+  getSleepTimelineOverlaysForRange,
   getSleepViewData,
   getVitalsViewData,
   getWorkoutSessionById,
@@ -5573,6 +5574,39 @@ function resolveScopedUserIds(
   return unique.length > 0 ? unique : undefined;
 }
 
+function attachMovementTimelineSleepOverlays<
+  T extends {
+    segments: Array<{
+      startedAt: string;
+      endedAt: string;
+    }>;
+  }
+>(movement: T, userIds?: string[]) {
+  const rangeStart = movement.segments.reduce<string | null>((earliest, segment) => {
+    if (!earliest || Date.parse(segment.startedAt) < Date.parse(earliest)) {
+      return segment.startedAt;
+    }
+    return earliest;
+  }, null);
+  const rangeEnd = movement.segments.reduce<string | null>((latest, segment) => {
+    if (!latest || Date.parse(segment.endedAt) > Date.parse(latest)) {
+      return segment.endedAt;
+    }
+    return latest;
+  }, null);
+  return {
+    ...movement,
+    sleepOverlays:
+      rangeStart && rangeEnd
+        ? getSleepTimelineOverlaysForRange({
+            startedAt: rangeStart,
+            endedAt: rangeEnd,
+            userIds
+          })
+        : []
+  };
+}
+
 function readRequestedUserIdFromBody(body: unknown): string | null | undefined {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return undefined;
@@ -6821,15 +6855,16 @@ export async function buildServer(
   });
   app.get("/api/v1/movement/timeline", async (request) => {
     const parsed = movementTimelineQuerySchema.parse(request.query ?? {});
+    const userIds =
+      parsed.userIds.length > 0
+        ? parsed.userIds
+        : (resolveScopedUserIds(request.query as Record<string, unknown>) ?? []);
+    const movement = getMovementTimeline({
+      ...parsed,
+      userIds
+    });
     return {
-      movement: getMovementTimeline({
-        ...parsed,
-        userIds:
-          parsed.userIds.length > 0
-            ? parsed.userIds
-            : (resolveScopedUserIds(request.query as Record<string, unknown>) ??
-              [])
-      })
+      movement: attachMovementTimelineSleepOverlays(movement, userIds)
     };
   });
   app.get("/api/v1/movement/settings", async (request) => ({
@@ -7246,12 +7281,13 @@ export async function buildServer(
   app.post("/api/v1/mobile/movement/timeline", async (request) => {
     const parsed = movementMobileTimelineSchema.parse(request.body ?? {});
     const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+    const movement = getMovementTimeline({
+      before: parsed.before,
+      limit: parsed.limit,
+      userIds: [pairing.user_id]
+    });
     return {
-      movement: getMovementTimeline({
-        before: parsed.before,
-        limit: parsed.limit,
-        userIds: [pairing.user_id]
-      })
+      movement: attachMovementTimelineSleepOverlays(movement, [pairing.user_id])
     };
   });
   app.post("/api/v1/mobile/movement/boxes/:id/detail", async (request, reply) => {

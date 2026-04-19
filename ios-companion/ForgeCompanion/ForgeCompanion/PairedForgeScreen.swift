@@ -199,6 +199,7 @@ private struct MovementLifeTimelineView: View {
     let close: () -> Void
 
     @State private var segments: [ForgeMovementTimelineSegment] = []
+    @State private var sleepOverlays: [ForgeMovementTimelineSleepOverlay] = []
     @State private var nextCursor: String?
     @State private var hasMore = true
     @State private var initialLoadComplete = false
@@ -216,6 +217,7 @@ private struct MovementLifeTimelineView: View {
     @State private var queuedPlaceLabelDraft: MovementTimelinePlaceLabelDraft?
     @State private var queuedPlaceDraft: MovementTimelinePlaceDraft?
     @State private var pendingPlaceAssignmentWarning: MovementTimelinePlaceAssignmentWarning?
+    @State private var sleepOverlayVisible = false
     @State private var scrolledToCurrent = false
     @State private var focusedVisibleId: String?
 
@@ -442,6 +444,17 @@ private struct MovementLifeTimelineView: View {
 
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 14) {
+                        Button {
+                            sleepOverlayVisible.toggle()
+                        } label: {
+                            Image(systemName: sleepOverlayVisible ? "moon.stars.fill" : "moon.stars")
+                                .foregroundStyle(
+                                    sleepOverlayVisible
+                                        ? CompanionStyle.accentStrong
+                                        : CompanionStyle.textMuted
+                                )
+                        }
+
                         if isScreenshotPreview == false {
                             Menu {
                                 Button("Manual stay") {
@@ -594,17 +607,33 @@ private struct MovementLifeTimelineView: View {
         let remoteItems = segments.compactMap(MovementLifeTimelineItem.init(remote:))
         let canonicalItems = remoteItems.isEmpty ? cachedCanonicalItems : remoteItems
         if canonicalItems.isEmpty == false {
-            return canonicalTimelineItems(
+            let canonical = canonicalTimelineItems(
                 canonicalItems,
                 liveOverlay: liveOverlayItem,
                 referenceDate: timelineReferenceDate
-            ) + [.currentAnchor(referenceDate: timelineReferenceDate)]
+            )
+            let display = sleepOverlayVisible
+                ? sleepOverlayTimelineItems(
+                    canonical,
+                    overlays: sleepOverlays,
+                    referenceDate: timelineReferenceDate
+                )
+                : canonical
+            return display + [.currentAnchor(referenceDate: timelineReferenceDate)]
         }
         var localItems = localHistoricalItems
         if let liveOverlayItem {
             localItems.append(liveOverlayItem)
         }
-        return normalizedTimelineItems(localItems, referenceDate: timelineReferenceDate)
+        let normalized = normalizedTimelineItems(localItems, referenceDate: timelineReferenceDate)
+        let display = sleepOverlayVisible
+            ? sleepOverlayTimelineItems(
+                normalized,
+                overlays: sleepOverlays,
+                referenceDate: timelineReferenceDate
+            )
+            : normalized
+        return display
             + [.currentAnchor(referenceDate: timelineReferenceDate)]
     }
 
@@ -709,6 +738,18 @@ private struct MovementLifeTimelineView: View {
         )
     }
 
+    private func sleepOverlayTimelineItems(
+        _ items: [MovementLifeTimelineItem],
+        overlays: [ForgeMovementTimelineSleepOverlay],
+        referenceDate: Date
+    ) -> [MovementLifeTimelineItem] {
+        MovementTimelineSleepOverlayNormalizer.overlay(
+            items: items,
+            overlays: overlays,
+            referenceDate: referenceDate
+        )
+    }
+
     private func reload() async {
         _ = appModel.movementStore.runCoverageRepair(
             reason: "life timeline reload",
@@ -717,6 +758,7 @@ private struct MovementLifeTimelineView: View {
         nextCursor = nil
         hasMore = true
         segments = []
+        sleepOverlays = []
         loadError = nil
         selectedId = nil
         initialLoadComplete = false
@@ -735,6 +777,7 @@ private struct MovementLifeTimelineView: View {
         }
         if appModel.screenshotScenario != nil {
             segments = []
+            sleepOverlays = []
             nextCursor = nil
             hasMore = false
             loadError = nil
@@ -755,6 +798,7 @@ private struct MovementLifeTimelineView: View {
                 limit: 36
             )
             segments = page.segments.reversed()
+            sleepOverlays = page.sleepOverlays
             appModel.movementStore.cacheCanonicalProjectedBoxes(page.segments)
             nextCursor = page.nextCursor
             hasMore = page.hasMore
@@ -773,6 +817,7 @@ private struct MovementLifeTimelineView: View {
                         limit: 36
                     )
                     segments = page.segments.reversed()
+                    sleepOverlays = page.sleepOverlays
                     appModel.movementStore.cacheCanonicalProjectedBoxes(page.segments)
                     nextCursor = page.nextCursor
                     hasMore = page.hasMore
@@ -820,6 +865,7 @@ private struct MovementLifeTimelineView: View {
                 limit: 32
             )
             segments = page.segments.reversed() + segments
+            sleepOverlays = mergeSleepTimelineOverlays(existing: sleepOverlays, incoming: page.sleepOverlays)
             appModel.movementStore.cacheCanonicalProjectedBoxes(
                 page.segments + appModel.movementStore.cachedProjectedBoxes
             )
@@ -840,6 +886,7 @@ private struct MovementLifeTimelineView: View {
                         limit: 32
                     )
                     segments = page.segments.reversed() + segments
+                    sleepOverlays = mergeSleepTimelineOverlays(existing: sleepOverlays, incoming: page.sleepOverlays)
                     appModel.movementStore.cacheCanonicalProjectedBoxes(
                         page.segments + appModel.movementStore.cachedProjectedBoxes
                     )
@@ -2372,13 +2419,18 @@ private struct MovementTimelineRow: View {
                 detailRow("Avg speed", "\(String(format: "%.1f", speed)) m/s")
             }
             detailRow("Sync source", item.syncSource.capitalized)
-            detailRow("Box source", item.sourceKind == "user_defined" ? "User-defined" : "Automatic")
+            detailRow(
+                "Box source",
+                item.isSleepOverlay ? "Virtual overlay" : (item.sourceKind == "user_defined" ? "User-defined" : "Automatic")
+            )
             if item.overrideCount > 0 {
                 detailRow("Overrides", "\(item.overrideCount) automatic boxes")
             }
             detailRow(
                 "Projection",
-                "Raw phone measurements stay immutable. Forge projects automatic boxes from raw evidence, then overlays user-defined boxes without mutating the imported raw data."
+                item.isSleepOverlay
+                    ? "This sleep layer is visual only. Forge temporarily slices the visible movement boxes around sleep without storing the split boxes."
+                    : "Raw phone measurements stay immutable. Forge projects automatic boxes from raw evidence, then overlays user-defined boxes without mutating the imported raw data."
             )
             detailRow("Raw stays", "\(item.rawStayIds.count)")
             detailRow("Raw trips", "\(item.rawTripIds.count)")
@@ -2389,7 +2441,7 @@ private struct MovementTimelineRow: View {
             if item.tags.isEmpty == false {
                 FlowTagCloud(tags: item.tags)
             }
-            if item.kind == .stay {
+            if item.kind == .stay && item.isSleepOverlay == false {
                 Button("Label location") {
                     onDefinePlace()
                 }
@@ -2420,6 +2472,7 @@ private struct MovementTimelineRow: View {
                             .stroke(Color.white.opacity(0.08), lineWidth: 1)
                     )
                     .buttonStyle(.plain)
+                    .disabled(item.isSleepOverlay)
                     if item.sourceKind == "user_defined" {
                         Button("Delete") {
                             onDelete()
@@ -2449,7 +2502,11 @@ private struct MovementTimelineRow: View {
                             .stroke(Color.white.opacity(0.08), lineWidth: 1)
                     )
                     .buttonStyle(.plain)
-                    .disabled(item.kind == .anchor || (item.sourceKind != "automatic" && item.editable == false))
+                    .disabled(
+                        item.kind == .anchor
+                            || item.isSleepOverlay
+                            || (item.sourceKind != "automatic" && item.editable == false)
+                    )
                 }
             }
         }
@@ -2509,10 +2566,17 @@ private struct MovementTimelineStayShape: View {
                 }
                 .overlay(alignment: .bottomLeading) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("STAY")
-                            .font(.system(size: 10, weight: .bold, design: .rounded))
-                            .foregroundStyle(CompanionStyle.textSecondary)
-                            .tracking(2)
+                        if item.isSleepOverlay {
+                            Text("SLEEP")
+                                .font(.system(size: 10, weight: .bold, design: .rounded))
+                                .foregroundStyle(CompanionStyle.textSecondary)
+                                .tracking(2)
+                        } else {
+                            Text("STAY")
+                                .font(.system(size: 10, weight: .bold, design: .rounded))
+                                .foregroundStyle(CompanionStyle.textSecondary)
+                                .tracking(2)
+                        }
                         Text(
                             "\(item.startedAtDate.formatted(.dateTime.hour().minute())) → \(item.isCurrent ? "Now" : item.endedAtDate.formatted(.dateTime.hour().minute()))"
                         )
@@ -2529,6 +2593,11 @@ private struct MovementTimelineStayShape: View {
                             .multilineTextAlignment(.center)
                             .lineLimit(2)
                             .padding(.horizontal, 20)
+                        if item.isSleepOverlay {
+                            Image(systemName: "moon.stars.fill")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundStyle(Color.white.opacity(0.86))
+                        }
                         if let placeLabel = item.secondaryPlaceLabel {
                             Text(placeLabel)
                                 .font(.system(size: 11, weight: .bold, design: .rounded))
@@ -3867,6 +3936,194 @@ enum MovementTimelineCanonicalNormalizer {
     }
 }
 
+private func mergeSleepTimelineOverlays(
+    existing: [ForgeMovementTimelineSleepOverlay],
+    incoming: [ForgeMovementTimelineSleepOverlay]
+) -> [ForgeMovementTimelineSleepOverlay] {
+    var byId: [String: ForgeMovementTimelineSleepOverlay] = [:]
+    for overlay in existing + incoming {
+        byId[overlay.id] = overlay
+    }
+    return byId.values.sorted { left, right in
+        let leftStarted = MovementTimelineFormatting.parse(left.startedAt)
+        let rightStarted = MovementTimelineFormatting.parse(right.startedAt)
+        if leftStarted == rightStarted {
+            return left.id < right.id
+        }
+        return leftStarted < rightStarted
+    }
+}
+
+enum MovementTimelineSleepOverlayNormalizer {
+    private static let overlayEpsilon: TimeInterval = 1
+
+    static func overlay(
+        items: [MovementLifeTimelineItem],
+        overlays: [ForgeMovementTimelineSleepOverlay],
+        referenceDate: Date
+    ) -> [MovementLifeTimelineItem] {
+        let canonical = items
+            .filter { $0.kind != .anchor && $0.endedAtDate > $0.startedAtDate }
+            .sorted { left, right in
+                if left.startedAtDate == right.startedAtDate {
+                    if left.endedAtDate == right.endedAtDate {
+                        return left.id < right.id
+                    }
+                    return left.endedAtDate < right.endedAtDate
+                }
+                return left.startedAtDate < right.startedAtDate
+            }
+        guard canonical.isEmpty == false else {
+            return []
+        }
+        var display = canonical
+        for overlay in mergedOverlays(overlays) {
+            let overlayStart = MovementTimelineFormatting.parse(overlay.startedAt)
+            let overlayEnd = MovementTimelineFormatting.parse(overlay.endedAt)
+            guard overlayEnd > overlayStart else {
+                continue
+            }
+            let overlayItem = MovementLifeTimelineItem(sleepOverlay: overlay)
+            var next: [MovementLifeTimelineItem] = []
+            var inserted = false
+            for item in display {
+                if item.endedAtDate <= overlayStart || item.startedAtDate >= overlayEnd {
+                    if inserted == false && item.startedAtDate >= overlayEnd {
+                        next.append(overlayItem)
+                        inserted = true
+                    }
+                    next.append(item)
+                    continue
+                }
+                if item.startedAtDate < overlayStart,
+                   let before = trimmedItem(
+                    item,
+                    startedAt: item.startedAtDate,
+                    endedAt: overlayStart.addingTimeInterval(-overlayEpsilon)
+                   )
+                {
+                    next.append(before)
+                }
+                if inserted == false {
+                    next.append(overlayItem)
+                    inserted = true
+                }
+                if item.endedAtDate > overlayEnd,
+                   let after = trimmedItem(
+                    item,
+                    startedAt: overlayEnd.addingTimeInterval(overlayEpsilon),
+                    endedAt: item.endedAtDate
+                   )
+                {
+                    next.append(after)
+                }
+            }
+            if inserted == false {
+                next.append(overlayItem)
+            }
+            display = next.sorted { left, right in
+                if left.startedAtDate == right.startedAtDate {
+                    if left.endedAtDate == right.endedAtDate {
+                        return left.id < right.id
+                    }
+                    return left.endedAtDate < right.endedAtDate
+                }
+                return left.startedAtDate < right.startedAtDate
+            }
+        }
+        if let last = display.last,
+           last.kind == .stay,
+           last.isSleepOverlay == false,
+           last.endedAtDate >= referenceDate.addingTimeInterval(-60 * 60)
+        {
+            display[display.count - 1] = last.promotedToCurrent(referenceDate: referenceDate)
+        }
+        return display
+    }
+
+    private static func mergedOverlays(
+        _ overlays: [ForgeMovementTimelineSleepOverlay]
+    ) -> [ForgeMovementTimelineSleepOverlay] {
+        let sorted = overlays.sorted { left, right in
+            let leftStarted = MovementTimelineFormatting.parse(left.startedAt)
+            let rightStarted = MovementTimelineFormatting.parse(right.startedAt)
+            if leftStarted == rightStarted {
+                return left.id < right.id
+            }
+            return leftStarted < rightStarted
+        }
+        guard sorted.isEmpty == false else {
+            return []
+        }
+        var merged: [ForgeMovementTimelineSleepOverlay] = []
+        for overlay in sorted {
+            guard let current = merged.last else {
+                merged.append(overlay)
+                continue
+            }
+            let currentEnd = MovementTimelineFormatting.parse(current.endedAt)
+            let nextStart = MovementTimelineFormatting.parse(overlay.startedAt)
+            if nextStart <= currentEnd.addingTimeInterval(overlayEpsilon) {
+                let nextEnd = max(currentEnd, MovementTimelineFormatting.parse(overlay.endedAt))
+                merged[merged.count - 1] = ForgeMovementTimelineSleepOverlay(
+                    id: "\(current.id)__\(overlay.id)",
+                    externalUid: current.externalUid,
+                    startedAt: current.startedAt,
+                    endedAt: MovementTimelineFormatting.isoFormatter.string(from: nextEnd),
+                    localDateKey: current.localDateKey,
+                    sourceTimezone: current.sourceTimezone,
+                    asleepSeconds: (current.asleepSeconds ?? 0) + (overlay.asleepSeconds ?? 0),
+                    timeInBedSeconds: (current.timeInBedSeconds ?? 0) + (overlay.timeInBedSeconds ?? 0),
+                    sleepScore: overlay.sleepScore ?? current.sleepScore,
+                    regularityScore: overlay.regularityScore ?? current.regularityScore,
+                    efficiency: overlay.efficiency ?? current.efficiency,
+                    recoveryState: overlay.recoveryState ?? current.recoveryState
+                )
+                continue
+            }
+            merged.append(overlay)
+        }
+        return merged
+    }
+
+    private static func trimmedItem(
+        _ item: MovementLifeTimelineItem,
+        startedAt: Date,
+        endedAt: Date
+    ) -> MovementLifeTimelineItem? {
+        guard endedAt > startedAt else {
+            return nil
+        }
+        return MovementLifeTimelineItem(
+            id: "\(item.id)-sleep-virtual-\(Int(startedAt.timeIntervalSince1970))-\(Int(endedAt.timeIntervalSince1970))",
+            source: item.source,
+            kind: item.kind,
+            title: item.title,
+            subtitle: item.subtitle,
+            placeLabel: item.placeLabel,
+            tags: item.tags,
+            syncSource: item.syncSource,
+            startedAtDate: startedAt,
+            endedAtDate: endedAt,
+            durationSeconds: max(60, Int(endedAt.timeIntervalSince(startedAt))),
+            laneSide: item.laneSide,
+            connectorFromLane: item.connectorFromLane,
+            connectorToLane: item.connectorToLane,
+            distanceMeters: item.distanceMeters,
+            averageSpeedMps: item.averageSpeedMps,
+            sourceKind: item.sourceKind,
+            overrideCount: item.overrideCount,
+            rawStayIds: item.rawStayIds,
+            rawTripIds: item.rawTripIds,
+            rawPointCount: item.rawPointCount,
+            hasLegacyCorrections: item.hasLegacyCorrections,
+            origin: item.origin,
+            editable: item.editable,
+            isCurrent: false
+        )
+    }
+}
+
 struct MovementLifeTimelineItem: Identifiable, Hashable {
     enum Kind: Hashable {
         case stay
@@ -4192,6 +4449,59 @@ struct MovementLifeTimelineItem: Identifiable, Hashable {
         )
     }
 
+    init(sleepOverlay overlay: ForgeMovementTimelineSleepOverlay) {
+        let startedAtDate = MovementTimelineFormatting.parse(overlay.startedAt)
+        let endedAtDate = MovementTimelineFormatting.parse(overlay.endedAt)
+        let durationSeconds = max(
+            60,
+            Int(endedAtDate.timeIntervalSince(startedAtDate))
+        )
+        var detailParts: [String] = []
+        if let asleepSeconds = overlay.asleepSeconds, asleepSeconds > 0 {
+            let hours = Double(asleepSeconds) / 3600
+            detailParts.append(String(format: "%.1fh asleep", hours))
+        } else if let timeInBedSeconds = overlay.timeInBedSeconds, timeInBedSeconds > 0 {
+            let hours = Double(timeInBedSeconds) / 3600
+            detailParts.append(String(format: "%.1fh in bed", hours))
+        }
+        if let sleepScore = overlay.sleepScore {
+            detailParts.append("score \(sleepScore)")
+        }
+        if let regularityScore = overlay.regularityScore {
+            detailParts.append("regularity \(regularityScore)")
+        }
+        if let recoveryState = overlay.recoveryState, recoveryState.isEmpty == false {
+            detailParts.append(recoveryState)
+        }
+        self.init(
+            id: "sleep-overlay-\(overlay.id)",
+            source: .derived("sleep-overlay-\(overlay.id)"),
+            kind: .stay,
+            title: "Sleep",
+            subtitle: detailParts.joined(separator: " · ").isEmpty ? "Sleep session" : detailParts.joined(separator: " · "),
+            placeLabel: nil,
+            tags: ["sleep"],
+            syncSource: "sleep overlay",
+            startedAtDate: startedAtDate,
+            endedAtDate: endedAtDate,
+            durationSeconds: durationSeconds,
+            laneSide: .left,
+            connectorFromLane: .left,
+            connectorToLane: .left,
+            distanceMeters: nil,
+            averageSpeedMps: nil,
+            sourceKind: "automatic",
+            overrideCount: 0,
+            rawStayIds: [],
+            rawTripIds: [],
+            rawPointCount: 0,
+            hasLegacyCorrections: false,
+            origin: .recorded,
+            editable: false,
+            isCurrent: false
+        )
+    }
+
     init?(localHistorySegment segment: MovementSyncStore.TimelineSegment) {
         guard segment.endedAt > segment.startedAt else {
             return nil
@@ -4253,8 +4563,9 @@ struct MovementLifeTimelineItem: Identifiable, Hashable {
 
     var displayHeight: CGFloat {
         let maxDisplaySeconds = 6.0 * 60.0 * 60.0
-        let minHeight: CGFloat = kind == .trip ? 90 : kind == .missing ? 96 : 72
-        let maxHeight: CGFloat = 320
+        let minHeight: CGFloat =
+            isSleepOverlay ? 92 : kind == .trip ? 90 : kind == .missing ? 96 : 72
+        let maxHeight: CGFloat = isSleepOverlay ? 280 : 320
         let fraction = CGFloat(min(Double(durationSeconds), maxDisplaySeconds) / maxDisplaySeconds)
         return minHeight + ((maxHeight - minHeight) * max(fraction, 0.04))
     }
@@ -4271,6 +4582,9 @@ struct MovementLifeTimelineItem: Identifiable, Hashable {
     }
 
     var displayTitle: String {
+        if isSleepOverlay {
+            return "Sleep"
+        }
         if kind == .missing {
             let normalized = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             if normalized.isEmpty || normalized == "stay" || normalized == "continued stay" || normalized == "repaired stay" {
@@ -4320,6 +4634,10 @@ struct MovementLifeTimelineItem: Identifiable, Hashable {
         case .liveTrip, .derived, .anchor:
             return nil
         }
+    }
+
+    var isSleepOverlay: Bool {
+        syncSource == "sleep overlay"
     }
 
     var boxId: String? {
@@ -4389,6 +4707,16 @@ struct MovementLifeTimelineItem: Identifiable, Hashable {
     }
 
     var gradient: LinearGradient {
+        if isSleepOverlay {
+            return LinearGradient(
+                colors: [
+                    Color(red: 0.18, green: 0.46, blue: 0.62).opacity(0.95),
+                    Color(red: 0.08, green: 0.24, blue: 0.36).opacity(0.84)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
         if kind == .missing {
             return LinearGradient(
                 colors: [
@@ -4425,6 +4753,12 @@ private enum MovementTimelineFormatting {
         return formatter
     }()
 
+    static let isoFormatterWithoutFractionalSeconds: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
     static let dayFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "dd/MM/yy"
@@ -4438,7 +4772,9 @@ private enum MovementTimelineFormatting {
     }()
 
     static func parse(_ value: String) -> Date {
-        isoFormatter.date(from: value) ?? Date()
+        isoFormatter.date(from: value)
+            ?? isoFormatterWithoutFractionalSeconds.date(from: value)
+            ?? Date()
     }
 
     static func durationLabel(_ seconds: Int) -> String {

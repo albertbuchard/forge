@@ -389,7 +389,7 @@ struct ForgeSyncClient {
         )
         companionDebugLog(
             "ForgeSyncClient",
-            "fetchMovementTimeline success segments=\(envelope.movement.segments.count) hasMore=\(envelope.movement.hasMore)"
+            "fetchMovementTimeline success segments=\(envelope.movement.segments.count) sleepOverlays=\(envelope.movement.sleepOverlays.count) hasMore=\(envelope.movement.hasMore)"
         )
         return envelope.movement
     }

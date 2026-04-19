@@ -1,5 +1,4 @@
-Forge Companion 1.0.14 finishes the stay relabeling fix by updating the live
-mobile movement backend path used by the iPhone app, so selecting an existing
-saved location or creating a new one can now attach to recorded stays instead
-of failing with the old immutable-stay error. Diagnostics log controls and
-location-distance warnings remain included from the previous release.
+Forge Companion 1.0.15 adds a visual sleep overlay to the phone life timeline.
+You can now toggle sleep sessions on top of movement history, with the timeline
+temporarily slicing overlapping boxes into virtual fragments above and below the
+sleep window without changing or storing the underlying movement data.

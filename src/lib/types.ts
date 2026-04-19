@@ -2171,8 +2171,24 @@ export type MovementTimelineSegment =
   | MovementTimelineTripSegment
   | MovementTimelineMissingSegment;
 
+export interface MovementTimelineSleepOverlay {
+  id: string;
+  externalUid: string;
+  startedAt: string;
+  endedAt: string;
+  localDateKey: string;
+  sourceTimezone: string;
+  asleepSeconds: number | null;
+  timeInBedSeconds: number | null;
+  sleepScore: number | null;
+  regularityScore: number | null;
+  efficiency: number | null;
+  recoveryState: string | null;
+}
+
 export interface MovementTimelineData {
   segments: MovementTimelineSegment[];
+  sleepOverlays: MovementTimelineSleepOverlay[];
   nextCursor: string | null;
   hasMore: boolean;
   invalidSegmentCount: number;

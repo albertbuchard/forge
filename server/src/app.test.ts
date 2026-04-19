@@ -4009,6 +4009,279 @@ test("movement timeline hides overlapping stays and trips and flags them invalid
   }
 });
 
+test("movement timeline returns sleep overlays for overlapping sessions on web and mobile routes", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-movement-sleep-overlay-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const pairingResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: {
+        userId: "user_operator"
+      }
+    });
+    assert.equal(pairingResponse.statusCode, 201);
+    const qrPayload = (
+      pairingResponse.json() as {
+        qrPayload: {
+          sessionId: string;
+          pairingToken: string;
+        };
+      }
+    ).qrPayload;
+    const syncResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        device: {
+          name: "Omar iPhone",
+          platform: "ios",
+          appVersion: "1.0",
+          sourceDevice: "iPhone"
+        },
+        permissions: {
+          healthKitAuthorized: true,
+          backgroundRefreshEnabled: true,
+          motionReady: true,
+          locationReady: true
+        },
+        sleepSessions: [],
+        workouts: [],
+        movement: {
+          settings: {
+            trackingEnabled: true,
+            publishMode: "auto_publish",
+            retentionMode: "aggregates_only",
+            locationPermissionStatus: "always",
+            motionPermissionStatus: "ready",
+            backgroundTrackingReady: true,
+            metadata: {}
+          },
+          knownPlaces: [
+            {
+              externalUid: "place_home_overlay",
+              label: "Home",
+              aliases: [],
+              latitude: 46.5191,
+              longitude: 6.6323,
+              radiusMeters: 120,
+              categoryTags: ["home"],
+              visibility: "shared",
+              wikiNoteId: null,
+              linkedEntities: [],
+              linkedPeople: [],
+              metadata: {}
+            },
+            {
+              externalUid: "place_shop_overlay",
+              label: "Shop",
+              aliases: [],
+              latitude: 46.5214,
+              longitude: 6.6407,
+              radiusMeters: 90,
+              categoryTags: ["grocery"],
+              visibility: "shared",
+              wikiNoteId: null,
+              linkedEntities: [],
+              linkedPeople: [],
+              metadata: {}
+            }
+          ],
+          stays: [
+            {
+              externalUid: "stay_home_overlay",
+              label: "Home",
+              status: "completed",
+              classification: "stationary",
+              startedAt: "2026-04-06T07:00:00.000Z",
+              endedAt: "2026-04-06T08:00:00.000Z",
+              centerLatitude: 46.5191,
+              centerLongitude: 6.6323,
+              radiusMeters: 100,
+              sampleCount: 10,
+              placeExternalUid: "place_home_overlay",
+              placeLabel: "Home",
+              tags: ["home"],
+              metadata: {}
+            },
+            {
+              externalUid: "stay_shop_overlay",
+              label: "Shop",
+              status: "completed",
+              classification: "stationary",
+              startedAt: "2026-04-06T08:20:00.000Z",
+              endedAt: "2026-04-06T09:10:00.000Z",
+              centerLatitude: 46.5214,
+              centerLongitude: 6.6407,
+              radiusMeters: 85,
+              sampleCount: 6,
+              placeExternalUid: "place_shop_overlay",
+              placeLabel: "Shop",
+              tags: ["grocery"],
+              metadata: {}
+            }
+          ],
+          trips: [
+            {
+              externalUid: "trip_home_shop_overlay",
+              label: "Home to shop",
+              status: "completed",
+              travelMode: "travel",
+              activityType: "walking",
+              startedAt: "2026-04-06T08:00:00.000Z",
+              endedAt: "2026-04-06T08:20:00.000Z",
+              startPlaceExternalUid: "place_home_overlay",
+              endPlaceExternalUid: "place_shop_overlay",
+              distanceMeters: 2100,
+              movingSeconds: 900,
+              idleSeconds: 120,
+              averageSpeedMps: 1.9,
+              maxSpeedMps: 2.5,
+              caloriesKcal: 120,
+              expectedMet: 3.2,
+              tags: ["grocery"],
+              linkedEntities: [],
+              linkedPeople: [],
+              metadata: {},
+              points: [
+                {
+                  externalUid: "trip_home_shop_overlay_p0",
+                  recordedAt: "2026-04-06T08:00:00.000Z",
+                  latitude: 46.5191,
+                  longitude: 6.6323,
+                  accuracyMeters: 9,
+                  altitudeMeters: 410,
+                  speedMps: 0,
+                  isStopAnchor: true
+                },
+                {
+                  externalUid: "trip_home_shop_overlay_p1",
+                  recordedAt: "2026-04-06T08:20:00.000Z",
+                  latitude: 46.5214,
+                  longitude: 6.6407,
+                  accuracyMeters: 8,
+                  altitudeMeters: 415,
+                  speedMps: 2.1,
+                  isStopAnchor: true
+                }
+              ]
+            }
+          ]
+        }
+      }
+    });
+    assert.equal(syncResponse.statusCode, 200);
+
+    const baselineTimelineResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/movement/timeline?limit=20"
+    });
+    assert.equal(baselineTimelineResponse.statusCode, 200);
+    const baselineTimeline = baselineTimelineResponse.json() as {
+      movement: {
+        segments: Array<{
+          startedAt: string;
+          endedAt: string;
+        }>;
+      };
+    };
+    const anchorSegment = baselineTimeline.movement.segments
+      .map((segment) => ({
+        ...segment,
+        durationMs: Date.parse(segment.endedAt) - Date.parse(segment.startedAt)
+      }))
+      .sort((left, right) => right.durationMs - left.durationMs)[0];
+    assert.ok(anchorSegment);
+    const overlayStartMs = Date.parse(anchorSegment.startedAt) + 60 * 1_000;
+    const overlayEndMs = Math.min(
+      Date.parse(anchorSegment.endedAt) - 60 * 1_000,
+      overlayStartMs + 30 * 60 * 1_000
+    );
+    assert.ok(overlayEndMs > overlayStartMs);
+
+    const createSleep = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/sleep",
+      headers: { cookie: operatorCookie },
+      payload: {
+        startedAt: new Date(overlayStartMs).toISOString(),
+        endedAt: new Date(overlayEndMs).toISOString(),
+        qualitySummary: "Sleep overlay regression",
+        tags: ["overlay"]
+      }
+    });
+    assert.equal(createSleep.statusCode, 201);
+
+    const webTimelineResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/movement/timeline?limit=20"
+    });
+    assert.equal(webTimelineResponse.statusCode, 200);
+    const webTimeline = webTimelineResponse.json() as {
+      movement: {
+        sleepOverlays: Array<{
+          id: string;
+          startedAt: string;
+          endedAt: string;
+          asleepSeconds: number | null;
+        }>;
+      };
+    };
+    assert.equal(webTimeline.movement.sleepOverlays.length, 1);
+    assert.equal(
+      webTimeline.movement.sleepOverlays[0]?.startedAt,
+      new Date(overlayStartMs).toISOString()
+    );
+    assert.equal(
+      webTimeline.movement.sleepOverlays[0]?.endedAt,
+      new Date(overlayEndMs).toISOString()
+    );
+    assert.equal(
+      webTimeline.movement.sleepOverlays[0]?.asleepSeconds,
+      Math.round((overlayEndMs - overlayStartMs) / 1_000)
+    );
+
+    const mobileTimelineResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/movement/timeline",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        limit: 20
+      }
+    });
+    assert.equal(mobileTimelineResponse.statusCode, 200);
+    const mobileTimeline = mobileTimelineResponse.json() as {
+      movement: {
+        sleepOverlays: Array<{
+          id: string;
+          startedAt: string;
+          endedAt: string;
+        }>;
+      };
+    };
+    assert.equal(mobileTimeline.movement.sleepOverlays.length, 1);
+    assert.equal(
+      mobileTimeline.movement.sleepOverlays[0]?.startedAt,
+      new Date(overlayStartMs).toISOString()
+    );
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("movement timeline hides tiny trips under the minimum distance or duration", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-movement-tiny-trip-")
