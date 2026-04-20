@@ -2077,6 +2077,110 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(item.linkableStayIds(using: store), ["remote_1", "stay_remote_1"])
     }
 
+    func testPromotedCurrentTimelineItemPreservesLinkableStayIds() {
+        let startedAt = Date(timeIntervalSince1970: 1_775_000_000)
+        let endedAt = startedAt.addingTimeInterval(3600)
+        let item = MovementLifeTimelineItem(
+            id: "remote-current-stay-item",
+            source: .remoteAutomatic(
+                "box_remote_current_stay",
+                MovementTimelineCoordinate(latitude: 46.5191, longitude: 6.6323)
+            ),
+            kind: .stay,
+            title: "Work",
+            subtitle: "Remote canonical stay",
+            placeLabel: nil,
+            tags: ["workplace"],
+            syncSource: "canonical",
+            startedAtDate: startedAt,
+            endedAtDate: endedAt,
+            durationSeconds: 3600,
+            laneSide: .left,
+            connectorFromLane: .left,
+            connectorToLane: .left,
+            distanceMeters: nil,
+            averageSpeedMps: nil,
+            rawStayIds: ["stay_remote_1"],
+            origin: .recorded,
+            editable: true,
+            isCurrent: false
+        )
+
+        let promoted = item.promotedToCurrent(referenceDate: endedAt.addingTimeInterval(1200))
+        let store = MovementSyncStore(testingState: nil)
+
+        XCTAssertEqual(promoted.rawStayIds, ["stay_remote_1"])
+        XCTAssertEqual(promoted.linkableStayIds(using: store), ["remote_1", "stay_remote_1"])
+        XCTAssertTrue(promoted.isCurrent)
+    }
+
+    func testCanonicalNormalizerPreservesRawStayIdsWhenMergingLiveOverlay() {
+        let startedAt = Date(timeIntervalSince1970: 1_775_000_000)
+        let canonicalStay = MovementLifeTimelineItem(
+            id: "remote-stay-item",
+            source: .remoteAutomatic(
+                "box_remote_stay",
+                MovementTimelineCoordinate(latitude: 46.5191, longitude: 6.6323)
+            ),
+            kind: .stay,
+            title: "Work",
+            subtitle: "Remote canonical stay",
+            placeLabel: "Work",
+            tags: ["workplace"],
+            syncSource: "canonical",
+            startedAtDate: startedAt,
+            endedAtDate: startedAt.addingTimeInterval(3600),
+            durationSeconds: 3600,
+            laneSide: .left,
+            connectorFromLane: .left,
+            connectorToLane: .left,
+            distanceMeters: nil,
+            averageSpeedMps: nil,
+            rawStayIds: ["stay_remote_1"],
+            origin: .recorded,
+            editable: true,
+            isCurrent: false
+        )
+        let liveOverlay = MovementLifeTimelineItem(
+            id: "live-stay-item",
+            source: .liveStay(
+                "remote_1",
+                MovementTimelineCoordinate(latitude: 46.5191, longitude: 6.6323)
+            ),
+            kind: .stay,
+            title: "Work",
+            subtitle: "Current stay",
+            placeLabel: "Work",
+            tags: ["workplace"],
+            syncSource: "local cache",
+            startedAtDate: startedAt.addingTimeInterval(3600),
+            endedAtDate: startedAt.addingTimeInterval(4200),
+            durationSeconds: 600,
+            laneSide: .left,
+            connectorFromLane: .left,
+            connectorToLane: .left,
+            distanceMeters: nil,
+            averageSpeedMps: nil,
+            rawStayIds: [],
+            origin: .recorded,
+            editable: true,
+            isCurrent: true
+        )
+
+        let normalized = MovementTimelineCanonicalNormalizer.normalize(
+            items: [canonicalStay],
+            liveOverlay: liveOverlay,
+            referenceDate: startedAt.addingTimeInterval(4500)
+        )
+        let store = MovementSyncStore(testingState: nil)
+        let merged = try? XCTUnwrap(normalized.first)
+
+        XCTAssertEqual(normalized.count, 1)
+        XCTAssertEqual(merged?.rawStayIds, ["stay_remote_1"])
+        XCTAssertEqual(merged?.linkableStayIds(using: store), ["remote_1", "stay_remote_1"])
+        XCTAssertTrue(merged?.isCurrent ?? false)
+    }
+
     func testPlaceLabelOperationCreatesUserBoxForAutomaticStay() {
         let startedAt = Date(timeIntervalSince1970: 1_775_000_000)
         let item = MovementLifeTimelineItem(

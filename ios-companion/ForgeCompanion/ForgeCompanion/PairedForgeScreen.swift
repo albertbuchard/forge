@@ -1343,7 +1343,7 @@ private struct MovementLifeTimelineView: View {
         to item: MovementLifeTimelineItem
     ) async {
         do {
-            let linkedStayIds = item.rawStayIds.filter { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false }
+            let linkedStayIds = item.linkableStayIds(using: appModel.movementStore)
             guard linkedStayIds.isEmpty == false else {
                 throw NSError(
                     domain: "MovementLifeTimeline",
@@ -3717,16 +3717,15 @@ enum MovementTimelineDisplayNormalizer {
         } else {
             mergedOrigin = .recorded
         }
-        return MovementLifeTimelineItem(
+        return previous.copy(
             id: "merged-\(previous.id)-\(next.id)",
             source: mergedOrigin == .recorded ? previous.source : .derived("merged-\(previous.id)-\(next.id)"),
-            kind: previous.kind,
             title: previous.placeLabel ?? next.placeLabel ?? previous.title,
             subtitle:
                 mergedOrigin == .continuedStay
                 ? "Short stationary gap carried forward into one continuous stay."
                 : previous.subtitle,
-            placeLabel: previous.placeLabel ?? next.placeLabel,
+            placeLabel: previous.placeLabel != nil ? previous.placeLabel : next.placeLabel,
             tags: Array(Set(previous.tags + next.tags)).sorted(),
             syncSource: previous.syncSource == next.syncSource ? previous.syncSource : "display repair",
             startedAtDate: min(previous.startedAtDate, next.startedAtDate),
@@ -3742,7 +3741,11 @@ enum MovementTimelineDisplayNormalizer {
                 previous.kind == .trip
                 ? max(previous.distanceMeters ?? 0, next.distanceMeters ?? 0)
                 : nil,
-            averageSpeedMps: previous.averageSpeedMps ?? next.averageSpeedMps,
+            averageSpeedMps: previous.averageSpeedMps != nil ? previous.averageSpeedMps : next.averageSpeedMps,
+            rawStayIds: MovementLifeTimelineItem.mergedIdentifiers(previous.rawStayIds, next.rawStayIds),
+            rawTripIds: MovementLifeTimelineItem.mergedIdentifiers(previous.rawTripIds, next.rawTripIds),
+            rawPointCount: previous.rawPointCount + next.rawPointCount,
+            hasLegacyCorrections: previous.hasLegacyCorrections || next.hasLegacyCorrections,
             origin: mergedOrigin,
             editable: mergedOrigin == .recorded && previous.editable && next.editable,
             isCurrent: previous.isCurrent || next.isCurrent
@@ -3756,26 +3759,10 @@ enum MovementTimelineDisplayNormalizer {
         guard item.endedAtDate > newStart else {
             return nil
         }
-        return MovementLifeTimelineItem(
+        return item.copy(
             id: "\(item.id)-trimmed-\(Int(newStart.timeIntervalSince1970))",
-            source: item.source,
-            kind: item.kind,
-            title: item.title,
-            subtitle: item.subtitle,
-            placeLabel: item.placeLabel,
-            tags: item.tags,
-            syncSource: item.syncSource,
             startedAtDate: newStart,
-            endedAtDate: item.endedAtDate,
-            durationSeconds: max(60, Int(item.endedAtDate.timeIntervalSince(newStart))),
-            laneSide: item.laneSide,
-            connectorFromLane: item.connectorFromLane,
-            connectorToLane: item.connectorToLane,
-            distanceMeters: item.distanceMeters,
-            averageSpeedMps: item.averageSpeedMps,
-            origin: item.origin,
-            editable: item.editable,
-            isCurrent: item.isCurrent
+            durationSeconds: max(60, Int(item.endedAtDate.timeIntervalSince(newStart)))
         )
     }
 }
@@ -3874,13 +3861,10 @@ enum MovementTimelineCanonicalNormalizer {
     ) -> MovementLifeTimelineItem {
         let mergedEnd = max(max(left.endedAtDate, right.endedAtDate), referenceDate)
         let mergedStart = min(left.startedAtDate, right.startedAtDate)
-        return MovementLifeTimelineItem(
-            id: left.id,
-            source: left.source,
-            kind: .stay,
+        return left.copy(
             title: left.placeLabel ?? right.placeLabel ?? left.title,
             subtitle: left.subtitle,
-            placeLabel: left.placeLabel ?? right.placeLabel,
+            placeLabel: left.placeLabel != nil ? left.placeLabel : right.placeLabel,
             tags: Array(Set(left.tags + right.tags)).sorted(),
             syncSource: left.syncSource == right.syncSource ? left.syncSource : "canonical",
             startedAtDate: mergedStart,
@@ -3894,8 +3878,11 @@ enum MovementTimelineCanonicalNormalizer {
             connectorToLane: .left,
             distanceMeters: nil,
             averageSpeedMps: nil,
-            sourceKind: left.sourceKind,
             overrideCount: max(left.overrideCount, right.overrideCount),
+            rawStayIds: MovementLifeTimelineItem.mergedIdentifiers(left.rawStayIds, right.rawStayIds),
+            rawTripIds: MovementLifeTimelineItem.mergedIdentifiers(left.rawTripIds, right.rawTripIds),
+            rawPointCount: max(left.rawPointCount, right.rawPointCount),
+            hasLegacyCorrections: left.hasLegacyCorrections || right.hasLegacyCorrections,
             origin:
                 left.origin == .continuedStay || right.origin == .continuedStay
                 ? .continuedStay
@@ -4758,28 +4745,70 @@ struct MovementLifeTimelineItem: Identifiable, Hashable {
         return 100
     }
 
-    func promotedToCurrent(referenceDate: Date) -> MovementLifeTimelineItem {
+    static func mergedIdentifiers(_ left: [String], _ right: [String]) -> [String] {
+        Array(Set(left + right)).sorted()
+    }
+
+    func copy(
+        id: String? = nil,
+        source: Source? = nil,
+        kind: Kind? = nil,
+        title: String? = nil,
+        subtitle: String? = nil,
+        placeLabel: String?? = nil,
+        tags: [String]? = nil,
+        syncSource: String? = nil,
+        startedAtDate: Date? = nil,
+        endedAtDate: Date? = nil,
+        durationSeconds: Int? = nil,
+        laneSide: MovementTimelineLaneSide? = nil,
+        connectorFromLane: MovementTimelineLaneSide? = nil,
+        connectorToLane: MovementTimelineLaneSide? = nil,
+        distanceMeters: Double?? = nil,
+        averageSpeedMps: Double?? = nil,
+        sourceKind: String? = nil,
+        overrideCount: Int? = nil,
+        rawStayIds: [String]? = nil,
+        rawTripIds: [String]? = nil,
+        rawPointCount: Int? = nil,
+        hasLegacyCorrections: Bool? = nil,
+        origin: Origin? = nil,
+        editable: Bool? = nil,
+        isCurrent: Bool? = nil
+    ) -> MovementLifeTimelineItem {
         MovementLifeTimelineItem(
-            id: id,
-            source: source,
-            kind: kind,
-            title: title,
-            subtitle: subtitle,
-            placeLabel: placeLabel,
-            tags: tags,
-            syncSource: syncSource,
-            startedAtDate: startedAtDate,
+            id: id ?? self.id,
+            source: source ?? self.source,
+            kind: kind ?? self.kind,
+            title: title ?? self.title,
+            subtitle: subtitle ?? self.subtitle,
+            placeLabel: placeLabel ?? self.placeLabel,
+            tags: tags ?? self.tags,
+            syncSource: syncSource ?? self.syncSource,
+            startedAtDate: startedAtDate ?? self.startedAtDate,
+            endedAtDate: endedAtDate ?? self.endedAtDate,
+            durationSeconds: durationSeconds ?? self.durationSeconds,
+            laneSide: laneSide ?? self.laneSide,
+            connectorFromLane: connectorFromLane ?? self.connectorFromLane,
+            connectorToLane: connectorToLane ?? self.connectorToLane,
+            distanceMeters: distanceMeters ?? self.distanceMeters,
+            averageSpeedMps: averageSpeedMps ?? self.averageSpeedMps,
+            sourceKind: sourceKind ?? self.sourceKind,
+            overrideCount: overrideCount ?? self.overrideCount,
+            rawStayIds: rawStayIds ?? self.rawStayIds,
+            rawTripIds: rawTripIds ?? self.rawTripIds,
+            rawPointCount: rawPointCount ?? self.rawPointCount,
+            hasLegacyCorrections: hasLegacyCorrections ?? self.hasLegacyCorrections,
+            origin: origin ?? self.origin,
+            editable: editable ?? self.editable,
+            isCurrent: isCurrent ?? self.isCurrent
+        )
+    }
+
+    func promotedToCurrent(referenceDate: Date) -> MovementLifeTimelineItem {
+        copy(
             endedAtDate: max(referenceDate, endedAtDate),
             durationSeconds: max(durationSeconds, Int(max(referenceDate, endedAtDate).timeIntervalSince(startedAtDate))),
-            laneSide: laneSide,
-            connectorFromLane: connectorFromLane,
-            connectorToLane: connectorToLane,
-            distanceMeters: distanceMeters,
-            averageSpeedMps: averageSpeedMps,
-            sourceKind: sourceKind,
-            overrideCount: overrideCount,
-            origin: origin,
-            editable: editable,
             isCurrent: true
         )
     }
