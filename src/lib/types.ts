@@ -2398,6 +2398,16 @@ export interface AgentTokenSummary {
   autonomyMode: "approval_required" | "scoped_write" | "autonomous";
   approvalMode: "approval_by_default" | "high_impact_only" | "none";
   description: string;
+  bootstrapPolicy: {
+    mode: "disabled" | "active_only" | "scoped" | "full";
+    goalsLimit: number;
+    projectsLimit: number;
+    tasksLimit: number;
+    habitsLimit: number;
+    strategiesLimit: number;
+    peoplePageLimit: number;
+    includePeoplePages: boolean;
+  };
   lastUsedAt: string | null;
   revokedAt: string | null;
   createdAt: string;
@@ -3328,6 +3338,8 @@ export interface AgentOnboardingPayload {
   recommendedTrustLevel: "standard" | "trusted" | "autonomous";
   recommendedAutonomyMode: "approval_required" | "scoped_write" | "autonomous";
   recommendedApprovalMode: "approval_by_default" | "high_impact_only" | "none";
+  defaultBootstrapPolicy: AgentTokenSummary["bootstrapPolicy"];
+  effectiveBootstrapPolicy: AgentTokenSummary["bootstrapPolicy"];
   authModes: {
     operatorSession: {
       label: string;

@@ -14975,11 +14975,27 @@ test("settings and local agent token management persist through the versioned AP
     const createdTokenBody = createdToken.json() as {
       token: {
         token: string;
-        tokenSummary: { id: string; status: string };
+        tokenSummary: {
+          id: string;
+          status: string;
+          bootstrapPolicy: {
+            mode: string;
+            projectsLimit: number;
+            tasksLimit: number;
+          };
+        };
       };
     };
     assert.ok(createdTokenBody.token.token.startsWith("fg_live_"));
     assert.equal(createdTokenBody.token.tokenSummary.status, "active");
+    assert.equal(
+      createdTokenBody.token.tokenSummary.bootstrapPolicy.mode,
+      "active_only"
+    );
+    assert.equal(
+      createdTokenBody.token.tokenSummary.bootstrapPolicy.projectsLimit,
+      8
+    );
 
     const settingsViaToken = await app.inject({
       method: "GET",
@@ -15039,6 +15055,16 @@ test("settings and local agent token management persist through the versioned AP
         defaultConnectionMode: string;
         recommendedScopes: string[];
         recommendedAutonomyMode: string;
+        defaultBootstrapPolicy: {
+          mode: string;
+          projectsLimit: number;
+          tasksLimit: number;
+        };
+        effectiveBootstrapPolicy: {
+          mode: string;
+          projectsLimit: number;
+          tasksLimit: number;
+        };
         authModes: { operatorSession: { tokenRequired: boolean } };
         tokenRecovery: {
           rawTokenStoredByForge: boolean;
@@ -15164,6 +15190,14 @@ test("settings and local agent token management persist through the versioned AP
       onboardingBody.onboarding.defaultConnectionMode,
       "operator_session"
     );
+    assert.equal(
+      onboardingBody.onboarding.defaultBootstrapPolicy.mode,
+      "active_only"
+    );
+    assert.equal(
+      onboardingBody.onboarding.effectiveBootstrapPolicy.mode,
+      "active_only"
+    );
     assert.deepEqual(onboardingBody.onboarding.recommendedScopes, [
       "read",
       "write",
@@ -15190,6 +15224,26 @@ test("settings and local agent token management persist through the versioned AP
     assert.equal(
       onboardingBody.onboarding.tokenRecovery.recoveryAction,
       "rotate_or_issue_new_token"
+    );
+
+    const onboardingViaToken = await app.inject({
+      method: "GET",
+      url: "/api/v1/agents/onboarding",
+      headers: {
+        authorization: `Bearer ${createdTokenBody.token.token}`,
+        host: "127.0.0.1:4317"
+      }
+    });
+    assert.equal(onboardingViaToken.statusCode, 200);
+    assert.equal(
+      (
+        onboardingViaToken.json() as {
+          onboarding: {
+            effectiveBootstrapPolicy: { mode: string; tasksLimit: number };
+          };
+        }
+      ).onboarding.effectiveBootstrapPolicy.mode,
+      "active_only"
     );
     assert.match(
       onboardingBody.onboarding.conceptModel.goal,

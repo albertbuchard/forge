@@ -149,7 +149,17 @@ export const createAgentTokenSchema = z.object({
   trustLevel: z.enum(["standard", "trusted", "autonomous"]),
   autonomyMode: z.enum(["approval_required", "scoped_write", "autonomous"]),
   approvalMode: z.enum(["approval_by_default", "high_impact_only", "none"]),
-  scopes: z.array(z.string().trim().min(1)).min(1)
+  scopes: z.array(z.string().trim().min(1)).min(1),
+  bootstrapPolicy: z.object({
+    mode: z.enum(["disabled", "active_only", "scoped", "full"]),
+    goalsLimit: z.coerce.number().int().min(0).max(100),
+    projectsLimit: z.coerce.number().int().min(0).max(100),
+    tasksLimit: z.coerce.number().int().min(0).max(100),
+    habitsLimit: z.coerce.number().int().min(0).max(100),
+    strategiesLimit: z.coerce.number().int().min(0).max(100),
+    peoplePageLimit: z.coerce.number().int().min(0).max(50),
+    includePeoplePages: z.boolean()
+  })
 });
 
 export const createInsightSchema = z.object({

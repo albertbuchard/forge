@@ -27,6 +27,16 @@ async function loadOnboardingPayload() {
   expect(response.statusCode).toBe(200);
   await app.close();
   return response.json().onboarding as {
+    defaultBootstrapPolicy: {
+      mode: string;
+      projectsLimit: number;
+      tasksLimit: number;
+    };
+    effectiveBootstrapPolicy: {
+      mode: string;
+      projectsLimit: number;
+      tasksLimit: number;
+    };
     entityCatalog: Array<{
       entityType: string;
       classification: string;
@@ -69,6 +79,22 @@ async function loadOnboardingPayload() {
 }
 
 describe("forge onboarding contract", () => {
+  it("publishes default and effective bootstrap policies for adapter session setup", async () => {
+    const onboarding = await loadOnboardingPayload();
+    expect(onboarding.defaultBootstrapPolicy).toEqual(
+      expect.objectContaining({
+        mode: "active_only",
+        projectsLimit: 8,
+        tasksLimit: 10
+      })
+    );
+    expect(onboarding.effectiveBootstrapPolicy).toEqual(
+      expect.objectContaining({
+        mode: "active_only"
+      })
+    );
+  });
+
   it("publishes the full entity catalog needed by question flows", async () => {
     const onboarding = await loadOnboardingPayload();
     const entityTypes = new Set(

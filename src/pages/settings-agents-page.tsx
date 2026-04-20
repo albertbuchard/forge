@@ -82,6 +82,10 @@ function runtimeStatusTone(status: AgentRuntimeSession["status"]) {
   return "text-white/45";
 }
 
+function formatBootstrapMode(mode: AgentTokenSummary["bootstrapPolicy"]["mode"]) {
+  return mode.replaceAll("_", " ");
+}
+
 export function SettingsAgentsPage() {
   const queryClient = useQueryClient();
 
@@ -810,6 +814,16 @@ export function SettingsAgentsPage() {
                     <span>·</span>
                     <span>{token.approvalMode.replaceAll("_", " ")}</span>
                   </div>
+                  <div className="mt-2 text-xs text-white/45">
+                    Bootstrap: {formatBootstrapMode(token.bootstrapPolicy.mode)}
+                    {" · "}
+                    {token.bootstrapPolicy.projectsLimit} projects
+                    {" · "}
+                    {token.bootstrapPolicy.tasksLimit} tasks
+                    {token.bootstrapPolicy.includePeoplePages
+                      ? ` · ${token.bootstrapPolicy.peoplePageLimit} people pages`
+                      : " · no people pages"}
+                  </div>
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     {["write", "rewards.manage", "psyche.write"].map(
                       (scope) => (
@@ -1173,6 +1187,14 @@ export function SettingsAgentsPage() {
                     {onboarding.recommendedTrustLevel} ·{" "}
                     {onboarding.recommendedAutonomyMode.replaceAll("_", " ")} ·{" "}
                     {onboarding.recommendedApprovalMode.replaceAll("_", " ")}
+                  </div>
+                  <div className="mt-2 text-xs text-white/45">
+                    Bootstrap default:{" "}
+                    {formatBootstrapMode(onboarding.defaultBootstrapPolicy.mode)}
+                    {" · "}
+                    {onboarding.defaultBootstrapPolicy.projectsLimit} projects
+                    {" · "}
+                    {onboarding.defaultBootstrapPolicy.tasksLimit} tasks
                   </div>
                 </div>
               </div>

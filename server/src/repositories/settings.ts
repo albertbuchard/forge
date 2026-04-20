@@ -16,7 +16,9 @@ import {
   syncForgeManagedWikiProfile
 } from "./model-settings.js";
 import {
+  agentBootstrapPolicySchema,
   createAgentTokenSchema,
+  legacyAgentBootstrapPolicy,
   agentIdentitySchema,
   customThemeSchema,
   settingsPayloadSchema,
@@ -92,6 +94,7 @@ type AgentTokenRow = {
   label: string;
   token_prefix: string;
   scopes_json: string;
+  bootstrap_policy_json: string | null;
   agent_id: string | null;
   agent_label: string | null;
   trust_level: AgentTokenSummary["trustLevel"];
@@ -481,6 +484,11 @@ function mapAgent(row: AgentIdentityRow): AgentIdentity {
 }
 
 function mapToken(row: AgentTokenRow): AgentTokenSummary {
+  const bootstrapPolicy = agentBootstrapPolicySchema.parse(
+    row.bootstrap_policy_json
+      ? JSON.parse(row.bootstrap_policy_json)
+      : legacyAgentBootstrapPolicy
+  );
   return {
     id: row.id,
     label: row.label,
@@ -492,6 +500,7 @@ function mapToken(row: AgentTokenRow): AgentTokenSummary {
     autonomyMode: row.autonomy_mode,
     approvalMode: row.approval_mode,
     description: row.description,
+    bootstrapPolicy,
     lastUsedAt: row.last_used_at,
     revokedAt: row.revoked_at,
     createdAt: row.created_at,
@@ -619,11 +628,12 @@ function readSettingsRow(): SettingsRow {
 export function listAgentTokens(): AgentTokenSummary[] {
   const rows = getDatabase()
     .prepare(
-      `SELECT
+        `SELECT
          agent_tokens.id,
          agent_tokens.label,
          agent_tokens.token_prefix,
          agent_tokens.scopes_json,
+         agent_tokens.bootstrap_policy_json,
          agent_tokens.agent_id,
          agent_identities.label AS agent_label,
          agent_tokens.trust_level,
@@ -1139,8 +1149,8 @@ export function createAgentToken(
     getDatabase()
       .prepare(
         `INSERT INTO agent_tokens (
-          id, label, token_hash, token_prefix, scopes_json, agent_id, trust_level, autonomy_mode, approval_mode, description, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          id, label, token_hash, token_prefix, scopes_json, bootstrap_policy_json, agent_id, trust_level, autonomy_mode, approval_mode, description, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         id,
@@ -1148,6 +1158,7 @@ export function createAgentToken(
         hashToken(token),
         tokenPrefix,
         JSON.stringify(parsed.scopes),
+        JSON.stringify(parsed.bootstrapPolicy),
         agent.id,
         parsed.trustLevel,
         parsed.autonomyMode,
@@ -1170,7 +1181,8 @@ export function createAgentToken(
         metadata: {
           agentId: agent.id,
           agentLabel: agent.label,
-          scopes: parsed.scopes.join(",")
+          scopes: parsed.scopes.join(","),
+          bootstrapMode: parsed.bootstrapPolicy.mode
         }
       });
       recordEventLog({
@@ -1183,7 +1195,8 @@ export function createAgentToken(
           agentId: agent.id,
           trustLevel: parsed.trustLevel,
           autonomyMode: parsed.autonomyMode,
-          approvalMode: parsed.approvalMode
+          approvalMode: parsed.approvalMode,
+          bootstrapMode: parsed.bootstrapPolicy.mode
         }
       });
     }
@@ -1300,11 +1313,12 @@ export function verifyAgentToken(token: string): AgentTokenSummary | null {
   const hash = hashToken(token);
   const row = getDatabase()
     .prepare(
-      `SELECT
+        `SELECT
          agent_tokens.id,
          agent_tokens.label,
          agent_tokens.token_prefix,
          agent_tokens.scopes_json,
+         agent_tokens.bootstrap_policy_json,
          agent_tokens.agent_id,
          agent_identities.label AS agent_label,
          agent_tokens.trust_level,

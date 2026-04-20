@@ -1895,6 +1895,34 @@ export function buildOpenApiDocument() {
     }
   };
 
+  const agentBootstrapPolicy = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "mode",
+      "goalsLimit",
+      "projectsLimit",
+      "tasksLimit",
+      "habitsLimit",
+      "strategiesLimit",
+      "peoplePageLimit",
+      "includePeoplePages"
+    ],
+    properties: {
+      mode: {
+        type: "string",
+        enum: ["disabled", "active_only", "scoped", "full"]
+      },
+      goalsLimit: { type: "integer", minimum: 0, maximum: 100 },
+      projectsLimit: { type: "integer", minimum: 0, maximum: 100 },
+      tasksLimit: { type: "integer", minimum: 0, maximum: 100 },
+      habitsLimit: { type: "integer", minimum: 0, maximum: 100 },
+      strategiesLimit: { type: "integer", minimum: 0, maximum: 100 },
+      peoplePageLimit: { type: "integer", minimum: 0, maximum: 50 },
+      includePeoplePages: { type: "boolean" }
+    }
+  };
+
   const agentTokenSummary = {
     type: "object",
     additionalProperties: false,
@@ -1909,6 +1937,7 @@ export function buildOpenApiDocument() {
       "autonomyMode",
       "approvalMode",
       "description",
+      "bootstrapPolicy",
       "lastUsedAt",
       "revokedAt",
       "createdAt",
@@ -1935,6 +1964,7 @@ export function buildOpenApiDocument() {
         enum: ["approval_by_default", "high_impact_only", "none"]
       },
       description: { type: "string" },
+      bootstrapPolicy: { $ref: "#/components/schemas/AgentBootstrapPolicy" },
       lastUsedAt: nullable({ type: "string", format: "date-time" }),
       revokedAt: nullable({ type: "string", format: "date-time" }),
       createdAt: { type: "string", format: "date-time" },
@@ -2879,6 +2909,8 @@ export function buildOpenApiDocument() {
       "recommendedTrustLevel",
       "recommendedAutonomyMode",
       "recommendedApprovalMode",
+      "defaultBootstrapPolicy",
+      "effectiveBootstrapPolicy",
       "authModes",
       "tokenRecovery",
       "requiredHeaders",
@@ -2926,6 +2958,12 @@ export function buildOpenApiDocument() {
       recommendedApprovalMode: {
         type: "string",
         enum: ["approval_by_default", "high_impact_only", "none"]
+      },
+      defaultBootstrapPolicy: {
+        $ref: "#/components/schemas/AgentBootstrapPolicy"
+      },
+      effectiveBootstrapPolicy: {
+        $ref: "#/components/schemas/AgentBootstrapPolicy"
       },
       authModes: {
         type: "object",
@@ -4295,6 +4333,7 @@ export function buildOpenApiDocument() {
         AgentRuntimeSessionEvent: agentRuntimeSessionEvent,
         AgentRuntimeSession: agentRuntimeSession,
         AgentRuntimeSessionHistory: agentRuntimeSessionHistory,
+        AgentBootstrapPolicy: agentBootstrapPolicy,
         AgentTokenSummary: agentTokenSummary,
         AgentTokenMutationResult: agentTokenMutationResult,
         Domain: domain,

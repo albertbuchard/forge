@@ -221,6 +221,74 @@ export const approvalModeSchema = z.enum([
   "high_impact_only",
   "none"
 ]);
+export const agentBootstrapModeSchema = z.enum([
+  "disabled",
+  "active_only",
+  "scoped",
+  "full"
+]);
+export const defaultAgentBootstrapPolicy = {
+  mode: "active_only",
+  goalsLimit: 5,
+  projectsLimit: 8,
+  tasksLimit: 10,
+  habitsLimit: 6,
+  strategiesLimit: 4,
+  peoplePageLimit: 4,
+  includePeoplePages: true
+} as const;
+export const legacyAgentBootstrapPolicy = {
+  mode: "full",
+  goalsLimit: 25,
+  projectsLimit: 25,
+  tasksLimit: 25,
+  habitsLimit: 20,
+  strategiesLimit: 20,
+  peoplePageLimit: 12,
+  includePeoplePages: true
+} as const;
+export const agentBootstrapPolicySchema = z.object({
+  mode: agentBootstrapModeSchema.default(defaultAgentBootstrapPolicy.mode),
+  goalsLimit: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(100)
+    .default(defaultAgentBootstrapPolicy.goalsLimit),
+  projectsLimit: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(100)
+    .default(defaultAgentBootstrapPolicy.projectsLimit),
+  tasksLimit: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(100)
+    .default(defaultAgentBootstrapPolicy.tasksLimit),
+  habitsLimit: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(100)
+    .default(defaultAgentBootstrapPolicy.habitsLimit),
+  strategiesLimit: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(100)
+    .default(defaultAgentBootstrapPolicy.strategiesLimit),
+  peoplePageLimit: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(50)
+    .default(defaultAgentBootstrapPolicy.peoplePageLimit),
+  includePeoplePages: z.boolean().default(
+    defaultAgentBootstrapPolicy.includePeoplePages
+  )
+});
 export const agentRuntimeProviderSchema = z.enum([
   "openclaw",
   "hermes",
@@ -2199,6 +2267,7 @@ export const agentTokenSummarySchema = z.object({
   autonomyMode: autonomyModeSchema,
   approvalMode: approvalModeSchema,
   description: z.string(),
+  bootstrapPolicy: agentBootstrapPolicySchema,
   lastUsedAt: z.string().nullable(),
   revokedAt: z.string().nullable(),
   createdAt: z.string(),
@@ -3868,7 +3937,8 @@ export const createAgentTokenSchema = z.object({
   trustLevel: agentTrustLevelSchema.default("standard"),
   autonomyMode: autonomyModeSchema.default("approval_required"),
   approvalMode: approvalModeSchema.default("approval_by_default"),
-  scopes: uniqueStringArraySchema.default(["read", "write", "insights"])
+  scopes: uniqueStringArraySchema.default(["read", "write", "insights"]),
+  bootstrapPolicy: agentBootstrapPolicySchema.default(defaultAgentBootstrapPolicy)
 });
 
 export const activityArchiveQuerySchema = activityListQuerySchema.extend({
@@ -4458,6 +4528,8 @@ export type ThemePreference = z.infer<typeof themePreferenceSchema>;
 export type ExecutionSettings = z.infer<typeof executionSettingsSchema>;
 export type AppLocale = z.infer<typeof appLocaleSchema>;
 export type AgentIdentity = z.infer<typeof agentIdentitySchema>;
+export type AgentBootstrapMode = z.infer<typeof agentBootstrapModeSchema>;
+export type AgentBootstrapPolicy = z.infer<typeof agentBootstrapPolicySchema>;
 export type AgentRuntimeProvider = z.infer<typeof agentRuntimeProviderSchema>;
 export type AgentRuntimeConnectionMode = z.infer<
   typeof agentRuntimeConnectionModeSchema

@@ -81,7 +81,24 @@ type ForgeOperatorOverview = {
   operator?: ForgeOperatorContext | null;
 };
 
+type ForgeBootstrapPolicy = {
+  mode: "disabled" | "active_only" | "scoped" | "full";
+  goalsLimit: number;
+  projectsLimit: number;
+  tasksLimit: number;
+  habitsLimit: number;
+  strategiesLimit: number;
+  peoplePageLimit: number;
+  includePeoplePages: boolean;
+};
+
+type ForgeOnboardingPayload = {
+  defaultBootstrapPolicy?: ForgeBootstrapPolicy;
+  effectiveBootstrapPolicy?: ForgeBootstrapPolicy;
+};
+
 type ForgeSessionBootstrapPayload = {
+  bootstrapPolicy: ForgeBootstrapPolicy;
   overview: ForgeOperatorOverview | null;
   goals: ForgeGoalRecord[];
   projects: ForgeProjectRecord[];
@@ -89,6 +106,17 @@ type ForgeSessionBootstrapPayload = {
   habits: ForgeHabitRecord[];
   strategies: ForgeStrategyRecord[];
   peoplePages: ForgeWikiPageRecord[];
+};
+
+const DEFAULT_BOOTSTRAP_POLICY: ForgeBootstrapPolicy = {
+  mode: "active_only",
+  goalsLimit: 5,
+  projectsLimit: 8,
+  tasksLimit: 10,
+  habitsLimit: 6,
+  strategiesLimit: 4,
+  peoplePageLimit: 4,
+  includePeoplePages: true
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -101,6 +129,68 @@ function asArray<T>(value: unknown): T[] {
 
 function cleanInline(value: string | null | undefined) {
   return (value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function clampBudget(
+  value: unknown,
+  fallback: number,
+  max: number
+) {
+  const numeric = typeof value === "number" ? value : Number(value);
+  return Math.min(
+    Math.max(Number.isFinite(numeric) ? numeric : fallback, 0),
+    max
+  );
+}
+
+function sanitizeBootstrapPolicy(value: unknown): ForgeBootstrapPolicy {
+  if (!isRecord(value)) {
+    return { ...DEFAULT_BOOTSTRAP_POLICY };
+  }
+  const mode =
+    value.mode === "disabled" ||
+    value.mode === "active_only" ||
+    value.mode === "scoped" ||
+    value.mode === "full"
+      ? value.mode
+      : DEFAULT_BOOTSTRAP_POLICY.mode;
+  return {
+    mode,
+    goalsLimit: clampBudget(
+      value.goalsLimit,
+      DEFAULT_BOOTSTRAP_POLICY.goalsLimit,
+      100
+    ),
+    projectsLimit: clampBudget(
+      value.projectsLimit,
+      DEFAULT_BOOTSTRAP_POLICY.projectsLimit,
+      100
+    ),
+    tasksLimit: clampBudget(
+      value.tasksLimit,
+      DEFAULT_BOOTSTRAP_POLICY.tasksLimit,
+      100
+    ),
+    habitsLimit: clampBudget(
+      value.habitsLimit,
+      DEFAULT_BOOTSTRAP_POLICY.habitsLimit,
+      100
+    ),
+    strategiesLimit: clampBudget(
+      value.strategiesLimit,
+      DEFAULT_BOOTSTRAP_POLICY.strategiesLimit,
+      100
+    ),
+    peoplePageLimit: clampBudget(
+      value.peoplePageLimit,
+      DEFAULT_BOOTSTRAP_POLICY.peoplePageLimit,
+      50
+    ),
+    includePeoplePages:
+      typeof value.includePeoplePages === "boolean"
+        ? value.includePeoplePages
+        : DEFAULT_BOOTSTRAP_POLICY.includePeoplePages
+  };
 }
 
 function excerpt(value: string | null | undefined, maxLength: number) {
@@ -224,6 +314,11 @@ export function buildForgeSessionBootstrapContext(
     lines.push(`Generated at: ${payload.overview.generatedAt}`, "");
   }
 
+  lines.push(
+    `Bootstrap mode: ${payload.bootstrapPolicy.mode.replaceAll("_", " ")}`,
+    ""
+  );
+
   if (overview) {
     lines.push("## Current Forge Snapshot", "");
     lines.push(`- Active projects in operator view: ${overview.activeProjects?.length ?? 0}`);
@@ -322,9 +417,104 @@ async function readForgePayload<T>(
   return expectForgeSuccess(result) as T;
 }
 
+function withQuery(
+  pathName: string,
+  query: Record<string, string | number | boolean | undefined>
+) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value === undefined) {
+      continue;
+    }
+    search.set(key, String(value));
+  }
+  const encoded = search.toString();
+  return encoded ? `${pathName}?${encoded}` : pathName;
+}
+
+function resolveBootstrapPolicy(
+  onboardingResponse: { onboarding?: ForgeOnboardingPayload | null } | null
+) {
+  const onboarding =
+    onboardingResponse && isRecord(onboardingResponse) && "onboarding" in onboardingResponse
+      ? onboardingResponse.onboarding
+      : null;
+  if (isRecord(onboarding) && isRecord(onboarding.effectiveBootstrapPolicy)) {
+    return sanitizeBootstrapPolicy(onboarding.effectiveBootstrapPolicy);
+  }
+  if (isRecord(onboarding) && isRecord(onboarding.defaultBootstrapPolicy)) {
+    return sanitizeBootstrapPolicy(onboarding.defaultBootstrapPolicy);
+  }
+  return { ...DEFAULT_BOOTSTRAP_POLICY };
+}
+
 async function loadForgeSessionBootstrapPayload(
   config: ForgePluginConfig
 ): Promise<ForgeSessionBootstrapPayload> {
+  const onboardingResponse = await readForgePayload<{
+    onboarding?: ForgeOnboardingPayload | null;
+  }>(config, "/api/v1/agents/onboarding");
+  const bootstrapPolicy = resolveBootstrapPolicy(onboardingResponse);
+  if (bootstrapPolicy.mode === "disabled") {
+    return {
+      bootstrapPolicy,
+      overview: null,
+      goals: [],
+      projects: [],
+      tasks: [],
+      habits: [],
+      strategies: [],
+      peoplePages: []
+    };
+  }
+
+  const goalsPath =
+    bootstrapPolicy.mode === "full"
+      ? withQuery("/api/v1/goals", { limit: 100 })
+      : withQuery("/api/v1/goals", {
+          status: bootstrapPolicy.mode === "active_only" ? "active" : undefined,
+          limit: bootstrapPolicy.goalsLimit
+        });
+  const projectsPath =
+    bootstrapPolicy.mode === "full"
+      ? withQuery("/api/v1/projects", { limit: 100 })
+      : withQuery("/api/v1/projects", {
+          status: bootstrapPolicy.mode === "active_only" ? "active" : undefined,
+          limit: bootstrapPolicy.projectsLimit
+        });
+  const tasksPath =
+    bootstrapPolicy.mode === "full"
+      ? withQuery("/api/v1/tasks", { limit: 100 })
+      : withQuery("/api/v1/tasks", {
+          status: bootstrapPolicy.mode === "active_only" ? "focus" : undefined,
+          limit: bootstrapPolicy.tasksLimit
+        });
+  const habitsPath =
+    bootstrapPolicy.mode === "full"
+      ? withQuery("/api/v1/habits", { limit: 100 })
+      : withQuery("/api/v1/habits", {
+          dueToday:
+            bootstrapPolicy.mode === "active_only" ? true : undefined,
+          limit: bootstrapPolicy.habitsLimit
+        });
+  const strategiesPath =
+    bootstrapPolicy.mode === "full"
+      ? withQuery("/api/v1/strategies", { limit: 100 })
+      : withQuery("/api/v1/strategies", {
+          status: bootstrapPolicy.mode === "active_only" ? "active" : undefined,
+          limit: bootstrapPolicy.strategiesLimit
+        });
+  const wikiPagesPath =
+    bootstrapPolicy.includePeoplePages && bootstrapPolicy.peoplePageLimit > 0
+      ? withQuery("/api/v1/wiki/pages", {
+          kind: "wiki",
+          limit:
+            bootstrapPolicy.mode === "full"
+              ? 200
+              : Math.max(bootstrapPolicy.peoplePageLimit * 4, 25)
+        })
+      : null;
+
   const [
     overviewResponse,
     goalsResponse,
@@ -338,21 +528,14 @@ async function loadForgeSessionBootstrapPayload(
       config,
       "/api/v1/operator/overview"
     ),
-    readForgePayload<{ goals?: ForgeGoalRecord[] }>(config, "/api/v1/goals"),
-    readForgePayload<{ projects?: ForgeProjectRecord[] }>(
-      config,
-      "/api/v1/projects"
-    ),
-    readForgePayload<{ tasks?: ForgeTaskRecord[] }>(config, "/api/v1/tasks"),
-    readForgePayload<{ habits?: ForgeHabitRecord[] }>(config, "/api/v1/habits"),
-    readForgePayload<{ strategies?: ForgeStrategyRecord[] }>(
-      config,
-      "/api/v1/strategies"
-    ),
-    readForgePayload<{ pages?: ForgeWikiPageRecord[] }>(
-      config,
-      "/api/v1/wiki/pages"
-    )
+    readForgePayload<{ goals?: ForgeGoalRecord[] }>(config, goalsPath),
+    readForgePayload<{ projects?: ForgeProjectRecord[] }>(config, projectsPath),
+    readForgePayload<{ tasks?: ForgeTaskRecord[] }>(config, tasksPath),
+    readForgePayload<{ habits?: ForgeHabitRecord[] }>(config, habitsPath),
+    readForgePayload<{ strategies?: ForgeStrategyRecord[] }>(config, strategiesPath),
+    wikiPagesPath
+      ? readForgePayload<{ pages?: ForgeWikiPageRecord[] }>(config, wikiPagesPath)
+      : Promise.resolve({ pages: [] })
   ]);
 
   const wikiPages = asArray<ForgeWikiPageRecord>(wikiPagesResponse.pages).filter(
@@ -363,25 +546,60 @@ async function loadForgeSessionBootstrapPayload(
   );
 
   return {
+    bootstrapPolicy,
     overview:
       overviewResponse && isRecord(overviewResponse) && "overview" in overviewResponse
         ? ((overviewResponse.overview as ForgeOperatorOverview | null) ?? null)
         : null,
-    goals: asArray<ForgeGoalRecord>(goalsResponse.goals),
-    projects: asArray<ForgeProjectRecord>(projectsResponse.projects),
-    tasks: asArray<ForgeTaskRecord>(tasksResponse.tasks),
-    habits: asArray<ForgeHabitRecord>(habitsResponse.habits),
-    strategies: asArray<ForgeStrategyRecord>(strategiesResponse.strategies),
-    peoplePages: listPeopleBranchPages(wikiPages)
+    goals:
+      bootstrapPolicy.mode === "full"
+        ? asArray<ForgeGoalRecord>(goalsResponse.goals)
+        : asArray<ForgeGoalRecord>(goalsResponse.goals).slice(
+            0,
+            bootstrapPolicy.goalsLimit
+          ),
+    projects:
+      bootstrapPolicy.mode === "full"
+        ? asArray<ForgeProjectRecord>(projectsResponse.projects)
+        : asArray<ForgeProjectRecord>(projectsResponse.projects).slice(
+            0,
+            bootstrapPolicy.projectsLimit
+          ),
+    tasks:
+      bootstrapPolicy.mode === "full"
+        ? asArray<ForgeTaskRecord>(tasksResponse.tasks)
+        : asArray<ForgeTaskRecord>(tasksResponse.tasks).slice(
+            0,
+            bootstrapPolicy.tasksLimit
+          ),
+    habits:
+      bootstrapPolicy.mode === "full"
+        ? asArray<ForgeHabitRecord>(habitsResponse.habits)
+        : asArray<ForgeHabitRecord>(habitsResponse.habits).slice(
+            0,
+            bootstrapPolicy.habitsLimit
+          ),
+    strategies:
+      bootstrapPolicy.mode === "full"
+        ? asArray<ForgeStrategyRecord>(strategiesResponse.strategies)
+        : asArray<ForgeStrategyRecord>(strategiesResponse.strategies).slice(
+            0,
+            bootstrapPolicy.strategiesLimit
+          ),
+    peoplePages: bootstrapPolicy.includePeoplePages
+      ? listPeopleBranchPages(wikiPages).slice(0, bootstrapPolicy.peoplePageLimit)
+      : []
   };
 }
 
 export async function buildLiveForgeSessionBootstrapContext(
   config: ForgePluginConfig
 ) {
-  return buildForgeSessionBootstrapContext(
-    await loadForgeSessionBootstrapPayload(config)
-  );
+  const payload = await loadForgeSessionBootstrapPayload(config);
+  if (payload.bootstrapPolicy.mode === "disabled") {
+    return "";
+  }
+  return buildForgeSessionBootstrapContext(payload);
 }
 
 export function registerForgeSessionBootstrapHook(

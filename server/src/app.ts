@@ -479,6 +479,7 @@ import {
 import {
   activityListQuerySchema,
   activitySourceSchema,
+  defaultAgentBootstrapPolicy,
   createAgentActionSchema,
   createAgentRuntimeSessionEventSchema,
   createAgentRuntimeSessionSchema,
@@ -4862,6 +4863,9 @@ function buildAgentOnboardingPayload(request: {
   headers: Record<string, unknown>;
 }) {
   const origin = getRequestOrigin(request);
+  const auth = parseRequestAuth(request.headers);
+  const effectiveBootstrapPolicy =
+    auth.token?.bootstrapPolicy ?? defaultAgentBootstrapPolicy;
 
   return {
     forgeBaseUrl: origin,
@@ -4889,6 +4893,8 @@ function buildAgentOnboardingPayload(request: {
     recommendedTrustLevel: "trusted" as const,
     recommendedAutonomyMode: "approval_required" as const,
     recommendedApprovalMode: "approval_by_default" as const,
+    defaultBootstrapPolicy: defaultAgentBootstrapPolicy,
+    effectiveBootstrapPolicy,
     authModes: {
       operatorSession: {
         label: "Quick connect",
@@ -4900,7 +4906,7 @@ function buildAgentOnboardingPayload(request: {
       managedToken: {
         label: "Managed token",
         summary:
-          "Use a long-lived token when you want explicit scoped auth, remote non-Tailscale access, or durable agent credentials.",
+          "Use a long-lived token when you want explicit scoped auth, remote non-Tailscale access, durable agent credentials, or a custom bootstrap budget per agent.",
         tokenRequired: true
       }
     },

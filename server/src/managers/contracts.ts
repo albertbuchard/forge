@@ -25,6 +25,16 @@ export type AuthContext = RequestContext & {
     trustLevel: string;
     autonomyMode: string;
     approvalMode: string;
+    bootstrapPolicy: {
+      mode: "disabled" | "active_only" | "scoped" | "full";
+      goalsLimit: number;
+      projectsLimit: number;
+      tasksLimit: number;
+      habitsLimit: number;
+      strategiesLimit: number;
+      peoplePageLimit: number;
+      includePeoplePages: boolean;
+    };
   } | null;
   session: {
     id: string;

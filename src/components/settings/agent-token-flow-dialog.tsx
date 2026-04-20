@@ -71,6 +71,28 @@ const TOKEN_SCOPE_OPTIONS = [
   }
 ] as const;
 
+const DEFAULT_BOOTSTRAP_POLICY = {
+  mode: "active_only" as const,
+  goalsLimit: 5,
+  projectsLimit: 8,
+  tasksLimit: 10,
+  habitsLimit: 6,
+  strategiesLimit: 4,
+  peoplePageLimit: 4,
+  includePeoplePages: true
+};
+type BootstrapMode = "disabled" | "active_only" | "scoped" | "full";
+type BootstrapPolicy = {
+  mode: BootstrapMode;
+  goalsLimit: number;
+  projectsLimit: number;
+  tasksLimit: number;
+  habitsLimit: number;
+  strategiesLimit: number;
+  peoplePageLimit: number;
+  includePeoplePages: boolean;
+};
+
 type TokenPreset = "review" | "operator" | "autonomous" | "custom";
 
 type TokenDraft = {
@@ -83,7 +105,39 @@ type TokenDraft = {
   autonomyMode: "approval_required" | "scoped_write" | "autonomous";
   approvalMode: "approval_by_default" | "high_impact_only" | "none";
   scopes: string[];
+  bootstrapPolicy: BootstrapPolicy;
 };
+
+function bootstrapPolicyForPreset(preset: TokenPreset): BootstrapPolicy {
+  if (preset === "review") {
+    return {
+      mode: "active_only",
+      goalsLimit: 3,
+      projectsLimit: 5,
+      tasksLimit: 6,
+      habitsLimit: 4,
+      strategiesLimit: 3,
+      peoplePageLimit: 0,
+      includePeoplePages: false
+    };
+  }
+  if (preset === "operator") {
+    return { ...DEFAULT_BOOTSTRAP_POLICY };
+  }
+  if (preset === "autonomous") {
+    return {
+      mode: "scoped",
+      goalsLimit: 10,
+      projectsLimit: 14,
+      tasksLimit: 16,
+      habitsLimit: 10,
+      strategiesLimit: 8,
+      peoplePageLimit: 6,
+      includePeoplePages: true
+    };
+  }
+  return { ...DEFAULT_BOOTSTRAP_POLICY };
+}
 
 function applyPreset(
   draft: TokenDraft,
@@ -97,7 +151,8 @@ function applyPreset(
       trustLevel: "trusted",
       autonomyMode: "approval_required",
       approvalMode: "approval_by_default",
-      scopes: [...recommendedScopes]
+      scopes: [...recommendedScopes],
+      bootstrapPolicy: bootstrapPolicyForPreset(preset)
     };
   }
   if (preset === "operator") {
@@ -107,7 +162,8 @@ function applyPreset(
       trustLevel: "trusted",
       autonomyMode: "scoped_write",
       approvalMode: "high_impact_only",
-      scopes: [...FULL_OPERATOR_SCOPES]
+      scopes: [...FULL_OPERATOR_SCOPES],
+      bootstrapPolicy: bootstrapPolicyForPreset(preset)
     };
   }
   if (preset === "autonomous") {
@@ -117,7 +173,8 @@ function applyPreset(
       trustLevel: "autonomous",
       autonomyMode: "autonomous",
       approvalMode: "none",
-      scopes: [...FULL_OPERATOR_SCOPES]
+      scopes: [...FULL_OPERATOR_SCOPES],
+      bootstrapPolicy: bootstrapPolicyForPreset(preset)
     };
   }
   return { ...draft, preset };
@@ -137,7 +194,8 @@ function buildInitialDraft(
     trustLevel: "trusted",
     autonomyMode: "scoped_write",
     approvalMode: "high_impact_only",
-    scopes: [...FULL_OPERATOR_SCOPES]
+    scopes: [...FULL_OPERATOR_SCOPES],
+    bootstrapPolicy: { ...DEFAULT_BOOTSTRAP_POLICY }
   };
   return applyPreset(base, initialPreset, recommendedScopes);
 }
@@ -426,6 +484,102 @@ export function AgentTokenFlowDialog({
           </div>
         </FlowField>
       )
+    },
+    {
+      id: "bootstrap",
+      eyebrow: "Bootstrap",
+      title: "Decide how much Forge context is injected at session start",
+      description:
+        "This controls the automatic BOOTSTRAP snapshot for agent sessions. Keep it lean unless the agent genuinely needs broad context on every new session.",
+      render: (value, setValue) => (
+        <>
+          <FlowField
+            label="Bootstrap mode"
+              labelHelp="Disabled injects nothing. Active-only keeps a compact current-work snapshot. Scoped keeps budgets but not status filters. Full mirrors the legacy broad bootstrap."
+          >
+            <FlowChoiceGrid
+              columns={3}
+              value={value.bootstrapPolicy.mode}
+              onChange={(next) =>
+                setValue({
+                  bootstrapPolicy: {
+                    ...value.bootstrapPolicy,
+                    mode: next as TokenDraft["bootstrapPolicy"]["mode"]
+                  }
+                })
+              }
+              options={[
+                {
+                  value: "disabled",
+                  label: "Disabled",
+                  description: "No automatic Forge snapshot is injected."
+                },
+                {
+                  value: "active_only",
+                  label: "Active only",
+                  description: "Only active projects, focus tasks, due habits, and bounded summaries."
+                },
+                {
+                  value: "scoped",
+                  label: "Scoped",
+                  description: "Bounded lists without forcing only active items."
+                },
+                {
+                  value: "full",
+                  label: "Full",
+                  description: "Legacy broad bootstrap. Highest context cost."
+                }
+              ]}
+            />
+          </FlowField>
+          <div className="grid gap-5 md:grid-cols-3">
+            {[
+              ["goalsLimit", "Goals"],
+              ["projectsLimit", "Projects"],
+              ["tasksLimit", "Tasks"],
+              ["habitsLimit", "Habits"],
+              ["strategiesLimit", "Strategies"],
+              ["peoplePageLimit", "People pages"]
+            ].map(([key, label]) => (
+              <FlowField key={key} label={label}>
+                <Input
+                  type="number"
+                  min={0}
+                  max={key === "peoplePageLimit" ? 50 : 100}
+                  value={
+                    value.bootstrapPolicy[
+                      key as keyof TokenDraft["bootstrapPolicy"]
+                    ] as number
+                  }
+                  onChange={(event) =>
+                    setValue({
+                      bootstrapPolicy: {
+                        ...value.bootstrapPolicy,
+                        [key]: Number(event.target.value || 0)
+                      }
+                    })
+                  }
+                />
+              </FlowField>
+            ))}
+          </div>
+          <label className="flex items-center gap-3 rounded-[16px] bg-white/[0.04] px-4 py-3 text-sm text-white/70">
+            <input
+              type="checkbox"
+              checked={value.bootstrapPolicy.includePeoplePages}
+              onChange={(event) =>
+                setValue({
+                  bootstrapPolicy: {
+                    ...value.bootstrapPolicy,
+                    includePeoplePages: event.target.checked
+                  }
+                })
+              }
+            />
+            Include People wiki pages in the bootstrap snapshot
+          </label>
+        </>
+      )
     }
   ];
 
@@ -454,7 +608,8 @@ export function AgentTokenFlowDialog({
           trustLevel: draft.trustLevel,
           autonomyMode: draft.autonomyMode,
           approvalMode: draft.approvalMode,
-          scopes: draft.scopes
+          scopes: draft.scopes,
+          bootstrapPolicy: draft.bootstrapPolicy
         });
 
         if (!payload.success) {
