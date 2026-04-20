@@ -1770,33 +1770,35 @@ final class ForgeCompanionTests: XCTestCase {
             origin: .recorded
         )
 
-        let rows = buildMovementViewportGridMetrics(
+        let layout = buildMovementViewportLayoutModel(
             items: [sleepItem],
             viewportHeight: 844,
-            safeTopInset: 0
+            safeTopInset: 0,
+            bottomPadding: 0,
+            rangeEnd: sleepItem.endedAtDate
         )
-        let row = try XCTUnwrap(rows.first)
+        let row = try XCTUnwrap(layout.items.first)
         let rangeEnd = sleepItem.endedAtDate
 
         let startY = try XCTUnwrap(
-            movementViewportYPosition(for: sleepItem.startedAtDate, rows: rows, rangeEnd: rangeEnd)
+            movementViewportYPosition(for: sleepItem.startedAtDate, layout: layout, rangeEnd: rangeEnd)
         )
         let midnightY = try XCTUnwrap(
             movementViewportYPosition(
                 for: formatter.date(from: "2026-04-20T00:00:00Z") ?? Date(),
-                rows: rows,
+                layout: layout,
                 rangeEnd: rangeEnd
             )
         )
         let fourAmY = try XCTUnwrap(
             movementViewportYPosition(
                 for: formatter.date(from: "2026-04-20T04:00:00Z") ?? Date(),
-                rows: rows,
+                layout: layout,
                 rangeEnd: rangeEnd
             )
         )
         let endY = try XCTUnwrap(
-            movementViewportYPosition(for: sleepItem.endedAtDate, rows: rows, rangeEnd: rangeEnd)
+            movementViewportYPosition(for: sleepItem.endedAtDate, layout: layout, rangeEnd: rangeEnd)
         )
 
         XCTAssertEqual(startY, row.boxTop, accuracy: 0.5)
@@ -1806,7 +1808,7 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertLessThan(fourAmY, endY)
 
         let inBoxMarkers = buildMovementViewportHourMarkers(
-            rows: rows,
+            layout: layout,
             rangeEnd: rangeEnd
         )
         .filter { $0.y >= row.boxTop - 0.5 && $0.y <= row.boxBottom + 0.5 }

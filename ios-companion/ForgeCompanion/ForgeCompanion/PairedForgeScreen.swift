@@ -269,95 +269,74 @@ private struct MovementLifeTimelineView: View {
                                 .frame(height: timelineLayout.contentHeight)
 
                                 VStack(spacing: 0) {
-                                    if let oldestTimelineItem {
+                                    if let oldestTimelineItem, timelineLayout.historyHeaderHeight > 0 {
                                         MovementTimelineHistoryCap(item: oldestTimelineItem)
                                             .padding(.top, proxy.safeAreaInsets.top + 12)
-                                            .padding(.bottom, 18)
+                                            .frame(height: timelineLayout.historyHeaderHeight, alignment: .top)
                                     }
 
-                                    Color.clear
-                                        .frame(height: max(proxy.size.height * 0.42, 260))
+                                    Color.clear.frame(height: timelineLayout.leadHeight)
 
-                                    LazyVStack(spacing: 18) {
-                                        if loadingMore {
-                                            ProgressView()
-                                                .tint(CompanionStyle.accentStrong)
-                                                .padding(.vertical, 10)
-                                        } else if hasMore {
-                                            Color.clear
-                                                .frame(height: 1)
-                                                .onAppear {
-                                                    Task {
-                                                        await loadMoreIfNeeded()
-                                                    }
-                                                }
-                                        }
-
-                                        if let loadError {
-                                            MovementTimelineStatusCard(
-                                                title: "Timeline load issue",
-                                                detail: loadError
-                                            )
-                                        } else if sleepOverlayVisible && hasSleepOverlayInLoadedRange == false {
-                                            MovementTimelineStatusCard(
-                                                title: "No sleep shown yet",
-                                                detail: "No sleep session overlaps the currently loaded timeline range. Scroll further back to load older history."
-                                            )
-                                        } else if loading && displayItems.isEmpty {
-                                            MovementTimelineStatusCard(
-                                                title: "Loading movement history",
-                                                detail: "Forge is paging your stay and trip history from the canonical movement store."
-                                            )
-                                        }
-
-                                        ForEach(displayItems) { item in
+                                    VStack(spacing: 0) {
+                                        ForEach(Array(timelineLayout.items.enumerated()), id: \.element.id) { index, metric in
+                                            if index > 0, metric.gapBefore > 0 {
+                                                Color.clear
+                                                    .frame(height: metric.gapBefore)
+                                            }
                                             MovementTimelineRow(
-                                                item: item,
+                                                item: metric.item,
                                                 width: proxy.size.width - 28,
-                                                isSelected: selectedId == item.id,
+                                                rowHeight: metric.boxHeight,
+                                                isSelected: selectedId == metric.item.id,
                                                 onSelect: {
                                                     withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
-                                                        selectedId = selectedId == item.id ? nil : item.id
+                                                        selectedId = selectedId == metric.item.id ? nil : metric.item.id
                                                     }
                                                 },
                                                 onEdit: {
-                                                    if item.sourceKind == "automatic" {
+                                                    if metric.item.sourceKind == "automatic" {
                                                         Task {
-                                                            await invalidateAutomaticItem(item)
+                                                            await invalidateAutomaticItem(metric.item)
                                                         }
                                                     } else {
-                                                        editorDraft = MovementTimelineEditorDraft(item: item)
+                                                        editorDraft = MovementTimelineEditorDraft(item: metric.item)
                                                     }
                                                 },
                                                 onDetail: {
                                                     Task {
-                                                        await openDetail(item)
+                                                        await openDetail(metric.item)
                                                     }
                                                 },
                                                 onDefinePlace: {
-                                                    openPlaceLabelDraft(for: item)
+                                                    openPlaceLabelDraft(for: metric.item)
                                                 },
                                                 onDelete: {
                                                     Task {
-                                                        await deleteUserDefinedItem(item)
+                                                        await deleteUserDefinedItem(metric.item)
                                                     }
                                                 }
                                             )
-                                            .id(item.id)
+                                            .id(metric.item.isCurrent ? MovementLifeTimelineItem.currentAnchorId : metric.item.id)
+                                            .frame(height: metric.boxHeight)
+                                            .zIndex(selectedId == metric.item.id ? 2 : 0)
                                             .background(
                                                 GeometryReader { rowProxy in
                                                     Color.clear
                                                         .preference(
                                                             key: MovementTimelineVisiblePositionKey.self,
-                                                            value: [item.id: rowProxy.frame(in: .named("MovementLifeTimelineScroll")).midY]
+                                                            value: [metric.item.id: rowProxy.frame(in: .named("MovementLifeTimelineScroll")).midY]
                                                         )
                                                 }
                                             )
                                         }
+
+                                        Color.clear
+                                            .frame(height: timelineLayout.tailHeight)
+                                            .id(MovementLifeTimelineItem.currentAnchorId)
                                     }
                                     .padding(.horizontal, 14)
-                                    .padding(.bottom, timelineBottomPadding)
                                 }
+                                .frame(height: timelineLayout.contentHeight, alignment: .top)
                             }
                         }
                         .coordinateSpace(name: "MovementLifeTimelineScroll")
@@ -416,6 +395,34 @@ private struct MovementLifeTimelineView: View {
                                 withAnimation(.easeInOut(duration: 0.45)) {
                                     reader.scrollTo(initialScrollTargetId, anchor: .center)
                                 }
+                            }
+                        }
+                        .overlay(alignment: .top) {
+                            if loadingMore {
+                                ProgressView()
+                                    .tint(CompanionStyle.accentStrong)
+                                    .padding(.top, proxy.safeAreaInsets.top + 12)
+                            } else if let loadError {
+                                MovementTimelineStatusCard(
+                                    title: "Timeline load issue",
+                                    detail: loadError
+                                )
+                                .padding(.top, proxy.safeAreaInsets.top + 12)
+                                .padding(.horizontal, 14)
+                            } else if sleepOverlayVisible && hasSleepOverlayInLoadedRange == false {
+                                MovementTimelineStatusCard(
+                                    title: "No sleep shown yet",
+                                    detail: "No sleep session overlaps the currently loaded timeline range. Scroll further back to load older history."
+                                )
+                                .padding(.top, proxy.safeAreaInsets.top + 12)
+                                .padding(.horizontal, 14)
+                            } else if loading && timelineLayout.items.isEmpty {
+                                MovementTimelineStatusCard(
+                                    title: "Loading movement history",
+                                    detail: "Forge is paging your stay and trip history from the canonical movement store."
+                                )
+                                .padding(.top, proxy.safeAreaInsets.top + 12)
+                                .padding(.horizontal, 14)
                             }
                         }
                     }
@@ -2351,6 +2358,7 @@ private func movementDetailRegion(
 private struct MovementTimelineRow: View {
     let item: MovementLifeTimelineItem
     let width: CGFloat
+    let rowHeight: CGFloat
     let isSelected: Bool
     let onSelect: () -> Void
     let onEdit: () -> Void
@@ -2359,28 +2367,24 @@ private struct MovementTimelineRow: View {
     let onDelete: () -> Void
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            if detailOnLeadingSide {
-                detailPanel
-                    .frame(width: detailWidth)
-                    .transition(.move(edge: .leading).combined(with: .opacity))
-            }
-
+        ZStack(alignment: .top) {
             segmentPanel
                 .frame(width: segmentWidth, alignment: item.isCurrent ? .center : item.laneSide == .left ? .leading : .trailing)
+                .offset(x: isSelected ? item.selectionOffset : 0)
 
             if detailOnTrailingSide {
-                detailPanel
-                    .frame(width: detailWidth)
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                HStack {
+                    Spacer(minLength: max(0, width * 0.47))
+                    detailPanel
+                        .frame(width: detailWidth)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             }
         }
-        .frame(maxWidth: .infinity)
-        .id(item.id)
-    }
-
-    private var detailOnLeadingSide: Bool {
-        false
+        .frame(maxWidth: .infinity, minHeight: rowHeight, maxHeight: rowHeight, alignment: .top)
+        .contentShape(Rectangle())
+        .id(item.isCurrent ? MovementLifeTimelineItem.currentAnchorId : item.id)
     }
 
     private var detailOnTrailingSide: Bool {
@@ -2409,7 +2413,6 @@ private struct MovementTimelineRow: View {
                 }
             }
             .padding(.horizontal, 4)
-            .offset(x: isSelected ? item.selectionOffset : 0)
         }
         .buttonStyle(.plain)
     }
@@ -2812,21 +2815,16 @@ enum MovementTimelineViewportLayout {
     static let gridRowHeight: CGFloat = 64
     static let historyLeadHours: Int = 5
     static let futureGridHours: Int = 1
-    static let rowSpacing: CGFloat = 18
     static let historyCapHeight: CGFloat = 64
     static let historyCapBottomSpacing: CGFloat = 18
-
-    static func leadSpacerHeight(for viewportHeight: CGFloat) -> CGFloat {
-        max(viewportHeight * 0.42, 260)
-    }
 }
 
-struct MovementTimelineViewportGridRowMetric {
+struct MovementTimelineViewportItemMetric: Identifiable {
+    let id: String
     let item: MovementLifeTimelineItem
-    let rowStart: CGFloat
-    let rowHeight: CGFloat
-    let displayHeight: CGFloat
+    let gapBefore: CGFloat
     let boxTop: CGFloat
+    let boxHeight: CGFloat
     let boxBottom: CGFloat
 }
 
@@ -2838,8 +2836,11 @@ struct MovementTimelineHourMarker: Identifiable {
 }
 
 struct MovementTimelineViewportLayoutModel {
-    let rows: [MovementTimelineViewportGridRowMetric]
+    let historyHeaderHeight: CGFloat
+    let leadHeight: CGFloat
+    let items: [MovementTimelineViewportItemMetric]
     let markers: [MovementTimelineHourMarker]
+    let tailHeight: CGFloat
     let contentHeight: CGFloat
 }
 
@@ -2887,37 +2888,38 @@ func movementViewportDisplayRatio(
     )
 }
 
+func movementViewportItemDisplayHeight(
+    for item: MovementLifeTimelineItem
+) -> CGFloat {
+    item.kind == .missing ? max(112, item.displayHeight * 0.72) : item.displayHeight
+}
+
 func movementViewportYPosition(
     for date: Date,
-    rows: [MovementTimelineViewportGridRowMetric],
+    layout: MovementTimelineViewportLayoutModel,
     rangeEnd: Date
 ) -> CGFloat? {
-    guard let first = rows.first, let last = rows.last else {
+    guard let first = layout.items.first, let last = layout.items.last else {
         return nil
     }
 
     if date < first.item.startedAtDate {
-        return first.boxTop
+        return layout.historyHeaderHeight + layout.leadHeight
             - CGFloat(first.item.startedAtDate.timeIntervalSince(date) / 3600)
                 * MovementTimelineViewportLayout.gridRowHeight
     }
 
-    for index in rows.indices {
-        let row = rows[index]
-        if date >= row.item.startedAtDate && date <= row.item.endedAtDate {
-            return row.boxTop + row.displayHeight * movementViewportDisplayRatio(for: row.item, at: date)
+    for index in layout.items.indices {
+        let itemMetric = layout.items[index]
+        if date >= itemMetric.item.startedAtDate && date <= itemMetric.item.endedAtDate {
+            return itemMetric.boxTop + itemMetric.boxHeight * movementViewportDisplayRatio(for: itemMetric.item, at: date)
         }
 
-        let nextRow = index + 1 < rows.count ? rows[index + 1] : nil
-        let gapStart = row.item.endedAtDate
-        let gapEnd = nextRow?.item.startedAtDate ?? rangeEnd
+        let nextItem = index + 1 < layout.items.count ? layout.items[index + 1] : nil
+        let gapStart = itemMetric.item.endedAtDate
+        let gapEnd = nextItem?.item.startedAtDate ?? rangeEnd
         if date > gapStart && date < gapEnd {
-            if let nextRow {
-                let gapDuration = max(1, gapEnd.timeIntervalSince(gapStart))
-                let ratio = date.timeIntervalSince(gapStart) / gapDuration
-                return row.boxBottom + (nextRow.boxTop - row.boxBottom) * CGFloat(ratio)
-            }
-            return row.boxBottom
+            return itemMetric.boxBottom
                 + CGFloat(date.timeIntervalSince(gapStart) / 3600)
                     * MovementTimelineViewportLayout.gridRowHeight
         }
@@ -2932,42 +2934,53 @@ func movementViewportYPosition(
     return nil
 }
 
-func buildMovementViewportGridMetrics(
+func buildMovementViewportLayoutMetrics(
     items: [MovementLifeTimelineItem],
-    viewportHeight: CGFloat,
     safeTopInset: CGFloat
-) -> [MovementTimelineViewportGridRowMetric] {
+) -> (historyHeaderHeight: CGFloat, leadHeight: CGFloat, items: [MovementTimelineViewportItemMetric]) {
     let timelineItems = items.filter { $0.kind != .anchor }
-    let historyOffset =
+    let historyHeaderHeight =
         timelineItems.isEmpty
         ? 0
         : safeTopInset
             + 12
             + MovementTimelineViewportLayout.historyCapHeight
             + MovementTimelineViewportLayout.historyCapBottomSpacing
-    var cursor = historyOffset + MovementTimelineViewportLayout.leadSpacerHeight(for: viewportHeight)
-    return timelineItems.map { item in
-        let displayHeight = item.kind == .missing ? max(112, item.displayHeight * 0.72) : item.displayHeight
-        let rowStart = cursor
-        let rowHeight = displayHeight + MovementTimelineViewportLayout.rowSpacing
-        let metric = MovementTimelineViewportGridRowMetric(
+    let leadHeight =
+        timelineItems.isEmpty
+        ? 0
+        : CGFloat(MovementTimelineViewportLayout.historyLeadHours)
+            * MovementTimelineViewportLayout.gridRowHeight
+    var cursor = historyHeaderHeight + leadHeight
+    var previousEndedAt: Date?
+    let metrics = timelineItems.map { item in
+        let gapBefore = previousEndedAt.map {
+            max(0, CGFloat(item.startedAtDate.timeIntervalSince($0)) / 3600)
+                * MovementTimelineViewportLayout.gridRowHeight
+        } ?? 0
+        cursor += gapBefore
+        let boxHeight = movementViewportItemDisplayHeight(for: item)
+        let boxTop = cursor
+        let metric = MovementTimelineViewportItemMetric(
+            id: item.id,
             item: item,
-            rowStart: rowStart,
-            rowHeight: rowHeight,
-            displayHeight: displayHeight,
-            boxTop: rowStart,
-            boxBottom: rowStart + displayHeight
+            gapBefore: gapBefore,
+            boxTop: boxTop,
+            boxHeight: boxHeight,
+            boxBottom: boxTop + boxHeight
         )
-        cursor += rowHeight
+        cursor = metric.boxBottom
+        previousEndedAt = item.endedAtDate
         return metric
     }
+    return (historyHeaderHeight, leadHeight, metrics)
 }
 
 func buildMovementViewportHourMarkers(
-    rows: [MovementTimelineViewportGridRowMetric],
+    layout: MovementTimelineViewportLayoutModel,
     rangeEnd: Date
 ) -> [MovementTimelineHourMarker] {
-    guard let first = rows.first else {
+    guard let first = layout.items.first else {
         return []
     }
 
@@ -2977,7 +2990,7 @@ func buildMovementViewportHourMarkers(
     )
     var hour = nextMovementHourBoundary(after: timelineStart)
     while hour <= rangeEnd {
-        if let y = movementViewportYPosition(for: hour, rows: rows, rangeEnd: rangeEnd) {
+        if let y = movementViewportYPosition(for: hour, layout: layout, rangeEnd: rangeEnd) {
             let isStrong = Calendar.current.component(.hour, from: hour) == 0
             markers.append(
                 MovementTimelineHourMarker(
@@ -3001,38 +3014,39 @@ func buildMovementViewportLayoutModel(
     bottomPadding: CGFloat,
     rangeEnd: Date
 ) -> MovementTimelineViewportLayoutModel {
-    let rows = buildMovementViewportGridMetrics(
+    let metrics = buildMovementViewportLayoutMetrics(
         items: items,
-        viewportHeight: viewportHeight,
         safeTopInset: safeTopInset
     )
-    let markers = buildMovementViewportHourMarkers(
-        rows: rows,
-        rangeEnd: rangeEnd
-    )
     let trailingReference = items.last(where: { $0.kind != .anchor })?.endedAtDate ?? rangeEnd
-    let trailingHeight = max(
+    let baseTailHeight = max(
         CGFloat(MovementTimelineViewportLayout.futureGridHours)
             * MovementTimelineViewportLayout.gridRowHeight,
         CGFloat(max(0, rangeEnd.timeIntervalSince(trailingReference)) / 3600)
             * MovementTimelineViewportLayout.gridRowHeight
     )
-    let minimumContentHeight =
-        (items.contains(where: { $0.kind != .anchor })
-            ? safeTopInset
-                + 12
-                + MovementTimelineViewportLayout.historyCapHeight
-                + MovementTimelineViewportLayout.historyCapBottomSpacing
-            : 0
-        )
-        + MovementTimelineViewportLayout.leadSpacerHeight(for: viewportHeight)
-        + trailingHeight
-        + bottomPadding
-    let baseHeight = (rows.last?.boxBottom ?? 0) + trailingHeight + bottomPadding
+    let baseHeight = (metrics.items.last?.boxBottom ?? (metrics.historyHeaderHeight + metrics.leadHeight)) + baseTailHeight + bottomPadding
+    let minimumHeight = max(viewportHeight + 260, metrics.historyHeaderHeight + metrics.leadHeight + baseTailHeight + bottomPadding)
+    let tailHeight = baseTailHeight + bottomPadding + max(0, minimumHeight - baseHeight)
+    let layout = MovementTimelineViewportLayoutModel(
+        historyHeaderHeight: metrics.historyHeaderHeight,
+        leadHeight: metrics.leadHeight,
+        items: metrics.items,
+        markers: [],
+        tailHeight: tailHeight,
+        contentHeight: max(baseHeight, minimumHeight)
+    )
+    let markers = buildMovementViewportHourMarkers(
+        layout: layout,
+        rangeEnd: rangeEnd
+    )
     return MovementTimelineViewportLayoutModel(
-        rows: rows,
+        historyHeaderHeight: layout.historyHeaderHeight,
+        leadHeight: layout.leadHeight,
+        items: layout.items,
         markers: markers,
-        contentHeight: max(baseHeight, minimumContentHeight, viewportHeight + 260)
+        tailHeight: layout.tailHeight,
+        contentHeight: layout.contentHeight
     )
 }
 

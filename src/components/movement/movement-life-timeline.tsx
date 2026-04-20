@@ -65,9 +65,8 @@ const TIMELINE_PAGE_SIZE = 24;
 const GRID_ROW_HEIGHT = 64;
 const MAX_DISPLAY_SECONDS = 6 * 60 * 60;
 const HISTORY_LEAD_HOURS = 5;
-const CENTER_PADDING = GRID_ROW_HEIGHT * HISTORY_LEAD_HOURS;
 const FUTURE_GRID_HOURS = 1;
-const SEGMENT_BOX_TOP = 32;
+const HISTORY_CAP_HEIGHT = 104;
 
 type MovementLifeTimelineProps = {
   userIds?: string[];
@@ -82,10 +81,10 @@ type TimelineDraft = {
   endedAtInput: string;
 };
 
-type TimelineRowMetric = {
+type TimelineItemLayoutMetric = {
+  id: string;
   segment: MovementTimelineSegment;
-  rowStart: number;
-  rowHeight: number;
+  gapBefore: number;
   displayHeight: number;
   boxTop: number;
   boxBottom: number;
@@ -98,7 +97,9 @@ type TimelineHourMarker = {
 };
 
 type MovementTimelineLayoutModel = {
-  rows: TimelineRowMetric[];
+  historyHeaderHeight: number;
+  leadHeight: number;
+  items: TimelineItemLayoutMetric[];
   markers: TimelineHourMarker[];
   rangeEndMs: number;
   futureTailHeight: number;
@@ -417,13 +418,6 @@ function segmentDisplayHeight(
   return Math.max(minHeight, Math.min(maxHeight, height));
 }
 
-function rowHeightForSegment(segment: MovementTimelineSegment) {
-  return Math.max(
-    250,
-    segmentDisplayHeight(segment.durationSeconds, segment.kind, segment.syncSource) + 130
-  );
-}
-
 function buildDraft(segment: MovementTimelineSegment): TimelineDraft {
   return {
     kind: segment.kind,
@@ -702,46 +696,42 @@ function segmentDisplayRatioAtHour(
 }
 
 function timelineHourMarkerY(
-  rows: TimelineRowMetric[],
+  layout: MovementTimelineLayoutModel,
   hourMs: number,
   rangeEndMs: number
 ) {
-  if (rows.length === 0) {
+  if (layout.items.length === 0) {
     return null;
   }
 
-  const firstRow = rows[0]!;
+  const firstRow = layout.items[0]!;
   if (hourMs < new Date(firstRow.segment.startedAt).getTime()) {
     return (
-      firstRow.boxTop -
+      layout.historyHeaderHeight +
+      layout.leadHeight -
       ((new Date(firstRow.segment.startedAt).getTime() - hourMs) / 3_600_000) *
         GRID_ROW_HEIGHT
     );
   }
 
-  for (let index = 0; index < rows.length; index += 1) {
-    const row = rows[index]!;
+  for (let index = 0; index < layout.items.length; index += 1) {
+    const row = layout.items[index]!;
     const rowStartMs = new Date(row.segment.startedAt).getTime();
     const rowEndMs = new Date(row.segment.endedAt).getTime();
     if (hourMs >= rowStartMs && hourMs <= rowEndMs) {
       return row.boxTop + segmentDisplayRatioAtHour(row.segment, hourMs) * row.displayHeight;
     }
 
-    const nextRow = rows[index + 1] ?? null;
+    const nextRow = layout.items[index + 1] ?? null;
     const gapEndMs = nextRow
       ? new Date(nextRow.segment.startedAt).getTime()
       : rangeEndMs;
     if (hourMs > rowEndMs && hourMs < gapEndMs) {
-      if (nextRow) {
-        const gapDurationMs = Math.max(1, gapEndMs - rowEndMs);
-        const ratio = (hourMs - rowEndMs) / gapDurationMs;
-        return row.boxBottom + (nextRow.boxTop - row.boxBottom) * ratio;
-      }
       return row.boxBottom + ((hourMs - rowEndMs) / 3_600_000) * GRID_ROW_HEIGHT;
     }
   }
 
-  const lastRow = rows[rows.length - 1]!;
+  const lastRow = layout.items[layout.items.length - 1]!;
   const lastEndMs = new Date(lastRow.segment.endedAt).getTime();
   if (hourMs >= lastEndMs) {
     return (
@@ -760,22 +750,22 @@ function nextHourBoundaryMs(valueMs: number) {
 }
 
 function buildTimelineHourMarkers(
-  rows: TimelineRowMetric[],
+  layout: MovementTimelineLayoutModel,
   rangeEndMs: number
 ) {
   const markers: TimelineHourMarker[] = [];
-  if (rows.length === 0) {
+  if (layout.items.length === 0) {
     return markers;
   }
 
-  const firstRow = rows[0]!;
+  const firstRow = layout.items[0]!;
   const firstStartMs = new Date(firstRow.segment.startedAt).getTime();
   for (
     let hourMs = nextHourBoundaryMs(firstStartMs - HISTORY_LEAD_HOURS * 3_600_000);
     hourMs <= rangeEndMs;
     hourMs += 3_600_000
   ) {
-    const y = timelineHourMarkerY(rows, hourMs, rangeEndMs);
+    const y = timelineHourMarkerY(layout, hourMs, rangeEndMs);
     if (y === null) {
       continue;
     }
@@ -799,29 +789,36 @@ function buildMovementTimelineLayoutModel({
   viewportHeight: number;
   nowMs?: number;
 }): MovementTimelineLayoutModel {
-  let cursor = CENTER_PADDING;
-  const rows = segments.map((segment) => {
+  const historyHeaderHeight = segments.length > 0 ? HISTORY_CAP_HEIGHT : 0;
+  const leadHeight = segments.length > 0 ? GRID_ROW_HEIGHT * HISTORY_LEAD_HOURS : 0;
+  let cursor = historyHeaderHeight + leadHeight;
+  let previousEndedMs: number | null = null;
+  const items = segments.map((segment) => {
     const displayHeight = segmentDisplayHeight(
       segment.durationSeconds,
       segment.kind,
       segment.syncSource
     );
-    const rowHeight = rowHeightForSegment(segment);
-    const rowStart = cursor;
-    const boxTop = rowStart + SEGMENT_BOX_TOP;
+    const startedAtMs = new Date(segment.startedAt).getTime();
+    const gapBefore =
+      previousEndedMs === null
+        ? 0
+        : Math.max(0, (startedAtMs - previousEndedMs) / 3_600_000) * GRID_ROW_HEIGHT;
+    cursor += gapBefore;
+    const boxTop = cursor;
     const boxBottom = boxTop + displayHeight;
-    cursor += rowHeight;
+    cursor = boxBottom;
+    previousEndedMs = new Date(segment.endedAt).getTime();
     return {
+      id: segment.id,
       segment,
-      rowStart,
-      rowHeight,
+      gapBefore,
       displayHeight,
       boxTop,
       boxBottom
-    } satisfies TimelineRowMetric;
+    } satisfies TimelineItemLayoutMetric;
   });
   const rangeEndMs = nowMs + FUTURE_GRID_HOURS * 3_600_000;
-  const markers = buildTimelineHourMarkers(rows, rangeEndMs);
   const futureTailHeight = (() => {
     const latestEndedAt = segments[segments.length - 1]?.endedAt;
     if (!latestEndedAt) {
@@ -833,19 +830,26 @@ function buildMovementTimelineLayoutModel({
       ((rangeEndMs - latestEndedMs) / 3_600_000) * GRID_ROW_HEIGHT
     );
   })();
+  const baseHeight =
+    (items[items.length - 1]?.boxBottom ?? historyHeaderHeight + leadHeight) +
+    futureTailHeight;
   const totalHeight = Math.max(
-    rows.length > 0
-      ? rows[rows.length - 1]!.rowStart + rows[rows.length - 1]!.rowHeight + futureTailHeight
-      : CENTER_PADDING + futureTailHeight,
+    baseHeight,
     viewportHeight > 0 ? viewportHeight + 260 : 960,
-    CENTER_PADDING + futureTailHeight
+    historyHeaderHeight + leadHeight + futureTailHeight
   );
-  return {
-    rows,
-    markers,
+  const layout = {
+    historyHeaderHeight,
+    leadHeight,
+    items,
+    markers: [] as TimelineHourMarker[],
     rangeEndMs,
-    futureTailHeight,
+    futureTailHeight: futureTailHeight + Math.max(0, totalHeight - baseHeight),
     totalHeight
+  } satisfies MovementTimelineLayoutModel;
+  return {
+    ...layout,
+    markers: buildTimelineHourMarkers(layout, rangeEndMs)
   };
 }
 
@@ -1900,30 +1904,26 @@ function MovementTripEndpointBox({
 }
 
 function MovementTimelineRow({
-  segment,
+  layout,
   selected,
   onToggle,
   onEdit,
   onOpenDetail,
   onDefinePlace
 }: {
-  segment: MovementTimelineSegment;
+  layout: TimelineItemLayoutMetric;
   selected: boolean;
   onToggle: () => void;
   onEdit: () => void;
   onOpenDetail: () => void;
   onDefinePlace: () => void;
 }) {
+  const { segment } = layout;
   const lane = segment.laneSide;
   const detailSide = lane === "right" ? "left" : "right";
   const shiftX = selected ? (detailSide === "right" ? -176 : 176) : 0;
   const sleepOverlay = isSleepOverlaySegment(segment);
-  const displayHeight = segmentDisplayHeight(
-    segment.durationSeconds,
-    segment.kind,
-    segment.syncSource
-  );
-  const minRowHeight = Math.max(240, displayHeight + 120);
+  const displayHeight = layout.displayHeight;
   const staySurface =
     segment.kind === "stay"
       ? sleepOverlay
@@ -1944,18 +1944,23 @@ function MovementTimelineRow({
       : null;
 
   return (
-    <div className="relative w-full px-6">
+    <div
+      className="absolute left-0 w-full px-6"
+      style={{
+        top: `${layout.boxTop}px`,
+        height: `${displayHeight}px`
+      }}
+    >
       <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-[linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.08),rgba(255,255,255,0.02))]" />
       <div
-        className="relative"
-        style={{ minHeight: `${minRowHeight}px` }}
+        className="relative h-full"
       >
         {segment.kind === "trip" ? (
           <motion.div
             layout
             animate={{ x: shiftX }}
             transition={{ type: "spring", stiffness: 240, damping: 30 }}
-            className="absolute inset-x-0 top-8 h-[calc(100%-2rem)] z-10"
+            className="absolute inset-x-0 top-0 h-full z-10"
           >
             {tripEndpoints && selected ? (
               <>
@@ -2014,7 +2019,7 @@ function MovementTimelineRow({
             layout
             animate={{ x: shiftX }}
             transition={{ type: "spring", stiffness: 260, damping: 28 }}
-            className="absolute top-8 left-1/2 z-10 w-[min(22rem,calc(100vw-5rem))] -translate-x-1/2"
+            className="absolute top-0 left-1/2 z-10 w-[min(22rem,calc(100vw-5rem))] -translate-x-1/2"
           >
             <button
               type="button"
@@ -2074,7 +2079,7 @@ function MovementTimelineRow({
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: detailSide === "right" ? 28 : -28 }}
             className={cn(
-              "absolute top-6 w-[min(22rem,calc(100vw-4rem))]",
+              "absolute top-0 w-[min(22rem,calc(100vw-4rem))]",
               detailSide === "right" ? "right-[3%]" : "left-[3%]"
             )}
           >
@@ -2238,6 +2243,36 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
       }),
     [displaySegments, viewportHeight]
   );
+  const timelineItemById = useMemo(
+    () =>
+      new Map(
+        timelineLayout.items.map((item) => [item.segment.id, item] as const)
+      ),
+    [timelineLayout.items]
+  );
+
+  const scrollToTimelineItem = (
+    segmentId: string,
+    behavior: ScrollBehavior = "smooth"
+  ) => {
+    const element = scrollParentRef.current;
+    const item = timelineItemById.get(segmentId);
+    if (!element || !item) {
+      return;
+    }
+    const targetTop = Math.max(
+      0,
+      item.boxTop - element.clientHeight / 2 + item.displayHeight / 2
+    );
+    if (typeof element.scrollTo === "function") {
+      element.scrollTo({
+        top: targetTop,
+        behavior
+      });
+      return;
+    }
+    element.scrollTop = targetTop;
+  };
 
   useEffect(() => {
     if (!dataModalOpen) {
@@ -2254,16 +2289,6 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
     dataTimelineQuery.isFetchingNextPage
   ]);
 
-  const rowVirtualizer = useVirtualizer({
-    count: displaySegments.length,
-    getScrollElement: () => scrollParentRef.current,
-    estimateSize: (index) =>
-      rowHeightForSegment(displaySegments[index] ?? displaySegments[0]!),
-    overscan: 6,
-    paddingStart: CENTER_PADDING,
-    paddingEnd: timelineLayout.futureTailHeight
-  });
-
   useEffect(() => {
     const latest = displaySegments.at(-1);
     if (!autoSelectedRef.current && latest) {
@@ -2276,9 +2301,10 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
     if (!initializedRef.current && displaySegments.length > 0) {
       initializedRef.current = true;
       requestAnimationFrame(() => {
-        rowVirtualizer.scrollToIndex(displaySegments.length - 1, {
-          align: "center"
-        });
+        const latestId = displaySegments[displaySegments.length - 1]?.id;
+        if (latestId) {
+          scrollToTimelineItem(latestId, "auto");
+        }
         requestAnimationFrame(() => {
           syncScrollMetrics();
         });
@@ -2298,12 +2324,12 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
         if (!scrollElement) {
           return;
         }
-        const delta = rowVirtualizer.getTotalSize() - anchor.size;
+        const delta = timelineLayout.totalHeight - anchor.size;
         scrollElement.scrollTop += delta;
         syncScrollMetrics();
       });
     }
-  }, [displaySegments.length, rowVirtualizer]);
+  }, [displaySegments.length, timelineLayout.totalHeight, timelineItemById]);
 
   useEffect(() => {
     const element = scrollParentRef.current;
@@ -2357,11 +2383,12 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
     }
     setSelectedSegmentId(mostRelevantSleepSegmentId);
     requestAnimationFrame(() => {
-      rowVirtualizer.scrollToIndex(targetIndex, {
-        align: "center"
-      });
+      const targetId = displaySegments[targetIndex]?.id;
+      if (targetId) {
+        scrollToTimelineItem(targetId);
+      }
     });
-  }, [displaySegments, mostRelevantSleepSegmentId, rowVirtualizer, sleepOverlayVisible]);
+  }, [displaySegments, mostRelevantSleepSegmentId, sleepOverlayVisible, timelineItemById]);
 
   const invalidateMovementProjectionQueries = async () => {
     await Promise.all([
@@ -2726,7 +2753,7 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
     if (element.scrollTop <= 960) {
       prependAnchorRef.current = {
         count: displaySegments.length,
-        size: rowVirtualizer.getTotalSize()
+        size: timelineLayout.totalHeight
       };
       void timelineQuery.fetchNextPage();
     }
@@ -2754,7 +2781,6 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
     );
   }
 
-  const virtualRows = rowVirtualizer.getVirtualItems();
   const contentHeight = timelineLayout.totalHeight;
   return (
     <section className="grid gap-4">
@@ -2833,40 +2859,35 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
             className="relative"
             style={{ height: `${contentHeight}px` }}
           >
-            <MovementTimelineHistoryCap segment={displaySegments[0] ?? null} />
-            {virtualRows.map((virtualRow) => {
-              const segment = displaySegments[virtualRow.index];
-              if (!segment) {
-                return null;
-              }
+            {timelineLayout.historyHeaderHeight > 0 ? (
+              <div
+                className="absolute inset-x-0 top-0"
+                style={{ height: `${timelineLayout.historyHeaderHeight}px` }}
+              >
+                <MovementTimelineHistoryCap segment={displaySegments[0] ?? null} />
+              </div>
+            ) : null}
+            {timelineLayout.items.map((itemLayout) => {
+              const segment = itemLayout.segment;
               return (
-                <div
+                <MovementTimelineRow
                   key={segment.id}
-                  data-index={virtualRow.index}
-                  ref={rowVirtualizer.measureElement}
-                  className="absolute left-0 top-0 w-full"
-                  style={{
-                    transform: `translateY(${virtualRow.start}px)`
-                  }}
-                >
-                  <MovementTimelineRow
-                    segment={segment}
-                    selected={selectedSegmentId === segment.id}
-                    onToggle={() =>
-                      setSelectedSegmentId((current) =>
-                        current === segment.id ? null : segment.id
-                      )
+                  layout={itemLayout}
+                  selected={selectedSegmentId === segment.id}
+                  onToggle={() =>
+                    setSelectedSegmentId((current) =>
+                      current === segment.id ? null : segment.id
+                    )
+                  }
+                  onEdit={() => {
+                    if (!segment.editable) {
+                      return;
                     }
-                    onEdit={() => {
-                      if (!segment.editable) {
-                        return;
-                      }
-                      setEditingSegmentId(segment.id);
-                    }}
-                    onOpenDetail={() => setDetailSegmentId(segment.id)}
-                    onDefinePlace={() => openPlaceLabelDialog(segment)}
-                  />
-                </div>
+                    setEditingSegmentId(segment.id);
+                  }}
+                  onOpenDetail={() => setDetailSegmentId(segment.id)}
+                  onDefinePlace={() => openPlaceLabelDialog(segment)}
+                />
               );
             })}
           </div>

@@ -1,3 +1,3 @@
-Forge Companion 1.0.20 fixes iPhone stay relabeling for existing saved places.
+Forge Companion 1.0.21 rebuilds the life timeline geometry so sleep overlay boxes and the hour grid align exactly.
 Normalized and ongoing timeline stays now preserve their canonical raw stay
 linkage, so selecting an existing place label correctly updates the stay again.
