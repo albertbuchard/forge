@@ -249,7 +249,7 @@ private struct MovementLifeTimelineView: View {
                     TimeInterval(MovementTimelineViewportLayout.futureGridHours * 3600)
                 )
                 let timelineBottomPadding = proxy.safeAreaInsets.bottom + 80
-                let timelineContentHeight = movementTimelineContentHeight(
+                let timelineLayout = movementTimelineLayoutModel(
                     viewportHeight: proxy.size.height,
                     safeTopInset: proxy.safeAreaInsets.top,
                     bottomPadding: timelineBottomPadding,
@@ -264,14 +264,9 @@ private struct MovementLifeTimelineView: View {
                         ScrollView(.vertical, showsIndicators: false) {
                             ZStack(alignment: .topLeading) {
                                 MovementTimelineViewportGrid(
-                                    items: displayItems,
-                                    backgroundBands: renderState.backgroundBands,
-                                    viewportHeight: proxy.size.height,
-                                    safeTopInset: proxy.safeAreaInsets.top,
-                                    bottomPadding: timelineBottomPadding,
-                                    rangeEnd: rangeEnd
+                                    layout: timelineLayout
                                 )
-                                .frame(height: timelineContentHeight)
+                                .frame(height: timelineLayout.contentHeight)
 
                                 VStack(spacing: 0) {
                                     if let oldestTimelineItem {
@@ -691,7 +686,7 @@ private struct MovementLifeTimelineView: View {
     }
 
     private var hasSleepOverlayInLoadedRange: Bool {
-        renderState.backgroundBands.contains(where: { $0.kind == .sleep })
+        renderableSleepOverlayItems.isEmpty == false
     }
 
     private var mostRelevantSleepOverlayId: String? {
@@ -722,37 +717,19 @@ private struct MovementLifeTimelineView: View {
         displayItems.first(where: { $0.kind != .anchor })
     }
 
-    private func movementTimelineContentHeight(
+    private func movementTimelineLayoutModel(
         viewportHeight: CGFloat,
         safeTopInset: CGFloat,
         bottomPadding: CGFloat,
         rangeEnd: Date
-    ) -> CGFloat {
-        let rows = buildMovementViewportGridMetrics(
+    ) -> MovementTimelineViewportLayoutModel {
+        buildMovementViewportLayoutModel(
             items: displayItems,
             viewportHeight: viewportHeight,
-            safeTopInset: safeTopInset
+            safeTopInset: safeTopInset,
+            bottomPadding: bottomPadding,
+            rangeEnd: rangeEnd
         )
-        let trailingReference = displayItems.last(where: { $0.kind != .anchor })?.endedAtDate ?? rangeEnd
-        let trailingHeight = max(
-            CGFloat(MovementTimelineViewportLayout.futureGridHours)
-                * MovementTimelineViewportLayout.gridRowHeight,
-            CGFloat(max(0, rangeEnd.timeIntervalSince(trailingReference)) / 3600)
-                * MovementTimelineViewportLayout.gridRowHeight
-        )
-        let minimumContentHeight =
-            (oldestTimelineItem == nil
-                ? 0
-                : safeTopInset
-                    + 12
-                    + MovementTimelineViewportLayout.historyCapHeight
-                    + MovementTimelineViewportLayout.historyCapBottomSpacing
-            )
-            + MovementTimelineViewportLayout.leadSpacerHeight(for: viewportHeight)
-            + trailingHeight
-            + bottomPadding
-        let baseHeight = (rows.last?.boxBottom ?? 0) + trailingHeight + bottomPadding
-        return max(baseHeight, minimumContentHeight, viewportHeight + 260)
     }
 
     private func makeCreateDraft(kind: MovementLifeTimelineItem.Kind) -> MovementTimelineEditorDraft {
@@ -2684,23 +2661,6 @@ private struct MovementTimelineStayShape: View {
                     }
                     .padding(.vertical, item.secondaryPlaceLabel == nil ? 22 : 18)
                 }
-                .overlay(alignment: .topTrailing) {
-                    if item.durationSeconds > 6 * 60 * 60 {
-                        VStack(alignment: .trailing, spacing: 5) {
-                            Capsule()
-                                .fill(Color.white.opacity(0.16))
-                                .frame(width: 38, height: 1)
-                            Capsule()
-                                .fill(Color.white.opacity(0.1))
-                                .frame(width: 28, height: 1)
-                            Text("wrapped")
-                                .font(.system(size: 8, weight: .bold, design: .rounded))
-                                .foregroundStyle(Color.white.opacity(0.32))
-                                .tracking(1.4)
-                        }
-                        .padding(16)
-                    }
-                }
                 .frame(width: item.isCurrent ? 206 : 182, height: item.displayHeight)
         }
         .frame(maxWidth: .infinity, alignment: .center)
@@ -2877,22 +2837,10 @@ struct MovementTimelineHourMarker: Identifiable {
     let strong: Bool
 }
 
-struct MovementTimelineBackgroundBand: Identifiable, Hashable {
-    enum Kind: Hashable {
-        case sleep
-    }
-
-    let id: String
-    let kind: Kind
-    let startedAtDate: Date
-    let endedAtDate: Date
-}
-
-struct MovementTimelineBackgroundBandMetric: Identifiable {
-    let id: String
-    let kind: MovementTimelineBackgroundBand.Kind
-    let top: CGFloat
-    let height: CGFloat
+struct MovementTimelineViewportLayoutModel {
+    let rows: [MovementTimelineViewportGridRowMetric]
+    let markers: [MovementTimelineHourMarker]
+    let contentHeight: CGFloat
 }
 
 func movementWarpDisplayRatio(_ ratio: CGFloat, severity: CGFloat) -> CGFloat {
@@ -3016,16 +2964,9 @@ func buildMovementViewportGridMetrics(
 }
 
 func buildMovementViewportHourMarkers(
-    items: [MovementLifeTimelineItem],
-    viewportHeight: CGFloat,
-    safeTopInset: CGFloat,
+    rows: [MovementTimelineViewportGridRowMetric],
     rangeEnd: Date
 ) -> [MovementTimelineHourMarker] {
-    let rows = buildMovementViewportGridMetrics(
-        items: items,
-        viewportHeight: viewportHeight,
-        safeTopInset: safeTopInset
-    )
     guard let first = rows.first else {
         return []
     }
@@ -3053,97 +2994,57 @@ func buildMovementViewportHourMarkers(
     return markers
 }
 
-func buildMovementViewportBackgroundBandMetrics(
+func buildMovementViewportLayoutModel(
     items: [MovementLifeTimelineItem],
-    bands: [MovementTimelineBackgroundBand],
     viewportHeight: CGFloat,
     safeTopInset: CGFloat,
+    bottomPadding: CGFloat,
     rangeEnd: Date
-) -> [MovementTimelineBackgroundBandMetric] {
+) -> MovementTimelineViewportLayoutModel {
     let rows = buildMovementViewportGridMetrics(
         items: items,
         viewportHeight: viewportHeight,
         safeTopInset: safeTopInset
     )
-    guard rows.isEmpty == false else {
-        return []
-    }
-    return bands.compactMap { band in
-        guard band.endedAtDate > band.startedAtDate,
-              let top = movementViewportYPosition(for: band.startedAtDate, rows: rows, rangeEnd: rangeEnd),
-              let bottom = movementViewportYPosition(for: band.endedAtDate, rows: rows, rangeEnd: rangeEnd)
-        else {
-            return nil
-        }
-        return MovementTimelineBackgroundBandMetric(
-            id: band.id,
-            kind: band.kind,
-            top: min(top, bottom),
-            height: max(24, abs(bottom - top))
+    let markers = buildMovementViewportHourMarkers(
+        rows: rows,
+        rangeEnd: rangeEnd
+    )
+    let trailingReference = items.last(where: { $0.kind != .anchor })?.endedAtDate ?? rangeEnd
+    let trailingHeight = max(
+        CGFloat(MovementTimelineViewportLayout.futureGridHours)
+            * MovementTimelineViewportLayout.gridRowHeight,
+        CGFloat(max(0, rangeEnd.timeIntervalSince(trailingReference)) / 3600)
+            * MovementTimelineViewportLayout.gridRowHeight
+    )
+    let minimumContentHeight =
+        (items.contains(where: { $0.kind != .anchor })
+            ? safeTopInset
+                + 12
+                + MovementTimelineViewportLayout.historyCapHeight
+                + MovementTimelineViewportLayout.historyCapBottomSpacing
+            : 0
         )
-    }
+        + MovementTimelineViewportLayout.leadSpacerHeight(for: viewportHeight)
+        + trailingHeight
+        + bottomPadding
+    let baseHeight = (rows.last?.boxBottom ?? 0) + trailingHeight + bottomPadding
+    return MovementTimelineViewportLayoutModel(
+        rows: rows,
+        markers: markers,
+        contentHeight: max(baseHeight, minimumContentHeight, viewportHeight + 260)
+    )
 }
 
 private struct MovementTimelineViewportGrid: View {
-    let items: [MovementLifeTimelineItem]
-    let backgroundBands: [MovementTimelineBackgroundBand]
-    let viewportHeight: CGFloat
-    let safeTopInset: CGFloat
-    let bottomPadding: CGFloat
-    let rangeEnd: Date
+    let layout: MovementTimelineViewportLayoutModel
 
     var body: some View {
-        let rows = buildMovementViewportGridMetrics(
-            items: items,
-            viewportHeight: viewportHeight,
-            safeTopInset: safeTopInset
-        )
-        let markers = buildMovementViewportHourMarkers(
-            items: items,
-            viewportHeight: viewportHeight,
-            safeTopInset: safeTopInset,
-            rangeEnd: rangeEnd
-        )
-        let bandMetrics = buildMovementViewportBackgroundBandMetrics(
-            items: items,
-            bands: backgroundBands,
-            viewportHeight: viewportHeight,
-            safeTopInset: safeTopInset,
-            rangeEnd: rangeEnd
-        )
-        let contentHeight =
-            (rows.last?.boxBottom ?? 0)
-            + max(
-                CGFloat(rangeEnd.timeIntervalSince(rows.last?.item.endedAtDate ?? rangeEnd) / 3600)
-                    * MovementTimelineViewportLayout.gridRowHeight,
-                CGFloat(MovementTimelineViewportLayout.futureGridHours) * MovementTimelineViewportLayout.gridRowHeight
-            )
-            + bottomPadding
         ZStack(alignment: .topLeading) {
             Rectangle()
                 .fill(Color.clear)
-                .frame(height: max(contentHeight, viewportHeight))
-            ForEach(bandMetrics) { band in
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color(red: 0.18, green: 0.46, blue: 0.62).opacity(0.16),
-                                Color(red: 0.08, green: 0.24, blue: 0.36).opacity(0.22)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 28, style: .continuous)
-                            .stroke(Color.white.opacity(0.06), lineWidth: 1)
-                    )
-                    .padding(.horizontal, 42)
-                    .frame(height: band.height)
-                    .offset(x: 0, y: band.top)
-            }
-            ForEach(markers) { marker in
+                .frame(height: layout.contentHeight)
+            ForEach(layout.markers) { marker in
                 VStack(alignment: .leading, spacing: 2) {
                     Rectangle()
                         .fill(Color.white.opacity(marker.strong ? 0.14 : 0.07))
@@ -4069,7 +3970,6 @@ private func mergeSleepTimelineOverlays(
 
 struct MovementTimelineRenderState {
     var items: [MovementLifeTimelineItem]
-    var backgroundBands: [MovementTimelineBackgroundBand]
 }
 
 struct MovementTimelineRenderContext {
@@ -4093,18 +3993,17 @@ enum MovementTimelineRenderManager {
     ) -> MovementTimelineRenderState {
         let canonical = MovementTimelineSleepOverlayNormalizer.sortedRenderableItems(baseItems)
         guard sleepOverlayVisible else {
-            return MovementTimelineRenderState(items: canonical, backgroundBands: [])
+            return MovementTimelineRenderState(items: canonical)
         }
         let context = MovementTimelineRenderContext(
             referenceDate: referenceDate,
             sleepOverlays: sleepOverlays
         )
         let layers: [MovementTimelineRenderLayer] = [
-            MovementTimelineSleepOverlayRenderLayer(),
-            MovementTimelineVirtualFragmentRenderLayer()
+            MovementTimelineSleepOverlayRenderLayer()
         ]
         return layers.reduce(
-            MovementTimelineRenderState(items: canonical, backgroundBands: [])
+            MovementTimelineRenderState(items: canonical)
         ) { partial, layer in
             layer.apply(to: partial, context: context)
         }
@@ -4127,70 +4026,8 @@ struct MovementTimelineSleepOverlayRenderLayer: MovementTimelineRenderLayer {
                 items: state.items,
                 overlays: mergedOverlays,
                 referenceDate: context.referenceDate
-            ),
-            backgroundBands: state.backgroundBands + mergedOverlays.map {
-                MovementTimelineBackgroundBand(
-                    id: "sleep-band-\($0.id)",
-                    kind: .sleep,
-                    startedAtDate: MovementTimelineFormatting.parse($0.startedAt),
-                    endedAtDate: MovementTimelineFormatting.parse($0.endedAt)
-                )
-            }
-        )
-    }
-}
-
-struct MovementTimelineVirtualFragmentRenderLayer: MovementTimelineRenderLayer {
-    private static let maxVisualSpanSeconds: TimeInterval = 6 * 60 * 60
-
-    func apply(
-        to state: MovementTimelineRenderState,
-        context: MovementTimelineRenderContext
-    ) -> MovementTimelineRenderState {
-        MovementTimelineRenderState(
-            items: state.items.flatMap(fragmentIfNeeded),
-            backgroundBands: state.backgroundBands
-        )
-    }
-
-    private func fragmentIfNeeded(
-        _ item: MovementLifeTimelineItem
-    ) -> [MovementLifeTimelineItem] {
-        guard item.isSleepOverlay == false,
-              item.kind != .anchor,
-              item.endedAtDate > item.startedAtDate,
-              item.endedAtDate.timeIntervalSince(item.startedAtDate) > Self.maxVisualSpanSeconds
-        else {
-            return [item]
-        }
-        var fragments: [MovementLifeTimelineItem] = []
-        var cursor = item.startedAtDate
-        var fragmentIndex = 0
-        while cursor < item.endedAtDate {
-            let nextBoundary = min(
-                nextDayBoundary(after: cursor),
-                cursor.addingTimeInterval(Self.maxVisualSpanSeconds),
-                item.endedAtDate
             )
-            guard let fragment = MovementTimelineSleepOverlayNormalizer.trimmedItem(
-                item,
-                startedAt: cursor,
-                endedAt: nextBoundary,
-                suffix: "display-fragment-\(fragmentIndex)"
-            ) else {
-                break
-            }
-            fragments.append(fragment)
-            fragmentIndex += 1
-            cursor = nextBoundary
-        }
-        return fragments.isEmpty ? [item] : fragments
-    }
-
-    private func nextDayBoundary(after date: Date) -> Date {
-        let calendar = Calendar.current
-        let startOfDay = calendar.startOfDay(for: date)
-        return calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? date.addingTimeInterval(Self.maxVisualSpanSeconds)
+        )
     }
 }
 

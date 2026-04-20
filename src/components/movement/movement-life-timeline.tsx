@@ -91,6 +91,20 @@ type TimelineRowMetric = {
   boxBottom: number;
 };
 
+type TimelineHourMarker = {
+  y: number;
+  label: string;
+  strong: boolean;
+};
+
+type MovementTimelineLayoutModel = {
+  rows: TimelineRowMetric[];
+  markers: TimelineHourMarker[];
+  rangeEndMs: number;
+  futureTailHeight: number;
+  totalHeight: number;
+};
+
 function normalizeSearchText(text: string) {
   return text.trim().toLowerCase();
 }
@@ -749,7 +763,7 @@ function buildTimelineHourMarkers(
   rows: TimelineRowMetric[],
   rangeEndMs: number
 ) {
-  const markers: Array<{ y: number; label: string; strong: boolean }> = [];
+  const markers: TimelineHourMarker[] = [];
   if (rows.length === 0) {
     return markers;
   }
@@ -776,33 +790,88 @@ function buildTimelineHourMarkers(
   return markers;
 }
 
+function buildMovementTimelineLayoutModel({
+  segments,
+  viewportHeight,
+  nowMs = Date.now()
+}: {
+  segments: MovementTimelineSegment[];
+  viewportHeight: number;
+  nowMs?: number;
+}): MovementTimelineLayoutModel {
+  let cursor = CENTER_PADDING;
+  const rows = segments.map((segment) => {
+    const displayHeight = segmentDisplayHeight(
+      segment.durationSeconds,
+      segment.kind,
+      segment.syncSource
+    );
+    const rowHeight = rowHeightForSegment(segment);
+    const rowStart = cursor;
+    const boxTop = rowStart + SEGMENT_BOX_TOP;
+    const boxBottom = boxTop + displayHeight;
+    cursor += rowHeight;
+    return {
+      segment,
+      rowStart,
+      rowHeight,
+      displayHeight,
+      boxTop,
+      boxBottom
+    } satisfies TimelineRowMetric;
+  });
+  const rangeEndMs = nowMs + FUTURE_GRID_HOURS * 3_600_000;
+  const markers = buildTimelineHourMarkers(rows, rangeEndMs);
+  const futureTailHeight = (() => {
+    const latestEndedAt = segments[segments.length - 1]?.endedAt;
+    if (!latestEndedAt) {
+      return GRID_ROW_HEIGHT * FUTURE_GRID_HOURS;
+    }
+    const latestEndedMs = new Date(latestEndedAt).getTime();
+    return Math.max(
+      GRID_ROW_HEIGHT * FUTURE_GRID_HOURS,
+      ((rangeEndMs - latestEndedMs) / 3_600_000) * GRID_ROW_HEIGHT
+    );
+  })();
+  const totalHeight = Math.max(
+    rows.length > 0
+      ? rows[rows.length - 1]!.rowStart + rows[rows.length - 1]!.rowHeight + futureTailHeight
+      : CENTER_PADDING + futureTailHeight,
+    viewportHeight > 0 ? viewportHeight + 260 : 960,
+    CENTER_PADDING + futureTailHeight
+  );
+  return {
+    rows,
+    markers,
+    rangeEndMs,
+    futureTailHeight,
+    totalHeight
+  };
+}
+
 function MovementTimelineViewportGrid({
-  rows,
-  totalHeight,
+  layout,
   scrollTop,
   viewportHeight
 }: {
-  rows: TimelineRowMetric[];
-  totalHeight: number;
+  layout: MovementTimelineLayoutModel;
   scrollTop: number;
   viewportHeight: number;
 }) {
-  const rangeEndMs = Date.now() + FUTURE_GRID_HOURS * 3_600_000;
-  const markers = buildTimelineHourMarkers(rows, rangeEndMs);
   const overscan = GRID_ROW_HEIGHT * 6;
   const visibleStart = Math.max(0, scrollTop - overscan);
   const visibleEnd = Math.min(
-    totalHeight,
+    layout.totalHeight,
     scrollTop + Math.max(viewportHeight, GRID_ROW_HEIGHT * 8) + overscan
   );
-  const visibleMarkers = markers.filter(
+  const visibleMarkers = layout.markers.filter(
     (marker) => marker.y >= visibleStart && marker.y <= visibleEnd
   );
 
   return (
     <div
       className="pointer-events-none absolute inset-x-0 top-0 overflow-hidden rounded-[30px]"
-      style={{ height: `${totalHeight}px` }}
+      style={{ height: `${layout.totalHeight}px` }}
     >
       <div className="absolute inset-y-0 left-0 w-18 bg-[linear-gradient(90deg,rgba(7,12,22,0.96),rgba(7,12,22,0.42),transparent)]" />
       {visibleMarkers.map((marker, index) => {
@@ -2161,41 +2230,14 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
     retry: false,
     refetchOnWindowFocus: false
   });
-  const futureTailHeight = useMemo(() => {
-    const latestEndedAt = displaySegments[displaySegments.length - 1]?.endedAt;
-    if (!latestEndedAt) {
-      return GRID_ROW_HEIGHT * FUTURE_GRID_HOURS;
-    }
-    const nowPlusOneHourMs = Date.now() + FUTURE_GRID_HOURS * 3_600_000;
-    const latestEndedMs = new Date(latestEndedAt).getTime();
-    return Math.max(
-      GRID_ROW_HEIGHT * FUTURE_GRID_HOURS,
-      ((nowPlusOneHourMs - latestEndedMs) / 3_600_000) * GRID_ROW_HEIGHT
-    );
-  }, [displaySegments]);
-  const timelineRows = useMemo(() => {
-    let cursor = CENTER_PADDING;
-    return displaySegments.map((segment) => {
-      const displayHeight = segmentDisplayHeight(
-        segment.durationSeconds,
-        segment.kind,
-        segment.syncSource
-      );
-      const rowHeight = rowHeightForSegment(segment);
-      const rowStart = cursor;
-      const boxTop = rowStart + SEGMENT_BOX_TOP;
-      const boxBottom = boxTop + displayHeight;
-      cursor += rowHeight;
-      return {
-        segment,
-        rowStart,
-        rowHeight,
-        displayHeight,
-        boxTop,
-        boxBottom
-      } satisfies TimelineRowMetric;
-    });
-  }, [displaySegments]);
+  const timelineLayout = useMemo(
+    () =>
+      buildMovementTimelineLayoutModel({
+        segments: displaySegments,
+        viewportHeight
+      }),
+    [displaySegments, viewportHeight]
+  );
 
   useEffect(() => {
     if (!dataModalOpen) {
@@ -2219,7 +2261,7 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
       rowHeightForSegment(displaySegments[index] ?? displaySegments[0]!),
     overscan: 6,
     paddingStart: CENTER_PADDING,
-    paddingEnd: futureTailHeight
+    paddingEnd: timelineLayout.futureTailHeight
   });
 
   useEffect(() => {
@@ -2713,15 +2755,7 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
   }
 
   const virtualRows = rowVirtualizer.getVirtualItems();
-  const contentHeight = Math.max(
-    timelineRows.length > 0
-      ? timelineRows[timelineRows.length - 1]!.rowStart +
-          timelineRows[timelineRows.length - 1]!.rowHeight +
-          futureTailHeight
-      : CENTER_PADDING + futureTailHeight,
-    viewportHeight > 0 ? viewportHeight + 260 : 960,
-    CENTER_PADDING + futureTailHeight
-  );
+  const contentHeight = timelineLayout.totalHeight;
   return (
     <section className="grid gap-4">
       <Card className="overflow-hidden rounded-[34px] border border-white/8 bg-[radial-gradient(circle_at_top,rgba(88,182,255,0.08),transparent_28%),linear-gradient(180deg,rgba(4,8,17,0.99),rgba(5,9,18,0.97))] p-4">
@@ -2790,8 +2824,7 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
           className="relative h-[82vh] overflow-auto rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(4,7,15,0.98),rgba(6,10,18,0.96))]"
         >
           <MovementTimelineViewportGrid
-            rows={timelineRows}
-            totalHeight={contentHeight}
+            layout={timelineLayout}
             scrollTop={scrollTop}
             viewportHeight={viewportHeight}
           />

@@ -1,4 +1,4 @@
-Forge Companion 1.0.18 hardens the iPhone life-timeline sleep overlay.
-Sleep now renders through a dedicated overlay pipeline with recalculated
-virtual fragments, adapted background bands, and simulator-verified screenshots
-that match the visible sleep slice above and below the affected stays.
+Forge Companion 1.0.19 rebuilds the life-timeline sleep overlay layout engine.
+Sleep now uses the same final box distribution as the rest of the timeline,
+without synthetic background bands, and the iPhone screenshots were re-captured
+from the simulator to verify the real rendered positions before release.

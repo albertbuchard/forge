@@ -1691,7 +1691,7 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertTrue(overlaid[0].isSleepOverlay)
     }
 
-    func testRenderManagerFragmentsLongPostSleepBoxesIntoVirtualDisplaySlices() {
+    func testRenderManagerBuildsCanonicalPostOverlaySegmentsWithoutSyntheticBackgroundBands() {
         let formatter = ISO8601DateFormatter()
         let baseItems = [
             makeDisplayItem(
@@ -1728,16 +1728,13 @@ final class ForgeCompanionTests: XCTestCase {
             sleepOverlayVisible: true
         )
 
-        XCTAssertEqual(renderState.backgroundBands.count, 1)
+        XCTAssertEqual(renderState.items.count, 3)
         XCTAssertTrue(renderState.items.contains(where: { $0.isSleepOverlay }))
-        XCTAssertFalse(
-            renderState.items.contains(where: { item in
-                item.isSleepOverlay == false && item.durationSeconds > 6 * 60 * 60
-            })
-        )
         XCTAssertTrue(
             renderState.items.contains(where: { item in
-                item.startedAtDate == formatter.date(from: "2026-04-19T11:08:01Z")
+                item.isSleepOverlay == false
+                    && item.startedAtDate == formatter.date(from: "2026-04-19T11:08:01Z")
+                    && item.endedAtDate == formatter.date(from: "2026-04-19T23:20:00Z")
             })
         )
     }
@@ -1809,9 +1806,7 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertLessThan(fourAmY, endY)
 
         let inBoxMarkers = buildMovementViewportHourMarkers(
-            items: [sleepItem],
-            viewportHeight: 844,
-            safeTopInset: 0,
+            rows: rows,
             rangeEnd: rangeEnd
         )
         .filter { $0.y >= row.boxTop - 0.5 && $0.y <= row.boxBottom + 0.5 }
