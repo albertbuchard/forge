@@ -1,4 +1,3 @@
-Forge Companion 1.0.19 rebuilds the life-timeline sleep overlay layout engine.
-Sleep now uses the same final box distribution as the rest of the timeline,
-without synthetic background bands, and the iPhone screenshots were re-captured
-from the simulator to verify the real rendered positions before release.
+Forge Companion 1.0.20 fixes iPhone stay relabeling for existing saved places.
+Normalized and ongoing timeline stays now preserve their canonical raw stay
+linkage, so selecting an existing place label correctly updates the stay again.
