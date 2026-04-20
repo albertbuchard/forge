@@ -30,6 +30,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { EntityBadge } from "@/components/ui/entity-badge";
 import { UserBadge } from "@/components/ui/user-badge";
 import { UserSelectField } from "@/components/ui/user-select-field";
+import { invalidateForgeSnapshot } from "@/store/api/invalidate-forge-snapshot";
 import {
   createNote,
   deleteNote,
@@ -847,7 +848,7 @@ export function PsycheSelfObservationPage() {
         queryClient.invalidateQueries({
           queryKey: ["forge-psyche-self-observation-calendar"]
         }),
-        queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] }),
+        invalidateForgeSnapshot(queryClient),
         queryClient.invalidateQueries({ queryKey: ["forge-psyche-overview"] })
       ]);
     }
@@ -883,7 +884,7 @@ export function PsycheSelfObservationPage() {
         queryClient.invalidateQueries({
           queryKey: ["forge-psyche-self-observation-calendar"]
         }),
-        queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] }),
+        invalidateForgeSnapshot(queryClient),
         queryClient.invalidateQueries({ queryKey: ["forge-psyche-overview"] })
       ]);
     }

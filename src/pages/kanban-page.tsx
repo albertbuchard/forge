@@ -34,6 +34,7 @@ import { useI18n } from "@/lib/i18n";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { getSingleSelectedUserId } from "@/lib/user-ownership";
 import type { UserSummary } from "@/lib/types";
+import { invalidateForgeSnapshot } from "@/store/api/invalidate-forge-snapshot";
 
 const ENTITY_FILTER_PREFIX = {
   goal: "goal:",
@@ -487,7 +488,7 @@ export function KanbanPage() {
   const invalidateBoard = async () => {
     await Promise.all([
       shell.refresh(),
-      queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] }),
+      invalidateForgeSnapshot(queryClient),
       queryClient.invalidateQueries({ queryKey: ["project-board"] }),
       queryClient.invalidateQueries({ queryKey: ["task-context"] })
     ]);

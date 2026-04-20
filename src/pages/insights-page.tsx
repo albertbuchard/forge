@@ -16,6 +16,7 @@ import { UserBadge } from "@/components/ui/user-badge";
 import { createGoal, createInsight, createNote, createProject, createTask, deleteInsight, getInsights, submitInsightFeedback } from "@/lib/api";
 import { getEntityNotesHref } from "@/lib/note-helpers";
 import type { Insight, InsightsPayload } from "@/lib/types";
+import { invalidateForgeSnapshot } from "@/store/api/invalidate-forge-snapshot";
 
 export function InsightsPage() {
   const queryClient = useQueryClient();
@@ -112,7 +113,7 @@ export function InsightsPage() {
     onSuccess: async ({ href }) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["forge-insights"] }),
-        queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] }),
+        invalidateForgeSnapshot(queryClient),
         queryClient.invalidateQueries({ queryKey: ["forge-xp-metrics"] }),
         queryClient.invalidateQueries({ queryKey: ["forge-reward-ledger"] }),
         queryClient.invalidateQueries({ queryKey: ["notes-index"] })

@@ -3277,6 +3277,7 @@ export interface AgentOnboardingEntityGuide {
     | "batch_crud_entity"
     | "specialized_crud_entity"
     | "action_workflow_entity"
+    | "specialized_domain_surface"
     | "read_model_only_surface";
   purpose: string;
   minimumCreateFields: string[];

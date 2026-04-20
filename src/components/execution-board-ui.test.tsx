@@ -1,9 +1,12 @@
 import { MemoryRouter } from "react-router-dom";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "@/lib/i18n";
 import type { Goal, NotesSummaryByEntity, Tag, Task, TaskRun } from "@/lib/types";
-import { ExecutionBoard } from "./execution-board";
+import {
+  buildExecutionBoardTaskMenuItems,
+  ExecutionBoard
+} from "./execution-board";
 
 describe("ExecutionBoard card surface", () => {
   it("renders AP badges and opens the split action from the card", () => {
@@ -300,5 +303,92 @@ describe("ExecutionBoard card surface", () => {
     );
 
     expect(onStopTask).toHaveBeenCalledWith(activeRun);
+  });
+
+  it("includes a delete action in the task menu contract", () => {
+    const task: Task = {
+      id: "task_3",
+      title: "Menu deletable task",
+      description: "Should be deletable from the kanban actions menu.",
+      level: "task",
+      status: "focus",
+      priority: "medium",
+      owner: "Albert",
+      goalId: "goal_1",
+      projectId: "project_1",
+      parentWorkItemId: null,
+      dueDate: null,
+      effort: "light",
+      energy: "steady",
+      points: 30,
+      plannedDurationSeconds: 1_800,
+      schedulingRules: null,
+      sortOrder: 0,
+      resolutionKind: null,
+      splitParentTaskId: null,
+      aiInstructions: "",
+      executionMode: null,
+      acceptanceCriteria: [],
+      blockerLinks: [],
+      completionReport: null,
+      gitRefs: [],
+      completedAt: null,
+      createdAt: "2026-04-11T08:00:00.000Z",
+      updatedAt: "2026-04-11T08:00:00.000Z",
+      tagIds: [],
+      userId: "user_operator",
+      user: {
+        id: "user_operator",
+        kind: "human",
+        handle: "albert",
+        displayName: "Albert",
+        description: "",
+        accentColor: "#c0c1ff",
+        createdAt: "2026-04-11T08:00:00.000Z",
+        updatedAt: "2026-04-11T08:00:00.000Z"
+      },
+      assigneeUserIds: [],
+      assignees: [],
+      time: {
+        totalTrackedSeconds: 0,
+        totalCreditedSeconds: 0,
+        liveTrackedSeconds: 0,
+        liveCreditedSeconds: 0,
+        manualAdjustedSeconds: 0,
+        activeRunCount: 0,
+        hasCurrentRun: false,
+        currentRunId: null
+      },
+      actionPointSummary: undefined,
+      splitSuggestion: undefined
+    };
+    const goal = {
+      id: "goal_1",
+      title: "Ship Forge",
+      description: "",
+      status: "active",
+      horizon: "lifetime",
+      targetPoints: 120,
+      themeColor: "#c0c1ff",
+      createdAt: "2026-04-11T08:00:00.000Z",
+      updatedAt: "2026-04-11T08:00:00.000Z",
+      tagIds: [],
+      owner: "Albert",
+      userId: "user_operator",
+      user: task.user
+    } as unknown as Goal;
+    const onRequestDelete = vi.fn();
+    const items = buildExecutionBoardTaskMenuItems({
+      task,
+      onMove: vi.fn(),
+      onDeleteTask: vi.fn(async () => {}),
+      deletePendingTaskId: null,
+      onRequestDelete
+    });
+    const deleteItem = items.find((item) => item.id === "delete-task");
+
+    expect(deleteItem?.label).toBe("Delete task");
+    deleteItem?.onSelect();
+    expect(onRequestDelete).toHaveBeenCalledWith(task);
   });
 });

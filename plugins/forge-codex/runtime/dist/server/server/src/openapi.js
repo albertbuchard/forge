@@ -333,6 +333,18 @@ export function buildOpenApiDocument() {
             message: { type: "string" }
         }
     };
+    const validationExpectedShape = {
+        type: "object",
+        additionalProperties: true,
+        required: ["inputShape", "requiredFields", "notes"],
+        properties: {
+            toolName: { type: "string" },
+            inputShape: { type: "string" },
+            requiredFields: arrayOf({ type: "string" }),
+            example: { type: ["string", "null"] },
+            notes: arrayOf({ type: "string" })
+        }
+    };
     const errorResponse = {
         type: "object",
         additionalProperties: true,
@@ -341,7 +353,12 @@ export function buildOpenApiDocument() {
             code: { type: "string" },
             error: { type: "string" },
             statusCode: { type: "integer" },
-            details: arrayOf({ $ref: "#/components/schemas/ValidationIssue" })
+            route: { type: "string" },
+            validationSummary: { type: "string" },
+            details: arrayOf({ $ref: "#/components/schemas/ValidationIssue" }),
+            expectedShape: {
+                $ref: "#/components/schemas/ValidationExpectedShape"
+            }
         }
     };
     const tag = {
@@ -4098,6 +4115,7 @@ export function buildOpenApiDocument() {
         components: {
             schemas: {
                 ValidationIssue: validationIssue,
+                ValidationExpectedShape: validationExpectedShape,
                 ErrorResponse: errorResponse,
                 Tag: tag,
                 Goal: goal,

@@ -30,6 +30,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { UserBadge } from "@/components/ui/user-badge";
 import { UserSelectField } from "@/components/ui/user-select-field";
+import { invalidateForgeSnapshot } from "@/store/api/invalidate-forge-snapshot";
 import { prependEntityToCollection } from "@/lib/query-cache";
 import { getEntityNotesSummary } from "@/lib/note-helpers";
 import {
@@ -231,7 +232,7 @@ export function PsychePatternsPage() {
         queryClient.invalidateQueries({
           queryKey: ["forge-psyche-self-observation-calendar"]
         }),
-        queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] }),
+        invalidateForgeSnapshot(queryClient),
         queryClient.invalidateQueries({ queryKey: ["notes-index"] })
       ]);
     }

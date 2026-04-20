@@ -74,6 +74,7 @@ import { cn } from "@/lib/utils";
 import { useForgeShell } from "@/components/shell/app-shell";
 import type { TaskStatus, TaskTimebox } from "@/lib/types";
 import { getSingleSelectedUserId } from "@/lib/user-ownership";
+import { invalidateForgeSnapshot } from "@/store/api/invalidate-forge-snapshot";
 
 function DetailLabel({ label, help }: { label: string; help?: string }) {
   return (
@@ -363,7 +364,7 @@ export function TaskDetailPage() {
 
   const invalidateAll = async () => {
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] }),
+      invalidateForgeSnapshot(queryClient),
       queryClient.invalidateQueries({
         queryKey: ["task-context", params.taskId]
       }),

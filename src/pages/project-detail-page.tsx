@@ -39,6 +39,7 @@ import { useI18n } from "@/lib/i18n";
 import { useForgeShell } from "@/components/shell/app-shell";
 import type { Project } from "@/lib/types";
 import { getSingleSelectedUserId } from "@/lib/user-ownership";
+import { invalidateForgeSnapshot } from "@/store/api/invalidate-forge-snapshot";
 
 function isLegacyProjectId(projectId: string | undefined): boolean {
   return Boolean(projectId && projectId.startsWith("campaign:"));
@@ -123,7 +124,7 @@ export function ProjectDetailPage() {
     mutationFn: (taskId: string) => uncompleteTask(taskId),
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] }),
+        invalidateForgeSnapshot(queryClient),
         queryClient.invalidateQueries({
           queryKey: ["project-board", params.projectId]
         })
@@ -134,7 +135,7 @@ export function ProjectDetailPage() {
     mutationFn: createWorkAdjustment,
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] }),
+        invalidateForgeSnapshot(queryClient),
         queryClient.invalidateQueries({
           queryKey: ["project-board", params.projectId]
         }),
@@ -149,7 +150,7 @@ export function ProjectDetailPage() {
       patchProject(params.projectId!, { status }),
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] }),
+        invalidateForgeSnapshot(queryClient),
         queryClient.invalidateQueries({
           queryKey: ["project-board", params.projectId]
         }),
@@ -163,7 +164,7 @@ export function ProjectDetailPage() {
     mutationFn: () => deleteProject(params.projectId!),
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] }),
+        invalidateForgeSnapshot(queryClient),
         queryClient.invalidateQueries({
           queryKey: ["project-board", params.projectId]
         })
@@ -175,7 +176,7 @@ export function ProjectDetailPage() {
     mutationFn: (taskId: string) => deleteTask(taskId),
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] }),
+        invalidateForgeSnapshot(queryClient),
         queryClient.invalidateQueries({
           queryKey: ["project-board", params.projectId]
         }),

@@ -82,6 +82,10 @@ type RouteCall = {
 
 type ToolCall = {
   name?: string;
+  execute?: (
+    toolCallId: string,
+    params: Record<string, unknown>
+  ) => Promise<{ details?: unknown } | unknown>;
 };
 
 type HookCall = {
@@ -149,6 +153,26 @@ function createMockResponse() {
       this.body = chunk ?? "";
     }
   };
+}
+
+function collectRegisteredTools(
+  pluginConfig: {
+    origin?: string;
+    port?: number;
+    dataRoot?: string;
+    apiToken?: string;
+    actorLabel?: string;
+  } = {}
+) {
+  const tools: ToolCall[] = [];
+  registerForgePlugin({
+    pluginConfig,
+    registerHttpRoute() {},
+    registerTool(tool) {
+      tools.push(tool as ToolCall);
+    }
+  });
+  return tools;
 }
 
 function collectTypeScriptFiles(directory: string): string[] {
@@ -732,6 +756,101 @@ describe("forge openclaw plugin", () => {
 
     expect(response.statusCode).toBe(302);
     expect(response.headers.location).toBe("http://127.0.0.1:4317/forge/");
+  });
+
+  it("normalizes local task-run starts to the task-run route instead of the UI path", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            session: { id: "ses_local", actorLabel: "Albert" }
+          }),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json",
+              "set-cookie":
+                "forge_operator_session=fg_session_cookie; Path=/; HttpOnly"
+            }
+          }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ taskRun: { id: "run_123" } }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        })
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const tools = collectRegisteredTools({
+      origin: "http://127.0.0.1",
+      port: 4318,
+      actorLabel: ""
+    });
+    const startTaskRun = tools.find(
+      (tool) => tool.name === "forge_start_task_run"
+    );
+
+    await expect(
+      startTaskRun?.execute?.("call_1", {
+        taskId: " task_123 ",
+        actor: "  Albert  ",
+        timerMode: "unlimited",
+        plannedDurationSeconds: 1200,
+        note: "  Focus block  "
+      })
+    ).resolves.toBeDefined();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const calledUrls = fetchMock.mock.calls.map(
+      ([url]) => (url as URL).toString()
+    );
+    expect(calledUrls).toEqual([
+      "http://127.0.0.1:4318/api/v1/auth/operator-session",
+      "http://127.0.0.1:4318/api/v1/tasks/task_123/runs"
+    ]);
+    expect(calledUrls.every((url) => !url.includes("/forge/"))).toBe(true);
+
+    const [, init] = fetchMock.mock.calls[1] as [URL, RequestInit];
+    expect(init.headers).toMatchObject({
+      cookie: "forge_operator_session=fg_session_cookie",
+      "x-forge-actor": "Albert",
+      "content-type": "application/json"
+    });
+    expect(JSON.parse(String(init.body))).toEqual({
+      actor: "Albert",
+      timerMode: "unlimited",
+      plannedDurationSeconds: null,
+      note: "Focus block"
+    });
+  });
+
+  it("rejects planned task runs without a duration before making a network call", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const tools = collectRegisteredTools({
+      origin: "http://127.0.0.1",
+      port: 4317,
+      actorLabel: ""
+    });
+    const startTaskRun = tools.find(
+      (tool) => tool.name === "forge_start_task_run"
+    );
+
+    await expect(
+      startTaskRun?.execute?.("call_1", {
+        taskId: "task_123",
+        actor: "Albert",
+        timerMode: "planned"
+      })
+    ).rejects.toThrow(
+      "forge_start_task_run requires plannedDurationSeconds when timerMode is planned."
+    );
+
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("exports SDK-native and legacy plugin entries with the same metadata", () => {

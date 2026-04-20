@@ -37,6 +37,7 @@ import {
   type NoteDestroyDelayUnit
 } from "@/lib/note-memory-tags";
 import { formatOwnedEntityOptionLabel } from "@/lib/user-ownership";
+import { invalidateForgeSnapshot } from "@/store/api/invalidate-forge-snapshot";
 
 type LinkDraft = {
   entityType: CrudEntityType;
@@ -267,7 +268,7 @@ export function EntityNotesSurface({
       queryClient.invalidateQueries({
         queryKey: ["notes", entityType, entityId]
       }),
-      queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] }),
+      invalidateForgeSnapshot(queryClient),
       ...invalidateQueryKeys.map((key) =>
         queryClient.invalidateQueries({ queryKey: key })
       )

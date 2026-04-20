@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { ErrorState } from "@/components/ui/page-state";
 import { finalizeWeeklyReview, getWeeklyReview } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { invalidateForgeSnapshot } from "@/store/api/invalidate-forge-snapshot";
 
 export function WeeklyReviewPage() {
   const { t } = useI18n();
@@ -24,7 +25,7 @@ export function WeeklyReviewPage() {
         queryClient.invalidateQueries({ queryKey: ["forge-weekly-review"] }),
         queryClient.invalidateQueries({ queryKey: ["forge-xp-metrics"] }),
         queryClient.invalidateQueries({ queryKey: ["forge-reward-ledger"] }),
-        queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] }),
+        invalidateForgeSnapshot(queryClient),
         queryClient.invalidateQueries({ queryKey: ["activity-archive"] })
       ]);
     }

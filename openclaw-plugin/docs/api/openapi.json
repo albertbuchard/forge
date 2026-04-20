@@ -33,6 +33,41 @@
           }
         }
       },
+      "ValidationExpectedShape": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": [
+          "inputShape",
+          "requiredFields",
+          "notes"
+        ],
+        "properties": {
+          "toolName": {
+            "type": "string"
+          },
+          "inputShape": {
+            "type": "string"
+          },
+          "requiredFields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "example": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "ErrorResponse": {
         "type": "object",
         "additionalProperties": true,
@@ -51,11 +86,20 @@
           "statusCode": {
             "type": "integer"
           },
+          "route": {
+            "type": "string"
+          },
+          "validationSummary": {
+            "type": "string"
+          },
           "details": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ValidationIssue"
             }
+          },
+          "expectedShape": {
+            "$ref": "#/components/schemas/ValidationExpectedShape"
           }
         }
       },
@@ -5357,6 +5401,324 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "AgentRuntimeReconnectPlan": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "summary",
+          "commands",
+          "notes",
+          "automationSupported"
+        ],
+        "properties": {
+          "summary": {
+            "type": "string"
+          },
+          "commands": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "automationSupported": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AgentRuntimeSessionEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "sessionId",
+          "eventType",
+          "level",
+          "title",
+          "summary",
+          "metadata",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "eventType": {
+            "type": "string"
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "info",
+              "warning",
+              "error"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AgentRuntimeSession": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "agentId",
+          "agentLabel",
+          "agentType",
+          "provider",
+          "sessionKey",
+          "sessionLabel",
+          "actorLabel",
+          "connectionMode",
+          "status",
+          "alive",
+          "baseUrl",
+          "webUrl",
+          "dataRoot",
+          "externalSessionId",
+          "staleAfterSeconds",
+          "reconnectCount",
+          "reconnectRequestedAt",
+          "lastError",
+          "lastSeenAt",
+          "lastHeartbeatAt",
+          "startedAt",
+          "endedAt",
+          "createdAt",
+          "updatedAt",
+          "metadata",
+          "recentEvents",
+          "eventCount",
+          "actionCount",
+          "reconnectPlan"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "agentId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "agentLabel": {
+            "type": "string"
+          },
+          "agentType": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "openclaw",
+              "hermes",
+              "codex"
+            ]
+          },
+          "sessionKey": {
+            "type": "string"
+          },
+          "sessionLabel": {
+            "type": "string"
+          },
+          "actorLabel": {
+            "type": "string"
+          },
+          "connectionMode": {
+            "type": "string",
+            "enum": [
+              "operator_session",
+              "managed_token",
+              "plugin",
+              "mcp",
+              "api_server",
+              "unknown"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "connected",
+              "stale",
+              "reconnecting",
+              "disconnected",
+              "error"
+            ]
+          },
+          "alive": {
+            "type": "boolean"
+          },
+          "baseUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "webUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dataRoot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "externalSessionId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "staleAfterSeconds": {
+            "type": "integer"
+          },
+          "reconnectCount": {
+            "type": "integer"
+          },
+          "reconnectRequestedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lastError": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lastSeenAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastHeartbeatAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "recentEvents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentRuntimeSessionEvent"
+            }
+          },
+          "eventCount": {
+            "type": "integer"
+          },
+          "actionCount": {
+            "type": "integer"
+          },
+          "reconnectPlan": {
+            "$ref": "#/components/schemas/AgentRuntimeReconnectPlan"
+          }
+        }
+      },
+      "AgentRuntimeSessionHistory": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "session",
+          "events",
+          "actions"
+        ],
+        "properties": {
+          "session": {
+            "$ref": "#/components/schemas/AgentRuntimeSession"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentRuntimeSessionEvent"
+            }
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentAction"
+            }
           }
         }
       },
@@ -16139,6 +16501,202 @@
           "Agents"
         ],
         "operationId": "getagents"
+      }
+    },
+    "/api/v1/agents/sessions": {
+      "get": {
+        "summary": "List registered live agent runtime sessions",
+        "responses": {
+          "200": {
+            "description": "Agent runtime sessions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "sessions"
+                  ],
+                  "properties": {
+                    "sessions": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AgentRuntimeSession"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Agents"
+        ],
+        "operationId": "getagents_sessions"
+      },
+      "post": {
+        "summary": "Register or refresh a live agent runtime session",
+        "responses": {
+          "200": {
+            "description": "Registered agent runtime session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "session"
+                  ],
+                  "properties": {
+                    "session": {
+                      "$ref": "#/components/schemas/AgentRuntimeSession"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Agents"
+        ],
+        "operationId": "postagents_sessions"
+      }
+    },
+    "/api/v1/agents/sessions/heartbeat": {
+      "post": {
+        "summary": "Heartbeat an existing agent runtime session",
+        "responses": {
+          "200": {
+            "description": "Updated runtime session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "session"
+                  ],
+                  "properties": {
+                    "session": {
+                      "$ref": "#/components/schemas/AgentRuntimeSession"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Agents"
+        ],
+        "operationId": "postagents_sessions_heartbeat"
+      }
+    },
+    "/api/v1/agents/sessions/events": {
+      "post": {
+        "summary": "Append an event to an agent runtime session history",
+        "responses": {
+          "200": {
+            "description": "Recorded runtime session event",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "event"
+                  ],
+                  "properties": {
+                    "event": {
+                      "$ref": "#/components/schemas/AgentRuntimeSessionEvent"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Agents"
+        ],
+        "operationId": "postagents_sessions_events"
+      }
+    },
+    "/api/v1/agents/sessions/{id}/history": {
+      "get": {
+        "summary": "Read one agent runtime session with event and action history",
+        "responses": {
+          "200": {
+            "description": "Agent runtime session history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRuntimeSessionHistory"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Agents"
+        ],
+        "operationId": "getagents_sessions_id_history"
+      }
+    },
+    "/api/v1/agents/sessions/{id}/reconnect": {
+      "post": {
+        "summary": "Mark a runtime session for reconnect and return its reconnect plan",
+        "responses": {
+          "200": {
+            "description": "Reconnect requested",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "session"
+                  ],
+                  "properties": {
+                    "session": {
+                      "$ref": "#/components/schemas/AgentRuntimeSession"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Agents"
+        ],
+        "operationId": "postagents_sessions_id_reconnect"
+      }
+    },
+    "/api/v1/agents/sessions/{id}/disconnect": {
+      "post": {
+        "summary": "Mark a runtime session disconnected",
+        "responses": {
+          "200": {
+            "description": "Disconnected session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "session"
+                  ],
+                  "properties": {
+                    "session": {
+                      "$ref": "#/components/schemas/AgentRuntimeSession"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Agents"
+        ],
+        "operationId": "postagents_sessions_id_disconnect"
       }
     },
     "/api/v1/agents/onboarding": {

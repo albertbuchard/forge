@@ -84,23 +84,74 @@ def sync_calendar_connection_path(args: Dict[str, Any]) -> str:
 
 
 def start_task_run_path(args: Dict[str, Any]) -> str:
-    return f"/api/v1/tasks/{args['taskId']}/runs"
+    task_id = str(args.get("taskId") or "").strip()
+    if not task_id:
+        raise ValueError("forge_start_task_run requires a non-empty taskId.")
+    return f"/api/v1/tasks/{task_id}/runs"
 
 
 def start_task_run_body(args: Dict[str, Any], _config: Any) -> Dict[str, Any]:
-    return {
-        "actor": args.get("actor"),
-        "timerMode": args.get("timerMode"),
-        "plannedDurationSeconds": args.get("plannedDurationSeconds"),
-        "overrideReason": args.get("overrideReason"),
-        "isCurrent": args.get("isCurrent"),
-        "leaseTtlSeconds": args.get("leaseTtlSeconds"),
-        "note": args.get("note"),
+    actor = str(args.get("actor") or "").strip()
+    if not actor:
+        raise ValueError("forge_start_task_run requires a non-empty actor.")
+
+    timer_mode = "planned" if args.get("timerMode") == "planned" else "unlimited"
+    raw_duration = args.get("plannedDurationSeconds")
+    planned_duration = raw_duration if isinstance(raw_duration, int) else None
+    if timer_mode == "planned" and planned_duration is None:
+        raise ValueError(
+            "forge_start_task_run requires plannedDurationSeconds when timerMode is planned."
+        )
+
+    override_reason = str(args.get("overrideReason") or "").strip() or None
+    note = str(args.get("note") or "").strip() or None
+
+    body: Dict[str, Any] = {
+        "actor": actor,
+        "timerMode": timer_mode,
+        "plannedDurationSeconds": planned_duration if timer_mode == "planned" else None,
     }
+    if override_reason is not None:
+        body["overrideReason"] = override_reason
+    if isinstance(args.get("isCurrent"), bool):
+        body["isCurrent"] = args.get("isCurrent")
+    if isinstance(args.get("leaseTtlSeconds"), int):
+        body["leaseTtlSeconds"] = args.get("leaseTtlSeconds")
+    if note is not None:
+        body["note"] = note
+    return body
 
 
 def task_run_action_path(action: str, args: Dict[str, Any]) -> str:
-    return f"/api/v1/task-runs/{args['taskRunId']}/{action}"
+    task_run_id = str(args.get("taskRunId") or "").strip()
+    if not task_run_id:
+        raise ValueError("Task-run actions require a non-empty taskRunId.")
+    return f"/api/v1/task-runs/{task_run_id}/{action}"
+
+
+def _optional_trimmed_text(args: Dict[str, Any], key: str) -> Any:
+    value = str(args.get(key) or "").strip()
+    return value or None
+
+
+def _task_run_actor_body(
+    args: Dict[str, Any],
+    *,
+    include_lease: bool = False,
+    include_closeout: bool = False,
+) -> Dict[str, Any]:
+    body: Dict[str, Any] = {}
+    actor = _optional_trimmed_text(args, "actor")
+    note = _optional_trimmed_text(args, "note")
+    if actor is not None:
+        body["actor"] = actor
+    if note is not None:
+        body["note"] = note
+    if include_lease and isinstance(args.get("leaseTtlSeconds"), int):
+        body["leaseTtlSeconds"] = args.get("leaseTtlSeconds")
+    if include_closeout and args.get("closeoutNote") is not None:
+        body["closeoutNote"] = args.get("closeoutNote")
+    return body
 
 
 def heartbeat_task_run_path(args: Dict[str, Any]) -> str:
@@ -108,11 +159,7 @@ def heartbeat_task_run_path(args: Dict[str, Any]) -> str:
 
 
 def heartbeat_task_run_body(args: Dict[str, Any], _config: Any) -> Dict[str, Any]:
-    return {
-        "actor": args.get("actor"),
-        "leaseTtlSeconds": args.get("leaseTtlSeconds"),
-        "note": args.get("note"),
-    }
+    return _task_run_actor_body(args, include_lease=True)
 
 
 def focus_task_run_path(args: Dict[str, Any]) -> str:
@@ -120,7 +167,7 @@ def focus_task_run_path(args: Dict[str, Any]) -> str:
 
 
 def focus_task_run_body(args: Dict[str, Any], _config: Any) -> Dict[str, Any]:
-    return {"actor": args.get("actor")}
+    return _task_run_actor_body(args)
 
 
 def complete_task_run_path(args: Dict[str, Any]) -> str:
@@ -128,11 +175,7 @@ def complete_task_run_path(args: Dict[str, Any]) -> str:
 
 
 def complete_task_run_body(args: Dict[str, Any], _config: Any) -> Dict[str, Any]:
-    return {
-        "actor": args.get("actor"),
-        "note": args.get("note"),
-        "closeoutNote": args.get("closeoutNote"),
-    }
+    return _task_run_actor_body(args, include_closeout=True)
 
 
 def release_task_run_path(args: Dict[str, Any]) -> str:
@@ -140,11 +183,7 @@ def release_task_run_path(args: Dict[str, Any]) -> str:
 
 
 def release_task_run_body(args: Dict[str, Any], _config: Any) -> Dict[str, Any]:
-    return {
-        "actor": args.get("actor"),
-        "note": args.get("note"),
-        "closeoutNote": args.get("closeoutNote"),
-    }
+    return _task_run_actor_body(args, include_closeout=True)
 
 
 def post_insight_body(args: Dict[str, Any], config: Any) -> Dict[str, Any]:

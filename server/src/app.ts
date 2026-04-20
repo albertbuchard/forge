@@ -2680,6 +2680,30 @@ function buildPreferredMutationPath(entityType: string) {
   }
 }
 
+function buildPreferredMutationTool(entityType: string) {
+  if (entityType in AGENT_ONBOARDING_BATCH_ROUTE_BASES) {
+    return "forge_create_entities | forge_update_entities | forge_delete_entities | forge_search_entities";
+  }
+  switch (entityType) {
+    case "wiki_page":
+      return "forge_upsert_wiki_page";
+    case "calendar_connection":
+      return "forge_connect_calendar_provider | forge_sync_calendar_connection";
+    case "task_run":
+      return "forge_start_task_run | forge_heartbeat_task_run | forge_focus_task_run | forge_complete_task_run | forge_release_task_run";
+    case "questionnaire_run":
+      return "forge_start_questionnaire_run | forge_update_questionnaire_run | forge_complete_questionnaire_run";
+    case "preference_judgment":
+      return "forge_submit_preferences_judgment";
+    case "preference_signal":
+      return "forge_submit_preferences_signal";
+    case "work_adjustment":
+      return "forge_adjust_work_minutes";
+    default:
+      return null;
+  }
+}
+
 function buildPreferredReadPath(entityType: string) {
   if (entityType in AGENT_ONBOARDING_BATCH_ROUTE_BASES) {
     return AGENT_ONBOARDING_BATCH_ROUTE_BASES[
@@ -2741,11 +2765,10 @@ function enrichOnboardingEntityGuide<
     preferredMutationPath: buildPreferredMutationPath(entry.entityType),
     preferredReadPath: buildPreferredReadPath(entry.entityType),
     preferredMutationTool:
-      classification === "batch_crud_entity"
-        ? "forge_create_entities | forge_update_entities | forge_delete_entities | forge_search_entities"
-        : classification === "specialized_domain_surface"
-          ? "Follow forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces for the dedicated route family."
-        : null
+      buildPreferredMutationTool(entry.entityType) ??
+      (classification === "specialized_domain_surface"
+        ? "Follow forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces for the dedicated route family."
+        : null)
   };
 }
 
@@ -3497,7 +3520,8 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
   "For specialized surfaces, ask what would make the answer or change useful before you ask route-shaped details such as provider, weekday, flow id, run id, or trip id.",
   "When the user already named a precise correction or review target, do not widen back out into a meta lane question. Confirm only the missing route-selecting detail and then act.",
   "Once the route family is clear, say it plainly enough that another agent could follow the same path without guessing.",
-  "For Movement specifically, treat missing-data corrections as user-defined overlay boxes unless the user is editing an already-recorded stay or trip. When the user already gave a clear instruction like 'that missing block was home', act after only the last ambiguity is resolved."
+  "For Movement specifically, treat missing-data corrections as user-defined overlay boxes unless the user is editing an already-recorded stay or trip. When the user already gave a clear instruction like 'that missing block was home', act after only the last ambiguity is resolved.",
+  "For meaning-bearing updates, especially in Psyche, briefly say what feels newly true before you ask for the one structural detail that still changes the save."
 ] as const;
 
 const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
@@ -3680,7 +3704,8 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
       "Confirm the task.",
       "Confirm the actor only if it is not already obvious.",
       "Ask whether the run should be planned or unlimited only if that changes the action.",
-      "Start the run instead of turning it into a longer intake."
+      "Start the run instead of turning it into a longer intake.",
+      "Use the dedicated task-run tool for start, heartbeat, focus, complete, and release work instead of bouncing to the UI or a generic web route."
     ]
   },
   {
@@ -3857,6 +3882,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
       "Ask whether the focus is a stay, a trip, a place, a timeline window, or a selected span.",
       "Ask for the time window, place, or movement item that makes the question concrete.",
       "Ask what they are trying to notice, preserve, or answer through that movement context.",
+      "Choose the dedicated day, month, all-time, timeline, places, trip-detail, or selection route once the question shape is clear.",
       "Skip the meta lane question when the user already named the exact correction or review target and only one ambiguity remains.",
       "If the request is filling a missing-data gap, use a user-defined movement box rather than a raw stay or trip patch.",
       "If the request is repairing already-saved movement data, use the repair route that matches the saved object instead of treating it like a missing span.",
@@ -3894,6 +3920,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
       "Ask whether they need the flow contract, a run result, a published output, or a node result.",
       "Ask what the user is trying to learn, repair, or publish through that flow.",
       "If the user already named the flow and action clearly, skip the meta lane question and ask only for the missing run, node, or output scope.",
+      "If the user wants a stable public input contract or published output, prefer those dedicated reads instead of detouring through run history first.",
       "If the user is still shaping a payload or edit, prefer flow detail or box catalog reads before asking for structured inputs.",
       "Prefer flow detail or published-output reads for stable contracts, and use run or node-result routes only when the user is asking about execution history or debugging.",
       "Route to the dedicated workbench route family once the execution lane is clear."
@@ -4757,6 +4784,77 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
       '{"taskRunId":"run_123","actor":"aurel","note":"Stopping for now; blocked on feedback","closeoutNote":{"contentMarkdown":"Blocked on feedback from design before I can continue."}}'
   }
 ] as const;
+
+type AgentOnboardingToolInputCatalogEntry =
+  (typeof AGENT_ONBOARDING_TOOL_INPUT_CATALOG)[number];
+
+const VALIDATION_ROUTE_TOOL_MAP = {
+  "POST /api/v1/entities/search": "forge_search_entities",
+  "POST /api/v1/entities/create": "forge_create_entities",
+  "POST /api/v1/entities/update": "forge_update_entities",
+  "POST /api/v1/entities/delete": "forge_delete_entities",
+  "POST /api/v1/entities/restore": "forge_restore_entities",
+  "POST /api/v1/tasks/:id/runs": "forge_start_task_run",
+  "POST /api/v1/task-runs/:id/heartbeat": "forge_heartbeat_task_run",
+  "POST /api/v1/task-runs/:id/focus": "forge_focus_task_run",
+  "POST /api/v1/task-runs/:id/complete": "forge_complete_task_run",
+  "POST /api/v1/task-runs/:id/release": "forge_release_task_run",
+  "POST /api/tasks/:id/runs": "forge_start_task_run",
+  "POST /api/task-runs/:id/heartbeat": "forge_heartbeat_task_run",
+  "POST /api/task-runs/:id/focus": "forge_focus_task_run",
+  "POST /api/task-runs/:id/complete": "forge_complete_task_run",
+  "POST /api/task-runs/:id/release": "forge_release_task_run"
+} as const satisfies Record<string, AgentOnboardingToolInputCatalogEntry["toolName"]>;
+
+function formatValidationSummary(issues: ValidationIssue[]) {
+  return issues
+    .slice(0, 3)
+    .map((issue) => `${issue.path}: ${issue.message}`)
+    .join("; ");
+}
+
+function buildValidationHelp(
+  method: string,
+  routeUrl: string,
+  issues: ValidationIssue[]
+) {
+  const route = routeUrl || "unknown_route";
+  const toolName =
+    VALIDATION_ROUTE_TOOL_MAP[
+      `${method.toUpperCase()} ${route}` as keyof typeof VALIDATION_ROUTE_TOOL_MAP
+    ];
+  const toolInput = toolName
+    ? AGENT_ONBOARDING_TOOL_INPUT_CATALOG.find(
+        (entry) => entry.toolName === toolName
+      )
+    : undefined;
+
+  return {
+    route,
+    validationSummary: formatValidationSummary(issues),
+    ...(toolInput
+      ? {
+          expectedShape: {
+            toolName: toolInput.toolName,
+            inputShape: toolInput.inputShape,
+            requiredFields: [...toolInput.requiredFields],
+            example: toolInput.example,
+            notes: [...toolInput.notes]
+          }
+        }
+      : {
+          expectedShape: {
+            inputShape: "See details[] for the rejected fields on this route.",
+            requiredFields: [],
+            example: null,
+            notes: [
+              "Retry with only the documented top-level keys for this route.",
+              "Omit optional fields instead of sending null unless the route contract explicitly allows null."
+            ]
+          }
+        })
+  };
+}
 
 function buildAgentOnboardingPayload(request: {
   protocol: string;
@@ -6216,6 +6314,10 @@ export async function buildServer(
   app.setErrorHandler((error, request, reply) => {
     const validationIssues =
       error instanceof ZodError ? formatValidationIssues(error) : undefined;
+    const routeUrl = request.routeOptions.url || request.url;
+    const validationHelp = validationIssues
+      ? buildValidationHelp(request.method, routeUrl, validationIssues)
+      : undefined;
     const statusCode = isHttpError(error)
       ? error.statusCode
       : isManagerError(error)
@@ -6223,7 +6325,6 @@ export async function buildServer(
         : error instanceof ZodError
           ? 400
           : 500;
-    const routeUrl = request.routeOptions.url || request.url;
     if (!shouldSkipAutomaticDiagnosticRoute(routeUrl)) {
       try {
         recordDiagnosticLog({
@@ -6264,10 +6365,11 @@ export async function buildServer(
             ? "invalid_request"
             : "internal_error",
       error: validationIssues
-        ? "Request validation failed"
+        ? `Request validation failed for ${request.method.toUpperCase()} ${routeUrl}. ${validationHelp?.validationSummary ?? ""}`.trim()
         : getErrorMessage(error),
       statusCode,
       ...(validationIssues ? { details: validationIssues } : {}),
+      ...(validationHelp ?? {}),
       ...(isHttpError(error) && error.details ? error.details : {}),
       ...(isManagerError(error) && error.details ? error.details : {})
     });

@@ -61,6 +61,96 @@ import {
 
 export const LANE_ORDER: TaskStatus[] = ["backlog", "focus", "in_progress", "blocked", "done"];
 
+type BuildTaskMenuItemsOptions = {
+  task: Task;
+  onOpenTask?: (taskId: string) => void;
+  onEditTask?: (taskId: string) => void;
+  onLinkTask?: (taskId: string) => void;
+  onCreateTaskForIssue?: (issueId: string) => void;
+  onCreateSubtaskForTask?: (taskId: string) => void;
+  onMove: (taskId: string, nextStatus: TaskStatus) => Promise<void> | void;
+  onDeleteTask?: (taskId: string) => Promise<void>;
+  deletePendingTaskId: string | null;
+  onRequestDelete: (task: Task) => void;
+};
+
+export function buildExecutionBoardTaskMenuItems({
+  task,
+  onOpenTask,
+  onEditTask,
+  onLinkTask,
+  onCreateTaskForIssue,
+  onCreateSubtaskForTask,
+  onMove,
+  onDeleteTask,
+  deletePendingTaskId,
+  onRequestDelete
+}: BuildTaskMenuItemsOptions): FloatingActionMenuItem[] {
+  const childCreateItem =
+    task.level === "issue"
+      ? {
+          id: "create-task",
+          label: "Create task",
+          description: "Add a focused execution task under this issue.",
+          icon: PlusCircle,
+          onSelect: () => onCreateTaskForIssue?.(task.id)
+        }
+      : task.level === "task"
+        ? {
+            id: "create-subtask",
+            label: "Create subtask",
+            description: "Add a granular child step under this task.",
+            icon: PlusCircle,
+            onSelect: () => onCreateSubtaskForTask?.(task.id)
+          }
+        : null;
+
+  return [
+    {
+      id: "open-task",
+      label: "Open",
+      description: "Jump to the work-item detail view.",
+      icon: ArrowUpRight,
+      onSelect: () => onOpenTask?.(task.id)
+    },
+    {
+      id: "edit-task",
+      label: "Edit",
+      description: "Open the guided work-item editor.",
+      icon: Pencil,
+      onSelect: () => onEditTask?.(task.id)
+    },
+    {
+      id: "link-task",
+      label: "Link",
+      description: "Open the placement step to relink this work item.",
+      icon: Link2,
+      onSelect: () => onLinkTask?.(task.id)
+    },
+    ...(childCreateItem ? [childCreateItem] : []),
+    {
+      id: "delete-task",
+      label:
+        task.level === "issue"
+          ? "Delete issue"
+          : task.level === "subtask"
+            ? "Delete subtask"
+            : "Delete task",
+      description: "Remove this work item directly from the board menu.",
+      icon: Trash2,
+      tone: "danger",
+      disabled: !onDeleteTask || deletePendingTaskId === task.id,
+      onSelect: () => onRequestDelete(task)
+    },
+    ...LANE_ORDER.filter((status) => status !== task.status).map((status) => ({
+      id: `move-task-${status}`,
+      label: `Move to ${status.replaceAll("_", " ")}`,
+      description: "Update the workflow lane for this work item.",
+      onSelect: () => void onMove(task.id, status)
+    }))
+  ];
+}
+
 type BoardItem =
   | {
       kind: "task";
@@ -1167,55 +1257,18 @@ export function ExecutionBoard({
       return [];
     }
 
-    const childCreateItem =
-      task.level === "issue"
-        ? {
-            id: "create-task",
-            label: "Create task",
-            description: "Add a focused execution task under this issue.",
-            icon: PlusCircle,
-            onSelect: () => onCreateTaskForIssue?.(task.id)
-          }
-        : task.level === "task"
-          ? {
-              id: "create-subtask",
-              label: "Create subtask",
-              description: "Add a granular child step under this task.",
-              icon: PlusCircle,
-              onSelect: () => onCreateSubtaskForTask?.(task.id)
-            }
-          : null;
-
-    return [
-      {
-        id: "open-task",
-        label: "Open",
-        description: "Jump to the work-item detail view.",
-        icon: ArrowUpRight,
-        onSelect: () => onOpenTask?.(task.id)
-      },
-      {
-        id: "edit-task",
-        label: "Edit",
-        description: "Open the guided work-item editor.",
-        icon: Pencil,
-        onSelect: () => onEditTask?.(task.id)
-      },
-      {
-        id: "link-task",
-        label: "Link",
-        description: "Open the placement step to relink this work item.",
-        icon: Link2,
-        onSelect: () => onLinkTask?.(task.id)
-      },
-      ...(childCreateItem ? [childCreateItem] : []),
-      ...LANE_ORDER.filter((status) => status !== task.status).map((status) => ({
-        id: `move-task-${status}`,
-        label: `Move to ${status.replaceAll("_", " ")}`,
-        description: "Update the workflow lane for this work item.",
-        onSelect: () => void onMove(task.id, status)
-      }))
-    ];
+    return buildExecutionBoardTaskMenuItems({
+      task,
+      onOpenTask,
+      onEditTask,
+      onLinkTask,
+      onCreateTaskForIssue,
+      onCreateSubtaskForTask,
+      onMove,
+      onDeleteTask,
+      deletePendingTaskId,
+      onRequestDelete: requestTaskDelete
+    });
   }, [
     boardProjects,
     boardTasks,
@@ -1229,8 +1282,11 @@ export function ExecutionBoard({
     onLinkTask,
     onMove,
     onMoveProject,
+    onDeleteTask,
     onOpenProject,
-    onOpenTask
+    onOpenTask,
+    deletePendingTaskId,
+    skipDeleteConfirm
   ]);
 
   function renderLaneItems(laneItems: BoardItem[]) {
@@ -1511,6 +1567,20 @@ export function ExecutionBoard({
     }
   };
 
+  function requestTaskDelete(task: Task) {
+    if (!onDeleteTask) {
+      return;
+    }
+
+    if (skipDeleteConfirm) {
+      void deleteTaskNow(task, false);
+      return;
+    }
+
+    setDisableDeleteConfirmChoice(false);
+    setConfirmingDeleteTask(task);
+  }
+
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     setActiveTaskId(null);
@@ -1540,12 +1610,7 @@ export function ExecutionBoard({
       if (boardItem.kind !== "task" || !onDeleteTask) {
         return;
       }
-      if (skipDeleteConfirm) {
-        await deleteTaskNow(boardItem.task, false);
-        return;
-      }
-      setDisableDeleteConfirmChoice(false);
-      setConfirmingDeleteTask(boardItem.task);
+      requestTaskDelete(boardItem.task);
       return;
     }
 

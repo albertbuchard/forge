@@ -31,6 +31,7 @@ import {
 } from "@/lib/project-collections";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { getSingleSelectedUserId } from "@/lib/user-ownership";
+import { invalidateForgeSnapshot } from "@/store/api/invalidate-forge-snapshot";
 
 export function GoalDetailPage() {
   const { t } = useI18n();
@@ -50,7 +51,7 @@ export function GoalDetailPage() {
     mutationFn: () => deleteGoal(params.goalId!),
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] }),
+        invalidateForgeSnapshot(queryClient),
         queryClient.invalidateQueries({ queryKey: ["project-board"] }),
         queryClient.invalidateQueries({ queryKey: ["task-context"] })
       ]);

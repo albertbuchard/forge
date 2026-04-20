@@ -14571,10 +14571,29 @@ test("batch entity routes require auth and return validation failures with machi
     assert.equal(invalid.statusCode, 400);
     const invalidBody = invalid.json() as {
       code: string;
+      error: string;
+      route: string;
+      validationSummary: string;
       details: Array<{ path: string; message: string }>;
+      expectedShape: {
+        toolName: string;
+        inputShape: string;
+        requiredFields: string[];
+        example: string | null;
+        notes: string[];
+      };
     };
     assert.equal(invalidBody.code, "invalid_request");
+    assert.equal(invalidBody.route, "/api/v1/entities/search");
+    assert.match(
+      invalidBody.error,
+      /Request validation failed for POST \/api\/v1\/entities\/search/
+    );
+    assert.match(invalidBody.validationSummary, /searches/);
     assert.ok(invalidBody.details.some((detail) => detail.path === "searches"));
+    assert.equal(invalidBody.expectedShape.toolName, "forge_search_entities");
+    assert.match(invalidBody.expectedShape.inputShape, /searches:/);
+    assert.ok(invalidBody.expectedShape.requiredFields.includes("searches"));
   } finally {
     await app.close();
     closeDatabase();
@@ -15065,6 +15084,7 @@ test("settings and local agent token management persist through the versioned AP
           classification?: string;
           preferredMutationPath?: string;
           preferredReadPath?: string | null;
+          preferredMutationTool?: string | null;
           minimumCreateFields: string[];
           relationshipRules: string[];
           fieldGuide: Array<{ name: string; required: boolean }>;
@@ -15345,6 +15365,11 @@ test("settings and local agent token management persist through the versioned AP
     assert.ok(
       taskRunConversationPlaybook.askSequence.some((step) =>
         /Start the run instead of turning it into a longer intake/i.test(step)
+      )
+    );
+    assert.ok(
+      taskRunConversationPlaybook.askSequence.some((step) =>
+        /dedicated task-run tool/i.test(step)
       )
     );
     const calendarConnectionConversationPlaybook =
@@ -15633,6 +15658,37 @@ test("settings and local agent token management persist through the versioned AP
     assert.ok(
       triggerReportEntity.fieldGuide.some((field) => field.name === "emotions")
     );
+    const taskRunEntity = onboardingBody.onboarding.entityCatalog.find(
+      (entity) => entity.entityType === "task_run"
+    );
+    assert.ok(taskRunEntity);
+    assert.equal(taskRunEntity.classification, "action_workflow_entity");
+    assert.match(
+      taskRunEntity.preferredMutationTool ?? "",
+      /forge_start_task_run/
+    );
+    const movementEntity = onboardingBody.onboarding.entityCatalog.find(
+      (entity) => entity.entityType === "movement"
+    );
+    assert.ok(movementEntity);
+    assert.equal(movementEntity.classification, "specialized_domain_surface");
+    assert.match(
+      movementEntity.preferredMutationTool ?? "",
+      /specializedDomainSurfaces/
+    );
+    const lifeForceEntity = onboardingBody.onboarding.entityCatalog.find(
+      (entity) => entity.entityType === "life_force"
+    );
+    assert.ok(lifeForceEntity);
+    assert.equal(
+      lifeForceEntity.classification,
+      "specialized_domain_surface"
+    );
+    const workbenchEntity = onboardingBody.onboarding.entityCatalog.find(
+      (entity) => entity.entityType === "workbench"
+    );
+    assert.ok(workbenchEntity);
+    assert.equal(workbenchEntity.classification, "specialized_domain_surface");
     const createTool = onboardingBody.onboarding.toolInputCatalog.find(
       (tool) => tool.toolName === "forge_create_entities"
     );
@@ -17979,6 +18035,77 @@ test("task run conflicts return structured lease details for recovery", async ()
     assert.equal(conflictBody.taskRun.status, "active");
     assert.equal(conflictBody.taskRun.taskId, taskId);
     assert.equal(conflictBody.taskRun.leaseTtlSeconds, 60);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("task run validation failures return route-aware expected shape hints", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-task-run-validation-help-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const dashboard = await app.inject({
+      method: "GET",
+      url: "/api/dashboard"
+    });
+    const taskId = (dashboard.json() as { tasks: Array<{ id: string }> })
+      .tasks[0]!.id;
+
+    const invalid = await app.inject({
+      method: "POST",
+      url: `/api/v1/tasks/${taskId}/runs`,
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        actor: "Aurel",
+        timerMode: "unlimited",
+        plannedDurationSeconds: 1200
+      }
+    });
+
+    assert.equal(invalid.statusCode, 400);
+    const invalidBody = invalid.json() as {
+      code: string;
+      error: string;
+      route: string;
+      validationSummary: string;
+      details: Array<{ path: string; message: string }>;
+      expectedShape: {
+        toolName: string;
+        inputShape: string;
+        requiredFields: string[];
+        example: string | null;
+        notes: string[];
+      };
+    };
+    assert.equal(invalidBody.code, "invalid_request");
+    assert.equal(invalidBody.route, "/api/v1/tasks/:id/runs");
+    assert.match(
+      invalidBody.error,
+      /Request validation failed for POST \/api\/v1\/tasks\/:id\/runs/
+    );
+    assert.match(invalidBody.validationSummary, /plannedDurationSeconds/);
+    assert.ok(
+      invalidBody.details.some(
+        (detail) => detail.path === "plannedDurationSeconds"
+      )
+    );
+    assert.equal(invalidBody.expectedShape.toolName, "forge_start_task_run");
+    assert.match(invalidBody.expectedShape.inputShape, /taskId: string/);
+    assert.ok(invalidBody.expectedShape.requiredFields.includes("taskId"));
+    assert.ok(invalidBody.expectedShape.requiredFields.includes("actor"));
+    assert.ok(
+      invalidBody.expectedShape.notes.some((note) =>
+        note.includes("plannedDurationSeconds must be null or omitted")
+      )
+    );
   } finally {
     await app.close();
     closeDatabase();

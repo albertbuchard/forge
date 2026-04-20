@@ -36,6 +36,7 @@ import {
   FloatingActionMenu,
   type FloatingActionMenuItem
 } from "@/components/ui/floating-action-menu";
+import { invalidateForgeSnapshot } from "@/store/api/invalidate-forge-snapshot";
 import {
   createFatigueSignal,
   getLifeForce,
@@ -1277,7 +1278,7 @@ export function LifeForceOverviewWorkspace({
       ),
     onSuccess: async (response) => {
       await queryClient.invalidateQueries({ queryKey: ["forge-life-force"] });
-      await queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] });
+      await invalidateForgeSnapshot(queryClient);
       if (onRefresh) {
         await onRefresh();
       }
@@ -1290,7 +1291,7 @@ export function LifeForceOverviewWorkspace({
       createFatigueSignal({ signalType: "tired" }, selectedUserIds),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["forge-life-force"] });
-      await queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] });
+      await invalidateForgeSnapshot(queryClient);
       if (onRefresh) {
         await onRefresh();
       }
@@ -1302,7 +1303,7 @@ export function LifeForceOverviewWorkspace({
       createFatigueSignal({ signalType: "okay_again" }, selectedUserIds),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["forge-life-force"] });
-      await queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] });
+      await invalidateForgeSnapshot(queryClient);
       if (onRefresh) {
         await onRefresh();
       }
@@ -1420,7 +1421,7 @@ export function LifeForceTodayCard({
       createFatigueSignal({ signalType: "tired" }, resolvedUserIds),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["forge-life-force"] });
-      await queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] });
+      await invalidateForgeSnapshot(queryClient);
       if (onRefresh) {
         await onRefresh();
       }
@@ -1432,7 +1433,7 @@ export function LifeForceTodayCard({
       createFatigueSignal({ signalType: "okay_again" }, resolvedUserIds),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["forge-life-force"] });
-      await queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] });
+      await invalidateForgeSnapshot(queryClient);
       if (onRefresh) {
         await onRefresh();
       }

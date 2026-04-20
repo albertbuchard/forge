@@ -4049,8 +4049,7 @@ function updateMovementBoxOverrideState(
            overridden_user_box_ids_json = ?,
            override_ranges_json = ?,
            is_overridden = ?,
-           is_fully_hidden = ?,
-           updated_at = ?
+           is_fully_hidden = ?
        WHERE id = ?`
     )
     .run(
@@ -4065,7 +4064,6 @@ function updateMovementBoxOverrideState(
       JSON.stringify(input.overrideRanges),
       input.isOverridden ? 1 : 0,
       input.isFullyHidden ? 1 : 0,
-      nowIso(),
       id
     );
 }

@@ -8,6 +8,7 @@ import { EmptyState, ErrorState, LoadingState } from "@/components/ui/page-state
 import { listActivity, removeActivityLog } from "@/lib/api";
 import { getActivityEventCtaLabel, getActivityEventHref } from "@/lib/entity-links";
 import { formatDateTime } from "@/lib/utils";
+import { invalidateForgeSnapshot } from "@/store/api/invalidate-forge-snapshot";
 
 export function ActivityPage() {
   const shell = useForgeShell();
@@ -34,7 +35,7 @@ export function ActivityPage() {
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["activity-archive"] }),
-        queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] }),
+        invalidateForgeSnapshot(queryClient),
         queryClient.invalidateQueries({ queryKey: ["task-context"] }),
         queryClient.invalidateQueries({ queryKey: ["project-board"] })
       ]);

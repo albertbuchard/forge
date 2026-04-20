@@ -32,6 +32,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { Textarea } from "@/components/ui/textarea";
+import { invalidateForgeSnapshot } from "@/store/api/invalidate-forge-snapshot";
 import {
   createNote,
   getLifeForce,
@@ -518,7 +519,7 @@ export function NotesPage() {
   const invalidateNotes = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["notes-index"] }),
-      queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] })
+      invalidateForgeSnapshot(queryClient)
     ]);
   };
 

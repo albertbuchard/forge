@@ -22,6 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ErrorState } from "@/components/ui/page-state";
+import { invalidateForgeSnapshot } from "@/store/api/invalidate-forge-snapshot";
 import {
   createCalendarConnection,
   deleteCalendarConnection,
@@ -204,7 +205,7 @@ export function SettingsCalendarPage() {
       }),
       queryClient.invalidateQueries({ queryKey: ["forge-calendar-resources"] }),
       queryClient.invalidateQueries({ queryKey: ["forge-calendar-overview"] }),
-      queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] })
+      invalidateForgeSnapshot(queryClient)
     ]);
   };
 

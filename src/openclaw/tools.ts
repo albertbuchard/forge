@@ -23,6 +23,59 @@ function jsonResult<T>(payload: T): AgentToolResult<T> {
   };
 }
 
+function normalizeText(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeOptionalText(value: unknown) {
+  const text = normalizeText(value);
+  return text.length > 0 ? text : undefined;
+}
+
+function normalizeTaskRunStartRequest(params: Record<string, unknown>) {
+  const taskId = normalizeText(params.taskId);
+  if (!taskId) {
+    throw new Error("forge_start_task_run requires a non-empty taskId.");
+  }
+
+  const actor = normalizeText(params.actor);
+  if (!actor) {
+    throw new Error("forge_start_task_run requires a non-empty actor.");
+  }
+
+  const timerMode = params.timerMode === "planned" ? "planned" : "unlimited";
+  const plannedDurationSeconds =
+    typeof params.plannedDurationSeconds === "number" &&
+    Number.isInteger(params.plannedDurationSeconds)
+      ? params.plannedDurationSeconds
+      : null;
+
+  if (timerMode === "planned" && plannedDurationSeconds === null) {
+    throw new Error(
+      "forge_start_task_run requires plannedDurationSeconds when timerMode is planned."
+    );
+  }
+
+  return {
+    taskId,
+    body: {
+      actor,
+      timerMode,
+      plannedDurationSeconds:
+        timerMode === "planned" ? plannedDurationSeconds : null,
+      overrideReason: normalizeOptionalText(params.overrideReason),
+      isCurrent:
+        typeof params.isCurrent === "boolean" ? params.isCurrent : undefined,
+      leaseTtlSeconds:
+        typeof params.leaseTtlSeconds === "number" &&
+        Number.isInteger(params.leaseTtlSeconds)
+          ? params.leaseTtlSeconds
+          : undefined,
+      note: normalizeOptionalText(params.note)
+    }
+  };
+}
+
 async function runRead(config: ForgePluginConfig, path: string) {
   const result = await callConfiguredForgeApi(config, {
     method: "GET",
@@ -1266,20 +1319,14 @@ export function registerForgePluginTools(
       note: Type.Optional(Type.String())
     }),
     async execute(_toolCallId, params) {
-      const typed = params as Record<string, unknown>;
+      const typed = normalizeTaskRunStartRequest(
+        params as Record<string, unknown>
+      );
       return jsonResult(
         await runWrite(config, {
           method: "POST",
-          path: `/api/v1/tasks/${typed.taskId as string}/runs`,
-          body: {
-            actor: typed.actor,
-            timerMode: typed.timerMode,
-            plannedDurationSeconds: typed.plannedDurationSeconds,
-            overrideReason: typed.overrideReason,
-            isCurrent: typed.isCurrent,
-            leaseTtlSeconds: typed.leaseTtlSeconds,
-            note: typed.note
-          }
+          path: `/api/v1/tasks/${typed.taskId}/runs`,
+          body: typed.body
         })
       );
     }

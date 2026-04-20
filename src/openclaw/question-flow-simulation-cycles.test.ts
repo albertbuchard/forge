@@ -146,6 +146,7 @@ describe("question flow simulation cycles", () => {
     expect(entityPlaybook).toMatch(/What feels different enough now that this record needs to change/i);
     expect(entityPlaybook).toMatch(/I can stay narrow here\. What is the one thing that no longer fits/i);
     expect(entityPlaybook).toMatch(/what this would help[\s\S]*decide later is/i);
+    expect(entityPlaybook).toMatch(/meaning-bearing updates[\s\S]*feels newly true/i);
     expect(entityPlaybook).toMatch(/repair or revise one saved overlay/i);
     expect(entityPlaybook).toMatch(/delete one saved overlay/i);
     expect(entityPlaybook).toMatch(/inspect one saved movement box before repairing it/i);
@@ -156,6 +157,7 @@ describe("question flow simulation cycles", () => {
     expect(entityPlaybook).toMatch(/skip the meta lane[\s\S]*ask only for the missing run, node, or output scope/i);
     expect(entityPlaybook).toMatch(/skip the meta lane[\s\S]*ask only for the specific weekday, profile field, or signal/i);
     expect(entityPlaybook).toMatch(/latest successful node output/i);
+    expect(entityPlaybook).toMatch(/stable public input contract or published output/i);
     expect(entityPlaybook).toMatch(/user already gave the correction in usable language/i);
     expect(entityPlaybook).toMatch(/read the overview back when the user is[\s\S]*practical impact of the change/i);
 

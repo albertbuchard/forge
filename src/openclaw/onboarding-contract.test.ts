@@ -32,6 +32,17 @@ async function loadOnboardingPayload() {
       classification: string;
       preferredMutationPath: string | null;
       preferredReadPath: string | null;
+      preferredMutationTool?: string | null;
+    }>;
+    entityConversationPlaybooks: Array<{
+      focus: string;
+      openingQuestion: string;
+      askSequence: string[];
+    }>;
+    psycheCoachingPlaybooks: Array<{
+      focus: string;
+      askSequence: string[];
+      notes: string[];
     }>;
     entityRouteModel: {
       batchCrudEntities: string[];
@@ -62,6 +73,12 @@ describe("forge onboarding contract", () => {
     const onboarding = await loadOnboardingPayload();
     const entityTypes = new Set(
       onboarding.entityCatalog.map((entry) => entry.entityType)
+    );
+    const playbookFocuses = new Set(
+      onboarding.entityConversationPlaybooks.map((entry) => entry.focus)
+    );
+    const psycheFocuses = new Set(
+      onboarding.psycheCoachingPlaybooks.map((entry) => entry.focus)
     );
 
     const expected = [
@@ -107,6 +124,58 @@ describe("forge onboarding contract", () => {
 
     for (const entityType of expected) {
       expect(entityTypes.has(entityType), `${entityType} should be published`).toBe(
+        true
+      );
+    }
+
+    for (const focus of [
+      "goal",
+      "project",
+      "strategy",
+      "task",
+      "habit",
+      "tag",
+      "note",
+      "insight",
+      "task_run",
+      "work_adjustment",
+      "calendar_event",
+      "work_block_template",
+      "task_timebox",
+      "calendar_connection",
+      "preference_catalog",
+      "preference_catalog_item",
+      "preference_context",
+      "preference_item",
+      "preference_judgment",
+      "preference_signal",
+      "questionnaire_instrument",
+      "questionnaire_run",
+      "self_observation",
+      "sleep_session",
+      "workout_session",
+      "wiki_page",
+      "movement",
+      "life_force",
+      "workbench",
+      "event_type",
+      "emotion_definition"
+    ] as const) {
+      expect(playbookFocuses.has(focus), `${focus} playbook should exist`).toBe(
+        true
+      );
+    }
+
+    for (const focus of [
+      "psyche_value",
+      "behavior_pattern",
+      "behavior",
+      "belief_entry",
+      "mode_profile",
+      "mode_guide_session",
+      "trigger_report"
+    ] as const) {
+      expect(psycheFocuses.has(focus), `${focus} psyche playbook should exist`).toBe(
         true
       );
     }
@@ -280,7 +349,8 @@ describe("forge onboarding contract", () => {
         classification: "specialized_crud_entity",
         preferredMutationPath:
           "Use /api/v1/wiki/pages with POST or PATCH for page CRUD.",
-        preferredReadPath: "/api/v1/wiki/pages/:id"
+        preferredReadPath: "/api/v1/wiki/pages/:id",
+        preferredMutationTool: "forge_upsert_wiki_page"
       })
     );
     expect(entityByType.get("calendar_connection")).toEqual(
@@ -288,41 +358,50 @@ describe("forge onboarding contract", () => {
         classification: "specialized_crud_entity",
         preferredMutationPath:
           "Use /api/v1/calendar/connections plus provider-specific setup flows.",
-        preferredReadPath: "/api/v1/calendar/connections"
+        preferredReadPath: "/api/v1/calendar/connections",
+        preferredMutationTool:
+          "forge_connect_calendar_provider | forge_sync_calendar_connection"
       })
     );
 
     expect(entityByType.get("task_run")).toEqual(
       expect.objectContaining({
         classification: "action_workflow_entity",
-        preferredReadPath: "/api/v1/operator/context"
+        preferredReadPath: "/api/v1/operator/context",
+        preferredMutationTool:
+          "forge_start_task_run | forge_heartbeat_task_run | forge_focus_task_run | forge_complete_task_run | forge_release_task_run"
       })
     );
     expect(entityByType.get("work_adjustment")).toEqual(
       expect.objectContaining({
         classification: "action_workflow_entity",
         preferredMutationPath:
-          "Use /api/v1/work-adjustments to apply an explicit operator adjustment."
+          "Use /api/v1/work-adjustments to apply an explicit operator adjustment.",
+        preferredMutationTool: "forge_adjust_work_minutes"
       })
     );
     expect(entityByType.get("preference_judgment")).toEqual(
       expect.objectContaining({
         classification: "action_workflow_entity",
         preferredMutationPath:
-          "Use /api/v1/preferences/judgments to record one pairwise comparison."
+          "Use /api/v1/preferences/judgments to record one pairwise comparison.",
+        preferredMutationTool: "forge_submit_preferences_judgment"
       })
     );
     expect(entityByType.get("preference_signal")).toEqual(
       expect.objectContaining({
         classification: "action_workflow_entity",
         preferredMutationPath:
-          "Use /api/v1/preferences/signals to record one direct signal such as favorite or veto."
+          "Use /api/v1/preferences/signals to record one direct signal such as favorite or veto.",
+        preferredMutationTool: "forge_submit_preferences_signal"
       })
     );
     expect(entityByType.get("questionnaire_run")).toEqual(
       expect.objectContaining({
         classification: "action_workflow_entity",
-        preferredReadPath: "/api/v1/psyche/questionnaire-runs/:id"
+        preferredReadPath: "/api/v1/psyche/questionnaire-runs/:id",
+        preferredMutationTool:
+          "forge_start_questionnaire_run | forge_update_questionnaire_run | forge_complete_questionnaire_run"
       })
     );
 
@@ -339,7 +418,9 @@ describe("forge onboarding contract", () => {
         classification: "specialized_domain_surface",
         preferredMutationPath:
           "Use the dedicated Movement route family for day, month, all-time, timeline, places, trip detail, selection aggregates, overlays, and repair actions.",
-        preferredReadPath: "/api/v1/movement/timeline"
+        preferredReadPath: "/api/v1/movement/timeline",
+        preferredMutationTool:
+          "Follow forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces for the dedicated route family."
       })
     );
     expect(entityByType.get("life_force")).toEqual(
@@ -347,7 +428,9 @@ describe("forge onboarding contract", () => {
         classification: "specialized_domain_surface",
         preferredMutationPath:
           "Use the dedicated Life Force route family for overview, profile edits, weekday templates, and fatigue signals.",
-        preferredReadPath: "/api/v1/life-force"
+        preferredReadPath: "/api/v1/life-force",
+        preferredMutationTool:
+          "Follow forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces for the dedicated route family."
       })
     );
     expect(entityByType.get("workbench")).toEqual(
@@ -355,7 +438,9 @@ describe("forge onboarding contract", () => {
         classification: "specialized_domain_surface",
         preferredMutationPath:
           "Use the dedicated Workbench route family for flow CRUD, execution, run history, published outputs, node results, and latest-node-output reads.",
-        preferredReadPath: "/api/v1/workbench/flows"
+        preferredReadPath: "/api/v1/workbench/flows",
+        preferredMutationTool:
+          "Follow forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces for the dedicated route family."
       })
     );
   });
@@ -375,6 +460,51 @@ describe("forge onboarding contract", () => {
           /Self-observation is note-backed[\s\S]*Sleep and workout sessions stay on batch CRUD by default/i
         )
       })
+    );
+  });
+
+  it("keeps specialized and Psyche playbooks explicit about active listening and route narrowing", async () => {
+    const onboarding = await loadOnboardingPayload();
+    const playbookByFocus = new Map(
+      onboarding.entityConversationPlaybooks.map((entry) => [entry.focus, entry])
+    );
+    const psycheByFocus = new Map(
+      onboarding.psycheCoachingPlaybooks.map((entry) => [entry.focus, entry])
+    );
+
+    expect(playbookByFocus.get("task_run")).toEqual(
+      expect.objectContaining({
+        openingQuestion: "Which task should I start?"
+      })
+    );
+    expect(
+      playbookByFocus.get("task_run")?.askSequence.join(" ")
+    ).toMatch(/dedicated task-run tool/i);
+
+    expect(
+      playbookByFocus.get("movement")?.askSequence.join(" ")
+    ).toMatch(
+      /day, month, all-time, timeline, places, trip-detail,[\s\S]*selection route/i
+    );
+    expect(playbookByFocus.get("movement")?.askSequence.join(" ")).toMatch(
+      /exact correction or review target/i
+    );
+
+    expect(playbookByFocus.get("life_force")?.askSequence.join(" ")).toMatch(
+      /read the overview back/i
+    );
+    expect(playbookByFocus.get("workbench")?.askSequence.join(" ")).toMatch(
+      /stable public input contract or published output/i
+    );
+
+    expect(psycheByFocus.get("belief_entry")?.askSequence.join(" ")).toMatch(
+      /own words|belief sentence/i
+    );
+    expect(psycheByFocus.get("behavior_pattern")?.notes.join(" ")).toMatch(
+      /Before you ask how to change the loop, ask what it is protecting/i
+    );
+    expect(psycheByFocus.get("mode_guide_session")?.notes.join(" ")).toMatch(
+      /exploration worksheet|interpretations tentative/i
     );
   });
 

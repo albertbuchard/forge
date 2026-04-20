@@ -61,6 +61,9 @@ Forge correctly, and gather only the structure that still matters.
   and then act.
 - Once the route family is clear, say it plainly enough that another agent could follow
   the same path without guessing.
+- For meaning-bearing updates, especially in Psyche-adjacent work, briefly say what
+  feels newly true before you ask for the one structural detail that still changes the
+  save.
 - Do not read schema fields out loud unless the user explicitly wants a checklist.
 - One focused question is the default. Ask two only when both questions serve the same
   job and the user is steady enough for it.
@@ -780,6 +783,7 @@ Arc:
 2. Confirm the actor only if it is not already obvious.
 3. Ask whether the run should be planned or unlimited only if that changes the action.
 4. Start the run instead of turning it into intake.
+5. Use the dedicated task-run tool for start, heartbeat, focus, complete, and release work. Do not bounce to the Forge UI, a browser session, or a generic web route for those actions unless the user explicitly wants the visual surface.
 
 Ready to start when:
 
@@ -1011,9 +1015,11 @@ Arc:
 3. Ask whether the focus is a stay, a trip, a place, a timeline window, or a selected span.
 4. Ask for the time window, place, or movement item that makes the question concrete.
 5. Ask what they are trying to notice, preserve, or answer through that movement context.
-6. Skip the meta lane question when the user already named the exact correction or
+6. Choose the dedicated day, month, all-time, timeline, places, trip-detail, or
+   selection route once the question shape is clear.
+7. Skip the meta lane question when the user already named the exact correction or
    review target and only one ambiguity remains.
-7. Route to the dedicated movement read or write path once the surface is clear.
+8. Route to the dedicated movement read or write path once the surface is clear.
 
 Direct action rules:
 
@@ -1101,7 +1107,9 @@ Arc:
    when the lane is still blurred.
 6. If the user already named the life-force lane clearly, skip the meta lane question
    and ask only for the specific weekday, profile field, or signal that still matters.
-7. Route to the dedicated life-force path once the lane is clear.
+7. If the user wants to see what changed after a write, read the overview back instead
+   of leaving the result implicit.
+8. Route to the dedicated life-force path once the lane is clear.
 
 Helpful follow-up lanes:
 
@@ -1156,7 +1164,9 @@ Arc:
 4. Ask whether they need the flow contract, a run result, a published output, or a node result.
 5. If the user already named the flow and action clearly, skip the meta lane
    question and ask only for the missing run, node, or output scope.
-6. Route to the dedicated workbench route family once the execution lane is clear.
+6. If the user wants a stable public input contract or published output, prefer those
+   dedicated reads instead of detouring through run history first.
+7. Route to the dedicated workbench route family once the execution lane is clear.
 
 Helpful follow-up lanes:
 

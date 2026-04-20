@@ -154,6 +154,7 @@ import {
   usePatchTaskStatusMutation,
   useReleaseTaskRunMutation
 } from "@/store/api/forge-api";
+import { invalidateForgeSnapshot } from "@/store/api/invalidate-forge-snapshot";
 import {
   clearKnowledgeGraphOverlayFocus,
   setSelectedUserIds as setSelectedUserIdsAction
@@ -2666,7 +2667,7 @@ export function AppShell() {
   const [completeTaskRunMutation, completeTaskRunMutationState] =
     useCompleteTaskRunMutation();
   const refreshLegacySnapshotQueries = async () => {
-    await queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] });
+    await invalidateForgeSnapshot(queryClient);
   };
   const submitTaskStatusPatch = async (
     taskId: string,

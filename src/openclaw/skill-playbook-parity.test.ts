@@ -124,6 +124,8 @@ describe("forge skill playbook parity", () => {
     expect(entityPlaybook).toMatch(/Update loop/i);
     expect(entityPlaybook).toMatch(/Update-first openers/i);
     expect(entityPlaybook).toMatch(/Task Run/i);
+    expect(entityPlaybook).toMatch(/dedicated task-run tool/i);
+    expect(entityPlaybook).toMatch(/Do not bounce to the Forge UI, a browser session, or a generic web route/i);
     expect(entityPlaybook).toMatch(/## Tag/);
     expect(entityPlaybook).toMatch(/offer a tentative title or summary/i);
     expect(entityPlaybook).toMatch(/reflect what the user is trying to[\s\S]*preserve, change, or make true/i);
@@ -157,6 +159,7 @@ describe("forge skill playbook parity", () => {
     expect(entityPlaybook).toMatch(/felt signature back in plain language/i);
     expect(entityPlaybook).toMatch(/another agent could follow[\s\S]*without guessing/i);
     expect(entityPlaybook).toMatch(/confirm only the missing route-selecting detail[\s\S]*then act/i);
+    expect(entityPlaybook).toMatch(/meaning-bearing updates[\s\S]*feels newly true/i);
     expect(entityPlaybook).toMatch(/self_observation[\s\S]*note-backed|note-backed[\s\S]*self_observation/i);
     expect(entityPlaybook).toMatch(/sleep_session[\s\S]*shared batch CRUD routes|shared batch CRUD routes[\s\S]*sleep_session/i);
     expect(entityPlaybook).toMatch(/workout_session[\s\S]*shared batch CRUD routes|shared batch CRUD routes[\s\S]*workout_session/i);
@@ -177,6 +180,10 @@ describe("forge skill playbook parity", () => {
     expect(entityPlaybook).toMatch(/\/api\/v1\/movement\/automatic-boxes\/:id\/invalidate/);
     expect(entityPlaybook).toMatch(/\/api\/v1\/life-force\/profile/);
     expect(entityPlaybook).toMatch(/\/api\/v1\/workbench\/flows\/:id\/run/);
+    expect(entityPlaybook).toMatch(
+      /day, month, all-time, timeline, places, trip-detail,[\s\S]*selection route/i
+    );
+    expect(entityPlaybook).toMatch(/stable public input contract or published output/i);
     expect(entityPlaybook).toMatch(/favorite, veto, or compare-later/i);
     expect(entityPlaybook).toMatch(/specialized surface work in Movement, Life Force, or Workbench/i);
     expect(entityPlaybook).toMatch(/candidate label[\s\S]*what kinds of moments belong inside it/i);
