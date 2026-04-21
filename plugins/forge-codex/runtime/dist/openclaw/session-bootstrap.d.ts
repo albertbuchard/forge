@@ -62,7 +62,18 @@ type ForgeOperatorOverview = {
     warnings?: string[];
     operator?: ForgeOperatorContext | null;
 };
+type ForgeBootstrapPolicy = {
+    mode: "disabled" | "active_only" | "scoped" | "full";
+    goalsLimit: number;
+    projectsLimit: number;
+    tasksLimit: number;
+    habitsLimit: number;
+    strategiesLimit: number;
+    peoplePageLimit: number;
+    includePeoplePages: boolean;
+};
 type ForgeSessionBootstrapPayload = {
+    bootstrapPolicy: ForgeBootstrapPolicy;
     overview: ForgeOperatorOverview | null;
     goals: ForgeGoalRecord[];
     projects: ForgeProjectRecord[];

@@ -9,6 +9,7 @@ export type ForgePluginConfig = {
     dataRoot: string;
     apiToken: string;
     actorLabel: string;
+    injectBootstrapContext: boolean;
     timeoutMs: number;
 };
 export type CallForgeApiArgs = {

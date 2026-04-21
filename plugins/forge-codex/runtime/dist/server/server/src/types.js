@@ -213,6 +213,77 @@ export const approvalModeSchema = z.enum([
     "high_impact_only",
     "none"
 ]);
+export const agentBootstrapModeSchema = z.enum([
+    "disabled",
+    "active_only",
+    "scoped",
+    "full"
+]);
+export const defaultAgentBootstrapPolicy = {
+    mode: "active_only",
+    goalsLimit: 5,
+    projectsLimit: 8,
+    tasksLimit: 10,
+    habitsLimit: 6,
+    strategiesLimit: 4,
+    peoplePageLimit: 4,
+    includePeoplePages: true
+};
+export const legacyAgentBootstrapPolicy = {
+    mode: "full",
+    goalsLimit: 25,
+    projectsLimit: 25,
+    tasksLimit: 25,
+    habitsLimit: 20,
+    strategiesLimit: 20,
+    peoplePageLimit: 12,
+    includePeoplePages: true
+};
+export const agentBootstrapPolicySchema = z.object({
+    mode: agentBootstrapModeSchema.default(defaultAgentBootstrapPolicy.mode),
+    goalsLimit: z.coerce
+        .number()
+        .int()
+        .min(0)
+        .max(100)
+        .default(defaultAgentBootstrapPolicy.goalsLimit),
+    projectsLimit: z.coerce
+        .number()
+        .int()
+        .min(0)
+        .max(100)
+        .default(defaultAgentBootstrapPolicy.projectsLimit),
+    tasksLimit: z.coerce
+        .number()
+        .int()
+        .min(0)
+        .max(100)
+        .default(defaultAgentBootstrapPolicy.tasksLimit),
+    habitsLimit: z.coerce
+        .number()
+        .int()
+        .min(0)
+        .max(100)
+        .default(defaultAgentBootstrapPolicy.habitsLimit),
+    strategiesLimit: z.coerce
+        .number()
+        .int()
+        .min(0)
+        .max(100)
+        .default(defaultAgentBootstrapPolicy.strategiesLimit),
+    peoplePageLimit: z.coerce
+        .number()
+        .int()
+        .min(0)
+        .max(50)
+        .default(defaultAgentBootstrapPolicy.peoplePageLimit),
+    includePeoplePages: z.boolean().default(defaultAgentBootstrapPolicy.includePeoplePages)
+});
+export const defaultAgentScopePolicy = {
+    userIds: [],
+    projectIds: [],
+    tagIds: []
+};
 export const agentRuntimeProviderSchema = z.enum([
     "openclaw",
     "hermes",
@@ -392,6 +463,13 @@ const uniqueStringArraySchema = z
         }
         seen.add(value);
     });
+});
+export const agentScopePolicySchema = z.object({
+    userIds: uniqueStringArraySchema.default(() => [...defaultAgentScopePolicy.userIds]),
+    projectIds: uniqueStringArraySchema.default(() => [
+        ...defaultAgentScopePolicy.projectIds
+    ]),
+    tagIds: uniqueStringArraySchema.default(() => [...defaultAgentScopePolicy.tagIds])
 });
 const integerMinuteSchema = z
     .number()
@@ -2013,6 +2091,8 @@ export const agentTokenSummarySchema = z.object({
     autonomyMode: autonomyModeSchema,
     approvalMode: approvalModeSchema,
     description: z.string(),
+    bootstrapPolicy: agentBootstrapPolicySchema,
+    scopePolicy: agentScopePolicySchema,
     lastUsedAt: z.string().nullable(),
     revokedAt: z.string().nullable(),
     createdAt: z.string(),
@@ -3522,7 +3602,9 @@ export const createAgentTokenSchema = z.object({
     trustLevel: agentTrustLevelSchema.default("standard"),
     autonomyMode: autonomyModeSchema.default("approval_required"),
     approvalMode: approvalModeSchema.default("approval_by_default"),
-    scopes: uniqueStringArraySchema.default(["read", "write", "insights"])
+    scopes: uniqueStringArraySchema.default(["read", "write", "insights"]),
+    bootstrapPolicy: agentBootstrapPolicySchema.default(defaultAgentBootstrapPolicy),
+    scopePolicy: agentScopePolicySchema.default(defaultAgentScopePolicy)
 });
 export const activityArchiveQuerySchema = activityListQuerySchema.extend({
     groupBy: z.enum(["day", "entity"]).optional(),

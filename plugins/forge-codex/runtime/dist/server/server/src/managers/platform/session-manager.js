@@ -51,6 +51,11 @@ export class SessionManager extends AbstractAuditedManager {
             host: null,
             ip: null,
             token: null,
+            scope: {
+                userIds: [],
+                projectIds: [],
+                tagIds: []
+            },
             session
         }, {
             actorLabel

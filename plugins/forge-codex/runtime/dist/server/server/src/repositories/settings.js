@@ -7,7 +7,7 @@ import { recordActivityEvent } from "./activity-events.js";
 import { recordEventLog } from "./event-log.js";
 import { resolveGoogleCalendarOauthPublicConfig } from "../services/google-calendar-oauth-config.js";
 import { buildConnectionAgentIdentity, FORGE_DEFAULT_AGENT_ID, listAiModelConnections, syncForgeManagedWikiProfile } from "./model-settings.js";
-import { createAgentTokenSchema, agentIdentitySchema, customThemeSchema, settingsPayloadSchema, updateSettingsSchema } from "../types.js";
+import { agentBootstrapPolicySchema, agentScopePolicySchema, createAgentTokenSchema, legacyAgentBootstrapPolicy, defaultAgentScopePolicy, agentIdentitySchema, customThemeSchema, settingsPayloadSchema, updateSettingsSchema } from "../types.js";
 const settingsFileSchema = settingsPayloadSchema.deepPartial();
 let settingsFileSyncDepth = 0;
 let lastSettingsFileStatus = {
@@ -319,6 +319,12 @@ function mapAgent(row) {
     });
 }
 function mapToken(row) {
+    const bootstrapPolicy = agentBootstrapPolicySchema.parse(row.bootstrap_policy_json
+        ? JSON.parse(row.bootstrap_policy_json)
+        : legacyAgentBootstrapPolicy);
+    const scopePolicy = agentScopePolicySchema.parse(row.scope_policy_json
+        ? JSON.parse(row.scope_policy_json)
+        : defaultAgentScopePolicy);
     return {
         id: row.id,
         label: row.label,
@@ -330,6 +336,8 @@ function mapToken(row) {
         autonomyMode: row.autonomy_mode,
         approvalMode: row.approval_mode,
         description: row.description,
+        bootstrapPolicy,
+        scopePolicy,
         lastUsedAt: row.last_used_at,
         revokedAt: row.revoked_at,
         createdAt: row.created_at,
@@ -409,6 +417,8 @@ export function listAgentTokens() {
          agent_tokens.label,
          agent_tokens.token_prefix,
          agent_tokens.scopes_json,
+         agent_tokens.bootstrap_policy_json,
+         agent_tokens.scope_policy_json,
          agent_tokens.agent_id,
          agent_identities.label AS agent_label,
          agent_tokens.trust_level,
@@ -807,9 +817,9 @@ export function createAgentToken(input, activity) {
         const tokenPrefix = `${token.slice(0, 10)}••••`;
         getDatabase()
             .prepare(`INSERT INTO agent_tokens (
-          id, label, token_hash, token_prefix, scopes_json, agent_id, trust_level, autonomy_mode, approval_mode, description, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-            .run(id, parsed.label, hashToken(token), tokenPrefix, JSON.stringify(parsed.scopes), agent.id, parsed.trustLevel, parsed.autonomyMode, parsed.approvalMode, parsed.description, now, now);
+          id, label, token_hash, token_prefix, scopes_json, bootstrap_policy_json, scope_policy_json, agent_id, trust_level, autonomy_mode, approval_mode, description, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+            .run(id, parsed.label, hashToken(token), tokenPrefix, JSON.stringify(parsed.scopes), JSON.stringify(parsed.bootstrapPolicy), JSON.stringify(parsed.scopePolicy), agent.id, parsed.trustLevel, parsed.autonomyMode, parsed.approvalMode, parsed.description, now, now);
         const tokenSummary = listAgentTokens().find((entry) => entry.id === id);
         if (activity) {
             recordActivityEvent({
@@ -823,7 +833,11 @@ export function createAgentToken(input, activity) {
                 metadata: {
                     agentId: agent.id,
                     agentLabel: agent.label,
-                    scopes: parsed.scopes.join(",")
+                    scopes: parsed.scopes.join(","),
+                    bootstrapMode: parsed.bootstrapPolicy.mode,
+                    scopedUserIds: parsed.scopePolicy.userIds.join(","),
+                    scopedProjectIds: parsed.scopePolicy.projectIds.join(","),
+                    scopedTagIds: parsed.scopePolicy.tagIds.join(",")
                 }
             });
             recordEventLog({
@@ -836,7 +850,11 @@ export function createAgentToken(input, activity) {
                     agentId: agent.id,
                     trustLevel: parsed.trustLevel,
                     autonomyMode: parsed.autonomyMode,
-                    approvalMode: parsed.approvalMode
+                    approvalMode: parsed.approvalMode,
+                    bootstrapMode: parsed.bootstrapPolicy.mode,
+                    scopeUserCount: parsed.scopePolicy.userIds.length,
+                    scopeProjectCount: parsed.scopePolicy.projectIds.length,
+                    scopeTagCount: parsed.scopePolicy.tagIds.length
                 }
             });
         }
@@ -929,6 +947,8 @@ export function verifyAgentToken(token) {
          agent_tokens.label,
          agent_tokens.token_prefix,
          agent_tokens.scopes_json,
+         agent_tokens.bootstrap_policy_json,
+         agent_tokens.scope_policy_json,
          agent_tokens.agent_id,
          agent_identities.label AS agent_label,
          agent_tokens.trust_level,

@@ -595,6 +595,9 @@ async function loadForgeSessionBootstrapPayload(
 export async function buildLiveForgeSessionBootstrapContext(
   config: ForgePluginConfig
 ) {
+  if (!config.injectBootstrapContext) {
+    return "";
+  }
   const payload = await loadForgeSessionBootstrapPayload(config);
   if (payload.bootstrapPolicy.mode === "disabled") {
     return "";
@@ -607,6 +610,9 @@ export function registerForgeSessionBootstrapHook(
   config: ForgePluginConfig
 ) {
   if (!api.registerHook) {
+    return;
+  }
+  if (!config.injectBootstrapContext) {
     return;
   }
 

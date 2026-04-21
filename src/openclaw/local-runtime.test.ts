@@ -61,6 +61,7 @@ function createLocalConfig(overrides: Partial<ForgePluginConfig> = {}): ForgePlu
     dataRoot: "",
     apiToken: "",
     actorLabel: "aurel",
+    injectBootstrapContext: true,
     timeoutMs: 15_000,
     ...overrides
   };

@@ -56,7 +56,7 @@ import { PSYCHE_ENTITY_TYPES, createBehaviorSchema, createBeliefEntrySchema, cre
 import { createQuestionnaireInstrumentSchema, publishQuestionnaireVersionSchema, startQuestionnaireRunSchema, updateQuestionnaireRunSchema, updateQuestionnaireVersionSchema } from "./questionnaire-types.js";
 import { createPreferenceCatalogItemSchema, createPreferenceCatalogSchema, createPreferenceContextSchema, createPreferenceItemSchema, enqueueEntityPreferenceItemSchema, mergePreferenceContextsSchema, preferenceWorkspaceQuerySchema, startPreferenceGameSchema, submitAbsoluteSignalSchema, submitPairwiseJudgmentSchema, updatePreferenceCatalogItemSchema, updatePreferenceCatalogSchema, updatePreferenceContextSchema, updatePreferenceItemSchema, updatePreferenceScoreSchema } from "./preferences-types.js";
 import { createDataBackupSchema, dataExportQuerySchema, restoreDataBackupSchema, switchDataRootSchema, updateDataManagementSettingsSchema } from "./data-management-types.js";
-import { activityListQuerySchema, activitySourceSchema, createAgentActionSchema, createAgentRuntimeSessionEventSchema, createAgentRuntimeSessionSchema, createAgentTokenSchema, createAiConnectorSchema, createAiProcessorLinkSchema, createAiProcessorSchema, runAiConnectorSchema, writeSurfaceLayoutSchema, upsertAiModelConnectionSchema, testAiModelConnectionSchema, submitOpenAiCodexOauthManualCodeSchema, batchCreateEntitiesSchema, batchDeleteEntitiesSchema, batchRestoreEntitiesSchema, batchSearchEntitiesSchema, batchUpdateEntitiesSchema, createGoalSchema, createInsightFeedbackSchema, createInsightSchema, createStrategySchema, createUserSchema, createNoteSchema, createProjectSchema, createManualRewardGrantSchema, createCalendarEventSchema, createHabitCheckInSchema, createCalendarConnectionSchema, createDiagnosticLogSchema, discoverCalendarConnectionSchema, startGoogleCalendarOauthSchema, startMicrosoftCalendarOauthSchema, testMicrosoftCalendarOauthConfigurationSchema, createHabitSchema, createTaskTimeboxSchema, createWorkBlockTemplateSchema, createSessionEventSchema, createWorkAdjustmentSchema, createTagSchema, calendarOverviewQuerySchema, psycheObservationCalendarExportQuerySchema, notesListQuerySchema, updateTagSchema, createTaskSchema, diagnosticLogListQuerySchema, disconnectAgentRuntimeSessionSchema, eventsListQuerySchema, heartbeatAgentRuntimeSessionSchema, operatorLogWorkSchema, projectBoardPayloadSchema, projectListQuerySchema, entityDeleteQuerySchema, removeActivityEventSchema, reconnectAgentRuntimeSessionSchema, resolveApprovalRequestSchema, rewardsLedgerQuerySchema, habitListQuerySchema, taskContextPayloadSchema, taskRunClaimSchema, taskRunFocusSchema, taskRunFinishSchema, taskRunHeartbeatSchema, taskRunListQuerySchema, taskSplitCreateSchema, taskListQuerySchema, tagSuggestionRequestSchema, uncompleteTaskSchema, updateSettingsSchema, updateGoalSchema, updateHabitSchema, updateInsightSchema, updateStrategySchema, updateUserSchema, updateCalendarConnectionSchema, updateCalendarEventSchema, updateNoteSchema, updateProjectSchema, updateRewardRuleSchema, updateTaskTimeboxSchema, updateTaskSchema, lifeForceProfilePatchSchema, lifeForceTemplateUpdateSchema, fatigueSignalCreateSchema, updateUserAccessGrantSchema, updateWorkBlockTemplateSchema, updateAiConnectorSchema, updateAiProcessorSchema, runAiProcessorSchema, workAdjustmentResultSchema, finalizeWeeklyReviewResultSchema, goalListQuerySchema, recommendTaskTimeboxesSchema, strategyListQuerySchema } from "./types.js";
+import { activityListQuerySchema, activitySourceSchema, defaultAgentBootstrapPolicy, defaultAgentScopePolicy, createAgentActionSchema, createAgentRuntimeSessionEventSchema, createAgentRuntimeSessionSchema, createAgentTokenSchema, createAiConnectorSchema, createAiProcessorLinkSchema, createAiProcessorSchema, runAiConnectorSchema, writeSurfaceLayoutSchema, upsertAiModelConnectionSchema, testAiModelConnectionSchema, submitOpenAiCodexOauthManualCodeSchema, batchCreateEntitiesSchema, batchDeleteEntitiesSchema, batchRestoreEntitiesSchema, batchSearchEntitiesSchema, batchUpdateEntitiesSchema, createGoalSchema, createInsightFeedbackSchema, createInsightSchema, createStrategySchema, createUserSchema, createNoteSchema, createProjectSchema, createManualRewardGrantSchema, createCalendarEventSchema, createHabitCheckInSchema, createCalendarConnectionSchema, createDiagnosticLogSchema, discoverCalendarConnectionSchema, startGoogleCalendarOauthSchema, startMicrosoftCalendarOauthSchema, testMicrosoftCalendarOauthConfigurationSchema, createHabitSchema, createTaskTimeboxSchema, createWorkBlockTemplateSchema, createSessionEventSchema, createWorkAdjustmentSchema, createTagSchema, calendarOverviewQuerySchema, psycheObservationCalendarExportQuerySchema, notesListQuerySchema, updateTagSchema, createTaskSchema, diagnosticLogListQuerySchema, disconnectAgentRuntimeSessionSchema, eventsListQuerySchema, heartbeatAgentRuntimeSessionSchema, operatorLogWorkSchema, projectBoardPayloadSchema, projectListQuerySchema, entityDeleteQuerySchema, removeActivityEventSchema, reconnectAgentRuntimeSessionSchema, resolveApprovalRequestSchema, rewardsLedgerQuerySchema, habitListQuerySchema, taskContextPayloadSchema, taskRunClaimSchema, taskRunFocusSchema, taskRunFinishSchema, taskRunHeartbeatSchema, taskRunListQuerySchema, taskSplitCreateSchema, taskListQuerySchema, tagSuggestionRequestSchema, uncompleteTaskSchema, updateSettingsSchema, updateGoalSchema, updateHabitSchema, updateInsightSchema, updateStrategySchema, updateUserSchema, updateCalendarConnectionSchema, updateCalendarEventSchema, updateNoteSchema, updateProjectSchema, updateRewardRuleSchema, updateTaskTimeboxSchema, updateTaskSchema, lifeForceProfilePatchSchema, lifeForceTemplateUpdateSchema, fatigueSignalCreateSchema, updateUserAccessGrantSchema, updateWorkBlockTemplateSchema, updateAiConnectorSchema, updateAiProcessorSchema, runAiProcessorSchema, workAdjustmentResultSchema, finalizeWeeklyReviewResultSchema, goalListQuerySchema, recommendTaskTimeboxesSchema, strategyListQuerySchema } from "./types.js";
 import { buildOpenApiDocument } from "./openapi.js";
 import { registerWebRoutes } from "./web.js";
 import { createManagerRuntime } from "./managers/runtime.js";
@@ -3936,6 +3936,9 @@ function buildValidationHelp(method, routeUrl, issues) {
 }
 function buildAgentOnboardingPayload(request) {
     const origin = getRequestOrigin(request);
+    const auth = parseRequestAuth(request.headers);
+    const effectiveBootstrapPolicy = auth.token?.bootstrapPolicy ?? defaultAgentBootstrapPolicy;
+    const effectiveScopePolicy = auth.token?.scopePolicy ?? defaultAgentScopePolicy;
     return {
         forgeBaseUrl: origin,
         webAppUrl: `${origin}/forge/`,
@@ -3962,6 +3965,10 @@ function buildAgentOnboardingPayload(request) {
         recommendedTrustLevel: "trusted",
         recommendedAutonomyMode: "approval_required",
         recommendedApprovalMode: "approval_by_default",
+        defaultBootstrapPolicy: defaultAgentBootstrapPolicy,
+        effectiveBootstrapPolicy,
+        defaultScopePolicy: defaultAgentScopePolicy,
+        effectiveScopePolicy,
         authModes: {
             operatorSession: {
                 label: "Quick connect",
@@ -3971,7 +3978,7 @@ function buildAgentOnboardingPayload(request) {
             },
             managedToken: {
                 label: "Managed token",
-                summary: "Use a long-lived token when you want explicit scoped auth, remote non-Tailscale access, or durable agent credentials.",
+                summary: "Use a long-lived token when you want explicit scoped auth, remote non-Tailscale access, durable agent credentials, a custom bootstrap budget, or default user/project/tag read boundaries per agent.",
                 tokenRequired: true
             }
         },
@@ -4552,6 +4559,11 @@ function parseRequestAuth(headers) {
     const source = token ? "agent" : activity.source;
     return {
         token,
+        scope: {
+            userIds: token?.scopePolicy.userIds ?? [],
+            projectIds: token?.scopePolicy.projectIds ?? [],
+            tagIds: token?.scopePolicy.tagIds ?? []
+        },
         actor,
         source,
         activity: {
@@ -4641,6 +4653,105 @@ function resolveScopedUserIds(query) {
     const unique = Array.from(new Set(values));
     return unique.length > 0 ? unique : undefined;
 }
+const EMPTY_SCOPED_USER_IDS = ["__forge_scope_none__"];
+function normalizeScopedUserIdsForReads(options) {
+    const validUserIdSet = new Set(options.validUserIds);
+    const validScopedUserIds = options.scope.userIds !== undefined
+        ? options.scope.userIds.filter((userId) => validUserIdSet.has(userId))
+        : undefined;
+    const scopedUserIdsForReads = options.scope.enforceUserIds &&
+        validScopedUserIds !== undefined &&
+        validScopedUserIds.length === 0
+        ? EMPTY_SCOPED_USER_IDS
+        : validScopedUserIds && validScopedUserIds.length > 0
+            ? validScopedUserIds
+            : undefined;
+    return {
+        validScopedUserIds,
+        scopedUserIdsForReads
+    };
+}
+function resolveEffectiveReadScope(query, auth) {
+    const requestedUserIds = resolveScopedUserIds(query);
+    const tokenUserIds = auth.token?.scopePolicy.userIds ?? [];
+    const effectiveUserIds = tokenUserIds.length > 0
+        ? requestedUserIds
+            ? requestedUserIds.filter((userId) => tokenUserIds.includes(userId))
+            : [...tokenUserIds]
+        : requestedUserIds;
+    return {
+        userIds: effectiveUserIds !== undefined ? Array.from(new Set(effectiveUserIds)) : undefined,
+        enforceUserIds: tokenUserIds.length > 0,
+        projectIds: auth.token?.scopePolicy.projectIds ?? [],
+        tagIds: auth.token?.scopePolicy.tagIds ?? []
+    };
+}
+function hasScopeFilters(scope) {
+    return scope.projectIds.length > 0 || scope.tagIds.length > 0;
+}
+function intersects(values, allowed) {
+    if (!values || values.length === 0) {
+        return false;
+    }
+    return values.some((value) => allowed.includes(value));
+}
+function applyTaskScope(tasks, scope) {
+    if (!hasScopeFilters(scope)) {
+        return tasks;
+    }
+    return tasks.filter((task) => {
+        if (scope.projectIds.length > 0 &&
+            (!task.projectId || !scope.projectIds.includes(task.projectId))) {
+            return false;
+        }
+        if (scope.tagIds.length > 0 && !intersects(task.tagIds, scope.tagIds)) {
+            return false;
+        }
+        return true;
+    });
+}
+function applyProjectScope(projects, scope) {
+    if (!hasScopeFilters(scope)) {
+        return projects;
+    }
+    return projects.filter((project) => {
+        if (scope.projectIds.length > 0 &&
+            !scope.projectIds.includes(project.id)) {
+            return false;
+        }
+        if (scope.tagIds.length > 0 &&
+            !intersects(project.tagIds ?? undefined, scope.tagIds)) {
+            return false;
+        }
+        return true;
+    });
+}
+function applyGoalScope(goals, scope, allowedGoalIds) {
+    if (!hasScopeFilters(scope)) {
+        return goals;
+    }
+    return goals.filter((goal) => (scope.tagIds.length > 0 &&
+        intersects(goal.tagIds ?? undefined, scope.tagIds)) ||
+        allowedGoalIds.has(goal.id));
+}
+function applyHabitScope(habits, scope, allowedGoalIds, allowedTaskIds) {
+    if (!hasScopeFilters(scope)) {
+        return habits;
+    }
+    return habits.filter((habit) => intersects(habit.linkedProjectIds, scope.projectIds) ||
+        intersects(habit.linkedTaskIds, [...allowedTaskIds]) ||
+        intersects(habit.linkedGoalIds, [...allowedGoalIds]));
+}
+function applyStrategyScope(strategies, scope, allowedGoalIds) {
+    if (!hasScopeFilters(scope)) {
+        return strategies;
+    }
+    return strategies.filter((strategy) => intersects(strategy.targetProjectIds, scope.projectIds) ||
+        intersects(strategy.targetGoalIds, [...allowedGoalIds]) ||
+        strategy.linkedEntities.some((link) => (link.entityType === "project" &&
+            scope.projectIds.includes(link.entityId)) ||
+            (link.entityType === "goal" && allowedGoalIds.has(link.entityId))));
+}
 function attachMovementTimelineSleepOverlays(movement, userIds) {
     const rangeStart = movement.segments.reduce((earliest, segment) => {
         if (!earliest || Date.parse(segment.startedAt) < Date.parse(earliest)) {
@@ -4687,18 +4798,26 @@ function syncEntityOwnerFromBody(options) {
     const owner = resolveUserForMutation(requestedUserId, options.fallbackLabel);
     setEntityOwner(options.entityType, options.entityId, owner.id);
 }
-function buildV1Context(userIds) {
+function buildV1Context(scope = {
+    userIds: undefined,
+    enforceUserIds: false,
+    projectIds: [],
+    tagIds: []
+}) {
     const users = listUsers();
-    const validUserIdSet = new Set(users.map((user) => user.id));
-    const scopedUserIds = userIds && userIds.length > 0
-        ? userIds.filter((userId) => validUserIdSet.has(userId))
-        : undefined;
-    const goals = filterOwnedEntities("goal", listGoals(), scopedUserIds);
-    const tasks = filterOwnedEntities("task", listTasks(), scopedUserIds);
-    const habits = filterOwnedEntities("habit", listHabits(), scopedUserIds);
-    const dashboard = getDashboard({ userIds: scopedUserIds });
-    const selectedUsers = scopedUserIds && scopedUserIds.length > 0
-        ? users.filter((user) => scopedUserIds.includes(user.id))
+    const { validScopedUserIds, scopedUserIdsForReads } = normalizeScopedUserIdsForReads({
+        scope,
+        validUserIds: users.map((user) => user.id)
+    });
+    const projects = applyProjectScope(listProjectSummaries({ userIds: scopedUserIdsForReads }), scope);
+    const tasks = applyTaskScope(filterOwnedEntities("task", listTasks(), scopedUserIdsForReads), scope);
+    const goals = applyGoalScope(filterOwnedEntities("goal", listGoals(), scopedUserIdsForReads), scope, new Set([...projects.map((project) => project.goalId), ...tasks.map((task) => task.goalId)]
+        .filter((value) => typeof value === "string" && value.length > 0)));
+    const habits = applyHabitScope(filterOwnedEntities("habit", listHabits(), scopedUserIdsForReads), scope, new Set(goals.map((goal) => goal.id)), new Set(tasks.map((task) => task.id)));
+    const strategies = applyStrategyScope(listStrategies({ userIds: scopedUserIdsForReads }), scope, new Set(goals.map((goal) => goal.id)));
+    const dashboard = getDashboard({ userIds: scopedUserIdsForReads });
+    const selectedUsers = validScopedUserIds !== undefined
+        ? users.filter((user) => validScopedUserIds.includes(user.id))
         : users;
     return {
         meta: {
@@ -4710,29 +4829,33 @@ function buildV1Context(userIds) {
         },
         metrics: buildGamificationProfile(goals, tasks, habits),
         dashboard,
-        overview: getOverviewContext(new Date(), { userIds: scopedUserIds }),
-        today: getTodayContext(new Date(), { userIds: scopedUserIds }),
-        risk: getRiskContext(new Date(), { userIds: scopedUserIds }),
+        overview: getOverviewContext(new Date(), { userIds: scopedUserIdsForReads }),
+        today: getTodayContext(new Date(), { userIds: scopedUserIdsForReads }),
+        risk: getRiskContext(new Date(), { userIds: scopedUserIdsForReads }),
         goals,
-        projects: listProjectSummaries({ userIds: scopedUserIds }),
+        projects,
         tags: listTags(),
         tasks,
         habits,
         users,
-        strategies: listStrategies({ userIds: scopedUserIds }),
+        strategies,
         userScope: {
-            selectedUserIds: scopedUserIds ?? [],
+            selectedUserIds: validScopedUserIds ?? [],
             selectedUsers
         },
-        activeTaskRuns: listTaskRuns({ active: true, limit: 25 }),
+        activeTaskRuns: scope.enforceUserIds &&
+            validScopedUserIds !== undefined &&
+            validScopedUserIds.length === 0
+            ? []
+            : listTaskRuns({ active: true, limit: 25, userIds: scopedUserIdsForReads }),
         activity: dashboard.recentActivity,
-        lifeForce: buildLifeForcePayload(new Date(), scopedUserIds)
+        lifeForce: buildLifeForcePayload(new Date(), scopedUserIdsForReads)
     };
 }
-function buildXpMetricsPayload() {
-    const goals = listGoals();
-    const tasks = listTasks();
-    const habits = listHabits();
+function buildXpMetricsPayload(input = {}) {
+    const goals = input.goals ?? listGoals();
+    const tasks = input.tasks ?? listTasks();
+    const habits = input.habits ?? listHabits();
     const rules = listRewardRules();
     const gamificationOverview = buildGamificationOverview(goals, tasks, habits);
     const dailyAmbientCap = rules
@@ -4791,13 +4914,26 @@ function describeWorkAdjustment(input) {
             : `${appliedLabel} ${direction} from the tracked work total.`
     };
 }
-function buildOperatorContext(userIds) {
-    const tasks = filterOwnedEntities("task", listTasks(), userIds);
-    const dueHabits = filterOwnedEntities("habit", listHabits({ dueToday: true }), userIds).slice(0, 12);
-    const activeProjects = listProjectSummaries({
+function buildOperatorContext(scope = {
+    userIds: undefined,
+    enforceUserIds: false,
+    projectIds: [],
+    tagIds: []
+}) {
+    const users = listUsers();
+    const { scopedUserIdsForReads } = normalizeScopedUserIdsForReads({
+        scope,
+        validUserIds: users.map((user) => user.id)
+    });
+    const tasks = applyTaskScope(filterOwnedEntities("task", listTasks(), scopedUserIdsForReads), scope);
+    const dueHabits = filterOwnedEntities("habit", listHabits({ dueToday: true }), scopedUserIdsForReads);
+    const activeProjects = applyProjectScope(listProjectSummaries({
         status: "active",
-        userIds
-    }).filter((project) => project.activeTaskCount > 0 || project.completedTaskCount > 0);
+        userIds: scopedUserIdsForReads
+    }), scope).filter((project) => project.activeTaskCount > 0 || project.completedTaskCount > 0);
+    const goals = applyGoalScope(filterOwnedEntities("goal", listGoals(), scopedUserIdsForReads), scope, new Set([...activeProjects.map((project) => project.goalId), ...tasks.map((task) => task.goalId)]
+        .filter((value) => typeof value === "string" && value.length > 0)));
+    const scopedHabits = applyHabitScope(dueHabits, scope, new Set(goals.map((goal) => goal.id)), new Set(tasks.map((task) => task.id))).slice(0, 12);
     const focusTasks = tasks.filter((task) => task.status === "focus" || task.status === "in_progress");
     const recommendedNextTask = focusTasks[0] ??
         tasks.find((task) => task.status === "backlog") ??
@@ -4807,7 +4943,7 @@ function buildOperatorContext(userIds) {
         generatedAt: new Date().toISOString(),
         activeProjects: activeProjects.slice(0, 8),
         focusTasks: focusTasks.slice(0, 12),
-        dueHabits,
+        dueHabits: scopedHabits,
         currentBoard: {
             backlog: tasks.filter((task) => task.status === "backlog").slice(0, 20),
             focus: tasks.filter((task) => task.status === "focus").slice(0, 20),
@@ -4817,10 +4953,16 @@ function buildOperatorContext(userIds) {
             blocked: tasks.filter((task) => task.status === "blocked").slice(0, 20),
             done: tasks.filter((task) => task.status === "done").slice(0, 20)
         },
-        recentActivity: listActivityEvents({ limit: 20, userIds }),
-        recentTaskRuns: listTaskRuns({ limit: 12, userIds }),
+        recentActivity: listActivityEvents({
+            limit: 20,
+            userIds: scopedUserIdsForReads
+        }),
+        recentTaskRuns: listTaskRuns({
+            limit: 12,
+            userIds: scopedUserIdsForReads
+        }),
         recommendedNextTask,
-        xp: buildXpMetricsPayload()
+        xp: buildXpMetricsPayload({ goals, tasks, habits: scopedHabits })
     };
 }
 function buildUserDirectoryPayload() {
@@ -4948,7 +5090,13 @@ function buildOperatorOverviewRouteGuide() {
 }
 function buildOperatorOverview(request) {
     const auth = parseRequestAuth(request.headers);
-    const userIds = resolveScopedUserIds(request.query);
+    const readScope = resolveEffectiveReadScope(request.query, auth);
+    const users = listUsers();
+    const { scopedUserIdsForReads } = normalizeScopedUserIdsForReads({
+        scope: readScope,
+        validUserIds: users.map((user) => user.id)
+    });
+    const userIds = scopedUserIdsForReads;
     const canReadPsyche = auth.token
         ? hasTokenScope(auth.token, "psyche.read")
         : true;
@@ -4959,8 +5107,8 @@ function buildOperatorOverview(request) {
         ];
     return {
         generatedAt: new Date().toISOString(),
-        snapshot: buildV1Context(userIds),
-        operator: buildOperatorContext(userIds),
+        snapshot: buildV1Context(readScope),
+        operator: buildOperatorContext(readScope),
         sleep: getSleepViewData(userIds),
         domains: listDomains(),
         psyche: canReadPsyche ? getPsycheOverview(userIds) : null,
@@ -5449,7 +5597,10 @@ export async function buildServer(options = {}) {
         revoked: managers.session.revokeCurrentSession(request.headers, reply)
     }));
     app.get("/api/v1/openapi.json", async () => buildOpenApiDocument());
-    app.get("/api/v1/context", async (request) => buildV1Context(resolveScopedUserIds(request.query)));
+    app.get("/api/v1/context", async (request) => {
+        const auth = authenticateRequest(request.headers);
+        return buildV1Context(resolveEffectiveReadScope(request.query, auth));
+    });
     app.get("/api/v1/life-force", async (request) => ({
         lifeForce: buildLifeForcePayload(new Date(), resolveScopedUserIds(request.query)),
         templates: listLifeForceTemplates(resolveLifeForceUser(resolveScopedUserIds(request.query)).id)
@@ -6106,16 +6257,15 @@ export async function buildServer(options = {}) {
         return { sleep };
     });
     app.get("/api/v1/operator/context", async (request) => {
-        requireOperatorSession(request.headers, {
+        const auth = requireAuthenticatedActor(request.headers, {
             route: "/api/v1/operator/context"
         });
-        const userIds = resolveScopedUserIds(request.query);
         return {
-            context: buildOperatorContext(userIds)
+            context: buildOperatorContext(resolveEffectiveReadScope(request.query, auth))
         };
     });
     app.get("/api/v1/operator/overview", async (request) => {
-        requireOperatorSession(request.headers, {
+        requireAuthenticatedActor(request.headers, {
             route: "/api/v1/operator/overview"
         });
         return {

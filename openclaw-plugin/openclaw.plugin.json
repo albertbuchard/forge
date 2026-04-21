@@ -34,6 +34,10 @@
       "help": "Optional acting user label for provenance. Leave blank to inherit the local operator session label, or set one when a child agent should announce itself under a specific user.",
       "placeholder": "Inherited from Forge operator session"
     },
+    "injectBootstrapContext": {
+      "label": "Inject Bootstrap Context",
+      "help": "Enabled by default. Turn this off when you want OpenClaw sessions to start without a preseeded Forge BOOTSTRAP.md context file to conserve token budget."
+    },
     "timeoutMs": {
       "label": "Request Timeout (ms)",
       "help": "Maximum time to wait before the plugin aborts an upstream Forge request.",
@@ -70,6 +74,11 @@
         "type": "string",
         "default": "",
         "description": "Optional acting user label recorded in Forge provenance headers. Leave blank to inherit the local operator session label automatically."
+      },
+      "injectBootstrapContext": {
+        "type": "boolean",
+        "default": true,
+        "description": "Whether OpenClaw should inject a preseeded Forge BOOTSTRAP.md file into new agent sessions. Disable this to conserve context or model-token budget."
       },
       "timeoutMs": {
         "type": "integer",

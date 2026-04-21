@@ -205,6 +205,7 @@ describe("forge openclaw plugin", () => {
         dataRoot: join(homedir(), ".forge"),
         apiToken: "",
         actorLabel: "",
+        injectBootstrapContext: true,
         timeoutMs: 15000
       });
     } finally {
@@ -240,10 +241,21 @@ describe("forge openclaw plugin", () => {
       dataRoot: join(homedir(), ".forge"),
       apiToken: "",
       actorLabel: "",
+      injectBootstrapContext: true,
       timeoutMs: 15000
     });
 
     rmSync(tempHome, { recursive: true, force: true });
+  });
+
+  it("lets operators disable automatic bootstrap context injection explicitly", () => {
+    expect(
+      resolveForgePluginConfig({
+        injectBootstrapContext: false
+      })
+    ).toMatchObject({
+      injectBootstrapContext: false
+    });
   });
 
   it("registers the curated Forge route groups, tools, and CLI commands", () => {

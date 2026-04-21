@@ -219,11 +219,30 @@ describe("forge session bootstrap", () => {
       dataRoot: "/tmp/forge",
       apiToken: "fg_live_test",
       actorLabel: "OpenClaw",
+      injectBootstrapContext: true,
       timeoutMs: 15_000
     });
 
     expect(content).toBe("");
     expect(mockedCallConfiguredForgeApi).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips all live bootstrap API calls when config disables injected context", async () => {
+    const content = await buildLiveForgeSessionBootstrapContext({
+      origin: "http://127.0.0.1",
+      port: 4317,
+      baseUrl: "http://127.0.0.1:4317",
+      webAppUrl: "http://127.0.0.1:4317/forge/",
+      portSource: "configured",
+      dataRoot: "/tmp/forge",
+      apiToken: "fg_live_test",
+      actorLabel: "OpenClaw",
+      injectBootstrapContext: false,
+      timeoutMs: 15_000
+    });
+
+    expect(content).toBe("");
+    expect(mockedCallConfiguredForgeApi).not.toHaveBeenCalled();
   });
 
   it("uses budget-aware active-only route filters when loading live bootstrap content", async () => {
@@ -327,6 +346,7 @@ describe("forge session bootstrap", () => {
       dataRoot: "/tmp/forge",
       apiToken: "fg_live_test",
       actorLabel: "OpenClaw",
+      injectBootstrapContext: true,
       timeoutMs: 15_000
     });
 

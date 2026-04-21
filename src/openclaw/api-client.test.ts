@@ -92,6 +92,7 @@ describe("openclaw api client", () => {
       dataRoot: "",
       apiToken: "fg_live_token",
       actorLabel: "aurel",
+      injectBootstrapContext: true,
       timeoutMs: 4000
     } as const;
 

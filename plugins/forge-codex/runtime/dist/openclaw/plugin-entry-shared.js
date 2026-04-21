@@ -55,6 +55,9 @@ function normalizeDataRoot(value) {
 function normalizeOptionalString(value) {
     return typeof value === "string" ? value.trim() : "";
 }
+function normalizeBoolean(value, fallback) {
+    return typeof value === "boolean" ? value : fallback;
+}
 function isLocalOrigin(origin) {
     try {
         return LOCAL_HOSTNAMES.has(new URL(origin).hostname.toLowerCase());
@@ -98,6 +101,7 @@ export function resolveForgePluginConfig(pluginConfig) {
         dataRoot: normalizeDataRoot(raw.dataRoot),
         apiToken: typeof raw.apiToken === "string" ? raw.apiToken.trim() : "",
         actorLabel: normalizeOptionalString(raw.actorLabel),
+        injectBootstrapContext: normalizeBoolean(raw.injectBootstrapContext, true),
         timeoutMs: normalizeTimeout(raw.timeoutMs, 15_000)
     };
 }
@@ -136,6 +140,11 @@ export const forgePluginConfigSchema = {
                 default: DEFAULT_OPENCLAW_ACTOR_LABEL,
                 description: "Optional acting user label recorded in Forge provenance headers. Leave blank to inherit the local operator session label automatically."
             },
+            injectBootstrapContext: {
+                type: "boolean",
+                default: true,
+                description: "Whether OpenClaw should inject a preseeded Forge BOOTSTRAP.md file into new agent sessions. Disable this to conserve context or model-token budget."
+            },
             timeoutMs: {
                 type: "integer",
                 default: 15000,
@@ -172,6 +181,10 @@ export const forgePluginConfigSchema = {
             label: "Actor Label",
             help: "Optional acting user label for provenance. Leave blank to inherit the local operator session label, or set one when a child agent should announce itself under a specific user.",
             placeholder: "Inherited from Forge operator session"
+        },
+        injectBootstrapContext: {
+            label: "Inject Bootstrap Context",
+            help: "Enabled by default. Turn this off when you want OpenClaw sessions to start without a preseeded Forge BOOTSTRAP.md context file to conserve token budget."
         },
         timeoutMs: {
             label: "Request Timeout (ms)",

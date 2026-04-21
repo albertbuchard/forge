@@ -21,6 +21,7 @@ const TEST_CONFIG = {
   dataRoot: "",
   apiToken: "fg_live_test",
   actorLabel: "aurel",
+  injectBootstrapContext: true,
   timeoutMs: 15000
 } as const;
 

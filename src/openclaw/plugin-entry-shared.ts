@@ -13,7 +13,18 @@ import { registerForgeSessionBootstrapHook } from "./session-bootstrap.js";
 import { registerForgePluginTools } from "./tools.js";
 import type { ForgePluginConfigSchema, ForgePluginRegistrationApi } from "./plugin-sdk-types.js";
 
-type RawPluginConfig = Partial<Record<"origin" | "port" | "dataRoot" | "apiToken" | "actorLabel" | "timeoutMs", unknown>>;
+type RawPluginConfig = Partial<
+  Record<
+    | "origin"
+    | "port"
+    | "dataRoot"
+    | "apiToken"
+    | "actorLabel"
+    | "timeoutMs"
+    | "injectBootstrapContext",
+    unknown
+  >
+>;
 
 export const FORGE_PLUGIN_ID = "forge-openclaw-plugin";
 export const FORGE_PLUGIN_NAME = "Forge";
@@ -70,6 +81,10 @@ function normalizeOptionalString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function normalizeBoolean(value: unknown, fallback: boolean) {
+  return typeof value === "boolean" ? value : fallback;
+}
+
 function isLocalOrigin(origin: string) {
   try {
     return LOCAL_HOSTNAMES.has(new URL(origin).hostname.toLowerCase());
@@ -116,6 +131,7 @@ export function resolveForgePluginConfig(pluginConfig: unknown): ForgePluginConf
     dataRoot: normalizeDataRoot(raw.dataRoot),
     apiToken: typeof raw.apiToken === "string" ? raw.apiToken.trim() : "",
     actorLabel: normalizeOptionalString(raw.actorLabel),
+    injectBootstrapContext: normalizeBoolean(raw.injectBootstrapContext, true),
     timeoutMs: normalizeTimeout(raw.timeoutMs, 15_000)
   };
 }
@@ -155,6 +171,12 @@ export const forgePluginConfigSchema: ForgePluginConfigSchema = {
         default: DEFAULT_OPENCLAW_ACTOR_LABEL,
         description: "Optional acting user label recorded in Forge provenance headers. Leave blank to inherit the local operator session label automatically."
       },
+      injectBootstrapContext: {
+        type: "boolean",
+        default: true,
+        description:
+          "Whether OpenClaw should inject a preseeded Forge BOOTSTRAP.md file into new agent sessions. Disable this to conserve context or model-token budget."
+      },
       timeoutMs: {
         type: "integer",
         default: 15000,
@@ -191,6 +213,10 @@ export const forgePluginConfigSchema: ForgePluginConfigSchema = {
       label: "Actor Label",
       help: "Optional acting user label for provenance. Leave blank to inherit the local operator session label, or set one when a child agent should announce itself under a specific user.",
       placeholder: "Inherited from Forge operator session"
+    },
+    injectBootstrapContext: {
+      label: "Inject Bootstrap Context",
+      help: "Enabled by default. Turn this off when you want OpenClaw sessions to start without a preseeded Forge BOOTSTRAP.md context file to conserve token budget."
     },
     timeoutMs: {
       label: "Request Timeout (ms)",
