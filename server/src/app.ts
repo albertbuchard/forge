@@ -480,6 +480,7 @@ import {
   activityListQuerySchema,
   activitySourceSchema,
   defaultAgentBootstrapPolicy,
+  defaultAgentScopePolicy,
   createAgentActionSchema,
   createAgentRuntimeSessionEventSchema,
   createAgentRuntimeSessionSchema,
@@ -575,6 +576,9 @@ import {
   strategyListQuerySchema,
   type Note,
   type CrudEntityType,
+  type Goal,
+  type Habit,
+  type Task,
   type TaskTimeSummary,
   type WorkAdjustmentEntityType
 } from "./types.js";
@@ -4866,6 +4870,7 @@ function buildAgentOnboardingPayload(request: {
   const auth = parseRequestAuth(request.headers);
   const effectiveBootstrapPolicy =
     auth.token?.bootstrapPolicy ?? defaultAgentBootstrapPolicy;
+  const effectiveScopePolicy = auth.token?.scopePolicy ?? defaultAgentScopePolicy;
 
   return {
     forgeBaseUrl: origin,
@@ -4895,6 +4900,8 @@ function buildAgentOnboardingPayload(request: {
     recommendedApprovalMode: "approval_by_default" as const,
     defaultBootstrapPolicy: defaultAgentBootstrapPolicy,
     effectiveBootstrapPolicy,
+    defaultScopePolicy: defaultAgentScopePolicy,
+    effectiveScopePolicy,
     authModes: {
       operatorSession: {
         label: "Quick connect",
@@ -4906,7 +4913,7 @@ function buildAgentOnboardingPayload(request: {
       managedToken: {
         label: "Managed token",
         summary:
-          "Use a long-lived token when you want explicit scoped auth, remote non-Tailscale access, durable agent credentials, or a custom bootstrap budget per agent.",
+          "Use a long-lived token when you want explicit scoped auth, remote non-Tailscale access, durable agent credentials, a custom bootstrap budget, or default user/project/tag read boundaries per agent.",
         tokenRequired: true
       }
     },
@@ -5564,6 +5571,11 @@ function parseRequestAuth(headers: Record<string, unknown>) {
   const source = token ? "agent" : activity.source;
   return {
     token,
+    scope: {
+      userIds: token?.scopePolicy.userIds ?? [],
+      projectIds: token?.scopePolicy.projectIds ?? [],
+      tagIds: token?.scopePolicy.tagIds ?? []
+    },
     actor,
     source,
     activity: {
@@ -5680,6 +5692,193 @@ function resolveScopedUserIds(
   return unique.length > 0 ? unique : undefined;
 }
 
+type EffectiveReadScope = {
+  userIds?: string[];
+  enforceUserIds: boolean;
+  projectIds: string[];
+  tagIds: string[];
+};
+
+const EMPTY_SCOPED_USER_IDS = ["__forge_scope_none__"];
+
+function normalizeScopedUserIdsForReads(options: {
+  scope: Pick<EffectiveReadScope, "userIds" | "enforceUserIds">;
+  validUserIds: readonly string[];
+}) {
+  const validUserIdSet = new Set(options.validUserIds);
+  const validScopedUserIds =
+    options.scope.userIds !== undefined
+      ? options.scope.userIds.filter((userId) => validUserIdSet.has(userId))
+      : undefined;
+  const scopedUserIdsForReads =
+    options.scope.enforceUserIds &&
+    validScopedUserIds !== undefined &&
+    validScopedUserIds.length === 0
+      ? EMPTY_SCOPED_USER_IDS
+      : validScopedUserIds && validScopedUserIds.length > 0
+        ? validScopedUserIds
+        : undefined;
+
+  return {
+    validScopedUserIds,
+    scopedUserIdsForReads
+  };
+}
+
+function resolveEffectiveReadScope(
+  query: Record<string, unknown> | undefined,
+  auth:
+    | ReturnType<typeof parseRequestAuth>
+    | {
+        token: {
+          scopePolicy: {
+            userIds: string[];
+            projectIds: string[];
+            tagIds: string[];
+          };
+        } | null;
+      }
+): EffectiveReadScope {
+  const requestedUserIds = resolveScopedUserIds(query);
+  const tokenUserIds = auth.token?.scopePolicy.userIds ?? [];
+  const effectiveUserIds =
+    tokenUserIds.length > 0
+      ? requestedUserIds
+        ? requestedUserIds.filter((userId) => tokenUserIds.includes(userId))
+        : [...tokenUserIds]
+      : requestedUserIds;
+  return {
+    userIds:
+      effectiveUserIds !== undefined ? Array.from(new Set(effectiveUserIds)) : undefined,
+    enforceUserIds: tokenUserIds.length > 0,
+    projectIds: auth.token?.scopePolicy.projectIds ?? [],
+    tagIds: auth.token?.scopePolicy.tagIds ?? []
+  };
+}
+
+function hasScopeFilters(scope: Pick<EffectiveReadScope, "projectIds" | "tagIds">) {
+  return scope.projectIds.length > 0 || scope.tagIds.length > 0;
+}
+
+function intersects(values: string[] | undefined, allowed: readonly string[]) {
+  if (!values || values.length === 0) {
+    return false;
+  }
+  return values.some((value) => allowed.includes(value));
+}
+
+function applyTaskScope<
+  T extends { id: string; projectId: string | null; tagIds: string[] }
+>(tasks: T[], scope: Pick<EffectiveReadScope, "projectIds" | "tagIds">) {
+  if (!hasScopeFilters(scope)) {
+    return tasks;
+  }
+  return tasks.filter((task) => {
+    if (
+      scope.projectIds.length > 0 &&
+      (!task.projectId || !scope.projectIds.includes(task.projectId))
+    ) {
+      return false;
+    }
+    if (scope.tagIds.length > 0 && !intersects(task.tagIds, scope.tagIds)) {
+      return false;
+    }
+    return true;
+  });
+}
+
+function applyProjectScope<T extends { id: string; tagIds?: string[] | null }>(
+  projects: T[],
+  scope: Pick<EffectiveReadScope, "projectIds" | "tagIds">
+) {
+  if (!hasScopeFilters(scope)) {
+    return projects;
+  }
+  return projects.filter((project) => {
+    if (
+      scope.projectIds.length > 0 &&
+      !scope.projectIds.includes(project.id)
+    ) {
+      return false;
+    }
+    if (
+      scope.tagIds.length > 0 &&
+      !intersects(project.tagIds ?? undefined, scope.tagIds)
+    ) {
+      return false;
+    }
+    return true;
+  });
+}
+
+function applyGoalScope<
+  T extends { id: string; tagIds?: string[] | null }
+>(
+  goals: T[],
+  scope: Pick<EffectiveReadScope, "projectIds" | "tagIds">,
+  allowedGoalIds: Set<string>
+) {
+  if (!hasScopeFilters(scope)) {
+    return goals;
+  }
+  return goals.filter(
+    (goal) =>
+      (scope.tagIds.length > 0 &&
+        intersects(goal.tagIds ?? undefined, scope.tagIds)) ||
+      allowedGoalIds.has(goal.id)
+  );
+}
+
+function applyHabitScope<
+  T extends {
+    linkedGoalIds: string[];
+    linkedProjectIds: string[];
+    linkedTaskIds: string[];
+  }
+>(
+  habits: T[],
+  scope: Pick<EffectiveReadScope, "projectIds" | "tagIds">,
+  allowedGoalIds: Set<string>,
+  allowedTaskIds: Set<string>
+) {
+  if (!hasScopeFilters(scope)) {
+    return habits;
+  }
+  return habits.filter(
+    (habit) =>
+      intersects(habit.linkedProjectIds, scope.projectIds) ||
+      intersects(habit.linkedTaskIds, [...allowedTaskIds]) ||
+      intersects(habit.linkedGoalIds, [...allowedGoalIds])
+  );
+}
+
+function applyStrategyScope<
+  T extends {
+    targetGoalIds: string[];
+    targetProjectIds: string[];
+    linkedEntities: Array<{ entityType: string; entityId: string }>;
+  }
+>(
+  strategies: T[],
+  scope: Pick<EffectiveReadScope, "projectIds" | "tagIds">,
+  allowedGoalIds: Set<string>
+) {
+  if (!hasScopeFilters(scope)) {
+    return strategies;
+  }
+  return strategies.filter(
+    (strategy) =>
+      intersects(strategy.targetProjectIds, scope.projectIds) ||
+      intersects(strategy.targetGoalIds, [...allowedGoalIds]) ||
+      strategy.linkedEntities.some(
+        (link) =>
+          (link.entityType === "project" &&
+            scope.projectIds.includes(link.entityId)) ||
+          (link.entityType === "goal" && allowedGoalIds.has(link.entityId))
+      )
+  );
+}
+
 function attachMovementTimelineSleepOverlays<
   T extends {
     segments: Array<{
@@ -5743,20 +5942,54 @@ function syncEntityOwnerFromBody(options: {
   setEntityOwner(options.entityType, options.entityId, owner.id);
 }
 
-function buildV1Context(userIds?: string[]) {
+function buildV1Context(
+  scope: Pick<
+    EffectiveReadScope,
+    "userIds" | "enforceUserIds" | "projectIds" | "tagIds"
+  > = {
+    userIds: undefined,
+    enforceUserIds: false,
+    projectIds: [],
+    tagIds: []
+  }
+) {
   const users = listUsers();
-  const validUserIdSet = new Set(users.map((user) => user.id));
-  const scopedUserIds =
-    userIds && userIds.length > 0
-      ? userIds.filter((userId) => validUserIdSet.has(userId))
-      : undefined;
-  const goals = filterOwnedEntities("goal", listGoals(), scopedUserIds);
-  const tasks = filterOwnedEntities("task", listTasks(), scopedUserIds);
-  const habits = filterOwnedEntities("habit", listHabits(), scopedUserIds);
-  const dashboard = getDashboard({ userIds: scopedUserIds });
+  const { validScopedUserIds, scopedUserIdsForReads } =
+    normalizeScopedUserIdsForReads({
+      scope,
+      validUserIds: users.map((user) => user.id)
+    });
+  const projects = applyProjectScope(
+    listProjectSummaries({ userIds: scopedUserIdsForReads }),
+    scope
+  );
+  const tasks = applyTaskScope(
+    filterOwnedEntities("task", listTasks(), scopedUserIdsForReads),
+    scope
+  );
+  const goals = applyGoalScope(
+    filterOwnedEntities("goal", listGoals(), scopedUserIdsForReads),
+    scope,
+    new Set(
+      [...projects.map((project) => project.goalId), ...tasks.map((task) => task.goalId)]
+        .filter((value): value is string => typeof value === "string" && value.length > 0)
+    )
+  );
+  const habits = applyHabitScope(
+    filterOwnedEntities("habit", listHabits(), scopedUserIdsForReads),
+    scope,
+    new Set(goals.map((goal) => goal.id)),
+    new Set(tasks.map((task) => task.id))
+  );
+  const strategies = applyStrategyScope(
+    listStrategies({ userIds: scopedUserIdsForReads }),
+    scope,
+    new Set(goals.map((goal) => goal.id))
+  );
+  const dashboard = getDashboard({ userIds: scopedUserIdsForReads });
   const selectedUsers =
-    scopedUserIds && scopedUserIds.length > 0
-      ? users.filter((user) => scopedUserIds.includes(user.id))
+    validScopedUserIds !== undefined
+      ? users.filter((user) => validScopedUserIds.includes(user.id))
       : users;
   return {
     meta: {
@@ -5768,30 +6001,39 @@ function buildV1Context(userIds?: string[]) {
     },
     metrics: buildGamificationProfile(goals, tasks, habits),
     dashboard,
-    overview: getOverviewContext(new Date(), { userIds: scopedUserIds }),
-    today: getTodayContext(new Date(), { userIds: scopedUserIds }),
-    risk: getRiskContext(new Date(), { userIds: scopedUserIds }),
+    overview: getOverviewContext(new Date(), { userIds: scopedUserIdsForReads }),
+    today: getTodayContext(new Date(), { userIds: scopedUserIdsForReads }),
+    risk: getRiskContext(new Date(), { userIds: scopedUserIdsForReads }),
     goals,
-    projects: listProjectSummaries({ userIds: scopedUserIds }),
+    projects,
     tags: listTags(),
     tasks,
     habits,
     users,
-    strategies: listStrategies({ userIds: scopedUserIds }),
+    strategies,
     userScope: {
-      selectedUserIds: scopedUserIds ?? [],
+      selectedUserIds: validScopedUserIds ?? [],
       selectedUsers
     },
-    activeTaskRuns: listTaskRuns({ active: true, limit: 25 }),
+    activeTaskRuns:
+      scope.enforceUserIds &&
+      validScopedUserIds !== undefined &&
+      validScopedUserIds.length === 0
+        ? []
+        : listTaskRuns({ active: true, limit: 25, userIds: scopedUserIdsForReads }),
     activity: dashboard.recentActivity,
-    lifeForce: buildLifeForcePayload(new Date(), scopedUserIds)
+    lifeForce: buildLifeForcePayload(new Date(), scopedUserIdsForReads)
   };
 }
 
-function buildXpMetricsPayload() {
-  const goals = listGoals();
-  const tasks = listTasks();
-  const habits = listHabits();
+function buildXpMetricsPayload(input: {
+  goals?: Goal[];
+  tasks?: Task[];
+  habits?: Habit[];
+} = {}) {
+  const goals = input.goals ?? listGoals();
+  const tasks = input.tasks ?? listTasks();
+  const habits = input.habits ?? listHabits();
   const rules = listRewardRules();
   const gamificationOverview = buildGamificationOverview(goals, tasks, habits);
   const dailyAmbientCap =
@@ -5880,19 +6122,51 @@ function describeWorkAdjustment(input: {
   };
 }
 
-function buildOperatorContext(userIds?: string[]) {
-  const tasks = filterOwnedEntities("task", listTasks(), userIds);
+function buildOperatorContext(
+  scope: Pick<
+    EffectiveReadScope,
+    "userIds" | "enforceUserIds" | "projectIds" | "tagIds"
+  > = {
+    userIds: undefined,
+    enforceUserIds: false,
+    projectIds: [],
+    tagIds: []
+  }
+) {
+  const users = listUsers();
+  const { scopedUserIdsForReads } = normalizeScopedUserIdsForReads({
+    scope,
+    validUserIds: users.map((user) => user.id)
+  });
+  const tasks = applyTaskScope(
+    filterOwnedEntities("task", listTasks(), scopedUserIdsForReads),
+    scope
+  );
   const dueHabits = filterOwnedEntities(
     "habit",
     listHabits({ dueToday: true }),
-    userIds
-  ).slice(0, 12);
-  const activeProjects = listProjectSummaries({
+    scopedUserIdsForReads
+  );
+  const activeProjects = applyProjectScope(listProjectSummaries({
     status: "active",
-    userIds
-  }).filter(
+    userIds: scopedUserIdsForReads
+  }), scope).filter(
     (project) => project.activeTaskCount > 0 || project.completedTaskCount > 0
   );
+  const goals = applyGoalScope(
+    filterOwnedEntities("goal", listGoals(), scopedUserIdsForReads),
+    scope,
+    new Set(
+      [...activeProjects.map((project) => project.goalId), ...tasks.map((task) => task.goalId)]
+        .filter((value): value is string => typeof value === "string" && value.length > 0)
+    )
+  );
+  const scopedHabits = applyHabitScope(
+    dueHabits,
+    scope,
+    new Set(goals.map((goal) => goal.id)),
+    new Set(tasks.map((task) => task.id))
+  ).slice(0, 12);
   const focusTasks = tasks.filter(
     (task) => task.status === "focus" || task.status === "in_progress"
   );
@@ -5906,7 +6180,7 @@ function buildOperatorContext(userIds?: string[]) {
     generatedAt: new Date().toISOString(),
     activeProjects: activeProjects.slice(0, 8),
     focusTasks: focusTasks.slice(0, 12),
-    dueHabits,
+    dueHabits: scopedHabits,
     currentBoard: {
       backlog: tasks.filter((task) => task.status === "backlog").slice(0, 20),
       focus: tasks.filter((task) => task.status === "focus").slice(0, 20),
@@ -5916,10 +6190,16 @@ function buildOperatorContext(userIds?: string[]) {
       blocked: tasks.filter((task) => task.status === "blocked").slice(0, 20),
       done: tasks.filter((task) => task.status === "done").slice(0, 20)
     },
-    recentActivity: listActivityEvents({ limit: 20, userIds }),
-    recentTaskRuns: listTaskRuns({ limit: 12, userIds }),
+    recentActivity: listActivityEvents({
+      limit: 20,
+      userIds: scopedUserIdsForReads
+    }),
+    recentTaskRuns: listTaskRuns({
+      limit: 12,
+      userIds: scopedUserIdsForReads
+    }),
     recommendedNextTask,
-    xp: buildXpMetricsPayload()
+    xp: buildXpMetricsPayload({ goals, tasks, habits: scopedHabits })
   };
 }
 
@@ -6072,7 +6352,13 @@ function buildOperatorOverview(request: {
   query?: Record<string, unknown>;
 }) {
   const auth = parseRequestAuth(request.headers);
-  const userIds = resolveScopedUserIds(request.query);
+  const readScope = resolveEffectiveReadScope(request.query, auth);
+  const users = listUsers();
+  const { scopedUserIdsForReads } = normalizeScopedUserIdsForReads({
+    scope: readScope,
+    validUserIds: users.map((user) => user.id)
+  });
+  const userIds = scopedUserIdsForReads;
   const canReadPsyche = auth.token
     ? hasTokenScope(auth.token, "psyche.read")
     : true;
@@ -6084,8 +6370,8 @@ function buildOperatorOverview(request: {
 
   return {
     generatedAt: new Date().toISOString(),
-    snapshot: buildV1Context(userIds),
-    operator: buildOperatorContext(userIds),
+    snapshot: buildV1Context(readScope),
+    operator: buildOperatorContext(readScope),
     sleep: getSleepViewData(userIds),
     domains: listDomains(),
     psyche: canReadPsyche ? getPsycheOverview(userIds) : null,
@@ -6704,11 +6990,15 @@ export async function buildServer(
     )
   }));
   app.get("/api/v1/openapi.json", async () => buildOpenApiDocument());
-  app.get("/api/v1/context", async (request) =>
-    buildV1Context(
-      resolveScopedUserIds(request.query as Record<string, unknown>)
-    )
-  );
+  app.get("/api/v1/context", async (request) => {
+    const auth = authenticateRequest(request.headers as Record<string, unknown>);
+    return buildV1Context(
+      resolveEffectiveReadScope(
+        request.query as Record<string, unknown>,
+        auth
+      )
+    );
+  });
   app.get("/api/v1/life-force", async (request) => ({
     lifeForce: buildLifeForcePayload(
       new Date(),
@@ -7662,18 +7952,23 @@ export async function buildServer(
     return { sleep };
   });
   app.get("/api/v1/operator/context", async (request) => {
-    requireOperatorSession(request.headers as Record<string, unknown>, {
-      route: "/api/v1/operator/context"
-    });
-    const userIds = resolveScopedUserIds(
-      request.query as Record<string, unknown>
+    const auth = requireAuthenticatedActor(
+      request.headers as Record<string, unknown>,
+      {
+        route: "/api/v1/operator/context"
+      }
     );
     return {
-      context: buildOperatorContext(userIds)
+      context: buildOperatorContext(
+        resolveEffectiveReadScope(
+          request.query as Record<string, unknown>,
+          auth
+        )
+      )
     };
   });
   app.get("/api/v1/operator/overview", async (request) => {
-    requireOperatorSession(request.headers as Record<string, unknown>, {
+    requireAuthenticatedActor(request.headers as Record<string, unknown>, {
       route: "/api/v1/operator/overview"
     });
     return {

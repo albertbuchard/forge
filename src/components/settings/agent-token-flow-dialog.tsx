@@ -92,6 +92,16 @@ type BootstrapPolicy = {
   peoplePageLimit: number;
   includePeoplePages: boolean;
 };
+type ScopePolicy = {
+  userIds: string[];
+  projectIds: string[];
+  tagIds: string[];
+};
+const DEFAULT_SCOPE_POLICY: ScopePolicy = {
+  userIds: [],
+  projectIds: [],
+  tagIds: []
+};
 
 type TokenPreset = "review" | "operator" | "autonomous" | "custom";
 
@@ -106,6 +116,7 @@ type TokenDraft = {
   approvalMode: "approval_by_default" | "high_impact_only" | "none";
   scopes: string[];
   bootstrapPolicy: BootstrapPolicy;
+  scopePolicy: ScopePolicy;
 };
 
 function bootstrapPolicyForPreset(preset: TokenPreset): BootstrapPolicy {
@@ -139,6 +150,17 @@ function bootstrapPolicyForPreset(preset: TokenPreset): BootstrapPolicy {
   return { ...DEFAULT_BOOTSTRAP_POLICY };
 }
 
+function parseIdList(raw: string) {
+  return Array.from(
+    new Set(
+      raw
+        .split(",")
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0)
+    )
+  );
+}
+
 function applyPreset(
   draft: TokenDraft,
   preset: TokenPreset,
@@ -152,7 +174,8 @@ function applyPreset(
       autonomyMode: "approval_required",
       approvalMode: "approval_by_default",
       scopes: [...recommendedScopes],
-      bootstrapPolicy: bootstrapPolicyForPreset(preset)
+      bootstrapPolicy: bootstrapPolicyForPreset(preset),
+      scopePolicy: { ...DEFAULT_SCOPE_POLICY }
     };
   }
   if (preset === "operator") {
@@ -163,7 +186,8 @@ function applyPreset(
       autonomyMode: "scoped_write",
       approvalMode: "high_impact_only",
       scopes: [...FULL_OPERATOR_SCOPES],
-      bootstrapPolicy: bootstrapPolicyForPreset(preset)
+      bootstrapPolicy: bootstrapPolicyForPreset(preset),
+      scopePolicy: { ...DEFAULT_SCOPE_POLICY }
     };
   }
   if (preset === "autonomous") {
@@ -174,7 +198,8 @@ function applyPreset(
       autonomyMode: "autonomous",
       approvalMode: "none",
       scopes: [...FULL_OPERATOR_SCOPES],
-      bootstrapPolicy: bootstrapPolicyForPreset(preset)
+      bootstrapPolicy: bootstrapPolicyForPreset(preset),
+      scopePolicy: { ...DEFAULT_SCOPE_POLICY }
     };
   }
   return { ...draft, preset };
@@ -195,7 +220,8 @@ function buildInitialDraft(
     autonomyMode: "scoped_write",
     approvalMode: "high_impact_only",
     scopes: [...FULL_OPERATOR_SCOPES],
-    bootstrapPolicy: { ...DEFAULT_BOOTSTRAP_POLICY }
+    bootstrapPolicy: { ...DEFAULT_BOOTSTRAP_POLICY },
+    scopePolicy: { ...DEFAULT_SCOPE_POLICY }
   };
   return applyPreset(base, initialPreset, recommendedScopes);
 }
@@ -486,6 +512,81 @@ export function AgentTokenFlowDialog({
       )
     },
     {
+      id: "default-scope",
+      eyebrow: "Default read scope",
+      title: "Decide which owners and slices this agent sees by default",
+      description:
+        "Leave these blank for broad reads. When set, Forge automatically narrows overview, context, and bootstrap reads for this token unless the request narrows further.",
+      render: (value, setValue) => (
+        <>
+          <FlowField
+            label="Default user IDs"
+            description="Comma-separated owner ids such as user_operator or user_forge_bot."
+            labelHelp="If you set user ids here, this token only sees that owner slice by default. Explicit userIds in a request can narrow further, but they will not silently widen beyond this list."
+          >
+            <Input
+              value={value.scopePolicy.userIds.join(", ")}
+              placeholder="user_operator, user_forge_bot"
+              onChange={(event) =>
+                setValue({
+                  scopePolicy: {
+                    ...value.scopePolicy,
+                    userIds: parseIdList(event.target.value)
+                  }
+                })
+              }
+            />
+          </FlowField>
+          <FlowField
+            label="Project IDs"
+            description="Optional project-level boundary for overview, context, and bootstrap reads."
+          >
+            <Input
+              value={value.scopePolicy.projectIds.join(", ")}
+              placeholder="project_123, project_456"
+              onChange={(event) =>
+                setValue({
+                  scopePolicy: {
+                    ...value.scopePolicy,
+                    projectIds: parseIdList(event.target.value)
+                  }
+                })
+              }
+            />
+          </FlowField>
+          <FlowField
+            label="Tag IDs"
+            description="Optional tag-level boundary for overview, context, and bootstrap reads."
+          >
+            <Input
+              value={value.scopePolicy.tagIds.join(", ")}
+              placeholder="tag_focus, tag_client"
+              onChange={(event) =>
+                setValue({
+                  scopePolicy: {
+                    ...value.scopePolicy,
+                    tagIds: parseIdList(event.target.value)
+                  }
+                })
+              }
+            />
+          </FlowField>
+          <div className="rounded-[16px] bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/62">
+            Default scope summary:{" "}
+            {value.scopePolicy.userIds.length > 0
+              ? `${value.scopePolicy.userIds.length} user slice${value.scopePolicy.userIds.length === 1 ? "" : "s"}`
+              : "all visible users"}
+            {value.scopePolicy.projectIds.length > 0
+              ? ` · ${value.scopePolicy.projectIds.length} project ${value.scopePolicy.projectIds.length === 1 ? "boundary" : "boundaries"}`
+              : ""}
+            {value.scopePolicy.tagIds.length > 0
+              ? ` · ${value.scopePolicy.tagIds.length} tag ${value.scopePolicy.tagIds.length === 1 ? "boundary" : "boundaries"}`
+              : ""}
+          </div>
+        </>
+      )
+    },
+    {
       id: "bootstrap",
       eyebrow: "Bootstrap",
       title: "Decide how much Forge context is injected at session start",
@@ -609,7 +710,8 @@ export function AgentTokenFlowDialog({
           autonomyMode: draft.autonomyMode,
           approvalMode: draft.approvalMode,
           scopes: draft.scopes,
-          bootstrapPolicy: draft.bootstrapPolicy
+          bootstrapPolicy: draft.bootstrapPolicy,
+          scopePolicy: draft.scopePolicy
         });
 
         if (!payload.success) {

@@ -289,6 +289,11 @@ export const agentBootstrapPolicySchema = z.object({
     defaultAgentBootstrapPolicy.includePeoplePages
   )
 });
+export const defaultAgentScopePolicy = {
+  userIds: [],
+  projectIds: [],
+  tagIds: []
+};
 export const agentRuntimeProviderSchema = z.enum([
   "openclaw",
   "hermes",
@@ -482,6 +487,14 @@ const uniqueStringArraySchema = z
       seen.add(value);
     });
   });
+
+export const agentScopePolicySchema = z.object({
+  userIds: uniqueStringArraySchema.default(() => [...defaultAgentScopePolicy.userIds]),
+  projectIds: uniqueStringArraySchema.default(() => [
+    ...defaultAgentScopePolicy.projectIds
+  ]),
+  tagIds: uniqueStringArraySchema.default(() => [...defaultAgentScopePolicy.tagIds])
+});
 
 const integerMinuteSchema = z
   .number()
@@ -2268,6 +2281,7 @@ export const agentTokenSummarySchema = z.object({
   approvalMode: approvalModeSchema,
   description: z.string(),
   bootstrapPolicy: agentBootstrapPolicySchema,
+  scopePolicy: agentScopePolicySchema,
   lastUsedAt: z.string().nullable(),
   revokedAt: z.string().nullable(),
   createdAt: z.string(),
@@ -3938,7 +3952,8 @@ export const createAgentTokenSchema = z.object({
   autonomyMode: autonomyModeSchema.default("approval_required"),
   approvalMode: approvalModeSchema.default("approval_by_default"),
   scopes: uniqueStringArraySchema.default(["read", "write", "insights"]),
-  bootstrapPolicy: agentBootstrapPolicySchema.default(defaultAgentBootstrapPolicy)
+  bootstrapPolicy: agentBootstrapPolicySchema.default(defaultAgentBootstrapPolicy),
+  scopePolicy: agentScopePolicySchema.default(defaultAgentScopePolicy)
 });
 
 export const activityArchiveQuerySchema = activityListQuerySchema.extend({
@@ -4530,6 +4545,7 @@ export type AppLocale = z.infer<typeof appLocaleSchema>;
 export type AgentIdentity = z.infer<typeof agentIdentitySchema>;
 export type AgentBootstrapMode = z.infer<typeof agentBootstrapModeSchema>;
 export type AgentBootstrapPolicy = z.infer<typeof agentBootstrapPolicySchema>;
+export type AgentScopePolicy = z.infer<typeof agentScopePolicySchema>;
 export type AgentRuntimeProvider = z.infer<typeof agentRuntimeProviderSchema>;
 export type AgentRuntimeConnectionMode = z.infer<
   typeof agentRuntimeConnectionModeSchema

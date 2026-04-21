@@ -159,6 +159,11 @@ export const createAgentTokenSchema = z.object({
     strategiesLimit: z.coerce.number().int().min(0).max(100),
     peoplePageLimit: z.coerce.number().int().min(0).max(50),
     includePeoplePages: z.boolean()
+  }),
+  scopePolicy: z.object({
+    userIds: z.array(z.string().trim().min(1)),
+    projectIds: z.array(z.string().trim().min(1)),
+    tagIds: z.array(z.string().trim().min(1))
   })
 });
 

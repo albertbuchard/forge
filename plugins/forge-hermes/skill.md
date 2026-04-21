@@ -208,6 +208,10 @@ For wiki-specific recall:
 ## Behavioral rules
 
 - Prefer overview and search before mutation unless the user is asking for one exact known write.
+- Managed Forge tokens may already apply a default scoped read slice from onboarding.
+  Treat `forge_get_agent_onboarding.effectiveScopePolicy` as the current default
+  boundary, and use explicit `userIds` only to narrow further unless the operator
+  intentionally reissues the token with a broader scope.
 - Prefer the high-level batch entity routes over proliferating one-off CRUD routes.
 - Batch CRUD is the default for simple entities. The point is to keep agents out of a route jungle, not to spam them with hundreds of individual CRUD endpoints they do not need to memorize.
 - Delete defaults to soft delete unless hard delete is explicit.

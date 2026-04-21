@@ -48,6 +48,11 @@ export class AuthenticationManager extends AbstractManager {
       actor,
       source,
       token,
+      scope: {
+        userIds: token?.scopePolicy.userIds ?? [],
+        projectIds: token?.scopePolicy.projectIds ?? [],
+        tagIds: token?.scopePolicy.tagIds ?? []
+      },
       session
     };
   }

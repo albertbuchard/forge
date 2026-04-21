@@ -2408,6 +2408,11 @@ export interface AgentTokenSummary {
     peoplePageLimit: number;
     includePeoplePages: boolean;
   };
+  scopePolicy: {
+    userIds: string[];
+    projectIds: string[];
+    tagIds: string[];
+  };
   lastUsedAt: string | null;
   revokedAt: string | null;
   createdAt: string;
@@ -3340,6 +3345,8 @@ export interface AgentOnboardingPayload {
   recommendedApprovalMode: "approval_by_default" | "high_impact_only" | "none";
   defaultBootstrapPolicy: AgentTokenSummary["bootstrapPolicy"];
   effectiveBootstrapPolicy: AgentTokenSummary["bootstrapPolicy"];
+  defaultScopePolicy: AgentTokenSummary["scopePolicy"];
+  effectiveScopePolicy: AgentTokenSummary["scopePolicy"];
   authModes: {
     operatorSession: {
       label: string;

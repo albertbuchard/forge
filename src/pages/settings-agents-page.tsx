@@ -86,6 +86,28 @@ function formatBootstrapMode(mode: AgentTokenSummary["bootstrapPolicy"]["mode"])
   return mode.replaceAll("_", " ");
 }
 
+function formatScopeSummary(token: AgentTokenSummary) {
+  const parts: string[] = [];
+  if (token.scopePolicy.userIds.length > 0) {
+    parts.push(
+      `${token.scopePolicy.userIds.length} user${token.scopePolicy.userIds.length === 1 ? "" : "s"}`
+    );
+  } else {
+    parts.push("all visible users");
+  }
+  if (token.scopePolicy.projectIds.length > 0) {
+    parts.push(
+      `${token.scopePolicy.projectIds.length} project${token.scopePolicy.projectIds.length === 1 ? "" : "s"}`
+    );
+  }
+  if (token.scopePolicy.tagIds.length > 0) {
+    parts.push(
+      `${token.scopePolicy.tagIds.length} tag${token.scopePolicy.tagIds.length === 1 ? "" : "s"}`
+    );
+  }
+  return parts.join(" · ");
+}
+
 export function SettingsAgentsPage() {
   const queryClient = useQueryClient();
 
@@ -823,6 +845,9 @@ export function SettingsAgentsPage() {
                     {token.bootstrapPolicy.includePeoplePages
                       ? ` · ${token.bootstrapPolicy.peoplePageLimit} people pages`
                       : " · no people pages"}
+                  </div>
+                  <div className="mt-1 text-xs text-white/45">
+                    Default read scope: {formatScopeSummary(token)}
                   </div>
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     {["write", "rewards.manage", "psyche.write"].map(

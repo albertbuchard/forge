@@ -37,6 +37,16 @@ async function loadOnboardingPayload() {
       projectsLimit: number;
       tasksLimit: number;
     };
+    defaultScopePolicy: {
+      userIds: string[];
+      projectIds: string[];
+      tagIds: string[];
+    };
+    effectiveScopePolicy: {
+      userIds: string[];
+      projectIds: string[];
+      tagIds: string[];
+    };
     entityCatalog: Array<{
       entityType: string;
       classification: string;
@@ -79,7 +89,7 @@ async function loadOnboardingPayload() {
 }
 
 describe("forge onboarding contract", () => {
-  it("publishes default and effective bootstrap policies for adapter session setup", async () => {
+  it("publishes bootstrap and default scope policies for adapter session setup", async () => {
     const onboarding = await loadOnboardingPayload();
     expect(onboarding.defaultBootstrapPolicy).toEqual(
       expect.objectContaining({
@@ -93,6 +103,16 @@ describe("forge onboarding contract", () => {
         mode: "active_only"
       })
     );
+    expect(onboarding.defaultScopePolicy).toEqual({
+      userIds: [],
+      projectIds: [],
+      tagIds: []
+    });
+    expect(onboarding.effectiveScopePolicy).toEqual({
+      userIds: [],
+      projectIds: [],
+      tagIds: []
+    });
   });
 
   it("publishes the full entity catalog needed by question flows", async () => {

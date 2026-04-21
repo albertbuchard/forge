@@ -258,6 +258,10 @@ Surface rule:
 ## Behavioral rules
 
 - Prefer the operator overview before mutating Forge.
+- Managed Forge tokens may already carry a default scoped read slice. Check
+  `forge_get_agent_onboarding.effectiveScopePolicy` and assume overview/context
+  reads are already narrowed when that policy lists user, project, or tag
+  boundaries. Pass explicit `userIds` only when you are narrowing further.
 - Prefer batch entity tools for simple entities. The point is to keep the agent out
   of a route jungle, not to memorize every direct CRUD endpoint in the server.
 - When ownership matters, set `userId` deliberately instead of assuming the current

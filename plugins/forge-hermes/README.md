@@ -177,6 +177,12 @@ health surfaces, markdown vault, backlinks, and metadata index stay aligned.
 - `FORGE_TIMEOUT_MS`
 - `FORGE_DATA_ROOT`
 
+Managed tokens can now carry both a bootstrap budget and a default read scope.
+That means Hermes may start with an already-scoped Forge view for one human, one
+bot, or a bounded collaboration slice even before it passes explicit `userIds`
+on a read call. Hermes can still narrow further per request, but it should not
+assume every token sees the whole workspace by default.
+
 ## Bundled Skills
 
 Forge Hermes now follows the newer Hermes plugin-skill recommendation when the

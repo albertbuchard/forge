@@ -1923,6 +1923,17 @@ export function buildOpenApiDocument() {
     }
   };
 
+  const agentScopePolicy = {
+    type: "object",
+    additionalProperties: false,
+    required: ["userIds", "projectIds", "tagIds"],
+    properties: {
+      userIds: arrayOf({ type: "string" }),
+      projectIds: arrayOf({ type: "string" }),
+      tagIds: arrayOf({ type: "string" })
+    }
+  };
+
   const agentTokenSummary = {
     type: "object",
     additionalProperties: false,
@@ -1938,6 +1949,7 @@ export function buildOpenApiDocument() {
       "approvalMode",
       "description",
       "bootstrapPolicy",
+      "scopePolicy",
       "lastUsedAt",
       "revokedAt",
       "createdAt",
@@ -1965,6 +1977,7 @@ export function buildOpenApiDocument() {
       },
       description: { type: "string" },
       bootstrapPolicy: { $ref: "#/components/schemas/AgentBootstrapPolicy" },
+      scopePolicy: { $ref: "#/components/schemas/AgentScopePolicy" },
       lastUsedAt: nullable({ type: "string", format: "date-time" }),
       revokedAt: nullable({ type: "string", format: "date-time" }),
       createdAt: { type: "string", format: "date-time" },
@@ -2911,6 +2924,8 @@ export function buildOpenApiDocument() {
       "recommendedApprovalMode",
       "defaultBootstrapPolicy",
       "effectiveBootstrapPolicy",
+      "defaultScopePolicy",
+      "effectiveScopePolicy",
       "authModes",
       "tokenRecovery",
       "requiredHeaders",
@@ -2964,6 +2979,12 @@ export function buildOpenApiDocument() {
       },
       effectiveBootstrapPolicy: {
         $ref: "#/components/schemas/AgentBootstrapPolicy"
+      },
+      defaultScopePolicy: {
+        $ref: "#/components/schemas/AgentScopePolicy"
+      },
+      effectiveScopePolicy: {
+        $ref: "#/components/schemas/AgentScopePolicy"
       },
       authModes: {
         type: "object",
@@ -4334,6 +4355,7 @@ export function buildOpenApiDocument() {
         AgentRuntimeSession: agentRuntimeSession,
         AgentRuntimeSessionHistory: agentRuntimeSessionHistory,
         AgentBootstrapPolicy: agentBootstrapPolicy,
+        AgentScopePolicy: agentScopePolicy,
         AgentTokenSummary: agentTokenSummary,
         AgentTokenMutationResult: agentTokenMutationResult,
         Domain: domain,

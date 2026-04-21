@@ -35,7 +35,17 @@ export type AuthContext = RequestContext & {
       peoplePageLimit: number;
       includePeoplePages: boolean;
     };
+    scopePolicy: {
+      userIds: string[];
+      projectIds: string[];
+      tagIds: string[];
+    };
   } | null;
+  scope: {
+    userIds: string[];
+    projectIds: string[];
+    tagIds: string[];
+  };
   session: {
     id: string;
     actorLabel: string;

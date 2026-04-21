@@ -1291,6 +1291,215 @@ test("scoped context returns bot-owned goals and strategies when userIds are req
   }
 });
 
+test("managed tokens apply default scoped reads to operator context and overview without widening", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-agent-default-scope-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+
+    const createdGoalResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/goals",
+      headers: { cookie: operatorCookie },
+      payload: {
+        title: "Bot-scoped goal",
+        description: "Work visible only to the bot-scoped token.",
+        horizon: "year",
+        status: "active",
+        userId: "user_forge_bot",
+        targetPoints: 200,
+        themeColor: "#60a5fa",
+        tagIds: [],
+        notes: []
+      }
+    });
+    assert.equal(createdGoalResponse.statusCode, 201);
+    const createdGoalId = (
+      createdGoalResponse.json() as { goal: { id: string } }
+    ).goal.id;
+
+    const createdProjectResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects",
+      headers: { cookie: operatorCookie },
+      payload: {
+        goalId: createdGoalId,
+        title: "Bot-scoped project",
+        description: "Project for scoped-read verification.",
+        status: "active",
+        userId: "user_forge_bot",
+        targetPoints: 120,
+        themeColor: "#60a5fa",
+        notes: []
+      }
+    });
+    assert.equal(createdProjectResponse.statusCode, 201);
+    const createdProjectId = (
+      createdProjectResponse.json() as {
+        project: { id: string; userId: string | null };
+      }
+    ).project.id;
+
+    const createdTaskResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/tasks",
+      headers: { cookie: operatorCookie },
+      payload: {
+        title: "Bot-scoped focus task",
+        description: "Focus task for default scoped reads.",
+        status: "focus",
+        priority: "medium",
+        owner: "Forge Bot",
+        userId: "user_forge_bot",
+        goalId: createdGoalId,
+        projectId: createdProjectId,
+        dueDate: null,
+        effort: "deep",
+        energy: "steady",
+        points: 40,
+        plannedDurationSeconds: 1800,
+        tagIds: [],
+        actionCostBand: "standard",
+        notes: []
+      }
+    });
+    assert.equal(createdTaskResponse.statusCode, 201);
+    const createdTaskId = (
+      createdTaskResponse.json() as { task: { id: string } }
+    ).task.id;
+
+    const tokenResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/settings/tokens",
+      headers: { cookie: operatorCookie },
+      payload: {
+        label: "Bot scoped token",
+        scopes: ["read"],
+        scopePolicy: {
+          userIds: ["user_forge_bot"],
+          projectIds: [],
+          tagIds: []
+        }
+      }
+    });
+    assert.equal(tokenResponse.statusCode, 201);
+    const token = (
+      tokenResponse.json() as { token: { token: string } }
+    ).token.token;
+
+    const scopedContextResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/operator/context",
+      headers: {
+        authorization: `Bearer ${token}`
+      }
+    });
+    assert.equal(scopedContextResponse.statusCode, 200);
+    const scopedContext = (
+      scopedContextResponse.json() as {
+        context: {
+          activeProjects: Array<{ id: string; userId: string | null }>;
+          focusTasks: Array<{ id: string; userId: string | null }>;
+        };
+      }
+    ).context;
+    assert.ok(
+      scopedContext.activeProjects.some(
+        (project) =>
+          project.id === createdProjectId && project.userId === "user_forge_bot"
+      )
+    );
+    assert.ok(
+      scopedContext.focusTasks.some(
+        (task) => task.id === createdTaskId && task.userId === "user_forge_bot"
+      )
+    );
+    assert.ok(
+      scopedContext.focusTasks.every((task) => task.userId === "user_forge_bot")
+    );
+
+    const overviewResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/operator/overview?userIds=user_operator,user_forge_bot",
+      headers: {
+        authorization: `Bearer ${token}`,
+        host: "127.0.0.1:4317"
+      }
+    });
+    assert.equal(overviewResponse.statusCode, 200);
+    const overview = (
+      overviewResponse.json() as {
+        overview: {
+          snapshot: {
+            userScope: { selectedUserIds: string[] };
+            goals: Array<{ userId: string | null }>;
+          };
+          onboarding: {
+            effectiveScopePolicy: {
+              userIds: string[];
+              projectIds: string[];
+              tagIds: string[];
+            };
+          };
+        };
+      }
+    ).overview;
+    assert.deepEqual(overview.snapshot.userScope.selectedUserIds, [
+      "user_forge_bot"
+    ]);
+    assert.ok(
+      overview.snapshot.goals.every((goal) => goal.userId === "user_forge_bot")
+    );
+    assert.deepEqual(overview.onboarding.effectiveScopePolicy, {
+      userIds: ["user_forge_bot"],
+      projectIds: [],
+      tagIds: []
+    });
+
+    const narrowedToNoneResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/operator/context?userIds=user_operator",
+      headers: {
+        authorization: `Bearer ${token}`
+      }
+    });
+    assert.equal(narrowedToNoneResponse.statusCode, 200);
+    const narrowedToNone = (
+      narrowedToNoneResponse.json() as {
+        context: {
+          activeProjects: Array<unknown>;
+          focusTasks: Array<unknown>;
+          currentBoard: {
+            backlog: Array<unknown>;
+            focus: Array<unknown>;
+            inProgress: Array<unknown>;
+            blocked: Array<unknown>;
+            done: Array<unknown>;
+          };
+          recentActivity: Array<unknown>;
+          recentTaskRuns: Array<unknown>;
+        };
+      }
+    ).context;
+    assert.equal(narrowedToNone.activeProjects.length, 0);
+    assert.equal(narrowedToNone.focusTasks.length, 0);
+    assert.equal(narrowedToNone.currentBoard.backlog.length, 0);
+    assert.equal(narrowedToNone.currentBoard.focus.length, 0);
+    assert.equal(narrowedToNone.currentBoard.inProgress.length, 0);
+    assert.equal(narrowedToNone.currentBoard.blocked.length, 0);
+    assert.equal(narrowedToNone.currentBoard.done.length, 0);
+    assert.equal(narrowedToNone.recentActivity.length, 0);
+    assert.equal(narrowedToNone.recentTaskRuns.length, 0);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("mobile health sync builds richer summaries and reconciles habit-generated workouts", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-mobile-health-"));
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
@@ -14968,7 +15177,12 @@ test("settings and local agent token management persist through the versioned AP
       },
       payload: {
         label: "Forge Pilot",
-        scopes: ["read", "write"]
+        scopes: ["read", "write"],
+        scopePolicy: {
+          userIds: ["user_operator", "user_forge_bot"],
+          projectIds: [],
+          tagIds: []
+        }
       }
     });
     assert.equal(createdToken.statusCode, 201);
@@ -14983,6 +15197,11 @@ test("settings and local agent token management persist through the versioned AP
             projectsLimit: number;
             tasksLimit: number;
           };
+          scopePolicy: {
+            userIds: string[];
+            projectIds: string[];
+            tagIds: string[];
+          };
         };
       };
     };
@@ -14996,6 +15215,11 @@ test("settings and local agent token management persist through the versioned AP
       createdTokenBody.token.tokenSummary.bootstrapPolicy.projectsLimit,
       8
     );
+    assert.deepEqual(createdTokenBody.token.tokenSummary.scopePolicy, {
+      userIds: ["user_operator", "user_forge_bot"],
+      projectIds: [],
+      tagIds: []
+    });
 
     const settingsViaToken = await app.inject({
       method: "GET",
@@ -15064,6 +15288,16 @@ test("settings and local agent token management persist through the versioned AP
           mode: string;
           projectsLimit: number;
           tasksLimit: number;
+        };
+        defaultScopePolicy: {
+          userIds: string[];
+          projectIds: string[];
+          tagIds: string[];
+        };
+        effectiveScopePolicy: {
+          userIds: string[];
+          projectIds: string[];
+          tagIds: string[];
         };
         authModes: { operatorSession: { tokenRequired: boolean } };
         tokenRecovery: {
@@ -15198,6 +15432,16 @@ test("settings and local agent token management persist through the versioned AP
       onboardingBody.onboarding.effectiveBootstrapPolicy.mode,
       "active_only"
     );
+    assert.deepEqual(onboardingBody.onboarding.defaultScopePolicy, {
+      userIds: [],
+      projectIds: [],
+      tagIds: []
+    });
+    assert.deepEqual(onboardingBody.onboarding.effectiveScopePolicy, {
+      userIds: [],
+      projectIds: [],
+      tagIds: []
+    });
     assert.deepEqual(onboardingBody.onboarding.recommendedScopes, [
       "read",
       "write",
@@ -15238,12 +15482,36 @@ test("settings and local agent token management persist through the versioned AP
     assert.equal(
       (
         onboardingViaToken.json() as {
-          onboarding: {
+        onboarding: {
             effectiveBootstrapPolicy: { mode: string; tasksLimit: number };
+            effectiveScopePolicy: {
+              userIds: string[];
+              projectIds: string[];
+              tagIds: string[];
+            };
           };
         }
       ).onboarding.effectiveBootstrapPolicy.mode,
       "active_only"
+    );
+    assert.deepEqual(
+      (
+        onboardingViaToken.json() as {
+          onboarding: {
+            effectiveBootstrapPolicy: { mode: string; tasksLimit: number };
+            effectiveScopePolicy: {
+              userIds: string[];
+              projectIds: string[];
+              tagIds: string[];
+            };
+          };
+        }
+      ).onboarding.effectiveScopePolicy,
+      {
+        userIds: ["user_operator", "user_forge_bot"],
+        projectIds: [],
+        tagIds: []
+      }
     );
     assert.match(
       onboardingBody.onboarding.conceptModel.goal,
