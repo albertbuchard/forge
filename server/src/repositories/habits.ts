@@ -45,6 +45,7 @@ import {
   type HabitListQuery,
   type UpdateHabitInput
 } from "../types.js";
+import { formatLocalDateKey } from "../../../src/lib/date-keys.js";
 
 type HabitRow = {
   id: string;
@@ -89,7 +90,7 @@ type ActivityContext = {
 };
 
 function todayKey(now = new Date()) {
-  return now.toISOString().slice(0, 10);
+  return formatLocalDateKey(now);
 }
 
 function parseWeekDays(raw: string): number[] {
@@ -212,28 +213,26 @@ function calculateStreak(
   }
 
   const isScheduledOn = (date: Date) =>
-    habit.frequency === "daily" || habit.weekDays.includes(date.getUTCDay());
-  const toDateKey = (date: Date) => date.toISOString().slice(0, 10);
-  const atUtcDayStart = (date: Date) =>
-    new Date(
-      Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
-    );
+    habit.frequency === "daily" || habit.weekDays.includes(date.getDay());
+  const toDateKey = (date: Date) => formatLocalDateKey(date);
+  const atLocalDayStart = (date: Date) =>
+    new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const previousScheduledDate = (date: Date) => {
-    const cursor = atUtcDayStart(date);
+    const cursor = atLocalDayStart(date);
     do {
-      cursor.setUTCDate(cursor.getUTCDate() - 1);
+      cursor.setDate(cursor.getDate() - 1);
     } while (!isScheduledOn(cursor));
     return cursor;
   };
-  const startOfUtcWeek = (date: Date) => {
-    const start = atUtcDayStart(date);
-    const offset = (start.getUTCDay() + 6) % 7;
-    start.setUTCDate(start.getUTCDate() - offset);
+  const startOfLocalWeek = (date: Date) => {
+    const start = atLocalDayStart(date);
+    const offset = (start.getDay() + 6) % 7;
+    start.setDate(start.getDate() - offset);
     return start;
   };
-  const previousUtcWeek = (date: Date) => {
-    const start = startOfUtcWeek(date);
-    start.setUTCDate(start.getUTCDate() - 7);
+  const previousLocalWeek = (date: Date) => {
+    const start = startOfLocalWeek(date);
+    start.setDate(start.getDate() - 7);
     return start;
   };
   const alignedStatusOn = (date: Date) => {
@@ -242,7 +241,7 @@ function calculateStreak(
   };
 
   if (habit.frequency === "daily") {
-    const today = atUtcDayStart(now);
+    const today = atLocalDayStart(now);
     let cursor =
       isScheduledOn(today) && !statusByDate.has(toDateKey(today))
         ? previousScheduledDate(today)
@@ -260,7 +259,7 @@ function calculateStreak(
     let count = 0;
     for (let offset = 0; offset < 7; offset += 1) {
       const day = new Date(weekStart);
-      day.setUTCDate(weekStart.getUTCDate() + offset);
+      day.setDate(weekStart.getDate() + offset);
       if (isScheduledOn(day) && alignedStatusOn(day)) {
         count += 1;
       }
@@ -268,16 +267,16 @@ function calculateStreak(
     return count;
   };
 
-  const currentWeekStart = startOfUtcWeek(now);
+  const currentWeekStart = startOfLocalWeek(now);
   let cursor =
     alignedCountForWeek(currentWeekStart) >= habit.targetCount
       ? currentWeekStart
-      : previousUtcWeek(currentWeekStart);
+      : previousLocalWeek(currentWeekStart);
   let streak = 0;
 
   while (alignedCountForWeek(cursor) >= habit.targetCount) {
     streak += 1;
-    cursor = previousUtcWeek(cursor);
+    cursor = previousLocalWeek(cursor);
   }
 
   return streak;
@@ -298,7 +297,7 @@ function isHabitDueToday(
   if (habit.frequency === "daily") {
     return true;
   }
-  return habit.weekDays.includes(now.getUTCDay());
+  return habit.weekDays.includes(now.getDay());
 }
 
 function mapHabit(
@@ -325,12 +324,18 @@ function mapHabit(
     frequency: row.frequency,
     targetCount: row.target_count,
     weekDays: parseWeekDays(row.week_days_json),
-    linkedGoalIds: filterDeletedIds("goal", parseIdList(row.linked_goal_ids_json)),
+    linkedGoalIds: filterDeletedIds(
+      "goal",
+      parseIdList(row.linked_goal_ids_json)
+    ),
     linkedProjectIds: filterDeletedIds(
       "project",
       parseIdList(row.linked_project_ids_json)
     ),
-    linkedTaskIds: filterDeletedIds("task", parseIdList(row.linked_task_ids_json)),
+    linkedTaskIds: filterDeletedIds(
+      "task",
+      parseIdList(row.linked_task_ids_json)
+    ),
     linkedValueIds: parseIdList(row.linked_value_ids_json),
     linkedPatternIds: parseIdList(row.linked_pattern_ids_json),
     linkedBehaviorIds,
@@ -406,8 +411,9 @@ function sortHabits(habits: Habit[], orderBy: HabitListQuery["orderBy"]) {
   nextHabits.sort((left, right) => {
     if (orderBy === "name") {
       return (
-        left.title.localeCompare(right.title, undefined, { sensitivity: "base" }) ||
-        compareDateDesc(left.createdAt, right.createdAt)
+        left.title.localeCompare(right.title, undefined, {
+          sensitivity: "base"
+        }) || compareDateDesc(left.createdAt, right.createdAt)
       );
     }
 
@@ -415,21 +421,27 @@ function sortHabits(habits: Habit[], orderBy: HabitListQuery["orderBy"]) {
       return (
         right.streakCount - left.streakCount ||
         Number(right.dueToday) - Number(left.dueToday) ||
-        left.title.localeCompare(right.title, undefined, { sensitivity: "base" })
+        left.title.localeCompare(right.title, undefined, {
+          sensitivity: "base"
+        })
       );
     }
 
     if (orderBy === "created_at") {
       return (
         compareDateDesc(left.createdAt, right.createdAt) ||
-        left.title.localeCompare(right.title, undefined, { sensitivity: "base" })
+        left.title.localeCompare(right.title, undefined, {
+          sensitivity: "base"
+        })
       );
     }
 
     if (orderBy === "updated_at") {
       return (
         compareDateDesc(left.updatedAt, right.updatedAt) ||
-        left.title.localeCompare(right.title, undefined, { sensitivity: "base" })
+        left.title.localeCompare(right.title, undefined, {
+          sensitivity: "base"
+        })
       );
     }
 

@@ -1,10 +1,17 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { HabitsPage } from "@/pages/habits-page";
+import { formatLocalDateKey } from "@/lib/date-keys";
 import type { Habit } from "@/lib/types";
 
 const {
@@ -41,10 +48,9 @@ vi.mock("@/lib/api", () => ({
 }));
 
 vi.mock("@/components/shell/app-shell", async () => {
-  const actual =
-    await vi.importActual<typeof import("@/components/shell/app-shell")>(
-      "@/components/shell/app-shell"
-    );
+  const actual = await vi.importActual<
+    typeof import("@/components/shell/app-shell")
+  >("@/components/shell/app-shell");
   return {
     ...actual,
     useForgeShell: useForgeShellMock
@@ -52,7 +58,9 @@ vi.mock("@/components/shell/app-shell", async () => {
 });
 
 vi.mock("@/components/notes/entity-note-count-link", () => ({
-  EntityNoteCountLink: ({ count }: { count: number }) => <div>{count} notes</div>
+  EntityNoteCountLink: ({ count }: { count: number }) => (
+    <div>{count} notes</div>
+  )
 }));
 
 vi.mock("@/components/notes/note-markdown", () => ({
@@ -174,6 +182,7 @@ function renderWithProviders() {
 
 describe("HabitsPage", () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.clearAllMocks();
   });
 
@@ -311,7 +320,12 @@ describe("HabitsPage", () => {
   });
 
   it("treats a resisted negative habit as the green aligned history state", async () => {
-    const todayKey = new Date().toISOString().slice(0, 10);
+    const todayKey = formatLocalDateKey(new Date());
+    const [year, month, day] = todayKey.split("-").map(Number);
+    const todayLabel = new Intl.DateTimeFormat(undefined, {
+      month: "short",
+      day: "numeric"
+    }).format(new Date(year, month - 1, day));
     listHabitsMock.mockResolvedValue({
       habits: [
         createHabit({
@@ -356,9 +370,14 @@ describe("HabitsPage", () => {
 
     await screen.findByText("Late-night doomscrolling");
 
-    fireEvent.click(
-      screen.getAllByRole("button", { name: /log check-in for/i }).at(-1)!
+    const rightmostHistoryButton = screen
+      .getAllByRole("button", { name: /log check-in for/i })
+      .at(-1)!;
+    expect(rightmostHistoryButton).toHaveAttribute(
+      "aria-label",
+      `Log check-in for ${todayLabel}`
     );
+    fireEvent.click(rightmostHistoryButton);
 
     const dialog = await screen.findByRole("dialog");
     const dialogScreen = within(dialog);
@@ -375,6 +394,7 @@ describe("HabitsPage", () => {
   });
 
   it("saves resisted for a negative habit as the aligned missed status", async () => {
+    const todayKey = formatLocalDateKey(new Date());
     createHabitCheckInMock.mockResolvedValue({
       habit: createHabit({
         id: "habit_negative",
@@ -420,7 +440,7 @@ describe("HabitsPage", () => {
     await waitFor(() => {
       expect(createHabitCheckInMock).toHaveBeenCalledWith("habit_negative", {
         status: "missed",
-        dateKey: undefined,
+        dateKey: todayKey,
         note: undefined
       });
     });
@@ -461,11 +481,21 @@ describe("HabitsPage", () => {
 
     renderWithProviders();
 
-    expect((await screen.findAllByText("Habit AP due")).length).toBeGreaterThan(0);
-    expect((await screen.findAllByText("Life Force sync")).length).toBeGreaterThan(0);
-    expect((await screen.findAllByText("3 AP check-in")).length).toBeGreaterThan(0);
-    expect((await screen.findAllByText("18 AP workout")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Habit AP due")).length).toBeGreaterThan(
+      0
+    );
+    expect(
+      (await screen.findAllByText("Life Force sync")).length
+    ).toBeGreaterThan(0);
+    expect(
+      (await screen.findAllByText("3 AP check-in")).length
+    ).toBeGreaterThan(0);
+    expect(
+      (await screen.findAllByText("18 AP workout")).length
+    ).toBeGreaterThan(0);
     expect((await screen.findAllByText("24 AP/h")).length).toBeGreaterThan(0);
-    expect((await screen.findAllByText("72 AP / 210 AP")).length).toBeGreaterThan(0);
+    expect(
+      (await screen.findAllByText("72 AP / 210 AP")).length
+    ).toBeGreaterThan(0);
   });
 });

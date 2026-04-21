@@ -53,6 +53,7 @@ import {
 import type { HabitMutationInput } from "@/lib/schemas";
 import type { Habit } from "@/lib/types";
 import { ForgeApiError } from "@/lib/api-error";
+import { formatLocalDateKey } from "@/lib/date-keys";
 import { getEntityNotesSummary } from "@/lib/note-helpers";
 import {
   coerceSelectedUserIds,
@@ -115,30 +116,28 @@ function formatHabitCadence(habit: Habit) {
 }
 
 function formatDateKey(date: Date) {
-  return date.toISOString().slice(0, 10);
+  return formatLocalDateKey(date);
 }
 
 function parseDateKey(dateKey: string) {
   const [year, month, day] = dateKey.split("-").map(Number);
-  return new Date(Date.UTC(year, month - 1, day));
+  return new Date(year, month - 1, day);
 }
 
-function startOfUtcDay(date: Date) {
-  return new Date(
-    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
-  );
+function startOfLocalDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
-function addUtcDays(date: Date, days: number) {
+function addLocalDays(date: Date, days: number) {
   const next = new Date(date);
-  next.setUTCDate(next.getUTCDate() + days);
+  next.setDate(next.getDate() + days);
   return next;
 }
 
-function startOfUtcWeek(date: Date) {
-  const start = startOfUtcDay(date);
-  const offset = (start.getUTCDay() + 6) % 7;
-  start.setUTCDate(start.getUTCDate() - offset);
+function startOfLocalWeek(date: Date) {
+  const start = startOfLocalDay(date);
+  const offset = (start.getDay() + 6) % 7;
+  start.setDate(start.getDate() - offset);
   return start;
 }
 
@@ -146,8 +145,7 @@ function formatUtcShortDate(value: Date | string) {
   const date = typeof value === "string" ? parseDateKey(value) : value;
   return new Intl.DateTimeFormat(undefined, {
     month: "short",
-    day: "numeric",
-    timeZone: "UTC"
+    day: "numeric"
   }).format(date);
 }
 
@@ -298,15 +296,15 @@ function buildHabitHistory(habit: Habit) {
   const now = new Date();
 
   if (habit.frequency === "daily") {
-    const today = startOfUtcDay(now);
+    const today = startOfLocalDay(now);
     const cells: HabitHistoryCell[] = [];
 
     for (let offset = -6; offset <= 0; offset += 1) {
-      const date = addUtcDays(today, offset);
+      const date = addLocalDays(today, offset);
       const dateKey = formatDateKey(date);
       const checkIn =
         habit.checkIns.find((entry) => entry.dateKey === dateKey) ?? null;
-      const label = DAILY_HISTORY_LABELS[date.getUTCDay()];
+      const label = DAILY_HISTORY_LABELS[date.getDay()];
       const current = offset === 0;
 
       cells.push({
@@ -334,12 +332,12 @@ function buildHabitHistory(habit: Habit) {
     };
   }
 
-  const thisWeek = startOfUtcWeek(now);
+  const thisWeek = startOfLocalWeek(now);
   const weekBuckets = new Map<string, Habit["checkIns"]>();
 
   for (const checkIn of habit.checkIns) {
     const weekStart = formatDateKey(
-      startOfUtcWeek(parseDateKey(checkIn.dateKey))
+      startOfLocalWeek(parseDateKey(checkIn.dateKey))
     );
     const entries = weekBuckets.get(weekStart) ?? [];
     entries.push(checkIn);
@@ -349,7 +347,7 @@ function buildHabitHistory(habit: Habit) {
   const cells: HabitHistoryCell[] = [];
 
   for (let offset = -6; offset <= 0; offset += 1) {
-    const weekStart = addUtcDays(thisWeek, offset * 7);
+    const weekStart = addLocalDays(thisWeek, offset * 7);
     const weekKey = formatDateKey(weekStart);
     const entries = weekBuckets.get(weekKey) ?? [];
     const scheduledWeekDay =
@@ -357,7 +355,7 @@ function buildHabitHistory(habit: Habit) {
         ? [...habit.weekDays].sort((left, right) => right - left)[0]
         : 0;
     const fallbackDateKey = formatDateKey(
-      addUtcDays(weekStart, scheduledWeekDay)
+      addLocalDays(weekStart, scheduledWeekDay)
     );
     const targetDateKey = entries[0]?.dateKey ?? fallbackDateKey;
     const alignedCount = entries.filter((entry) =>
@@ -385,7 +383,7 @@ function buildHabitHistory(habit: Habit) {
     caption: "7-week rhythm",
     rangeLabel: "Past 7 weeks",
     showLabels: false,
-    startLabel: formatUtcShortDate(addUtcDays(thisWeek, -42)),
+    startLabel: formatUtcShortDate(addLocalDays(thisWeek, -42)),
     endLabel: "This week",
     cells
   };
@@ -1261,7 +1259,8 @@ export function HabitsPage() {
                         onClick={() =>
                           void checkInMutation.mutateAsync({
                             habitId: habit.id,
-                            status: alignedAction.status
+                            status: alignedAction.status,
+                            dateKey: formatDateKey(new Date())
                           })
                         }
                       >
@@ -1278,7 +1277,8 @@ export function HabitsPage() {
                         onClick={() =>
                           void checkInMutation.mutateAsync({
                             habitId: habit.id,
-                            status: unalignedAction.status
+                            status: unalignedAction.status,
+                            dateKey: formatDateKey(new Date())
                           })
                         }
                       >

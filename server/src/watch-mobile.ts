@@ -10,6 +10,7 @@ import {
   updateMovementPlace
 } from "./movement.js";
 import { listHabits } from "./repositories/habits.js";
+import { formatLocalDateKey } from "../../src/lib/date-keys.js";
 
 const watchCapability = "watch-ready";
 const watchHistoryStateSchema = z.enum(["aligned", "unaligned", "unknown"]);
@@ -67,7 +68,11 @@ export const mobileWatchHabitCheckInSchema = z.object({
   sessionId: z.string().trim().min(1),
   pairingToken: z.string().trim().min(1),
   dedupeKey: z.string().trim().min(1),
-  dateKey: z.string().trim().min(1).default(new Date().toISOString().slice(0, 10)),
+  dateKey: z
+    .string()
+    .trim()
+    .min(1)
+    .default(() => formatLocalDateKey()),
   status: z.enum(["done", "missed"]),
   note: z.string().trim().default(""),
   description: z.string().trim().optional()
@@ -148,30 +153,28 @@ function nowIso() {
 }
 
 function formatDateKey(date: Date) {
-  return date.toISOString().slice(0, 10);
+  return formatLocalDateKey(date);
 }
 
 function parseDateKey(dateKey: string) {
   const [year, month, day] = dateKey.split("-").map(Number);
-  return new Date(Date.UTC(year, month - 1, day));
+  return new Date(year, month - 1, day);
 }
 
-function startOfUtcDay(date: Date) {
-  return new Date(
-    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
-  );
+function startOfLocalDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
-function addUtcDays(date: Date, days: number) {
+function addLocalDays(date: Date, days: number) {
   const next = new Date(date);
-  next.setUTCDate(next.getUTCDate() + days);
+  next.setDate(next.getDate() + days);
   return next;
 }
 
-function startOfUtcWeek(date: Date) {
-  const start = startOfUtcDay(date);
-  const offset = (start.getUTCDay() + 6) % 7;
-  start.setUTCDate(start.getUTCDate() - offset);
+function startOfLocalWeek(date: Date) {
+  const start = startOfLocalDay(date);
+  const offset = (start.getDay() + 6) % 7;
+  start.setDate(start.getDate() - offset);
   return start;
 }
 
@@ -206,25 +209,29 @@ function formatCadenceLabel(habit: {
   return `${habit.targetCount}x weekly${labels ? ` · ${labels}` : ""}`;
 }
 
-function buildHabitHistory(habit: {
-  frequency: "daily" | "weekly";
-  polarity: "positive" | "negative";
-  checkIns: Array<{ dateKey: string; status: "done" | "missed" }>;
-}, options?: { anchorDateKey?: string }) {
+function buildHabitHistory(
+  habit: {
+    frequency: "daily" | "weekly";
+    polarity: "positive" | "negative";
+    checkIns: Array<{ dateKey: string; status: "done" | "missed" }>;
+  },
+  options?: { anchorDateKey?: string }
+) {
   const now = options?.anchorDateKey
     ? parseDateKey(options.anchorDateKey)
     : new Date();
 
   if (habit.frequency === "daily") {
-    const today = startOfUtcDay(now);
+    const today = startOfLocalDay(now);
     return Array.from({ length: 7 }, (_, index) => {
       const offset = index - 6;
-      const date = addUtcDays(today, offset);
+      const date = addLocalDays(today, offset);
       const dateKey = formatDateKey(date);
-      const checkIn = habit.checkIns.find((entry) => entry.dateKey === dateKey) ?? null;
+      const checkIn =
+        habit.checkIns.find((entry) => entry.dateKey === dateKey) ?? null;
       return {
         id: dateKey,
-        label: ["S", "M", "T", "W", "T", "F", "S"][date.getUTCDay()],
+        label: ["S", "M", "T", "W", "T", "F", "S"][date.getDay()],
         periodKey: dateKey,
         current: offset === 0,
         state: checkIn
@@ -236,13 +243,15 @@ function buildHabitHistory(habit: {
     });
   }
 
-  const thisWeek = startOfUtcWeek(now);
+  const thisWeek = startOfLocalWeek(now);
   return Array.from({ length: 7 }, (_, index) => {
     const offset = index - 6;
-    const weekStart = addUtcDays(thisWeek, offset * 7);
+    const weekStart = addLocalDays(thisWeek, offset * 7);
     const weekKey = formatDateKey(weekStart);
     const weekEntries = habit.checkIns.filter((entry) => {
-      const entryWeek = formatDateKey(startOfUtcWeek(parseDateKey(entry.dateKey)));
+      const entryWeek = formatDateKey(
+        startOfLocalWeek(parseDateKey(entry.dateKey))
+      );
       return entryWeek === weekKey;
     });
     const alignedCount = weekEntries.filter((entry) =>
@@ -342,28 +351,24 @@ const watchCategoryMap = new Map<string, string[]>([
 function recentPeopleLabels(userId: string) {
   const labels = new Set<string>();
   const sources = [
-    ...(
-      getDatabase()
-        .prepare(
-          `SELECT linked_people_json
+    ...(getDatabase()
+      .prepare(
+        `SELECT linked_people_json
            FROM movement_places
            WHERE user_id = ?
            ORDER BY updated_at DESC
            LIMIT 25`
-        )
-        .all(userId) as Array<{ linked_people_json: string }>
-    ),
-    ...(
-      getDatabase()
-        .prepare(
-          `SELECT linked_people_json
+      )
+      .all(userId) as Array<{ linked_people_json: string }>),
+    ...(getDatabase()
+      .prepare(
+        `SELECT linked_people_json
            FROM movement_trips
            WHERE user_id = ?
            ORDER BY started_at DESC
            LIMIT 25`
-        )
-        .all(userId) as Array<{ linked_people_json: string }>
-    )
+      )
+      .all(userId) as Array<{ linked_people_json: string }>)
   ];
 
   for (const source of sources) {
@@ -390,8 +395,12 @@ function recentPeopleLabels(userId: string) {
     )
     .all(userId) as Array<{ payload_json: string }>;
   for (const row of captureRows) {
-    const payload = safeJsonParse<Record<string, unknown>>(row.payload_json, {});
-    const label = typeof payload.personLabel === "string" ? payload.personLabel.trim() : "";
+    const payload = safeJsonParse<Record<string, unknown>>(
+      row.payload_json,
+      {}
+    );
+    const label =
+      typeof payload.personLabel === "string" ? payload.personLabel.trim() : "";
     if (label) {
       labels.add(label);
     }
@@ -514,7 +523,9 @@ function projectionForStoredEvent(
     const categoryCandidate = Array.isArray(event.payload.categoryTags)
       ? event.payload.categoryTags
       : typeof event.payload.category === "string"
-        ? watchCategoryMap.get(event.payload.category) ?? [event.payload.category]
+        ? (watchCategoryMap.get(event.payload.category) ?? [
+            event.payload.category
+          ])
         : [];
     const categoryTags = canonicalizeMovementCategoryTags(
       categoryCandidate.flatMap((value) =>
@@ -549,20 +560,29 @@ function projectionForStoredEvent(
         status: "projection_failed",
         details: {
           reason: "place_update_failed",
-          message: error instanceof Error ? error.message : "Unknown place update error"
+          message:
+            error instanceof Error
+              ? error.message
+              : "Unknown place update error"
         }
       };
     }
   }
 
-  if (event.eventType === "workout_annotation" && event.linkedContext.workoutId) {
+  if (
+    event.eventType === "workout_annotation" &&
+    event.linkedContext.workoutId
+  ) {
     try {
       const workout = updateWorkoutMetadata(
         event.linkedContext.workoutId,
         {
           subjectiveEffort:
             typeof event.payload.subjectiveEffort === "number"
-              ? Math.max(1, Math.min(10, Math.round(event.payload.subjectiveEffort)))
+              ? Math.max(
+                  1,
+                  Math.min(10, Math.round(event.payload.subjectiveEffort))
+                )
               : undefined,
           moodBefore:
             typeof event.payload.moodBefore === "string"
@@ -607,7 +627,10 @@ function projectionForStoredEvent(
         status: "projection_failed",
         details: {
           reason: "workout_update_failed",
-          message: error instanceof Error ? error.message : "Unknown workout update error"
+          message:
+            error instanceof Error
+              ? error.message
+              : "Unknown workout update error"
         }
       };
     }
@@ -620,7 +643,10 @@ function projectionForStoredEvent(
 }
 
 export function assertWatchReady(pairing: PairingSessionLike) {
-  const capabilities = safeJsonParse<string[]>(pairing.capability_flags_json, []);
+  const capabilities = safeJsonParse<string[]>(
+    pairing.capability_flags_json,
+    []
+  );
   if (!capabilities.includes(watchCapability)) {
     throw new HttpError(
       403,
@@ -636,7 +662,10 @@ export function buildWatchBootstrap(
 ) {
   assertWatchReady(pairing);
   const habits = listHabits({ status: "active", limit: 64 })
-    .filter((habit) => habit.userId === pairing.user_id || pairing.user_id === "user_operator")
+    .filter(
+      (habit) =>
+        habit.userId === pairing.user_id || pairing.user_id === "user_operator"
+    )
     .sort((left, right) => {
       if (left.dueToday !== right.dueToday) {
         return Number(right.dueToday) - Number(left.dueToday);

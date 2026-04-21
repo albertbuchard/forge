@@ -4,6 +4,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { formatLocalDateKey } from "../../src/lib/date-keys.js";
 import { buildServer } from "./app.js";
 import { closeDatabase, configureDatabase, getDatabase } from "./db.js";
 import { BackgroundJobManager } from "./managers/platform/background-job-manager.js";
@@ -5638,7 +5639,7 @@ test("watch bootstrap serves compact habit state and watch habit check-ins prese
     path.join(os.tmpdir(), "forge-watch-bootstrap-")
   );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
-  const currentDateKey = new Date().toISOString().slice(0, 10);
+  const currentDateKey = formatLocalDateKey();
 
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
@@ -5818,6 +5819,12 @@ test("watch bootstrap serves compact habit state and watch habit check-ins prese
         ?.currentPeriodStatus,
       "aligned"
     );
+    const positiveWatchHabit = positiveCheckIn.watch.habits.find(
+      (habit) => habit.id === positiveHabitId
+    );
+    assert.equal(positiveWatchHabit?.last7History.at(-1)?.current, true);
+    assert.equal(positiveWatchHabit?.last7History.at(-1)?.periodKey, currentDateKey);
+    assert.equal(positiveWatchHabit?.last7History.at(-1)?.state, "aligned");
 
     const negativeCheckInResponse = await app.inject({
       method: "POST",
@@ -9570,8 +9577,8 @@ test("habit streaks use consecutive cadence windows instead of raw aligned check
   const fixedNow = new RealDate("2026-04-09T12:00:00.000Z");
 
   class MockDate extends RealDate {
-    constructor(value?: ConstructorParameters<typeof Date>[0]) {
-      super(value ?? fixedNow.toISOString());
+    constructor(...value: ConstructorParameters<typeof Date>) {
+      super(...(value.length > 0 ? value : [fixedNow.toISOString()]));
     }
 
     static now() {
