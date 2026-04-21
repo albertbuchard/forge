@@ -8,7 +8,7 @@ OpenClaw install note:
 - `openclaw plugins enable forge-openclaw-plugin` is not always enough by itself.
 - If `forge-openclaw-plugin` is missing from `plugins.allow`, OpenClaw can still refuse to load it.
 - The install section below includes the `node -e ...` step that repairs `plugins.allow` safely.
-- On some OpenClaw `2026.4.x` builds, `plugins install` can still block Forge because the package launches a local Forge runtime and gets flagged as dangerous by the installer scanner. I am trying to get a better long-term path upstream. A concise temporary bypass is included below.
+- I re-verified on April 21, 2026 that OpenClaw `2026.4.15` still blocks both the published package install and the repo-local install because Forge launches a local runtime and gets flagged by the installer scanner. The bypass sections below are still current.
 
 ## Open the UI
 
@@ -225,7 +225,7 @@ openclaw gateway restart
 openclaw forge health
 ```
 
-If the install path is blocked on your OpenClaw build, use this temporary npm bypass instead:
+If the install path is blocked on your OpenClaw build, use this temporary npm bypass instead. This is still required on OpenClaw `2026.4.15` as of April 21, 2026:
 
 ```bash
 npm install -g forge-openclaw-plugin
@@ -235,7 +235,7 @@ openclaw plugins info forge-openclaw-plugin
 openclaw forge health
 ```
 
-That bypass still uses the published npm package. It just tells OpenClaw to load the npm-installed folder directly from `plugins.load.paths`, which avoids the current installer regression on some builds.
+That bypass still uses the published npm package. It just tells OpenClaw to load the npm-installed folder directly from `plugins.load.paths`, which avoids the installer block that still happens on OpenClaw `2026.4.15`.
 
 `openclaw plugins enable forge-openclaw-plugin` marks the plugin enabled, but it does not guarantee that `plugins.allow` was repaired. The `node -e ...` command above preserves the current allow list and appends `"forge-openclaw-plugin"` if it is missing.
 
@@ -249,8 +249,8 @@ openclaw gateway restart
 openclaw forge health
 ```
 
-If your current OpenClaw build blocks that repo-local install because of the package
-scanner, keep the repo folder on `plugins.load.paths`, make sure
+OpenClaw `2026.4.15` still blocks that repo-local install on this machine, so keep
+the repo folder on `plugins.load.paths`, make sure
 `openclaw plugins info forge-openclaw-plugin` still points at the local Forge source
 path, then restart the gateway and verify health. That fallback still keeps OpenClaw
 on the local code folder instead of switching to the published package.

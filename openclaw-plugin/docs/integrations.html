@@ -109,7 +109,11 @@ openclaw gateway restart
 openclaw forge health</code></pre>
             </article>
             <article class="card">
-              <h3>Temporary bypass (`2026.4.x`)</h3>
+              <h3>Temporary bypass (`2026.4.15` still blocked)</h3>
+              <p>
+                Re-verified on April 21, 2026 for OpenClaw
+                <code>2026.4.15</code>.
+              </p>
               <pre><code>npm install -g forge-openclaw-plugin
 node -e 'const cp=require("child_process"); const fs=require("fs"); const path=require("path"); const p=process.env.HOME+"/.openclaw/openclaw.json"; const j=JSON.parse(fs.readFileSync(p,"utf8")); const pluginPath=path.join(cp.execSync("npm root -g",{encoding:"utf8"}).trim(),"forge-openclaw-plugin"); j.plugins ??= {}; j.plugins.allow = Array.from(new Set([...(j.plugins.allow || []), "forge-openclaw-plugin"])); j.plugins.load ??= {}; j.plugins.load.paths = Array.from(new Set([...(j.plugins.load.paths || []), pluginPath])); j.plugins.entries ??= {}; j.plugins.entries["forge-openclaw-plugin"] = { enabled: true, config: { origin: "http://127.0.0.1", port: 4317, actorLabel: "aurel", timeoutMs: 15000 } }; fs.writeFileSync(p, JSON.stringify(j, null, 2)+"\n"); console.log("Configured", pluginPath);'
 openclaw gateway restart

@@ -26,7 +26,7 @@ openclaw gateway restart
 openclaw forge health
 ```
 
-If the plugin installs but does not load, the usual missing step is `plugins.allow`. If your OpenClaw `2026.4.x` build blocks the normal install path, use the fallback flow in the [Integrations guide](https://albertbuchard.github.io/forge/integrations.html#openclaw).
+If the plugin installs but does not load, the usual missing step is `plugins.allow`. I re-verified on April 21, 2026 that OpenClaw `2026.4.15` still blocks the normal install path, so keep using the fallback flow in the [Integrations guide](https://albertbuchard.github.io/forge/integrations.html#openclaw) when `plugins install` is rejected by the scanner.
 
 ### Run Forge Locally
 

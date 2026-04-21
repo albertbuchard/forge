@@ -319,15 +319,15 @@ openclaw gateway restart
 openclaw forge health
 ```
 
-If that repo-local install is blocked by the current OpenClaw package scanner, keep
+OpenClaw `2026.4.15` still blocks that repo-local install on this machine, so keep
 the repo folder on `plugins.load.paths`, verify
 `openclaw plugins info forge-openclaw-plugin` still resolves to the local Forge source
 path, then restart the gateway and re-run health. That preserves the repo-local plugin
 workflow without switching to the published package.
 
-Temporary bypass for some OpenClaw `2026.4.x` builds:
+Temporary bypass for OpenClaw `2026.4.15` and similar `2026.4.x` builds:
 
-Some recent OpenClaw versions can still block Forge during `plugins install`, even though Forge is a legitimate local-runtime plugin. The installer currently flags the package as dangerous because it launches the local Forge runtime and proxies to the localhost API. I am trying to get a better long-term install story upstream. Until then, the most reliable fallback is:
+I re-verified on April 21, 2026 that OpenClaw `2026.4.15` still blocks Forge during both the published-package install path and the repo-local install path. The installer still flags the plugin as dangerous because it launches the local Forge runtime and proxies to the localhost API. Until that changes upstream, the most reliable published-package fallback is:
 
 ```bash
 npm install -g forge-openclaw-plugin
@@ -337,7 +337,7 @@ openclaw plugins info forge-openclaw-plugin
 openclaw forge health
 ```
 
-That bypass still uses the published npm package. It avoids the current installer regression by loading the npm-installed folder from `plugins.load.paths` instead of relying on the blocked `plugins install` flow.
+That bypass still uses the published npm package. It avoids the installer block by loading the npm-installed folder from `plugins.load.paths` instead of relying on the still-blocked `plugins install` flow.
 
 `openclaw plugins enable forge-openclaw-plugin` sets the enabled flag, but it does not by itself guarantee that `plugins.allow` contains the plugin id. The `node -e ...` command above preserves the current allow list and appends `"forge-openclaw-plugin"` if it is missing.
 
