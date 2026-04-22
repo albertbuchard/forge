@@ -1,4 +1,4 @@
-Forge Companion 1.0.23 keeps merged canonical stays stable in the paired timeline,
+Forge Companion 1.0.24 keeps merged canonical stays stable in the paired timeline,
 preserving shared raw stay identifiers across coalesced visits so stay continuity and
-place relabeling survive sync repairs. This release also restores the ASC-based CI
-auth path used for TestFlight publishing.
+place relabeling survive sync repairs. This release also restores ASC-authenticated
+export signing in the CI TestFlight publish flow.
