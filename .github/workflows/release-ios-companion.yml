@@ -187,7 +187,34 @@ jobs:
           FORGE_IOS_SKIP_REPO_RELEASE_CHECKS: "1"
           FORGE_IOS_SKIP_FASTLANE_SETUP_CI: "1"
           RELEASE_MODE: ${{ steps.release_meta.outputs.release_mode }}
-        run: ./ios-companion/scripts/publish-forge-companion.sh "${RELEASE_MODE}"
+        run: |
+          set +e
+          ./ios-companion/scripts/publish-forge-companion.sh "${RELEASE_MODE}"
+          release_exit_code=$?
+          set -e
+
+          if [[ "${release_exit_code}" -ne 0 ]]; then
+            latest_gym_log="$(find "${HOME}/Library/Logs/gym" -maxdepth 1 -type f -name '*.log' -print 2>/dev/null | sort | tail -n 1)"
+            if [[ -n "${latest_gym_log}" && -f "${latest_gym_log}" ]]; then
+              echo "Latest gym log: ${latest_gym_log}"
+              echo "Last 120 lines from ${latest_gym_log}:"
+              tail -n 120 "${latest_gym_log}" || true
+              {
+                echo "## Forge iOS gym log tail"
+                echo
+                echo '```text'
+                tail -n 120 "${latest_gym_log}" || true
+                echo '```'
+              } >> "${GITHUB_STEP_SUMMARY}"
+              while IFS= read -r line; do
+                printf '::error title=Forge iOS gym log::%s\n' "${line}"
+              done < <(tail -n 25 "${latest_gym_log}" || true)
+            else
+              echo "::error title=Forge iOS gym log::No gym log file was found under ~/Library/Logs/gym after the release failure."
+            fi
+          fi
+
+          exit "${release_exit_code}"
 
       - name: Upload release artifacts
         if: always()
