@@ -2601,6 +2601,92 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(pruned.map(\.id), ["error_old", "error_recent"])
     }
 
+    func testWorkoutActivityDescriptorNormalizesKnownAppleHealthCodes() async {
+        let store = HealthSyncStore()
+
+        let descriptor = await store.workoutActivityDescriptor(for: 52)
+
+        XCTAssertEqual(descriptor.sourceSystem, "apple_health")
+        XCTAssertEqual(descriptor.providerActivityType, "hk_workout_activity_type")
+        XCTAssertEqual(descriptor.providerRawValue, 52)
+        XCTAssertEqual(descriptor.canonicalKey, "walking")
+        XCTAssertEqual(descriptor.canonicalLabel, "Walking")
+        XCTAssertEqual(descriptor.familyKey, "cardio")
+        XCTAssertEqual(descriptor.familyLabel, "Cardio")
+        XCTAssertFalse(descriptor.isFallback)
+    }
+
+    func testWorkoutActivityDescriptorFallsBackForUnknownAppleHealthCodes() async {
+        let store = HealthSyncStore()
+
+        let descriptor = await store.workoutActivityDescriptor(for: 9999)
+
+        XCTAssertEqual(descriptor.providerRawValue, 9999)
+        XCTAssertEqual(descriptor.canonicalKey, "activity_9999")
+        XCTAssertEqual(descriptor.canonicalLabel, "Activity 9999")
+        XCTAssertEqual(descriptor.familyKey, "other")
+        XCTAssertEqual(descriptor.familyLabel, "Other")
+        XCTAssertTrue(descriptor.isFallback)
+    }
+
+    func testWorkoutDetailsEncodesMetricsEventsAndComponents() throws {
+        let payload = CompanionSyncPayload.WorkoutDetails(
+            sourceSystem: "apple_health",
+            metrics: [
+                .init(
+                    key: "average_speed",
+                    label: "Average speed",
+                    category: "cardio",
+                    unit: "km/h",
+                    statistic: "average",
+                    value: .number(5.1),
+                    startedAt: nil,
+                    endedAt: nil
+                )
+            ],
+            events: [
+                .init(
+                    type: "pause",
+                    label: "Pause",
+                    startedAt: "2026-04-07T07:33:00.000Z",
+                    endedAt: "2026-04-07T07:35:00.000Z",
+                    durationSeconds: 120,
+                    metadata: [:]
+                )
+            ],
+            components: [
+                .init(
+                    externalUid: "component_1",
+                    startedAt: "2026-04-07T07:50:00.000Z",
+                    endedAt: "2026-04-07T08:00:00.000Z",
+                    durationSeconds: 600,
+                    activity: .init(
+                        sourceSystem: "apple_health",
+                        providerActivityType: "hk_workout_activity_type",
+                        providerRawValue: 80,
+                        canonicalKey: "cooldown",
+                        canonicalLabel: "Cooldown",
+                        familyKey: "mobility",
+                        familyLabel: "Mobility",
+                        isFallback: false
+                    ),
+                    metrics: [],
+                    metadata: [:]
+                )
+            ],
+            metadata: [
+                "indoorWorkout": .boolean(false)
+            ]
+        )
+
+        let encoded = try JSONEncoder().encode(payload)
+        let rendered = try XCTUnwrap(String(data: encoded, encoding: .utf8))
+
+        XCTAssertTrue(rendered.contains("\\\"average_speed\\\""))
+        XCTAssertTrue(rendered.contains("\\\"pause\\\""))
+        XCTAssertTrue(rendered.contains("\\\"Cooldown\\\""))
+    }
+
     private func makeLocation(
         latitude: Double,
         longitude: Double,

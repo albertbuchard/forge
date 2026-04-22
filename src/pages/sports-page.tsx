@@ -51,6 +51,17 @@ type WorkoutDraft = {
   linkValues: string[];
 };
 
+function humanizeToken(value: string | null | undefined) {
+  if (!value) {
+    return "Unknown";
+  }
+  return value
+    .replace(/^activity_/i, "")
+    .replaceAll("_", " ")
+    .replace(/\s+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 function minutesLabel(seconds: number) {
   return `${Math.round(seconds / 60)}m`;
 }
@@ -95,10 +106,51 @@ function normalize(text: string) {
   return text.trim().toLowerCase();
 }
 
+function workoutTypeLabel(session: WorkoutSessionRecord) {
+  return session.workoutTypeLabel?.trim() || humanizeToken(session.workoutType);
+}
+
+function activityFamilyLabel(session: WorkoutSessionRecord) {
+  return session.activityFamilyLabel?.trim() || humanizeToken(session.activityFamily);
+}
+
+function sourceSystemLabel(session: WorkoutSessionRecord) {
+  return humanizeToken(session.sourceSystem ?? session.source);
+}
+
+function formatScalarValue(value: string | number | boolean | null | undefined) {
+  if (value == null) {
+    return "n/a";
+  }
+  if (typeof value === "boolean") {
+    return value ? "Yes" : "No";
+  }
+  if (typeof value === "number") {
+    return Number.isInteger(value) ? String(value) : value.toFixed(1);
+  }
+  return value;
+}
+
+function formatWorkoutMetric(metric: {
+  value: string | number | boolean | null;
+  unit: string;
+}) {
+  const base = formatScalarValue(metric.value);
+  if (!metric.unit || metric.unit === "count") {
+    return base;
+  }
+  return `${base} ${metric.unit}`;
+}
+
 function buildWorkoutSearchText(session: WorkoutSessionRecord, draft: WorkoutDraft) {
   return normalize(
     [
       session.workoutType,
+      workoutTypeLabel(session),
+      session.activityFamily,
+      activityFamilyLabel(session),
+      session.sourceSystem,
+      sourceSystemLabel(session),
       session.sourceType,
       session.sourceDevice,
       session.reconciliationStatus,
@@ -127,10 +179,10 @@ function createWorkoutFilterOptions(
   for (const session of sessions) {
     options.set(`workout:${session.workoutType}`, {
       id: `workout:${session.workoutType}`,
-      label: session.workoutType,
+      label: workoutTypeLabel(session),
       description: "Workout type",
-      searchText: `${session.workoutType} workout`,
-      badge: <Badge tone="meta">{session.workoutType}</Badge>
+      searchText: `${workoutTypeLabel(session)} workout`,
+      badge: <Badge tone="meta">{workoutTypeLabel(session)}</Badge>
     });
     options.set(`source:${session.sourceType}`, {
       id: `source:${session.sourceType}`,
@@ -258,7 +310,7 @@ function SportsSessionEditor({
           <div>
             <div className="flex items-center gap-2 text-lg text-white">
               <Dumbbell className="size-4 text-[var(--primary)]" />
-              <span>{session.workoutType}</span>
+              <span>{workoutTypeLabel(session)}</span>
             </div>
             <div className="mt-2 text-sm text-white/58">
               {formatWorkoutWindow(session.startedAt, session.endedAt)}
@@ -272,6 +324,7 @@ function SportsSessionEditor({
             {session.distanceMeters ? (
               <Badge tone="meta">{kilometersLabel(session.distanceMeters)}</Badge>
             ) : null}
+            <Badge tone="meta">{activityFamilyLabel(session)}</Badge>
             <Badge tone="meta" className="capitalize">
               {session.reconciliationStatus.replaceAll("_", " ")}
             </Badge>
@@ -311,15 +364,35 @@ function SportsSessionEditor({
           <div className="mt-4 grid gap-4">
             <div className="grid gap-3 md:grid-cols-3">
               <div className="rounded-[18px] bg-white/[0.04] p-4">
-                <div className="text-sm text-white/58">Source</div>
+                <div className="text-sm text-white/58">Activity family</div>
                 <div className="mt-2 text-lg text-white capitalize">
-                  {session.sourceType.replaceAll("_", " ")}
+                  {activityFamilyLabel(session)}
                 </div>
               </div>
+              <div className="rounded-[18px] bg-white/[0.04] p-4">
+                <div className="text-sm text-white/58">Source system</div>
+                <div className="mt-2 text-lg text-white">
+                  {sourceSystemLabel(session)}
+                </div>
+              </div>
+              <div className="rounded-[18px] bg-white/[0.04] p-4">
+                <div className="text-sm text-white/58">Source device</div>
+                <div className="mt-2 text-lg text-white">
+                  {session.sourceDevice || "n/a"}
+                </div>
+              </div>
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
               <div className="rounded-[18px] bg-white/[0.04] p-4">
                 <div className="text-sm text-white/58">Steps</div>
                 <div className="mt-2 text-lg text-white">
                   {session.stepCount ?? "n/a"}
+                </div>
+              </div>
+              <div className="rounded-[18px] bg-white/[0.04] p-4">
+                <div className="text-sm text-white/58">Avg HR</div>
+                <div className="mt-2 text-lg text-white">
+                  {session.averageHeartRate ? Math.round(session.averageHeartRate) : "n/a"}
                 </div>
               </div>
               <div className="rounded-[18px] bg-white/[0.04] p-4">
@@ -419,6 +492,88 @@ function SportsSessionEditor({
             />
           </div>
         ) : null}
+
+        <div className="mt-5 grid gap-4 border-t border-white/8 pt-5">
+          <div>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
+              Captured data
+            </div>
+            <div className="mt-2 text-sm leading-6 text-white/58">
+              Source-native workout metrics, events, and phases exposed through the adapter layer.
+            </div>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {(session.details?.metrics ?? []).slice(0, 12).map((metric) => (
+              <div
+                key={`${metric.category}:${metric.key}:${metric.statistic}`}
+                className="rounded-[18px] bg-white/[0.04] p-4"
+              >
+                <div className="text-sm text-white/58">{metric.label}</div>
+                <div className="mt-2 text-lg text-white">
+                  {formatWorkoutMetric(metric)}
+                </div>
+                <div className="mt-1 text-xs uppercase tracking-[0.14em] text-white/38">
+                  {humanizeToken(metric.category)} · {humanizeToken(metric.statistic)}
+                </div>
+              </div>
+            ))}
+            {(session.details?.metrics?.length ?? 0) === 0 ? (
+              <div className="rounded-[18px] bg-white/[0.04] p-4 text-sm text-white/50">
+                No provider metrics were captured for this session yet.
+              </div>
+            ) : null}
+          </div>
+          {(session.details?.events?.length ?? 0) > 0 ? (
+            <div className="grid gap-3">
+              <div className="text-sm text-white/58">Workout events</div>
+              <div className="grid gap-2">
+                {session.details?.events.map((event) => (
+                  <div
+                    key={`${event.type}:${event.startedAt}`}
+                    className="rounded-[18px] bg-white/[0.04] px-4 py-3"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-white">{event.label}</div>
+                      <Badge tone="meta">{minutesLabel(event.durationSeconds)}</Badge>
+                    </div>
+                    <div className="mt-1 text-sm text-white/56">
+                      {formatWorkoutWindow(
+                        event.startedAt,
+                        event.endedAt ?? event.startedAt
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {(session.details?.components?.length ?? 0) > 0 ? (
+            <div className="grid gap-3">
+              <div className="text-sm text-white/58">Workout phases</div>
+              <div className="grid gap-2">
+                {session.details?.components.map((component) => (
+                  <div
+                    key={component.externalUid}
+                    className="rounded-[18px] bg-white/[0.04] px-4 py-3"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-white">
+                        {component.activity.canonicalLabel}
+                      </div>
+                      <Badge tone="meta">{minutesLabel(component.durationSeconds)}</Badge>
+                    </div>
+                    <div className="mt-1 text-sm text-white/56">
+                      {formatWorkoutWindow(
+                        component.startedAt,
+                        component.endedAt ?? component.startedAt
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -745,7 +900,7 @@ export function SportsPage() {
             Top block
           </div>
           <div className="mt-3 text-xl text-white">
-            {summary.topWorkoutType ?? "n/a"}
+            {summary.topWorkoutTypeLabel ?? summary.topWorkoutType ?? "n/a"}
           </div>
           <div className="mt-2 text-sm text-white/58">
             Dominant workout type across the recent window.
@@ -767,7 +922,9 @@ export function SportsPage() {
                 className="grid gap-2 rounded-[18px] bg-white/[0.04] px-4 py-3 md:grid-cols-[110px_150px_minmax(0,1fr)_90px]"
               >
                 <div className="text-sm text-white/62">{session.dateKey}</div>
-                <div className="text-sm text-white">{session.workoutType}</div>
+                <div className="text-sm text-white">
+                  {session.workoutTypeLabel ?? humanizeToken(session.workoutType)}
+                </div>
                 <div className="flex items-center gap-3">
                   <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/[0.08]">
                     <div
@@ -823,9 +980,11 @@ export function SportsPage() {
                 className="grid gap-2 rounded-[18px] bg-white/[0.04] px-4 py-3 md:grid-cols-[minmax(0,1fr)_90px_90px]"
               >
                 <div>
-                  <div className="text-white">{entry.workoutType}</div>
+                  <div className="text-white">
+                    {entry.workoutTypeLabel ?? humanizeToken(entry.workoutType)}
+                  </div>
                   <div className="mt-1 text-sm text-white/58">
-                    {entry.sessionCount} sessions
+                    {entry.sessionCount} sessions · {entry.activityFamilyLabel ?? "Other"}
                   </div>
                 </div>
                 <div className="text-sm text-white/72">{entry.totalMinutes}m</div>
@@ -921,7 +1080,7 @@ export function SportsPage() {
                             <div className="flex items-center gap-2 text-white">
                               <Dumbbell className="size-4 shrink-0 text-[var(--primary)]" />
                               <span className="truncate text-base font-medium">
-                                {session.workoutType}
+                                {workoutTypeLabel(session)}
                               </span>
                             </div>
                             <div className="mt-2 flex items-center gap-2 text-sm text-white/56">
@@ -929,6 +1088,9 @@ export function SportsPage() {
                               <span className="truncate">
                                 {formatWorkoutWindow(session.startedAt, session.endedAt)}
                               </span>
+                            </div>
+                            <div className="mt-2 text-sm text-white/46">
+                              {activityFamilyLabel(session)} · {session.sourceDevice}
                             </div>
                           </div>
                           <div className="inline-flex items-center gap-2 rounded-full bg-white/[0.05] px-3 py-1.5 text-xs text-white/70">
@@ -950,6 +1112,7 @@ export function SportsPage() {
                               {Math.round(session.averageHeartRate)} bpm
                             </Badge>
                           ) : null}
+                          <Badge tone="meta">{activityFamilyLabel(session)}</Badge>
                           <Badge tone="meta" className="capitalize">
                             {session.sourceType.replaceAll("_", " ")}
                           </Badge>
@@ -978,7 +1141,7 @@ export function SportsPage() {
             }
           }}
           eyebrow="Sports session"
-          title={activeSession.workoutType}
+          title={workoutTypeLabel(activeSession)}
           description="Add contextual meaning without crowding the main training surface."
         >
           <SportsSessionEditor

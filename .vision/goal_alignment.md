@@ -53,6 +53,8 @@ Forge also already has existing project and strategy models, user ownership, tas
 
 Forge also already has a real health layer. Sleep in particular now needs to stay canonical-night-first across the iPhone companion, backend, and web app: one overnight session per wake-date as the main product object, with raw platform segments preserved underneath for drill-down instead of leaking transport fragments into the main UI.
 
+Forge workout imports also now need to stay provider-native underneath but canonical in the product surface. Apple Health and HealthKit data should flow through one provider-neutral workout adapter contract so the iPhone companion, Fastify backend, OpenAPI schema, and React sports UI all agree on friendly activity labels, activity families, source provenance, and preserved metrics/events/components for drill-down.
+
 Before this pass, however, the project-management hierarchy was still too shallow and too task-centric. The product did not yet fully expose the explicit `Goal -> Strategy -> Project -> Strategy -> Issue -> Task -> Subtask` stack across backend, UI, skills, and docs.
 
 ## 4. What Is Missing

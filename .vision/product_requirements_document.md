@@ -21,6 +21,7 @@ Forge is built as a production-grade monorepo application with:
 - generated OpenAPI
 - OpenClaw, Hermes, and Codex adapter layers
 - Swift iPhone companion
+- provider-neutral health adapters spanning Swift ingestion, Fastify normalization, and React read models
 
 ## Core Requirements
 
@@ -202,3 +203,22 @@ Public docs, GitHub Pages docs, README, and agent-facing docs must all explain:
 - owner + assignee model
 - git refs + completion reports
 - direct-to-`main` workflow
+
+### 11. Health Workout Adapter Contract
+
+- Workout imports must not leak raw provider activity placeholders such as `activity_52` into the main product UI when the source system can resolve them.
+- The canonical workout adapter contract must normalize provider-native activity identifiers into a structured descriptor:
+  - `sourceSystem`
+  - `providerActivityType`
+  - `providerRawValue`
+  - `canonicalKey`
+  - `canonicalLabel`
+  - `familyKey`
+  - `familyLabel`
+- The canonical contract must also preserve provider-captured workout evidence for drill-down:
+  - scalar and aggregate metrics
+  - workout events
+  - workout components or phases
+  - provider metadata
+- Apple Health and HealthKit are the first production adapter path, but the architecture must stay modular so Android Health Connect, Garmin, and other providers can plug into the same backend and UI contract without forking the product model.
+- The web sports surface must present friendly workout naming, provider provenance, and captured metrics/events/phases directly in the session UI instead of hiding them behind transport-only fields.

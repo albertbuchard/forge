@@ -2103,6 +2103,224 @@ test("mobile health sync builds richer summaries and reconciles habit-generated 
   }
 });
 
+test("mobile health sync exposes structured apple health workout descriptors and details", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-mobile-health-workout-adapter-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: false });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const pairingResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: {
+        userId: "user_operator"
+      }
+    });
+    assert.equal(pairingResponse.statusCode, 201);
+    const qrPayload = (
+      pairingResponse.json() as {
+        qrPayload: {
+          sessionId: string;
+          pairingToken: string;
+        };
+      }
+    ).qrPayload;
+
+    const syncResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        device: {
+          name: "Omar iPhone",
+          platform: "ios",
+          appVersion: "1.0",
+          sourceDevice: "iPhone"
+        },
+        permissions: {
+          healthKitAuthorized: true,
+          backgroundRefreshEnabled: true,
+          motionReady: false,
+          locationReady: false,
+          screenTimeReady: false
+        },
+        sleepSessions: [],
+        workouts: [
+          {
+            externalUid: "hk-workout-activity-52",
+            workoutType: "activity_52",
+            startedAt: "2026-04-07T07:15:00.000Z",
+            endedAt: "2026-04-07T08:00:00.000Z",
+            activeEnergyKcal: 210,
+            totalEnergyKcal: 230,
+            distanceMeters: 3800,
+            stepCount: 4800,
+            exerciseMinutes: 45,
+            averageHeartRate: 116,
+            maxHeartRate: 138,
+            sourceDevice: "Apple Watch",
+            sourceSystem: "apple_health",
+            sourceBundleIdentifier: "com.apple.health",
+            sourceProductType: "Watch7,5",
+            activity: {
+              sourceSystem: "apple_health",
+              providerActivityType: "hk_workout_activity_type",
+              providerRawValue: 52,
+              canonicalKey: "walking",
+              canonicalLabel: "Walking",
+              familyKey: "cardio",
+              familyLabel: "Cardio",
+              isFallback: false
+            },
+            details: {
+              sourceSystem: "apple_health",
+              metrics: [
+                {
+                  key: "average_speed",
+                  label: "Average speed",
+                  category: "cardio",
+                  unit: "km/h",
+                  statistic: "average",
+                  value: 5.1
+                },
+                {
+                  key: "time_in_zone_2_minutes",
+                  label: "Time in zone 2",
+                  category: "heart_rate",
+                  unit: "min",
+                  statistic: "total",
+                  value: 24
+                }
+              ],
+              events: [
+                {
+                  type: "pause",
+                  label: "Pause",
+                  startedAt: "2026-04-07T07:33:00.000Z",
+                  endedAt: "2026-04-07T07:35:00.000Z",
+                  durationSeconds: 120,
+                  metadata: {}
+                }
+              ],
+              components: [
+                {
+                  externalUid: "hk-workout-activity-52-segment-1",
+                  startedAt: "2026-04-07T07:50:00.000Z",
+                  endedAt: "2026-04-07T08:00:00.000Z",
+                  durationSeconds: 600,
+                  activity: {
+                    sourceSystem: "apple_health",
+                    providerActivityType: "hk_workout_activity_type",
+                    providerRawValue: 80,
+                    canonicalKey: "cooldown",
+                    canonicalLabel: "Cooldown",
+                    familyKey: "mobility",
+                    familyLabel: "Mobility",
+                    isFallback: false
+                  },
+                  metrics: [],
+                  metadata: {}
+                }
+              ],
+              metadata: {
+                indoorWorkout: false
+              }
+            },
+            links: [],
+            annotations: {}
+          }
+        ],
+        vitals: {
+          daySummaries: []
+        }
+      }
+    });
+    assert.equal(syncResponse.statusCode, 200);
+
+    const fitnessResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/health/fitness"
+    });
+    assert.equal(fitnessResponse.statusCode, 200);
+    const fitness = (
+      fitnessResponse.json() as {
+        fitness: {
+          summary: {
+            topWorkoutType: string | null;
+            topWorkoutTypeLabel?: string | null;
+          };
+          typeBreakdown: Array<{
+            workoutType: string;
+            workoutTypeLabel?: string;
+            activityFamily?: string;
+            activityFamilyLabel?: string;
+          }>;
+          sessions: Array<{
+            sourceSystem?: string;
+            sourceBundleIdentifier?: string | null;
+            sourceProductType?: string | null;
+            workoutType: string;
+            workoutTypeLabel?: string;
+            activityFamily?: string;
+            activityFamilyLabel?: string;
+            activity?: {
+              providerRawValue?: number | null;
+            };
+            details?: {
+              metrics: Array<{ key: string }>;
+              events: Array<{ type: string }>;
+              components: Array<{
+                activity: { canonicalLabel: string };
+              }>;
+            };
+          }>;
+        };
+      }
+    ).fitness;
+
+    assert.equal(fitness.summary.topWorkoutType, "walking");
+    assert.equal(fitness.summary.topWorkoutTypeLabel, "Walking");
+    assert.equal(fitness.typeBreakdown[0]?.workoutType, "walking");
+    assert.equal(fitness.typeBreakdown[0]?.workoutTypeLabel, "Walking");
+    assert.equal(fitness.typeBreakdown[0]?.activityFamily, "cardio");
+    assert.equal(fitness.typeBreakdown[0]?.activityFamilyLabel, "Cardio");
+
+    const session = fitness.sessions[0];
+    assert.ok(session);
+    assert.equal(session.sourceSystem, "apple_health");
+    assert.equal(session.sourceBundleIdentifier, "com.apple.health");
+    assert.equal(session.sourceProductType, "Watch7,5");
+    assert.equal(session.workoutType, "walking");
+    assert.equal(session.workoutTypeLabel, "Walking");
+    assert.equal(session.activityFamily, "cardio");
+    assert.equal(session.activityFamilyLabel, "Cardio");
+    assert.equal(session.activity?.providerRawValue, 52);
+    assert.deepEqual(
+      session.details?.metrics.map((metric) => metric.key),
+      ["average_speed", "time_in_zone_2_minutes"]
+    );
+    assert.deepEqual(
+      session.details?.events.map((event) => event.type),
+      ["pause"]
+    );
+    assert.deepEqual(
+      session.details?.components.map((component) => component.activity.canonicalLabel),
+      ["Cooldown"]
+    );
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("context ignores invalid scoped user ids instead of blanking the board", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-user-scope-"));
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });

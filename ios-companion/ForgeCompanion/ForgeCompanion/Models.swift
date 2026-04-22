@@ -215,9 +215,63 @@ struct CompanionSyncPayload: Codable {
         let tags: [String]
     }
 
+    struct WorkoutActivityDescriptor: Codable {
+        let sourceSystem: String
+        let providerActivityType: String
+        let providerRawValue: Int?
+        let canonicalKey: String
+        let canonicalLabel: String
+        let familyKey: String
+        let familyLabel: String
+        let isFallback: Bool
+    }
+
+    struct WorkoutMetric: Codable {
+        let key: String
+        let label: String
+        let category: String
+        let unit: String
+        let statistic: String
+        let value: ScalarValue
+        let startedAt: String?
+        let endedAt: String?
+    }
+
+    struct WorkoutEvent: Codable {
+        let type: String
+        let label: String
+        let startedAt: String
+        let endedAt: String?
+        let durationSeconds: Int
+        let metadata: [String: ScalarValue]
+    }
+
+    struct WorkoutComponent: Codable {
+        let externalUid: String
+        let startedAt: String
+        let endedAt: String?
+        let durationSeconds: Int
+        let activity: WorkoutActivityDescriptor
+        let metrics: [WorkoutMetric]
+        let metadata: [String: ScalarValue]
+    }
+
+    struct WorkoutDetails: Codable {
+        let sourceSystem: String
+        let metrics: [WorkoutMetric]
+        let events: [WorkoutEvent]
+        let components: [WorkoutComponent]
+        let metadata: [String: ScalarValue]
+    }
+
     struct WorkoutSession: Codable {
         let externalUid: String
         let workoutType: String
+        let sourceSystem: String
+        let sourceBundleIdentifier: String?
+        let sourceProductType: String?
+        let activity: WorkoutActivityDescriptor
+        let details: WorkoutDetails
         let startedAt: String
         let endedAt: String
         let activeEnergyKcal: Double?

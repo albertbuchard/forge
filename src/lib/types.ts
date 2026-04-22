@@ -1302,6 +1302,55 @@ export interface HealthLink {
   relationshipType: string;
 }
 
+export interface WorkoutActivityDescriptor {
+  sourceSystem: string;
+  providerActivityType: string;
+  providerRawValue?: number | null;
+  canonicalKey: string;
+  canonicalLabel: string;
+  familyKey: string;
+  familyLabel: string;
+  isFallback: boolean;
+}
+
+export interface WorkoutMetricRecord {
+  key: string;
+  label: string;
+  category: string;
+  unit: string;
+  statistic: string;
+  value: string | number | boolean | null;
+  startedAt?: string | null;
+  endedAt?: string | null;
+}
+
+export interface WorkoutEventRecord {
+  type: string;
+  label: string;
+  startedAt: string;
+  endedAt?: string | null;
+  durationSeconds: number;
+  metadata: Record<string, string | number | boolean | null>;
+}
+
+export interface WorkoutComponentRecord {
+  externalUid: string;
+  startedAt: string;
+  endedAt?: string | null;
+  durationSeconds: number;
+  activity: WorkoutActivityDescriptor;
+  metrics: WorkoutMetricRecord[];
+  metadata: Record<string, string | number | boolean | null>;
+}
+
+export interface WorkoutDetailsRecord {
+  sourceSystem: string;
+  metrics: WorkoutMetricRecord[];
+  events: WorkoutEventRecord[];
+  components: WorkoutComponentRecord[];
+  metadata: Record<string, string | number | boolean | null>;
+}
+
 export interface SleepSessionRecord {
   id: string;
   externalUid: string;
@@ -1487,7 +1536,15 @@ export interface WorkoutSessionRecord {
   userId: string;
   source: string;
   sourceType: string;
+  sourceSystem?: string;
+  sourceBundleIdentifier?: string | null;
+  sourceProductType?: string | null;
   workoutType: string;
+  workoutTypeLabel?: string;
+  activityFamily?: string;
+  activityFamilyLabel?: string;
+  activity?: WorkoutActivityDescriptor;
+  details?: WorkoutDetailsRecord;
   sourceDevice: string;
   startedAt: string;
   endedAt: string;
@@ -1576,17 +1633,24 @@ export interface FitnessViewData {
     habitGeneratedSessionCount: number;
     reconciledSessionCount: number;
     topWorkoutType: string | null;
+    topWorkoutTypeLabel?: string | null;
     streakDays: number;
   };
   weeklyTrend: Array<{
     id: string;
     dateKey: string;
     workoutType: string;
+    workoutTypeLabel?: string;
+    activityFamily?: string;
+    activityFamilyLabel?: string;
     durationMinutes: number;
     energyKcal: number;
   }>;
   typeBreakdown: Array<{
     workoutType: string;
+    workoutTypeLabel?: string;
+    activityFamily?: string;
+    activityFamilyLabel?: string;
     sessionCount: number;
     totalMinutes: number;
     energyKcal: number;

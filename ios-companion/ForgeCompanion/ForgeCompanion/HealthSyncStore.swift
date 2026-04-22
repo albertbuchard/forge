@@ -701,6 +701,7 @@ actor HealthSyncStore {
             "HealthSyncStore",
             "mapWorkoutSession start id=\(workout.uuid.uuidString.lowercased()) type=\(workout.workoutActivityType.rawValue)"
         )
+        let activityDescriptor = workoutActivityDescriptor(for: workout.workoutActivityType)
         async let averageHeartRate = quantityStatistic(
             identifier: .heartRate,
             unit: HKUnit.count().unitDivided(by: .minute()),
@@ -714,6 +715,13 @@ actor HealthSyncStore {
             startDate: workout.startDate,
             endDate: workout.endDate,
             option: .discreteMax
+        )
+        async let minHeartRate = quantityStatistic(
+            identifier: .heartRate,
+            unit: HKUnit.count().unitDivided(by: .minute()),
+            startDate: workout.startDate,
+            endDate: workout.endDate,
+            option: .discreteMin
         )
         async let stepCount = quantityStatistic(
             identifier: .stepCount,
@@ -733,14 +741,40 @@ actor HealthSyncStore {
         let totalEnergy = workout.totalEnergyBurned?.doubleValue(for: .kilocalorie())
         let distance = workout.totalDistance?.doubleValue(for: .meter())
         let sourceDevice = workout.device?.name ?? workout.sourceRevision.source.name
+        let sourceBundleIdentifier = workout.sourceRevision.source.bundleIdentifier
+        let sourceProductType = workout.sourceRevision.productType
         let resolvedStepCount = try await stepCount
         let resolvedAverageHeartRate = try await averageHeartRate
         let resolvedMaxHeartRate = try await maxHeartRate
+        let resolvedMinHeartRate = try await minHeartRate
         let resolvedActiveEnergy = try await activeEnergy
+        let metadataProjection = serializeWorkoutMetadata(workout.metadata ?? [:])
+        let details = CompanionSyncPayload.WorkoutDetails(
+            sourceSystem: "apple_health",
+            metrics: buildWorkoutMetrics(
+                workout: workout,
+                averageHeartRate: resolvedAverageHeartRate,
+                maxHeartRate: resolvedMaxHeartRate,
+                minHeartRate: resolvedMinHeartRate,
+                stepCount: resolvedStepCount,
+                activeEnergyKcal: resolvedActiveEnergy,
+                totalEnergyKcal: totalEnergy,
+                distanceMeters: distance,
+                metadataMetrics: metadataProjection.metrics
+            ),
+            events: serializeWorkoutEvents(workout.workoutEvents ?? []),
+            components: serializeWorkoutComponents(workout),
+            metadata: metadataProjection.metadata
+        )
 
         let session = CompanionSyncPayload.WorkoutSession(
             externalUid: workout.uuid.uuidString.lowercased(),
-            workoutType: workoutTypeLabel(for: workout.workoutActivityType),
+            workoutType: activityDescriptor.canonicalKey,
+            sourceSystem: "apple_health",
+            sourceBundleIdentifier: sourceBundleIdentifier,
+            sourceProductType: sourceProductType,
+            activity: activityDescriptor,
+            details: details,
             startedAt: isoString(workout.startDate),
             endedAt: isoString(workout.endDate),
             activeEnergyKcal: resolvedActiveEnergy,
@@ -1268,46 +1302,816 @@ actor HealthSyncStore {
         .filter { $0.seconds > 0 }
     }
 
-    private func workoutTypeLabel(for type: HKWorkoutActivityType) -> String {
-        switch type {
-        case .walking:
-            return "walking"
-        case .running:
-            return "running"
-        case .cycling:
-            return "cycling"
-        case .hiking:
-            return "hiking"
-        case .swimming:
-            return "swimming"
-        case .traditionalStrengthTraining:
-            return "strength_training"
-        case .functionalStrengthTraining:
-            return "functional_strength"
-        case .yoga:
-            return "yoga"
-        case .mindAndBody:
-            return "mind_and_body"
-        case .tennis:
-            return "tennis"
-        case .basketball:
-            return "basketball"
-        case .rowing:
-            return "rowing"
-        case .elliptical:
-            return "elliptical"
-        case .stairClimbing:
-            return "stair_climbing"
-        case .cooldown:
-            return "cooldown"
-        case .flexibility:
-            return "flexibility"
-        case .mixedCardio:
-            return "mixed_cardio"
-        default:
-            return "activity_\(type.rawValue)"
+    func workoutActivityDescriptor(for rawValue: Int) -> CompanionSyncPayload.WorkoutActivityDescriptor {
+        let entry = Self.appleWorkoutActivityCatalog[rawValue]
+        let canonicalKey = entry?.key ?? "activity_\(rawValue)"
+        let family = workoutFamily(for: canonicalKey)
+        return .init(
+            sourceSystem: "apple_health",
+            providerActivityType: "hk_workout_activity_type",
+            providerRawValue: rawValue,
+            canonicalKey: canonicalKey,
+            canonicalLabel: entry?.label ?? humanizedWorkoutKey(canonicalKey),
+            familyKey: family.key,
+            familyLabel: family.label,
+            isFallback: entry == nil
+        )
+    }
+
+    private func workoutActivityDescriptor(
+        for type: HKWorkoutActivityType
+    ) -> CompanionSyncPayload.WorkoutActivityDescriptor {
+        workoutActivityDescriptor(for: Int(type.rawValue))
+    }
+
+    private func humanizedWorkoutKey(_ key: String) -> String {
+        key
+            .replacingOccurrences(of: "_", with: " ")
+            .split(separator: " ")
+            .map { word in
+                guard let first = word.first else { return "" }
+                return first.uppercased() + word.dropFirst().lowercased()
+            }
+            .joined(separator: " ")
+    }
+
+    private func workoutFamily(for key: String) -> (key: String, label: String) {
+        let normalized = key.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if Self.cardioWorkoutKeys.contains(normalized) {
+            return ("cardio", "Cardio")
+        }
+        if Self.strengthWorkoutKeys.contains(normalized) {
+            return ("strength", "Strength")
+        }
+        if Self.mobilityWorkoutKeys.contains(normalized) {
+            return ("mobility", "Mobility")
+        }
+        if Self.mindfulWorkoutKeys.contains(normalized) {
+            return ("mindful", "Mindful")
+        }
+        if Self.waterWorkoutKeys.contains(normalized) {
+            return ("water", "Water")
+        }
+        if Self.teamWorkoutKeys.contains(normalized) {
+            return ("team_sport", "Team sport")
+        }
+        if Self.racketWorkoutKeys.contains(normalized) {
+            return ("racket", "Racket")
+        }
+        if Self.combatWorkoutKeys.contains(normalized) {
+            return ("combat", "Combat")
+        }
+        if Self.winterWorkoutKeys.contains(normalized) {
+            return ("winter", "Winter")
+        }
+        if normalized.contains("dance") || normalized == "play" || normalized == "golf" {
+            return ("recreation", "Recreation")
+        }
+        return ("other", "Other")
+    }
+
+    private func buildWorkoutMetrics(
+        workout: HKWorkout,
+        averageHeartRate: Double?,
+        maxHeartRate: Double?,
+        minHeartRate: Double?,
+        stepCount: Double?,
+        activeEnergyKcal: Double?,
+        totalEnergyKcal: Double?,
+        distanceMeters: Double?,
+        metadataMetrics: [CompanionSyncPayload.WorkoutMetric]
+    ) -> [CompanionSyncPayload.WorkoutMetric] {
+        var metrics: [CompanionSyncPayload.WorkoutMetric] = [
+            .init(
+                key: "duration_seconds",
+                label: "Recorded duration",
+                category: "time",
+                unit: "sec",
+                statistic: "total",
+                value: .number(workout.duration),
+                startedAt: isoString(workout.startDate),
+                endedAt: isoString(workout.endDate)
+            ),
+            .init(
+                key: "exercise_minutes",
+                label: "Exercise minutes",
+                category: "time",
+                unit: "min",
+                statistic: "total",
+                value: .number(workout.duration / 60),
+                startedAt: isoString(workout.startDate),
+                endedAt: isoString(workout.endDate)
+            )
+        ]
+        if let activeEnergyKcal {
+            metrics.append(
+                .init(
+                    key: "active_energy_kcal",
+                    label: "Active energy",
+                    category: "energy",
+                    unit: "kcal",
+                    statistic: "total",
+                    value: .number(activeEnergyKcal),
+                    startedAt: nil,
+                    endedAt: nil
+                )
+            )
+        }
+        if let totalEnergyKcal {
+            metrics.append(
+                .init(
+                    key: "total_energy_kcal",
+                    label: "Total energy",
+                    category: "energy",
+                    unit: "kcal",
+                    statistic: "total",
+                    value: .number(totalEnergyKcal),
+                    startedAt: nil,
+                    endedAt: nil
+                )
+            )
+        }
+        if let distanceMeters {
+            metrics.append(
+                .init(
+                    key: "distance_meters",
+                    label: "Distance",
+                    category: "distance",
+                    unit: "m",
+                    statistic: "total",
+                    value: .number(distanceMeters),
+                    startedAt: nil,
+                    endedAt: nil
+                )
+            )
+        }
+        if let stepCount {
+            metrics.append(
+                .init(
+                    key: "step_count",
+                    label: "Step count",
+                    category: "volume",
+                    unit: "count",
+                    statistic: "total",
+                    value: .number(stepCount),
+                    startedAt: nil,
+                    endedAt: nil
+                )
+            )
+        }
+        if let averageHeartRate {
+            metrics.append(
+                .init(
+                    key: "heart_rate_avg",
+                    label: "Average heart rate",
+                    category: "cardio",
+                    unit: "bpm",
+                    statistic: "average",
+                    value: .number(averageHeartRate),
+                    startedAt: nil,
+                    endedAt: nil
+                )
+            )
+        }
+        if let maxHeartRate {
+            metrics.append(
+                .init(
+                    key: "heart_rate_max",
+                    label: "Max heart rate",
+                    category: "cardio",
+                    unit: "bpm",
+                    statistic: "max",
+                    value: .number(maxHeartRate),
+                    startedAt: nil,
+                    endedAt: nil
+                )
+            )
+        }
+        if let minHeartRate {
+            metrics.append(
+                .init(
+                    key: "heart_rate_min",
+                    label: "Min heart rate",
+                    category: "cardio",
+                    unit: "bpm",
+                    statistic: "min",
+                    value: .number(minHeartRate),
+                    startedAt: nil,
+                    endedAt: nil
+                )
+            )
+        }
+        if let totalFlights = workout.totalFlightsClimbed?.doubleValue(for: .count()) {
+            metrics.append(
+                .init(
+                    key: "flights_climbed",
+                    label: "Flights climbed",
+                    category: "volume",
+                    unit: "count",
+                    statistic: "total",
+                    value: .number(totalFlights),
+                    startedAt: nil,
+                    endedAt: nil
+                )
+            )
+        }
+        if let strokeCount = workout.totalSwimmingStrokeCount?.doubleValue(for: .count()) {
+            metrics.append(
+                .init(
+                    key: "swimming_stroke_count",
+                    label: "Swimming strokes",
+                    category: "volume",
+                    unit: "count",
+                    statistic: "total",
+                    value: .number(strokeCount),
+                    startedAt: nil,
+                    endedAt: nil
+                )
+            )
+        }
+        metrics.append(contentsOf: metadataMetrics)
+        return metrics.sorted { left, right in
+            if left.category == right.category {
+                return left.label < right.label
+            }
+            return left.category < right.category
         }
     }
+
+    private func serializeWorkoutMetadata(
+        _ metadata: [String: Any]
+    ) -> (
+        metrics: [CompanionSyncPayload.WorkoutMetric],
+        metadata: [String: CompanionSyncPayload.ScalarValue]
+    ) {
+        var metrics: [CompanionSyncPayload.WorkoutMetric] = []
+        var scalarMetadata: [String: CompanionSyncPayload.ScalarValue] = [:]
+
+        func appendQuantityMetric(
+            _ metadataKey: String,
+            key: String,
+            label: String,
+            category: String,
+            unit: HKUnit,
+            unitLabel: String,
+            statistic: String = "value"
+        ) {
+            guard let quantity = metadata[metadataKey] as? HKQuantity else {
+                return
+            }
+            metrics.append(
+                .init(
+                    key: key,
+                    label: label,
+                    category: category,
+                    unit: unitLabel,
+                    statistic: statistic,
+                    value: .number(quantity.doubleValue(for: unit)),
+                    startedAt: nil,
+                    endedAt: nil
+                )
+            )
+        }
+
+        appendQuantityMetric(
+            HKMetadataKeyAverageSpeed,
+            key: "average_speed_mps",
+            label: "Average speed",
+            category: "pace",
+            unit: HKUnit.meter().unitDivided(by: .second()),
+            unitLabel: "m/s",
+            statistic: "average"
+        )
+        appendQuantityMetric(
+            HKMetadataKeyMaximumSpeed,
+            key: "maximum_speed_mps",
+            label: "Maximum speed",
+            category: "pace",
+            unit: HKUnit.meter().unitDivided(by: .second()),
+            unitLabel: "m/s",
+            statistic: "max"
+        )
+        appendQuantityMetric(
+            HKMetadataKeyAverageMETs,
+            key: "average_mets",
+            label: "Average METs",
+            category: "cardio",
+            unit: .count(),
+            unitLabel: "METs",
+            statistic: "average"
+        )
+        appendQuantityMetric(
+            HKMetadataKeyElevationAscended,
+            key: "elevation_ascended_m",
+            label: "Elevation ascended",
+            category: "elevation",
+            unit: .meter(),
+            unitLabel: "m",
+            statistic: "total"
+        )
+        appendQuantityMetric(
+            HKMetadataKeyElevationDescended,
+            key: "elevation_descended_m",
+            label: "Elevation descended",
+            category: "elevation",
+            unit: .meter(),
+            unitLabel: "m",
+            statistic: "total"
+        )
+        appendQuantityMetric(
+            HKMetadataKeyLapLength,
+            key: "lap_length_m",
+            label: "Lap length",
+            category: "lap",
+            unit: .meter(),
+            unitLabel: "m"
+        )
+        appendQuantityMetric(
+            HKMetadataKeyVO2MaxValue,
+            key: "vo2_max_ml_kg_min",
+            label: "VO2 max",
+            category: "cardio",
+            unit: HKUnit(from: "ml/(kg*min)"),
+            unitLabel: "ml/kg/min"
+        )
+        appendQuantityMetric(
+            HKMetadataKeyWeatherTemperature,
+            key: "weather_temperature_c",
+            label: "Weather temperature",
+            category: "environment",
+            unit: .degreeCelsius(),
+            unitLabel: "degC"
+        )
+        appendQuantityMetric(
+            HKMetadataKeyWeatherHumidity,
+            key: "weather_humidity_percent",
+            label: "Weather humidity",
+            category: "environment",
+            unit: .percent(),
+            unitLabel: "%"
+        )
+
+        if let brand = metadata[HKMetadataKeyWorkoutBrandName] as? String, brand.isEmpty == false {
+            scalarMetadata["workoutBrandName"] = .string(brand)
+        }
+        if let indoor = metadata[HKMetadataKeyIndoorWorkout] as? NSNumber {
+            scalarMetadata["indoorWorkout"] = metadataScalarValue(indoor)
+        }
+        if let coached = metadata[HKMetadataKeyCoachedWorkout] as? NSNumber {
+            scalarMetadata["coachedWorkout"] = metadataScalarValue(coached)
+        }
+        if let groupFitness = metadata[HKMetadataKeyGroupFitness] as? NSNumber {
+            scalarMetadata["groupFitness"] = metadataScalarValue(groupFitness)
+        }
+        if let weatherCondition = metadata[HKMetadataKeyWeatherCondition] {
+            scalarMetadata["weatherCondition"] = metadataScalarValue(weatherCondition)
+        }
+        if let swimmingLocation = metadata[HKMetadataKeySwimmingLocationType] as? NSNumber {
+            scalarMetadata["swimmingLocationType"] = .string(
+                swimmingLocationTypeLabel(swimmingLocation.intValue)
+            )
+        }
+        if let strokeStyle = metadata[HKMetadataKeySwimmingStrokeStyle] as? NSNumber {
+            scalarMetadata["swimmingStrokeStyle"] = .string(
+                swimmingStrokeStyleLabel(strokeStyle.intValue)
+            )
+        }
+
+        return (metrics, scalarMetadata)
+    }
+
+    private func metadataScalarValue(_ value: Any) -> CompanionSyncPayload.ScalarValue {
+        if let string = value as? String {
+            return .string(string)
+        }
+        if let date = value as? Date {
+            return .string(isoString(date))
+        }
+        if let number = value as? NSNumber {
+            if CFGetTypeID(number) == CFBooleanGetTypeID() {
+                return .boolean(number.boolValue)
+            }
+            return .number(number.doubleValue)
+        }
+        return .string(String(describing: value))
+    }
+
+    private func serializeWorkoutEvents(
+        _ events: [HKWorkoutEvent]
+    ) -> [CompanionSyncPayload.WorkoutEvent] {
+        events.map { event in
+            let interval = event.dateInterval
+            let startedAt = isoString(interval.start)
+            let endedAt = interval.duration > 0 ? isoString(interval.end) : nil
+            let metadata = (event.metadata ?? [:]).reduce(
+                into: [String: CompanionSyncPayload.ScalarValue]()
+            ) { partial, entry in
+                partial[entry.key] = metadataScalarValue(entry.value)
+            }
+            return .init(
+                type: workoutEventTypeKey(event.type),
+                label: workoutEventTypeLabel(event.type),
+                startedAt: startedAt,
+                endedAt: endedAt,
+                durationSeconds: Int(interval.duration.rounded()),
+                metadata: metadata
+            )
+        }
+    }
+
+    private func serializeWorkoutComponents(
+        _ workout: HKWorkout
+    ) -> [CompanionSyncPayload.WorkoutComponent] {
+        guard #available(iOS 16.0, *) else {
+            return []
+        }
+        return workout.workoutActivities.map { activity in
+            let metadata = (activity.metadata ?? [:]).reduce(
+                into: [String: CompanionSyncPayload.ScalarValue]()
+            ) { partial, entry in
+                partial[entry.key] = metadataScalarValue(entry.value)
+            }
+            return .init(
+                externalUid: activity.uuid.uuidString.lowercased(),
+                startedAt: isoString(activity.startDate),
+                endedAt: activity.endDate.map(isoString),
+                durationSeconds: Int(activity.duration.rounded()),
+                activity: workoutActivityDescriptor(
+                    for: activity.workoutConfiguration.activityType
+                ),
+                metrics: workoutMetrics(for: activity),
+                metadata: metadata
+            )
+        }
+    }
+
+    @available(iOS 16.0, *)
+    private func workoutMetrics(
+        for activity: HKWorkoutActivity
+    ) -> [CompanionSyncPayload.WorkoutMetric] {
+        var metrics: [CompanionSyncPayload.WorkoutMetric] = []
+        func appendStatistic(
+            identifier: HKQuantityTypeIdentifier,
+            key: String,
+            label: String,
+            category: String,
+            unit: HKUnit,
+            unitLabel: String,
+            statistic: String,
+            resolver: (HKStatistics) -> HKQuantity?
+        ) {
+            guard
+                let quantityType = HKQuantityType.quantityType(forIdentifier: identifier),
+                let stats = activity.statistics(for: quantityType),
+                let quantity = resolver(stats)
+            else {
+                return
+            }
+            metrics.append(
+                .init(
+                    key: key,
+                    label: label,
+                    category: category,
+                    unit: unitLabel,
+                    statistic: statistic,
+                    value: .number(quantity.doubleValue(for: unit)),
+                    startedAt: isoString(activity.startDate),
+                    endedAt: activity.endDate.map(isoString)
+                )
+            )
+        }
+        appendStatistic(
+            identifier: .activeEnergyBurned,
+            key: "active_energy_kcal",
+            label: "Active energy",
+            category: "energy",
+            unit: .kilocalorie(),
+            unitLabel: "kcal",
+            statistic: "total",
+            resolver: { $0.sumQuantity() }
+        )
+        appendStatistic(
+            identifier: .heartRate,
+            key: "heart_rate_avg",
+            label: "Average heart rate",
+            category: "cardio",
+            unit: HKUnit.count().unitDivided(by: .minute()),
+            unitLabel: "bpm",
+            statistic: "average",
+            resolver: { $0.averageQuantity() }
+        )
+        appendStatistic(
+            identifier: .heartRate,
+            key: "heart_rate_max",
+            label: "Max heart rate",
+            category: "cardio",
+            unit: HKUnit.count().unitDivided(by: .minute()),
+            unitLabel: "bpm",
+            statistic: "max",
+            resolver: { $0.maximumQuantity() }
+        )
+        appendStatistic(
+            identifier: .distanceWalkingRunning,
+            key: "distance_meters",
+            label: "Distance",
+            category: "distance",
+            unit: .meter(),
+            unitLabel: "m",
+            statistic: "total",
+            resolver: { $0.sumQuantity() }
+        )
+        appendStatistic(
+            identifier: .distanceCycling,
+            key: "cycling_distance_meters",
+            label: "Cycling distance",
+            category: "distance",
+            unit: .meter(),
+            unitLabel: "m",
+            statistic: "total",
+            resolver: { $0.sumQuantity() }
+        )
+        appendStatistic(
+            identifier: .distanceSwimming,
+            key: "swimming_distance_meters",
+            label: "Swimming distance",
+            category: "distance",
+            unit: .meter(),
+            unitLabel: "m",
+            statistic: "total",
+            resolver: { $0.sumQuantity() }
+        )
+        return metrics.sorted { left, right in
+            if left.category == right.category {
+                return left.label < right.label
+            }
+            return left.category < right.category
+        }
+    }
+
+    private func workoutEventTypeKey(_ type: HKWorkoutEventType) -> String {
+        switch type {
+        case .pause:
+            return "pause"
+        case .resume:
+            return "resume"
+        case .lap:
+            return "lap"
+        case .marker:
+            return "marker"
+        case .motionPaused:
+            return "motion_paused"
+        case .motionResumed:
+            return "motion_resumed"
+        case .segment:
+            return "segment"
+        case .pauseOrResumeRequest:
+            return "pause_or_resume_request"
+        @unknown default:
+            return "event_\(type.rawValue)"
+        }
+    }
+
+    private func workoutEventTypeLabel(_ type: HKWorkoutEventType) -> String {
+        switch type {
+        case .pause:
+            return "Pause"
+        case .resume:
+            return "Resume"
+        case .lap:
+            return "Lap"
+        case .marker:
+            return "Marker"
+        case .motionPaused:
+            return "Motion paused"
+        case .motionResumed:
+            return "Motion resumed"
+        case .segment:
+            return "Segment"
+        case .pauseOrResumeRequest:
+            return "Pause or resume request"
+        @unknown default:
+            return "Workout event"
+        }
+    }
+
+    private func swimmingLocationTypeLabel(_ rawValue: Int) -> String {
+        switch rawValue {
+        case 1:
+            return "Pool"
+        case 2:
+            return "Open water"
+        default:
+            return "Unknown"
+        }
+    }
+
+    private func swimmingStrokeStyleLabel(_ rawValue: Int) -> String {
+        switch rawValue {
+        case 1:
+            return "Mixed"
+        case 2:
+            return "Freestyle"
+        case 3:
+            return "Backstroke"
+        case 4:
+            return "Breaststroke"
+        case 5:
+            return "Butterfly"
+        case 6:
+            return "Kickboard"
+        default:
+            return "Unknown"
+        }
+    }
+
+    private static let appleWorkoutActivityCatalog: [Int: (key: String, label: String)] = [
+        1: ("american_football", "American football"),
+        2: ("archery", "Archery"),
+        3: ("australian_football", "Australian football"),
+        4: ("badminton", "Badminton"),
+        5: ("baseball", "Baseball"),
+        6: ("basketball", "Basketball"),
+        7: ("bowling", "Bowling"),
+        8: ("boxing", "Boxing"),
+        9: ("climbing", "Climbing"),
+        10: ("cricket", "Cricket"),
+        11: ("cross_training", "Cross training"),
+        12: ("curling", "Curling"),
+        13: ("cycling", "Cycling"),
+        14: ("dance", "Dance"),
+        15: ("dance_inspired_training", "Dance-inspired training"),
+        16: ("elliptical", "Elliptical"),
+        17: ("equestrian_sports", "Equestrian sports"),
+        18: ("fencing", "Fencing"),
+        19: ("fishing", "Fishing"),
+        20: ("functional_strength_training", "Functional strength training"),
+        21: ("golf", "Golf"),
+        22: ("gymnastics", "Gymnastics"),
+        23: ("handball", "Handball"),
+        24: ("hiking", "Hiking"),
+        25: ("hockey", "Hockey"),
+        26: ("hunting", "Hunting"),
+        27: ("lacrosse", "Lacrosse"),
+        28: ("martial_arts", "Martial arts"),
+        29: ("mind_and_body", "Mind and body"),
+        30: ("mixed_metabolic_cardio_training", "Mixed metabolic cardio training"),
+        31: ("paddle_sports", "Paddle sports"),
+        32: ("play", "Play"),
+        33: ("preparation_and_recovery", "Preparation and recovery"),
+        34: ("racquetball", "Racquetball"),
+        35: ("rowing", "Rowing"),
+        36: ("rugby", "Rugby"),
+        37: ("running", "Running"),
+        38: ("sailing", "Sailing"),
+        39: ("skating_sports", "Skating sports"),
+        40: ("snow_sports", "Snow sports"),
+        41: ("soccer", "Soccer"),
+        42: ("softball", "Softball"),
+        43: ("squash", "Squash"),
+        44: ("stair_climbing", "Stair climbing"),
+        45: ("surfing_sports", "Surfing sports"),
+        46: ("swimming", "Swimming"),
+        47: ("table_tennis", "Table tennis"),
+        48: ("tennis", "Tennis"),
+        49: ("track_and_field", "Track and field"),
+        50: ("traditional_strength_training", "Traditional strength training"),
+        51: ("volleyball", "Volleyball"),
+        52: ("walking", "Walking"),
+        53: ("water_fitness", "Water fitness"),
+        54: ("water_polo", "Water polo"),
+        55: ("water_sports", "Water sports"),
+        56: ("wrestling", "Wrestling"),
+        57: ("yoga", "Yoga"),
+        58: ("barre", "Barre"),
+        59: ("core_training", "Core training"),
+        60: ("cross_country_skiing", "Cross-country skiing"),
+        61: ("downhill_skiing", "Downhill skiing"),
+        62: ("flexibility", "Flexibility"),
+        63: ("high_intensity_interval_training", "High-intensity interval training"),
+        64: ("jump_rope", "Jump rope"),
+        65: ("kickboxing", "Kickboxing"),
+        66: ("pilates", "Pilates"),
+        67: ("snowboarding", "Snowboarding"),
+        68: ("stairs", "Stairs"),
+        69: ("step_training", "Step training"),
+        70: ("wheelchair_walk_pace", "Wheelchair walk pace"),
+        71: ("wheelchair_run_pace", "Wheelchair run pace"),
+        72: ("tai_chi", "Tai chi"),
+        73: ("mixed_cardio", "Mixed cardio"),
+        74: ("hand_cycling", "Hand cycling"),
+        75: ("disc_sports", "Disc sports"),
+        76: ("fitness_gaming", "Fitness gaming"),
+        77: ("cardio_dance", "Cardio dance"),
+        78: ("social_dance", "Social dance"),
+        79: ("pickleball", "Pickleball"),
+        80: ("cooldown", "Cooldown"),
+        82: ("swim_bike_run", "Swim-bike-run"),
+        83: ("transition", "Transition"),
+        84: ("underwater_diving", "Underwater diving"),
+        3000: ("other", "Other")
+    ]
+
+    private static let cardioWorkoutKeys: Set<String> = [
+        "walking",
+        "running",
+        "cycling",
+        "rowing",
+        "elliptical",
+        "hiking",
+        "mixed_cardio",
+        "mixed_metabolic_cardio_training",
+        "high_intensity_interval_training",
+        "jump_rope",
+        "stair_climbing",
+        "stairs",
+        "step_training",
+        "cross_country_skiing",
+        "downhill_skiing",
+        "snowboarding",
+        "hand_cycling",
+        "wheelchair_walk_pace",
+        "wheelchair_run_pace",
+        "track_and_field",
+        "cross_training",
+        "cardio_dance",
+        "fitness_gaming",
+        "swim_bike_run",
+        "transition"
+    ]
+
+    private static let strengthWorkoutKeys: Set<String> = [
+        "traditional_strength_training",
+        "functional_strength_training",
+        "core_training",
+        "cross_training",
+        "climbing"
+    ]
+
+    private static let mobilityWorkoutKeys: Set<String> = [
+        "barre",
+        "pilates",
+        "flexibility",
+        "preparation_and_recovery",
+        "cooldown"
+    ]
+
+    private static let mindfulWorkoutKeys: Set<String> = [
+        "mind_and_body",
+        "yoga",
+        "tai_chi"
+    ]
+
+    private static let waterWorkoutKeys: Set<String> = [
+        "swimming",
+        "water_fitness",
+        "water_polo",
+        "water_sports",
+        "paddle_sports",
+        "surfing_sports",
+        "sailing",
+        "underwater_diving"
+    ]
+
+    private static let teamWorkoutKeys: Set<String> = [
+        "american_football",
+        "australian_football",
+        "baseball",
+        "basketball",
+        "cricket",
+        "handball",
+        "hockey",
+        "lacrosse",
+        "rugby",
+        "soccer",
+        "softball",
+        "volleyball",
+        "water_polo"
+    ]
+
+    private static let racketWorkoutKeys: Set<String> = [
+        "badminton",
+        "pickleball",
+        "racquetball",
+        "squash",
+        "table_tennis",
+        "tennis"
+    ]
+
+    private static let combatWorkoutKeys: Set<String> = [
+        "boxing",
+        "kickboxing",
+        "martial_arts",
+        "wrestling",
+        "fencing"
+    ]
+
+    private static let winterWorkoutKeys: Set<String> = [
+        "cross_country_skiing",
+        "downhill_skiing",
+        "snow_sports",
+        "snowboarding",
+        "curling"
+    ]
 
     private func clippedInterval(
         start: Date,

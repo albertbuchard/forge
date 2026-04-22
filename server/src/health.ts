@@ -3,6 +3,12 @@ import { z } from "zod";
 import { getDatabase, runInTransaction } from "./db.js";
 import { HttpError } from "./errors.js";
 import {
+  buildWorkoutSessionPersistenceSeed,
+  buildWorkoutSessionPresentation,
+  workoutActivityDescriptorSchema,
+  workoutDetailsSchema
+} from "./health-workout-adapters.js";
+import {
   getMovementMobileBootstrap,
   ingestMovementSync,
   movementSyncPayloadSchema
@@ -278,6 +284,11 @@ export const mobileHealthSyncSchema = z.object({
         averageHeartRate: z.number().nonnegative().nullable().optional(),
         maxHeartRate: z.number().nonnegative().nullable().optional(),
         sourceDevice: z.string().trim().default("Apple Health"),
+        sourceSystem: z.string().trim().min(1).default("apple_health"),
+        sourceBundleIdentifier: z.string().trim().optional(),
+        sourceProductType: z.string().trim().optional(),
+        activity: workoutActivityDescriptorSchema.optional(),
+        details: workoutDetailsSchema.optional(),
         links: z.array(healthLinkSchema).default([]),
         annotations: workoutAnnotationSchema.partial().default({})
       })
@@ -1254,6 +1265,15 @@ type MappedSleepSegment = ReturnType<typeof mapSleepSegment>;
 type MappedSleepSourceRecord = ReturnType<typeof mapSleepSourceRecord>;
 
 function mapWorkoutSession(row: WorkoutSessionRow) {
+  const provenance = safeJsonParse<Record<string, unknown>>(row.provenance_json, {});
+  const derived = safeJsonParse<Record<string, unknown>>(row.derived_json, {});
+  const presentation = buildWorkoutSessionPresentation({
+    source: row.source,
+    sourceType: row.source_type,
+    workoutType: row.workout_type,
+    provenance,
+    derived
+  });
   return {
     id: row.id,
     externalUid: row.external_uid,
@@ -1261,7 +1281,15 @@ function mapWorkoutSession(row: WorkoutSessionRow) {
     userId: row.user_id,
     source: row.source,
     sourceType: row.source_type,
-    workoutType: row.workout_type,
+    sourceSystem: presentation.sourceSystem,
+    sourceBundleIdentifier: presentation.sourceBundleIdentifier,
+    sourceProductType: presentation.sourceProductType,
+    workoutType: presentation.workoutType,
+    workoutTypeLabel: presentation.workoutTypeLabel,
+    activityFamily: presentation.activityFamily,
+    activityFamilyLabel: presentation.activityFamilyLabel,
+    activity: presentation.activity,
+    details: presentation.details,
     sourceDevice: row.source_device,
     startedAt: row.started_at,
     endedAt: row.ended_at,
@@ -1285,8 +1313,8 @@ function mapWorkoutSession(row: WorkoutSessionRow) {
     ),
     tags: safeJsonParse<string[]>(row.tags_json, []),
     annotations: safeJsonParse(row.annotations_json, {}),
-    provenance: safeJsonParse(row.provenance_json, {}),
-    derived: safeJsonParse(row.derived_json, {}),
+    provenance,
+    derived,
     generatedFromHabitId: row.generated_from_habit_id,
     generatedFromCheckInId: row.generated_from_check_in_id,
     reconciliationStatus: row.reconciliation_status,
@@ -2980,11 +3008,21 @@ function insertOrUpdateWorkoutSession(
     .get(pairing.user_id, input.externalUid) as WorkoutSessionRow | undefined;
   const annotations = workoutAnnotationSchema.parse(input.annotations ?? {});
   const now = nowIso();
+  const basePersistenceSeed = buildWorkoutSessionPersistenceSeed({
+    source: "apple_health",
+    sourceType: "healthkit",
+    workoutType: input.workoutType,
+    sourceSystem: input.sourceSystem,
+    sourceBundleIdentifier: input.sourceBundleIdentifier,
+    sourceProductType: input.sourceProductType,
+    activity: input.activity,
+    details: input.details
+  });
   const matchedGenerated =
     existing ??
     findMatchingGeneratedWorkout({
       userId: pairing.user_id,
-      workoutType: input.workoutType,
+      workoutType: basePersistenceSeed.activity.canonicalKey,
       startedAt: input.startedAt,
       endedAt: input.endedAt
     });
@@ -2999,6 +3037,34 @@ function insertOrUpdateWorkoutSession(
       matchedGenerated.annotations_json,
       {}
     );
+    const existingProvenance = safeJsonParse<Record<string, unknown>>(
+      matchedGenerated.provenance_json,
+      {}
+    );
+    const existingDerived = safeJsonParse<Record<string, unknown>>(
+      matchedGenerated.derived_json,
+      {}
+    );
+    const persistenceSeed = buildWorkoutSessionPersistenceSeed({
+      source: "apple_health",
+      sourceType: matchedGenerated.generated_from_habit_id
+        ? "reconciled"
+        : "healthkit",
+      workoutType: input.workoutType,
+      sourceSystem: input.sourceSystem,
+      sourceBundleIdentifier:
+        input.sourceBundleIdentifier ??
+        (typeof existingProvenance.sourceBundleIdentifier === "string"
+          ? existingProvenance.sourceBundleIdentifier
+          : null),
+      sourceProductType:
+        input.sourceProductType ??
+        (typeof existingProvenance.sourceProductType === "string"
+          ? existingProvenance.sourceProductType
+          : null),
+      activity: input.activity ?? existingDerived.activity ?? existingProvenance.activity,
+      details: input.details ?? existingDerived.details ?? existingProvenance.details
+    });
     const mergedLinks = mergeHealthLinks(
       existingLinks,
       input.links,
@@ -3063,14 +3129,23 @@ function insertOrUpdateWorkoutSession(
         JSON.stringify(mergedTags),
         JSON.stringify(nextAnnotations),
         JSON.stringify({
+          ...existingProvenance,
           importedVia: "ios_companion",
           pairingSessionId: pairing.id,
+          sourceSystem: persistenceSeed.sourceSystem,
+          sourceBundleIdentifier: persistenceSeed.sourceBundleIdentifier,
+          sourceProductType: persistenceSeed.sourceProductType,
+          activity: persistenceSeed.activity,
+          details: persistenceSeed.details,
           mergedWithGenerated:
             matchedGenerated.generated_from_habit_id !== null,
           priorSource: matchedGenerated.source,
           updatedAt: now
         }),
         JSON.stringify({
+          ...existingDerived,
+          activity: persistenceSeed.activity,
+          details: persistenceSeed.details,
           paceMetersPerMinute:
             input.distanceMeters && input.exerciseMinutes
               ? Number((input.distanceMeters / input.exerciseMinutes).toFixed(2))
@@ -3106,7 +3181,7 @@ function insertOrUpdateWorkoutSession(
       input.externalUid,
       pairing.id,
       pairing.user_id,
-      input.workoutType,
+      basePersistenceSeed.activity.canonicalKey,
       input.sourceDevice,
       input.startedAt,
       input.endedAt,
@@ -3130,9 +3205,16 @@ function insertOrUpdateWorkoutSession(
       JSON.stringify({
         importedVia: "ios_companion",
         pairingSessionId: pairing.id,
+        sourceSystem: basePersistenceSeed.sourceSystem,
+        sourceBundleIdentifier: basePersistenceSeed.sourceBundleIdentifier,
+        sourceProductType: basePersistenceSeed.sourceProductType,
+        activity: basePersistenceSeed.activity,
+        details: basePersistenceSeed.details,
         createdAt: now
       }),
       JSON.stringify({
+        activity: basePersistenceSeed.activity,
+        details: basePersistenceSeed.details,
         paceMetersPerMinute:
           input.distanceMeters && input.exerciseMinutes
             ? Number((input.distanceMeters / input.exerciseMinutes).toFixed(2))
@@ -4381,6 +4463,9 @@ export function getFitnessViewData(userIds?: string[]) {
         (session) => session.reconciliationStatus === "merged"
       ).length,
       topWorkoutType: orderedWorkoutTypes[0]?.[0] ?? null,
+      topWorkoutTypeLabel:
+        recent.find((session) => session.workoutType === orderedWorkoutTypes[0]?.[0])
+          ?.workoutTypeLabel ?? null,
       streakDays: Array.from(
         new Set(weekly.map((session) => dayKey(session.startedAt)))
       ).length
@@ -4390,6 +4475,9 @@ export function getFitnessViewData(userIds?: string[]) {
         id: session.id,
         dateKey: dayKey(session.startedAt),
         workoutType: session.workoutType,
+        workoutTypeLabel: session.workoutTypeLabel,
+        activityFamily: session.activityFamily,
+        activityFamilyLabel: session.activityFamilyLabel,
         durationMinutes: Math.round(session.durationSeconds / 60),
         energyKcal: Math.round(
           session.totalEnergyKcal ?? session.activeEnergyKcal ?? 0
@@ -4398,6 +4486,15 @@ export function getFitnessViewData(userIds?: string[]) {
       .reverse(),
     typeBreakdown: orderedWorkoutTypes.map(([workoutType, metrics]) => ({
       workoutType,
+      workoutTypeLabel:
+        recent.find((session) => session.workoutType === workoutType)?.workoutTypeLabel ??
+        workoutType,
+      activityFamily:
+        recent.find((session) => session.workoutType === workoutType)?.activityFamily ??
+        "other",
+      activityFamilyLabel:
+        recent.find((session) => session.workoutType === workoutType)
+          ?.activityFamilyLabel ?? "Other",
       sessionCount: metrics.sessionCount,
       totalMinutes: metrics.totalMinutes,
       energyKcal: metrics.energyKcal
@@ -4893,6 +4990,11 @@ export function createWorkoutSession(
     tags: parsed.tags,
     links: parsed.links
   };
+  const persistenceSeed = buildWorkoutSessionPersistenceSeed({
+    source: parsed.source,
+    sourceType: parsed.sourceType,
+    workoutType: parsed.workoutType
+  });
 
   getDatabase()
     .prepare(
@@ -4911,7 +5013,7 @@ export function createWorkoutSession(
       userId,
       parsed.source,
       parsed.sourceType,
-      parsed.workoutType,
+      persistenceSeed.activity.canonicalKey,
       parsed.sourceDevice,
       parsed.startedAt,
       parsed.endedAt,
@@ -4937,12 +5039,17 @@ export function createWorkoutSession(
         entryMode: "local",
         source: parsed.source,
         sourceType: parsed.sourceType,
+        sourceSystem: persistenceSeed.sourceSystem,
+        activity: persistenceSeed.activity,
+        details: persistenceSeed.details,
         sourceDevice: parsed.sourceDevice,
         actor: activity?.actor ?? null,
         createdAt: now,
         ...parsed.provenance
       }),
       JSON.stringify({
+        activity: persistenceSeed.activity,
+        details: persistenceSeed.details,
         paceMetersPerMinute:
           parsed.distanceMeters && parsed.exerciseMinutes
             ? Number((parsed.distanceMeters / parsed.exerciseMinutes).toFixed(2))
@@ -5041,9 +5148,32 @@ export function updateWorkoutSession(
     current.provenance_json,
     {}
   );
+  const currentDerived = safeJsonParse<Record<string, unknown>>(
+    current.derived_json,
+    {}
+  );
   const nextExerciseMinutes =
     parsed.exerciseMinutes ?? current.exercise_minutes;
   const nextDistanceMeters = parsed.distanceMeters ?? current.distance_meters;
+  const persistenceSeed = buildWorkoutSessionPersistenceSeed({
+    source: parsed.source ?? current.source,
+    sourceType: parsed.sourceType ?? current.source_type,
+    workoutType: parsed.workoutType ?? current.workout_type,
+    sourceSystem:
+      typeof currentProvenance.sourceSystem === "string"
+        ? currentProvenance.sourceSystem
+        : null,
+    sourceBundleIdentifier:
+      typeof currentProvenance.sourceBundleIdentifier === "string"
+        ? currentProvenance.sourceBundleIdentifier
+        : null,
+    sourceProductType:
+      typeof currentProvenance.sourceProductType === "string"
+        ? currentProvenance.sourceProductType
+        : null,
+    activity: currentDerived.activity ?? currentProvenance.activity,
+    details: currentDerived.details ?? currentProvenance.details
+  });
 
   getDatabase()
     .prepare(
@@ -5060,7 +5190,7 @@ export function updateWorkoutSession(
       parsed.externalUid ?? current.external_uid,
       parsed.source ?? current.source,
       parsed.sourceType ?? current.source_type,
-      parsed.workoutType ?? current.workout_type,
+      persistenceSeed.activity.canonicalKey,
       parsed.sourceDevice ?? current.source_device,
       startedAt,
       endedAt,
@@ -5084,10 +5214,18 @@ export function updateWorkoutSession(
       JSON.stringify({
         ...currentProvenance,
         ...(parsed.provenance ?? {}),
+        sourceSystem: persistenceSeed.sourceSystem,
+        sourceBundleIdentifier: persistenceSeed.sourceBundleIdentifier,
+        sourceProductType: persistenceSeed.sourceProductType,
+        activity: persistenceSeed.activity,
+        details: persistenceSeed.details,
         updatedAt: now,
         updatedByActor: activity?.actor ?? null
       }),
       JSON.stringify({
+        ...currentDerived,
+        activity: persistenceSeed.activity,
+        details: persistenceSeed.details,
         paceMetersPerMinute:
           nextDistanceMeters && nextExerciseMinutes
             ? Number((nextDistanceMeters / nextExerciseMinutes).toFixed(2))
@@ -5299,6 +5437,11 @@ export function createGeneratedWorkoutFromHabit(args: {
   }
   const now = nowIso();
   const id = `workout_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+  const persistenceSeed = buildWorkoutSessionPersistenceSeed({
+    source: "forge_habit",
+    sourceType: "habit_generated",
+    workoutType: template.workoutType
+  });
   getDatabase()
     .prepare(
       `INSERT INTO health_workout_sessions (
@@ -5312,7 +5455,7 @@ export function createGeneratedWorkoutFromHabit(args: {
       id,
       `habit_${args.checkInId}`,
       args.userId,
-      template.workoutType,
+      persistenceSeed.activity.canonicalKey,
       startedAt,
       endedAt,
       template.durationMinutes * 60,
@@ -5328,9 +5471,14 @@ export function createGeneratedWorkoutFromHabit(args: {
       JSON.stringify({
         generatedFrom: "habit_completion",
         habitId: args.habitId,
-        checkInId: args.checkInId
+        checkInId: args.checkInId,
+        sourceSystem: persistenceSeed.sourceSystem,
+        activity: persistenceSeed.activity,
+        details: persistenceSeed.details
       }),
       JSON.stringify({
+        activity: persistenceSeed.activity,
+        details: persistenceSeed.details,
         xpReward: template.xpReward
       }),
       args.habitId,
