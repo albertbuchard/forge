@@ -1208,6 +1208,7 @@ private struct MovementLifeTimelineView: View {
         }
         let draft = MovementTimelinePlaceLabelDraft(
             item: item,
+            coordinate: item.resolvedCoordinate(using: appModel.movementStore),
             query: item.placeLabel?.isEmpty == false ? item.placeLabel! : item.displayTitle
         )
         companionDebugLog(
@@ -1225,13 +1226,14 @@ private struct MovementLifeTimelineView: View {
         for item: MovementLifeTimelineItem,
         labelHint: String? = nil
     ) {
-        guard item.kind == .stay, let coordinate = item.coordinate else {
+        guard item.kind == .stay else {
             companionDebugLog(
                 "MovementLifeTimeline",
                 "openPlaceDraft skipped unsupported item=\(movementTimelineLogDescriptor(for: item))"
             )
             return
         }
+        let resolvedCoordinate = item.resolvedCoordinate(using: appModel.movementStore)
         let draft = MovementTimelinePlaceDraft(
             item: item,
             label:
@@ -1239,15 +1241,14 @@ private struct MovementLifeTimelineView: View {
                 ? labelHint!.trimmingCharacters(in: .whitespacesAndNewlines)
                 : item.placeLabel?.isEmpty == false
                     ? item.placeLabel!
-                : item.displayTitle,
-            latitude: coordinate.latitude,
-            longitude: coordinate.longitude,
+                    : item.displayTitle,
+            coordinate: resolvedCoordinate,
             radiusMeters: item.stayRadiusMeters(using: appModel.movementStore),
             tags: movementTimelineSeededCategoryTagsForNewPlace(from: item)
         )
         companionDebugLog(
             "MovementLifeTimeline",
-            "openPlaceDraft item=\(movementTimelineLogDescriptor(for: item)) label=\(draft.label) latitude=\(draft.latitude) longitude=\(draft.longitude) radius=\(draft.radiusMeters) tags=\(draft.tags.joined(separator: "|")) queued=\(hasPresentedModal)"
+            "openPlaceDraft item=\(movementTimelineLogDescriptor(for: item)) label=\(draft.label) latitude=\(draft.latitudeText) longitude=\(draft.longitudeText) radius=\(draft.radiusMeters) tags=\(draft.tags.joined(separator: "|")) queued=\(hasPresentedModal)"
         )
         if hasPresentedModal {
             queuedPlaceDraft = draft
@@ -1264,7 +1265,7 @@ private struct MovementLifeTimelineView: View {
             return places.sorted { $0.label.localizedCaseInsensitiveCompare($1.label) == .orderedAscending }
         }
         let normalizedQuery = draft.query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let coordinate = item.coordinate
+        let coordinate = draft.coordinate ?? item.resolvedCoordinate(using: appModel.movementStore)
         return places
             .filter { place in
                 guard normalizedQuery.isEmpty == false else {
@@ -1310,7 +1311,7 @@ private struct MovementLifeTimelineView: View {
         from item: MovementLifeTimelineItem,
         to place: MovementSyncStore.StoredKnownPlace
     ) -> Double? {
-        guard let coordinate = item.coordinate else {
+        guard let coordinate = item.resolvedCoordinate(using: appModel.movementStore) else {
             return nil
         }
         return CLLocation(
@@ -1350,7 +1351,8 @@ private struct MovementLifeTimelineView: View {
         to item: MovementLifeTimelineItem
     ) async {
         do {
-            let linkedStayIds = item.linkableStayIds(using: appModel.movementStore)
+            let resolution = item.resolveStayTarget(using: appModel.movementStore)
+            let linkedStayIds = resolution.stayIds
             guard linkedStayIds.isEmpty == false else {
                 throw NSError(
                     domain: "MovementLifeTimeline",
@@ -1396,7 +1398,7 @@ private struct MovementLifeTimelineView: View {
                 )
             }
 
-            for stayId in item.linkableStayIds(using: appModel.movementStore) {
+            for stayId in resolution.stayIds {
                 appModel.movementStore.updateLocalStay(
                     id: stayId,
                     label: preservedStayTitle(for: item, fallbackPlaceLabel: place.label),
@@ -1408,7 +1410,7 @@ private struct MovementLifeTimelineView: View {
 
             companionDebugLog(
                 "MovementLifeTimeline",
-                "assignKnownPlace complete item=\(movementTimelineLogDescriptor(for: item)) place=\(knownPlaceLogDescriptor(place)) linkedStayIds=\(item.linkableStayIds(using: appModel.movementStore).joined(separator: "|"))"
+                "assignKnownPlace complete item=\(movementTimelineLogDescriptor(for: item)) place=\(knownPlaceLogDescriptor(place)) linkedStayIds=\(resolution.stayIds.joined(separator: "|"))"
             )
             placeLabelDraft = nil
             await reload()
@@ -1448,9 +1450,9 @@ private struct MovementLifeTimelineView: View {
         for item: MovementLifeTimelineItem,
         fallbackPlaceLabel: String
     ) -> String {
-        let linkedStayIds = item.linkableStayIds(using: appModel.movementStore)
-        if let localLabel = appModel.movementStore.storedStays
-            .first(where: { linkedStayIds.contains($0.id) })?
+        if let localLabel = item.resolveStayTarget(using: appModel.movementStore)
+            .linkedStays
+            .first?
             .label
             .trimmingCharacters(in: .whitespacesAndNewlines),
            localLabel.isEmpty == false
@@ -1513,9 +1515,16 @@ private struct MovementLifeTimelineView: View {
     @MainActor
     private func savePlaceDraft(_ draft: MovementTimelinePlaceDraft) async {
         do {
+            guard let latitude = draft.latitude, let longitude = draft.longitude else {
+                throw NSError(
+                    domain: "MovementLifeTimeline",
+                    code: 13,
+                    userInfo: [NSLocalizedDescriptionKey: "Enter latitude and longitude or place the location on the map before creating it."]
+                )
+            }
             companionDebugLog(
                 "MovementLifeTimeline",
-                "savePlaceDraft start item=\(movementTimelineLogDescriptor(for: draft.item)) label=\(draft.label) latitude=\(draft.latitude) longitude=\(draft.longitude) radius=\(draft.radiusMeters) tags=\(draft.tags.joined(separator: "|"))"
+                "savePlaceDraft start item=\(movementTimelineLogDescriptor(for: draft.item)) label=\(draft.label) latitude=\(latitude) longitude=\(longitude) radius=\(draft.radiusMeters) tags=\(draft.tags.joined(separator: "|"))"
             )
             let place = try await performMovementOperation(
                 reason: "life-timeline-save-place",
@@ -1523,8 +1532,8 @@ private struct MovementLifeTimelineView: View {
             ) { pairing in
                 try await appModel.syncClient.createMovementPlace(
                     label: draft.label.trimmingCharacters(in: .whitespacesAndNewlines),
-                    latitude: draft.latitude,
-                    longitude: draft.longitude,
+                    latitude: latitude,
+                    longitude: longitude,
                     categoryTags: draft.tags,
                     pairing: pairing
                 )
@@ -1680,6 +1689,38 @@ struct MovementTimelineDetailCoordinate: Identifiable, Hashable {
     }
 }
 
+struct MovementTimelineStayTargetResolution {
+    let stayIds: [String]
+    let linkedStays: [MovementSyncStore.StoredStay]
+    let coordinate: MovementTimelineCoordinate?
+    let stayRadiusMeters: Double
+
+    @MainActor
+    init(item: MovementLifeTimelineItem, movementStore: MovementSyncStore) {
+        let linkedStays = item.resolveLinkedStays(using: movementStore)
+        self.linkedStays = linkedStays
+        if linkedStays.isEmpty == false {
+            self.stayIds = linkedStays.map(\.id).sorted()
+        } else if item.rawStayIds.isEmpty == false {
+            self.stayIds = Array(Set(item.rawStayIds)).sorted()
+        } else if let liveStayId = item.liveStayId {
+            self.stayIds = [liveStayId]
+        } else {
+            self.stayIds = []
+        }
+        if let coordinate = item.coordinate {
+            self.coordinate = coordinate
+        } else if linkedStays.isEmpty == false {
+            let latitude = linkedStays.map(\.centerLatitude).reduce(0, +) / Double(linkedStays.count)
+            let longitude = linkedStays.map(\.centerLongitude).reduce(0, +) / Double(linkedStays.count)
+            self.coordinate = MovementTimelineCoordinate(latitude: latitude, longitude: longitude)
+        } else {
+            self.coordinate = nil
+        }
+        self.stayRadiusMeters = linkedStays.map(\.radiusMeters).max() ?? 100
+    }
+}
+
 enum MovementTimelinePlaceLabelOperation: Equatable {
     case createUserBox
     case patchUserBox(String)
@@ -1736,21 +1777,57 @@ func movementTimelineSeededCategoryTagsForNewPlace(
     }
 }
 
-private struct MovementTimelinePlaceDraft: Identifiable {
+struct MovementTimelinePlaceDraft: Identifiable {
     let item: MovementLifeTimelineItem
     var label: String
-    var latitude: Double
-    var longitude: Double
+    var latitudeText: String
+    var longitudeText: String
     var radiusMeters: Double
     var tags: [String]
 
+    init(
+        item: MovementLifeTimelineItem,
+        label: String,
+        coordinate: MovementTimelineCoordinate?,
+        radiusMeters: Double,
+        tags: [String]
+    ) {
+        self.item = item
+        self.label = label
+        self.latitudeText = coordinate.map { movementTimelineCoordinateDraftText($0.latitude) } ?? ""
+        self.longitudeText = coordinate.map { movementTimelineCoordinateDraftText($0.longitude) } ?? ""
+        self.radiusMeters = radiusMeters
+        self.tags = tags
+    }
+
     var id: String {
         item.id
+    }
+
+    var latitude: Double? {
+        movementTimelineCoordinateDraftValue(latitudeText)
+    }
+
+    var longitude: Double? {
+        movementTimelineCoordinateDraftValue(longitudeText)
+    }
+
+    var coordinate: CLLocationCoordinate2D? {
+        guard let latitude, let longitude else {
+            return nil
+        }
+        return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
+
+    mutating func setCoordinate(_ coordinate: CLLocationCoordinate2D) {
+        latitudeText = movementTimelineCoordinateDraftText(coordinate.latitude)
+        longitudeText = movementTimelineCoordinateDraftText(coordinate.longitude)
     }
 }
 
 private struct MovementTimelinePlaceLabelDraft: Identifiable {
     let item: MovementLifeTimelineItem
+    let coordinate: MovementTimelineCoordinate?
     var query: String
 
     var id: String {
@@ -1770,6 +1847,18 @@ private struct MovementTimelinePlaceAssignmentWarning: Identifiable {
         }
         return "\(Int(distanceMeters.rounded())) m"
     }
+}
+
+private func movementTimelineCoordinateDraftText(_ value: Double) -> String {
+    value.formatted(.number.precision(.fractionLength(6)))
+}
+
+private func movementTimelineCoordinateDraftValue(_ text: String) -> Double? {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard trimmed.isEmpty == false else {
+        return nil
+    }
+    return Double(trimmed)
 }
 
 struct MovementTimelineDetailSnapshot: Identifiable {
@@ -1885,6 +1974,7 @@ struct MovementTimelineDetailSnapshot: Identifiable {
 
     @MainActor
     init(item: MovementLifeTimelineItem, movementStore: MovementSyncStore) {
+        let stayResolution = item.resolveStayTarget(using: movementStore)
         self.itemId = item.id
         self.title = item.displayTitle
         self.subtitle = item.subtitle
@@ -1892,7 +1982,7 @@ struct MovementTimelineDetailSnapshot: Identifiable {
         self.startedAt = item.startedAtDate
         self.endedAt = item.endedAtDate
         self.durationSeconds = item.durationSeconds
-        let stays = movementStore.storedStays.filter { item.linkableStayIds(using: movementStore).contains($0.id) }
+        let stays = stayResolution.linkedStays
         let trips = movementStore.storedTrips.filter {
             item.rawTripIds.contains($0.id) || item.rawTripIds.contains($0.id.replacingOccurrences(of: "trip_", with: ""))
         }
@@ -1910,7 +2000,7 @@ struct MovementTimelineDetailSnapshot: Identifiable {
                 speedMps: nil
             )
         }
-        if localStayPositions.isEmpty, let coordinate = item.coordinate {
+        if localStayPositions.isEmpty, let coordinate = stayResolution.coordinate {
             localStayPositions = [
                 MovementTimelineDetailCoordinate(
                     id: "fallback-stay",
@@ -1937,7 +2027,7 @@ struct MovementTimelineDetailSnapshot: Identifiable {
         } else {
             self.averagePosition = nil
         }
-        self.stayRadiusMeters = item.stayRadiusMeters(using: movementStore)
+        self.stayRadiusMeters = stayResolution.stayRadiusMeters
         self.sampleCount = stays.map(\.sampleCount).reduce(0, +)
         let localTripPositions = trips
             .flatMap(\.points)
@@ -1969,16 +2059,64 @@ struct MovementTimelineDetailSnapshot: Identifiable {
 
 private struct MovementTimelinePlaceSheet: View {
     @State var draft: MovementTimelinePlaceDraft
+    @State private var mapPosition: MapCameraPosition
     let close: () -> Void
     let save: (MovementTimelinePlaceDraft) async -> Void
+
+    init(
+        draft: MovementTimelinePlaceDraft,
+        close: @escaping () -> Void,
+        save: @escaping (MovementTimelinePlaceDraft) async -> Void
+    ) {
+        _draft = State(initialValue: draft)
+        _mapPosition = State(initialValue: movementTimelinePlaceDraftCameraPosition(for: draft.coordinate))
+        self.close = close
+        self.save = save
+    }
 
     var body: some View {
         NavigationStack {
             Form {
+                Section("Map") {
+                    MapReader { proxy in
+                        Map(position: $mapPosition) {
+                            if let coordinate = draft.coordinate {
+                                Marker(
+                                    draft.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                        ? "Selected location"
+                                        : draft.label.trimmingCharacters(in: .whitespacesAndNewlines),
+                                    coordinate: coordinate
+                                )
+                            }
+                        }
+                        .frame(height: 220)
+                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .gesture(
+                            SpatialTapGesture()
+                                .onEnded { value in
+                                    guard let coordinate = proxy.convert(value.location, from: .local) else {
+                                        return
+                                    }
+                                    draft.setCoordinate(coordinate)
+                                    mapPosition = movementTimelinePlaceDraftCameraPosition(for: coordinate)
+                                }
+                        )
+                    }
+
+                    Text("Tap the map to place the location, or enter latitude and longitude below.")
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(CompanionStyle.textSecondary)
+                }
                 Section("Location details") {
                     TextField("Label", text: $draft.label)
-                    TextField("Latitude", value: $draft.latitude, format: .number.precision(.fractionLength(6)))
-                    TextField("Longitude", value: $draft.longitude, format: .number.precision(.fractionLength(6)))
+                    TextField("Latitude", text: $draft.latitudeText)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.numbersAndPunctuation)
+                    TextField("Longitude", text: $draft.longitudeText)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.numbersAndPunctuation)
                 }
                 Section("Optional details") {
                     TextField("Radius meters", value: $draft.radiusMeters, format: .number.precision(.fractionLength(0)))
@@ -1995,6 +2133,18 @@ private struct MovementTimelinePlaceSheet: View {
             }
             .navigationTitle("Create Location")
             .navigationBarTitleDisplayMode(.inline)
+            .onChange(of: draft.coordinate?.latitude) { _, _ in
+                guard let coordinate = draft.coordinate else {
+                    return
+                }
+                mapPosition = movementTimelinePlaceDraftCameraPosition(for: coordinate)
+            }
+            .onChange(of: draft.coordinate?.longitude) { _, _ in
+                guard let coordinate = draft.coordinate else {
+                    return
+                }
+                mapPosition = movementTimelinePlaceDraftCameraPosition(for: coordinate)
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") {
@@ -2009,13 +2159,16 @@ private struct MovementTimelinePlaceSheet: View {
                     Button("Create") {
                         companionDebugLog(
                             "MovementLifeTimeline",
-                            "place create tap item=\(draft.item.id) label=\(draft.label) latitude=\(draft.latitude) longitude=\(draft.longitude) radius=\(draft.radiusMeters) tags=\(draft.tags.joined(separator: "|"))"
+                            "place create tap item=\(draft.item.id) label=\(draft.label) latitude=\(draft.latitudeText) longitude=\(draft.longitudeText) radius=\(draft.radiusMeters) tags=\(draft.tags.joined(separator: "|"))"
                         )
                         Task {
                             await save(draft)
                         }
                     }
-                    .disabled(draft.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(
+                        draft.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            || draft.coordinate == nil
+                    )
                 }
             }
         }
@@ -2030,7 +2183,7 @@ private struct MovementTimelinePlaceLabelSheet: View {
     let createNewPlace: (String) -> Void
 
     private var coordinate: MovementTimelineCoordinate? {
-        draft.item.coordinate
+        draft.coordinate
     }
 
     private var hasExactMatch: Bool {
@@ -2126,7 +2279,6 @@ private struct MovementTimelinePlaceLabelSheet: View {
                             draft.query.trimmingCharacters(in: .whitespacesAndNewlines)
                         )
                     }
-                    .disabled(coordinate == nil)
                 }
             }
         }
@@ -2159,6 +2311,20 @@ private struct MovementTimelinePlaceLabelSheet: View {
         }
         return "\(Int(meters.rounded())) m away"
     }
+}
+
+private func movementTimelinePlaceDraftCameraPosition(
+    for coordinate: CLLocationCoordinate2D?
+) -> MapCameraPosition {
+    guard let coordinate else {
+        return .automatic
+    }
+    return .region(
+        MKCoordinateRegion(
+            center: coordinate,
+            span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+        )
+    )
 }
 
 private struct MovementTimelineDetailSheet: View {
@@ -4737,26 +4903,46 @@ struct MovementLifeTimelineItem: Identifiable, Hashable {
 
     @MainActor
     func linkableStayIds(using movementStore: MovementSyncStore) -> [String] {
-        if rawStayIds.isEmpty == false {
-            let direct = rawStayIds
-            let stripped = rawStayIds.map { $0.replacingOccurrences(of: "stay_", with: "") }
-            return Array(Set(direct + stripped)).sorted()
+        resolveStayTarget(using: movementStore).stayIds
+    }
+
+    var liveStayId: String? {
+        guard case .liveStay(let stayId, _) = source else {
+            return nil
         }
-        switch source {
-        case .liveStay(let stayId, _):
-            return [stayId]
-        default:
+        return stayId
+    }
+
+    @MainActor
+    func resolveStayTarget(using movementStore: MovementSyncStore) -> MovementTimelineStayTargetResolution {
+        MovementTimelineStayTargetResolution(item: self, movementStore: movementStore)
+    }
+
+    @MainActor
+    func resolvedCoordinate(using movementStore: MovementSyncStore) -> MovementTimelineCoordinate? {
+        resolveStayTarget(using: movementStore).coordinate
+    }
+
+    @MainActor
+    func resolveLinkedStays(using movementStore: MovementSyncStore) -> [MovementSyncStore.StoredStay] {
+        let candidateIds = rawStayIds.isEmpty == false ? rawStayIds : (liveStayId.map { [$0] } ?? [])
+        guard candidateIds.isEmpty == false else {
             return []
         }
+        let normalizedCandidates = Set(candidateIds.map(movementTimelineNormalizedStayIdentifier))
+        return movementStore.storedStays
+            .filter { normalizedCandidates.contains(movementTimelineNormalizedStayIdentifier($0.id)) }
+            .sorted {
+                if $0.startedAt == $1.startedAt {
+                    return $0.id < $1.id
+                }
+                return $0.startedAt < $1.startedAt
+            }
     }
 
     @MainActor
     func stayRadiusMeters(using movementStore: MovementSyncStore) -> Double {
-        let linkedStays = movementStore.storedStays.filter { linkableStayIds(using: movementStore).contains($0.id) }
-        if let radius = linkedStays.map(\.radiusMeters).max() {
-            return radius
-        }
-        return 100
+        resolveStayTarget(using: movementStore).stayRadiusMeters
     }
 
     static func mergedIdentifiers(_ left: [String], _ right: [String]) -> [String] {
@@ -4865,6 +5051,13 @@ struct MovementLifeTimelineItem: Identifiable, Hashable {
         }
         return LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
     }
+}
+
+private func movementTimelineNormalizedStayIdentifier(_ value: String) -> String {
+    guard value.hasPrefix("stay_") else {
+        return value
+    }
+    return String(value.dropFirst(5))
 }
 
 private enum MovementTimelineFormatting {

@@ -2076,10 +2076,10 @@ final class ForgeCompanionTests: XCTestCase {
         )
 
         let store = MovementSyncStore(testingState: nil)
-        XCTAssertEqual(item.linkableStayIds(using: store), ["remote_1", "stay_remote_1"])
+        XCTAssertEqual(item.linkableStayIds(using: store), ["stay_remote_1"])
     }
 
-    func testPromotedCurrentTimelineItemPreservesLinkableStayIds() {
+    func testPromotedCurrentTimelineItemResolvesToStoredStayIdentifier() {
         let startedAt = Date(timeIntervalSince1970: 1_775_000_000)
         let endedAt = startedAt.addingTimeInterval(3600)
         let item = MovementLifeTimelineItem(
@@ -2109,10 +2109,36 @@ final class ForgeCompanionTests: XCTestCase {
         )
 
         let promoted = item.promotedToCurrent(referenceDate: endedAt.addingTimeInterval(1200))
-        let store = MovementSyncStore(testingState: nil)
+        let store = MovementSyncStore(
+            testingState: MovementSyncStore.PersistedState(
+                trackingEnabled: true,
+                publishMode: "auto_publish",
+                retentionMode: "aggregates_only",
+                knownPlaces: [],
+                stays: [
+                    MovementSyncStore.StoredStay(
+                        id: "stay_remote_1",
+                        label: "Work",
+                        status: "active",
+                        classification: "stationary",
+                        startedAt: startedAt,
+                        endedAt: endedAt,
+                        centerLatitude: 46.5191,
+                        centerLongitude: 6.6323,
+                        radiusMeters: 85,
+                        sampleCount: 4,
+                        placeExternalUid: "",
+                        placeLabel: "",
+                        tags: ["workplace"],
+                        metadata: [:]
+                    )
+                ],
+                trips: []
+            )
+        )
 
         XCTAssertEqual(promoted.rawStayIds, ["stay_remote_1"])
-        XCTAssertEqual(promoted.linkableStayIds(using: store), ["remote_1", "stay_remote_1"])
+        XCTAssertEqual(promoted.linkableStayIds(using: store), ["stay_remote_1"])
         XCTAssertTrue(promoted.isCurrent)
     }
 
@@ -2174,13 +2200,149 @@ final class ForgeCompanionTests: XCTestCase {
             liveOverlay: liveOverlay,
             referenceDate: startedAt.addingTimeInterval(4500)
         )
-        let store = MovementSyncStore(testingState: nil)
+        let store = MovementSyncStore(
+            testingState: MovementSyncStore.PersistedState(
+                trackingEnabled: true,
+                publishMode: "auto_publish",
+                retentionMode: "aggregates_only",
+                knownPlaces: [],
+                stays: [
+                    MovementSyncStore.StoredStay(
+                        id: "stay_remote_1",
+                        label: "Work",
+                        status: "active",
+                        classification: "stationary",
+                        startedAt: startedAt,
+                        endedAt: startedAt.addingTimeInterval(4200),
+                        centerLatitude: 46.5191,
+                        centerLongitude: 6.6323,
+                        radiusMeters: 110,
+                        sampleCount: 6,
+                        placeExternalUid: "place_work",
+                        placeLabel: "Work",
+                        tags: ["workplace"],
+                        metadata: [:]
+                    )
+                ],
+                trips: []
+            )
+        )
         let merged = try? XCTUnwrap(normalized.first)
 
         XCTAssertEqual(normalized.count, 1)
         XCTAssertEqual(merged?.rawStayIds, ["stay_remote_1"])
-        XCTAssertEqual(merged?.linkableStayIds(using: store), ["remote_1", "stay_remote_1"])
+        XCTAssertEqual(merged?.linkableStayIds(using: store), ["stay_remote_1"])
         XCTAssertTrue(merged?.isCurrent ?? false)
+    }
+
+    func testMovementLifeTimelineItemResolvedCoordinateFallsBackToStoredStayCenter() throws {
+        let startedAt = Date(timeIntervalSince1970: 1_775_000_000)
+        let item = MovementLifeTimelineItem(
+            id: "derived-stay-item",
+            source: .derived("derived-stay"),
+            kind: .stay,
+            title: "Stay",
+            subtitle: "Derived stay",
+            placeLabel: nil,
+            tags: [],
+            syncSource: "local cache",
+            startedAtDate: startedAt,
+            endedAtDate: startedAt.addingTimeInterval(1800),
+            durationSeconds: 1800,
+            laneSide: .left,
+            connectorFromLane: .left,
+            connectorToLane: .left,
+            distanceMeters: nil,
+            averageSpeedMps: nil,
+            rawStayIds: ["stay_remote_1"],
+            origin: .recorded,
+            editable: true,
+            isCurrent: true
+        )
+        let store = MovementSyncStore(
+            testingState: MovementSyncStore.PersistedState(
+                trackingEnabled: true,
+                publishMode: "auto_publish",
+                retentionMode: "aggregates_only",
+                knownPlaces: [],
+                stays: [
+                    MovementSyncStore.StoredStay(
+                        id: "stay_remote_1",
+                        label: "Work",
+                        status: "active",
+                        classification: "stationary",
+                        startedAt: startedAt,
+                        endedAt: startedAt.addingTimeInterval(1800),
+                        centerLatitude: 46.5245,
+                        centerLongitude: 6.6391,
+                        radiusMeters: 95,
+                        sampleCount: 8,
+                        placeExternalUid: "",
+                        placeLabel: "",
+                        tags: [],
+                        metadata: [:]
+                    )
+                ],
+                trips: []
+            )
+        )
+
+        let resolvedCoordinate = item.resolvedCoordinate(using: store)
+        guard let coordinate = resolvedCoordinate else {
+            return XCTFail("Expected a resolved coordinate from the stored stay center")
+        }
+
+        XCTAssertEqual(coordinate.latitude, 46.5245, accuracy: 0.000001)
+        XCTAssertEqual(coordinate.longitude, 6.6391, accuracy: 0.000001)
+        XCTAssertEqual(item.stayRadiusMeters(using: store), 95, accuracy: 0.000001)
+    }
+
+    func testMovementTimelinePlaceDraftAllowsManualCoordinatesWhenNoSeedCoordinateExists() throws {
+        let startedAt = Date(timeIntervalSince1970: 1_775_000_000)
+        let item = MovementLifeTimelineItem(
+            id: "derived-stay-item",
+            source: .derived("derived-stay"),
+            kind: .stay,
+            title: "Stay",
+            subtitle: "Derived stay",
+            placeLabel: nil,
+            tags: [],
+            syncSource: "local cache",
+            startedAtDate: startedAt,
+            endedAtDate: startedAt.addingTimeInterval(1800),
+            durationSeconds: 1800,
+            laneSide: .left,
+            connectorFromLane: .left,
+            connectorToLane: .left,
+            distanceMeters: nil,
+            averageSpeedMps: nil,
+            rawStayIds: ["stay_remote_1"],
+            origin: .recorded,
+            editable: true,
+            isCurrent: true
+        )
+        var draft = MovementTimelinePlaceDraft(
+            item: item,
+            label: "Gym",
+            coordinate: nil,
+            radiusMeters: 80,
+            tags: ["fitness"]
+        )
+
+        XCTAssertNil(draft.coordinate)
+
+        draft.latitudeText = "46.520000"
+        draft.longitudeText = "6.630000"
+        let latitude = try XCTUnwrap(draft.latitude)
+        let longitude = try XCTUnwrap(draft.longitude)
+        guard let coordinate = draft.coordinate else {
+            return XCTFail("Expected manual latitude/longitude to produce a coordinate")
+        }
+
+        XCTAssertEqual(latitude, 46.52, accuracy: 0.000001)
+        XCTAssertEqual(longitude, 6.63, accuracy: 0.000001)
+        XCTAssertEqual(coordinate.latitude, 46.52, accuracy: 0.000001)
+        XCTAssertEqual(coordinate.longitude, 6.63, accuracy: 0.000001)
     }
 
     func testPlaceLabelOperationCreatesUserBoxForAutomaticStay() {
