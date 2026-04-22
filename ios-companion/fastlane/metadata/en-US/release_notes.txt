@@ -1,3 +1,4 @@
-Forge Companion 1.0.21 rebuilds the life timeline geometry so sleep overlay boxes and the hour grid align exactly.
-Normalized and ongoing timeline stays now preserve their canonical raw stay
-linkage, so selecting an existing place label correctly updates the stay again.
+Forge Companion 1.0.22 merges touching canonical stays that belong to the same place,
+so the paired timeline stops fragmenting one continuous visit into duplicate blocks.
+Shared raw stay identifiers are now preserved across coalesced stays, which keeps
+place relabeling and stay continuity stable after sync repairs.

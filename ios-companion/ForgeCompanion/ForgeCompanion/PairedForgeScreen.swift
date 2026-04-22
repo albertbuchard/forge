@@ -3971,7 +3971,7 @@ enum MovementTimelineCanonicalNormalizer {
             return []
         }
 
-        var canonical = deduplicated
+        var canonical = mergeAdjacentStayContinuity(deduplicated)
         if let liveOverlay {
             canonical = applyLiveOverlay(liveOverlay, to: canonical, referenceDate: referenceDate)
         } else if let last = canonical.last,
@@ -3982,6 +3982,14 @@ enum MovementTimelineCanonicalNormalizer {
             canonical[canonical.count - 1] = last.promotedToCurrent(referenceDate: referenceDate)
         }
         return canonical
+    }
+
+    private static func touchesOrOverlaps(
+        _ left: MovementLifeTimelineItem,
+        _ right: MovementLifeTimelineItem
+    ) -> Bool {
+        right.startedAtDate <= left.endedAtDate
+            || abs(right.startedAtDate.timeIntervalSince(left.endedAtDate)) < 1
     }
 
     private static func deduplicate(
@@ -4006,6 +4014,72 @@ enum MovementTimelineCanonicalNormalizer {
             }
             return left.startedAtDate < right.startedAtDate
         }
+    }
+
+    private static func stayIdentityKeys(for item: MovementLifeTimelineItem) -> Set<String> {
+        guard item.kind == .stay else {
+            return []
+        }
+        var keys = Set(
+            item.rawStayIds
+                .map(normalizedRawStayIdentifier)
+                .filter { $0.isEmpty == false }
+                .map { "raw:\($0)" }
+        )
+        if let boxId = item.boxId?.trimmingCharacters(in: .whitespacesAndNewlines),
+           boxId.isEmpty == false
+        {
+            keys.insert("box:\(boxId)")
+        }
+        if let anchor = stayAnchorKey(for: item) {
+            keys.insert("anchor:\(anchor)")
+        }
+        return keys
+    }
+
+    private static func sharesCanonicalStayContinuity(
+        _ left: MovementLifeTimelineItem,
+        _ right: MovementLifeTimelineItem
+    ) -> Bool {
+        guard left.kind == .stay, right.kind == .stay else {
+            return false
+        }
+        let leftKeys = stayIdentityKeys(for: left)
+        let rightKeys = stayIdentityKeys(for: right)
+        if leftKeys.isEmpty == false, rightKeys.isEmpty == false, leftKeys.isDisjoint(with: rightKeys) == false {
+            return true
+        }
+        return sharesStayAnchor(left, right)
+    }
+
+    private static func mergeAdjacentStayContinuity(
+        _ items: [MovementLifeTimelineItem]
+    ) -> [MovementLifeTimelineItem] {
+        var merged: [MovementLifeTimelineItem] = []
+        for item in items {
+            guard let last = merged.last else {
+                merged.append(item)
+                continue
+            }
+            guard
+                last.kind == .stay,
+                item.kind == .stay,
+                touchesOrOverlaps(last, item),
+                sharesCanonicalStayContinuity(last, item)
+            else {
+                merged.append(item)
+                continue
+            }
+            merged[merged.count - 1] = mergedCanonicalStay(last, item)
+        }
+        return merged
+    }
+
+    private static func normalizedRawStayIdentifier(_ value: String) -> String {
+        guard value.hasPrefix("stay_") else {
+            return value
+        }
+        return String(value.dropFirst(5))
     }
 
     private static func stayAnchorKey(for item: MovementLifeTimelineItem) -> String? {
@@ -4037,9 +4111,10 @@ enum MovementTimelineCanonicalNormalizer {
     private static func mergedCanonicalStay(
         _ left: MovementLifeTimelineItem,
         _ right: MovementLifeTimelineItem,
-        referenceDate: Date
+        referenceDate: Date? = nil
     ) -> MovementLifeTimelineItem {
-        let mergedEnd = max(max(left.endedAtDate, right.endedAtDate), referenceDate)
+        let mergedEnd = max(left.endedAtDate, right.endedAtDate)
+        let resolvedEnd = referenceDate.map { max(mergedEnd, $0) } ?? mergedEnd
         let mergedStart = min(left.startedAtDate, right.startedAtDate)
         return left.copy(
             title: left.placeLabel ?? right.placeLabel ?? left.title,
@@ -4048,10 +4123,10 @@ enum MovementTimelineCanonicalNormalizer {
             tags: Array(Set(left.tags + right.tags)).sorted(),
             syncSource: left.syncSource == right.syncSource ? left.syncSource : "canonical",
             startedAtDate: mergedStart,
-            endedAtDate: mergedEnd,
+            endedAtDate: resolvedEnd,
             durationSeconds: max(
                 60,
-                Int(mergedEnd.timeIntervalSince(mergedStart))
+                Int(resolvedEnd.timeIntervalSince(mergedStart))
             ),
             laneSide: .left,
             connectorFromLane: .left,
@@ -4068,7 +4143,7 @@ enum MovementTimelineCanonicalNormalizer {
                 ? .continuedStay
                 : left.origin,
             editable: left.editable && right.editable,
-            isCurrent: true
+            isCurrent: referenceDate != nil || left.isCurrent || right.isCurrent
         )
     }
 

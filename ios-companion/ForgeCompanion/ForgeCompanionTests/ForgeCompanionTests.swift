@@ -1595,6 +1595,79 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(normalizedEnd.timeIntervalSince1970, referenceDate.timeIntervalSince1970, accuracy: 1)
     }
 
+    func testCanonicalNormalizerCoalescesTouchingSamePlaceStays() throws {
+        let formatter = ISO8601DateFormatter()
+        let firstStart = try XCTUnwrap(formatter.date(from: "2026-04-22T13:51:00Z"))
+        let secondEnd = try XCTUnwrap(formatter.date(from: "2026-04-22T15:05:00Z"))
+        let items = [
+            makeDisplayItem(
+                id: "canonical-gym-a",
+                kind: .stay,
+                title: "Gym",
+                placeLabel: "Gym",
+                startedAt: firstStart,
+                endedAt: try XCTUnwrap(formatter.date(from: "2026-04-22T14:39:00Z")),
+                origin: .recorded
+            ),
+            makeDisplayItem(
+                id: "canonical-gym-b",
+                kind: .stay,
+                title: "Gym",
+                placeLabel: "Gym",
+                startedAt: try XCTUnwrap(formatter.date(from: "2026-04-22T14:39:00Z")),
+                endedAt: secondEnd,
+                origin: .recorded
+            )
+        ]
+
+        let normalized = MovementTimelineCanonicalNormalizer.normalize(
+            items: items,
+            liveOverlay: nil,
+            referenceDate: secondEnd
+        )
+
+        XCTAssertEqual(normalized.count, 1)
+        XCTAssertEqual(normalized.first?.kind, .stay)
+        XCTAssertEqual(normalized.first?.title, "Gym")
+        XCTAssertEqual(normalized.first?.startedAtDate, firstStart)
+        XCTAssertEqual(normalized.first?.endedAtDate, secondEnd)
+    }
+
+    func testCanonicalNormalizerCoalescesTouchingStaysSharingRawStayIdsEvenWhenLabelsDiffer() throws {
+        let formatter = ISO8601DateFormatter()
+        let firstStart = try XCTUnwrap(formatter.date(from: "2026-04-22T13:51:00Z"))
+        let secondEnd = try XCTUnwrap(formatter.date(from: "2026-04-22T15:05:00Z"))
+        let first = makeDisplayItem(
+            id: "canonical-stay-a",
+            kind: .stay,
+            title: "Stay",
+            placeLabel: nil,
+            startedAt: firstStart,
+            endedAt: try XCTUnwrap(formatter.date(from: "2026-04-22T14:39:00Z")),
+            origin: .recorded
+        ).copy(rawStayIds: ["stay_remote_1"])
+        let second = makeDisplayItem(
+            id: "canonical-stay-b",
+            kind: .stay,
+            title: "Gym",
+            placeLabel: "Gym",
+            startedAt: try XCTUnwrap(formatter.date(from: "2026-04-22T14:39:00Z")),
+            endedAt: secondEnd,
+            origin: .recorded
+        ).copy(rawStayIds: ["remote_1"])
+
+        let normalized = MovementTimelineCanonicalNormalizer.normalize(
+            items: [first, second],
+            liveOverlay: nil,
+            referenceDate: secondEnd
+        )
+
+        XCTAssertEqual(normalized.count, 1)
+        XCTAssertEqual(normalized.first?.kind, .stay)
+        XCTAssertEqual(normalized.first?.title, "Gym")
+        XCTAssertEqual(normalized.first?.rawStayIds, ["remote_1", "stay_remote_1"])
+    }
+
     func testSleepOverlayNormalizerSlicesMovementItemsWithoutPersistingFragments() throws {
         let formatter = ISO8601DateFormatter()
         let referenceDate = formatter.date(from: "2026-04-20T08:00:00Z") ?? Date()
@@ -2682,9 +2755,9 @@ final class ForgeCompanionTests: XCTestCase {
         let encoded = try JSONEncoder().encode(payload)
         let rendered = try XCTUnwrap(String(data: encoded, encoding: .utf8))
 
-        XCTAssertTrue(rendered.contains("\\\"average_speed\\\""))
-        XCTAssertTrue(rendered.contains("\\\"pause\\\""))
-        XCTAssertTrue(rendered.contains("\\\"Cooldown\\\""))
+        XCTAssertTrue(rendered.contains("\"average_speed\""))
+        XCTAssertTrue(rendered.contains("\"pause\""))
+        XCTAssertTrue(rendered.contains("\"Cooldown\""))
     }
 
     private func makeLocation(
