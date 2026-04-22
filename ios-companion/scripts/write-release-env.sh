@@ -52,15 +52,22 @@ done
 
 mkdir -p "$(dirname "${TARGET_PATH}")"
 
-if [[ -n "${FORGE_IOS_RELEASE_ENV_BASE64:-}" ]]; then
-  decode_base64_to_file "${TARGET_PATH}"
-elif [[ -n "${FORGE_IOS_RELEASE_ENV:-}" ]]; then
-  printf '%s\n' "${FORGE_IOS_RELEASE_ENV}" >"${TARGET_PATH}"
-else
-  :
+has_direct_release_env_values=0
+if [[ -n "${FORGE_ASC_KEY_ID:-}" || -n "${FORGE_ASC_ISSUER_ID:-}" || -n "${FORGE_ASC_KEY_PATH:-}" || -n "${FORGE_ASC_KEY_CONTENT_BASE64:-}" || -n "${FORGE_APPLE_TEAM_ID:-}" || -n "${FORGE_RELEASE_SKIP_REMOTE_VALIDATION:-}" ]]; then
+  has_direct_release_env_values=1
 fi
 
-if [[ -f "${TARGET_PATH}" ]]; then
+if [[ "${has_direct_release_env_values}" == "1" ]]; then
+  printf '[forge-release] Using individual FORGE_ASC_* / FORGE_APPLE_TEAM_ID values to write %s\n' "${TARGET_PATH}"
+elif [[ -n "${FORGE_IOS_RELEASE_ENV_BASE64:-}" ]]; then
+  printf '[forge-release] Using FORGE_IOS_RELEASE_ENV_BASE64 to write %s\n' "${TARGET_PATH}"
+  decode_base64_to_file "${TARGET_PATH}"
+elif [[ -n "${FORGE_IOS_RELEASE_ENV:-}" ]]; then
+  printf '[forge-release] Using FORGE_IOS_RELEASE_ENV to write %s\n' "${TARGET_PATH}"
+  printf '%s\n' "${FORGE_IOS_RELEASE_ENV}" >"${TARGET_PATH}"
+fi
+
+if [[ "${has_direct_release_env_values}" != "1" && -f "${TARGET_PATH}" ]]; then
   set -a
   source "${TARGET_PATH}"
   set +a

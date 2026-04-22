@@ -155,6 +155,11 @@ jobs:
           FORGE_ASC_KEY_CONTENT_BASE64: ${{ secrets.FORGE_ASC_KEY_CONTENT_BASE64 }}
           FORGE_APPLE_TEAM_ID: ${{ secrets.FORGE_APPLE_TEAM_ID }}
         run: |
+          if [[ -n "${FORGE_ASC_KEY_ID}" && -n "${FORGE_ASC_ISSUER_ID}" && -n "${FORGE_ASC_KEY_CONTENT_BASE64}" ]]; then
+            echo "Using split ASC secrets for Forge iOS release auth."
+          else
+            echo "Using bundled FORGE_IOS_RELEASE_ENV(_BASE64) payload for Forge iOS release auth."
+          fi
           ./ios-companion/scripts/write-release-env.sh ios-companion/.release.env --require-asc-auth
 
       - name: Verify release config version matches tag
