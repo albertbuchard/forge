@@ -598,6 +598,7 @@ def build_release_archive!(artifact_dir:, archive_path:, marketing_version:, bum
     include_bitcode: false,
     disable_xcpretty: true,
     xcargs: xcargs,
+    export_xcargs: xcargs,
     export_team_id: ENV.fetch("FORGE_APPLE_TEAM_ID", "KZ65F7924F"),
     export_options: export_options,
     skip_profile_detection: !export_options.nil?

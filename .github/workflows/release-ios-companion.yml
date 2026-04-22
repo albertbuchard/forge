@@ -190,11 +190,20 @@ jobs:
         run: ./ios-companion/scripts/publish-forge-companion.sh "${RELEASE_MODE}"
 
       - name: Upload release artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: forge-ios-release-artifacts
           path: ios-companion/.artifacts/releases/**
-          if-no-files-found: error
+          if-no-files-found: ignore
+
+      - name: Upload gym logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-ios-gym-logs
+          path: ~/Library/Logs/gym/*.log
+          if-no-files-found: ignore
 
       - name: Upload screenshot artifacts
         if: steps.release_meta.outputs.release_mode == 'app-store'
