@@ -1,4 +1,4 @@
-Forge Companion 1.0.22 merges touching canonical stays that belong to the same place,
-so the paired timeline stops fragmenting one continuous visit into duplicate blocks.
-Shared raw stay identifiers are now preserved across coalesced stays, which keeps
-place relabeling and stay continuity stable after sync repairs.
+Forge Companion 1.0.23 keeps merged canonical stays stable in the paired timeline,
+preserving shared raw stay identifiers across coalesced visits so stay continuity and
+place relabeling survive sync repairs. This release also restores the ASC-based CI
+auth path used for TestFlight publishing.
