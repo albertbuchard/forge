@@ -1,4 +1,4 @@
-Forge Companion 1.0.27 keeps merged canonical stays stable in the paired timeline,
+Forge Companion 1.0.28 keeps merged canonical stays stable in the paired timeline,
 preserving shared raw stay identifiers across coalesced visits so stay continuity and
 place relabeling survive sync repairs. This release also adds CI diagnostics so any
 remaining TestFlight archive or signing failure is surfaced directly in the public run.
