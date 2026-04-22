@@ -11,8 +11,9 @@ import { recordActivityEvent } from "./activity-events.js";
 import { filterDeletedEntities, filterDeletedIds, isEntityDeleted } from "./deleted-entities.js";
 import { recordHabitCheckInReward, reverseLatestHabitCheckInReward } from "./rewards.js";
 import { createHabitCheckInSchema, createHabitSchema, habitCheckInSchema, habitSchema, updateHabitSchema } from "../types.js";
+import { formatLocalDateKey } from "../../../src/lib/date-keys.js";
 function todayKey(now = new Date()) {
-    return now.toISOString().slice(0, 10);
+    return formatLocalDateKey(now);
 }
 function parseWeekDays(raw) {
     const parsed = JSON.parse(raw);
@@ -87,25 +88,25 @@ function calculateStreak(habit, checkIns, now = new Date()) {
             statusByDate.set(checkIn.dateKey, checkIn.status);
         }
     }
-    const isScheduledOn = (date) => habit.frequency === "daily" || habit.weekDays.includes(date.getUTCDay());
-    const toDateKey = (date) => date.toISOString().slice(0, 10);
-    const atUtcDayStart = (date) => new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+    const isScheduledOn = (date) => habit.frequency === "daily" || habit.weekDays.includes(date.getDay());
+    const toDateKey = (date) => formatLocalDateKey(date);
+    const atLocalDayStart = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
     const previousScheduledDate = (date) => {
-        const cursor = atUtcDayStart(date);
+        const cursor = atLocalDayStart(date);
         do {
-            cursor.setUTCDate(cursor.getUTCDate() - 1);
+            cursor.setDate(cursor.getDate() - 1);
         } while (!isScheduledOn(cursor));
         return cursor;
     };
-    const startOfUtcWeek = (date) => {
-        const start = atUtcDayStart(date);
-        const offset = (start.getUTCDay() + 6) % 7;
-        start.setUTCDate(start.getUTCDate() - offset);
+    const startOfLocalWeek = (date) => {
+        const start = atLocalDayStart(date);
+        const offset = (start.getDay() + 6) % 7;
+        start.setDate(start.getDate() - offset);
         return start;
     };
-    const previousUtcWeek = (date) => {
-        const start = startOfUtcWeek(date);
-        start.setUTCDate(start.getUTCDate() - 7);
+    const previousLocalWeek = (date) => {
+        const start = startOfLocalWeek(date);
+        start.setDate(start.getDate() - 7);
         return start;
     };
     const alignedStatusOn = (date) => {
@@ -113,7 +114,7 @@ function calculateStreak(habit, checkIns, now = new Date()) {
         return status ? isAligned(habit, { status }) : false;
     };
     if (habit.frequency === "daily") {
-        const today = atUtcDayStart(now);
+        const today = atLocalDayStart(now);
         let cursor = isScheduledOn(today) && !statusByDate.has(toDateKey(today))
             ? previousScheduledDate(today)
             : today;
@@ -128,21 +129,21 @@ function calculateStreak(habit, checkIns, now = new Date()) {
         let count = 0;
         for (let offset = 0; offset < 7; offset += 1) {
             const day = new Date(weekStart);
-            day.setUTCDate(weekStart.getUTCDate() + offset);
+            day.setDate(weekStart.getDate() + offset);
             if (isScheduledOn(day) && alignedStatusOn(day)) {
                 count += 1;
             }
         }
         return count;
     };
-    const currentWeekStart = startOfUtcWeek(now);
+    const currentWeekStart = startOfLocalWeek(now);
     let cursor = alignedCountForWeek(currentWeekStart) >= habit.targetCount
         ? currentWeekStart
-        : previousUtcWeek(currentWeekStart);
+        : previousLocalWeek(currentWeekStart);
     let streak = 0;
     while (alignedCountForWeek(cursor) >= habit.targetCount) {
         streak += 1;
-        cursor = previousUtcWeek(cursor);
+        cursor = previousLocalWeek(cursor);
     }
     return streak;
 }
@@ -157,7 +158,7 @@ function isHabitDueToday(habit, latestCheckIn, now = new Date()) {
     if (habit.frequency === "daily") {
         return true;
     }
-    return habit.weekDays.includes(now.getUTCDay());
+    return habit.weekDays.includes(now.getDay());
 }
 function mapHabit(row, checkIns = listCheckInsForHabit(row.id)) {
     const latestCheckIn = checkIns[0] ?? null;
@@ -235,21 +236,28 @@ function sortHabits(habits, orderBy) {
     const nextHabits = [...habits];
     nextHabits.sort((left, right) => {
         if (orderBy === "name") {
-            return (left.title.localeCompare(right.title, undefined, { sensitivity: "base" }) ||
-                compareDateDesc(left.createdAt, right.createdAt));
+            return (left.title.localeCompare(right.title, undefined, {
+                sensitivity: "base"
+            }) || compareDateDesc(left.createdAt, right.createdAt));
         }
         if (orderBy === "streak") {
             return (right.streakCount - left.streakCount ||
                 Number(right.dueToday) - Number(left.dueToday) ||
-                left.title.localeCompare(right.title, undefined, { sensitivity: "base" }));
+                left.title.localeCompare(right.title, undefined, {
+                    sensitivity: "base"
+                }));
         }
         if (orderBy === "created_at") {
             return (compareDateDesc(left.createdAt, right.createdAt) ||
-                left.title.localeCompare(right.title, undefined, { sensitivity: "base" }));
+                left.title.localeCompare(right.title, undefined, {
+                    sensitivity: "base"
+                }));
         }
         if (orderBy === "updated_at") {
             return (compareDateDesc(left.updatedAt, right.updatedAt) ||
-                left.title.localeCompare(right.title, undefined, { sensitivity: "base" }));
+                left.title.localeCompare(right.title, undefined, {
+                    sensitivity: "base"
+                }));
         }
         return (Number(right.dueToday) - Number(left.dueToday) ||
             compareDateAsc(left.lastCheckInAt, right.lastCheckInAt) ||

@@ -56,6 +56,8 @@ Forge correctly, and gather only the structure that still matters.
 - For specialized surfaces, start from the user's real job in plain language, then
   narrow to the route family. Do not open with a route menu unless the user already
   named the exact object and action.
+- For specialized surfaces, if the truth of the current state is still uncertain, read
+  the relevant dedicated view before you mutate it.
 - When the user has already named a precise correction or review target, do not widen
   back out into a meta lane question. Confirm only the missing route-selecting detail
   and then act.
@@ -411,7 +413,7 @@ about linking only after the main record already feels named and steady.
 
 Use this when the user is updating an existing record rather than creating a new one.
 
-1. Ask what feels newly true, newly urgent, or newly clear.
+1. Ask what feels newly true, newly inaccurate, or newly clear.
 2. Ask what should stay true so the record keeps its core meaning.
 3. Ask what prompted the update now if that changes the shape of the record.
 4. Then ask only for the missing structural detail required by the change.
@@ -1017,9 +1019,11 @@ Arc:
 5. Ask what they are trying to notice, preserve, or answer through that movement context.
 6. Choose the dedicated day, month, all-time, timeline, places, trip-detail, or
    selection route once the question shape is clear.
-7. Skip the meta lane question when the user already named the exact correction or
+7. If the truth of one uncertain span is still unclear, read the timeline or saved-box
+   detail before you mutate it.
+8. Skip the meta lane question when the user already named the exact correction or
    review target and only one ambiguity remains.
-8. Route to the dedicated movement read or write path once the surface is clear.
+9. Route to the dedicated movement read or write path once the surface is clear.
 
 Direct action rules:
 
@@ -1036,6 +1040,8 @@ Direct action rules:
 - If the user wants to inspect one already-saved movement correction before editing
   it, read the box detail first so the follow-up write stays grounded in the saved
   object.
+- If the user is asking where they were during one uncertain window, prefer a timeline
+  read before you create a correction. Mutate only after the lived truth is clear.
 - When the user has already given the real answer, for example "I stayed home during
   that missing block", do not ask a broad review question again. Confirm only the
   interval or place if that is still ambiguous, then act.
@@ -1105,11 +1111,14 @@ Arc:
 4. Ask what should stay true if they are changing profile or template assumptions.
 5. Ask whether the user is describing a stable weekly shape or just how today feels
    when the lane is still blurred.
-6. If the user already named the life-force lane clearly, skip the meta lane question
+6. If the user describes a repeatable day-shape such as "Mondays crash after lunch",
+   treat that as a weekday-template question before you reach for profile or
+   fatigue-signal routes.
+7. If the user already named the life-force lane clearly, skip the meta lane question
    and ask only for the specific weekday, profile field, or signal that still matters.
-7. If the user wants to see what changed after a write, read the overview back instead
+8. If the user wants to see what changed after a write, read the overview back instead
    of leaving the result implicit.
-8. Route to the dedicated life-force path once the lane is clear.
+9. Route to the dedicated life-force path once the lane is clear.
 
 Helpful follow-up lanes:
 
@@ -1133,6 +1142,8 @@ Direct action rules:
 
 - If the user is describing a durable baseline such as work capacity, recovery style,
   or action-point assumptions, patch the profile instead of logging a fatigue signal.
+- If the user is describing a repeatable weekday rhythm, update that weekday template
+  instead of treating it as a one-off right-now feeling.
 - If the user is describing how one weekday should usually feel, update that weekday
   template instead of editing the profile.
 - If the user is describing right-now depletion or recovery, post a fatigue signal and
@@ -1161,12 +1172,16 @@ Arc:
    before you narrow to flow discovery, editing, execution, or results.
 2. Ask whether the job is flow discovery, one flow edit, execution, run history, published output, node-level inspection, or latest-node-output lookup.
 3. Ask which flow, slug, run, or node the request is about.
-4. Ask whether they need the flow contract, a run result, a published output, or a node result.
+4. Ask whether they need the stable flow contract, one run result, one published
+   output, one node result, or the latest node output.
 5. If the user already named the flow and action clearly, skip the meta lane
    question and ask only for the missing run, node, or output scope.
 6. If the user wants a stable public input contract or published output, prefer those
    dedicated reads instead of detouring through run history first.
-7. Route to the dedicated workbench route family once the execution lane is clear.
+7. If the user is debugging one failed run, ask whether the useful artifact is the run
+   summary, one node result, the latest node output, or the published output before
+   you start asking for edits.
+8. Route to the dedicated workbench route family once the execution lane is clear.
 
 Helpful follow-up lanes:
 
@@ -1205,6 +1220,9 @@ Direct action rules:
 - If the user wants to execute a known saved flow, use `/api/v1/workbench/flows/:id/run`.
 - If the user wants payload-first execution without depending on a saved flow id, use
   `/api/v1/workbench/run`.
+- If the user wants to debug one failed execution, narrow whether they need the run
+  detail, one node result, the latest node output, or the published output before you
+  ask for flow changes.
 - If the user wants one node's latest successful output, do not browse old runs first
   unless they explicitly want historical debugging.
 - If the user wants to understand what inputs a flow can accept before editing or

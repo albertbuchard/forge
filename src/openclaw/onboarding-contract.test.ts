@@ -535,12 +535,21 @@ describe("forge onboarding contract", () => {
     expect(playbookByFocus.get("movement")?.askSequence.join(" ")).toMatch(
       /exact correction or review target/i
     );
+    expect(playbookByFocus.get("movement")?.askSequence.join(" ")).toMatch(
+      /read the timeline or saved-box detail before you mutate it/i
+    );
 
     expect(playbookByFocus.get("life_force")?.askSequence.join(" ")).toMatch(
       /read the overview back/i
     );
+    expect(playbookByFocus.get("life_force")?.askSequence.join(" ")).toMatch(
+      /Mondays crash after lunch|weekday-template question/i
+    );
     expect(playbookByFocus.get("workbench")?.askSequence.join(" ")).toMatch(
       /stable public input contract or published output/i
+    );
+    expect(playbookByFocus.get("workbench")?.askSequence.join(" ")).toMatch(
+      /run summary, one node result, the latest node output, or the published output/i
     );
 
     expect(psycheByFocus.get("belief_entry")?.askSequence.join(" ")).toMatch(

@@ -347,6 +347,7 @@ describe("forge skill playbook parity", () => {
     expect(appSource).toMatch(/workbenchFlows:/);
     expect(appSource).toMatch(/specializedSurfaceRule:/);
     expect(appSource).toMatch(/another agent could follow the same path without guessing/i);
+    expect(appSource).toMatch(/read the relevant specialized view before you mutate it/i);
     expect(appSource).toMatch(/shared batch CRUD path for ordinary sleep_session create or update work/i);
     expect(appSource).toMatch(/shared batch CRUD path for ordinary workout_session create or update work/i);
 

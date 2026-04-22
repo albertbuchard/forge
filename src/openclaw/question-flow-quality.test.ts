@@ -128,6 +128,19 @@ describe("question flow quality coverage", () => {
       /read[\s\S]*relevant timeline back instead of leaving the correction ungrounded/i
     );
     expect(entityPlaybook).toMatch(
+      /if the truth of one uncertain span is still unclear,[\s\S]*read the timeline or saved-box[\s\S]*detail before you mutate it/i
+    );
+    expect(entityPlaybook).toMatch(
+      /if the user is asking where they were during one uncertain window,[\s\S]*prefer a timeline[\s\S]*read before you create a correction/i
+    );
+    expect(entityPlaybook).toMatch(
+      /repeatable day-shape such as "Mondays crash after lunch"[\s\S]*weekday-template question/i
+    );
+    expect(entityPlaybook).toMatch(/debugging one failed run|debug one failed execution/i);
+    expect(entityPlaybook).toMatch(/run[\s\S]*summary/i);
+    expect(entityPlaybook).toMatch(/latest node output/i);
+    expect(entityPlaybook).toMatch(/published output/i);
+    expect(entityPlaybook).toMatch(
       /inspect one already-saved movement correction before editing/i
     );
     expect(entityPlaybook).toMatch(/DELETE \/api\/v1\/movement\/user-boxes\/:id/i);
@@ -191,6 +204,9 @@ describe("question flow quality coverage", () => {
     );
     expect(psychePlaybook).toMatch(
       /Do not ask for evidence, alternative beliefs, or repair plans before the user has had/i
+    );
+    expect(psychePlaybook).toMatch(
+      /If the user already gives the new sentence in usable language,[\s\S]*revise the wording[\s\S]*once and save/i
     );
     expect(psychePlaybook).toMatch(/## Therapeutic turn shapes/i);
     expect(psychePlaybook).toMatch(/## Name, Define, Connect/i);

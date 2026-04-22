@@ -3096,6 +3096,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
             "Ask for the time window, place, or movement item that makes the question concrete.",
             "Ask what they are trying to notice, preserve, or answer through that movement context.",
             "Choose the dedicated day, month, all-time, timeline, places, trip-detail, or selection route once the question shape is clear.",
+            "If the truth of one uncertain span is still unclear, read the timeline or saved-box detail before you mutate it.",
             "Skip the meta lane question when the user already named the exact correction or review target and only one ambiguity remains.",
             "If the request is filling a missing-data gap, use a user-defined movement box rather than a raw stay or trip patch.",
             "If the request is repairing already-saved movement data, use the repair route that matches the saved object instead of treating it like a missing span.",
@@ -3113,6 +3114,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
             "Ask what part of the current energy picture feels most important or inaccurate.",
             "Ask what should stay true if they are changing profile or template assumptions.",
             "Ask whether the user is describing a stable weekly shape or just how today feels when the lane is still blurred.",
+            "If the user describes a repeatable day-shape such as 'Mondays crash after lunch', treat that as a weekday-template question before you reach for profile or fatigue-signal routes.",
             "If the user already named the life-force lane clearly, skip the meta lane question and ask only for the specific weekday, profile field, or signal that still matters.",
             "If the request is about a durable baseline, use profile or weekday-template mutation rather than a fatigue signal; if it is about right now, prefer the fatigue-signal route.",
             "If the user wants to see what changed after a write, read the overview back instead of leaving the result implicit.",
@@ -3126,11 +3128,12 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
         askSequence: [
             "Ask whether the job is flow discovery, one flow edit, execution, run history, published output, node-level inspection, or latest-node-output lookup.",
             "Ask which flow, slug, run, or node the request is about.",
-            "Ask whether they need the flow contract, a run result, a published output, or a node result.",
+            "Ask whether they need the stable flow contract, one run result, one published output, one node result, or the latest node output.",
             "Ask what the user is trying to learn, repair, or publish through that flow.",
             "If the user already named the flow and action clearly, skip the meta lane question and ask only for the missing run, node, or output scope.",
             "If the user wants a stable public input contract or published output, prefer those dedicated reads instead of detouring through run history first.",
             "If the user is still shaping a payload or edit, prefer flow detail or box catalog reads before asking for structured inputs.",
+            "If the user is debugging one failed run, ask whether the useful artifact is the run summary, one node result, the latest node output, or the published output before you start asking for edits.",
             "Prefer flow detail or published-output reads for stable contracts, and use run or node-result routes only when the user is asking about execution history or debugging.",
             "Route to the dedicated workbench route family once the execution lane is clear."
         ]
@@ -4436,7 +4439,7 @@ function buildAgentOnboardingPayload(request) {
             saveSuggestionTone: "gentle_optional",
             maxQuestionsPerTurn: 1,
             psycheExplorationRule: "When a Psyche entity needs understanding first, begin with one exploratory question before any working formulation, replacement belief, suggested title, or save pitch. Keep the opening reflection to one or two short sentences, stay in plain prose instead of bullets or numbered lists, keep that first reply short, do not mention Forge search or save structure yet, avoid colons or list-shaped phrasing, prefer what/when/how over why until the experience is grounded, wait for the user's answer before offering a fuller formulation, ask permission before moving from charged exploration into naming or challenge when needed, do not widen into adjacent entities until the current one has a working sentence the user recognizes, and once the lived experience is coherent stop deepening and help the user name it cleanly. When the user is updating a Psyche record because of one fresh episode, anchor in that episode before renaming the durable formulation. If the user accepts the wording, move toward the save instead of reopening deeper exploration.",
-            specializedSurfaceRule: "For Movement, Life Force, and Workbench, clarify the lane first, then name the dedicated route family in plain language and do not guess at a generic CRUD path. When the user already named a precise correction or review target, confirm only the route-selecting detail that is still missing. After a concrete specialized-surface correction, read the relevant specialized view back when the user is trying to understand the result rather than just store it. The canonical runtime routes stay under /api/v1/*, and the OpenClaw HTTP mirror exposes the same families under /forge/v1/movement, /forge/v1/life-force, and /forge/v1/workbench.",
+            specializedSurfaceRule: "For Movement, Life Force, and Workbench, clarify the lane first, then name the dedicated route family in plain language and do not guess at a generic CRUD path. If the truth of the current state is still uncertain, read the relevant specialized view before you mutate it. When the user already named a precise correction or review target, confirm only the route-selecting detail that is still missing. After a concrete specialized-surface correction, read the relevant specialized view back when the user is trying to understand the result rather than just store it. The canonical runtime routes stay under /api/v1/*, and the OpenClaw HTTP mirror exposes the same families under /forge/v1/movement, /forge/v1/life-force, and /forge/v1/workbench.",
             reviewShortcutRule: "When the user is reviewing or correcting an existing record, narrow the saved object, timeframe, or route family first. Do not reopen the whole intake unless the user is actually redefining the record.",
             readModelWriteRule: "Self-observation is note-backed and should be written through observed notes with frontmatter.observedAt. Sleep and workout sessions stay on batch CRUD by default; use the reflective review helpers only when enriching one already-known record after review.",
             psycheOpeningQuestionRule: "Prefer a concrete opening question tied to the entity: ask when the value mattered, what happened the last time the pattern appeared, what cue or body signal came first before the behavior, what the belief starts saying about self or outcome, what feels most at risk inside the mode, what the part is trying to get the user to do or stop doing, or where the shift began in the incident. Reflect briefly before the question, choose one follow-up lane at a time, say what is becoming clearer before the next deeper question, and if several Psyche entities are visible hold the adjacent ones lightly until the main container is clear.",

@@ -383,6 +383,9 @@ If the entity is not yet clear:
   hold and what the new episode or evidence changes.
 - If a recent charged episode is what made the update visible, anchor in that episode
   before you rename the durable belief, pattern, mode, or value.
+- If the user already gives the new sentence in usable language, revise the wording
+  once and save instead of reopening evidence, origin, or repair just because those
+  lanes are available.
 - If another belief, value, pattern, mode, or note becomes visible, name it gently but
   do not switch containers unless the user wants to.
 

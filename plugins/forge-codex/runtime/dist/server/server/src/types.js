@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { LEGACY_WORKBENCH_PORT_KINDS, WORKBENCH_PORT_KINDS, normalizeWorkbenchPortKind } from "../../src/lib/workbench/nodes.js";
+import { formatLocalDateKey } from "../../src/lib/date-keys.js";
 export const taskStatusSchema = z.enum([
     "backlog",
     "focus",
@@ -3372,7 +3373,7 @@ export const taskRunFocusSchema = z.object({
     actor: nonEmptyTrimmedString.optional()
 });
 export const createHabitCheckInSchema = z.object({
-    dateKey: dateOnlySchema.default(new Date().toISOString().slice(0, 10)),
+    dateKey: dateOnlySchema.default(() => formatLocalDateKey()),
     status: habitCheckInStatusSchema,
     note: trimmedString.default(""),
     description: trimmedString.optional()

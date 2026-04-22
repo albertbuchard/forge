@@ -387,6 +387,7 @@ Use the dedicated domain routes for specialized surfaces that are not simple bat
   `/api/v1/workbench/flows/:id/output` for published outputs, and the run/node routes
   under `/api/v1/workbench/flows/:id` for run history and node-level inspection.
 - If you are unsure which specialized route family applies, check `forge_get_agent_onboarding` and use its `entityRouteModel.specializedDomainSurfaces` section before guessing.
+- If the truth of the current Movement, Life Force, or Workbench state is still unclear, prefer the dedicated read before the mutation so the correction stays truthful.
 - After a concrete Movement, Life Force, or Workbench correction, read the relevant specialized view back when the user is trying to understand the result rather than only store it.
 
 Use live work tools for `task_run`:

@@ -5,6 +5,7 @@ import { HttpError } from "./errors.js";
 import { updateWorkoutMetadata } from "./health.js";
 import { canonicalizeMovementCategoryTags, listMovementPlaces, normalizeMovementCategoryTag, updateMovementPlace } from "./movement.js";
 import { listHabits } from "./repositories/habits.js";
+import { formatLocalDateKey } from "../../src/lib/date-keys.js";
 const watchCapability = "watch-ready";
 const watchHistoryStateSchema = z.enum(["aligned", "unaligned", "unknown"]);
 const watchPromptKindSchema = z.enum([
@@ -56,7 +57,11 @@ export const mobileWatchHabitCheckInSchema = z.object({
     sessionId: z.string().trim().min(1),
     pairingToken: z.string().trim().min(1),
     dedupeKey: z.string().trim().min(1),
-    dateKey: z.string().trim().min(1).default(new Date().toISOString().slice(0, 10)),
+    dateKey: z
+        .string()
+        .trim()
+        .min(1)
+        .default(() => formatLocalDateKey()),
     status: z.enum(["done", "missed"]),
     note: z.string().trim().default(""),
     description: z.string().trim().optional()
@@ -82,24 +87,24 @@ function nowIso() {
     return new Date().toISOString();
 }
 function formatDateKey(date) {
-    return date.toISOString().slice(0, 10);
+    return formatLocalDateKey(date);
 }
 function parseDateKey(dateKey) {
     const [year, month, day] = dateKey.split("-").map(Number);
-    return new Date(Date.UTC(year, month - 1, day));
+    return new Date(year, month - 1, day);
 }
-function startOfUtcDay(date) {
-    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+function startOfLocalDay(date) {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
-function addUtcDays(date, days) {
+function addLocalDays(date, days) {
     const next = new Date(date);
-    next.setUTCDate(next.getUTCDate() + days);
+    next.setDate(next.getDate() + days);
     return next;
 }
-function startOfUtcWeek(date) {
-    const start = startOfUtcDay(date);
-    const offset = (start.getUTCDay() + 6) % 7;
-    start.setUTCDate(start.getUTCDate() - offset);
+function startOfLocalWeek(date) {
+    const start = startOfLocalDay(date);
+    const offset = (start.getDay() + 6) % 7;
+    start.setDate(start.getDate() - offset);
     return start;
 }
 function isAlignedCheckIn(habit, status) {
@@ -125,15 +130,15 @@ function buildHabitHistory(habit, options) {
         ? parseDateKey(options.anchorDateKey)
         : new Date();
     if (habit.frequency === "daily") {
-        const today = startOfUtcDay(now);
+        const today = startOfLocalDay(now);
         return Array.from({ length: 7 }, (_, index) => {
             const offset = index - 6;
-            const date = addUtcDays(today, offset);
+            const date = addLocalDays(today, offset);
             const dateKey = formatDateKey(date);
             const checkIn = habit.checkIns.find((entry) => entry.dateKey === dateKey) ?? null;
             return {
                 id: dateKey,
-                label: ["S", "M", "T", "W", "T", "F", "S"][date.getUTCDay()],
+                label: ["S", "M", "T", "W", "T", "F", "S"][date.getDay()],
                 periodKey: dateKey,
                 current: offset === 0,
                 state: checkIn
@@ -144,13 +149,13 @@ function buildHabitHistory(habit, options) {
             };
         });
     }
-    const thisWeek = startOfUtcWeek(now);
+    const thisWeek = startOfLocalWeek(now);
     return Array.from({ length: 7 }, (_, index) => {
         const offset = index - 6;
-        const weekStart = addUtcDays(thisWeek, offset * 7);
+        const weekStart = addLocalDays(thisWeek, offset * 7);
         const weekKey = formatDateKey(weekStart);
         const weekEntries = habit.checkIns.filter((entry) => {
-            const entryWeek = formatDateKey(startOfUtcWeek(parseDateKey(entry.dateKey)));
+            const entryWeek = formatDateKey(startOfLocalWeek(parseDateKey(entry.dateKey)));
             return entryWeek === weekKey;
         });
         const alignedCount = weekEntries.filter((entry) => isAlignedCheckIn(habit, entry.status)).length;
@@ -375,7 +380,9 @@ function projectionForStoredEvent(event) {
         const categoryCandidate = Array.isArray(event.payload.categoryTags)
             ? event.payload.categoryTags
             : typeof event.payload.category === "string"
-                ? watchCategoryMap.get(event.payload.category) ?? [event.payload.category]
+                ? (watchCategoryMap.get(event.payload.category) ?? [
+                    event.payload.category
+                ])
                 : [];
         const categoryTags = canonicalizeMovementCategoryTags(categoryCandidate.flatMap((value) => typeof value === "string" ? [normalizeMovementCategoryTag(value)] : []));
         try {
@@ -403,12 +410,15 @@ function projectionForStoredEvent(event) {
                 status: "projection_failed",
                 details: {
                     reason: "place_update_failed",
-                    message: error instanceof Error ? error.message : "Unknown place update error"
+                    message: error instanceof Error
+                        ? error.message
+                        : "Unknown place update error"
                 }
             };
         }
     }
-    if (event.eventType === "workout_annotation" && event.linkedContext.workoutId) {
+    if (event.eventType === "workout_annotation" &&
+        event.linkedContext.workoutId) {
         try {
             const workout = updateWorkoutMetadata(event.linkedContext.workoutId, {
                 subjectiveEffort: typeof event.payload.subjectiveEffort === "number"
@@ -449,7 +459,9 @@ function projectionForStoredEvent(event) {
                 status: "projection_failed",
                 details: {
                     reason: "workout_update_failed",
-                    message: error instanceof Error ? error.message : "Unknown workout update error"
+                    message: error instanceof Error
+                        ? error.message
+                        : "Unknown workout update error"
                 }
             };
         }

@@ -207,6 +207,9 @@ Surface rule:
 - Habit outcome writes through `/api/v1/habits/:id/check-ins` accept `status` plus optional `dateKey`, `note`, and `description`; if `description` is provided, it replaces the habit's stored `description` in the same write.
 - Preferred API path for Movement, Life Force, and Workbench: use the dedicated
   route families published in `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces`.
+- If the truth of the current Movement, Life Force, or Workbench state is still
+  unclear, prefer the dedicated read before the mutation so the correction stays
+  truthful.
 - After a concrete Movement, Life Force, or Workbench correction, read the relevant
   specialized view back when the user is trying to understand the result rather than
   only store it.
