@@ -1053,7 +1053,7 @@ TOOL_CATALOG: List[ToolSpec] = [
     },
     {
         "name": "forge_update_entities",
-        "description": "Update one or more Forge entities through the ordered batch workflow. Pass operations as an array. Each operation must include entityType, id, and patch. This is the preferred update path for calendar_event, work_block_template, task_timebox, preferences basic CRUD entities, and questionnaire_instrument too.",
+        "description": "Update one or more Forge entities through the ordered batch workflow. Pass operations as an array. Each operation must include entityType, id, and patch. This is the preferred update path for calendar_event, work_block_template, task_timebox, preferences basic CRUD entities, questionnaire_instrument, and official habit outcome logging through habit.patch.checkIn.",
         "parameters": object_schema(
             {
                 "atomic": {"type": "boolean"},

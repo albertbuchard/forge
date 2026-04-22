@@ -103,6 +103,11 @@ Surface rule:
   controls.
 - Guided modal flows cover create, edit, move, link, and completion actions.
 
+Habits are a first-class recurring entity in the planning side.
+NEGATIVE HABIT CHECK-IN RULE: for a `negative` habit, the correct
+aligned/resisted outcome is `missed`. `missed` means the bad habit was
+resisted, the user stayed aligned, and the habit should award its XP bonus.
+
 ## Wiki model
 
 Treat the wiki as Forge's canonical long-form memory layer rather than as a loose pile

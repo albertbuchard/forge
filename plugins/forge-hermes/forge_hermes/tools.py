@@ -575,6 +575,27 @@ def _safe_error(code: str, message: str) -> str:
     return _json_result({"error": {"code": code, "message": message}})
 
 
+def _extract_upstream_error_code(payload: Any) -> Optional[str]:
+    if isinstance(payload, dict):
+        error_payload = payload.get("error")
+        if isinstance(error_payload, dict):
+            code = error_payload.get("code")
+            if isinstance(code, str) and code.strip():
+                return code.strip()
+    return None
+
+
+def _build_guided_error_message(http_code: int, payload: Any, fallback: str) -> str:
+    if http_code == 401 and _extract_upstream_error_code(payload) == "auth_required":
+        return (
+            f"{fallback} In Hermes, do not fall back to raw Forge routes. "
+            "Call forge_get_agent_onboarding, then use the shared Forge tools. "
+            'For official habit outcomes, use forge_update_entities on entityType "habit" '
+            "with patch.checkIn instead of a direct check-in route call."
+        )
+    return fallback
+
+
 def _normalize_origin(value: Optional[str]) -> str:
     candidate = (value or "").strip() or "http://127.0.0.1"
     parsed = parse.urlparse(candidate)
@@ -729,7 +750,10 @@ def _request_json(
             message = parsed_payload.get("message") or parsed_payload.get("error") or payload_text or exc.reason
         else:
             message = payload_text or exc.reason
-        raise ForgePluginError(f"forge_http_{exc.code}", str(message))
+        raise ForgePluginError(
+            f"forge_http_{exc.code}",
+            _build_guided_error_message(exc.code, parsed_payload, str(message)),
+        )
     except error.URLError as exc:
         raise ForgePluginError("forge_unreachable", str(exc.reason))
 

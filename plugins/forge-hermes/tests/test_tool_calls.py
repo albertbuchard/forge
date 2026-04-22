@@ -6,6 +6,7 @@ import pytest
 
 from forge_hermes import tools
 from forge_hermes.catalog import (
+    TOOL_CATALOG,
     release_task_run_body,
     release_task_run_path,
     start_task_run_body,
@@ -92,6 +93,9 @@ def test_start_task_run_handler_uses_operator_session_and_task_run_route(
         def read(self) -> bytes:
             return self._body
 
+        def close(self) -> None:
+            return None
+
         def __enter__(self):
             return self
 
@@ -147,3 +151,195 @@ def test_start_task_run_handler_uses_operator_session_and_task_run_route(
         "plannedDurationSeconds": None,
         "note": "Focus block",
     }
+
+
+def test_update_entities_tool_description_mentions_habit_checkins():
+    spec = next(tool for tool in TOOL_CATALOG if tool["name"] == "forge_update_entities")
+    description = spec["description"]
+
+    assert "habit.patch.checkIn" in description
+    assert "official habit outcome logging" in description
+
+
+def test_update_entities_handler_uses_batch_route_for_habit_checkins(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    config = tools.ForgeConfig(
+        origin="http://127.0.0.1",
+        port=4317,
+        base_url="http://127.0.0.1:4317",
+        web_app_url="http://127.0.0.1:4317/forge/",
+        data_root="",
+        api_token="",
+        actor_label="",
+        timeout_ms=4000,
+    )
+    monkeypatch.setattr(tools, "_load_config", lambda: config)
+    monkeypatch.setattr(tools, "_ensure_runtime", lambda current: current)
+
+    calls: list[dict[str, object]] = []
+
+    class FakeResponse:
+        def __init__(self, body: object, headers: dict[str, str] | None = None):
+            self._body = json.dumps(body).encode("utf-8")
+            self.headers = headers or {}
+
+        def read(self) -> bytes:
+            return self._body
+
+        def close(self) -> None:
+            return None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    def fake_urlopen(req, timeout=0):  # noqa: ANN001 - urllib request object
+        body = json.loads(req.data.decode("utf-8")) if req.data else None
+        headers = dict(req.header_items())
+        calls.append(
+            {
+                "url": req.full_url,
+                "method": req.get_method(),
+                "headers": headers,
+                "body": body,
+            }
+        )
+        if req.full_url.endswith("/api/v1/auth/operator-session"):
+            return FakeResponse(
+                {"session": {"id": "ses_local", "actorLabel": "Albert"}},
+                headers={
+                    "Set-Cookie": "forge_operator_session=fg_session_cookie; Path=/; HttpOnly"
+                },
+            )
+        if req.full_url.endswith("/api/v1/entities/update"):
+            return FakeResponse({"results": [{"entityType": "habit", "id": "habit_123"}]})
+        raise AssertionError(f"Unexpected Hermes request: {req.full_url}")
+
+    monkeypatch.setattr(tools.request, "urlopen", fake_urlopen)
+
+    handler = tools.build_handler("forge_update_entities")
+    payload = json.loads(
+        handler(
+            {
+                "operations": [
+                    {
+                        "entityType": "habit",
+                        "id": "habit_123",
+                        "patch": {
+                            "checkIn": {
+                                "status": "missed",
+                                "note": "Resisted the bad habit after dinner.",
+                                "description": "85 sec reset",
+                            }
+                        },
+                    }
+                ]
+            }
+        )
+    )
+
+    assert payload == {"results": [{"entityType": "habit", "id": "habit_123"}]}
+    assert [call["url"] for call in calls] == [
+        "http://127.0.0.1:4317/api/v1/auth/operator-session",
+        "http://127.0.0.1:4317/api/v1/entities/update",
+    ]
+    assert all("/api/v1/habits/" not in str(call["url"]) for call in calls)
+    assert calls[1]["body"] == {
+        "operations": [
+            {
+                "entityType": "habit",
+                "id": "habit_123",
+                "patch": {
+                    "checkIn": {
+                        "status": "missed",
+                        "note": "Resisted the bad habit after dinner.",
+                        "description": "85 sec reset",
+                    }
+                },
+            }
+        ]
+    }
+
+
+def test_auth_required_errors_include_habit_guidance(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    config = tools.ForgeConfig(
+        origin="http://127.0.0.1",
+        port=4317,
+        base_url="http://127.0.0.1:4317",
+        web_app_url="http://127.0.0.1:4317/forge/",
+        data_root="",
+        api_token="",
+        actor_label="",
+        timeout_ms=4000,
+    )
+    monkeypatch.setattr(tools, "_load_config", lambda: config)
+    monkeypatch.setattr(tools, "_ensure_runtime", lambda current: current)
+
+    class FakeResponse:
+        def __init__(self, body: object, headers: dict[str, str] | None = None):
+            self._body = json.dumps(body).encode("utf-8")
+            self.headers = headers or {}
+
+        def read(self) -> bytes:
+            return self._body
+
+        def close(self) -> None:
+            return None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    def fake_urlopen(req, timeout=0):  # noqa: ANN001 - urllib request object
+        if req.full_url.endswith("/api/v1/auth/operator-session"):
+            return FakeResponse(
+                {"session": {"id": "ses_local", "actorLabel": "Albert"}},
+                headers={
+                    "Set-Cookie": "forge_operator_session=fg_session_cookie; Path=/; HttpOnly"
+                },
+            )
+
+        payload = json.dumps(
+            {
+                "error": {
+                    "code": "auth_required",
+                    "message": "A token or operator session is required.",
+                }
+            }
+        ).encode("utf-8")
+        raise tools.error.HTTPError(
+            req.full_url,
+            401,
+            "Unauthorized",
+            hdrs=None,
+            fp=FakeResponse({"error": {"code": "auth_required", "message": "A token or operator session is required."}}),
+        )
+
+    monkeypatch.setattr(tools.request, "urlopen", fake_urlopen)
+
+    handler = tools.build_handler("forge_update_entities")
+    payload = json.loads(
+        handler(
+            {
+                "operations": [
+                    {
+                        "entityType": "habit",
+                        "id": "habit_123",
+                        "patch": {"checkIn": {"status": "missed"}},
+                    }
+                ]
+            }
+        )
+    )
+
+    assert payload["error"]["code"] == "forge_http_401"
+    assert "forge_get_agent_onboarding" in payload["error"]["message"]
+    assert "forge_update_entities" in payload["error"]["message"]
+    assert "patch.checkIn" in payload["error"]["message"]

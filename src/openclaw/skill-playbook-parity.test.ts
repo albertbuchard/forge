@@ -115,6 +115,21 @@ describe("forge skill playbook parity", () => {
     expect(codexSkill).toMatch(/preference_signal/i);
   });
 
+  it("keeps OpenClaw and Hermes explicit about habit semantics and the shared check-in path", () => {
+    const openclawSkill = readRepoFile("skills/forge-openclaw/SKILL.md");
+    const hermesSkill = readRepoFile("plugins/forge-hermes/forge_hermes/skill.md");
+
+    for (const skill of [openclawSkill, hermesSkill]) {
+      expect(skill).toMatch(/negative habit/i);
+      expect(skill).toMatch(/bad habit was[\s\S]*resisted|habit was[\s\S]*resisted/i);
+      expect(skill).toMatch(/xp bonus/i);
+      expect(skill).toMatch(
+        /forge_update_entities[\s\S]*(patch\.checkIn|patch:\s*\{\s*checkIn)/i
+      );
+      expect(skill).not.toMatch(/direct raw calls? to \/api\/v1\/habits\/:id\/check-ins[\s\S]*preferred/i);
+    }
+  });
+
   it("keeps the canonical playbooks focused on guided, one-lane questioning", () => {
     const entityPlaybook = readRepoFile("skills/forge-openclaw/entity_conversation_playbooks.md");
     const psychePlaybook = readRepoFile("skills/forge-openclaw/psyche_entity_playbooks.md");
