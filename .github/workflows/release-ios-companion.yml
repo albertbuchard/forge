@@ -196,6 +196,8 @@ jobs:
 
           if [[ "${release_exit_code}" -ne 0 ]]; then
             if [[ -f "${publish_log_path}" ]]; then
+              publish_error_excerpt="${RUNNER_TEMP}/forge-ios-publish-errors.txt"
+              grep -En '(^error:| error:|Error:|Provisioning|provisioning|signing|Signing|CodeSign|No profiles|No signing certificate|No Accounts|requires a provisioning profile|requires a development team|errSec|GatherProvisioningInputs|CreateBuildDescription)' "${publish_log_path}" > "${publish_error_excerpt}" || true
               echo "Last 160 lines from ${publish_log_path}:"
               tail -n 160 "${publish_log_path}" || true
               {
@@ -205,9 +207,23 @@ jobs:
                 tail -n 160 "${publish_log_path}" || true
                 echo '```'
               } >> "${GITHUB_STEP_SUMMARY}"
-              while IFS= read -r line; do
-                printf '::error title=Forge iOS publish log::%s\n' "${line}"
-              done < <(tail -n 35 "${publish_log_path}" || true)
+              if [[ -s "${publish_error_excerpt}" ]]; then
+                {
+                  echo
+                  echo "## Forge iOS publish error matches"
+                  echo
+                  echo '```text'
+                  tail -n 80 "${publish_error_excerpt}" || true
+                  echo '```'
+                } >> "${GITHUB_STEP_SUMMARY}"
+                while IFS= read -r line; do
+                  printf '::error title=Forge iOS publish log::%s\n' "${line}"
+                done < <(tail -n 40 "${publish_error_excerpt}" || true)
+              else
+                while IFS= read -r line; do
+                  printf '::error title=Forge iOS publish log::%s\n' "${line}"
+                done < <(tail -n 35 "${publish_log_path}" || true)
+              fi
             else
               echo "::error title=Forge iOS publish log::No publish log file was captured in ${RUNNER_TEMP}."
             fi
