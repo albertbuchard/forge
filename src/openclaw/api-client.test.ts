@@ -12,6 +12,7 @@ import {
   buildForgeWebAppUrl,
   callConfiguredForgeApi,
   callForgeApi,
+  expectForgeSuccess,
   readJsonRequestBody,
   writePluginError,
   ForgePluginError
@@ -185,5 +186,22 @@ describe("openclaw api client", () => {
         message: "Missing token"
       }
     });
+  });
+
+  it("adds onboarding guidance when upstream auth_required comes from a raw route path", () => {
+    expect(() =>
+      expectForgeSuccess({
+        status: 401,
+        body: {
+          ok: false,
+          error: {
+            code: "auth_required",
+            message: "A token or operator session is required."
+          }
+        }
+      })
+    ).toThrow(
+      /forge_get_agent_onboarding[\s\S]*forge_update_entities[\s\S]*patch\.checkIn/i
+    );
   });
 });

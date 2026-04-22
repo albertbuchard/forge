@@ -1496,7 +1496,8 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
     ],
     searchHints: [
       "Search by title before creating a duplicate habit.",
-      "Use linkedTo when the habit should already be attached to a goal, project, task, or Psyche entity."
+      "Use linkedTo when the habit should already be attached to a goal, project, task, or Psyche entity.",
+      "To log an official habit outcome from the shared agent tool surface, patch the habit through forge_update_entities with checkIn: { status, dateKey?, note?, description? }."
     ],
     examples: [
       '{"title":"Morning training","frequency":"daily","polarity":"positive","linkedGoalIds":["goal_train_body"],"linkedValueIds":["value_steadiness"],"linkedBehaviorIds":["behavior_regulating_walk"]}'
@@ -4924,9 +4925,9 @@ function buildAgentOnboardingPayload(request: {
       rawTokenStoredByForge: false,
       recoveryAction: "rotate_or_issue_new_token",
       rotationSummary:
-        "Forge reveals raw tokens once. If you lose one, rotate it or issue a new token from Settings and update the plugin config.",
+        "Forge reveals raw tokens once. If you lose one, rotate it or issue a new token through /api/v1/settings/tokens, then update the plugin config.",
       settingsSummary:
-        "Token creation, rotation, and revocation all live under Forge Settings so recovery is explicit and operator-controlled."
+        "Token creation, rotation, and revocation all live on explicit settings routes so recovery stays operator-controlled without requiring a browser click."
     },
     requiredHeaders: {
       authorization: "Authorization: Bearer <forge-api-token>",
@@ -5261,19 +5262,24 @@ function buildAgentOnboardingPayload(request: {
         installSteps: [
           "Install the Forge plugin from the repo or published package.",
           "Restart the OpenClaw gateway so the tool surface and UI proxy routes refresh.",
-          "Open Forge Settings -> Agents to issue or rotate a managed token when remote scoped auth is needed."
+          "For localhost or Tailscale, finish onboarding through operator-session bootstrap and CLI verification without opening the Forge UI.",
+          "If remote scoped auth is needed, issue or rotate a managed token through /api/v1/settings/tokens and update the plugin config without a Settings click."
         ],
         verifyCommands: [
           `curl -s ${origin}/api/v1/health`,
           "openclaw plugins install ./projects/forge/openclaw-plugin",
           "openclaw plugins info forge-openclaw-plugin",
-          "openclaw gateway restart"
+          "openclaw gateway restart",
+          "openclaw forge onboarding",
+          "openclaw forge health"
         ],
         configNotes: [
           "Localhost and Tailscale targets can usually use the operator-session path without a long-lived token.",
+          "The operator-session route is /api/v1/auth/operator-session, so trusted local OpenClaw onboarding does not need a browser confirmation step.",
           "If your current OpenClaw build blocks the repo-local install because of the package scanner, keep the repo folder on plugins.load.paths and verify that plugins info still points at the local Forge source path before continuing.",
           "Use a distinct actor label such as Albert (claw) so OpenClaw-originated work stays obvious in Forge provenance.",
-          "Create each agent as a Forge bot user, then use userId or userIds in tool inputs whenever the agent should focus on one human, one bot, or a specific collaboration slice."
+          "Create each agent as a Forge bot user, then use userId or userIds in tool inputs whenever the agent should focus on one human, one bot, or a specific collaboration slice.",
+          "If you genuinely need a durable managed token, create it through /api/v1/settings/tokens instead of sending the operator into the Settings UI."
         ]
       },
       hermes: {
@@ -5281,7 +5287,7 @@ function buildAgentOnboardingPayload(request: {
         installSteps: [
           "Install forge-hermes-plugin into the Python environment Hermes actually runs.",
           "Let Hermes load the Forge plugin and bundled skill pack on startup.",
-          "Use Forge Settings -> Agents if Hermes needs a managed token for remote or durable access."
+          "If Hermes needs remote or durable scoped auth, issue a managed token through /api/v1/settings/tokens and update the Hermes config without a Settings click."
         ],
         verifyCommands: [
           "python -m pip show forge-hermes-plugin",
@@ -5457,11 +5463,11 @@ function buildAgentOnboardingPayload(request: {
       createRule:
         "Each create operation must include entityType and full data. entityType alone is not enough. This includes calendar_event, work_block_template, task_timebox, sleep_session, workout_session, preference CRUD entities, and questionnaire_instrument alongside the usual planning and Psyche entities.",
       updateRule:
-        "Each update operation must include entityType, id, and patch. For projects, lifecycle changes are status patches: active to restart, paused to suspend, completed to finish. Keep task and project scheduling rules on those same patch payloads. Calendar-event updates still run downstream provider projection sync, and manual health-session field edits belong on the batch route by default rather than on the reflective review helpers.",
+        "Each update operation must include entityType, id, and patch. For projects, lifecycle changes are status patches: active to restart, paused to suspend, completed to finish. Keep task and project scheduling rules on those same patch payloads. Official habit outcomes can also be logged through forge_update_entities by patching the habit with checkIn: { status, dateKey?, note?, description? } instead of route-hunting. Calendar-event updates still run downstream provider projection sync, and manual health-session field edits belong on the batch route by default rather than on the reflective review helpers.",
       createExample:
         '{"operations":[{"entityType":"goal","data":{"title":"Create meaningfully"},"clientRef":"goal-create-1"},{"entityType":"goal","data":{"title":"Build a beautiful family"},"clientRef":"goal-create-2"}]}',
       updateExample:
-        '{"operations":[{"entityType":"project","id":"project_123","patch":{"status":"paused","schedulingRules":{"blockWorkBlockKinds":["main_activity"],"allowWorkBlockKinds":["secondary_activity"]}},"clientRef":"project-suspend-1"},{"entityType":"task","id":"task_456","patch":{"plannedDurationSeconds":5400,"schedulingRules":{"allowEventKeywords":["creative"],"blockEventKeywords":["clinic"]}},"clientRef":"task-scheduling-1"}]}'
+        '{"operations":[{"entityType":"project","id":"project_123","patch":{"status":"paused","schedulingRules":{"blockWorkBlockKinds":["main_activity"],"allowWorkBlockKinds":["secondary_activity"]}},"clientRef":"project-suspend-1"},{"entityType":"habit","id":"habit_456","patch":{"checkIn":{"status":"missed","note":"Resisted the urge after dinner.","description":"85 sec reset"}},"clientRef":"habit-check-in-1"}]}'
     }
   };
 }

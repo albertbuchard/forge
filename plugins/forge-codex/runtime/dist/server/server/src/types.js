@@ -3121,6 +3121,12 @@ export const taskMutationShape = {
     notes: z.array(nestedCreateNoteSchema).default([])
 };
 export const createTaskSchema = z.object(taskMutationShape);
+const habitCheckInWriteSchema = z.object({
+    dateKey: dateOnlySchema.default(() => formatLocalDateKey()),
+    status: habitCheckInStatusSchema,
+    note: trimmedString.default(""),
+    description: trimmedString.optional()
+});
 const habitMutationShape = {
     title: nonEmptyTrimmedString,
     description: trimmedString.default(""),
@@ -3207,6 +3213,7 @@ export const updateHabitSchema = z
     linkedBehaviorId: nonEmptyTrimmedString.nullable().optional(),
     rewardXp: z.number().int().min(1).max(100).optional(),
     penaltyXp: z.number().int().min(1).max(100).optional(),
+    checkIn: habitCheckInWriteSchema.optional(),
     generatedHealthEventTemplate: z
         .object({
         enabled: z.boolean().optional(),
@@ -3372,12 +3379,7 @@ export const taskRunFinishSchema = z.object({
 export const taskRunFocusSchema = z.object({
     actor: nonEmptyTrimmedString.optional()
 });
-export const createHabitCheckInSchema = z.object({
-    dateKey: dateOnlySchema.default(() => formatLocalDateKey()),
-    status: habitCheckInStatusSchema,
-    note: trimmedString.default(""),
-    description: trimmedString.optional()
-});
+export const createHabitCheckInSchema = habitCheckInWriteSchema;
 export const updateSettingsSchema = z.object({
     profile: z
         .object({

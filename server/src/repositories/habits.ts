@@ -656,6 +656,35 @@ export function updateHabit(
     return undefined;
   }
   const parsed = updateHabitSchema.parse(input);
+  const shouldApplyEntityPatch =
+    parsed.title !== undefined ||
+    parsed.description !== undefined ||
+    parsed.status !== undefined ||
+    parsed.polarity !== undefined ||
+    parsed.frequency !== undefined ||
+    parsed.targetCount !== undefined ||
+    parsed.weekDays !== undefined ||
+    parsed.linkedGoalIds !== undefined ||
+    parsed.linkedProjectIds !== undefined ||
+    parsed.linkedTaskIds !== undefined ||
+    parsed.linkedValueIds !== undefined ||
+    parsed.linkedPatternIds !== undefined ||
+    parsed.linkedBehaviorIds !== undefined ||
+    parsed.linkedBeliefIds !== undefined ||
+    parsed.linkedModeIds !== undefined ||
+    parsed.linkedReportIds !== undefined ||
+    parsed.linkedBehaviorId !== undefined ||
+    parsed.rewardXp !== undefined ||
+    parsed.penaltyXp !== undefined ||
+    parsed.generatedHealthEventTemplate !== undefined ||
+    parsed.userId !== undefined;
+
+  if (!shouldApplyEntityPatch) {
+    return parsed.checkIn
+      ? createHabitCheckIn(habitId, parsed.checkIn, activity)
+      : current;
+  }
+
   const nextLinkedBehaviorIds =
     parsed.linkedBehaviorIds !== undefined ||
     parsed.linkedBehaviorId !== undefined
@@ -722,7 +751,7 @@ export function updateHabit(
     "report_not_found",
     "Report"
   );
-  return runInTransaction(() => {
+  const updatedHabit = runInTransaction(() => {
     const updatedAt = new Date().toISOString();
     getDatabase()
       .prepare(
@@ -783,6 +812,10 @@ export function updateHabit(
     }
     return habit;
   });
+
+  return parsed.checkIn
+    ? createHabitCheckIn(habitId, parsed.checkIn, activity) ?? updatedHabit
+    : updatedHabit;
 }
 
 export function deleteHabit(

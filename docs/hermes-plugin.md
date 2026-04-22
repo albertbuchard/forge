@@ -172,7 +172,8 @@ without refetching a brand-new overview from Forge.
 The same session hooks now also register Hermes sessions into Forge's live
 agent-session registry. Forge can therefore keep a provider-aware session list,
 mark Hermes sessions stale when they stop heartbeating, preserve a short event
-timeline, and show reconnect guidance directly in `Settings -> Agents`.
+timeline, and show reconnect guidance directly in the onboarding and
+token-management contract without requiring a Settings click.
 
 ## Shared Multi-user Setup
 

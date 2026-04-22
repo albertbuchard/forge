@@ -239,7 +239,8 @@ CRITICAL NEGATIVE-HABIT CHECK-IN RULE:
 - For a `negative` habit, the correct check-in outcome is `missed`.
 - On a `negative` habit, `missed` means the habit was resisted, the user stayed aligned, and the habit earns its XP bonus.
 - Do not treat `missed` on a `negative` habit as failure. In this case, `missed` is the successful outcome.
-- Habit check-ins written through `/api/v1/habits/:id/check-ins` can also include an optional `description`; when present, it replaces the habit's current `description` in the same write.
+- In OpenClaw, official habit outcome logging should go through `forge_update_entities` on `entityType: "habit"` with `patch: { checkIn: { status, dateKey?, note?, description? } }`.
+- Do not bypass the shared tool model with raw habit routes when the batch entity update already covers the write cleanly.
   Ask:
 
 1. What is the recurring behavior in one concrete sentence?

@@ -46,7 +46,8 @@ session bootstrap, not a per-reply prompt mutation.
 
 Forge now also registers each active OpenClaw session into Forge's agent-session
 registry. The plugin updates liveness from message and compaction hooks, keeps a
-recent event timeline, and exposes reconnect guidance in `Settings -> Agents`
+recent event timeline, and exposes reconnect guidance through the onboarding and
+token-management contract without requiring a Settings click
 when a session goes stale.
 
 The injected block includes:

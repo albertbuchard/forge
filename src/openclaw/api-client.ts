@@ -105,6 +105,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+function extractUpstreamErrorCode(body: unknown) {
+  return isRecord(body) &&
+    isRecord(body.error) &&
+    typeof body.error.code === "string"
+    ? body.error.code
+    : null;
+}
+
+function buildGuidedUpstreamMessage(result: ForgeProxyResponse, fallback: string) {
+  const upstreamCode = extractUpstreamErrorCode(result.body);
+  if (result.status === 401 && upstreamCode === "auth_required") {
+    return `${fallback} In OpenClaw, do not fall back to raw Forge routes. Call forge_get_agent_onboarding, then use the shared plugin tools. For official habit outcomes, use forge_update_entities on entityType "habit" with patch.checkIn instead of a direct check-in route call.`;
+  }
+  return fallback;
+}
+
 function buildErrorBody(code: string, message: string): PluginErrorPayload {
   return {
     ok: false,
@@ -458,7 +474,11 @@ export function expectForgeSuccess(result: ForgeProxyResponse) {
       typeof result.body.error.message === "string"
         ? result.body.error.message
         : `Forge API returned ${result.status}`;
-    throw new ForgePluginError(result.status, "forge_plugin_upstream_error", message);
+    throw new ForgePluginError(
+      result.status,
+      "forge_plugin_upstream_error",
+      buildGuidedUpstreamMessage(result, message)
+    );
   }
   return result.body;
 }

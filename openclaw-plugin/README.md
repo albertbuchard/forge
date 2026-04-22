@@ -368,6 +368,7 @@ The batch tools are array-first:
 - goal, project, task, strategy, habit, tag, and note writes can include `userId` to assign ownership to a human or bot user
 - scoped reads can use `userId` or repeated `userIds` query parameters when the agent needs to focus on specific humans or bots
 - `forge_update_entities` takes `operations: []`, and each update operation must include `entityType`, `id`, and `patch`
+- official habit outcomes can stay on that same shared path: patch `entityType: "habit"` with `checkIn: { status, dateKey?, note?, description? }` to record the real habit outcome without leaving batch CRUD
 - `forge_delete_entities` and `forge_restore_entities` also take `operations: []`
 
 Project lifecycle uses those same generic tools:

@@ -81,6 +81,7 @@ async function loadOnboardingPayload() {
     interactionGuidance: Record<string, string>;
     connectionGuides?: {
       openclaw?: {
+        installSteps?: string[];
         verifyCommands?: string[];
         configNotes?: string[];
       };
@@ -570,13 +571,20 @@ describe("forge onboarding contract", () => {
     ).toEqual(
       expect.arrayContaining([
         "openclaw plugins install ./projects/forge/openclaw-plugin",
-        "openclaw plugins info forge-openclaw-plugin"
+        "openclaw plugins info forge-openclaw-plugin",
+        "openclaw forge onboarding",
+        "openclaw forge health"
       ])
     );
     expect(onboarding.connectionGuides?.openclaw?.configNotes ?? []).toEqual(
       expect.arrayContaining([
-        expect.stringMatching(/plugins\.load\.paths/i)
+        expect.stringMatching(/plugins\.load\.paths/i),
+        expect.stringMatching(/operator-session/i),
+        expect.stringMatching(/\/api\/v1\/settings\/tokens/i)
       ])
     );
+    expect(
+      (onboarding.connectionGuides?.openclaw?.installSteps ?? []).join(" ")
+    ).not.toMatch(/Settings -> Agents/i);
   });
 });

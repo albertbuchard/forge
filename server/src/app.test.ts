@@ -14168,6 +14168,93 @@ test("batch entity routes create, update, and search entities through the shared
   }
 });
 
+test("batch habit updates can record official habit outcomes through patch.checkIn", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-batch-habit-check-in-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/entities/create",
+      headers: { cookie: operatorCookie },
+      payload: {
+        operations: [
+          {
+            entityType: "habit",
+            data: {
+              title: "Resist doomscrolling",
+              description: "Treat late-night doomscrolling as a resisted slip.",
+              polarity: "negative",
+              frequency: "daily"
+            }
+          }
+        ]
+      }
+    });
+
+    assert.equal(createResponse.statusCode, 200);
+    const createdHabitId = (
+      createResponse.json() as {
+        results: Array<{ entity?: { id: string } }>;
+      }
+    ).results[0]?.entity?.id;
+    assert.ok(createdHabitId);
+
+    const updateResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/entities/update",
+      headers: { cookie: operatorCookie },
+      payload: {
+        operations: [
+          {
+            entityType: "habit",
+            id: createdHabitId,
+            patch: {
+              checkIn: {
+                status: "missed",
+                dateKey: "2026-04-22",
+                note: "Resisted the urge after dinner.",
+                description: "85 sec reset"
+              }
+            }
+          }
+        ]
+      }
+    });
+
+    assert.equal(updateResponse.statusCode, 200);
+    const updatedHabit = (
+      updateResponse.json() as {
+        results: Array<{
+          ok: boolean;
+          entity?: {
+            description: string;
+            lastCheckInStatus: string | null;
+            checkIns: Array<{ dateKey: string; status: string; note: string }>;
+          };
+        }>;
+      }
+    ).results[0];
+    assert.equal(updatedHabit?.ok, true);
+    assert.equal(updatedHabit?.entity?.description, "85 sec reset");
+    assert.equal(updatedHabit?.entity?.lastCheckInStatus, "missed");
+    assert.equal(updatedHabit?.entity?.checkIns[0]?.dateKey, "2026-04-22");
+    assert.equal(updatedHabit?.entity?.checkIns[0]?.status, "missed");
+    assert.equal(
+      updatedHabit?.entity?.checkIns[0]?.note,
+      "Resisted the urge after dinner."
+    );
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("calendar entities work through the generic batch routes and keep calendar-specific side effects", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-batch-calendar-entities-")

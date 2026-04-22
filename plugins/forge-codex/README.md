@@ -15,7 +15,8 @@ definition in [`./.mcp.json`](./.mcp.json), and a local stdio bridge in
 The MCP bridge now also registers itself into Forge's live agent-session
 registry when the server process starts. Forge can therefore show active Codex
 bridges next to OpenClaw and Hermes, track recent MCP activity, detect stale
-sessions, and surface reconnect guidance in `Settings -> Agents`.
+sessions, and surface reconnect guidance in the onboarding and token-management
+contract without requiring a Settings click.
 
 - start from the operator overview
 - search before creating duplicates
