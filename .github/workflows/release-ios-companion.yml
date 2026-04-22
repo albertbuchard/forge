@@ -189,11 +189,29 @@ jobs:
           RELEASE_MODE: ${{ steps.release_meta.outputs.release_mode }}
         run: |
           set +e
-          ./ios-companion/scripts/publish-forge-companion.sh "${RELEASE_MODE}"
-          release_exit_code=$?
+          publish_log_path="${RUNNER_TEMP}/forge-ios-publish.log"
+          ./ios-companion/scripts/publish-forge-companion.sh "${RELEASE_MODE}" 2>&1 | tee "${publish_log_path}"
+          release_exit_code=${PIPESTATUS[0]}
           set -e
 
           if [[ "${release_exit_code}" -ne 0 ]]; then
+            if [[ -f "${publish_log_path}" ]]; then
+              echo "Last 160 lines from ${publish_log_path}:"
+              tail -n 160 "${publish_log_path}" || true
+              {
+                echo "## Forge iOS publish log tail"
+                echo
+                echo '```text'
+                tail -n 160 "${publish_log_path}" || true
+                echo '```'
+              } >> "${GITHUB_STEP_SUMMARY}"
+              while IFS= read -r line; do
+                printf '::error title=Forge iOS publish log::%s\n' "${line}"
+              done < <(tail -n 35 "${publish_log_path}" || true)
+            else
+              echo "::error title=Forge iOS publish log::No publish log file was captured in ${RUNNER_TEMP}."
+            fi
+
             latest_gym_log="$(find "${HOME}/Library/Logs/gym" -maxdepth 1 -type f -name '*.log' -print 2>/dev/null | sort | tail -n 1)"
             if [[ -n "${latest_gym_log}" && -f "${latest_gym_log}" ]]; then
               echo "Latest gym log: ${latest_gym_log}"
