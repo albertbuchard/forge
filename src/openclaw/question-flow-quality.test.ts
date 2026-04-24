@@ -113,6 +113,9 @@ describe("question flow quality coverage", () => {
       /what kind of honest moment or decision it should help someone answer/i
     );
     expect(entityPlaybook).toMatch(
+      /what they are actually trying[\s\S]*save, decide, review, or change/i
+    );
+    expect(entityPlaybook).toMatch(
       /keep it provisional[\s\S]*future use are clear/i
     );
     expect(entityPlaybook).toMatch(
@@ -150,6 +153,9 @@ describe("question flow quality coverage", () => {
     );
     expect(entityPlaybook).toMatch(
       /what sentence future-you would need to recover from this note later/i
+    );
+    expect(entityPlaybook).toMatch(
+      /already gave usable wording[\s\S]*rename it for style/i
     );
     expect(entityPlaybook).toMatch(
       /what belongs inside the boundary and what can stay out if the scope still[\s\S]*feels muddy/i
@@ -198,12 +204,17 @@ describe("question flow quality coverage", () => {
     expect(psychePlaybook).toMatch(
       /ask permission before moving from understanding into[\s\S]*naming, challenging, or solution-finding/i
     );
+    expect(psychePlaybook).toMatch(/feel less alone with the experience/i);
+    expect(psychePlaybook).toMatch(/more\s+able to name it/i);
     expect(psychePlaybook).toMatch(/Contain:/);
     expect(psychePlaybook).toMatch(
       /makes the moment feel holdable before you deepen or name it/i
     );
     expect(psychePlaybook).toMatch(
       /Do not ask for evidence, alternative beliefs, or repair plans before the user has had/i
+    );
+    expect(psychePlaybook).toMatch(
+      /moment is still hot[\s\S]*painful, dangerous, or protective/i
     );
     expect(psychePlaybook).toMatch(
       /If the user already gives the new sentence in usable language,[\s\S]*revise the wording[\s\S]*once and save/i

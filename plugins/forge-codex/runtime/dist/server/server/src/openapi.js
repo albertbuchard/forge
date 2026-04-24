@@ -2137,6 +2137,11 @@ export function buildOpenApiDocument() {
             "id",
             "label",
             "agentType",
+            "identityKey",
+            "provider",
+            "machineKey",
+            "personaKey",
+            "linkedUsers",
             "trustLevel",
             "autonomyMode",
             "approvalMode",
@@ -2150,6 +2155,20 @@ export function buildOpenApiDocument() {
             id: { type: "string" },
             label: { type: "string" },
             agentType: { type: "string" },
+            identityKey: nullable({ type: "string" }),
+            provider: nullable({ type: "string", enum: ["openclaw", "hermes", "codex"] }),
+            machineKey: nullable({ type: "string" }),
+            personaKey: nullable({ type: "string" }),
+            linkedUsers: arrayOf({
+                type: "object",
+                additionalProperties: false,
+                required: ["userId", "role", "user"],
+                properties: {
+                    userId: { type: "string" },
+                    role: { type: "string" },
+                    user: nullable({ $ref: "#/components/schemas/UserSummary" })
+                }
+            }),
             trustLevel: {
                 type: "string",
                 enum: ["standard", "trusted", "autonomous"]

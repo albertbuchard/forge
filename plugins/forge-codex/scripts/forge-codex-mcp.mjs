@@ -66,6 +66,21 @@ function resolveRuntimeAgentLabel() {
   return process.env.FORGE_AGENT_LABEL?.trim() || DEFAULT_RUNTIME_AGENT_LABEL;
 }
 
+function createStableMachineKey(config) {
+  const fingerprint = createHash("sha1")
+    .update(JSON.stringify({
+      baseUrl: config.baseUrl,
+      dataRoot: config.dataRoot || ""
+    }))
+    .digest("hex")
+    .slice(0, 12);
+  return `machine_${fingerprint}`;
+}
+
+function createStableAgentIdentityKey(config) {
+  return `${["runtime", SESSION_PROVIDER, createStableMachineKey(config), "default"].join(":")}`;
+}
+
 function buildPluginConfigFromEnv() {
   return resolveForgePluginConfig({
     origin: process.env.FORGE_ORIGIN ?? "http://127.0.0.1",
@@ -121,6 +136,9 @@ async function registerRuntimeSession(state) {
       provider: SESSION_PROVIDER,
       agentLabel: resolveRuntimeAgentLabel(),
       agentType: SESSION_PROVIDER,
+      agentIdentityKey: createStableAgentIdentityKey(state.config),
+      machineKey: createStableMachineKey(state.config),
+      personaKey: "default",
       actorLabel,
       sessionKey: state.key,
       sessionLabel: "Forge Codex bridge",

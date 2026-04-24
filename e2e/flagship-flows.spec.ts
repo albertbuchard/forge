@@ -8,11 +8,11 @@ test("overview exposes the premium XP command deck", async ({ page }) => {
   await page.goto("");
   await waitForForge(page);
   await expect(page).toHaveURL(/\/forge\/overview$/);
-  await expect(page.locator("body")).toContainText("Momentum pulse");
-  await expect(page.locator("body")).toContainText("Next unlock");
-  await expect(page.locator("body")).toContainText("Milestone track");
-  await expect(page.locator("body")).toContainText("Now, next, risks, and recent proof");
-  await expect(page.locator("body")).toContainText("Command surface");
+  await expect(page.locator("body")).toContainText("Momentum summary");
+  await expect(page.locator("body")).toContainText("Core live metrics");
+  await expect(page.locator("body")).toContainText("Action signals");
+  await expect(page.locator("body")).toContainText("Projects, habits, tasks");
+  await expect(page.locator("body")).toContainText("Life Force");
 });
 
 test("today feels like a directive-driven operating surface", async ({ page }) => {
@@ -22,8 +22,8 @@ test("today feels like a directive-driven operating surface", async ({ page }) =
   await expect(page.locator("body")).toContainText("Tasks for today");
   await expect(page.locator("body")).toContainText("Tasks by status");
   await expect(page.locator("body")).toContainText("Current task");
-  await expect(page.locator("body")).toContainText("Daily quests");
-  await expect(page.locator("body")).toContainText("Needs attention");
+  await expect(page.locator("body")).toContainText("Due habits");
+  await expect(page.locator("body")).toContainText("Life Force");
 });
 
 test("weekly review reads like an editorial calibration surface", async ({ page }) => {
@@ -88,8 +88,8 @@ test("psyche flagship surfaces render inside the shared shell", async ({ page })
   await page.goto("psyche/reports");
   await waitForForge(page);
   await expect(page).toHaveURL(/\/forge\/psyche\/reports$/);
-  await expect(page.locator("body")).toContainText("Spark-to-Pivot");
-  await expect(page.locator("body")).toContainText("Reports should read like live reflective chains");
+  await expect(page.locator("body")).toContainText("Capture the trigger, emotional wave, script, state, and next pivot");
+  await expect(page.locator("body")).toContainText("Recent reports");
   await expect(page.locator("body")).not.toContainText("emotion | intensity | note | emotionId");
 });
 

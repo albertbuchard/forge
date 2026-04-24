@@ -136,3 +136,22 @@ def test_start_gateway_runtime_presence_skips_non_gateway_process(
     tools.start_gateway_runtime_presence()
 
     assert called is False
+
+
+def test_runtime_agent_identity_key_is_stable_for_same_runtime():
+    config = tools.ForgeConfig(
+        origin="http://127.0.0.1",
+        port=4317,
+        base_url="http://127.0.0.1:4317",
+        web_app_url="http://127.0.0.1:4317/forge/",
+        data_root="/tmp/forge",
+        api_token="",
+        actor_label="",
+        timeout_ms=15000,
+    )
+
+    first = tools._stable_agent_identity_key(config)
+    second = tools._stable_agent_identity_key(config)
+
+    assert first == second
+    assert first.startswith("runtime:hermes:machine_")

@@ -3517,6 +3517,10 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
       "When useful, help the user name, define, and connect the record in that order: offer a working label, clarify what belongs inside it, then ask about links only after the record itself feels steady.",
       "When the meaning is clearer than the wording, offer a tentative title or formulation yourself and invite correction instead of forcing the user to wordsmith alone.",
       "For direct update or review requests, the next question should usually narrow the saved object, timeframe, or route family instead of reopening the whole meaning-making arc.",
+      "The opening question should help the user understand what they are actually trying to save, decide, review, or change, not make them perform the schema out loud.",
+      "If the user already named the exact correction in usable language, confirm only the missing scope, timing, or route-selecting detail that still matters, then act.",
+      "Once a specialized-surface lane is clear, speak in route-relevant nouns such as timeline, overlay, weekday template, published output, run detail, or node result instead of generic record language.",
+      "If the next answer would not change the route, wording, timing, or write payload in a meaningful way, stop asking and act.",
       "Before saving, briefly summarize the working formulation in the user's own language when that would reduce ambiguity.",
   "Once the record is clear enough to name, stop exploring broadly and ask only for the last structural detail that still matters.",
   "If the record is already clear enough to save, save it instead of performing a ceremonial extra question.",
@@ -5123,6 +5127,11 @@ function buildAgentOnboardingPayload(request: {
         movement: {
           summary:
             "Dedicated movement workspace API. Use these routes for stays, trips, time-in-place questions, visited places, trip detail, selection aggregates, user-defined overlays, and repair actions on already-recorded movement data.",
+          routeSelectionQuestions: [
+            "Is the user asking for a day, month, all-time, timeline, place, trip detail, or selected-span answer?",
+            "Is this a missing-gap overlay, a saved-overlay repair, or an edit to one already-recorded stay, trip, or trip point?",
+            "If the target is already known, what one time, place, or saved-object detail is still missing before acting?"
+          ],
           readRoutes: {
             day: "/api/v1/movement/day",
             month: "/api/v1/movement/month",
@@ -5162,6 +5171,11 @@ function buildAgentOnboardingPayload(request: {
         lifeForce: {
           summary:
             "Dedicated life-force API. Use it to read the current energy budget, drains, recommendations, and warnings, then patch only the parts that are meant to be user-controlled.",
+          routeSelectionQuestions: [
+            "Is the user trying to understand the overview, change durable profile assumptions, change a weekday curve, or log a right-now fatigue signal?",
+            "Are they describing a repeatable weekly shape or a one-off current state?",
+            "If the lane is already clear, what one weekday, profile field, or signal detail is still missing?"
+          ],
           readRoutes: {
             overview: "/api/v1/life-force"
           },
@@ -5174,6 +5188,7 @@ function buildAgentOnboardingPayload(request: {
             "Life Force is a focused domain surface, not a batch CRUD entity type.",
             "Use GET /api/v1/life-force for the current overview payload with stats, drains, recommendations, and current-curve state.",
             "Patch the profile only for durable personal settings, update weekday templates only for the curve itself, and post fatigue signals for real-time tired or recovered observations.",
+            "If the user says something like 'I always dip on Tuesdays after lunch', treat that as a weekday-template change rather than a one-off fatigue signal.",
             "If the user is asking what changed after a profile, template, or fatigue write, read the overview back so the effect stays visible.",
             "If the user already knows they want a profile change, weekday-template edit, or right-now fatigue signal, skip the broad lane question and ask only for the missing weekday, profile field, or signal detail."
           ]
@@ -5181,6 +5196,11 @@ function buildAgentOnboardingPayload(request: {
         workbench: {
           summary:
             "Dedicated graph-flow API. Use it for flow catalog reads, flow CRUD, execution, run history, published outputs, node results, and latest successful node outputs.",
+          routeSelectionQuestions: [
+            "Is the job flow discovery, flow editing, execution, published output, run detail, node result, latest node output, or flow chat follow-up?",
+            "Does the user need a stable public contract or one execution artifact?",
+            "If the flow is already known, what one run, node, or output scope detail is still missing before acting?"
+          ],
           readRoutes: {
             listFlows: "/api/v1/workbench/flows",
             flowById: "/api/v1/workbench/flows/:id",
@@ -5208,6 +5228,7 @@ function buildAgentOnboardingPayload(request: {
             "Use the flow routes when the agent needs stable public input contracts, published outputs, node-level results, or reusable execution history.",
             "If the user is still figuring out inputs or editable structure, read flow detail or box catalog before asking them to author a payload from memory.",
             "Prefer the dedicated output and node-result routes over reverse-engineering raw traces.",
+            "If the user only wants a published output, latest node output, or run detail, do not reopen a flow-edit intake before reading that artifact.",
             "If the user already named the flow and wants one output or one run, skip the broad lane question and ask only for the missing run, node, or output scope."
           ]
         }
@@ -5425,9 +5446,9 @@ function buildAgentOnboardingPayload(request: {
       saveSuggestionTone: "gentle_optional",
       maxQuestionsPerTurn: 1,
       psycheExplorationRule:
-        "When a Psyche entity needs understanding first, begin with one exploratory question before any working formulation, replacement belief, suggested title, or save pitch. Keep the opening reflection to one or two short sentences, stay in plain prose instead of bullets or numbered lists, keep that first reply short, do not mention Forge search or save structure yet, avoid colons or list-shaped phrasing, prefer what/when/how over why until the experience is grounded, wait for the user's answer before offering a fuller formulation, ask permission before moving from charged exploration into naming or challenge when needed, do not widen into adjacent entities until the current one has a working sentence the user recognizes, and once the lived experience is coherent stop deepening and help the user name it cleanly. When the user is updating a Psyche record because of one fresh episode, anchor in that episode before renaming the durable formulation. If the user accepts the wording, move toward the save instead of reopening deeper exploration.",
+        "When a Psyche entity needs understanding first, begin with one exploratory question before any working formulation, replacement belief, suggested title, or save pitch. Keep the opening reflection to one or two short sentences, stay in plain prose instead of bullets or numbered lists, keep that first reply short, do not mention Forge search or save structure yet, avoid colons or list-shaped phrasing, prefer what/when/how over why until the experience is grounded, wait for the user's answer before offering a fuller formulation, ask permission before moving from charged exploration into naming or challenge when needed, make the next question help the user feel more able to name the experience rather than more examined, do not widen into adjacent entities until the current one has a working sentence the user recognizes, and once the lived experience is coherent stop deepening and help the user name it cleanly. When the user is updating a Psyche record because of one fresh episode, anchor in that episode before renaming the durable formulation. If the user accepts the wording, move toward the save instead of reopening deeper exploration.",
       specializedSurfaceRule:
-        "For Movement, Life Force, and Workbench, clarify the lane first, then name the dedicated route family in plain language and do not guess at a generic CRUD path. If the truth of the current state is still uncertain, read the relevant specialized view before you mutate it. When the user already named a precise correction or review target, confirm only the route-selecting detail that is still missing. After a concrete specialized-surface correction, read the relevant specialized view back when the user is trying to understand the result rather than just store it. The canonical runtime routes stay under /api/v1/*, and the OpenClaw HTTP mirror exposes the same families under /forge/v1/movement, /forge/v1/life-force, and /forge/v1/workbench.",
+        "For Movement, Life Force, and Workbench, clarify the lane first, then name the dedicated route family in plain language and do not guess at a generic CRUD path. Use specializedDomainSurfaces.routeSelectionQuestions when they are present so the next follow-up stays route-selective instead of generic. Once the lane is clear, talk in route-relevant nouns such as timeline, overlay, weekday template, published output, run detail, or node result rather than generic record language. If the truth of the current state is still uncertain, read the relevant specialized view before you mutate it. When the user already named a precise correction or review target, confirm only the route-selecting detail that is still missing. After a concrete specialized-surface correction, read the relevant specialized view back when the user is trying to understand the result rather than just store it. The canonical runtime routes stay under /api/v1/*, and the OpenClaw HTTP mirror exposes the same families under /forge/v1/movement, /forge/v1/life-force, and /forge/v1/workbench.",
       reviewShortcutRule:
         "When the user is reviewing or correcting an existing record, narrow the saved object, timeframe, or route family first. Do not reopen the whole intake unless the user is actually redefining the record.",
       readModelWriteRule:

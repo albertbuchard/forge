@@ -282,6 +282,9 @@ describe("PsycheSelfObservationPage", () => {
   let activity: ReturnType<typeof createActivity>[];
 
   beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-04-06T12:00:00.000Z"));
+
     observations = [
       createObservation({
         id: "note_human",
@@ -559,6 +562,7 @@ describe("PsycheSelfObservationPage", () => {
 
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.restoreAllMocks();
     vi.clearAllMocks();
   });

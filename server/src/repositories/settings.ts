@@ -15,6 +15,7 @@ import {
   listAiModelConnections,
   syncForgeManagedWikiProfile
 } from "./model-settings.js";
+import { listUsersByIds } from "./users.js";
 import {
   agentBootstrapPolicySchema,
   agentScopePolicySchema,
@@ -30,6 +31,7 @@ import {
   type AgentTokenMutationResult,
   type AgentTokenSummary,
   type CreateAgentTokenInput,
+  type AgentRuntimeProvider,
   type SettingsPayload,
   type UpdateSettingsInput
 } from "../types.js";
@@ -114,6 +116,10 @@ type AgentIdentityRow = {
   id: string;
   label: string;
   agent_type: string;
+  identity_key: string | null;
+  provider: AgentRuntimeProvider | null;
+  machine_key: string | null;
+  persona_key: string | null;
   trust_level: AgentIdentity["trustLevel"];
   autonomy_mode: AgentIdentity["autonomyMode"];
   approval_mode: AgentIdentity["approvalMode"];
@@ -122,6 +128,12 @@ type AgentIdentityRow = {
   updated_at: string;
   token_count: number;
   active_token_count: number;
+};
+
+type AgentIdentityUserRow = {
+  agent_id: string;
+  user_id: string;
+  role: string;
 };
 
 const settingsFileSchema = settingsPayloadSchema.deepPartial();
@@ -470,11 +482,52 @@ function pickComparableOverrideSubset(
   return picked as UpdateSettingsInput;
 }
 
-function mapAgent(row: AgentIdentityRow): AgentIdentity {
+function listAgentIdentityUserLinks(
+  agentIds: string[]
+): Map<string, AgentIdentity["linkedUsers"]> {
+  if (agentIds.length === 0) {
+    return new Map();
+  }
+  const placeholders = agentIds.map(() => "?").join(",");
+  const rows = getDatabase()
+    .prepare(
+      `SELECT agent_id, user_id, role
+       FROM agent_identity_users
+       WHERE agent_id IN (${placeholders})
+       ORDER BY role = 'primary' DESC, created_at ASC`
+    )
+    .all(...agentIds) as AgentIdentityUserRow[];
+  const usersById = new Map(
+    listUsersByIds(rows.map((row) => row.user_id)).map(
+      (user) => [user.id, user] as const
+    )
+  );
+  const linksByAgentId = new Map<string, AgentIdentity["linkedUsers"]>();
+  for (const row of rows) {
+    const current = linksByAgentId.get(row.agent_id) ?? [];
+    current.push({
+      userId: row.user_id,
+      role: row.role,
+      user: usersById.get(row.user_id) ?? null
+    });
+    linksByAgentId.set(row.agent_id, current);
+  }
+  return linksByAgentId;
+}
+
+function mapAgent(
+  row: AgentIdentityRow,
+  linkedUsers: AgentIdentity["linkedUsers"] = []
+): AgentIdentity {
   return agentIdentitySchema.parse({
     id: row.id,
     label: row.label,
     agentType: row.agent_type,
+    identityKey: row.identity_key,
+    provider: row.provider,
+    machineKey: row.machine_key,
+    personaKey: row.persona_key,
+    linkedUsers,
     trustLevel: row.trust_level,
     autonomyMode: row.autonomy_mode,
     approvalMode: row.approval_mode,
@@ -525,6 +578,10 @@ function findAgentIdentity(agentId: string): AgentIdentity | undefined {
          agent_identities.id,
          agent_identities.label,
          agent_identities.agent_type,
+         agent_identities.identity_key,
+         agent_identities.provider,
+         agent_identities.machine_key,
+         agent_identities.persona_key,
          agent_identities.trust_level,
          agent_identities.autonomy_mode,
          agent_identities.approval_mode,
@@ -532,36 +589,95 @@ function findAgentIdentity(agentId: string): AgentIdentity | undefined {
          agent_identities.created_at,
          agent_identities.updated_at,
          COUNT(agent_tokens.id) AS token_count,
-         COALESCE(SUM(CASE WHEN agent_tokens.revoked_at IS NULL THEN 1 ELSE 0 END), 0) AS active_token_count
+         COALESCE(SUM(CASE WHEN agent_tokens.id IS NOT NULL AND agent_tokens.revoked_at IS NULL THEN 1 ELSE 0 END), 0) AS active_token_count
        FROM agent_identities
        LEFT JOIN agent_tokens ON agent_tokens.agent_id = agent_identities.id
        WHERE agent_identities.id = ?
        GROUP BY agent_identities.id`
     )
     .get(agentId) as AgentIdentityRow | undefined;
-  return row ? mapAgent(row) : undefined;
+  const links = row ? listAgentIdentityUserLinks([row.id]) : new Map();
+  return row ? mapAgent(row, links.get(row.id) ?? []) : undefined;
+}
+
+function normalizeAgentIdentityPart(value: string | null | undefined) {
+  return value
+    ?.trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._:]+/g, "_")
+    .replace(/^_+|_+$/g, "") || "";
+}
+
+function runtimeProviderFromAgentType(
+  agentType: string
+): AgentRuntimeProvider | null {
+  const normalized = normalizeAgentIdentityPart(agentType);
+  if (
+    normalized === "openclaw" ||
+    normalized === "hermes" ||
+    normalized === "codex"
+  ) {
+    return normalized;
+  }
+  return null;
+}
+
+function deriveTokenAgentIdentityFields(input: CreateAgentTokenInput): {
+  identityKey: string | null;
+  provider: AgentRuntimeProvider | null;
+  machineKey: string | null;
+  personaKey: string | null;
+} {
+  const provider = runtimeProviderFromAgentType(input.agentType);
+  if (!provider) {
+    return {
+      identityKey: null,
+      provider: null,
+      machineKey: null,
+      personaKey: null
+    };
+  }
+  return {
+    identityKey: `runtime:${provider}:token:default`,
+    provider,
+    machineKey: "token",
+    personaKey: "default"
+  };
 }
 
 function upsertAgentIdentity(input: CreateAgentTokenInput): AgentIdentity {
   const now = new Date().toISOString();
+  const identityFields = deriveTokenAgentIdentityFields(input);
   const existing = getDatabase()
     .prepare(
       `SELECT id
        FROM agent_identities
-       WHERE lower(label) = lower(?)
+       WHERE (? IS NOT NULL AND identity_key = ?)
+          OR lower(label) = lower(?)
        LIMIT 1`
     )
-    .get(input.agentLabel) as { id: string } | undefined;
+    .get(
+      identityFields.identityKey,
+      identityFields.identityKey,
+      input.agentLabel
+    ) as { id: string } | undefined;
 
   if (existing) {
     getDatabase()
       .prepare(
         `UPDATE agent_identities
-         SET agent_type = ?, trust_level = ?, autonomy_mode = ?, approval_mode = ?, description = ?, updated_at = ?
+         SET agent_type = ?, identity_key = COALESCE(identity_key, ?),
+             provider = COALESCE(provider, ?), machine_key = COALESCE(machine_key, ?),
+             persona_key = COALESCE(persona_key, ?), trust_level = ?,
+             autonomy_mode = ?, approval_mode = ?, description = ?, updated_at = ?
          WHERE id = ?`
       )
       .run(
         input.agentType,
+        identityFields.identityKey,
+        identityFields.provider,
+        identityFields.machineKey,
+        identityFields.personaKey,
         input.trustLevel,
         input.autonomyMode,
         input.approvalMode,
@@ -576,13 +692,18 @@ function upsertAgentIdentity(input: CreateAgentTokenInput): AgentIdentity {
   getDatabase()
     .prepare(
       `INSERT INTO agent_identities (
-        id, label, agent_type, trust_level, autonomy_mode, approval_mode, description, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        id, label, agent_type, identity_key, provider, machine_key, persona_key,
+        trust_level, autonomy_mode, approval_mode, description, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       agentId,
       input.agentLabel,
       input.agentType,
+      identityFields.identityKey,
+      identityFields.provider,
+      identityFields.machineKey,
+      identityFields.personaKey,
       input.trustLevel,
       input.autonomyMode,
       input.approvalMode,
@@ -669,6 +790,10 @@ export function listAgentIdentities(): AgentIdentity[] {
          agent_identities.id,
          agent_identities.label,
          agent_identities.agent_type,
+         agent_identities.identity_key,
+         agent_identities.provider,
+         agent_identities.machine_key,
+         agent_identities.persona_key,
          agent_identities.trust_level,
          agent_identities.autonomy_mode,
          agent_identities.approval_mode,
@@ -676,14 +801,15 @@ export function listAgentIdentities(): AgentIdentity[] {
          agent_identities.created_at,
          agent_identities.updated_at,
          COUNT(agent_tokens.id) AS token_count,
-         COALESCE(SUM(CASE WHEN agent_tokens.revoked_at IS NULL THEN 1 ELSE 0 END), 0) AS active_token_count
+         COALESCE(SUM(CASE WHEN agent_tokens.id IS NOT NULL AND agent_tokens.revoked_at IS NULL THEN 1 ELSE 0 END), 0) AS active_token_count
        FROM agent_identities
        LEFT JOIN agent_tokens ON agent_tokens.agent_id = agent_identities.id
        GROUP BY agent_identities.id
        ORDER BY agent_identities.created_at DESC`
     )
     .all() as AgentIdentityRow[];
-  const manualAgents = rows.map(mapAgent);
+  const links = listAgentIdentityUserLinks(rows.map((row) => row.id));
+  const manualAgents = rows.map((row) => mapAgent(row, links.get(row.id) ?? []));
   const modelAgents = listAiModelConnections().map(
     buildConnectionAgentIdentity
   );
@@ -692,6 +818,11 @@ export function listAgentIdentities(): AgentIdentity[] {
     id: FORGE_DEFAULT_AGENT_ID,
     label: "Forge Agent",
     agentType: "forge_default",
+    identityKey: "forge:default",
+    provider: null,
+    machineKey: null,
+    personaKey: "default",
+    linkedUsers: [],
     trustLevel: "trusted",
     autonomyMode: "approval_required",
     approvalMode: "approval_by_default",
@@ -702,7 +833,11 @@ export function listAgentIdentities(): AgentIdentity[] {
     createdAt: settings.created_at,
     updatedAt: settings.updated_at
   });
-  return [forgeAgent, ...modelAgents, ...manualAgents];
+  const deduped = new Map<string, AgentIdentity>();
+  for (const agent of [forgeAgent, ...modelAgents, ...manualAgents]) {
+    deduped.set(agent.identityKey ?? agent.id, agent);
+  }
+  return Array.from(deduped.values());
 }
 
 export function isPsycheAuthRequired(): boolean {

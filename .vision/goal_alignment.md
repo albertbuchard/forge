@@ -16,6 +16,8 @@ Forge should make the full planning ladder explicit:
 
 Forge should treat projects as PRD-backed initiatives, issues as vertical slices across the stack, tasks as one focused AI session each, and subtasks as lightweight granular child steps. The product should support humans and bots as first-class collaborators with one owner plus one-or-many assignees, and the web app should let users explore the hierarchy through both a mixed Kanban board and a compact hierarchy view.
 
+Forge should also distinguish stable agent identity from user ownership. OpenClaw, Hermes, and Codex are durable agent runtimes that may reconnect many times, create bot users, or spawn subagents, but repeated runtime sessions must not become repeated top-level agents. A stable agent ID can link to one or several human or bot users, and each linked bot user can own its own Kanban work.
+
 Forge should stay modern and production-grade:
 
 - React 19

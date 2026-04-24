@@ -188,6 +188,8 @@ Agent skills must default to:
 - no branch creation prompts
 - no pull request prompts
 
+Agent runtime identity is separate from Forge user ownership. OpenClaw, Hermes, and Codex each need one stable agent identity per machine/runtime installation, derived from provider, machine/data root, and persona rather than volatile session keys, cron IDs, WhatsApp threads, PIDs, or timestamps. Runtime sessions are history under that identity. Agent identities can link to one or several Forge users, including bot users with their own Kanban ownership, so spawned subagents are modeled as users or linked actors instead of duplicate top-level agents.
+
 Separate code review and final audit skills are not part of this Forge PM workflow and should remain Codex concerns instead.
 
 ### 10. Documentation Contract

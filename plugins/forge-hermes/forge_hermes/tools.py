@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import atexit
+import hashlib
 import json
 import logging
 import os
@@ -68,6 +69,21 @@ def _is_gateway_process() -> bool:
 
 def _gateway_runtime_session_key() -> str:
     return DEFAULT_HERMES_GATEWAY_SESSION_KEY
+
+
+def _stable_machine_key(config: "ForgeConfig") -> str:
+    raw = json.dumps(
+        {
+            "baseUrl": config.base_url,
+            "dataRoot": config.data_root or "",
+        },
+        sort_keys=True,
+    )
+    return f"machine_{hashlib.sha1(raw.encode('utf-8')).hexdigest()[:12]}"
+
+
+def _stable_agent_identity_key(config: "ForgeConfig") -> str:
+    return f"runtime:hermes:{_stable_machine_key(config)}:default"
 
 
 class ForgePluginError(RuntimeError):
@@ -310,6 +326,9 @@ def _register_runtime_session(session_id: str = "") -> Optional[str]:
                 "provider": "hermes",
                 "agentLabel": _resolve_runtime_agent_label(),
                 "agentType": "hermes",
+                "agentIdentityKey": _stable_agent_identity_key(config),
+                "machineKey": _stable_machine_key(config),
+                "personaKey": "default",
                 "actorLabel": effective_actor_label,
                 "sessionKey": cache_key,
                 "sessionLabel": cache_key,

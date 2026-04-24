@@ -6022,7 +6022,7 @@ test("watch bootstrap serves compact habit state and watch habit check-ins prese
         habits: Array<{
           id: string;
           currentPeriodStatus: string;
-          last7History: Array<{ current: boolean; state: string }>;
+          last7History: Array<{ current: boolean; periodKey: string; state: string }>;
         }>;
       };
     };
@@ -9795,8 +9795,38 @@ test("habit streaks use consecutive cadence windows instead of raw aligned check
   const fixedNow = new RealDate("2026-04-09T12:00:00.000Z");
 
   class MockDate extends RealDate {
-    constructor(...value: ConstructorParameters<typeof Date>) {
-      super(...(value.length > 0 ? value : [fixedNow.toISOString()]));
+    constructor(
+      ...value:
+        | []
+        | [string | number | Date]
+        | [number, number, number?, number?, number?, number?, number?]
+    ) {
+      if (value.length === 0) {
+        super(fixedNow.toISOString());
+      } else if (value.length === 1) {
+        super(value[0]);
+      } else {
+        const [year, month, date, hours, minutes, seconds, ms] = value;
+        switch (value.length) {
+          case 2:
+            super(year, month);
+            break;
+          case 3:
+            super(year, month, date);
+            break;
+          case 4:
+            super(year, month, date, hours);
+            break;
+          case 5:
+            super(year, month, date, hours, minutes);
+            break;
+          case 6:
+            super(year, month, date, hours, minutes, seconds);
+            break;
+          default:
+            super(year, month, date, hours, minutes, seconds, ms);
+        }
+      }
     }
 
     static now() {
@@ -17887,6 +17917,133 @@ test("singleton codex runtime sessions supersede older bridges and ignore stale 
     };
     assert.ok(
       historyBody.events.some((event) => event.eventType === "session_registered")
+    );
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("agent runtime identities stay stable across volatile session keys and labels", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-agent-runtime-identity-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+
+    for (const payload of [
+      {
+        provider: "openclaw",
+        agentLabel: "Forge OpenClaw",
+        agentType: "openclaw",
+        sessionKey: "agent:main:cron:111",
+        externalSessionId: "agent:main:cron:111"
+      },
+      {
+        provider: "openclaw",
+        agentLabel: "aurel",
+        agentType: "openclaw",
+        sessionKey: "agent:main:whatsapp:direct:+4474",
+        externalSessionId: "agent:main:whatsapp:direct:+4474"
+      },
+      {
+        provider: "hermes",
+        agentLabel: "Forge Hermes Auth Probe",
+        agentType: "hermes",
+        sessionKey: "auth-probe",
+        externalSessionId: "auth-probe"
+      },
+      {
+        provider: "hermes",
+        agentLabel: "Forge Hermes",
+        agentType: "hermes",
+        sessionKey: "20260424_052517_b0f6bfff",
+        externalSessionId: "20260424_052517_b0f6bfff"
+      }
+    ] as const) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/v1/agents/sessions",
+        headers: {
+          cookie: operatorCookie
+        },
+        payload: {
+          ...payload,
+          actorLabel: "Albert",
+          connectionMode: "operator_session",
+          baseUrl: "http://127.0.0.1:4317",
+          webUrl: "http://127.0.0.1:4317/forge/",
+          dataRoot: rootDir,
+          machineKey: "test-machine",
+          personaKey: "default",
+          metadata: {
+            singleton: true
+          }
+        }
+      });
+      assert.equal(response.statusCode, 200);
+    }
+
+    const sessionsResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/agents/sessions",
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(sessionsResponse.statusCode, 200);
+    const sessionsBody = sessionsResponse.json() as {
+      sessions: Array<{ provider: string; agentId: string | null }>;
+    };
+    const openclawAgentIds = new Set(
+      sessionsBody.sessions
+        .filter((session) => session.provider === "openclaw")
+        .map((session) => session.agentId)
+    );
+    const hermesAgentIds = new Set(
+      sessionsBody.sessions
+        .filter((session) => session.provider === "hermes")
+        .map((session) => session.agentId)
+    );
+    assert.equal(openclawAgentIds.size, 1);
+    assert.equal(hermesAgentIds.size, 1);
+
+    const agentsResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/agents",
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(agentsResponse.statusCode, 200);
+    const agentsBody = agentsResponse.json() as {
+      agents: Array<{
+        label: string;
+        provider: string | null;
+        activeTokenCount: number;
+        identityKey: string | null;
+        linkedUsers: Array<{ userId: string }>;
+      }>;
+    };
+    const openclawAgents = agentsBody.agents.filter(
+      (agent) => agent.provider === "openclaw"
+    );
+    const hermesAgents = agentsBody.agents.filter(
+      (agent) => agent.provider === "hermes"
+    );
+    assert.equal(openclawAgents.length, 1);
+    assert.equal(hermesAgents.length, 1);
+    assert.equal(openclawAgents[0]?.label, "Forge OpenClaw");
+    assert.equal(hermesAgents[0]?.label, "Forge Hermes");
+    assert.equal(openclawAgents[0]?.activeTokenCount, 0);
+    assert.ok(openclawAgents[0]?.identityKey?.includes("test_machine"));
+    assert.ok(
+      openclawAgents[0]?.linkedUsers.some(
+        (link) => link.userId === "user_agent_openclaw"
+      )
     );
   } finally {
     await app.close();

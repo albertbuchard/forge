@@ -97,6 +97,11 @@ Surface rule:
   reflect the meaning before you ask for the structure.
 - When updating, start with what is changing, what should stay true, and what prompted
   the update now.
+- If the user already named the exact correction in usable language, keep the next
+  question narrow. Confirm only the scope, timing, or route-selecting detail that is
+  still missing, then act.
+- If the next answer would not change the route, wording, or save payload in a useful
+  way, stop asking and write.
 - When the user is vague, ask for one small concrete example, stake, or desired
   outcome before you ask them to name the record.
 - When the user is clear, state the working formulation and ask only for the last
@@ -123,9 +128,13 @@ Surface rule:
   one question, and avoid naming a finished diagnosis-like formulation.
 - Reflect before the next question. Earn the formulation gradually from the user's own
   words.
+- The next question should help the user feel more able to name the experience, not
+  more examined by a schema.
 - If the user already offers a usable belief sentence, value phrase, or mode name,
   refine from their wording first instead of replacing it with a cleaner label too
   early.
+- If the formulation already lands and no new answer would change the wording or the
+  write, stop asking and save.
 - For Psyche updates, start with what feels newly true, newly visible, or newly
   inaccurate, then ask what should stay true before you change the wording or links.
 - If a fresh episode is what made a Psyche update visible, anchor in that episode
@@ -208,6 +217,11 @@ Surface rule:
 - `patch.checkIn` accepts `status` plus optional `dateKey`, `note`, and `description`; if `description` is provided, it replaces the habit's stored `description` in the same write.
 - Preferred API path for Movement, Life Force, and Workbench: use the dedicated
   route families published in `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces`.
+- When that onboarding payload includes `routeSelectionQuestions`, use them before
+  improvising follow-up questions for Movement, Life Force, or Workbench.
+- After the lane is clear, talk in route-relevant nouns such as timeline, overlay,
+  weekday template, published output, run detail, or node result rather than generic
+  "record" language.
 - If the truth of the current Movement, Life Force, or Workbench state is still
   unclear, prefer the dedicated read before the mutation so the correction stays
   truthful.

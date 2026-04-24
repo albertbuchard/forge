@@ -12,6 +12,7 @@ describe("entity visuals", () => {
     expect(ENTITY_KINDS).toEqual([
       "goal",
       "project",
+      "issue",
       "task",
       "strategy",
       "habit",

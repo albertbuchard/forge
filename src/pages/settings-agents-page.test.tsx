@@ -81,6 +81,51 @@ function renderPage() {
   );
 }
 
+function createRuntimeSession(
+  id: string,
+  sessionKey: string,
+  status: "connected" | "stale",
+  lastHeartbeatAt: string
+) {
+  return {
+    id,
+    agentId: "agt_openclaw",
+    agentLabel: "Forge OpenClaw",
+    agentType: "openclaw",
+    provider: "openclaw",
+    sessionKey,
+    sessionLabel: sessionKey,
+    actorLabel: "Albert",
+    connectionMode: "operator_session",
+    status,
+    alive: status === "connected",
+    baseUrl: "http://127.0.0.1:4317",
+    webUrl: "http://127.0.0.1:4317/forge/",
+    dataRoot: "/tmp/forge",
+    externalSessionId: sessionKey,
+    staleAfterSeconds: 120,
+    reconnectCount: 0,
+    reconnectRequestedAt: null,
+    lastError: null,
+    lastSeenAt: lastHeartbeatAt,
+    lastHeartbeatAt,
+    startedAt: "2026-04-21T10:00:00.000Z",
+    endedAt: null,
+    createdAt: "2026-04-21T10:00:00.000Z",
+    updatedAt: lastHeartbeatAt,
+    metadata: {},
+    recentEvents: [],
+    eventCount: 2,
+    actionCount: 1,
+    reconnectPlan: {
+      summary: "Restart OpenClaw.",
+      commands: ["openclaw gateway restart"],
+      notes: [],
+      automationSupported: false
+    }
+  };
+}
+
 describe("SettingsAgentsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -167,6 +212,33 @@ describe("SettingsAgentsPage", () => {
     expect(screen.getByText(/Bootstrap: scoped/i)).toBeInTheDocument();
     expect(
       screen.getByText("Default read scope: 1 user · 1 project · 2 tags")
+    ).toBeInTheDocument();
+  });
+
+  it("groups repeated runtime sessions under one canonical agent", async () => {
+    listAgentRuntimeSessionsMock.mockResolvedValue({
+      sessions: [
+        createRuntimeSession(
+          "ags_new",
+          "agent:main:whatsapp:direct:+4474",
+          "connected",
+          "2026-04-24T08:45:31.395Z"
+        ),
+        createRuntimeSession(
+          "ags_old",
+          "agent:main:cron:111",
+          "stale",
+          "2026-04-23T08:45:31.395Z"
+        )
+      ]
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Forge OpenClaw")).toBeInTheDocument();
+    expect(screen.getByText("2 runtime sessions")).toBeInTheDocument();
+    expect(
+      screen.getByText("Session history under this agent")
     ).toBeInTheDocument();
   });
 });

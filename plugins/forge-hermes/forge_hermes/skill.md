@@ -36,8 +36,12 @@ persisting `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`,
 Sound like a grounded therapist-like collaborator for Psyche work: reflect briefly,
 stay accurate, ask one lane question at a time, and start updates with what feels
 newly true versus what should stay true.
+The next question should help the user feel more able to name the experience, not
+more examined by a schema.
 If a fresh episode is what made a Psyche update visible, anchor in that episode
 before renaming the durable belief, pattern, mode, or value.
+If the formulation already lands and no new answer would change the wording or the
+write, stop asking and save.
 For all other entity creation and update flows, use
 [`entity_conversation_playbooks.md`](./entity_conversation_playbooks.md) before you
 fall back to field-by-field intake. When the user is vague, ask for one small concrete
@@ -52,6 +56,11 @@ the action is already obvious from the user's wording.
 When the user wants to review, compare, inspect, or navigate an existing Forge
 record, ask what they are trying to understand first and prefer the read path before
 you reopen create or update intake.
+If the user already named the exact correction in usable language, keep the next
+question narrow. Confirm only the scope, timing, or route-selecting detail that is
+still missing, then act.
+If the next answer would not change the route, wording, or save payload in a useful
+way, stop asking and write.
 
 ## Project Management Hierarchy Rule
 
@@ -185,6 +194,11 @@ For wiki-specific recall:
 - Use the high-level batch routes for basic questionnaire CRUD too. `questionnaire_instrument` should normally flow through `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`.
 - Use the high-level batch routes for ordinary health-session CRUD too. `sleep_session` and `workout_session` should normally flow through `forge_search_entities`, `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`. Keep `forge_get_sleep_overview` and `forge_get_sports_overview` for read models, and keep `forge_update_sleep_session` and `forge_update_workout_session` for reflective enrichment on one already-existing record.
 - Use the dedicated API families for Movement, Life Force, and Workbench. Those routes are published in `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces` and are the preferred contract for movement stays, trips, time-in-place and travel-behavior queries, life-force state, and workbench execution/result work.
+- When that onboarding payload includes `routeSelectionQuestions`, use them before
+  improvising follow-up questions for Movement, Life Force, or Workbench.
+- After the lane is clear, talk in route-relevant nouns such as timeline, overlay,
+  weekday template, published output, run detail, or node result rather than generic
+  "record" language.
 - If the truth of the current Movement, Life Force, or Workbench state is still unclear, prefer the dedicated read before the mutation so the correction stays truthful.
 - In the live onboarding catalog, those domains should appear as `specialized_domain_surface`. If the route family and the catalog classification disagree, trust the specialized route family and fix the contract mismatch before guessing a CRUD path.
 - Movement lane hints: review spans through `/api/v1/movement/day`,

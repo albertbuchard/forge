@@ -82,6 +82,73 @@ function runtimeStatusTone(status: AgentRuntimeSession["status"]) {
   return "text-white/45";
 }
 
+function resolveRuntimeGroupStatus(sessions: AgentRuntimeSession[]) {
+  if (sessions.some((session) => session.status === "connected")) {
+    return "connected" as const;
+  }
+  if (sessions.some((session) => session.status === "reconnecting")) {
+    return "reconnecting" as const;
+  }
+  if (sessions.some((session) => session.status === "error")) {
+    return "error" as const;
+  }
+  if (sessions.some((session) => session.status === "stale")) {
+    return "stale" as const;
+  }
+  return "disconnected" as const;
+}
+
+function groupRuntimeSessions(sessions: AgentRuntimeSession[]) {
+  const groups = new Map<
+    string,
+    {
+      key: string;
+      agentId: string | null;
+      agentLabel: string;
+      provider: AgentRuntimeSession["provider"];
+      status: AgentRuntimeSession["status"];
+      primary: AgentRuntimeSession;
+      sessions: AgentRuntimeSession[];
+      actionCount: number;
+      eventCount: number;
+    }
+  >();
+
+  for (const session of sessions) {
+    const key = session.agentId ?? `${session.provider}:${session.agentLabel}`;
+    const existing = groups.get(key);
+    if (!existing) {
+      groups.set(key, {
+        key,
+        agentId: session.agentId,
+        agentLabel: session.agentLabel,
+        provider: session.provider,
+        status: session.status,
+        primary: session,
+        sessions: [session],
+        actionCount: session.actionCount,
+        eventCount: session.eventCount
+      });
+      continue;
+    }
+    existing.sessions.push(session);
+    existing.actionCount += session.actionCount;
+    existing.eventCount += session.eventCount;
+    existing.sessions.sort(
+      (a, b) =>
+        Date.parse(b.lastHeartbeatAt) - Date.parse(a.lastHeartbeatAt)
+    );
+    existing.primary = existing.sessions[0] ?? existing.primary;
+    existing.status = resolveRuntimeGroupStatus(existing.sessions);
+  }
+
+  return Array.from(groups.values()).sort(
+    (a, b) =>
+      Date.parse(b.primary.lastHeartbeatAt) -
+      Date.parse(a.primary.lastHeartbeatAt)
+  );
+}
+
 function formatBootstrapMode(mode: AgentTokenSummary["bootstrapPolicy"]["mode"]) {
   return mode.replaceAll("_", " ");
 }
@@ -182,7 +249,7 @@ export function SettingsAgentsPage() {
   });
   const rotateMutation = useMutation({
     mutationFn: (tokenId: string) => rotateAgentToken(tokenId),
-    onSuccess: async (data, _tokenId) => {
+    onSuccess: async (data) => {
       await invalidateAll();
       // Show the reveal dialog for the rotated token
       if (onboarding) {
@@ -234,7 +301,14 @@ export function SettingsAgentsPage() {
   const settings = settingsQuery.data?.settings;
   const approvals = approvalsQuery.data?.approvalRequests ?? [];
   const onboarding = onboardingQuery.data?.onboarding;
-  const runtimeSessions = runtimeSessionsQuery.data?.sessions ?? [];
+  const runtimeSessions = useMemo(
+    () => runtimeSessionsQuery.data?.sessions ?? [],
+    [runtimeSessionsQuery.data?.sessions]
+  );
+  const runtimeSessionGroups = useMemo(
+    () => groupRuntimeSessions(runtimeSessions),
+    [runtimeSessions]
+  );
   const runtimeSessionHistory = runtimeSessionHistoryQuery.data;
   const operatorContext = operatorContextQuery.data?.context;
 
@@ -255,14 +329,11 @@ export function SettingsAgentsPage() {
       t.autonomyMode !== "approval_required" && tokenHasScopes(t, ["write"])
   );
   const hasAnyToken = activeTokens.length > 0;
-  const connectedRuntimeSessions = runtimeSessions.filter(
-    (session) => session.status === "connected"
+  const connectedRuntimeSessions = runtimeSessionGroups.filter(
+    (group) => group.status === "connected"
   );
-  const staleRuntimeSessions = runtimeSessions.filter(
-    (session) => session.status === "stale"
-  );
-  const reconnectingRuntimeSessions = runtimeSessions.filter(
-    (session) => session.status === "reconnecting"
+  const staleRuntimeSessions = runtimeSessionGroups.filter(
+    (group) => group.status === "stale"
   );
 
   const operatorTasks = useMemo(() => {
@@ -555,7 +626,7 @@ export function SettingsAgentsPage() {
                 Live OpenClaw, Hermes, and Codex sessions registered against this Forge runtime, with stale detection and reconnect guidance.
               </div>
             </div>
-            {runtimeSessions.length > 0 ? (
+            {runtimeSessionGroups.length > 0 ? (
               <Badge className="text-white/60">
                 {connectedRuntimeSessions.length} live · {staleRuntimeSessions.length} stale
               </Badge>
@@ -566,31 +637,37 @@ export function SettingsAgentsPage() {
               <div className="rounded-[18px] bg-white/[0.04] px-4 py-4 text-sm text-white/55">
                 Loading agent runtime sessions…
               </div>
-            ) : runtimeSessions.length === 0 ? (
+            ) : runtimeSessionGroups.length === 0 ? (
               <div className="rounded-[18px] bg-white/[0.04] px-4 py-4 text-sm text-white/55">
                 No runtime sessions have registered yet. OpenClaw, Hermes, and Codex now self-register here when their Forge adapter starts.
               </div>
             ) : (
-              runtimeSessions.map((session) => (
-                <div key={session.id} className="rounded-[18px] bg-white/[0.04] p-4">
+              runtimeSessionGroups.map((group) => {
+                const session = group.primary;
+                return (
+                <div key={group.key} className="rounded-[18px] bg-white/[0.04] p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2.5">
                         <div className="font-medium text-white">
-                          {session.agentLabel}
+                          {group.agentLabel}
                         </div>
-                        <Badge className={runtimeStatusTone(session.status)}>
-                          {session.status}
+                        <Badge className={runtimeStatusTone(group.status)}>
+                          {group.status}
                         </Badge>
                       </div>
                       <div className="mt-1 text-sm text-white/52">
-                        {session.provider} · {session.connectionMode.replaceAll("_", " ")} · last heartbeat{" "}
+                        {group.provider} · {session.connectionMode.replaceAll("_", " ")} · last heartbeat{" "}
                         {formatDateTime(session.lastHeartbeatAt)}
                       </div>
                       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-white/42">
-                        <span>Session key {session.sessionKey}</span>
-                        <span>{session.actionCount} recorded actions</span>
-                        <span>{session.eventCount} session events</span>
+                        <span>
+                          {group.sessions.length} runtime session
+                          {group.sessions.length === 1 ? "" : "s"}
+                        </span>
+                        <span>Current key {session.sessionKey}</span>
+                        <span>{group.actionCount} recorded actions</span>
+                        <span>{group.eventCount} session events</span>
                       </div>
                       {session.lastError ? (
                         <div className="mt-3 text-sm text-rose-200/82">
@@ -599,7 +676,7 @@ export function SettingsAgentsPage() {
                       ) : null}
                     </div>
                     <div className="flex shrink-0 flex-wrap gap-2">
-                      {session.status !== "connected" ? (
+                      {group.status !== "connected" ? (
                         <Button
                           variant="secondary"
                           size="sm"
@@ -627,7 +704,7 @@ export function SettingsAgentsPage() {
                           ? "Hide history"
                           : "View history"}
                       </Button>
-                      {session.status !== "disconnected" ? (
+                      {group.status !== "disconnected" ? (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -678,6 +755,29 @@ export function SettingsAgentsPage() {
                       <code>{session.reconnectPlan.commands.join("\n")}</code>
                     </pre>
                   </div>
+
+                  {group.sessions.length > 1 ? (
+                    <div className="mt-4 rounded-[16px] bg-[rgba(8,13,28,0.38)] p-3">
+                      <div className="text-xs uppercase tracking-[0.14em] text-white/38">
+                        Session history under this agent
+                      </div>
+                      <div className="mt-2 grid gap-2">
+                        {group.sessions.slice(0, 6).map((entry) => (
+                          <div
+                            key={entry.id}
+                            className="flex flex-wrap items-center justify-between gap-2 rounded-[12px] bg-white/[0.035] px-3 py-2 text-xs text-white/50"
+                          >
+                            <span className="min-w-0 truncate">
+                              {entry.sessionKey}
+                            </span>
+                            <span className={runtimeStatusTone(entry.status)}>
+                              {entry.status} · {formatDateTime(entry.lastHeartbeatAt)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
 
                   {expandedRuntimeSessionId === session.id ? (
                     <div className="mt-4 rounded-[16px] bg-[rgba(8,13,28,0.52)] p-3">
@@ -771,7 +871,8 @@ export function SettingsAgentsPage() {
                     </div>
                   ) : null}
                 </div>
-              ))
+                );
+              })
             )}
           </div>
         </Card>
@@ -914,8 +1015,22 @@ export function SettingsAgentsPage() {
                         {agent.description}
                       </div>
                     ) : null}
+                    {agent.linkedUsers.length > 0 ? (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {agent.linkedUsers.map((link) => (
+                          <Badge key={link.userId} className="text-white/55">
+                            {link.user?.displayName ?? link.userId}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : null}
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-white/55">
                       <span>{agent.agentType}</span>
+                      {agent.identityKey ? (
+                        <span className="font-mono text-xs">
+                          {agent.identityKey}
+                        </span>
+                      ) : null}
                       <span>{agent.autonomyMode.replaceAll("_", " ")}</span>
                       <span>
                         {agent.activeTokenCount} active token

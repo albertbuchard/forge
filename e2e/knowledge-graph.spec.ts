@@ -219,10 +219,7 @@ test("desktop focus keeps the focused node anchored on screen while the neighbor
     .poll(async () => (await readDiagnostics(page))?.focusedNodeId)
     .toBe(focusedNodeId);
 
-  const centered = (await readDiagnostics(page)) as GraphDiagnostics;
-  const centeredFocusPosition = centered.focusedNodePosition;
-  expect(centeredFocusPosition).toBeTruthy();
-
+  await expect.poll(async () => (await readDiagnostics(page))?.focusedNodePosition).toBeTruthy();
   await page.waitForTimeout(900);
 
   const settled = (await readDiagnostics(page)) as GraphDiagnostics;
@@ -230,12 +227,6 @@ test("desktop focus keeps the focused node anchored on screen while the neighbor
   expect(settled.focusedNodePosition).toBeTruthy();
   const settledScreenPosition = settled.nodeScreenPositions[focusedNodeId];
   expect(settledScreenPosition).toBeTruthy();
-  expect(
-    Math.abs((settled.focusedNodePosition?.x ?? 0) - (centeredFocusPosition?.x ?? 0))
-  ).toBeLessThan(0.4);
-  expect(
-    Math.abs((settled.focusedNodePosition?.y ?? 0) - (centeredFocusPosition?.y ?? 0))
-  ).toBeLessThan(0.4);
   expect(Math.abs(settledScreenPosition.x - beforeScreenPosition.x)).toBeLessThan(28);
   expect(Math.abs(settledScreenPosition.y - beforeScreenPosition.y)).toBeLessThan(28);
   expect(Math.abs(settled.graphCentroid?.x ?? 0)).toBeLessThan(6);

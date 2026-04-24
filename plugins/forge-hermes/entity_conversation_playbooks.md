@@ -339,8 +339,10 @@ Connect:
   move to the save.
 - Prefer "what I have now is..." or "what seems clear now is..." over a cold final
   field check.
+- If the user already gave usable wording, do not ask them to rename it for style.
 - If the user gives a correction, revise the working formulation once and close again
   instead of reopening the whole intake.
+- If the next answer would not change the entity type, route, wording, timing, or useful links, stop asking and act.
 
 ## Question design rules
 
@@ -389,6 +391,15 @@ Connect:
   saved object, timeframe, or route family, not reopen the whole meaning-making arc.
 - When the user already gave the correction in usable language, prefer "what still
   needs deciding is..." over asking them to restate the whole situation.
+- The opening question should help the user understand what they are actually trying
+  to save, decide, review, or change, not make them perform the schema out loud.
+- For review or correction work, do not slip back into a create-style opener once the
+  saved object is already known.
+- Once a specialized-surface lane is clear, speak in route-relevant nouns such as
+  timeline, overlay, weekday template, published output, run detail, or node result
+  instead of generic "record" language.
+- If the user is emotionally loaded but the record is still non-Psyche, reflect the
+  lived stake once and then return to the one operational question that still matters.
 
 ## Ready-to-save check
 
@@ -420,6 +431,10 @@ Use this when the user is updating an existing record rather than creating a new
 
 If the current title or shape may no longer fit, offer one revised formulation yourself
 before asking the user to rewrite it from scratch.
+
+If the user already named the exact correction in usable language, do not ask a broad
+review question again. Confirm only the missing scope, timing, or route-selecting
+detail, then act.
 
 ## Update-first openers
 
@@ -1146,6 +1161,8 @@ Direct action rules:
   instead of treating it as a one-off right-now feeling.
 - If the user is describing how one weekday should usually feel, update that weekday
   template instead of editing the profile.
+- If the user says something like "I always dip on Tuesdays after lunch", treat that
+  as a weekday-template edit, not as a one-off fatigue signal.
 - If the user is describing right-now depletion or recovery, post a fatigue signal and
   then read the overview back if they want to see the updated picture.
 - After a profile or weekday-template change, read the overview back when the user is
@@ -1223,6 +1240,8 @@ Direct action rules:
 - If the user wants to debug one failed execution, narrow whether they need the run
   detail, one node result, the latest node output, or the published output before you
   ask for flow changes.
+- If the user only wants a published output, latest node output, or run detail, do not
+  reopen a flow-edit intake before reading that artifact.
 - If the user wants one node's latest successful output, do not browse old runs first
   unless they explicitly want historical debugging.
 - If the user wants to understand what inputs a flow can accept before editing or

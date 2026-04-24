@@ -104,6 +104,9 @@ describe("question flow simulation cycles", () => {
     expect(entityPlaybook).toMatch(/Close cleanly/i);
     expect(entityPlaybook).toMatch(/what seems clear now is/i);
     expect(entityPlaybook).toMatch(/what workflow they are trying to unlock/i);
+    expect(entityPlaybook).toMatch(
+      /emotionally loaded but the record is still non-Psyche[\s\S]*lived stake once[\s\S]*operational question/i
+    );
     expect(entityPlaybook).toMatch(/what sentence future-you would need to recover from this note later/i);
     expect(entityPlaybook).toMatch(/what belongs inside the boundary and what can stay out if the scope still[\s\S]*feels muddy/i);
     expect(entityPlaybook).toMatch(/smallest concrete slice if the observation still feels vague[\s\S]*global/i);
@@ -116,6 +119,7 @@ describe("question flow simulation cycles", () => {
     expect(psychePlaybook).toMatch(/Permission pivots/i);
     expect(psychePlaybook).toMatch(/graspable enough/i);
     expect(psychePlaybook).toMatch(/accurate enough to be held/i);
+    expect(psychePlaybook).toMatch(/contain before you interpret/i);
 
     const reflectiveNonPsyche = [
       "Goal",
@@ -161,12 +165,14 @@ describe("question flow simulation cycles", () => {
     expect(entityPlaybook).toMatch(/latest node output/i);
     expect(entityPlaybook).toMatch(/published output/i);
     expect(entityPlaybook).toMatch(/do not ask a broad review question again/i);
+    expect(entityPlaybook).toMatch(/already gave usable wording[\s\S]*rename it for style/i);
     expect(entityPlaybook).toMatch(/skip the meta lane question when the user already named[\s\S]*exact correction or[\s\S]*review target/i);
     expect(entityPlaybook).toMatch(/skip the meta lane[\s\S]*ask only for the missing run, node, or output scope/i);
     expect(entityPlaybook).toMatch(/skip the meta lane[\s\S]*ask only for the specific weekday, profile field, or signal/i);
     expect(entityPlaybook).toMatch(/latest successful node output/i);
     expect(entityPlaybook).toMatch(/stable public input contract or published output/i);
     expect(entityPlaybook).toMatch(/user already gave the correction in usable language/i);
+    expect(entityPlaybook).toMatch(/next answer would not change the entity type, route, wording, timing, or useful links/i);
     expect(entityPlaybook).toMatch(/read the overview back when the user is[\s\S]*practical impact of the change/i);
 
     expect(psychePlaybook).toMatch(/Change and save pivots/i);
@@ -186,6 +192,8 @@ describe("question flow simulation cycles", () => {
     expect(psychePlaybook).toMatch(
       /If the user already gives the new sentence in usable language,[\s\S]*revise the wording[\s\S]*once and save/i
     );
+    expect(psychePlaybook).toMatch(/Do not open a second broad origin story/i);
+    expect(psychePlaybook).toMatch(/formulation already lands[\s\S]*stop asking and save/i);
     expect(psychePlaybook).toMatch(/do not ask for evidence, origin, or repair[\s\S]*all that is[\s\S]*missing/i);
     expect(psychePlaybook).toMatch(/do not switch containers unless the user wants to/i);
     expect(psychePlaybook).toMatch(/say in plain language what makes you think/i);

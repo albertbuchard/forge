@@ -428,6 +428,9 @@ function createDeferred<T>() {
 }
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-04-13T12:00:00.000Z"));
+
   window.history.replaceState({}, "", "http://localhost:3000/");
   window.localStorage.clear();
   useForgeShellMock.mockReturnValue({
@@ -742,6 +745,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   window.localStorage.clear();
   useForgeClipboardStore.getState().clear();
   vi.clearAllMocks();

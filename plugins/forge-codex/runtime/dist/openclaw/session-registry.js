@@ -1,8 +1,22 @@
+import { createHash } from "node:crypto";
 import { isAgentBootstrapEvent } from "openclaw/plugin-sdk/hook-runtime";
 import { callConfiguredForgeApi, expectForgeSuccess, resolveConfiguredForgeActorLabel } from "./api-client.js";
 const SESSION_IDS = new Map();
 const SESSION_PROVIDER = "openclaw";
 const DEFAULT_RUNTIME_AGENT_LABEL = "Forge OpenClaw";
+function shortHash(value) {
+    return createHash("sha1").update(value).digest("hex").slice(0, 12);
+}
+function buildStableMachineKey(config) {
+    const source = JSON.stringify({
+        baseUrl: config.baseUrl,
+        dataRoot: config.dataRoot || ""
+    });
+    return `machine_${shortHash(source)}`;
+}
+function buildStableAgentIdentityKey(config) {
+    return `runtime:${SESSION_PROVIDER}:${buildStableMachineKey(config)}:default`;
+}
 function isRecord(value) {
     return typeof value === "object" && value !== null;
 }
@@ -40,6 +54,9 @@ async function registerSession(config, sessionKey, metadata) {
             provider: SESSION_PROVIDER,
             agentLabel: process.env.FORGE_AGENT_LABEL?.trim() || DEFAULT_RUNTIME_AGENT_LABEL,
             agentType: SESSION_PROVIDER,
+            agentIdentityKey: buildStableAgentIdentityKey(config),
+            machineKey: buildStableMachineKey(config),
+            personaKey: "default",
             actorLabel,
             sessionKey,
             sessionLabel: sessionKey,

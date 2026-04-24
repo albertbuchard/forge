@@ -251,6 +251,46 @@ export function ensureSystemUsers(): void {
   }
 }
 
+export function ensureBotUser(input: {
+  id: string;
+  handle: string;
+  displayName: string;
+  description: string;
+  accentColor: string;
+}): UserSummary {
+  const parsed = createUserSchema.parse({
+    kind: "bot",
+    handle: normalizeHandle(input.handle),
+    displayName: input.displayName,
+    description: input.description,
+    accentColor: input.accentColor
+  });
+  const now = new Date().toISOString();
+  getDatabase()
+    .prepare(
+      `INSERT INTO users (id, kind, handle, display_name, description, accent_color, created_at, updated_at)
+       VALUES (?, 'bot', ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         kind = 'bot',
+         handle = excluded.handle,
+         display_name = excluded.display_name,
+         description = excluded.description,
+         accent_color = excluded.accent_color,
+         updated_at = excluded.updated_at`
+    )
+    .run(
+      input.id,
+      parsed.handle,
+      parsed.displayName,
+      parsed.description,
+      parsed.accentColor,
+      now,
+      now
+    );
+  ensurePermissiveGrantsForUser(input.id, now);
+  return getUserById(input.id)!;
+}
+
 function ensurePermissiveGrantsForUser(userId: string, now: string): void {
   const existingUsers = listUsers();
   for (const otherUser of existingUsers) {

@@ -73,6 +73,7 @@ async function loadOnboardingPayload() {
         {
           readRoutes: Record<string, string>;
           writeRoutes: Record<string, string>;
+          routeSelectionQuestions?: string[];
           notes: string[];
         }
       >;
@@ -306,6 +307,14 @@ describe("forge onboarding contract", () => {
         tripPointDelete: "/api/v1/movement/trips/:id/points/:pointId"
       })
     );
+    expect(
+      routeModel.specializedDomainSurfaces.movement.routeSelectionQuestions
+    ).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/day, month, all-time, timeline, place, trip detail/i),
+        expect.stringMatching(/missing-gap overlay|saved-overlay repair/i)
+      ])
+    );
 
     expect(routeModel.specializedDomainSurfaces.lifeForce.readRoutes).toEqual(
       expect.objectContaining({
@@ -318,6 +327,13 @@ describe("forge onboarding contract", () => {
         weekdayTemplate: "/api/v1/life-force/templates/:weekday",
         fatigueSignal: "/api/v1/life-force/fatigue-signals"
       })
+    );
+    expect(
+      routeModel.specializedDomainSurfaces.lifeForce.routeSelectionQuestions
+    ).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/overview, change durable profile assumptions, change a weekday curve, or log a right-now fatigue signal/i)
+      ])
     );
 
     expect(routeModel.specializedDomainSurfaces.workbench.readRoutes).toEqual(
@@ -334,6 +350,13 @@ describe("forge onboarding contract", () => {
         runFlow: "/api/v1/workbench/flows/:id/run",
         runByPayload: "/api/v1/workbench/run"
       })
+    );
+    expect(
+      routeModel.specializedDomainSurfaces.workbench.routeSelectionQuestions
+    ).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/flow discovery, flow editing, execution, published output, run detail, node result, latest node output/i)
+      ])
     );
 
     expect(routeModel.readModelOnlySurfaces).toEqual(

@@ -1,7 +1,8 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { getDatabase, runInTransaction } from "../db.js";
 import { recordActivityEvent } from "./activity-events.js";
 import { listAgentActions } from "./collaboration.js";
+import { ensureBotUser, getUserById } from "./users.js";
 import { agentActionSchema, agentRuntimeEventLevelSchema, agentRuntimeReconnectPlanSchema, agentRuntimeSessionEventSchema, agentRuntimeSessionSchema, createAgentRuntimeSessionEventSchema, createAgentRuntimeSessionSchema, disconnectAgentRuntimeSessionSchema, heartbeatAgentRuntimeSessionSchema, reconnectAgentRuntimeSessionSchema } from "../types.js";
 function parseMetadata(raw) {
     try {
@@ -211,7 +212,95 @@ function ensureCurrentSessionInstance(row, externalSessionId) {
     }
     return true;
 }
-function disconnectSupersededSingletonSessions(parsed, sessionId, now) {
+function normalizeIdentityPart(value) {
+    return (value
+        ?.trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9._:]+/g, "_")
+        .replace(/^_+|_+$/g, "") ?? "");
+}
+function shortHash(value) {
+    return createHash("sha1").update(value).digest("hex").slice(0, 12);
+}
+function canonicalRuntimeAgentLabel(provider) {
+    if (provider === "openclaw") {
+        return "Forge OpenClaw";
+    }
+    if (provider === "hermes") {
+        return "Forge Hermes";
+    }
+    return "Forge Codex";
+}
+function canonicalRuntimeDescription(provider) {
+    return `${canonicalRuntimeAgentLabel(provider)} runtime agent with stable Forge identity and linked Kanban user.`;
+}
+function canonicalAgentUserSpec(provider) {
+    if (provider === "openclaw") {
+        return {
+            id: "user_agent_openclaw",
+            handle: "openclaw",
+            displayName: "OpenClaw",
+            description: "OpenClaw runtime actor linked to Forge agent identity and Kanban ownership.",
+            accentColor: "#38bdf8"
+        };
+    }
+    if (provider === "hermes") {
+        return {
+            id: "user_agent_hermes",
+            handle: "hermes",
+            displayName: "Hermes",
+            description: "Hermes runtime actor linked to Forge agent identity and Kanban ownership.",
+            accentColor: "#a78bfa"
+        };
+    }
+    return {
+        id: "user_agent_codex",
+        handle: "codex",
+        displayName: "Codex",
+        description: "Codex runtime actor linked to Forge agent identity and Kanban ownership.",
+        accentColor: "#22c55e"
+    };
+}
+function deriveMachineKey(input) {
+    const explicit = normalizeIdentityPart(input.machineKey);
+    if (explicit) {
+        return explicit;
+    }
+    const source = [
+        normalizeText(input.dataRoot) ?? "",
+        normalizeText(input.baseUrl) ?? "local"
+    ].join("|");
+    return `machine_${shortHash(source)}`;
+}
+function derivePersonaKey(input) {
+    return (normalizeIdentityPart(input.personaKey) ||
+        normalizeIdentityPart(input.agentType) ||
+        "default");
+}
+function deriveAgentIdentityKey(input) {
+    const explicit = normalizeIdentityPart(input.agentIdentityKey);
+    if (explicit) {
+        return explicit;
+    }
+    return `runtime:${input.provider}:${deriveMachineKey(input)}:${derivePersonaKey(input)}`;
+}
+function linkAgentIdentityUsers(agentId, provider, linkedUserIds, now) {
+    const primaryUser = ensureBotUser(canonicalAgentUserSpec(provider));
+    const normalizedUserIds = Array.from(new Set([primaryUser.id, ...linkedUserIds.map((id) => id.trim()).filter(Boolean)]));
+    for (const userId of normalizedUserIds) {
+        if (!getUserById(userId)) {
+            continue;
+        }
+        getDatabase()
+            .prepare(`INSERT INTO agent_identity_users (agent_id, user_id, role, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(agent_id, user_id) DO UPDATE SET
+           role = excluded.role,
+           updated_at = excluded.updated_at`)
+            .run(agentId, userId, userId === primaryUser.id ? "primary" : "linked", now, now);
+    }
+}
+function disconnectSupersededSingletonSessions(parsed, sessionId, agentId, now) {
     if (!parsed.metadata?.singleton) {
         return;
     }
@@ -224,11 +313,11 @@ function disconnectSupersededSingletonSessions(parsed, sessionId, now) {
          created_at, updated_at
        FROM agent_runtime_sessions
        WHERE provider = ?
-         AND agent_label = ?
+         AND agent_id = ?
          AND coalesce(base_url, '') = coalesce(?, '')
          AND coalesce(data_root, '') = coalesce(?, '')
          AND id <> ?`)
-        .all(parsed.provider, parsed.agentLabel, normalizeText(parsed.baseUrl), normalizeText(parsed.dataRoot), sessionId);
+        .all(parsed.provider, agentId, normalizeText(parsed.baseUrl), normalizeText(parsed.dataRoot), sessionId);
     for (const row of rows) {
         if (row.status === "disconnected" && row.ended_at) {
             continue;
@@ -251,29 +340,45 @@ function disconnectSupersededSingletonSessions(parsed, sessionId, now) {
     }
 }
 function upsertRuntimeAgentIdentity(input) {
+    const identityKey = deriveAgentIdentityKey(input);
+    const machineKey = deriveMachineKey(input);
+    const personaKey = derivePersonaKey(input);
+    const label = canonicalRuntimeAgentLabel(input.provider);
     const existing = getDatabase()
         .prepare(`SELECT id
        FROM agent_identities
-       WHERE lower(label) = lower(?)
+       WHERE identity_key = ?
+          OR (
+            (identity_key IS NULL OR machine_key IS NULL OR machine_key = 'legacy' OR identity_key LIKE 'runtime:%:legacy:%')
+            AND (
+              provider = ?
+              OR lower(agent_type) = lower(?)
+              OR lower(label) = lower(?)
+            )
+          )
        LIMIT 1`)
-        .get(input.agentLabel);
+        .get(identityKey, input.provider, input.provider, label);
     const now = new Date().toISOString();
-    const description = `${input.provider[0].toUpperCase()}${input.provider.slice(1)} runtime session participant registered through Forge.`;
+    const description = canonicalRuntimeDescription(input.provider);
     if (existing) {
         getDatabase()
             .prepare(`UPDATE agent_identities
-         SET agent_type = ?, updated_at = ?
+         SET label = ?, agent_type = ?, identity_key = ?, provider = ?,
+             machine_key = ?, persona_key = ?, description = ?, updated_at = ?
          WHERE id = ?`)
-            .run(input.agentType || input.provider, now, existing.id);
+            .run(label, input.agentType || input.provider, identityKey, input.provider, machineKey, personaKey, description, now, existing.id);
+        linkAgentIdentityUsers(existing.id, input.provider, input.linkedUserIds, now);
         return existing.id;
     }
     const agentId = `agt_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
     getDatabase()
         .prepare(`INSERT INTO agent_identities (
-        id, label, agent_type, trust_level, autonomy_mode, approval_mode,
+        id, label, agent_type, identity_key, provider, machine_key, persona_key,
+        trust_level, autonomy_mode, approval_mode,
         description, created_at, updated_at
-      ) VALUES (?, ?, ?, 'trusted', 'approval_required', 'approval_by_default', ?, ?, ?)`)
-        .run(agentId, input.agentLabel, input.agentType || input.provider, description, now, now);
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'trusted', 'approval_required', 'approval_by_default', ?, ?, ?)`)
+        .run(agentId, label, input.agentType || input.provider, identityKey, input.provider, machineKey, personaKey, description, now, now);
+    linkAgentIdentityUsers(agentId, input.provider, input.linkedUserIds, now);
     return agentId;
 }
 function insertSessionEvent(sessionId, input, now = new Date().toISOString()) {
@@ -321,6 +426,7 @@ export function registerAgentRuntimeSession(input) {
     return runInTransaction(() => {
         const now = new Date().toISOString();
         const agentId = upsertRuntimeAgentIdentity(parsed);
+        const agentLabel = canonicalRuntimeAgentLabel(parsed.provider);
         const existing = getSessionRowByCompositeKey(parsed.provider, parsed.sessionKey);
         const sessionId = existing?.id ?? `ags_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
         if (existing) {
@@ -332,7 +438,7 @@ export function registerAgentRuntimeSession(input) {
                last_error = ?, last_seen_at = ?, last_heartbeat_at = ?, started_at = ?,
                ended_at = NULL, metadata_json = ?, updated_at = ?
            WHERE id = ?`)
-                .run(agentId, parsed.agentLabel, parsed.agentType || parsed.provider, parsed.sessionLabel || parsed.sessionKey, parsed.actorLabel, parsed.connectionMode, parsed.status === "error" ? "error" : "connected", normalizeText(parsed.baseUrl), normalizeText(parsed.webUrl), normalizeText(parsed.dataRoot), normalizeText(parsed.externalSessionId), parsed.staleAfterSeconds, normalizeText(parsed.lastError), now, now, now, JSON.stringify(parsed.metadata), now, sessionId);
+                .run(agentId, agentLabel, parsed.agentType || parsed.provider, parsed.sessionLabel || parsed.sessionKey, parsed.actorLabel, parsed.connectionMode, parsed.status === "error" ? "error" : "connected", normalizeText(parsed.baseUrl), normalizeText(parsed.webUrl), normalizeText(parsed.dataRoot), normalizeText(parsed.externalSessionId), parsed.staleAfterSeconds, normalizeText(parsed.lastError), now, now, now, JSON.stringify(parsed.metadata), now, sessionId);
             insertSessionEvent(sessionId, {
                 eventType: "session_registered",
                 title: "Session re-registered",
@@ -349,7 +455,7 @@ export function registerAgentRuntimeSession(input) {
              last_seen_at, last_heartbeat_at, started_at, ended_at, metadata_json,
              created_at, updated_at
            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?, ?, ?, ?, NULL, ?, ?, ?)`)
-                .run(sessionId, agentId, parsed.agentLabel, parsed.agentType || parsed.provider, parsed.provider, parsed.sessionKey, parsed.sessionLabel || parsed.sessionKey, parsed.actorLabel, parsed.connectionMode, parsed.status === "error" ? "error" : "connected", normalizeText(parsed.baseUrl), normalizeText(parsed.webUrl), normalizeText(parsed.dataRoot), normalizeText(parsed.externalSessionId), parsed.staleAfterSeconds, normalizeText(parsed.lastError), now, now, now, JSON.stringify(parsed.metadata), now, now);
+                .run(sessionId, agentId, agentLabel, parsed.agentType || parsed.provider, parsed.provider, parsed.sessionKey, parsed.sessionLabel || parsed.sessionKey, parsed.actorLabel, parsed.connectionMode, parsed.status === "error" ? "error" : "connected", normalizeText(parsed.baseUrl), normalizeText(parsed.webUrl), normalizeText(parsed.dataRoot), normalizeText(parsed.externalSessionId), parsed.staleAfterSeconds, normalizeText(parsed.lastError), now, now, now, JSON.stringify(parsed.metadata), now, now);
             insertSessionEvent(sessionId, {
                 eventType: "session_registered",
                 title: "Session registered",
@@ -357,12 +463,12 @@ export function registerAgentRuntimeSession(input) {
                 metadata: parsed.metadata
             }, now);
         }
-        disconnectSupersededSingletonSessions(parsed, sessionId, now);
+        disconnectSupersededSingletonSessions(parsed, sessionId, agentId, now);
         recordActivityEvent({
             entityType: "session",
             entityId: sessionId,
             eventType: "agent_session_registered",
-            title: `Agent session registered: ${parsed.agentLabel}`,
+            title: `Agent session registered: ${agentLabel}`,
             description: `${parsed.provider} registered a live agent session.`,
             actor: parsed.actorLabel,
             source: "agent",

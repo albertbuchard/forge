@@ -2488,6 +2488,15 @@ export interface AgentIdentity {
   id: string;
   label: string;
   agentType: string;
+  identityKey: string | null;
+  provider: "openclaw" | "hermes" | "codex" | null;
+  machineKey: string | null;
+  personaKey: string | null;
+  linkedUsers: Array<{
+    userId: string;
+    role: string;
+    user: UserSummary | null;
+  }>;
   trustLevel: "standard" | "trusted" | "autonomous";
   autonomyMode: "approval_required" | "scoped_write" | "autonomous";
   approvalMode: "approval_by_default" | "high_impact_only" | "none";
