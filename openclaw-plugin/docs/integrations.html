@@ -62,6 +62,7 @@
             <p class="eyebrow">Jump To</p>
             <ul class="guide-list">
               <li><a href="#shared-runtime">Shared runtime</a></li>
+              <li><a href="#agent-identity">Agent identity and users</a></li>
               <li><a href="#openclaw">OpenClaw</a></li>
               <li><a href="#hermes">Hermes</a></li>
               <li><a href="#codex">Codex</a></li>
@@ -92,6 +93,209 @@ userIds:  explicit on cross-owner reads</code></pre>
                 same Forge instance rather than drifting onto separate default stores.
               </p>
             </article>
+          </div>
+        </section>
+
+        <section class="section" id="agent-identity">
+          <div class="section-heading">
+            <p class="eyebrow">Agent Identity</p>
+            <h2>Agents, sessions, and users are different things in Forge.</h2>
+          </div>
+
+          <div class="card-grid two">
+            <article class="card">
+              <h3>The short version</h3>
+              <p>
+                OpenClaw, Hermes, and Codex each connect as a stable
+                <strong>agent identity</strong>. That identity is based on the
+                provider, machine or data root, and persona. It is not based on
+                a cron id, process id, timestamp, WhatsApp thread, or temporary
+                session key.
+              </p>
+              <p>
+                Every reconnect creates or updates a <strong>runtime
+                session</strong> under that agent identity. Sessions keep
+                heartbeat, reconnect, and event history, but they do not become
+                new agents.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Why users still matter</h3>
+              <p>
+                A Forge <strong>user</strong> is the owner or actor for work:
+                Kanban lanes, task ownership, notes, scoped reads, and
+                provenance. One agent identity can be linked to one or several
+                users. That lets the same OpenClaw runtime act for Albert,
+                spawn a bot user, or work inside a constrained Kanban without
+                pretending it is a different installed agent.
+              </p>
+              <p>
+                Subagents normally become bot users with their own user id and
+                Kanban scope. They link back to the parent agent identity unless
+                they are truly a separate runtime installation.
+              </p>
+            </article>
+          </div>
+
+          <div class="identity-diagram-card">
+            <div class="diagram-heading">
+              <p class="eyebrow">Connection Flow</p>
+              <h3>One stable agent, many sessions, linked users.</h3>
+            </div>
+            <div
+              class="identity-flow"
+              role="img"
+              aria-label="OpenClaw, Hermes, and Codex register stable agent identity keys. Forge stores one canonical agent identity per provider and machine, records sessions under it, links users to it, and shows one grouped card in Settings."
+            >
+              <div class="flow-group source">
+                <div class="flow-node openclaw">
+                  <strong>OpenClaw</strong>
+                  <span>provider: openclaw</span>
+                </div>
+                <div class="flow-node hermes">
+                  <strong>Hermes</strong>
+                  <span>provider: hermes</span>
+                </div>
+                <div class="flow-node codex">
+                  <strong>Codex</strong>
+                  <span>provider: codex</span>
+                </div>
+              </div>
+
+              <div class="flow-arrow" aria-hidden="true">
+                <span></span>
+              </div>
+
+              <div class="flow-node identity-key">
+                <strong>Stable identity key</strong>
+                <span>provider + machine/dataRoot + persona</span>
+                <small>never pid, timestamp, cron uuid, or chat thread</small>
+              </div>
+
+              <div class="flow-arrow" aria-hidden="true">
+                <span></span>
+              </div>
+
+              <div class="flow-node forge-core">
+                <strong>Forge canonical agent</strong>
+                <span>agent_identities.identity_key</span>
+                <small>one OpenClaw, one Hermes, one Codex per install</small>
+              </div>
+
+              <div class="flow-branch">
+                <div class="flow-node sessions">
+                  <strong>Runtime sessions</strong>
+                  <span>heartbeats, reconnects, event history</span>
+                </div>
+                <div class="flow-node users">
+                  <strong>Linked users</strong>
+                  <span>Albert, openclaw, hermes, codex, bot users</span>
+                </div>
+                <div class="flow-node settings-card">
+                  <strong>Settings card</strong>
+                  <span>one card with nested current/history rows</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card-grid two">
+            <article class="card">
+              <h3>What Forge stores</h3>
+              <table class="doc-table compact">
+                <thead>
+                  <tr>
+                    <th>Concept</th>
+                    <th>Purpose</th>
+                    <th>Stable?</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>agent_identities</code></td>
+                    <td>The installed/runtime agent Forge recognizes.</td>
+                    <td>Yes</td>
+                  </tr>
+                  <tr>
+                    <td><code>agent_runtime_sessions</code></td>
+                    <td>Live and historical activity for that agent.</td>
+                    <td>No</td>
+                  </tr>
+                  <tr>
+                    <td><code>users</code></td>
+                    <td>Human or bot ownership, Kanban scope, and provenance.</td>
+                    <td>Yes</td>
+                  </tr>
+                  <tr>
+                    <td><code>agent_identity_users</code></td>
+                    <td>The link between a stable agent and the users it may act for.</td>
+                    <td>Yes</td>
+                  </tr>
+                </tbody>
+              </table>
+            </article>
+            <article class="card">
+              <h3>What you should see in Settings</h3>
+              <p>
+                The Settings &gt; Agents page should show canonical agent
+                presence, not a pile of old sessions. A healthy local setup
+                shows one OpenClaw card, one Hermes card, and one Codex card,
+                each with its own nested session history.
+              </p>
+              <p>
+                Token counts belong to the canonical identity. Old auth probes,
+                cron runs, gateway restarts, and Codex process ids remain useful
+                as session history, but they should not appear as separate
+                connected agents.
+              </p>
+            </article>
+          </div>
+
+          <div class="identity-diagram-card">
+            <div class="diagram-heading">
+              <p class="eyebrow">Ownership Model</p>
+              <h3>Agent identity answers "which runtime?", user answers "whose work?".</h3>
+            </div>
+            <div
+              class="ownership-diagram"
+              role="img"
+              aria-label="A canonical OpenClaw agent identity links to several Forge users. Each user owns a Kanban and work records. Subagents are bot users linked to the same parent agent unless they are separate runtime installs."
+            >
+              <div class="owner-agent">
+                <strong>Forge OpenClaw</strong>
+                <span>agent identity</span>
+                <code>runtime:openclaw:machine:default</code>
+              </div>
+              <div class="owner-lines" aria-hidden="true"></div>
+              <div class="owner-users">
+                <div class="owner-user">
+                  <strong>Albert</strong>
+                  <span>human user</span>
+                  <small>personal tasks, notes, goals</small>
+                </div>
+                <div class="owner-user">
+                  <strong>openclaw</strong>
+                  <span>bot user</span>
+                  <small>agent-owned Kanban</small>
+                </div>
+                <div class="owner-user">
+                  <strong>research-bot</strong>
+                  <span>spawned subagent user</span>
+                  <small>scoped project board</small>
+                </div>
+              </div>
+              <div class="owner-kanbans">
+                <div>Albert Kanban</div>
+                <div>OpenClaw Kanban</div>
+                <div>Research Bot Kanban</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="note">
+            Rule of thumb: create another user when the work needs its own
+            owner, permissions, or Kanban. Create another agent identity only
+            when there is another durable runtime installation.
           </div>
         </section>
 

@@ -467,6 +467,12 @@ li {
   border-bottom: 0;
 }
 
+.doc-table.compact th,
+.doc-table.compact td {
+  padding: 12px 13px;
+  font-size: 0.9rem;
+}
+
 .guide-list {
   list-style: none;
   margin: 0;
@@ -652,6 +658,162 @@ li {
   display: grid;
   gap: 18px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.identity-diagram-card {
+  margin: 18px 0;
+  padding: 22px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(
+      circle at top left,
+      rgba(138, 180, 255, 0.16),
+      transparent 30%
+    ),
+    linear-gradient(180deg, rgba(10, 18, 32, 0.9), rgba(5, 10, 20, 0.92));
+  box-shadow: var(--shadow-md);
+}
+
+.diagram-heading {
+  margin-bottom: 18px;
+}
+
+.identity-flow {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) auto minmax(13rem, 1fr) auto minmax(13rem, 1fr) minmax(14rem, 1.1fr);
+  gap: 16px;
+  align-items: center;
+}
+
+.flow-group,
+.flow-branch,
+.owner-users,
+.owner-kanbans {
+  display: grid;
+  gap: 12px;
+}
+
+.flow-node,
+.owner-agent,
+.owner-user,
+.owner-kanbans div {
+  position: relative;
+  min-width: 0;
+  padding: 15px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 16px;
+  background: rgba(6, 11, 20, 0.72);
+}
+
+.flow-node strong,
+.owner-agent strong,
+.owner-user strong {
+  display: block;
+  color: var(--text);
+  font-family: "Sora", ui-sans-serif, sans-serif;
+  font-size: 0.94rem;
+}
+
+.flow-node span,
+.flow-node small,
+.owner-agent span,
+.owner-agent code,
+.owner-user span,
+.owner-user small {
+  display: block;
+  margin-top: 7px;
+  color: var(--text-soft);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.flow-node code,
+.owner-agent code {
+  width: fit-content;
+  max-width: 100%;
+}
+
+.flow-node.openclaw {
+  border-color: rgba(56, 189, 248, 0.32);
+}
+
+.flow-node.hermes {
+  border-color: rgba(167, 139, 250, 0.34);
+}
+
+.flow-node.codex {
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+.flow-node.identity-key {
+  border-color: rgba(138, 180, 255, 0.34);
+  background: rgba(22, 37, 64, 0.78);
+}
+
+.flow-node.forge-core,
+.owner-agent {
+  border-color: rgba(123, 225, 191, 0.34);
+  background: rgba(13, 42, 39, 0.58);
+}
+
+.flow-node.sessions,
+.flow-node.users,
+.flow-node.settings-card {
+  background: rgba(12, 20, 36, 0.82);
+}
+
+.flow-arrow {
+  width: 44px;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(138, 180, 255, 0.28), rgba(123, 225, 191, 0.88));
+}
+
+.flow-arrow span {
+  display: block;
+  width: 10px;
+  height: 10px;
+  margin-top: -4px;
+  margin-left: auto;
+  border-top: 2px solid rgba(123, 225, 191, 0.88);
+  border-right: 2px solid rgba(123, 225, 191, 0.88);
+  transform: rotate(45deg);
+}
+
+.ownership-diagram {
+  display: grid;
+  grid-template-columns: minmax(13rem, 0.9fr) minmax(2rem, 0.12fr) minmax(14rem, 1.1fr) minmax(14rem, 1fr);
+  gap: 16px;
+  align-items: center;
+}
+
+.owner-agent {
+  min-height: 120px;
+  display: grid;
+  align-content: center;
+}
+
+.owner-lines {
+  height: min(220px, 100%);
+  border-top: 2px solid rgba(123, 225, 191, 0.52);
+  border-bottom: 2px solid rgba(123, 225, 191, 0.52);
+  border-left: 2px solid rgba(123, 225, 191, 0.52);
+  border-radius: 16px 0 0 16px;
+}
+
+.owner-user {
+  border-color: rgba(138, 180, 255, 0.24);
+}
+
+.owner-kanbans div {
+  min-height: 74px;
+  display: grid;
+  place-items: center;
+  color: var(--accent-strong);
+  font-weight: 700;
+  text-align: center;
+  background: rgba(138, 180, 255, 0.1);
 }
 
 .footer {
@@ -1005,8 +1167,26 @@ li {
   .card-grid.three,
   .split-list,
   .api-stat-grid,
-  .ios-shot-grid {
+  .ios-shot-grid,
+  .identity-flow,
+  .ownership-diagram {
     grid-template-columns: 1fr;
+  }
+
+  .flow-arrow,
+  .owner-lines {
+    width: 2px;
+    height: 32px;
+    justify-self: center;
+    background: linear-gradient(180deg, rgba(138, 180, 255, 0.28), rgba(123, 225, 191, 0.88));
+    border: 0;
+    border-radius: 999px;
+  }
+
+  .flow-arrow span {
+    margin-top: 24px;
+    margin-left: -4px;
+    transform: rotate(135deg);
   }
 }
 
@@ -1067,6 +1247,7 @@ li {
   .callout,
   .shot,
   .guide-list,
+  .identity-diagram-card,
   .breadcrumbs {
     padding: 18px;
   }
