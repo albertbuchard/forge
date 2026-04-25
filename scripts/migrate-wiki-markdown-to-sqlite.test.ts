@@ -232,6 +232,110 @@ Recovered person page that must survive plugin upgrades.
   });
 });
 
+test("database startup imports legacy personal wiki pages into the matching personal space", async () => {
+  await withTempForgeDataRoot("forge-wiki-md-personal-startup-", async (rootDir) => {
+    const filePath = await writeWikiMarkdown(
+      rootDir,
+      "users/user_operator/pages/private-story.md",
+      `---
+id: "note_private_story"
+title: "Private Story"
+slug: "private-story"
+---
+# Private Story
+
+Recovered personal page that must stay in the operator wiki.
+`
+    );
+
+    configureDatabase({ dataRoot: rootDir, seedDemoData: false });
+    configureLegacyWikiAutoImport(true);
+    await initializeDatabase();
+
+    const row = getDatabase()
+      .prepare(
+        `SELECT notes.title, notes.content_markdown, wiki_spaces.owner_user_id, wiki_spaces.visibility
+         FROM notes
+         JOIN wiki_spaces ON wiki_spaces.id = notes.space_id
+         WHERE notes.id = ?`
+      )
+      .get("note_private_story") as
+      | {
+          title: string;
+          content_markdown: string;
+          owner_user_id: string;
+          visibility: string;
+        }
+      | undefined;
+
+    assert.equal(row?.title, "Private Story");
+    assert.match(row?.content_markdown ?? "", /operator wiki/);
+    assert.equal(row?.owner_user_id, "user_operator");
+    assert.equal(row?.visibility, "personal");
+    assert.equal(existsSync(filePath), true);
+  });
+});
+
+test("database startup does not overwrite existing SQLite wiki content with stale legacy markdown", async () => {
+  await withTempForgeDataRoot("forge-wiki-md-preserve-sqlite-", async (rootDir) => {
+    const filePath = await writeWikiMarkdown(
+      rootDir,
+      "shared/shared/pages/stale-page.md",
+      `---
+id: "note_stale_page"
+title: "Stale Page From Disk"
+slug: "stale-page"
+spaceId: "wiki_space_shared"
+---
+# Stale Page From Disk
+
+Old legacy content that should not replace SQLite.
+`
+    );
+
+    configureDatabase({ dataRoot: rootDir, seedDemoData: false });
+    configureLegacyWikiAutoImport(false);
+    await initializeDatabase();
+    getDatabase()
+      .prepare(
+        `INSERT INTO notes (
+          id, kind, title, slug, space_id, parent_slug, index_order, show_in_index,
+          aliases_json, summary, content_markdown, content_plain, author, source,
+          tags_json, destroy_at, source_path, frontmatter_json, revision_hash,
+          last_synced_at, created_at, updated_at
+        ) VALUES (?, 'wiki', ?, ?, 'wiki_space_shared', NULL, 0, 1, '[]', '',
+          ?, ?, NULL, 'system', '[]', NULL, ?, '{}', '', NULL, ?, ?)`
+      )
+      .run(
+        "note_stale_page",
+        "Current SQLite Page",
+        "stale-page",
+        "# Current SQLite Page\n\nThis newer canonical content must survive.",
+        "Current SQLite Page This newer canonical content must survive.",
+        "data/forge/wiki/shared/shared/pages/stale-page.md",
+        new Date().toISOString(),
+        new Date().toISOString()
+      );
+    closeDatabase();
+
+    configureDatabase({ dataRoot: rootDir, seedDemoData: false });
+    configureLegacyWikiAutoImport(true);
+    await initializeDatabase();
+
+    const row = getDatabase()
+      .prepare("SELECT title, content_markdown, source_path FROM notes WHERE id = ?")
+      .get("note_stale_page") as
+      | { title: string; content_markdown: string; source_path: string }
+      | undefined;
+
+    assert.equal(row?.title, "Current SQLite Page");
+    assert.match(row?.content_markdown ?? "", /newer canonical content/);
+    assert.doesNotMatch(row?.content_markdown ?? "", /Old legacy content/);
+    assert.equal(row?.source_path, "");
+    assert.equal(existsSync(filePath), true);
+  });
+});
+
 test("wiki settings list the shared populated space before personal spaces", async () => {
   await withTempForgeDataRoot("forge-wiki-md-shared-first-", async (rootDir) => {
     configureDatabase({ dataRoot: rootDir, seedDemoData: false });

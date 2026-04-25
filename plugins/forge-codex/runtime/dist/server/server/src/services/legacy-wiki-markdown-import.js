@@ -135,6 +135,7 @@ function findSpaceForFile(dataRoot, filePath, parsed) {
         if (row) {
             return row.id;
         }
+        return ensurePersonalWikiSpaceForLegacyUser(parts[1]);
     }
     return "wiki_space_shared";
 }
@@ -151,6 +152,28 @@ function findExistingNote(input) {
         .prepare("SELECT id FROM notes WHERE space_id = ? AND slug = ?")
         .get(input.spaceId, input.slug);
     return bySlug?.id ?? null;
+}
+function ensurePersonalWikiSpaceForLegacyUser(userId) {
+    const row = getDatabase()
+        .prepare(`SELECT id FROM wiki_spaces
+       WHERE owner_user_id = ? OR slug = ? OR slug = ? OR id = ?
+       ORDER BY created_at ASC
+       LIMIT 1`)
+        .get(userId, userId, `user-${slugify(userId)}`, `wiki_space_user_${slugify(userId)}`);
+    if (row) {
+        return row.id;
+    }
+    const now = new Date().toISOString();
+    const id = `wiki_space_user_${slugify(userId)}`;
+    getDatabase()
+        .prepare(`INSERT INTO wiki_spaces (id, slug, label, description, owner_user_id, visibility, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO NOTHING`)
+        .run(id, `user-${slugify(userId)}`, `${userId} Wiki`, "Personal Forge wiki space recovered from legacy wiki files.", userId, "personal", now, now);
+    const inserted = getDatabase()
+        .prepare("SELECT id FROM wiki_spaces WHERE id = ?")
+        .get(id);
+    return inserted?.id ?? "wiki_space_shared";
 }
 function upsertLinks(noteId, links) {
     getDatabase().prepare("DELETE FROM note_links WHERE note_id = ?").run(noteId);
@@ -179,7 +202,8 @@ export async function importLegacyWikiMarkdownToSqlite(input = {}) {
         apply: input.apply ?? false,
         deleteFiles: input.deleteFiles ?? false,
         backupBeforeApply: input.backupBeforeApply ?? false,
-        backupLabel: input.backupLabel ?? "legacy-wiki-markdown-pre-sqlite-import"
+        backupLabel: input.backupLabel ?? "legacy-wiki-markdown-pre-sqlite-import",
+        preserveExistingNotes: input.preserveExistingNotes ?? false
     };
     const wikiRoot = path.join(options.dataRoot, "wiki");
     const files = await walkMarkdownFiles(wikiRoot);
@@ -234,6 +258,17 @@ export async function importLegacyWikiMarkdownToSqlite(input = {}) {
             continue;
         }
         if (noteId) {
+            const existingNote = getNoteById(noteId, { skipCleanup: true });
+            if (options.preserveExistingNotes &&
+                existingNote &&
+                existingNote.contentMarkdown.trim().length > 0) {
+                getDatabase()
+                    .prepare("UPDATE notes SET source_path = '' WHERE id = ? AND source_path <> ''")
+                    .run(noteId);
+                syncNoteWikiArtifacts(existingNote);
+                updated += 1;
+                continue;
+            }
             getDatabase()
                 .prepare(`UPDATE notes
            SET kind = ?, title = ?, slug = ?, space_id = ?, parent_slug = ?, index_order = ?, show_in_index = ?,
@@ -321,7 +356,8 @@ export async function importLegacyWikiMarkdownOnStartup(dataRoot = getEffectiveD
         dataRoot,
         apply: true,
         deleteFiles: false,
-        backupBeforeApply: true
+        backupBeforeApply: true,
+        preserveExistingNotes: true
     });
     markStartupImportComplete();
     return result;
