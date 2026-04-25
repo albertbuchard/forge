@@ -91,8 +91,10 @@ One-time Apple-side setup:
    questionnaire, and age rating are complete
 4. Create an App Store Connect API key with permission to upload builds and manage
    releases
-5. Confirm automatic signing works for Apple team `KZ65F7924F`, or prepare signing
-   certificate and provisioning profile secrets for CI
+5. Prepare persistent Apple Distribution signing assets for GitHub Actions CI.
+   Do not rely on Xcode-managed automatic signing on hosted runners, because each
+   fresh runner can create another throwaway Apple Development certificate and
+   eventually exhaust the Apple account certificate limit.
 
 ## GitHub Secrets
 
@@ -115,15 +117,17 @@ Optional in either setup:
 
 - `FORGE_APPLE_TEAM_ID` if you do not want to rely on the default team `KZ65F7924F`
 
-### Required only if CI automatic signing is not enough
+### Also required for GitHub-hosted CI signing
 
 - `FORGE_IOS_BUILD_CERTIFICATE_BASE64`
 - `FORGE_IOS_P12_PASSWORD`
 - `FORGE_IOS_KEYCHAIN_PASSWORD`
-
-Optional:
-
-- `FORGE_IOS_PROVISIONING_PROFILES_BASE64`
+- either `FORGE_IOS_PROVISIONING_PROFILES_BASE64`
+- or these four split secrets:
+- `FORGE_IOS_PROFILE_APP_BASE64`
+- `FORGE_IOS_PROFILE_SCREENTIME_BASE64`
+- `FORGE_IOS_PROFILE_WATCH_APP_BASE64`
+- `FORGE_IOS_PROFILE_WATCH_EXTENSION_BASE64`
 
 Formatting note:
 
@@ -133,7 +137,11 @@ Formatting note:
   Connect key
 - `FORGE_IOS_BUILD_CERTIFICATE_BASE64` should be the base64 body of the exported `.p12`
 - `FORGE_IOS_PROVISIONING_PROFILES_BASE64` should be one or more base64
-  `.mobileprovision` payloads separated by newlines
+  `.mobileprovision` payloads separated by newlines, but GitHub secret size limits
+  may require using the four split profile secrets instead
+- the provisioning-profile secret set must cover the iPhone app, watch app, watch
+  extension, and screen-time report extension bundle ids used by
+  `ForgeCompanion.xcodeproj`
 
 ## Local Prep Commands
 

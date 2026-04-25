@@ -1,0 +1,11 @@
+# Forge iOS Companion — Product Requirements Document
+
+Forge iOS Companion is the native Apple client for the Forge ecosystem. It pairs to a specific Forge runtime, captures on-device signals that the web app cannot access directly, syncs those signals into Forge, and exposes a small set of high-value native controls for correction, diagnostics, and wrist-first capture.
+
+The current production stack is Swift 5, SwiftUI, MapKit, HealthKit, Core Location, BackgroundTasks, WatchConnectivity, WidgetKit, App Intents, AVFoundation, and the live Xcode project at `ios-companion/ForgeCompanion.xcodeproj`. Release automation is handled through Fastlane plus the repo scripts under `ios-companion/scripts/`, with TestFlight and App Store delivery driven from the companion subtree.
+
+The core product surfaces are the pairing flow, permission onboarding, the paired Forge shell, the movement life timeline, settings and diagnostics sheets, HealthKit sync controls, and the watchOS capture surfaces. The paired shell embeds the Forge web experience after authentication, while the native overlays expose the tasks that are more trustworthy or faster in native UI than in a web wrapper.
+
+The movement life timeline must present stays, trips, sleep overlays, manual corrections, box invalidation, location labeling, and detail drill-down in a way that works cleanly on both desktop-class simulator layouts and real iPhone touch input. Visible buttons must have matching hit targets, and modal or sidecar movement actions must never be obscured by an overlapping transparent interaction layer.
+
+The release contract for this subtree is explicit. Changes to the companion must preserve the live Xcode project, avoid casual project regeneration, build successfully through `xcodebuild` against the canonical simulator target, and remain compatible with the Fastlane-driven `testflight_release` path used by the repo’s local and tag-driven shipping flows. GitHub-hosted releases must sign with imported Apple Distribution assets and matching provisioning profiles for every shipped bundle id; the release architecture must not depend on Xcode-managed automatic signing minting fresh Apple Development certificates on ephemeral runners.

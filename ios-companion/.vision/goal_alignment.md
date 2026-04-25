@@ -1,0 +1,11 @@
+# Forge iOS Companion — Goal Alignment
+
+Forge iOS Companion is the native Apple-device capture and sync client for Forge. It exists to bridge phone and watch sensors, permissions, background delivery, and lightweight user actions into the canonical Forge runtime without forcing the user to live in the web UI for every movement, health, or habit event.
+
+The companion should feel native where the platform matters and subordinate where Forge already owns the domain truth. Pairing, permission prompts, movement capture, sleep and workout ingestion, watch relay, background sync, and small corrective actions belong in the app. Long-form planning, deep project management, and the broader Forge knowledge surface still belong to the paired Forge runtime.
+
+The movement timeline is a particularly sensitive surface in this client. It must let the user inspect stays and trips, correct automatic movement boxes, label locations, and open detail views with reliable touch behavior on iPhone hardware. A timeline card that visibly presents actions but fails to register taps is a product bug, not a cosmetic issue, because it blocks the user from correcting canonical movement data.
+
+The production stack for this project is explicit and binding: Swift 5 with SwiftUI for the iPhone and watchOS UI, MapKit for timeline maps, Core Location for movement capture, HealthKit for sleep and workout ingestion, BackgroundTasks for scheduled sync, WatchConnectivity for iPhone-watch transport, AVFoundation for QR scanning, WebKit-backed embedding for the paired Forge web surface, Xcode project management through the live `ForgeCompanion.xcodeproj`, and Fastlane-based TestFlight and App Store release automation. The hosted CI release path is part of that production stack: GitHub Actions must import persistent Apple Distribution signing assets and matching provisioning profiles rather than depending on Xcode-managed automatic signing on ephemeral runners.
+
+The architecture should remain local-first on device and Forge-first at the product level. The iPhone app owns credentials, sync retries, queued watch actions, and native capture state. The watch remains a lightweight capture satellite. Canonical Forge entities, movement projections, and broader planning data remain anchored in the paired Forge backend.

@@ -571,6 +571,12 @@ end
 
 def configure_release_signing!
   if ENV["FORGE_IOS_SIGNING_KEYCHAIN_PATH"].to_s.strip.empty?
+    if ENV["CI"]
+      UI.user_error!(
+        "CI release signing assets are missing. Hosted CI must import a persistent Apple Distribution certificate and provisioning profiles via FORGE_IOS_BUILD_CERTIFICATE_BASE64, FORGE_IOS_P12_PASSWORD, FORGE_IOS_KEYCHAIN_PASSWORD, and either FORGE_IOS_PROVISIONING_PROFILES_BASE64 or the split FORGE_IOS_PROFILE_*_BASE64 secrets. Xcode-managed automatic signing on ephemeral runners creates throwaway Apple Development certificates and will exhaust the Apple account certificate limit."
+      )
+    end
+
     UI.message("Using Xcode-managed automatic signing for Release archive")
     return configure_automatic_release_signing!
   end

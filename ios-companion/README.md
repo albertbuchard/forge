@@ -127,8 +127,9 @@ Developer already has:
 
 - an app record for `Forge Companion`
 - the iPhone bundle id and watch companion bundle ids configured correctly
-- automatic signing working for team `KZ65F7924F`
 - an App Store Connect API key with permission to upload builds and manage releases
+- a persistent Apple Distribution certificate export and matching provisioning
+  profiles prepared for CI import
 - app category, pricing, availability, export compliance, privacy questionnaire, and age rating completed
 
 ### One-time GitHub Actions setup
@@ -146,13 +147,22 @@ repository secrets. You can choose either of these setup styles:
 - `FORGE_ASC_KEY_CONTENT_BASE64`
 - optional `FORGE_APPLE_TEAM_ID` if you do not want to rely on the repo default
 
-If the GitHub runner cannot complete automatic signing with its own state, also add:
+For GitHub-hosted CI, also add:
 
 - `FORGE_IOS_BUILD_CERTIFICATE_BASE64`
 - `FORGE_IOS_P12_PASSWORD`
 - `FORGE_IOS_KEYCHAIN_PASSWORD`
-- optional `FORGE_IOS_PROVISIONING_PROFILES_BASE64` as newline-delimited base64
+- either `FORGE_IOS_PROVISIONING_PROFILES_BASE64` as newline-delimited base64
   `.mobileprovision` payloads
+- or these four secrets when the combined payload is too large for GitHub Actions:
+  `FORGE_IOS_PROFILE_APP_BASE64`, `FORGE_IOS_PROFILE_SCREENTIME_BASE64`,
+  `FORGE_IOS_PROFILE_WATCH_APP_BASE64`, and
+  `FORGE_IOS_PROFILE_WATCH_EXTENSION_BASE64`
+
+Do not rely on Xcode-managed automatic signing on ephemeral GitHub runners. That
+path creates throwaway Apple Development certificates, and repeated releases can
+exhaust the Apple account certificate limit, which is what broke the hosted
+TestFlight path after `1.0.18`.
 
 The workflow writes a normalized `ios-companion/.release.env` from the chosen secret
 source, applies the default Apple team id when you do not override it, captures the
