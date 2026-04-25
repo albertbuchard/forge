@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import {
   closeDatabase,
   configureDatabase,
+  configureLegacyWikiAutoImport,
   getDatabase,
   initializeDatabase
 } from "../server/src/db.ts";
@@ -255,6 +256,7 @@ export async function migrateWikiMarkdownToSqlite(
   };
   const wikiRoot = path.join(options.dataRoot, "wiki");
   configureDatabase({ dataRoot: options.dataRoot, seedDemoData: false });
+  configureLegacyWikiAutoImport(false);
   await initializeDatabase();
 
   let scanned = 0;

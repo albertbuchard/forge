@@ -7,9 +7,11 @@ import test from "node:test";
 import {
   closeDatabase,
   configureDatabase,
+  configureLegacyWikiAutoImport,
   getDatabase,
   initializeDatabase
 } from "../server/src/db.ts";
+import { getWikiSettingsPayload } from "../server/src/repositories/wiki-memory.ts";
 import { migrateWikiMarkdownToSqlite } from "./migrate-wiki-markdown-to-sqlite.ts";
 
 async function withTempForgeDataRoot(
@@ -20,6 +22,7 @@ async function withTempForgeDataRoot(
   try {
     await operation(rootDir);
   } finally {
+    configureLegacyWikiAutoImport(true);
     closeDatabase();
     await rm(rootDir, { recursive: true, force: true });
   }
@@ -161,5 +164,97 @@ id "missing colon"
       /Malformed frontmatter line/
     );
     assert.equal(existsSync(filePath), true);
+  });
+});
+
+test("database startup automatically backs up and imports legacy wiki markdown without deleting files", async () => {
+  await withTempForgeDataRoot("forge-wiki-md-startup-", async (rootDir) => {
+    const filePath = await writeWikiMarkdown(
+      rootDir,
+      "shared/shared/pages/albert-buchard.md",
+      `---
+id: "note_albert_buchard"
+title: "Albert Buchard"
+slug: "albert-buchard"
+spaceId: "wiki_space_shared"
+---
+# Albert Buchard
+
+Recovered person page that must survive plugin upgrades.
+`
+    );
+
+    configureDatabase({ dataRoot: rootDir, seedDemoData: false });
+    configureLegacyWikiAutoImport(true);
+    await initializeDatabase();
+
+    const row = getDatabase()
+      .prepare(
+        "SELECT title, kind, content_markdown FROM notes WHERE slug = ?"
+      )
+      .get("albert-buchard") as
+      | { title: string; kind: string; content_markdown: string }
+      | undefined;
+    assert.equal(row?.title, "Albert Buchard");
+    assert.equal(row?.kind, "wiki");
+    assert.match(row?.content_markdown ?? "", /survive plugin upgrades/);
+    assert.equal(existsSync(filePath), true);
+    assert.equal(
+      existsSync(
+        path.join(
+          rootDir,
+          "backups",
+          "legacy-wiki-markdown-pre-sqlite-import",
+          "wiki",
+          "shared",
+          "shared",
+          "pages",
+          "albert-buchard.md"
+        )
+      ),
+      true
+    );
+
+    getDatabase()
+      .prepare("UPDATE notes SET content_markdown = ? WHERE slug = ?")
+      .run("# Albert Buchard\n\nEdited in SQLite after upgrade.", "albert-buchard");
+    closeDatabase();
+
+    configureDatabase({ dataRoot: rootDir, seedDemoData: false });
+    configureLegacyWikiAutoImport(true);
+    await initializeDatabase();
+
+    const editedRow = getDatabase()
+      .prepare("SELECT content_markdown FROM notes WHERE slug = ?")
+      .get("albert-buchard") as { content_markdown: string } | undefined;
+    assert.match(editedRow?.content_markdown ?? "", /Edited in SQLite/);
+    assert.doesNotMatch(editedRow?.content_markdown ?? "", /survive plugin upgrades/);
+  });
+});
+
+test("wiki settings list the shared populated space before personal spaces", async () => {
+  await withTempForgeDataRoot("forge-wiki-md-shared-first-", async (rootDir) => {
+    configureDatabase({ dataRoot: rootDir, seedDemoData: false });
+    configureLegacyWikiAutoImport(false);
+    await initializeDatabase();
+    getDatabase()
+      .prepare(
+        `INSERT INTO wiki_spaces (id, slug, label, description, owner_user_id, visibility, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        "wiki_space_user_user-operator",
+        "user-user-operator",
+        "user_operator Wiki",
+        "Personal Forge wiki space.",
+        "user_operator",
+        "personal",
+        "2099-01-01T00:00:00.000Z",
+        "2099-01-01T00:00:00.000Z"
+      );
+
+    const settings = getWikiSettingsPayload();
+    assert.equal(settings.spaces[0]?.id, "wiki_space_shared");
+    assert.equal(settings.spaces[1]?.id, "wiki_space_user_user-operator");
   });
 });

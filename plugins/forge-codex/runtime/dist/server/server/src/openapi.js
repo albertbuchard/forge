@@ -115,7 +115,7 @@ const API_TAGS = [
     },
     {
         name: "Wiki",
-        description: "File-first wiki settings, pages, ingest, sync, health, and search."
+        description: "SQLite-backed wiki settings, pages, ingest, sync, health, and search."
     },
     {
         name: "Preferences",

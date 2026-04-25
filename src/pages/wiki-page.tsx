@@ -126,6 +126,8 @@ function WikiSpacePickerDialog({
   activeSpaceId: string;
   onSelect: (spaceId: string) => void;
 }) {
+  const sharedSpaceId =
+    spaces.find((space) => space.visibility === "shared")?.id ?? "";
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
@@ -154,6 +156,7 @@ function WikiSpacePickerDialog({
           <div className="mt-4 grid gap-2">
             {spaces.map((space) => {
               const active = space.id === activeSpaceId;
+              const shared = space.id === sharedSpaceId;
               return (
                 <button
                   key={space.id}
@@ -176,6 +179,11 @@ function WikiSpacePickerDialog({
                     <span className="mt-1 block text-[12px] leading-5 text-white/52">
                       {space.description || `/${space.slug}`}
                     </span>
+                    {shared ? (
+                      <span className="mt-2 inline-flex rounded-full bg-amber-200/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-stone-950">
+                        Recovered pages
+                      </span>
+                    ) : null}
                   </span>
                   {active ? (
                     <Check className="size-4 shrink-0 text-[var(--primary)]" />
@@ -300,6 +308,15 @@ export function WikiPage() {
     settingsQuery.data?.settings.spaces.find(
       (space) => space.id === activeSpaceId
     ) ?? null;
+  const sharedSpace =
+    settingsQuery.data?.settings.spaces.find(
+      (space) => space.visibility === "shared"
+    ) ?? null;
+  const showSharedSpaceRecoveryHint =
+    Boolean(sharedSpace) &&
+    Boolean(activeSpace) &&
+    activeSpace?.id !== sharedSpace?.id &&
+    activeSpace?.visibility === "personal";
   const canDeletePage = selectedPage?.slug !== "index";
   const missingLinkedTitle =
     slug &&
@@ -537,9 +554,13 @@ export function WikiPage() {
                   className="wiki-space-trigger inline-flex min-h-[2.9rem] items-center gap-2 rounded-[18px] border border-white/8 bg-white/[0.04] px-4 text-[13px] font-medium text-white/78 transition hover:bg-white/[0.07] hover:text-white"
                   onClick={() => setSpacePickerOpen(true)}
                 >
+                  <span className="text-[11px] uppercase tracking-[0.14em] text-white/38">
+                    Space
+                  </span>
                   <span className="max-w-[16rem] truncate">
                     {activeSpace?.label ?? "KarpaWiki space"}
                   </span>
+                  <ChevronDown className="size-3.5 text-white/44" />
                 </button>
                 <div className="relative" ref={ingestMenuRef}>
                   <Button
@@ -659,6 +680,28 @@ export function WikiPage() {
                 </Button>
               </div>
             </div>
+
+            {showSharedSpaceRecoveryHint && sharedSpace ? (
+              <div className="mt-3 flex flex-col gap-3 rounded-[22px] border border-amber-300/20 bg-amber-300/[0.08] px-4 py-3 text-[13px] leading-6 text-amber-50 sm:flex-row sm:items-center sm:justify-between">
+                <span>
+                  You are viewing the personal starter wiki. The recovered
+                  people, story, and conversation pages are in{" "}
+                  <strong>{sharedSpace.label}</strong>.
+                </span>
+                <button
+                  type="button"
+                  className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-2xl bg-amber-200 px-4 text-[12px] font-semibold uppercase tracking-[0.14em] text-stone-950 transition hover:bg-amber-100"
+                  onClick={() => {
+                    navigate({
+                      pathname: "/wiki",
+                      search: `?spaceId=${encodeURIComponent(sharedSpace.id)}`
+                    });
+                  }}
+                >
+                  Open shared memory
+                </button>
+              </div>
+            ) : null}
           </section>
 
           <section className="grid gap-4 lg:grid-cols-[15rem_minmax(0,1fr)] xl:grid-cols-[16rem_minmax(0,1fr)]">
@@ -896,10 +939,13 @@ export function WikiPage() {
         spaces={settingsQuery.data?.settings.spaces ?? []}
         activeSpaceId={activeSpaceId}
         onSelect={(spaceId) => {
-          const next = new URLSearchParams(searchParams);
-          next.set("spaceId", spaceId);
-          setSearchParams(next, { replace: true });
-          navigate("/wiki", { replace: true });
+          navigate(
+            {
+              pathname: "/wiki",
+              search: `?spaceId=${encodeURIComponent(spaceId)}`
+            },
+            { replace: true }
+          );
         }}
       />
 

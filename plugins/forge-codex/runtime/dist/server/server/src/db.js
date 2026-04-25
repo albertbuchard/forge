@@ -79,6 +79,7 @@ export function resolveDefaultDataRoot(currentWorkingDir = process.cwd()) {
 }
 let dataRoot = resolveDefaultDataRoot();
 let seedDemoDataEnabled = false;
+let legacyWikiAutoImportEnabled = true;
 let db = null;
 let transactionDepth = 0;
 let savepointCounter = 0;
@@ -160,6 +161,9 @@ export function configureDatabase(options = {}) {
     if (typeof options.seedDemoData === "boolean") {
         seedDemoDataEnabled = options.seedDemoData;
     }
+}
+export function configureLegacyWikiAutoImport(enabled) {
+    legacyWikiAutoImportEnabled = enabled;
 }
 async function listMigrationFiles() {
     const files = await readdir(migrationsDir);
@@ -389,6 +393,13 @@ export async function initializeDatabase() {
         seedData();
     }
     ensureQuestionnaireSeeds();
+    if (legacyWikiAutoImportEnabled) {
+        const { importLegacyWikiMarkdownOnStartup } = await import("./services/legacy-wiki-markdown-import.js");
+        const legacyWikiImport = await importLegacyWikiMarkdownOnStartup(getDataDir());
+        if (legacyWikiImport.scanned > 0) {
+            logForgeDebug(`[forge-db] imported legacy wiki markdown scanned=${legacyWikiImport.scanned} inserted=${legacyWikiImport.inserted} updated=${legacyWikiImport.updated} backed_up=${legacyWikiImport.backedUp} backup_path=${legacyWikiImport.backupPath}`);
+        }
+    }
 }
 export function configureDatabaseSeeding(enabled) {
     seedDemoDataEnabled = enabled;

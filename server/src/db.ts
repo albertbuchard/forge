@@ -97,6 +97,7 @@ export function resolveDefaultDataRoot(currentWorkingDir = process.cwd()): strin
 
 let dataRoot = resolveDefaultDataRoot();
 let seedDemoDataEnabled = false;
+let legacyWikiAutoImportEnabled = true;
 
 let db: DatabaseSync | null = null;
 let transactionDepth = 0;
@@ -181,6 +182,10 @@ export function configureDatabase(options: { dataRoot?: string; seedDemoData?: b
   if (typeof options.seedDemoData === "boolean") {
     seedDemoDataEnabled = options.seedDemoData;
   }
+}
+
+export function configureLegacyWikiAutoImport(enabled: boolean): void {
+  legacyWikiAutoImportEnabled = enabled;
 }
 
 async function listMigrationFiles(): Promise<string[]> {
@@ -491,6 +496,17 @@ export async function initializeDatabase(): Promise<void> {
   }
 
   ensureQuestionnaireSeeds();
+  if (legacyWikiAutoImportEnabled) {
+    const { importLegacyWikiMarkdownOnStartup } = await import(
+      "./services/legacy-wiki-markdown-import.js"
+    );
+    const legacyWikiImport = await importLegacyWikiMarkdownOnStartup(getDataDir());
+    if (legacyWikiImport.scanned > 0) {
+      logForgeDebug(
+        `[forge-db] imported legacy wiki markdown scanned=${legacyWikiImport.scanned} inserted=${legacyWikiImport.inserted} updated=${legacyWikiImport.updated} backed_up=${legacyWikiImport.backedUp} backup_path=${legacyWikiImport.backupPath}`
+      );
+    }
+  }
 }
 
 export function configureDatabaseSeeding(enabled: boolean): void {

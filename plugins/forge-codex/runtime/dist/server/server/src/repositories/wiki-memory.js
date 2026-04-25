@@ -1481,7 +1481,7 @@ export function listWikiSpaces() {
     const rows = getDatabase()
         .prepare(`SELECT id, slug, label, description, owner_user_id, visibility, created_at, updated_at
        FROM wiki_spaces
-       ORDER BY visibility ASC, updated_at DESC`)
+       ORDER BY CASE WHEN visibility = 'shared' THEN 0 ELSE 1 END, updated_at DESC`)
         .all();
     const spaces = rows.map(mapWikiSpace);
     for (const space of spaces) {
