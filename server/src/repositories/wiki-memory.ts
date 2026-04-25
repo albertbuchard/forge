@@ -3,17 +3,14 @@ import AdmZip, { type AdmZipEntry } from "adm-zip";
 import {
   accessSync,
   existsSync,
-  mkdirSync,
   readdirSync,
   unlinkSync,
-  rmSync,
-  writeFileSync
+  rmSync
 } from "node:fs";
 import {
   access,
   mkdir,
   readFile,
-  readdir,
   rm,
   writeFile
 } from "node:fs/promises";
@@ -975,7 +972,7 @@ function mapWikiSpace(row: WikiSpaceRow) {
 }
 
 function getWikiRootDir() {
-  return path.join(resolveDataDir(), "wiki");
+  return path.join(resolveDataDir(), "wiki-ingest");
 }
 
 function getSpaceStorageDir(space: WikiSpace) {
@@ -985,17 +982,8 @@ function getSpaceStorageDir(space: WikiSpace) {
   return path.join(getWikiRootDir(), "users", space.ownerUserId ?? space.slug);
 }
 
-function getSpaceIndexPath(space: WikiSpace) {
-  return path.join(getSpaceStorageDir(space), "index.md");
-}
-
 function getSpaceRawDir(space: WikiSpace) {
   return path.join(getSpaceStorageDir(space), "raw");
-}
-
-function getNoteStoragePath(note: Note, space: WikiSpace) {
-  const directory = note.kind === "wiki" ? "pages" : "evidence";
-  return path.join(getSpaceStorageDir(space), directory, `${note.slug}.md`);
 }
 
 function buildNoteFrontmatter(note: Note) {
@@ -1022,22 +1010,6 @@ function buildNoteFrontmatter(note: Note) {
     lastSyncedAt: note.lastSyncedAt,
     author: note.author
   };
-}
-
-function stringifyFrontmatterValue(value: unknown): string {
-  if (typeof value === "string") {
-    return JSON.stringify(value);
-  }
-  return JSON.stringify(value);
-}
-
-function renderFrontmatter(frontmatter: Record<string, unknown>) {
-  const lines = ["---"];
-  for (const [key, value] of Object.entries(frontmatter)) {
-    lines.push(`${key}: ${stringifyFrontmatterValue(value)}`);
-  }
-  lines.push("---", "");
-  return lines.join("\n");
 }
 
 function hashContent(value: string) {
@@ -1509,7 +1481,7 @@ async function compileImageWithLlm(
       summary: parsed.summary?.trim() || "",
       markdown:
         parsed.markdown?.trim() ||
-        `# ${parsed.title?.trim() || input.titleHint || "Imported image"}\n\nImage imported into the wiki vault.\n`,
+        `# ${parsed.title?.trim() || input.titleHint || "Imported image"}\n\nImage imported into Forge wiki memory.\n`,
       tags: normalizeTags(parsed.tags),
       entityProposals: Array.isArray(parsed.entityProposals)
         ? parsed.entityProposals.filter(
@@ -1644,7 +1616,7 @@ function ensureSharedWikiSpace() {
       "wiki_space_shared",
       "shared",
       "Shared Forge Memory",
-      "Shared wiki space for file-backed Forge knowledge.",
+      "Shared wiki space for SQLite-backed Forge knowledge.",
       null,
       "shared",
       now,
@@ -1808,7 +1780,6 @@ function ensureWikiSpaceSeedPages(spaceId: string) {
     for (const note of insertedNotes) {
       syncNoteWikiArtifacts(note);
     }
-    syncWikiSpaceIndex(spaceId);
   }
 }
 
@@ -1889,19 +1860,13 @@ export function prepareNoteWikiFields(input: {
 }
 
 export function syncNoteWikiArtifacts(note: Note) {
-  const space = getWikiSpaceById(note.spaceId) ?? ensureSharedWikiSpace();
-  const filePath = getNoteStoragePath(note, space);
   const frontmatter = buildNoteFrontmatter(note);
-  const payload = `${renderFrontmatter(frontmatter)}${note.contentMarkdown.trim()}\n`;
-  const revisionHash = hashContent(payload);
-
-  mkdirSync(path.dirname(filePath), { recursive: true });
-  if (note.sourcePath && note.sourcePath !== filePath) {
-    if (existsSync(note.sourcePath)) {
-      rmSync(note.sourcePath, { force: true });
-    }
-  }
-  writeFileSync(filePath, payload, "utf8");
+  const revisionHash = hashContent(
+    JSON.stringify({
+      frontmatter,
+      contentMarkdown: note.contentMarkdown
+    })
+  );
 
   const now = nowIso();
   getDatabase()
@@ -1910,29 +1875,25 @@ export function syncNoteWikiArtifacts(note: Note) {
        SET source_path = ?, frontmatter_json = ?, revision_hash = ?, last_synced_at = ?
        WHERE id = ?`
     )
-    .run(filePath, JSON.stringify(frontmatter), revisionHash, now, note.id);
+    .run("", JSON.stringify(frontmatter), revisionHash, now, note.id);
 
   upsertWikiSearchRow({
     ...note,
-    sourcePath: filePath,
+    sourcePath: "",
     frontmatter,
     revisionHash,
     lastSyncedAt: now
   });
   rebuildWikiLinkEdges({
     ...note,
-    sourcePath: filePath,
+    sourcePath: "",
     frontmatter,
     revisionHash,
     lastSyncedAt: now
   });
-  syncWikiSpaceIndex(space.id);
 }
 
 export function deleteNoteWikiArtifacts(note: Note) {
-  if (note.sourcePath && existsSync(note.sourcePath)) {
-    rmSync(note.sourcePath, { force: true });
-  }
   deleteWikiSearchRow(note.id);
   getDatabase()
     .prepare(`DELETE FROM wiki_link_edges WHERE source_note_id = ?`)
@@ -1945,80 +1906,6 @@ export function deleteNoteWikiArtifacts(note: Note) {
       `DELETE FROM wiki_media_assets WHERE note_id = ? OR transcript_note_id = ?`
     )
     .run(note.id, note.id);
-  syncWikiSpaceIndex(note.spaceId);
-}
-
-function buildWikiIndexMarkdown(space: WikiSpace, pages: Note[]) {
-  const wikiPages = [...pages]
-    .filter((page) => page.kind === "wiki")
-    .sort((left, right) =>
-      left.parentSlug === right.parentSlug
-        ? left.indexOrder - right.indexOrder ||
-          left.title.localeCompare(right.title)
-        : (left.parentSlug ?? "").localeCompare(right.parentSlug ?? "")
-    );
-  const evidencePages = [...pages]
-    .filter((page) => page.kind === "evidence")
-    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
-
-  const lines = [
-    `# ${space.label}`,
-    "",
-    "Explicit Forge wiki index generated from the local vault.",
-    "",
-    "## How To Use",
-    "",
-    "- Start here when an agent needs a crawlable catalog of the space.",
-    "- `pages/` contains durable wiki articles.",
-    "- `evidence/` contains shorter notes and work traces.",
-    "- `raw/` contains imported source material for future recompilation.",
-    "",
-    `Generated at ${nowIso()}.`,
-    "",
-    "## Wiki Index",
-    ""
-  ];
-
-  if (wikiPages.length === 0) {
-    lines.push("_No wiki pages yet._", "");
-  } else {
-    for (const page of wikiPages) {
-      const depth = page.parentSlug ? 1 : 0;
-      const prefix = `${"  ".repeat(depth)}- `;
-      lines.push(
-        `${prefix}[[${page.slug}]]${page.summary ? ` - ${page.summary}` : ""}`
-      );
-    }
-    lines.push("");
-  }
-
-  lines.push("## Evidence Pages", "");
-  if (evidencePages.length === 0) {
-    lines.push("_No evidence pages yet._", "");
-  } else {
-    for (const page of evidencePages.slice(0, 200)) {
-      lines.push(
-        `- [[${page.slug}]]${page.summary ? ` - ${page.summary}` : ""}`
-      );
-    }
-    lines.push("");
-  }
-
-  return `${lines.join("\n")}\n`;
-}
-
-function syncWikiSpaceIndex(spaceId: string) {
-  const space = getWikiSpaceById(spaceId) ?? ensureSharedWikiSpace();
-  const rootDir = getSpaceStorageDir(space);
-  mkdirSync(path.join(rootDir, "pages"), { recursive: true });
-  mkdirSync(path.join(rootDir, "evidence"), { recursive: true });
-  mkdirSync(path.join(rootDir, "assets"), { recursive: true });
-  mkdirSync(path.join(rootDir, "raw"), { recursive: true });
-  writeFileSync(
-    getSpaceIndexPath(space),
-    buildWikiIndexMarkdown(space, listWikiPages({ spaceId, limit: 10_000 })),
-    "utf8"
-  );
 }
 
 function upsertWikiSearchRow(note: Note) {
@@ -2377,122 +2264,13 @@ export async function syncWikiVaultFromDisk(
 
   let updated = 0;
   for (const space of spaces) {
-    for (const directoryName of ["pages", "evidence"] as const) {
-      const directory = path.join(getSpaceStorageDir(space), directoryName);
-      try {
-        const entries = await readdir(directory);
-        for (const entry of entries) {
-          if (!entry.endsWith(".md")) {
-            continue;
-          }
-          const filePath = path.join(directory, entry);
-          const content = await readFile(filePath, "utf8");
-          const parsedFile = parseFrontmatter(content);
-          const noteId =
-            typeof parsedFile.frontmatter.id === "string"
-              ? parsedFile.frontmatter.id
-              : null;
-          if (!noteId) {
-            continue;
-          }
-          const existing = getNoteByIdRaw(noteId);
-          if (!existing) {
-            continue;
-          }
-          const markdown = parsedFile.body.trim();
-          const contentPlain = buildContentPlain(markdown);
-          const title =
-            typeof parsedFile.frontmatter.title === "string"
-              ? parsedFile.frontmatter.title
-              : inferTitle(markdown, existing.title);
-          const aliases = normalizeAliases(
-            Array.isArray(parsedFile.frontmatter.aliases)
-              ? parsedFile.frontmatter.aliases.filter(
-                  (entry): entry is string => typeof entry === "string"
-                )
-              : []
-          );
-          const summary =
-            typeof parsedFile.frontmatter.summary === "string"
-              ? parsedFile.frontmatter.summary
-              : inferSummary(markdown);
-          const payload = `${renderFrontmatter(parsedFile.frontmatter)}${markdown}\n`;
-          const revisionHash = hashContent(payload);
-          const now = nowIso();
-
-          getDatabase()
-            .prepare(
-              `UPDATE notes
-               SET title = ?, slug = ?, kind = ?, space_id = ?, parent_slug = ?, index_order = ?, show_in_index = ?, aliases_json = ?, summary = ?, content_markdown = ?, content_plain = ?,
-                   source_path = ?, frontmatter_json = ?, revision_hash = ?, last_synced_at = ?, updated_at = ?
-               WHERE id = ?`
-            )
-            .run(
-              title,
-              typeof parsedFile.frontmatter.slug === "string"
-                ? parsedFile.frontmatter.slug
-                : existing.slug,
-              directoryName === "pages" ? "wiki" : "evidence",
-              space.id,
-              typeof parsedFile.frontmatter.parentSlug === "string"
-                ? parsedFile.frontmatter.parentSlug
-                : existing.parent_slug,
-              typeof parsedFile.frontmatter.indexOrder === "number"
-                ? Math.trunc(parsedFile.frontmatter.indexOrder)
-                : existing.index_order,
-              parsedFile.frontmatter.showInIndex === false ? 0 : 1,
-              JSON.stringify(aliases),
-              summary,
-              markdown,
-              contentPlain,
-              filePath,
-              JSON.stringify(parsedFile.frontmatter),
-              revisionHash,
-              now,
-              now,
-              noteId
-            );
-          const note = mapNoteRow(
-            getNoteByIdRaw(noteId)!,
-            listLinkRowsForNotes([noteId])
-          );
-          upsertWikiSearchRow(note);
-          rebuildWikiLinkEdges(note);
-          updated += 1;
-        }
-      } catch {
-        continue;
-      }
+    for (const note of listWikiPages({ spaceId: space.id, limit: 10_000 })) {
+      syncNoteWikiArtifacts(note);
+      updated += 1;
     }
-    syncWikiSpaceIndex(space.id);
   }
 
   return { updated };
-}
-
-function parseFrontmatter(markdown: string) {
-  const match = markdown.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
-  if (!match) {
-    return { frontmatter: {}, body: markdown };
-  }
-  const frontmatter: Record<string, unknown> = {};
-  for (const line of match[1].split("\n")) {
-    const separatorIndex = line.indexOf(":");
-    if (separatorIndex <= 0) {
-      continue;
-    }
-    const key = line.slice(0, separatorIndex).trim();
-    const rawValue = line.slice(separatorIndex + 1).trim();
-    if (!key) {
-      continue;
-    }
-    try {
-      frontmatter[key] = JSON.parse(rawValue);
-    } catch {
-      frontmatter[key] = rawValue.replace(/^"(.*)"$/, "$1");
-    }
-  }
-  return { frontmatter, body: match[2] };
 }
 
 function findMatchingWikiNoteIds(query: string) {
@@ -2719,8 +2497,6 @@ export function getWikiHealth(input: { spaceId?: string } = {}) {
   const pages = listWikiPages({ spaceId, limit: 10_000 });
   const noteIds = pages.map((page) => page.id);
   const noteIdSet = new Set(noteIds);
-  const rootDir = getSpaceStorageDir(space);
-  const indexPath = getSpaceIndexPath(space);
   const rawDirectoryPath = getSpaceRawDir(space);
 
   const edgeRows = getDatabase()
@@ -2785,7 +2561,7 @@ export function getWikiHealth(input: { spaceId?: string } = {}) {
 
   return wikiHealthPayloadSchema.parse({
     space,
-    indexPath,
+    indexPath: "",
     rawDirectoryPath,
     pageCount: pages.length,
     wikiPageCount: pages.filter((page) => page.kind === "wiki").length,

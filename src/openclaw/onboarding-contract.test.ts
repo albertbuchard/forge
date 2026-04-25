@@ -289,6 +289,7 @@ describe("forge onboarding contract", () => {
         allTime: "/api/v1/movement/all-time",
         timeline: "/api/v1/movement/timeline",
         boxDetail: "/api/v1/movement/boxes/:id",
+        settings: "/api/v1/movement/settings",
         places: "/api/v1/movement/places",
         tripDetail: "/api/v1/movement/trips/:id",
         selection: "/api/v1/movement/selection"
@@ -338,8 +339,10 @@ describe("forge onboarding contract", () => {
 
     expect(routeModel.specializedDomainSurfaces.workbench.readRoutes).toEqual(
       expect.objectContaining({
+        boxCatalog: "/api/v1/workbench/catalog/boxes",
         listFlows: "/api/v1/workbench/flows",
         flowBySlug: "/api/v1/workbench/flows/by-slug/:slug",
+        runs: "/api/v1/workbench/flows/:id/runs",
         publishedOutput: "/api/v1/workbench/flows/:id/output",
         latestNodeOutput: "/api/v1/workbench/flows/:id/nodes/:nodeId/output"
       })

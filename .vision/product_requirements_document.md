@@ -18,6 +18,7 @@ Forge is built as a production-grade monorepo application with:
 - Tailwind CSS 4
 - Fastify 5
 - SQLite
+- SQLite-backed wiki/evidence memory through `notes`, wiki spaces, FTS, link edges, and optional embeddings
 - generated OpenAPI
 - OpenClaw, Hermes, and Codex adapter layers
 - Swift iPhone companion

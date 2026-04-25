@@ -499,7 +499,7 @@ export function registerForgePluginTools(
     name: "forge_upsert_wiki_page",
     label: "Forge Upsert Wiki Page",
     description:
-      "Create a new wiki page or update an existing one through the file-backed wiki surface.",
+      "Create a new wiki page or update an existing one through the SQLite-backed wiki surface.",
     parameters: wikiPageMutationSchema(),
     async execute(_toolCallId, params) {
       const typed = (params ?? {}) as Record<string, unknown>;
@@ -534,9 +534,9 @@ export function registerForgePluginTools(
 
   registerWriteTool(api, config, {
     name: "forge_sync_wiki_vault",
-    label: "Forge Sync Wiki Vault",
+    label: "Forge Refresh Wiki Indexes",
     description:
-      "Resync Markdown files from the local wiki vault into Forge metadata.",
+      "Rebuild SQLite wiki search, link, and metadata indexes.",
     parameters: Type.Object({
       spaceId: optionalString()
     }),

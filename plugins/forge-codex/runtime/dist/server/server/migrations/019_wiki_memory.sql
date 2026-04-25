@@ -57,7 +57,7 @@ VALUES (
   'wiki_space_shared',
   'shared',
   'Shared Forge Memory',
-  'Shared wiki space for file-backed Forge knowledge.',
+  'Shared wiki space for SQLite-backed Forge knowledge.',
   NULL,
   'shared',
   CURRENT_TIMESTAMP,

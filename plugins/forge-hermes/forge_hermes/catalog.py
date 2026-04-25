@@ -517,7 +517,7 @@ TOOL_CATALOG: List[ToolSpec] = [
     },
     {
         "name": "forge_upsert_wiki_page",
-        "description": "Create a new wiki page or update an existing one through the file-backed wiki surface.",
+        "description": "Create a new wiki page or update an existing one through the SQLite-backed wiki surface.",
         "parameters": object_schema(
             {
                 "pageId": optional_string("Optional page id for updates."),
@@ -552,7 +552,7 @@ TOOL_CATALOG: List[ToolSpec] = [
     },
     {
         "name": "forge_sync_wiki_vault",
-        "description": "Resync Markdown files from the local wiki vault into Forge metadata.",
+        "description": "Rebuild SQLite wiki search, link, and metadata indexes.",
         "parameters": object_schema(
             {
                 "spaceId": optional_string("Optional wiki space id."),

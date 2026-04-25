@@ -108,6 +108,10 @@ function normalizeTags(tags: string[] | undefined): string[] {
     });
 }
 
+function canonicalNoteSourcePath() {
+  return "";
+}
+
 function parseTagsJson(raw: string): string[] {
   try {
     const parsed = JSON.parse(raw) as unknown;
@@ -658,7 +662,7 @@ export function createNote(input: CreateNoteInput, context: NoteContext): Note {
       context.source,
       JSON.stringify(parsed.tags),
       parsed.destroyAt,
-      parsed.sourcePath,
+      canonicalNoteSourcePath(),
       JSON.stringify(parsed.frontmatter),
       parsed.revisionHash,
       parsed.lastSyncedAt ?? null,
@@ -750,8 +754,7 @@ export function updateNote(
   });
   const nextFrontmatter =
     patch.frontmatter === undefined ? existing.frontmatter : patch.frontmatter;
-  const nextSourcePath =
-    patch.sourcePath === undefined ? existing.sourcePath : patch.sourcePath;
+  const nextSourcePath = canonicalNoteSourcePath();
   const nextRevisionHash =
     patch.revisionHash === undefined
       ? existing.revisionHash

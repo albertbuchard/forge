@@ -103,6 +103,12 @@ describe("question flow simulation cycles", () => {
     expect(entityPlaybook).toMatch(/feels important to keep true/i);
     expect(entityPlaybook).toMatch(/Close cleanly/i);
     expect(entityPlaybook).toMatch(/what seems clear now is/i);
+    expect(entityPlaybook).toMatch(
+      /For review requests, ask what practical question they want the read to answer/i
+    );
+    expect(entityPlaybook).toMatch(
+      /what this would help them decide later is often the clearest scope signal/i
+    );
     expect(entityPlaybook).toMatch(/what workflow they are trying to unlock/i);
     expect(entityPlaybook).toMatch(
       /emotionally loaded but the record is still non-Psyche[\s\S]*lived stake once[\s\S]*operational question/i
@@ -120,6 +126,9 @@ describe("question flow simulation cycles", () => {
     expect(psychePlaybook).toMatch(/graspable enough/i);
     expect(psychePlaybook).toMatch(/accurate enough to be held/i);
     expect(psychePlaybook).toMatch(/contain before you interpret/i);
+    expect(psychePlaybook).toMatch(
+      /old wording no longer holds the whole experience/i
+    );
 
     const reflectiveNonPsyche = [
       "Goal",
@@ -149,6 +158,9 @@ describe("question flow simulation cycles", () => {
     expect(entityPlaybook).toMatch(/revise the working formulation once/i);
     expect(entityPlaybook).toMatch(/What feels different enough now that this record needs to change/i);
     expect(entityPlaybook).toMatch(/I can stay narrow here\. What is the one thing that no longer fits/i);
+    expect(entityPlaybook).toMatch(
+      /When the user already gave the correction in usable language,[\s\S]*what still[\s\S]*seems true,[\s\S]*one thing that no longer fits/i
+    );
     expect(entityPlaybook).toMatch(/what this would help[\s\S]*decide later is/i);
     expect(entityPlaybook).toMatch(/meaning-bearing updates[\s\S]*feels newly true/i);
     expect(entityPlaybook).toMatch(/repair or revise one saved overlay/i);
@@ -182,6 +194,9 @@ describe("question flow simulation cycles", () => {
     );
     expect(psychePlaybook).toMatch(
       /what the old wording was trying to[\s\S]*hold and what the new episode or evidence changes/i
+    );
+    expect(psychePlaybook).toMatch(
+      /Do not reopen the full origin story/i
     );
     expect(psychePlaybook).toMatch(
       /Do you want to revise the whole formulation, or only the part that now feels inaccurate/i

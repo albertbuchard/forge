@@ -2643,7 +2643,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
     }),
     enrichOnboardingEntityGuide({
         entityType: "wiki_page",
-        purpose: "A file-backed Forge wiki page or evidence page.",
+        purpose: "A SQLite-backed Forge wiki page or evidence page.",
         minimumCreateFields: ["title", "contentMarkdown"],
         relationshipRules: [
             "Wiki pages live on the wiki surface and use specialized page upsert routes rather than batch CRUD.",
@@ -2772,6 +2772,8 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
     "When useful, help the user name, define, and connect the record in that order: offer a working label, clarify what belongs inside it, then ask about links only after the record itself feels steady.",
     "When the meaning is clearer than the wording, offer a tentative title or formulation yourself and invite correction instead of forcing the user to wordsmith alone.",
     "For direct update or review requests, the next question should usually narrow the saved object, timeframe, or route family instead of reopening the whole meaning-making arc.",
+    "For updates, start with the smallest thing that now feels wrong, newly true, or newly visible rather than restarting the whole story.",
+    "For review requests, ask what practical question the user wants the read to answer before you ask for more scope.",
     "The opening question should help the user understand what they are actually trying to save, decide, review, or change, not make them perform the schema out loud.",
     "If the user already named the exact correction in usable language, confirm only the missing scope, timing, or route-selecting detail that still matters, then act.",
     "Once a specialized-surface lane is clear, speak in route-relevant nouns such as timeline, overlay, weekday template, published output, run detail, or node result instead of generic record language.",
@@ -3550,7 +3552,7 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
         requiredFields: [],
         notes: [
             "Semantic search is optional and profile-driven.",
-            "The wiki is file-first, so spaces map to local vault directories."
+            "The wiki is SQLite-backed, so pages and evidence live in Forge's database."
         ],
         example: "{}"
     },
@@ -3592,13 +3594,13 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     },
     {
         toolName: "forge_upsert_wiki_page",
-        summary: "Create a new wiki page or update an existing one through the file-backed wiki surface.",
+        summary: "Create a new wiki page or update an existing one through the SQLite-backed wiki surface.",
         whenToUse: "Use when the user explicitly wants wiki memory persisted or reorganized.",
         inputShape: '{ pageId?: string, kind?: "wiki"|"evidence", title: string, slug?: string, summary?: string, aliases?: string[], contentMarkdown: string, author?: string|null, tags?: string[], spaceId?: string, frontmatter?: object, links?: Array<{ entityType, entityId, anchorKey? }> }',
         requiredFields: ["title", "contentMarkdown"],
         notes: [
             "When pageId is omitted, Forge creates a new page.",
-            "When pageId is present, Forge patches the existing page and rewrites the canonical file."
+            "When pageId is present, Forge patches the existing SQLite note record."
         ],
         example: '{"title":"Taste map","contentMarkdown":"# Taste map\\n\\n[[forge:goal:goal_123|Core goal]] influences this page.","spaceId":"wiki_space_shared"}'
     },
@@ -3609,19 +3611,19 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
         inputShape: "{ spaceId?: string }",
         requiredFields: [],
         notes: [
-            "This is the explicit health surface for the file-first wiki vault.",
+            "This is the explicit health surface for the SQLite-backed wiki memory layer.",
             "Use it before proposing cleanup work or auto-maintenance."
         ],
         example: '{"spaceId":"wiki_space_shared"}'
     },
     {
         toolName: "forge_sync_wiki_vault",
-        summary: "Resync Markdown files from the local wiki vault into Forge metadata.",
-        whenToUse: "Use after out-of-band file edits or imported file changes that should be reflected back in Forge.",
+        summary: "Rebuild SQLite wiki search, link, and metadata indexes.",
+        whenToUse: "Use after large SQLite wiki changes or maintenance work that should refresh derived metadata.",
         inputShape: "{ spaceId?: string }",
         requiredFields: [],
         notes: [
-            "Forge treats the vault as a first-class local artifact, so this route is the bridge back into app metadata."
+            "Forge treats SQLite as the canonical wiki store; this route refreshes derived indexes."
         ],
         example: '{"spaceId":"wiki_space_shared"}'
     },
@@ -3640,11 +3642,11 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     {
         toolName: "forge_ingest_wiki_source",
         summary: "Ingest raw text, local files, or URLs into the wiki, preserving a raw source artifact and returning page plus proposal outputs.",
-        whenToUse: "Use when the operator wants source material compiled into file-first wiki memory and optional Forge-entity proposals.",
+        whenToUse: "Use when the operator wants source material compiled into SQLite-backed wiki memory and optional Forge-entity proposals.",
         inputShape: '{ spaceId?: string, titleHint?: string, sourceKind: "raw_text"|"local_path"|"url", sourceText?: string, sourcePath?: string, sourceUrl?: string, mimeType?: string, llmProfileId?: string, parseStrategy?: "auto"|"text_only"|"multimodal", entityProposalMode?: "none"|"suggest", createAsKind?: "wiki"|"evidence", linkedEntityHints?: Array<{ entityType, entityId, anchorKey? }> }',
         requiredFields: ["sourceKind", "sourceText/sourcePath/sourceUrl"],
         notes: [
-            "Forge preserves a raw artifact under the wiki space's raw directory.",
+            "Forge preserves a raw ingest artifact separately from SQLite page content.",
             "Entity proposals are suggestions only; they are not auto-applied."
         ],
         example: '{"sourceKind":"url","sourceUrl":"https://example.com/article","titleHint":"Research import","parseStrategy":"auto","entityProposalMode":"suggest"}'
@@ -4017,7 +4019,7 @@ function buildAgentOnboardingPayload(request) {
             task: "A concrete actionable work item. Task status is board state, not proof of live work.",
             taskRun: "A live work session attached to a task. Start, heartbeat, focus, complete, and release runs instead of faking work with status alone.",
             note: "A Markdown work note that can link to one or many entities. Use notes for progress evidence, context, and close-out summaries.",
-            wiki: "Forge Wiki is the file-first memory layer: local Markdown pages plus media, backlinks, optional embeddings, explicit spaces, and structured links back to Forge entities.",
+            wiki: "Forge Wiki is the SQLite-backed memory layer: Markdown content in notes rows plus media, backlinks, optional embeddings, explicit spaces, and structured links back to Forge entities.",
             sleepSession: "A sleep session is a first-class health record with timing, sleep and bed duration, stage breakdown, recovery metrics, annotations, and Forge links back to planning or Psyche context.",
             workoutSession: "A workout session is a first-class sports record imported from HealthKit or generated from a habit. It holds workout type, timing, energy or distance when available, subjective effort, narrative context, and Forge links.",
             preferences: "Forge Preferences is the explicit taste-modeling domain. It has workspaces, contexts, concept libraries, direct items, pairwise judgments, direct signals, and inferred scores.",
@@ -4379,17 +4381,26 @@ function buildAgentOnboardingPayload(request) {
             movementTimeline: "/api/v1/movement/timeline",
             movementAllTime: "/api/v1/movement/all-time",
             movementPlaces: "/api/v1/movement/places",
+            movementBoxDetail: "/api/v1/movement/boxes/:id",
+            movementSettings: "/api/v1/movement/settings",
+            movementSettingsUpdate: "/api/v1/movement/settings",
             movementTripDetail: "/api/v1/movement/trips/:id",
             movementSelection: "/api/v1/movement/selection",
             movementUserBoxPreflight: "/api/v1/movement/user-boxes/preflight",
             movementUserBoxUpdate: "/api/v1/movement/user-boxes/:id",
+            movementUserBoxDelete: "/api/v1/movement/user-boxes/:id",
             movementAutomaticBoxInvalidate: "/api/v1/movement/automatic-boxes/:id/invalidate",
             movementStayUpdate: "/api/v1/movement/stays/:id",
+            movementStayDelete: "/api/v1/movement/stays/:id",
             movementTripUpdate: "/api/v1/movement/trips/:id",
+            movementTripDelete: "/api/v1/movement/trips/:id",
             movementTripPointUpdate: "/api/v1/movement/trips/:id/points/:pointId",
+            movementTripPointDelete: "/api/v1/movement/trips/:id/points/:pointId",
+            workbenchBoxCatalog: "/api/v1/workbench/catalog/boxes",
             workbenchFlows: "/api/v1/workbench/flows",
             workbenchFlowBySlug: "/api/v1/workbench/flows/by-slug/:slug",
             workbenchPublishedOutput: "/api/v1/workbench/flows/:id/output",
+            workbenchRuns: "/api/v1/workbench/flows/:id/runs",
             workbenchRunDetail: "/api/v1/workbench/flows/:id/runs/:runId",
             workbenchNodeResult: "/api/v1/workbench/flows/:id/runs/:runId/nodes/:nodeId",
             workbenchLatestNodeOutput: "/api/v1/workbench/flows/:id/nodes/:nodeId/output",
@@ -4465,9 +4476,9 @@ function buildAgentOnboardingPayload(request) {
             saveSuggestionPlacement: "end_of_message",
             saveSuggestionTone: "gentle_optional",
             maxQuestionsPerTurn: 1,
-            psycheExplorationRule: "When a Psyche entity needs understanding first, begin with one exploratory question before any working formulation, replacement belief, suggested title, or save pitch. Keep the opening reflection to one or two short sentences, stay in plain prose instead of bullets or numbered lists, keep that first reply short, do not mention Forge search or save structure yet, avoid colons or list-shaped phrasing, prefer what/when/how over why until the experience is grounded, wait for the user's answer before offering a fuller formulation, ask permission before moving from charged exploration into naming or challenge when needed, make the next question help the user feel more able to name the experience rather than more examined, do not widen into adjacent entities until the current one has a working sentence the user recognizes, and once the lived experience is coherent stop deepening and help the user name it cleanly. When the user is updating a Psyche record because of one fresh episode, anchor in that episode before renaming the durable formulation. If the user accepts the wording, move toward the save instead of reopening deeper exploration.",
+            psycheExplorationRule: "When a Psyche entity needs understanding first, begin with one exploratory question before any working formulation, replacement belief, suggested title, or save pitch. Keep the opening reflection to one or two short sentences, stay in plain prose instead of bullets or numbered lists, keep that first reply short, do not mention Forge search or save structure yet, avoid colons or list-shaped phrasing, prefer what/when/how over why until the experience is grounded, wait for the user's answer before offering a fuller formulation, ask permission before moving from charged exploration into naming or challenge when needed, make the next question help the user feel more able to name the experience rather than more examined, do not widen into adjacent entities until the current one has a working sentence the user recognizes, and once the lived experience is coherent stop deepening and help the user name it cleanly. When the user is updating a Psyche record because of one fresh episode, anchor in that episode before renaming the durable formulation, begin with the smallest part of the old wording that no longer fits, and do not reopen the full origin story unless the new understanding is truly structural. If the user accepts the wording, move toward the save instead of reopening deeper exploration.",
             specializedSurfaceRule: "For Movement, Life Force, and Workbench, clarify the lane first, then name the dedicated route family in plain language and do not guess at a generic CRUD path. Use specializedDomainSurfaces.routeSelectionQuestions when they are present so the next follow-up stays route-selective instead of generic. Once the lane is clear, talk in route-relevant nouns such as timeline, overlay, weekday template, published output, run detail, or node result rather than generic record language. If the truth of the current state is still uncertain, read the relevant specialized view before you mutate it. When the user already named a precise correction or review target, confirm only the route-selecting detail that is still missing. After a concrete specialized-surface correction, read the relevant specialized view back when the user is trying to understand the result rather than just store it. The canonical runtime routes stay under /api/v1/*, and the OpenClaw HTTP mirror exposes the same families under /forge/v1/movement, /forge/v1/life-force, and /forge/v1/workbench.",
-            reviewShortcutRule: "When the user is reviewing or correcting an existing record, narrow the saved object, timeframe, or route family first. Do not reopen the whole intake unless the user is actually redefining the record.",
+            reviewShortcutRule: "When the user is reviewing or correcting an existing record, ask what practical question they want the read or correction to answer, then narrow the saved object, timeframe, or route family first. Do not reopen the whole intake unless the user is actually redefining the record.",
             readModelWriteRule: "Self-observation is note-backed and should be written through observed notes with frontmatter.observedAt. Sleep and workout sessions stay on batch CRUD by default; use the reflective review helpers only when enriching one already-known record after review.",
             psycheOpeningQuestionRule: "Prefer a concrete opening question tied to the entity: ask when the value mattered, what happened the last time the pattern appeared, what cue or body signal came first before the behavior, what the belief starts saying about self or outcome, what feels most at risk inside the mode, what the part is trying to get the user to do or stop doing, or where the shift began in the incident. Reflect briefly before the question, choose one follow-up lane at a time, say what is becoming clearer before the next deeper question, and if several Psyche entities are visible hold the adjacent ones lightly until the main container is clear.",
             duplicateCheckRoute: "/api/v1/entities/search",

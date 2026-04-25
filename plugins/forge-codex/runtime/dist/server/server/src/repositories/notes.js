@@ -40,6 +40,9 @@ function normalizeTags(tags) {
         return true;
     });
 }
+function canonicalNoteSourcePath() {
+    return "";
+}
 function parseTagsJson(raw) {
     try {
         const parsed = JSON.parse(raw);
@@ -438,7 +441,7 @@ export function createNote(input, context) {
          source_path, frontmatter_json, revision_hash, last_synced_at, created_at, updated_at
        )
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(id, wikiFields.kind, wikiFields.title, wikiFields.slug, wikiFields.spaceId, wikiFields.parentSlug, wikiFields.indexOrder, wikiFields.showInIndex ? 1 : 0, JSON.stringify(wikiFields.aliases), wikiFields.summary, parsed.contentMarkdown, contentPlain, parsed.author ?? context.actor ?? null, context.source, JSON.stringify(parsed.tags), parsed.destroyAt, parsed.sourcePath, JSON.stringify(parsed.frontmatter), parsed.revisionHash, parsed.lastSyncedAt ?? null, now, now);
+        .run(id, wikiFields.kind, wikiFields.title, wikiFields.slug, wikiFields.spaceId, wikiFields.parentSlug, wikiFields.indexOrder, wikiFields.showInIndex ? 1 : 0, JSON.stringify(wikiFields.aliases), wikiFields.summary, parsed.contentMarkdown, contentPlain, parsed.author ?? context.actor ?? null, context.source, JSON.stringify(parsed.tags), parsed.destroyAt, canonicalNoteSourcePath(), JSON.stringify(parsed.frontmatter), parsed.revisionHash, parsed.lastSyncedAt ?? null, now, now);
     insertLinks(id, parsed.links, now);
     setEntityOwner("note", id, parsed.userId, parsed.author ?? context.actor ?? null);
     clearDeletedEntityRecord("note", id);
@@ -504,7 +507,7 @@ export function updateNote(noteId, input, context) {
         existing
     });
     const nextFrontmatter = patch.frontmatter === undefined ? existing.frontmatter : patch.frontmatter;
-    const nextSourcePath = patch.sourcePath === undefined ? existing.sourcePath : patch.sourcePath;
+    const nextSourcePath = canonicalNoteSourcePath();
     const nextRevisionHash = patch.revisionHash === undefined
         ? existing.revisionHash
         : patch.revisionHash;

@@ -156,7 +156,7 @@ function makeBackup(overrides: Partial<DataBackupEntry> = {}): DataBackupEntry {
       "/Users/omarclaw/Documents/aurel-monorepo/data/forge/backups/forge-backup.manifest.json",
     databasePath: "/Users/omarclaw/Documents/aurel-monorepo/data/forge/forge.sqlite",
     sizeBytes: 2048,
-    includesWiki: true,
+    includesWiki: false,
     includesSecretsKey: true,
     counts: {
       notes: 12,

@@ -11387,7 +11387,7 @@ test("notes support custom and memory tags plus ephemeral auto-destruction", asy
   }
 });
 
-test("wiki pages are file-backed, searchable, backlink-aware, and ingestable", async () => {
+test("wiki pages are SQLite-backed, searchable, backlink-aware, and ingestable", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-wiki-memory-"));
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
@@ -11422,11 +11422,16 @@ test("wiki pages are file-backed, searchable, backlink-aware, and ingestable", a
       },
       payload: {
         contentMarkdown: "Daily Forge Checkup Note - Evening",
+        sourcePath: "/tmp/legacy-wiki/evidence/checkup.md",
         links: [],
         tags: []
       }
     });
     assert.equal(evidenceNote.statusCode, 201);
+    const evidenceNoteBody = evidenceNote.json() as {
+      note: { id: string; sourcePath: string };
+    };
+    assert.equal(evidenceNoteBody.note.sourcePath, "");
 
     const treeAfterEvidence = await app.inject({
       method: "GET",
@@ -11485,10 +11490,39 @@ test("wiki pages are file-backed, searchable, backlink-aware, and ingestable", a
     };
     assert.equal(releaseBody.page.slug, "release-playbook");
     assert.equal(releaseBody.page.kind, "wiki");
-    assert.ok(releaseBody.page.sourcePath.endsWith("release-playbook.md"));
-    const releaseFile = await readFile(releaseBody.page.sourcePath, "utf8");
-    assert.match(releaseFile, /title:\s+"Release playbook"/);
-    assert.match(releaseFile, /slug:\s+"release-playbook"/);
+    assert.equal(releaseBody.page.sourcePath, "");
+    assert.equal(
+      (
+        getDatabase()
+          .prepare("SELECT content_markdown FROM notes WHERE id = ?")
+          .get(releaseBody.page.id) as { content_markdown: string } | undefined
+      )?.content_markdown,
+      "# Release playbook\n\nCapture the release checklist, rollback protocol, and launch owner."
+    );
+
+    const releaseSourcePathPatch = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/notes/${releaseBody.page.id}`,
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        sourcePath: "/tmp/legacy-wiki/pages/release-playbook.md"
+      }
+    });
+    assert.equal(releaseSourcePathPatch.statusCode, 200);
+    const releaseSourcePathPatchBody = releaseSourcePathPatch.json() as {
+      note: { sourcePath: string };
+    };
+    assert.equal(releaseSourcePathPatchBody.note.sourcePath, "");
+    assert.equal(
+      (
+        getDatabase()
+          .prepare("SELECT source_path FROM notes WHERE id = ?")
+          .get(releaseBody.page.id) as { source_path: string } | undefined
+      )?.source_path,
+      ""
+    );
 
     const launchLog = await app.inject({
       method: "POST",
@@ -11923,7 +11957,7 @@ test("wiki pages are file-backed, searchable, backlink-aware, and ingestable", a
     };
     assert.ok(healthBody.health.pageCount >= 3);
     assert.ok(healthBody.health.rawSourceCount >= 1);
-    assert.match(healthBody.health.indexPath, /index\.md$/);
+    assert.equal(healthBody.health.indexPath, "");
   } finally {
     await app.close();
     closeDatabase();

@@ -47,7 +47,7 @@ Forge already has strong foundations:
 - goals, projects, strategies, tasks, task runs, habits, notes, wiki, preferences, health, movement, and Psyche surfaces
 - a React web app mounted under `/forge/`
 - a Fastify API under `/api/v1/`
-- local-first SQLite persistence and file-backed wiki storage
+- local-first SQLite persistence, including SQLite-backed wiki and evidence memory
 - OpenClaw, Hermes, and Codex integrations
 - guided modal flows for many important entity edits
 

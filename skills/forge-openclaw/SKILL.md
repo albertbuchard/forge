@@ -1,5 +1,5 @@
 ---
-name: forge-openclaw
+name: forge-openclaw-plugin
 description: use when the user wants to save, search, update, review, start, stop, reward, explain, compare, or run Forge records, or when the conversation is clearly about a Forge entity such as a goal, project, strategy, task, habit, note, calendar_event, work_block_template, task_timebox, task_run, insight, preference item, preference context, preference catalog, questionnaire instrument, questionnaire run, self observation, psyche_value, behavior_pattern, behavior, belief_entry, mode_profile, mode_guide_session, trigger_report, event_type, emotion_definition, sleep_session, or workout_session. identify the exact Forge object, keep the main conversation natural, guide psyche intake with active listening before storing it, and for psyche issues that need understanding first usually begin with one exploratory question before any formulation or save suggestion.
 ---
 
@@ -59,7 +59,7 @@ PM surface rule:
   human/bot ownership filters.
 - Guided modal flows handle create, edit, move, link, and closeout actions.
 
-Forge has four major surfaces. The planning side covers goals, projects, strategies, tasks, habits, notes, calendar events, recurring work blocks, task timeboxes, live work sessions, and agent-authored insights. The Health side covers sleep sessions, sports and workout sessions, companion pairing, and habit-generated workout records that should still stay linked to the broader Forge graph. The Preferences side covers contextual taste modeling, pairwise comparisons, direct signals, editable concept libraries, and preference items that can come from Forge entities or seeded concept domains such as food, activities, places, countries, fashion, people, media, and tools. The Psyche side covers values, patterns, behaviors, beliefs, modes, guided mode sessions, trigger reports, event types, and reusable emotion definitions. Forge also has a file-first Wiki memory layer with explicit spaces, local markdown pages, backlinks, optional embeddings, and structured links back to Forge entities. Forge is also multi-user: every entity can belong to a typed `human` or `bot` user through `userId`, and read routes can scope to one or many users with `userId` or repeated `userIds`. The current access posture is configurable through a directional user graph, but the live default is still permissive: Forge can list users directly, every relationship edge starts open, and a user can read or affect another user's linked records when the route explicitly asks for them. Use `forge_get_user_directory` when owner identity or cross-user access matters. Strategies can also be locked into a contract with `isLocked`; once locked, do not mutate the graph or target structure unless the user explicitly wants the strategy unlocked first. The model should use the real entity names, not vague substitutes. Say `project`, not “initiative”. Say `behavior_pattern`, not “theme”. Say `trigger_report`, not “incident note”.
+Forge has four major surfaces. The planning side covers goals, projects, strategies, tasks, habits, notes, calendar events, recurring work blocks, task timeboxes, live work sessions, and agent-authored insights. The Health side covers sleep sessions, sports and workout sessions, companion pairing, and habit-generated workout records that should still stay linked to the broader Forge graph. The Preferences side covers contextual taste modeling, pairwise comparisons, direct signals, editable concept libraries, and preference items that can come from Forge entities or seeded concept domains such as food, activities, places, countries, fashion, people, media, and tools. The Psyche side covers values, patterns, behaviors, beliefs, modes, guided mode sessions, trigger reports, event types, and reusable emotion definitions. Forge also has a SQLite-backed Wiki memory layer with explicit spaces, Markdown content in database rows, backlinks, optional embeddings, and structured links back to Forge entities. Forge is also multi-user: every entity can belong to a typed `human` or `bot` user through `userId`, and read routes can scope to one or many users with `userId` or repeated `userIds`. The current access posture is configurable through a directional user graph, but the live default is still permissive: Forge can list users directly, every relationship edge starts open, and a user can read or affect another user's linked records when the route explicitly asks for them. Use `forge_get_user_directory` when owner identity or cross-user access matters. Strategies can also be locked into a contract with `isLocked`; once locked, do not mutate the graph or target structure unless the user explicitly wants the strategy unlocked first. The model should use the real entity names, not vague substitutes. Say `project`, not “initiative”. Say `behavior_pattern`, not “theme”. Say `trigger_report`, not “incident note”.
 Habits are a first-class recurring entity in the planning side.
 NEGATIVE HABIT CHECK-IN RULE: for a `negative` habit, the correct aligned/resisted outcome is `missed`. `missed` means the bad habit was resisted, the user stayed aligned, and the habit should award its XP bonus.
 
@@ -74,9 +74,9 @@ Preferences rule:
 Wiki rule:
 
 - Treat the Wiki as the canonical long-form memory surface, not as a loose note dump.
-- Use the wiki tools when the user wants file-first reference pages, backlink-aware recall, ingest from a URL or local file, or wiki maintenance work such as unresolved-link cleanup.
+- Use the wiki tools when the user wants SQLite-backed reference pages, backlink-aware recall, ingest from a URL or local file, or wiki maintenance work such as unresolved-link cleanup.
 - `forge_ingest_wiki_source` now queues the ingest as background work; use the Forge UI handoff when the user wants to review or keep only selected wiki/entity candidates after the ingest finishes.
-- Keep evidence notes and wiki pages conceptually distinct: evidence notes are linked operating records, while wiki pages are the curated memory vault.
+- Keep evidence notes and wiki pages conceptually distinct: evidence notes are linked operating records, while wiki pages are curated long-form memory.
 
 Wiki navigation and search rule:
 
@@ -90,7 +90,7 @@ Wiki navigation and search rule:
 - Use `forge_search_wiki` as the default wiki recall tool. It is the main route for people, conversations, concepts, and exact page lookup.
 - Use `forge_list_wiki_pages` when the user wants to browse structure, inspect a branch, or understand how pages are organized rather than search by phrase.
 - Use `forge_get_wiki_page` after search yields a likely hit, or when the user already identified the page to open.
-- Use `forge_get_wiki_settings` or `forge_get_wiki_health` when the task is about wiki maintenance, indexing, unresolved links, ingest setup, or vault integrity rather than content recall.
+- Use `forge_get_wiki_settings` or `forge_get_wiki_health` when the task is about wiki maintenance, indexing, unresolved links, ingest setup, or memory integrity rather than content recall.
 
 Health rule:
 
@@ -353,7 +353,7 @@ Use the batch entity tools for stored records:
 These tools operate on:
 `goal`, `project`, `strategy`, `task`, `habit`, `tag`, `note`, `insight`, `calendar_event`, `work_block_template`, `task_timebox`, `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`, `mode_guide_session`, `trigger_report`, `event_type`, `emotion_definition`, `preference_catalog`, `preference_catalog_item`, `preference_context`, `preference_item`, `questionnaire_instrument`, `sleep_session`, `workout_session`
 
-Use the wiki tools for file-first memory work:
+Use the wiki tools for SQLite-backed memory work:
 `forge_get_wiki_settings`, `forge_list_wiki_pages`, `forge_get_wiki_page`, `forge_search_wiki`, `forge_upsert_wiki_page`, `forge_get_wiki_health`, `forge_sync_wiki_vault`, `forge_reindex_wiki_embeddings`, `forge_ingest_wiki_source`
 
 Use the health tools for review and reflective enrichment, not as the default CRUD architecture:

@@ -32,14 +32,24 @@ describe("forge plugin route parity", () => {
     expect(report.mirrored).toContain("GET /api/v1/health/fitness");
     expect(report.mirrored).toContain("PATCH /api/v1/health/workouts/:id");
     expect(report.mirrored).toContain("GET /api/v1/movement/day");
+    expect(report.mirrored).toContain("GET /api/v1/movement/boxes/:id");
+    expect(report.mirrored).toContain("PATCH /api/v1/movement/settings");
     expect(report.mirrored).toContain("POST /api/v1/movement/user-boxes");
+    expect(report.mirrored).toContain("DELETE /api/v1/movement/user-boxes/:id");
     expect(report.mirrored).toContain(
       "POST /api/v1/movement/automatic-boxes/:id/invalidate"
+    );
+    expect(report.mirrored).toContain("DELETE /api/v1/movement/stays/:id");
+    expect(report.mirrored).toContain("DELETE /api/v1/movement/trips/:id");
+    expect(report.mirrored).toContain(
+      "DELETE /api/v1/movement/trips/:id/points/:pointId"
     );
     expect(report.mirrored).toContain("POST /api/v1/movement/selection");
     expect(report.mirrored).toContain("GET /api/v1/life-force");
     expect(report.mirrored).toContain("PATCH /api/v1/life-force/profile");
     expect(report.mirrored).toContain("GET /api/v1/workbench/flows");
+    expect(report.mirrored).toContain("GET /api/v1/workbench/catalog/boxes");
+    expect(report.mirrored).toContain("GET /api/v1/workbench/flows/:id/runs");
     expect(report.mirrored).toContain("POST /api/v1/workbench/flows/:id/run");
     expect(report.mirrored).toContain(
       "GET /api/v1/workbench/flows/:id/nodes/:nodeId/output"
@@ -79,7 +89,11 @@ describe("forge plugin route parity", () => {
     expect(supported.has("GET /api/v1/health/sleep")).toBe(true);
     expect(supported.has("GET /api/v1/health/fitness")).toBe(true);
     expect(supported.has("GET /api/v1/movement/timeline")).toBe(true);
+    expect(supported.has("GET /api/v1/movement/boxes/:id")).toBe(true);
+    expect(supported.has("DELETE /api/v1/movement/user-boxes/:id")).toBe(true);
     expect(supported.has("POST /api/v1/life-force/fatigue-signals")).toBe(true);
+    expect(supported.has("GET /api/v1/workbench/catalog/boxes")).toBe(true);
+    expect(supported.has("GET /api/v1/workbench/flows/:id/runs")).toBe(true);
     expect(supported.has("GET /api/v1/workbench/flows/by-slug/:slug")).toBe(true);
     expect(supported.has("GET /api/v1/calendar/overview")).toBe(true);
     expect(supported.has("POST /api/v1/calendar/connections")).toBe(true);

@@ -64,10 +64,10 @@ function listTagIds() {
 }
 
 async function writeRuntimeArtifacts(dataRoot: string, suffix: string) {
-  await mkdir(path.join(dataRoot, "wiki"), { recursive: true });
+  await mkdir(path.join(dataRoot, "wiki-ingest"), { recursive: true });
   await writeFile(
-    path.join(dataRoot, "wiki", "index.md"),
-    `# Wiki ${suffix}\n`,
+    path.join(dataRoot, "wiki-ingest", "source.txt"),
+    `Raw ingest ${suffix}\n`,
     "utf8"
   );
   await writeFile(
@@ -83,7 +83,7 @@ test.afterEach(async () => {
   closeDatabase();
 });
 
-test("createDataBackup captures the database, schema, wiki files, and secrets key", async () => {
+test("createDataBackup captures the database, schema, ingest artifacts, and secrets key", async () => {
   const dataRoot = await createRuntimeRoot("forge-data-backup-");
 
   try {
@@ -103,13 +103,13 @@ test("createDataBackup captures the database, schema, wiki files, and secrets ke
 
     assert.equal(backups.length, 1);
     assert.equal(backup.counts.tags, baselineTagCount + 1);
-    assert.equal(backup.includesWiki, true);
+    assert.equal(backup.includesWiki, false);
     assert.equal(backup.includesSecretsKey, true);
     assert.ok(archiveEntries.includes("forge.sqlite"));
     assert.ok(archiveEntries.includes("schema.sql"));
     assert.ok(archiveEntries.includes("schema.json"));
     assert.ok(archiveEntries.includes("snapshot-summary.json"));
-    assert.ok(archiveEntries.includes("wiki/index.md"));
+    assert.ok(archiveEntries.includes("wiki-ingest/source.txt"));
     assert.ok(archiveEntries.includes(".forge-secrets.key"));
   } finally {
     await rm(dataRoot, { recursive: true, force: true });
@@ -137,8 +137,8 @@ test("restoreDataBackup rolls the database and runtime files back to the selecte
 
     assert.deepEqual(listTagIds(), expectedTagIds);
     assert.equal(
-      await readFile(path.join(dataRoot, "wiki", "index.md"), "utf8"),
-      "# Wiki before\n"
+      await readFile(path.join(dataRoot, "wiki-ingest", "source.txt"), "utf8"),
+      "Raw ingest before\n"
     );
     assert.equal(
       await readFile(path.join(dataRoot, ".forge-secrets.key"), "utf8"),
@@ -315,7 +315,7 @@ test("switchDataRoot can both move the current data and adopt an existing data f
     assert.equal(getEffectiveDataRoot(), movedRoot);
     assert.deepEqual(listTagIds(), expectedMovedTagIds);
     assert.equal(existsSync(path.join(movedRoot, "forge.sqlite")), true);
-    assert.equal(existsSync(path.join(movedRoot, "wiki", "index.md")), true);
+    assert.equal(existsSync(path.join(movedRoot, "wiki-ingest", "source.txt")), true);
     assert.equal(
       movedState.settings.backupDirectory,
       path.join(movedRoot, "backups")

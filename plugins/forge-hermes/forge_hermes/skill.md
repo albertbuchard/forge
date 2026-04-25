@@ -13,8 +13,8 @@ The Preferences side covers contextual taste modeling, pairwise comparisons, dir
 signals, editable concept libraries, and preference items. The Psyche side covers
 values, patterns, behaviors, beliefs, modes, guided mode sessions, trigger reports,
 event types, reusable emotion definitions, structured questionnaires, questionnaire
-runs, and a self-observation calendar backed by note-based observations. Forge also has a file-first Wiki
-memory layer with explicit spaces, local markdown pages, backlinks, optional
+runs, and a self-observation calendar backed by note-based observations. Forge also has a SQLite-backed Wiki
+memory layer with explicit spaces, Markdown content in database rows, backlinks, optional
 embeddings, and structured Forge links. Forge is also multi-user: every entity can belong to a
 typed `human` or `bot` user through `userId`, and Hermes can scope reads with `userId`
 or repeated `userIds`. The user directory exposes a directional relationship graph
@@ -151,7 +151,7 @@ When Hermes is trying to find the right wiki record, use these search patterns:
 3. Search before creating duplicates with `forge_search_entities`.
 4. Prefer the batch entity tools for normal stored-entity work. Batch CRUD is the default for simple entities, so do not build a huge one-route-per-entity mental model when the shared routes already fit:
    `forge_create_entities`, `forge_update_entities`, `forge_delete_entities`, `forge_restore_entities`.
-5. Use the wiki tools for file-first knowledge work:
+5. Use the wiki tools for SQLite-backed knowledge work:
    `forge_get_wiki_settings`, `forge_list_wiki_pages`, `forge_get_wiki_page`, `forge_search_wiki`, `forge_upsert_wiki_page`, `forge_get_wiki_health`, `forge_sync_wiki_vault`, `forge_reindex_wiki_embeddings`, `forge_ingest_wiki_source`.
    `forge_ingest_wiki_source` queues background ingest work; when the user wants to review candidate pages or entities before publishing, hand off to the Forge UI instead of pretending Hermes already has an inline review tool.
 6. Use the health tools for sleep and sports review and reflective enrichment:
@@ -176,7 +176,7 @@ For wiki-specific recall:
 - Use `forge_get_wiki_page` after search yields a likely hit, or when the page is
   already known.
 - Use `forge_get_wiki_health` or `forge_get_wiki_settings` for wiki maintenance,
-  ingest configuration, unresolved-link cleanup, indexing, or vault integrity work.
+  ingest configuration, unresolved-link cleanup, indexing, or memory integrity work.
 
 ## Entity guidance
 
@@ -187,7 +187,7 @@ For wiki-specific recall:
 - `task_run` is not a batch entity. Use the live task-run tools instead.
 - `forge_post_insight` is still the preferred write for agent-authored recommendations, even though `insight` also exists in the simple-entity catalog.
 - Sleep and workout sessions are batch entities for normal CRUD. Use the dedicated health tools only for read models and reflective enrichment on one existing record.
-- Wiki pages are not batch entities. Use the dedicated wiki tools so the markdown vault, backlinks, and metadata index stay aligned.
+- Wiki pages are not batch entities. Use the dedicated wiki tools so SQLite page rows, backlinks, and metadata indexes stay aligned.
 - Habit outcome writes in the shared agent model should go through `forge_update_entities` on `entityType: "habit"` with `patch.checkIn`, not direct raw calls to `/api/v1/habits/:id/check-ins`.
 - `patch.checkIn` accepts `status` plus optional `dateKey`, `note`, and `description`; if `description` is provided, it replaces the habit's stored `description` in the same write.
 - Use the high-level batch routes for basic Preferences CRUD. `preference_catalog`, `preference_catalog_item`, `preference_context`, and `preference_item` should normally flow through `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`.

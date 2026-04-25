@@ -161,7 +161,7 @@ function createEnglishDictionary() {
         kanban: "Move active work across the board without losing context.",
         today: "Focus today on the clearest next move.",
         notes: "Search Markdown work notes and reopen the linked work fast.",
-        wiki: "Work in KarpaWiki, the file-first memory workspace with backlinks, entity links, and optional embeddings.",
+        wiki: "Work in KarpaWiki, the SQLite-backed memory workspace with backlinks, entity links, and optional embeddings.",
         psyche: "Reflect on values, patterns, and reports with structure.",
         activity: "Review the visible audit trail of what changed and when.",
         insights: "Store and review coaching, analysis, and recommendations.",

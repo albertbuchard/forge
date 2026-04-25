@@ -10527,7 +10527,7 @@
         "operationId": "getwiki_pages"
       },
       "post": {
-        "summary": "Create a wiki page through the file-backed wiki surface",
+        "summary": "Create a wiki page through the SQLite-backed wiki surface",
         "responses": {
           "200": {
             "description": "Created wiki page",
@@ -10591,7 +10591,7 @@
         "operationId": "getwiki_pages_id"
       },
       "patch": {
-        "summary": "Update an existing wiki page through the file-backed surface",
+        "summary": "Update an existing wiki page through the SQLite-backed surface",
         "responses": {
           "200": {
             "description": "Updated wiki page",
@@ -10687,7 +10687,7 @@
     },
     "/api/v1/wiki/sync": {
       "post": {
-        "summary": "Resync markdown files from the local wiki vault into Forge metadata",
+        "summary": "Rebuild SQLite wiki search, link, and metadata indexes",
         "responses": {
           "200": {
             "description": "Wiki sync result",

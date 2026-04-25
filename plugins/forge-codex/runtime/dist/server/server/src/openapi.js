@@ -3253,17 +3253,26 @@ export function buildOpenApiDocument() {
                     "movementTimeline",
                     "movementAllTime",
                     "movementPlaces",
+                    "movementBoxDetail",
+                    "movementSettings",
+                    "movementSettingsUpdate",
                     "movementTripDetail",
                     "movementSelection",
                     "movementUserBoxPreflight",
                     "movementUserBoxUpdate",
+                    "movementUserBoxDelete",
                     "movementAutomaticBoxInvalidate",
                     "movementStayUpdate",
+                    "movementStayDelete",
                     "movementTripUpdate",
+                    "movementTripDelete",
                     "movementTripPointUpdate",
+                    "movementTripPointDelete",
+                    "workbenchBoxCatalog",
                     "workbenchFlows",
                     "workbenchFlowBySlug",
                     "workbenchPublishedOutput",
+                    "workbenchRuns",
                     "workbenchRunDetail",
                     "workbenchNodeResult",
                     "workbenchLatestNodeOutput",
@@ -3292,17 +3301,26 @@ export function buildOpenApiDocument() {
                     movementTimeline: { type: "string" },
                     movementAllTime: { type: "string" },
                     movementPlaces: { type: "string" },
+                    movementBoxDetail: { type: "string" },
+                    movementSettings: { type: "string" },
+                    movementSettingsUpdate: { type: "string" },
                     movementTripDetail: { type: "string" },
                     movementSelection: { type: "string" },
                     movementUserBoxPreflight: { type: "string" },
                     movementUserBoxUpdate: { type: "string" },
+                    movementUserBoxDelete: { type: "string" },
                     movementAutomaticBoxInvalidate: { type: "string" },
                     movementStayUpdate: { type: "string" },
+                    movementStayDelete: { type: "string" },
                     movementTripUpdate: { type: "string" },
+                    movementTripDelete: { type: "string" },
                     movementTripPointUpdate: { type: "string" },
+                    movementTripPointDelete: { type: "string" },
+                    workbenchBoxCatalog: { type: "string" },
                     workbenchFlows: { type: "string" },
                     workbenchFlowBySlug: { type: "string" },
                     workbenchPublishedOutput: { type: "string" },
+                    workbenchRuns: { type: "string" },
                     workbenchRunDetail: { type: "string" },
                     workbenchNodeResult: { type: "string" },
                     workbenchLatestNodeOutput: { type: "string" },
@@ -4830,6 +4848,24 @@ export function buildOpenApiDocument() {
                     }
                 }
             },
+            "/api/v1/movement/boxes/{id}": {
+                get: {
+                    summary: "Read one movement box with projected detail, provenance, and raw linked evidence",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["movement"],
+                            properties: {
+                                movement: {
+                                    type: "object",
+                                    additionalProperties: true
+                                }
+                            }
+                        }, "Movement box detail"),
+                        "404": { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
             "/api/v1/movement/trips/{id}": {
                 get: {
                     summary: "Read one movement trip with its full detail",
@@ -5260,7 +5296,7 @@ export function buildOpenApiDocument() {
                     }
                 },
                 post: {
-                    summary: "Create a wiki page through the file-backed wiki surface",
+                    summary: "Create a wiki page through the SQLite-backed wiki surface",
                     responses: {
                         "200": jsonResponse({
                             type: "object",
@@ -5288,7 +5324,7 @@ export function buildOpenApiDocument() {
                     }
                 },
                 patch: {
-                    summary: "Update an existing wiki page through the file-backed surface",
+                    summary: "Update an existing wiki page through the SQLite-backed surface",
                     responses: {
                         "200": jsonResponse({
                             type: "object",
@@ -5334,7 +5370,7 @@ export function buildOpenApiDocument() {
             },
             "/api/v1/wiki/sync": {
                 post: {
-                    summary: "Resync markdown files from the local wiki vault into Forge metadata",
+                    summary: "Rebuild SQLite wiki search, link, and metadata indexes",
                     responses: {
                         "200": jsonResponse({
                             type: "object",

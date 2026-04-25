@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowUpRight,
@@ -15,7 +15,6 @@ import { Card } from "@/components/ui/card";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { Input } from "@/components/ui/input";
 import { ErrorState, LoadingState } from "@/components/ui/page-state";
-import { Textarea } from "@/components/ui/textarea";
 import {
   createWikiEmbeddingProfile,
   createWikiSpace,
@@ -154,17 +153,17 @@ export function SettingsWikiPage() {
     ? summarizeWikiLlmProfile(activeLlmProfile)
     : null;
   const operatingModelTooltip =
-    "Canonical knowledge lives as markdown and media files on disk, with Forge keeping a synced metadata, link, and search index on top. Text search and entity-linked search work without embeddings, while semantic search stays additive and profile-driven. Ingest jobs can create pages and media assets now, with room for richer OCR, transcription, and multimodal compilation later.";
+    "Canonical knowledge lives in SQLite notes, with Forge maintaining metadata, links, search, and optional embedding indexes in the database. Text search and entity-linked search work without embeddings, while semantic search stays additive and profile-driven. Ingest jobs can create pages and media assets now, with room for richer OCR, transcription, and multimodal compilation later.";
 
   const forgeWikiSlot = appSettingsQuery.data?.settings.modelSettings.forgeAgent.wiki;
 
   return (
     <div className="mx-auto grid w-full max-w-[1440px] gap-5">
       <PageHero
-        eyebrow="File-first memory"
+        eyebrow="SQLite memory"
         title="KarpaWiki Settings"
         titleText="KarpaWiki Settings"
-        description="Configure file-backed spaces, parse models, and embedding profiles for the KarpaWiki memory system."
+        description="Configure SQLite-backed spaces, parse models, and embedding profiles for the KarpaWiki memory system."
         badge={`${settings.spaces.length} spaces · ${settings.embeddingProfiles.length} embedding profiles`}
         actions={
           <>
@@ -174,7 +173,7 @@ export function SettingsWikiPage() {
               pendingLabel="Syncing"
               onClick={() => void syncMutation.mutateAsync()}
             >
-              Sync vault
+              Refresh indexes
             </Button>
             <Button
               pending={reindexMutation.isPending}
@@ -262,7 +261,7 @@ export function SettingsWikiPage() {
               <div className="text-sm leading-6 text-white/58">
                 OpenAI API and local compatible endpoints are configured under
                 Settings {"->"} Models. OpenAI Codex OAuth lives there as a chat
-                agent path, while Wiki keeps the file-backed memory controls here
+                agent path, while Wiki keeps the SQLite memory controls here
                 and consumes the selected ingest model slot.
               </div>
               <div className="flex flex-wrap gap-2">
@@ -347,8 +346,8 @@ export function SettingsWikiPage() {
                   />
                 </div>
                 <div className="text-xs leading-5 text-white/50">
-                  Personal and shared wiki vaults map to explicit file-backed
-                  roots and metadata namespaces.
+                  Personal and shared wiki spaces map to explicit SQLite
+                  namespaces.
                 </div>
               </div>
             </div>

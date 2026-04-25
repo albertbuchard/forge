@@ -320,6 +320,13 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
           passthroughSearch("/api/v1/movement/places", url)
       },
       {
+        method: "GET",
+        pattern: /^\/forge\/v1\/movement\/boxes\/([^/]+)$/,
+        upstreamPath: "/api/v1/movement/boxes/:id",
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/movement/boxes/${match[1]}`, url)
+      },
+      {
         method: "POST",
         pattern: /^\/forge\/v1\/movement\/places$/,
         upstreamPath: "/api/v1/movement/places",
@@ -360,6 +367,15 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
           passthroughSearch("/api/v1/movement/settings", url)
       },
       {
+        method: "PATCH",
+        pattern: /^\/forge\/v1\/movement\/settings$/,
+        upstreamPath: "/api/v1/movement/settings",
+        requestBody: "json",
+        requiresToken: true,
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/movement/settings", url)
+      },
+      {
         method: "POST",
         pattern: /^\/forge\/v1\/movement\/user-boxes$/,
         upstreamPath: "/api/v1/movement/user-boxes",
@@ -387,6 +403,14 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
           passthroughSearch(`/api/v1/movement/user-boxes/${match[1]}`, url)
       },
       {
+        method: "DELETE",
+        pattern: /^\/forge\/v1\/movement\/user-boxes\/([^/]+)$/,
+        upstreamPath: "/api/v1/movement/user-boxes/:id",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/movement/user-boxes/${match[1]}`, url)
+      },
+      {
         method: "POST",
         pattern: /^\/forge\/v1\/movement\/automatic-boxes\/([^/]+)\/invalidate$/,
         upstreamPath: "/api/v1/movement/automatic-boxes/:id/invalidate",
@@ -408,6 +432,14 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
           passthroughSearch(`/api/v1/movement/stays/${match[1]}`, url)
       },
       {
+        method: "DELETE",
+        pattern: /^\/forge\/v1\/movement\/stays\/([^/]+)$/,
+        upstreamPath: "/api/v1/movement/stays/:id",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/movement/stays/${match[1]}`, url)
+      },
+      {
         method: "PATCH",
         pattern: /^\/forge\/v1\/movement\/trips\/([^/]+)$/,
         upstreamPath: "/api/v1/movement/trips/:id",
@@ -417,10 +449,29 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
           passthroughSearch(`/api/v1/movement/trips/${match[1]}`, url)
       },
       {
+        method: "DELETE",
+        pattern: /^\/forge\/v1\/movement\/trips\/([^/]+)$/,
+        upstreamPath: "/api/v1/movement/trips/:id",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/movement/trips/${match[1]}`, url)
+      },
+      {
         method: "PATCH",
         pattern: /^\/forge\/v1\/movement\/trips\/([^/]+)\/points\/([^/]+)$/,
         upstreamPath: "/api/v1/movement/trips/:id/points/:pointId",
         requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(
+            `/api/v1/movement/trips/${match[1]}/points/${match[2]}`,
+            url
+          )
+      },
+      {
+        method: "DELETE",
+        pattern: /^\/forge\/v1\/movement\/trips\/([^/]+)\/points\/([^/]+)$/,
+        upstreamPath: "/api/v1/movement/trips/:id/points/:pointId",
         requiresToken: true,
         target: (match: RegExpMatchArray, url: URL) =>
           passthroughSearch(

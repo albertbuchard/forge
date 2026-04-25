@@ -58,11 +58,13 @@ export const FORGE_SUPPORTED_PLUGIN_API_ROUTES: ForgeSupportedPluginApiRoute[] =
     { method: "GET", path: "/api/v1/movement/all-time", purpose: "health" },
     { method: "GET", path: "/api/v1/movement/timeline", purpose: "health" },
     { method: "GET", path: "/api/v1/movement/places", purpose: "health" },
+    { method: "GET", path: "/api/v1/movement/boxes/:id", purpose: "health" },
     { method: "POST", path: "/api/v1/movement/places", purpose: "health" },
     { method: "PATCH", path: "/api/v1/movement/places/:id", purpose: "health" },
     { method: "GET", path: "/api/v1/movement/trips/:id", purpose: "health" },
     { method: "POST", path: "/api/v1/movement/selection", purpose: "health" },
     { method: "GET", path: "/api/v1/movement/settings", purpose: "health" },
+    { method: "PATCH", path: "/api/v1/movement/settings", purpose: "health" },
     { method: "POST", path: "/api/v1/movement/user-boxes", purpose: "health" },
     {
       method: "POST",
@@ -75,14 +77,26 @@ export const FORGE_SUPPORTED_PLUGIN_API_ROUTES: ForgeSupportedPluginApiRoute[] =
       purpose: "health"
     },
     {
+      method: "DELETE",
+      path: "/api/v1/movement/user-boxes/:id",
+      purpose: "health"
+    },
+    {
       method: "POST",
       path: "/api/v1/movement/automatic-boxes/:id/invalidate",
       purpose: "health"
     },
     { method: "PATCH", path: "/api/v1/movement/stays/:id", purpose: "health" },
+    { method: "DELETE", path: "/api/v1/movement/stays/:id", purpose: "health" },
     { method: "PATCH", path: "/api/v1/movement/trips/:id", purpose: "health" },
+    { method: "DELETE", path: "/api/v1/movement/trips/:id", purpose: "health" },
     {
       method: "PATCH",
+      path: "/api/v1/movement/trips/:id/points/:pointId",
+      purpose: "health"
+    },
+    {
+      method: "DELETE",
       path: "/api/v1/movement/trips/:id/points/:pointId",
       purpose: "health"
     },

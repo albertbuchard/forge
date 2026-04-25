@@ -10,7 +10,7 @@
 
 Forge is a local-first operating system for planning, execution, memory, health, and agent collaboration.
 
-It brings the web app, API, SQLite runtime, file-backed wiki, OpenClaw adapter, Hermes adapter, Codex adapter, and iPhone companion into one shared system instead of splitting your work and context across disconnected tools.
+It brings the web app, API, SQLite-backed wiki memory, OpenClaw adapter, Hermes adapter, Codex adapter, and iPhone companion into one shared system instead of splitting your work and context across disconnected tools.
 
 Built with React 19, TypeScript 5.8, Vite 6, Fastify 5, SQLite, OpenAPI 3.1, Tauri 2, and a native iPhone companion.
 

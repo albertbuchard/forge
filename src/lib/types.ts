@@ -3504,6 +3504,15 @@ export interface AgentOnboardingPayload {
     };
     specializedCrudEntities: Record<string, Record<string, string>>;
     actionEntities: Record<string, Record<string, unknown>>;
+    specializedDomainSurfaces: Record<
+      string,
+      {
+        readRoutes: Record<string, string>;
+        writeRoutes: Record<string, string>;
+        routeSelectionQuestions?: string[];
+        notes: string[];
+      }
+    >;
     readModelOnlySurfaces: Record<string, string>;
   };
   multiUserModel: {
@@ -3547,6 +3556,38 @@ export interface AgentOnboardingPayload {
     weeklyReview: string;
     sleepOverview: string;
     sportsOverview: string;
+    lifeForce: string;
+    lifeForceProfile: string;
+    lifeForceWeekdayTemplate: string;
+    lifeForceFatigueSignals: string;
+    movementDay: string;
+    movementMonth: string;
+    movementTimeline: string;
+    movementAllTime: string;
+    movementPlaces: string;
+    movementBoxDetail: string;
+    movementSettings: string;
+    movementSettingsUpdate: string;
+    movementTripDetail: string;
+    movementSelection: string;
+    movementUserBoxPreflight: string;
+    movementUserBoxUpdate: string;
+    movementUserBoxDelete: string;
+    movementAutomaticBoxInvalidate: string;
+    movementStayUpdate: string;
+    movementStayDelete: string;
+    movementTripUpdate: string;
+    movementTripDelete: string;
+    movementTripPointUpdate: string;
+    movementTripPointDelete: string;
+    workbenchBoxCatalog: string;
+    workbenchFlows: string;
+    workbenchFlowBySlug: string;
+    workbenchPublishedOutput: string;
+    workbenchRuns: string;
+    workbenchRunDetail: string;
+    workbenchNodeResult: string;
+    workbenchLatestNodeOutput: string;
     wikiSettings: string;
     wikiSearch: string;
     wikiHealth: string;
@@ -3575,6 +3616,9 @@ export interface AgentOnboardingPayload {
     saveSuggestionTone: string;
     maxQuestionsPerTurn: number;
     psycheExplorationRule: string;
+    specializedSurfaceRule: string;
+    reviewShortcutRule: string;
+    readModelWriteRule: string;
     psycheOpeningQuestionRule: string;
     duplicateCheckRoute: string;
     uiSuggestionRule: string;

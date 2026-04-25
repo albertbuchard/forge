@@ -129,7 +129,7 @@
               </tr>
               <tr>
                 <td>Persistence</td>
-                <td>SQLite, structured JSON columns, file-backed wiki storage</td>
+                <td>SQLite, structured JSON columns, SQLite-backed wiki storage</td>
                 <td>Execution and reflection records stay local-first and auditable.</td>
               </tr>
               <tr>
@@ -162,11 +162,11 @@
               </p>
             </article>
             <article class="card">
-              <h3>File-first wiki memory</h3>
+              <h3>SQLite-backed wiki memory</h3>
               <p>
-                Wiki pages remain Markdown-first and file-backed. Forge stores the
-                page metadata, ingest jobs, and search index state while keeping the
-                article source as files.
+                Wiki pages keep Markdown content in SQLite notes rows. Forge stores
+                page metadata, ingest jobs, links, and search index state in the
+                database.
               </p>
             </article>
             <article class="card">

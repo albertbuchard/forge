@@ -63,6 +63,11 @@ Forge correctly, and gather only the structure that still matters.
   and then act.
 - Once the route family is clear, say it plainly enough that another agent could follow
   the same path without guessing.
+- For updates, start with the smallest thing that now feels wrong, newly true, or
+  newly visible. Do not make the user retell the whole record unless the change is
+  genuinely structural.
+- For review requests, ask what practical question they want the read to answer before
+  you ask for more scope.
 - For meaning-bearing updates, especially in Psyche-adjacent work, briefly say what
   feels newly true before you ask for the one structural detail that still changes the
   save.
@@ -221,6 +226,31 @@ When you are about to save:
 - give one short working summary in the user's language and ask whether it feels true
   enough or needs one correction
 - if the user confirms it, stop asking and save
+
+## Update And Review Shortcuts
+
+Use these when the user is correcting, reviewing, or tightening something that already
+exists.
+
+- When the user already gave the correction in usable language, reflect what still
+  seems true, then ask only for the one thing that no longer fits.
+- A good narrow update line is:
+  "I can stay narrow here. What is the one thing that no longer fits?"
+- When the user is revising placement, timing, or ownership rather than meaning, do
+  not reopen the whole story. Confirm only the parent, interval, owner, or route scope
+  that changes the write.
+- When the record is abstract or reusable and the user wants an update, ask what
+  future decision, comparison, or retrieval moment got muddy with the old wording.
+- When the user wants review rather than mutation, ask what answer they need from the
+  read:
+  what this would help them decide later is often the clearest scope signal.
+- For specialized surfaces, ask what exact saved object, span, weekday, flow, run, or
+  node the user wants to check before you ask why it matters.
+- If the next answer would not change the route, wording, timing, links, or useful
+  interpretation, stop asking and act.
+- Close cleanly:
+  once the user says the wording or route lands, summarize once and move to the read
+  or write.
 
 When an adjacent record becomes visible:
 

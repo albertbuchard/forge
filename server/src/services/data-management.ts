@@ -605,10 +605,6 @@ export async function createDataBackup(
       )
     );
     const currentRoot = getEffectiveDataRoot();
-    const wikiPath = path.join(currentRoot, "wiki");
-    if (existsSync(wikiPath)) {
-      zip.addLocalFolder(wikiPath, "wiki");
-    }
     const wikiIngestPath = path.join(currentRoot, "wiki-ingest");
     if (existsSync(wikiIngestPath)) {
       zip.addLocalFolder(wikiIngestPath, "wiki-ingest");
@@ -630,7 +626,7 @@ export async function createDataBackup(
       manifestPath,
       databasePath: snapshot.databasePath,
       sizeBytes: archiveStat.size,
-      includesWiki: existsSync(wikiPath),
+      includesWiki: false,
       includesSecretsKey: existsSync(secretsKeyPath),
       counts: snapshot.counts
     });
@@ -781,7 +777,6 @@ function runtimeAssetPaths(dataRoot: string) {
   return {
     dataRoot: resolvedRoot,
     databasePath: resolveDatabasePathForDataRoot(resolvedRoot),
-    wikiPath: path.join(resolvedRoot, "wiki"),
     wikiIngestPath: path.join(resolvedRoot, "wiki-ingest"),
     secretsKeyPath: path.join(resolvedRoot, ".forge-secrets.key")
   };
@@ -791,7 +786,7 @@ async function copyRuntimeAssets(sourceRoot: string, targetRoot: string) {
   const source = runtimeAssetPaths(sourceRoot);
   const target = runtimeAssetPaths(targetRoot);
   await mkdir(target.dataRoot, { recursive: true });
-  if (existsSync(target.databasePath) || existsSync(target.wikiPath) || existsSync(target.secretsKeyPath)) {
+  if (existsSync(target.databasePath) || existsSync(target.secretsKeyPath)) {
     throw new HttpError(
       409,
       "target_data_root_not_empty",
@@ -799,7 +794,6 @@ async function copyRuntimeAssets(sourceRoot: string, targetRoot: string) {
     );
   }
   await copyIfExists(source.databasePath, target.databasePath);
-  await copyIfExists(source.wikiPath, target.wikiPath);
   await copyIfExists(source.wikiIngestPath, target.wikiIngestPath);
   await copyIfExists(source.secretsKeyPath, target.secretsKeyPath);
 }
@@ -906,7 +900,6 @@ export async function restoreDataBackup(
       await removeIfExists(path.join(currentRoot, ".forge-secrets.key"));
     }
     await copyIfExists(restoredDatabasePath, path.join(currentRoot, "forge.sqlite"));
-    await copyIfExists(path.join(tempDir, "wiki"), path.join(currentRoot, "wiki"));
     await copyIfExists(
       path.join(tempDir, "wiki-ingest"),
       path.join(currentRoot, "wiki-ingest")

@@ -343,7 +343,7 @@ export function SettingsDataPage() {
                 value: "migrate_current",
                 label: "Move the current data",
                 description:
-                  "Copy the live database, wiki files, and local secrets key into a new folder, then switch Forge to it."
+                  "Copy the live database and local secrets key into a new folder, then switch Forge to it."
               },
               {
                 value: "adopt_existing",
@@ -384,7 +384,7 @@ export function SettingsDataPage() {
         <div className="grid gap-4">
           <FlowField
             label="Data folder"
-            description="Forge will place or read the database, wiki files, and backups from here."
+            description="Forge will place or read the database and backups from here."
           >
             <Input
               value={value.targetDataRoot}
@@ -438,7 +438,7 @@ export function SettingsDataPage() {
       eyebrow: "Step 1",
       title: "Review the backup you want to restore",
       description:
-        "Restoring replaces the current database and wiki files with the selected backup.",
+        "Restoring replaces the current database with the selected backup.",
       render: (value, setValue) => (
         <div className="grid gap-4">
           <div className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 text-sm leading-6 text-[var(--ui-ink-soft)]">
@@ -490,7 +490,7 @@ export function SettingsDataPage() {
         "Use this only when you are confident this backup is the state you want back.",
       render: () => (
         <div className="rounded-[22px] border border-amber-400/20 bg-amber-500/[0.08] p-4 text-sm leading-6 text-amber-100/88">
-          Forge will replace the live database and wiki files with this backup,
+          Forge will replace the live database with this backup,
           then reopen the restored copy.
         </div>
       )

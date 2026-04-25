@@ -18,7 +18,7 @@ summary-first workspace read, the comparison-game starter, editable concept
 lists, contextual profile slices, direct signals, and exact score overrides.
 It also exposes Forge's wiki memory surface plus the sleep and sports review
 models, so Hermes can inspect recent nights, review workout context, enrich
-health sessions with reflective links, and work with file-first wiki pages.
+health sessions with reflective links, and work with SQLite-backed wiki pages.
 It also exposes a dedicated `forge_get_doctor` diagnostic tool for runtime and
 config-file health checks.
 It also warms a session-scoped Forge overview through Hermes' documented
@@ -166,7 +166,7 @@ Hermes now ships the same explicit coverage for these newer Forge surfaces:
 
 This matters because sleep and sports are not generic notes or tasks, and wiki
 pages are not normal batch entities. Hermes uses the dedicated routes so the
-health surfaces, markdown vault, backlinks, and metadata index stay aligned.
+health surfaces, SQLite page rows, backlinks, and metadata index stay aligned.
 
 ## Environment variables
 

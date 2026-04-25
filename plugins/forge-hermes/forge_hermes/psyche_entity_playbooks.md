@@ -72,6 +72,10 @@ Forge without turning the conversation into a worksheet.
   container first and hold the others lightly until the user wants to map them.
 - When the user has said enough for an accurate working formulation, stop deepening and
   help them name it cleanly.
+- For Psyche updates, begin with the smallest part of the old wording that no longer
+  fits instead of reopening the whole formulation immediately.
+- Do not reopen the full origin story when the update is really about one changed
+  meaning, one newly visible protection, or one new sentence the user can already say.
 
 ## First reflection menu
 
@@ -192,6 +196,23 @@ opening:
 - one brief reflection
 - one missing-detail question
 - then move toward the write instead of forcing exploration
+
+## Update micro-openers
+
+Use these when the user is revising an existing Psyche record and the tone should stay
+therapist-like without becoming expansive again.
+
+- "Something about the old wording no longer holds the whole experience. What felt
+  different in the moment that made that visible?"
+- "The old name was trying to protect something real. What part of the recent episode
+  made it feel too small or off?"
+- "It sounds like the same pain, but not quite the same meaning. What changed in what
+  it started to say?"
+- If the user already gave the new sentence in usable language, reflect it once, ask
+  what part of the old wording it replaces, and then save.
+- If the user wants review rather than storage, ask whether they need clearer
+  language, better understanding, or next-step help before you reopen the whole
+  formulation.
 
 ## Therapeutic turn shapes
 

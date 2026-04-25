@@ -89,6 +89,12 @@ describe("question flow quality coverage", () => {
       /The first question should usually clarify lived meaning, use, stake, or timing/i
     );
     expect(entityPlaybook).toMatch(
+      /For updates,[\s\S]*smallest thing[\s\S]*newly visible/i
+    );
+    expect(entityPlaybook).toMatch(
+      /For review requests, ask what practical question they want the read to answer/i
+    );
+    expect(entityPlaybook).toMatch(
       /trying to understand,\s*preserve,\s*decide,\s*schedule,\s*or change something/i
     );
     expect(entityPlaybook).toMatch(/hidden checklist says it is next/i);
@@ -123,6 +129,13 @@ describe("question flow quality coverage", () => {
     );
     expect(entityPlaybook).toMatch(
       /what workflow they are trying to unlock/i
+    );
+    expect(entityPlaybook).toMatch(/## Update And Review Shortcuts/i);
+    expect(entityPlaybook).toMatch(
+      /I can stay narrow here\. What is the one thing that no longer fits/i
+    );
+    expect(entityPlaybook).toMatch(
+      /what this would help them decide later is often the clearest scope signal/i
     );
     expect(entityPlaybook).toMatch(
       /read the overview back if they want to see the updated picture/i
@@ -224,6 +237,16 @@ describe("question flow quality coverage", () => {
     expect(psychePlaybook).toMatch(/Do not make the user prove the experience/i);
     expect(psychePlaybook).toMatch(
       /Do not widen into adjacent entities until the current one has a working sentence/i
+    );
+    expect(psychePlaybook).toMatch(/## Update micro-openers/i);
+    expect(psychePlaybook).toMatch(
+      /Something about the old wording no longer holds the whole experience/i
+    );
+    expect(psychePlaybook).toMatch(
+      /same pain, but not quite the same meaning/i
+    );
+    expect(psychePlaybook).toMatch(
+      /clearer[\s\S]*language,[\s\S]*better understanding,[\s\S]*next-step help/i
     );
     expect(psychePlaybook).toMatch(/If the user says it lands, move toward the write/i);
     expect(psychePlaybook).toMatch(/name the core meaning in the user's language/i);

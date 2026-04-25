@@ -34,14 +34,12 @@ function resolveLegacyDatabasePath(root = dataRoot) {
 function hasCanonicalRuntimeLayout(root = dataRoot) {
     const canonicalRoot = resolveCanonicalDataDir(root);
     return (existsSync(resolveCanonicalDatabasePath(root)) ||
-        existsSync(path.join(canonicalRoot, "wiki")) ||
         existsSync(path.join(canonicalRoot, "wiki-ingest")) ||
         existsSync(path.join(canonicalRoot, ".forge-secrets.key")));
 }
 function hasLegacyRuntimeLayout(root = dataRoot) {
     const legacyRoot = resolveLegacyDataDir(root);
     return (existsSync(resolveLegacyDatabasePath(root)) ||
-        existsSync(path.join(legacyRoot, "wiki")) ||
         existsSync(path.join(legacyRoot, "wiki-ingest")) ||
         existsSync(path.join(legacyRoot, ".forge-secrets.key")));
 }
