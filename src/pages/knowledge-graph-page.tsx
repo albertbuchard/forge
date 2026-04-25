@@ -44,6 +44,7 @@ import { UserBadge } from "@/components/ui/user-badge";
 import { getKnowledgeGraph } from "@/lib/api";
 import {
   formatKnowledgeGraphFocusValue,
+  KNOWLEDGE_GRAPH_HIERARCHY_ORDER,
   parseKnowledgeGraphFocusValue,
   type KnowledgeGraphEntityKind,
   type KnowledgeGraphNode,
@@ -90,10 +91,11 @@ import {
 import { useAppDispatch, useAppSelector } from "@/store/typed-hooks";
 import type { UserSummary } from "@/lib/types";
 import { getEntityNotesHref } from "@/lib/note-helpers";
+import { getEntityVisual } from "@/lib/entity-visuals";
 
-const DEFAULT_MAX_NODES = 240;
+const DEFAULT_MAX_NODES = 2000;
 const MIN_MAX_NODES = 40;
-const MAX_MAX_NODES = 1000;
+const MAX_MAX_NODES = 2000;
 const KNOWLEDGE_GRAPH_PHYSICS_STORAGE_KEY = "forge.knowledge-graph.physics";
 
 declare global {
@@ -327,6 +329,7 @@ export function KnowledgeGraphPage() {
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
   const [appearanceDialogOpen, setAppearanceDialogOpen] = useState(false);
+  const [draftQueryText, setDraftQueryText] = useState("");
   const [physicsSettings, setPhysicsSettings] = useState<KnowledgeGraphPhysicsSettings>(
     () => loadKnowledgeGraphPhysicsSettings()
   );
@@ -474,6 +477,10 @@ export function KnowledgeGraphPage() {
     updatedTo,
     maxNodes
   } = parsedPageState;
+
+  useEffect(() => {
+    setDraftQueryText(queryText);
+  }, [queryText]);
 
   const query = useMemo<KnowledgeGraphQuery>(
     () => ({
@@ -703,6 +710,18 @@ export function KnowledgeGraphPage() {
     }, { replace: true });
   };
 
+  const submitGraphSearch = (value: string) => {
+    const nextValue = value.trim();
+    setDraftQueryText(value);
+    setParam((next) => {
+      if (nextValue.length > 0) {
+        next.set("q", nextValue);
+      } else {
+        next.delete("q");
+      }
+    });
+  };
+
   const handleFocusNode = (node: KnowledgeGraphNode | null) => {
     const interaction = resolveKnowledgeGraphFocusInteraction({
       isMobile,
@@ -808,12 +827,20 @@ export function KnowledgeGraphPage() {
     return null;
   }
 
-  const kindOptions = graph.facets.entityKinds.map((entry) => ({
-    value: entry.value,
-    label: entry.label,
-    description: `${entry.count} nodes`,
-    kind: entry.value
-  }));
+  const entityKindFacetCounts = new Map(
+    graph.facets.entityKinds.map((entry) => [entry.value, entry] as const)
+  );
+  const kindOptions = KNOWLEDGE_GRAPH_HIERARCHY_ORDER.map((kind) => {
+    const visual = getEntityVisual(kind);
+    const facet = entityKindFacetCounts.get(kind);
+    const count = facet?.count ?? 0;
+    return {
+      value: kind,
+      label: facet?.label ?? visual.label,
+      description: count === 1 ? "1 node" : `${count} nodes`,
+      kind
+    };
+  });
   const relationOptions = graph.facets.relationKinds.map((entry) => ({
     value: entry.value,
     label: entry.label,
@@ -1081,16 +1108,10 @@ export function KnowledgeGraphPage() {
                   compact
                   minimal
                   hideSummary
-                  query={queryText}
-                  onQueryChange={(value) =>
-                    setParam((next) => {
-                      if (value.trim().length > 0) {
-                        next.set("q", value);
-                      } else {
-                        next.delete("q");
-                      }
-                    })
-                  }
+                  query={draftQueryText}
+                  onQueryChange={setDraftQueryText}
+                  onQuerySubmit={submitGraphSearch}
+                  submitLabel="Search graph"
                   options={quickFilterOptions}
                   selectedOptionIds={quickFilterSelectionIds}
                   onSelectedOptionIdsChange={(selectedOptionIds) => {
@@ -1103,7 +1124,7 @@ export function KnowledgeGraphPage() {
                     });
                   }}
                   resultSummary=""
-                  placeholder="Search titles, summaries, owners, tags, or add a quick filter chip"
+                  placeholder="Type a graph search, then press Enter or the search button"
                 />
               </div>
               <Button
@@ -1433,16 +1454,10 @@ export function KnowledgeGraphPage() {
               title=""
               description=""
               compact
-              query={queryText}
-              onQueryChange={(value) =>
-                setParam((next) => {
-                  if (value.trim().length > 0) {
-                    next.set("q", value);
-                  } else {
-                    next.delete("q");
-                  }
-                })
-              }
+              query={draftQueryText}
+              onQueryChange={setDraftQueryText}
+              onQuerySubmit={submitGraphSearch}
+              submitLabel="Search graph"
               options={quickFilterOptions}
               selectedOptionIds={quickFilterSelectionIds}
               onSelectedOptionIdsChange={(selectedOptionIds) => {
@@ -1455,7 +1470,7 @@ export function KnowledgeGraphPage() {
                 });
               }}
               resultSummary={summaryBadgeTitle}
-              placeholder="Search titles, summaries, tags, or owners"
+              placeholder="Type a graph search, then press Enter or the search button"
             />
           </div>
 

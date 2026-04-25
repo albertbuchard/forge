@@ -147,6 +147,7 @@ export function filterKnowledgeGraphData(graph, query) {
             node.title,
             node.subtitle,
             node.description,
+            node.searchText ?? "",
             node.owner?.displayName ?? "",
             ...node.tags.map((tag) => tag.label)
         ]

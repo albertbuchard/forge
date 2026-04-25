@@ -2627,7 +2627,7 @@ export const notesListQuerySchema = z
     userIds: repeatedTrimmedStringQuerySchema,
     updatedFrom: dateOnlySchema.optional(),
     updatedTo: dateOnlySchema.optional(),
-    limit: z.coerce.number().int().positive().max(200).optional()
+    limit: z.coerce.number().int().positive().max(2000).optional()
 })
     .superRefine((value, context) => {
     if (value.linkedEntityType !== undefined &&

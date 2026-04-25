@@ -19,6 +19,7 @@ const GRAPH_RANGE = {
     from: "2000-01-01T00:00:00.000Z",
     to: "2100-01-01T00:00:00.000Z"
 };
+const KNOWLEDGE_GRAPH_NOTE_LIMIT = 2000;
 const BASE_NODE_SIZE = {
     goal: 56,
     strategy: 52,
@@ -167,6 +168,7 @@ function makeNode(input) {
         title: truncate(input.title, 90) || input.entityId,
         subtitle: truncate(input.subtitle, 120),
         description: truncate(input.description, 220),
+        searchText: truncate(input.searchText, 4000) || null,
         href: input.href ?? null,
         graphHref: buildKnowledgeGraphFocusHref(input.entityType, input.entityId),
         iconName: null,
@@ -226,7 +228,16 @@ export function buildKnowledgeGraph(userIds, query = {}) {
     const tags = filterOwnedEntities("tag", listTags(), userIds);
     const strategies = listStrategies({ userIds });
     const habits = listHabits({ userIds });
-    const notes = listNotes({ userIds });
+    const selectedUserIds = new Set(userIds ?? []);
+    const notes = listNotes({ limit: KNOWLEDGE_GRAPH_NOTE_LIMIT }).filter((note) => {
+        if (selectedUserIds.size === 0) {
+            return true;
+        }
+        if (note.userId && selectedUserIds.has(note.userId)) {
+            return true;
+        }
+        return note.kind === "wiki" && note.userId === null;
+    });
     const insights = listInsights({ userIds });
     const calendarEvents = listCalendarEvents({ ...GRAPH_RANGE, userIds });
     const workBlocks = listWorkBlockTemplates({ userIds });
@@ -585,6 +596,7 @@ export function buildKnowledgeGraph(userIds, query = {}) {
             title: note.title,
             subtitle: isWiki ? note.slug : note.summary,
             description: note.summary || note.contentPlain,
+            searchText: note.contentPlain,
             previewStats: [
                 { label: "Kind", value: note.kind },
                 { label: "Links", value: note.links.length },

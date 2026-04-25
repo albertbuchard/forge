@@ -80,6 +80,7 @@ const wikiNode: KnowledgeGraphNode = {
   title: "Architecture Notes",
   subtitle: "knowledge-graph",
   description: "Wiki page attached to the goal",
+  searchText: "Deep implementation notes mention a hidden topological invariant.",
   href: "/wiki/page/architecture-notes",
   graphHref: "/knowledge-graph?focus=note%3Anote-1",
   iconName: "StickyNote",
@@ -216,6 +217,20 @@ describe("knowledge graph helpers", () => {
 
     expect(filtered.nodes.map((node) => node.id)).toEqual([taggedGoal.id]);
     expect(filtered.edges).toEqual([]);
+  });
+
+  it("filters graph nodes by hidden search text without exposing it as description", () => {
+    const filtered = filterKnowledgeGraphData(
+      {
+        nodes: [goalNode, projectNode, wikiNode],
+        edges
+      },
+      {
+        q: "hidden topological"
+      }
+    );
+
+    expect(filtered.nodes.map((node) => node.id)).toEqual([wikiNode.id]);
   });
 
   it("prioritizes hop expansion from the focused node when limiting visible nodes", () => {

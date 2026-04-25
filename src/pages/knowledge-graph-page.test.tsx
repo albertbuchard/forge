@@ -55,14 +55,15 @@ vi.mock("@/components/psyche/entity-link-multiselect", () => ({
   }) => (
     <div>
       <input placeholder={placeholder} readOnly value="" />
-      {options.length > 0 ? (
+      {options.map((option) => (
         <button
+          key={option.value}
           type="button"
-          onClick={() => onChange([...selectedValues, options[0]!.value])}
+          onClick={() => onChange([...selectedValues, option.value])}
         >
-          {options[0]!.label}
+          {option.label}
         </button>
-      ) : null}
+      ))}
     </div>
   )
 }));
@@ -514,7 +515,7 @@ describe("KnowledgeGraphPage", () => {
     );
     expect(
       screen.getByPlaceholderText(
-        "Search titles, summaries, owners, tags, or add a quick filter chip"
+        "Type a graph search, then press Enter or the search button"
       )
     ).toBeInTheDocument();
   });
@@ -565,11 +566,12 @@ describe("KnowledgeGraphPage", () => {
     );
 
     const searchInput = screen.getByPlaceholderText(
-      "Search titles, summaries, owners, tags, or add a quick filter chip"
+      "Type a graph search, then press Enter or the search button"
     );
     fireEvent.click(screen.getByRole("button", { name: /Advanced/i }));
     const entityFilterInput = screen.getByPlaceholderText("Filter by entity type");
     fireEvent.focus(entityFilterInput);
+    expect(screen.getByRole("button", { name: /^Wiki Page$/i })).toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: /^Goal$/i }));
     await waitFor(() =>
       expect(getKnowledgeGraphMock).toHaveBeenLastCalledWith(["user_operator"], {
@@ -580,12 +582,15 @@ describe("KnowledgeGraphPage", () => {
         owners: [],
         updatedFrom: null,
         updatedTo: null,
-        limit: 240,
+        limit: 2000,
         focusNodeId: null
       })
     );
 
+    const callsBeforeTyping = getKnowledgeGraphMock.mock.calls.length;
     fireEvent.change(searchInput, { target: { value: "North Star" } });
+    expect(getKnowledgeGraphMock).toHaveBeenCalledTimes(callsBeforeTyping);
+    fireEvent.keyDown(searchInput, { key: "Enter" });
 
     await waitFor(() =>
       expect(getKnowledgeGraphMock).toHaveBeenLastCalledWith(["user_operator"], {
@@ -596,7 +601,7 @@ describe("KnowledgeGraphPage", () => {
         owners: [],
         updatedFrom: null,
         updatedTo: null,
-        limit: 240,
+        limit: 2000,
         focusNodeId: null
       })
     );

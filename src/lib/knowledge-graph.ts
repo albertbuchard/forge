@@ -253,6 +253,7 @@ export function filterKnowledgeGraphData(
       node.title,
       node.subtitle,
       node.description,
+      node.searchText ?? "",
       node.owner?.displayName ?? "",
       ...node.tags.map((tag) => tag.label)
     ]

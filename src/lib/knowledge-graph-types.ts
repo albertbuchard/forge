@@ -119,6 +119,7 @@ export type KnowledgeGraphNode = {
   title: string;
   subtitle: string;
   description: string;
+  searchText?: string | null;
   href: string | null;
   graphHref: string;
   iconName: string | null;

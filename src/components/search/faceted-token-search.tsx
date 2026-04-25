@@ -19,11 +19,13 @@ export function FacetedTokenSearch({
   description,
   query,
   onQueryChange,
+  onQuerySubmit,
   options,
   selectedOptionIds,
   onSelectedOptionIdsChange,
   resultSummary,
   clearLabel = "Clear filters",
+  submitLabel = "Search",
   placeholder = "Search title, alias, domain, source, or filter chip",
   emptyStateMessage = "Keep typing to search the library or pick one of the suggested filter chips.",
   compact = false,
@@ -34,11 +36,13 @@ export function FacetedTokenSearch({
   description: string;
   query: string;
   onQueryChange: (value: string) => void;
+  onQuerySubmit?: (value: string) => void;
   options: FacetedTokenOption[];
   selectedOptionIds: string[];
   onSelectedOptionIdsChange: (value: string[]) => void;
   resultSummary: string;
   clearLabel?: string;
+  submitLabel?: string;
   placeholder?: string;
   emptyStateMessage?: string;
   compact?: boolean;
@@ -202,6 +206,12 @@ export function FacetedTokenSearch({
                   setOpen(false);
                   return;
                 }
+                if (event.key === "Enter" && onQuerySubmit) {
+                  event.preventDefault();
+                  onQuerySubmit(query);
+                  setOpen(false);
+                  return;
+                }
                 if (event.key === "Enter" && filteredOptions[highlightedIndex]) {
                   event.preventDefault();
                   addOption(filteredOptions[highlightedIndex]!.id);
@@ -221,6 +231,24 @@ export function FacetedTokenSearch({
                     aria-label={clearLabel}
                   >
                     <X className="size-3.5" />
+                  </button>
+                ) : null}
+                {onQuerySubmit ? (
+                  <button
+                    type="button"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      onQuerySubmit(query);
+                      setOpen(false);
+                    }}
+                    className={cn(
+                      "inline-flex items-center justify-center rounded-full border border-white/10 bg-white/[0.08] text-white/72 transition hover:bg-white/[0.14] hover:text-white",
+                      minimal ? "size-6" : compact ? "size-7" : "size-8"
+                    )}
+                    aria-label={submitLabel}
+                    title={submitLabel}
+                  >
+                    <Search className={cn(compact ? "size-3.5" : "size-4")} />
                   </button>
                 ) : null}
               </div>
