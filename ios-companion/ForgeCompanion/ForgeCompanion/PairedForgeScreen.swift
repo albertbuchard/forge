@@ -224,6 +224,7 @@ private struct MovementLifeTimelineView: View {
     @State private var focusedVisibleId: String?
     @State private var pendingScrollTargetId: String?
     @State private var screenshotOverlayScrollApplied = false
+    @State private var timelineScrollTop: CGFloat = 0
 
     private var timelineReferenceDate: Date {
         if appModel.screenshotScenario != nil {
@@ -258,6 +259,12 @@ private struct MovementLifeTimelineView: View {
                     rangeEnd: rangeEnd,
                     selectedItemId: selectedId
                 )
+                let visibleTimelineItems = visibleMovementViewportItems(
+                    layout: timelineLayout,
+                    scrollTop: timelineScrollTop,
+                    viewportHeight: proxy.size.height,
+                    selectedItemId: selectedId
+                )
                 ZStack {
                     CompanionStyle.background
                     Color.black.opacity(0.16)
@@ -266,83 +273,105 @@ private struct MovementLifeTimelineView: View {
                     ScrollViewReader { reader in
                         ScrollView(.vertical, showsIndicators: false) {
                             ZStack(alignment: .topLeading) {
+                                GeometryReader { scrollProxy in
+                                    Color.clear
+                                        .preference(
+                                            key: MovementTimelineScrollOffsetKey.self,
+                                            value: max(
+                                                0,
+                                                -scrollProxy.frame(in: .named("MovementLifeTimelineScroll")).minY
+                                            )
+                                        )
+                                }
+                                .frame(height: 0)
+
                                 MovementTimelineViewportGrid(
                                     layout: timelineLayout
                                 )
                                 .frame(height: timelineLayout.contentHeight)
 
-                                VStack(spacing: 0) {
-                                    if let oldestTimelineItem, timelineLayout.historyHeaderHeight > 0 {
-                                        MovementTimelineHistoryCap(item: oldestTimelineItem)
-                                            .padding(.top, proxy.safeAreaInsets.top + 12)
-                                            .frame(height: timelineLayout.historyHeaderHeight, alignment: .top)
-                                    }
-
-                                    Color.clear.frame(height: timelineLayout.leadHeight)
-
-                                    LazyVStack(spacing: 0) {
-                                        ForEach(Array(timelineLayout.items.enumerated()), id: \.element.id) { index, metric in
-                                            if index > 0, metric.gapBefore > 0 {
-                                                Color.clear
-                                                    .frame(height: metric.gapBefore)
-                                            }
-                                            MovementTimelineRow(
-                                                item: metric.item,
-                                                width: proxy.size.width - 28,
-                                                rowHeight: metric.boxHeight,
-                                                isSelected: selectedId == metric.item.id,
-                                                onSelect: {
-                                                    withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
-                                                        selectedId = selectedId == metric.item.id ? nil : metric.item.id
-                                                    }
-                                                },
-                                                onEdit: {
-                                                    if metric.item.sourceKind == "automatic" {
-                                                        Task {
-                                                            await invalidateAutomaticItem(metric.item)
-                                                        }
-                                                    } else {
-                                                        editorDraft = MovementTimelineEditorDraft(item: metric.item)
-                                                    }
-                                                },
-                                                onDetail: {
-                                                    Task {
-                                                        await openDetail(metric.item)
-                                                    }
-                                                },
-                                                onDefinePlace: {
-                                                    openPlaceLabelDraft(for: metric.item)
-                                                },
-                                                onDelete: {
-                                                    Task {
-                                                        await deleteUserDefinedItem(metric.item)
-                                                    }
-                                                }
-                                            )
-                                            .id(metric.item.isCurrent ? MovementLifeTimelineItem.currentAnchorId : metric.item.id)
-                                            .frame(height: metric.boxHeight)
-                                            .zIndex(selectedId == metric.item.id ? 2 : 0)
-                                            .background(
-                                                GeometryReader { rowProxy in
-                                                    Color.clear
-                                                        .preference(
-                                                            key: MovementTimelineVisiblePositionKey.self,
-                                                            value: [metric.item.id: rowProxy.frame(in: .named("MovementLifeTimelineScroll")).midY]
-                                                        )
-                                                }
-                                            )
-                                        }
-
-                                        Color.clear
-                                            .frame(height: timelineLayout.tailHeight)
-                                            .id(MovementLifeTimelineItem.currentAnchorId)
-                                    }
-                                    .padding(.horizontal, 14)
+                                if let oldestTimelineItem, timelineLayout.historyHeaderHeight > 0 {
+                                    MovementTimelineHistoryCap(item: oldestTimelineItem)
+                                        .padding(.top, proxy.safeAreaInsets.top + 12)
+                                        .frame(
+                                            width: proxy.size.width,
+                                            height: timelineLayout.historyHeaderHeight,
+                                            alignment: .top
+                                        )
                                 }
-                                .frame(height: timelineLayout.contentHeight, alignment: .top)
+
+                                VStack(spacing: 0) {
+                                    Color.clear
+                                        .frame(height: timelineLayout.historyHeaderHeight + timelineLayout.leadHeight)
+                                    ForEach(Array(timelineLayout.items.enumerated()), id: \.element.id) { index, metric in
+                                        if index > 0, metric.gapBefore > 0 {
+                                            Color.clear
+                                                .frame(height: metric.gapBefore)
+                                        }
+                                        Color.clear
+                                            .frame(height: metric.boxHeight)
+                                            .id(metric.item.id)
+                                    }
+                                    Color.clear
+                                        .frame(height: timelineLayout.tailHeight)
+                                        .id(MovementLifeTimelineItem.currentAnchorId)
+                                }
+                                .allowsHitTesting(false)
+
+                                ForEach(visibleTimelineItems) { metric in
+                                    MovementTimelineRow(
+                                        item: metric.item,
+                                        width: proxy.size.width - 28,
+                                        rowHeight: metric.boxHeight,
+                                        isSelected: selectedId == metric.item.id,
+                                        onSelect: {
+                                            withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                                                selectedId = selectedId == metric.item.id ? nil : metric.item.id
+                                            }
+                                        },
+                                        onEdit: {
+                                            if metric.item.sourceKind == "automatic" {
+                                                Task {
+                                                    await invalidateAutomaticItem(metric.item)
+                                                }
+                                            } else {
+                                                editorDraft = MovementTimelineEditorDraft(item: metric.item)
+                                            }
+                                        },
+                                        onDetail: {
+                                            Task {
+                                                await openDetail(metric.item)
+                                            }
+                                        },
+                                        onDefinePlace: {
+                                            openPlaceLabelDraft(for: metric.item)
+                                        },
+                                        onDelete: {
+                                            Task {
+                                                await deleteUserDefinedItem(metric.item)
+                                            }
+                                        }
+                                    )
+                                    .frame(width: proxy.size.width - 28, height: metric.boxHeight)
+                                    .offset(x: 14, y: metric.boxTop)
+                                    .zIndex(selectedId == metric.item.id ? 2 : 0)
+                                    .background(
+                                        GeometryReader { rowProxy in
+                                            Color.clear
+                                                .preference(
+                                                    key: MovementTimelineVisiblePositionKey.self,
+                                                    value: [metric.item.id: rowProxy.frame(in: .named("MovementLifeTimelineScroll")).midY]
+                                                )
+                                        }
+                                    )
+                                }
                             }
+                            .frame(height: timelineLayout.contentHeight, alignment: .top)
                         }
                         .coordinateSpace(name: "MovementLifeTimelineScroll")
+                        .onPreferenceChange(MovementTimelineScrollOffsetKey.self) { nextValue in
+                            timelineScrollTop = nextValue
+                        }
                         .onChange(of: pendingScrollTargetId) { _, nextValue in
                             guard let nextValue else {
                                 return
@@ -2621,7 +2650,6 @@ private struct MovementTimelineRow: View {
         }
         .frame(maxWidth: .infinity, minHeight: rowHeight, maxHeight: rowHeight, alignment: .top)
         .contentShape(Rectangle())
-        .id(item.isCurrent ? MovementLifeTimelineItem.currentAnchorId : item.id)
     }
 
     private var detailOnTrailingSide: Bool {
@@ -3256,6 +3284,26 @@ func buildMovementViewportLayoutMetrics(
     return (historyHeaderHeight, leadHeight, metrics)
 }
 
+func visibleMovementViewportItems(
+    layout: MovementTimelineViewportLayoutModel,
+    scrollTop: CGFloat,
+    viewportHeight: CGFloat,
+    selectedItemId: String? = nil
+) -> [MovementTimelineViewportItemMetric] {
+    let overscan = MovementTimelineViewportLayout.gridRowHeight * 6
+    let visibleStart = max(0, scrollTop - overscan)
+    let visibleEnd =
+        scrollTop
+        + max(viewportHeight, MovementTimelineViewportLayout.gridRowHeight * 8)
+        + overscan
+    return layout.items.filter { metric in
+        if metric.item.id == selectedItemId {
+            return true
+        }
+        return metric.boxBottom >= visibleStart && metric.boxTop <= visibleEnd
+    }
+}
+
 func buildMovementViewportHourMarkers(
     layout: MovementTimelineViewportLayoutModel,
     rangeEnd: Date
@@ -3615,6 +3663,14 @@ private struct MovementTimelineVisiblePositionKey: PreferenceKey {
 
     static func reduce(value: inout [String: CGFloat], nextValue: () -> [String: CGFloat]) {
         value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
+
+private struct MovementTimelineScrollOffsetKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 

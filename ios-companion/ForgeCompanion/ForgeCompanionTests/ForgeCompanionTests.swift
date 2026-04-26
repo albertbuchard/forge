@@ -1895,6 +1895,72 @@ final class ForgeCompanionTests: XCTestCase {
         )
     }
 
+    func testViewportVirtualizationUsesAbsoluteTimelineGeometry() throws {
+        let formatter = ISO8601DateFormatter()
+        let overnightStay = makeDisplayItem(
+            id: "home-overnight",
+            kind: .stay,
+            title: "Home",
+            placeLabel: "Home",
+            startedAt: formatter.date(from: "2026-04-25T22:06:00Z") ?? Date(),
+            endedAt: formatter.date(from: "2026-04-26T17:15:00Z") ?? Date(),
+            durationSeconds: 68_940,
+            origin: .recorded
+        )
+        let shortMove = makeDisplayItem(
+            id: "move-after-home",
+            kind: .trip,
+            title: "Move",
+            placeLabel: nil,
+            startedAt: formatter.date(from: "2026-04-26T17:15:00Z") ?? Date(),
+            endedAt: formatter.date(from: "2026-04-26T17:26:00Z") ?? Date(),
+            durationSeconds: 660,
+            distanceMeters: 2_900,
+            origin: .recorded
+        )
+        let gymStay = makeDisplayItem(
+            id: "gym-stay",
+            kind: .stay,
+            title: "Gym",
+            placeLabel: "Gym",
+            startedAt: formatter.date(from: "2026-04-26T17:26:00Z") ?? Date(),
+            endedAt: formatter.date(from: "2026-04-26T19:52:00Z") ?? Date(),
+            durationSeconds: 8_760,
+            origin: .recorded
+        )
+
+        let layout = buildMovementViewportLayoutModel(
+            items: [overnightStay, shortMove, gymStay],
+            viewportHeight: 844,
+            safeTopInset: 47,
+            bottomPadding: 114,
+            rangeEnd: (formatter.date(from: "2026-04-26T21:00:00Z") ?? Date())
+        )
+        let rangeEnd = formatter.date(from: "2026-04-26T21:00:00Z") ?? Date()
+
+        for metric in layout.items {
+            let startY = try XCTUnwrap(
+                movementViewportYPosition(for: metric.item.startedAtDate, layout: layout, rangeEnd: rangeEnd)
+            )
+            let endY = try XCTUnwrap(
+                movementViewportYPosition(for: metric.item.endedAtDate, layout: layout, rangeEnd: rangeEnd)
+            )
+
+            XCTAssertEqual(startY, metric.boxTop, accuracy: 0.5)
+            XCTAssertEqual(endY, metric.boxBottom, accuracy: 0.5)
+        }
+
+        let gymMetric = try XCTUnwrap(layout.items.first(where: { $0.id == gymStay.id }))
+        let visibleAroundGym = visibleMovementViewportItems(
+            layout: layout,
+            scrollTop: gymMetric.boxTop - 120,
+            viewportHeight: 360
+        )
+
+        XCTAssertTrue(visibleAroundGym.contains(where: { $0.id == gymStay.id }))
+        XCTAssertTrue(visibleAroundGym.allSatisfy { $0.boxBottom >= 0 })
+    }
+
     func testMovementStoreCachesCanonicalProjectedBoxesFromBootstrap() {
         let projected = try! loadSharedMovementFixture(
             id: "user_defined_missing_override"
