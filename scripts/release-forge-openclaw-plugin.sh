@@ -373,7 +373,7 @@ verify_published_latest() {
   local version="$1"
   local publish_state
   local attempt
-  for attempt in 1 2 3 4 5; do
+  for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
     publish_state="$(npm view forge-openclaw-plugin version dist-tags --json 2>/dev/null || true)"
     if [[ -n "${publish_state}" ]] && node --input-type=module - "$version" "$publish_state" <<'NODE'
 const expected = process.argv[2];
