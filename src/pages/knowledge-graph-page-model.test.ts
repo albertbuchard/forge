@@ -10,7 +10,6 @@ describe("resolveKnowledgeGraphFocusInteraction", () => {
       resolveKnowledgeGraphFocusInteraction({
         isMobile: false,
         currentFocusNodeId: null,
-        mobileSheetOpen: false,
         nextNodeId: "goal:goal-1"
       })
     ).toEqual({
@@ -25,7 +24,6 @@ describe("resolveKnowledgeGraphFocusInteraction", () => {
       resolveKnowledgeGraphFocusInteraction({
         isMobile: true,
         currentFocusNodeId: null,
-        mobileSheetOpen: false,
         nextNodeId: "goal:goal-1"
       })
     ).toEqual({
@@ -38,7 +36,6 @@ describe("resolveKnowledgeGraphFocusInteraction", () => {
       resolveKnowledgeGraphFocusInteraction({
         isMobile: true,
         currentFocusNodeId: "goal:goal-1",
-        mobileSheetOpen: false,
         nextNodeId: "goal:goal-1"
       })
     ).toEqual({
@@ -53,7 +50,6 @@ describe("resolveKnowledgeGraphFocusInteraction", () => {
       resolveKnowledgeGraphFocusInteraction({
         isMobile: true,
         currentFocusNodeId: "goal:goal-1",
-        mobileSheetOpen: true,
         nextNodeId: "project:project-1"
       })
     ).toEqual({
@@ -68,7 +64,6 @@ describe("resolveKnowledgeGraphFocusInteraction", () => {
       resolveKnowledgeGraphFocusInteraction({
         isMobile: true,
         currentFocusNodeId: "goal:goal-1",
-        mobileSheetOpen: true,
         nextNodeId: null
       })
     ).toEqual({

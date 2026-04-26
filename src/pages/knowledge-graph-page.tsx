@@ -6,7 +6,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type ErrorInfo,
   type ReactNode
 } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -280,8 +279,6 @@ class KnowledgeGraphRendererBoundary extends Component<
     };
   }
 
-  componentDidCatch(_error: Error, _errorInfo: ErrorInfo) {}
-
   componentDidUpdate(prevProps: Readonly<{ resetKey: string }>) {
     if (
       prevProps.resetKey !== this.props.resetKey &&
@@ -449,7 +446,6 @@ export function KnowledgeGraphPage() {
 
     return {
       selectedView,
-      focusSpec,
       focusNodeId,
       selectedKinds,
       selectedRelations,
@@ -465,7 +461,6 @@ export function KnowledgeGraphPage() {
 
   const {
     selectedView,
-    focusSpec,
     focusNodeId,
     selectedKinds,
     selectedRelations,
@@ -726,7 +721,6 @@ export function KnowledgeGraphPage() {
     const interaction = resolveKnowledgeGraphFocusInteraction({
       isMobile,
       currentFocusNodeId: focusNodeId,
-      mobileSheetOpen: mobilePanelOpen,
       nextNodeId: node?.id ?? null
     });
 

@@ -1,12 +1,10 @@
 export function resolveKnowledgeGraphFocusInteraction({
   isMobile,
   currentFocusNodeId,
-  mobileSheetOpen,
   nextNodeId
 }: {
   isMobile: boolean;
   currentFocusNodeId: string | null;
-  mobileSheetOpen: boolean;
   nextNodeId: string | null;
 }) {
   if (!nextNodeId) {
