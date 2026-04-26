@@ -1,4 +1,4 @@
-Forge Companion 1.0.29 fixes the paired movement timeline action rail so buttons like
+Forge Companion 1.0.30 fixes the paired movement timeline action rail so buttons like
 Label location and Details register taps reliably again from the expanded box detail
 view. This release keeps the earlier stay-merging stability work in place while
 restoring the native correction flow for movement boxes on iPhone.
