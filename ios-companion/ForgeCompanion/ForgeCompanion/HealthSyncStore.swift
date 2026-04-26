@@ -1559,6 +1559,13 @@ actor HealthSyncStore {
             guard let quantity = metadata[metadataKey] as? HKQuantity else {
                 return
             }
+            guard quantity.is(compatibleWith: unit) else {
+                companionDebugLog(
+                    "HealthSyncStore",
+                    "skipping incompatible workout metadata quantity key=\(metadataKey) targetUnit=\(unitLabel) value=\(String(describing: metadata[metadataKey]))"
+                )
+                return
+            }
             metrics.append(
                 .init(
                     key: key,
