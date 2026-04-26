@@ -7,6 +7,7 @@ require "cfpropertylist"
 require "fileutils"
 require "shellwords"
 require "tmpdir"
+require "xcodeproj"
 
 platform :ios do
   before_all do |_lane, _options|
@@ -452,7 +453,10 @@ def provisioning_profile_directory
   configured = ENV["FORGE_IOS_PROVISIONING_PROFILE_DIR"].to_s.strip
   return configured unless configured.empty?
 
-  File.expand_path("~/Library/MobileDevice/Provisioning Profiles")
+  standard = File.expand_path("~/Library/MobileDevice/Provisioning Profiles")
+  return standard if Dir.exist?(standard)
+
+  File.expand_path("~/Library/Developer/Xcode/UserData/Provisioning Profiles")
 end
 
 def provisioning_profile_bundle_id(plist)
@@ -566,7 +570,38 @@ def configure_automatic_release_signing!
     build_configurations: ["Release"],
     targets: release_target_bundle_ids.keys
   )
+  clear_release_signing_overrides!(targets: release_target_bundle_ids.keys)
   nil
+end
+
+def clear_release_signing_overrides!(targets:)
+  project = Xcodeproj::Project.open(xcode_project_path)
+  override_keys = [
+    "CODE_SIGN_IDENTITY",
+    "CODE_SIGN_IDENTITY[sdk=iphoneos*]",
+    "PROVISIONING_PROFILE",
+    "PROVISIONING_PROFILE[sdk=iphoneos*]",
+    "PROVISIONING_PROFILE_SPECIFIER",
+    "PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]",
+    "DEVELOPMENT_TEAM[sdk=iphoneos*]"
+  ]
+  modified = false
+
+  project.targets.each do |target|
+    next unless targets.include?(target.name)
+
+    target.build_configurations.each do |config|
+      next unless config.name == "Release"
+
+      config.build_settings["CODE_SIGN_STYLE"] = "Automatic"
+      config.build_settings["DEVELOPMENT_TEAM"] = ENV.fetch("FORGE_APPLE_TEAM_ID", "KZ65F7924F")
+      override_keys.each do |key|
+        modified ||= config.build_settings.delete(key).nil? == false
+      end
+    end
+  end
+
+  project.save if modified
 end
 
 def configure_release_signing!
@@ -604,7 +639,6 @@ def build_release_archive!(artifact_dir:, archive_path:, marketing_version:, bum
     include_bitcode: false,
     disable_xcpretty: true,
     xcargs: xcargs,
-    export_xcargs: xcargs,
     export_team_id: ENV.fetch("FORGE_APPLE_TEAM_ID", "KZ65F7924F"),
     export_options: export_options,
     skip_profile_detection: !export_options.nil?
