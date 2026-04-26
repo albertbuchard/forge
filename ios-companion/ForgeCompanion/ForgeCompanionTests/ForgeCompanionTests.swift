@@ -1928,15 +1928,25 @@ final class ForgeCompanionTests: XCTestCase {
             durationSeconds: 8_760,
             origin: .recorded
         )
+        let laterStay = makeDisplayItem(
+            id: "later-stay",
+            kind: .stay,
+            title: "Home",
+            placeLabel: "Home",
+            startedAt: formatter.date(from: "2026-04-29T01:00:00Z") ?? Date(),
+            endedAt: formatter.date(from: "2026-04-29T03:00:00Z") ?? Date(),
+            durationSeconds: 7_200,
+            origin: .recorded
+        )
 
         let layout = buildMovementViewportLayoutModel(
-            items: [overnightStay, shortMove, gymStay],
+            items: [overnightStay, shortMove, gymStay, laterStay],
             viewportHeight: 844,
             safeTopInset: 47,
             bottomPadding: 114,
-            rangeEnd: (formatter.date(from: "2026-04-26T21:00:00Z") ?? Date())
+            rangeEnd: (formatter.date(from: "2026-04-29T04:00:00Z") ?? Date())
         )
-        let rangeEnd = formatter.date(from: "2026-04-26T21:00:00Z") ?? Date()
+        let rangeEnd = formatter.date(from: "2026-04-29T04:00:00Z") ?? Date()
 
         for metric in layout.items {
             let startY = try XCTUnwrap(
@@ -1949,6 +1959,14 @@ final class ForgeCompanionTests: XCTestCase {
             XCTAssertEqual(startY, metric.boxTop, accuracy: 0.5)
             XCTAssertEqual(endY, metric.boxBottom, accuracy: 0.5)
         }
+
+        let visibleAtTop = visibleMovementViewportItems(
+            layout: layout,
+            scrollTop: 0,
+            viewportHeight: 844
+        )
+        XCTAssertTrue(visibleAtTop.contains(where: { $0.id == overnightStay.id }))
+        XCTAssertTrue(visibleAtTop.contains(where: { $0.id == laterStay.id }))
 
         let gymMetric = try XCTUnwrap(layout.items.first(where: { $0.id == gymStay.id }))
         let visibleAroundGym = visibleMovementViewportItems(

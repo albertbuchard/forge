@@ -283,7 +283,8 @@ private struct MovementLifeTimelineView: View {
                                             )
                                         )
                                 }
-                                .frame(height: 0)
+                                .frame(width: 1, height: 1)
+                                .allowsHitTesting(false)
 
                                 MovementTimelineViewportGrid(
                                     layout: timelineLayout
@@ -318,57 +319,73 @@ private struct MovementLifeTimelineView: View {
                                 }
                                 .allowsHitTesting(false)
 
-                                ForEach(visibleTimelineItems) { metric in
-                                    MovementTimelineRow(
-                                        item: metric.item,
-                                        width: proxy.size.width - 28,
-                                        rowHeight: metric.boxHeight,
-                                        isSelected: selectedId == metric.item.id,
-                                        onSelect: {
-                                            withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
-                                                selectedId = selectedId == metric.item.id ? nil : metric.item.id
-                                            }
-                                        },
-                                        onEdit: {
-                                            if metric.item.sourceKind == "automatic" {
-                                                Task {
-                                                    await invalidateAutomaticItem(metric.item)
-                                                }
-                                            } else {
-                                                editorDraft = MovementTimelineEditorDraft(item: metric.item)
-                                            }
-                                        },
-                                        onDetail: {
-                                            Task {
-                                                await openDetail(metric.item)
-                                            }
-                                        },
-                                        onDefinePlace: {
-                                            openPlaceLabelDraft(for: metric.item)
-                                        },
-                                        onDelete: {
-                                            Task {
-                                                await deleteUserDefinedItem(metric.item)
-                                            }
-                                        }
-                                    )
-                                    .frame(width: proxy.size.width - 28, height: metric.boxHeight)
-                                    .offset(x: 14, y: metric.boxTop)
-                                    .zIndex(selectedId == metric.item.id ? 2 : 0)
-                                    .background(
-                                        GeometryReader { rowProxy in
+                                VStack(spacing: 0) {
+                                    Color.clear
+                                        .frame(height: visibleTimelineItems.first?.boxTop ?? timelineLayout.contentHeight)
+
+                                    ForEach(Array(visibleTimelineItems.enumerated()), id: \.element.id) { index, metric in
+                                        if index > 0 {
+                                            let previous = visibleTimelineItems[index - 1]
                                             Color.clear
-                                                .preference(
-                                                    key: MovementTimelineVisiblePositionKey.self,
-                                                    value: [metric.item.id: rowProxy.frame(in: .named("MovementLifeTimelineScroll")).midY]
-                                                )
+                                                .frame(height: max(0, metric.boxTop - previous.boxBottom))
                                         }
-                                    )
+
+                                        MovementTimelineRow(
+                                            item: metric.item,
+                                            width: proxy.size.width - 28,
+                                            rowHeight: metric.boxHeight,
+                                            isSelected: selectedId == metric.item.id,
+                                            onSelect: {
+                                                withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                                                    selectedId = selectedId == metric.item.id ? nil : metric.item.id
+                                                }
+                                            },
+                                            onEdit: {
+                                                if metric.item.sourceKind == "automatic" {
+                                                    Task {
+                                                        await invalidateAutomaticItem(metric.item)
+                                                    }
+                                                } else {
+                                                    editorDraft = MovementTimelineEditorDraft(item: metric.item)
+                                                }
+                                            },
+                                            onDetail: {
+                                                Task {
+                                                    await openDetail(metric.item)
+                                                }
+                                            },
+                                            onDefinePlace: {
+                                                openPlaceLabelDraft(for: metric.item)
+                                            },
+                                            onDelete: {
+                                                Task {
+                                                    await deleteUserDefinedItem(metric.item)
+                                                }
+                                            }
+                                        )
+                                        .frame(height: metric.boxHeight)
+                                        .zIndex(selectedId == metric.item.id ? 2 : 0)
+                                        .background(
+                                            GeometryReader { rowProxy in
+                                                Color.clear
+                                                    .preference(
+                                                        key: MovementTimelineVisiblePositionKey.self,
+                                                        value: [metric.item.id: rowProxy.frame(in: .named("MovementLifeTimelineScroll")).midY]
+                                                    )
+                                            }
+                                        )
+                                    }
+
+                                    Color.clear
+                                        .frame(height: max(0, timelineLayout.contentHeight - (visibleTimelineItems.last?.boxBottom ?? 0)))
                                 }
+                                .padding(.horizontal, 14)
+                                .frame(height: timelineLayout.contentHeight, alignment: .top)
                             }
                             .frame(height: timelineLayout.contentHeight, alignment: .top)
                         }
                         .coordinateSpace(name: "MovementLifeTimelineScroll")
+                        .movementTimelineScrollTracking($timelineScrollTop)
                         .onPreferenceChange(MovementTimelineScrollOffsetKey.self) { nextValue in
                             timelineScrollTop = nextValue
                         }
@@ -3290,7 +3307,7 @@ func visibleMovementViewportItems(
     viewportHeight: CGFloat,
     selectedItemId: String? = nil
 ) -> [MovementTimelineViewportItemMetric] {
-    let overscan = MovementTimelineViewportLayout.gridRowHeight * 6
+    let overscan = MovementTimelineViewportLayout.gridRowHeight * 96
     let visibleStart = max(0, scrollTop - overscan)
     let visibleEnd =
         scrollTop
@@ -3671,6 +3688,21 @@ private struct MovementTimelineScrollOffsetKey: PreferenceKey {
 
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = nextValue()
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func movementTimelineScrollTracking(_ scrollTop: Binding<CGFloat>) -> some View {
+        if #available(iOS 18.0, *) {
+            self.onScrollGeometryChange(for: CGFloat.self) { geometry in
+                max(0, geometry.contentOffset.y)
+            } action: { _, nextValue in
+                scrollTop.wrappedValue = nextValue
+            }
+        } else {
+            self
+        }
     }
 }
 
