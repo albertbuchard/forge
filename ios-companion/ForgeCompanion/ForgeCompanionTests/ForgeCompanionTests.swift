@@ -7,6 +7,7 @@
 
 import XCTest
 import CoreLocation
+import HealthKit
 @testable import ForgeCompanion
 
 private struct SharedMovementFixtureCatalog: Decodable {
@@ -2700,6 +2701,33 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(descriptor.familyKey, "other")
         XCTAssertEqual(descriptor.familyLabel, "Other")
         XCTAssertTrue(descriptor.isFallback)
+    }
+
+    func testSafeDoubleValueReturnsNilForIncompatibleQuantityUnits() {
+        let store = HealthSyncStore()
+        let quantity = HKQuantity(unit: .second(), doubleValue: 30)
+
+        let value = store.safeDoubleValue(
+            quantity,
+            for: .meter(),
+            context: "test.incompatible_quantity"
+        )
+
+        XCTAssertNil(value)
+    }
+
+    func testSafeDoubleValueConvertsCompatibleQuantityUnits() {
+        let store = HealthSyncStore()
+        let quantity = HKQuantity(unit: HKUnit.meterUnit(with: .kilo), doubleValue: 1.5)
+
+        let value = store.safeDoubleValue(
+            quantity,
+            for: .meter(),
+            context: "test.compatible_quantity"
+        )
+
+        XCTAssertNotNil(value)
+        XCTAssertEqual(value ?? 0, 1500, accuracy: 0.001)
     }
 
     func testWorkoutDetailsEncodesMetricsEventsAndComponents() throws {

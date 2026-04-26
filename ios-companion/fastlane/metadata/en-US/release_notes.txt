@@ -1,4 +1,4 @@
-Forge Companion 1.0.32 fixes a TestFlight crash in workout sync on iPhone. The app now
-skips incompatible HealthKit workout metadata unit conversions instead of aborting the
-sync task, so movement and health ingestion continue even when Apple provides an
-unexpected workout quantity unit.
+Forge Companion 1.0.33 further hardens HealthKit sync on iPhone. The app now guards
+all workout and vital quantity conversions against incompatible units, so unexpected
+HealthKit payloads are skipped safely instead of crashing the TestFlight build during
+sync.

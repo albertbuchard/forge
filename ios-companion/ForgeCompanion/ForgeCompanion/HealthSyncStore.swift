@@ -738,8 +738,16 @@ actor HealthSyncStore {
             option: .cumulativeSum
         )
 
-        let totalEnergy = workout.totalEnergyBurned?.doubleValue(for: .kilocalorie())
-        let distance = workout.totalDistance?.doubleValue(for: .meter())
+        let totalEnergy = safeDoubleValue(
+            workout.totalEnergyBurned,
+            for: .kilocalorie(),
+            context: "workout.totalEnergyBurned"
+        )
+        let distance = safeDoubleValue(
+            workout.totalDistance,
+            for: .meter(),
+            context: "workout.totalDistance"
+        )
         let sourceDevice = workout.device?.name ?? workout.sourceRevision.source.name
         let sourceBundleIdentifier = workout.sourceRevision.source.bundleIdentifier
         let sourceProductType = workout.sourceRevision.productType
@@ -953,11 +961,20 @@ actor HealthSyncStore {
                     continuation.resume(throwing: error)
                     return
                 }
-                let resolved = (samples as? [HKQuantitySample] ?? []).map { sample in
-                    VitalQuantitySample(
+                let resolved: [VitalQuantitySample] = (samples as? [HKQuantitySample] ?? []).compactMap { sample in
+                    guard
+                        let value = self.safeDoubleValue(
+                            sample.quantity,
+                            for: definition.unit,
+                            context: "vital_sample.\(definition.key)"
+                        )
+                    else {
+                        return nil
+                    }
+                    return VitalQuantitySample(
                         startedAt: sample.startDate,
                         endedAt: sample.endDate,
-                        value: sample.quantity.doubleValue(for: definition.unit) * definition.displayMultiplier
+                        value: value * definition.displayMultiplier
                     )
                 }
                 continuation.resume(returning: resolved)
@@ -1072,11 +1089,23 @@ actor HealthSyncStore {
                 }
                 let value: Double?
                 if option.contains(.cumulativeSum) {
-                    value = statistics?.sumQuantity()?.doubleValue(for: unit)
+                    value = self.safeDoubleValue(
+                        statistics?.sumQuantity(),
+                        for: unit,
+                        context: "quantity_statistic.\(identifier.rawValue).sum"
+                    )
                 } else if option.contains(.discreteAverage) {
-                    value = statistics?.averageQuantity()?.doubleValue(for: unit)
+                    value = self.safeDoubleValue(
+                        statistics?.averageQuantity(),
+                        for: unit,
+                        context: "quantity_statistic.\(identifier.rawValue).average"
+                    )
                 } else if option.contains(.discreteMax) {
-                    value = statistics?.maximumQuantity()?.doubleValue(for: unit)
+                    value = self.safeDoubleValue(
+                        statistics?.maximumQuantity(),
+                        for: unit,
+                        context: "quantity_statistic.\(identifier.rawValue).max"
+                    )
                 } else {
                     value = nil
                 }
@@ -1126,6 +1155,24 @@ actor HealthSyncStore {
     private func mapRawSleepSegment(_ segment: SleepSegment) -> CompanionSyncPayload.SleepSegment {
         let sourceTimezone = sourceTimeZoneIdentifier()
         return CompanionSyncPayload.SleepSegment(
+    nonisolated func safeDoubleValue(
+        _ quantity: HKQuantity?,
+        for unit: HKUnit,
+        context: String
+    ) -> Double? {
+        guard let quantity else {
+            return nil
+        }
+        guard quantity.is(compatibleWith: unit) else {
+            companionDebugLog(
+                "HealthSyncStore",
+                "skipping incompatible quantity conversion context=\(context) targetUnit=\(unit) quantity=\(quantity)"
+            )
+            return nil
+        }
+        return quantity.doubleValue(for: unit)
+    }
+
             externalUid: segment.externalUid,
             startedAt: isoString(segment.startDate),
             endedAt: isoString(segment.endDate),
@@ -1501,7 +1548,11 @@ actor HealthSyncStore {
                 )
             )
         }
-        if let totalFlights = workout.totalFlightsClimbed?.doubleValue(for: .count()) {
+        if let totalFlights = safeDoubleValue(
+            workout.totalFlightsClimbed,
+            for: .count(),
+            context: "workout.totalFlightsClimbed"
+        ) {
             metrics.append(
                 .init(
                     key: "flights_climbed",
@@ -1515,7 +1566,11 @@ actor HealthSyncStore {
                 )
             )
         }
-        if let strokeCount = workout.totalSwimmingStrokeCount?.doubleValue(for: .count()) {
+        if let strokeCount = safeDoubleValue(
+            workout.totalSwimmingStrokeCount,
+            for: .count(),
+            context: "workout.totalSwimmingStrokeCount"
+        ) {
             metrics.append(
                 .init(
                     key: "swimming_stroke_count",
@@ -1559,10 +1614,11 @@ actor HealthSyncStore {
             guard let quantity = metadata[metadataKey] as? HKQuantity else {
                 return
             }
-            guard quantity.is(compatibleWith: unit) else {
-                companionDebugLog(
-                    "HealthSyncStore",
-                    "skipping incompatible workout metadata quantity key=\(metadataKey) targetUnit=\(unitLabel) value=\(String(describing: metadata[metadataKey]))"
+            guard
+                let value = safeDoubleValue(
+                    quantity,
+                    for: unit,
+                    context: "workout.metadata.\(metadataKey)"
                 )
                 return
             }
@@ -1573,7 +1629,7 @@ actor HealthSyncStore {
                     category: category,
                     unit: unitLabel,
                     statistic: statistic,
-                    value: .number(quantity.doubleValue(for: unit)),
+                    value: .number(value),
                     startedAt: nil,
                     endedAt: nil
                 )
@@ -1598,6 +1654,7 @@ actor HealthSyncStore {
             unitLabel: "m/s",
             statistic: "max"
         )
+            else {
         appendQuantityMetric(
             HKMetadataKeyAverageMETs,
             key: "average_mets",
@@ -1781,7 +1838,7 @@ actor HealthSyncStore {
                     category: category,
                     unit: unitLabel,
                     statistic: statistic,
-                    value: .number(quantity.doubleValue(for: unit)),
+                    value: .number(value),
                     startedAt: isoString(activity.startDate),
                     endedAt: activity.endDate.map(isoString)
                 )
@@ -1808,6 +1865,15 @@ actor HealthSyncStore {
             resolver: { $0.averageQuantity() }
         )
         appendStatistic(
+            guard
+                let value = safeDoubleValue(
+                    quantity,
+                    for: unit,
+                    context: "workout.activity.\(identifier.rawValue).\(statistic)"
+                )
+            else {
+                return
+            }
             identifier: .heartRate,
             key: "heart_rate_max",
             label: "Max heart rate",
