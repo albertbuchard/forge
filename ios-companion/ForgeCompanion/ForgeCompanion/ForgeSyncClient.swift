@@ -2,6 +2,8 @@ import Foundation
 import UIKit
 
 struct ForgeSyncClient {
+    static let movementTimelineServerCompatibleLimit = 120
+
     private static let bootstrapSession: URLSession = {
         let configuration = URLSessionConfiguration.default
         configuration.httpCookieAcceptPolicy = .always
@@ -371,11 +373,12 @@ struct ForgeSyncClient {
     func fetchMovementTimeline(
         payload: PairingPayload,
         before: String?,
-        limit: Int = 36
+        limit: Int = movementTimelineServerCompatibleLimit
     ) async throws -> ForgeMovementTimelinePage {
+        let requestLimit = min(max(limit, 1), Self.movementTimelineServerCompatibleLimit)
         companionDebugLog(
             "ForgeSyncClient",
-            "fetchMovementTimeline start session=\(payload.sessionId) before=\(before ?? "nil") limit=\(limit)"
+            "fetchMovementTimeline start session=\(payload.sessionId) before=\(before ?? "nil") limit=\(requestLimit)"
         )
         let envelope: MovementTimelineEnvelope = try await sendRequest(
             path: "/mobile/movement/timeline",
@@ -384,7 +387,7 @@ struct ForgeSyncClient {
                 sessionId: payload.sessionId,
                 pairingToken: payload.pairingToken,
                 before: before,
-                limit: limit
+                limit: requestLimit
             )
         )
         companionDebugLog(

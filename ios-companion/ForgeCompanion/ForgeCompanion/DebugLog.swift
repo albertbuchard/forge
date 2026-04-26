@@ -15,7 +15,10 @@ private let companionDebugLogExportFormatter: ISO8601DateFormatter = {
 
 private func inferCompanionDebugLogLevel(for message: String) -> CompanionDebugLogLevel {
     let normalized = message.lowercased()
-    if normalized.contains("error=")
+    let hasActualErrorValue = normalized.contains("error=")
+        && normalized.contains("error=nil") == false
+        && normalized.contains("error=null") == false
+    if hasActualErrorValue
         || normalized.contains(" failed")
         || normalized.hasPrefix("failed")
         || normalized.contains(" failure")

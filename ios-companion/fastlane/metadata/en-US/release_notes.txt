@@ -1,3 +1,10 @@
-Forge Companion 1.0.34 hardens HealthKit sync on iPhone. The app now guards workout
-and vital quantity conversions against incompatible units, so unexpected HealthKit
-payloads are skipped safely instead of crashing during sync.
+Forge Companion 1.0.34 fixes movement timeline loading against Forge servers that
+still enforce the 120-item mobile page limit. The app now pages deeper history in
+compatible chunks instead of sending one oversized request, so early April boxes
+can load without a status 400 error.
+
+Normal WebView loading state messages are no longer mislabeled as errors when the
+loading error is nil.
+
+The movement timeline now keeps row rendering virtualized on iPhone and web while
+preserving the existing background hour alignment.

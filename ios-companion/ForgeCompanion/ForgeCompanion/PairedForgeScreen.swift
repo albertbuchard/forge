@@ -197,6 +197,8 @@ private struct MovementLifeTimelineView: View {
     @EnvironmentObject private var appModel: CompanionAppModel
 
     let close: () -> Void
+    private let initialTimelineTargetLimit = 240
+    private let olderTimelinePageLimit = ForgeSyncClient.movementTimelineServerCompatibleLimit
 
     @State private var segments: [ForgeMovementTimelineSegment] = []
     @State private var sleepOverlays: [ForgeMovementTimelineSleepOverlay] = []
@@ -253,7 +255,8 @@ private struct MovementLifeTimelineView: View {
                     viewportHeight: proxy.size.height,
                     safeTopInset: proxy.safeAreaInsets.top,
                     bottomPadding: timelineBottomPadding,
-                    rangeEnd: rangeEnd
+                    rangeEnd: rangeEnd,
+                    selectedItemId: selectedId
                 )
                 ZStack {
                     CompanionStyle.background
@@ -277,7 +280,7 @@ private struct MovementLifeTimelineView: View {
 
                                     Color.clear.frame(height: timelineLayout.leadHeight)
 
-                                    VStack(spacing: 0) {
+                                    LazyVStack(spacing: 0) {
                                         ForEach(Array(timelineLayout.items.enumerated()), id: \.element.id) { index, metric in
                                             if index > 0, metric.gapBefore > 0 {
                                                 Color.clear
@@ -728,14 +731,16 @@ private struct MovementLifeTimelineView: View {
         viewportHeight: CGFloat,
         safeTopInset: CGFloat,
         bottomPadding: CGFloat,
-        rangeEnd: Date
+        rangeEnd: Date,
+        selectedItemId: String? = nil
     ) -> MovementTimelineViewportLayoutModel {
         buildMovementViewportLayoutModel(
             items: displayItems,
             viewportHeight: viewportHeight,
             safeTopInset: safeTopInset,
             bottomPadding: bottomPadding,
-            rangeEnd: rangeEnd
+            rangeEnd: rangeEnd,
+            selectedItemId: selectedItemId
         )
     }
 
@@ -846,10 +851,10 @@ private struct MovementLifeTimelineView: View {
             return
         }
         do {
-            let page = try await appModel.syncClient.fetchMovementTimeline(
+            let page = try await fetchMovementTimelineWindow(
                 payload: pairing,
                 before: nil,
-                limit: 36
+                targetLimit: initialTimelineTargetLimit
             )
             segments = page.segments.reversed()
             sleepOverlays = page.sleepOverlays
@@ -865,10 +870,10 @@ private struct MovementLifeTimelineView: View {
                )
             {
                 do {
-                    let page = try await appModel.syncClient.fetchMovementTimeline(
+                    let page = try await fetchMovementTimelineWindow(
                         payload: renewedPairing,
                         before: nil,
-                        limit: 36
+                        targetLimit: initialTimelineTargetLimit
                     )
                     segments = page.segments.reversed()
                     sleepOverlays = page.sleepOverlays
@@ -916,7 +921,7 @@ private struct MovementLifeTimelineView: View {
             let page = try await appModel.syncClient.fetchMovementTimeline(
                 payload: pairing,
                 before: nextCursor,
-                limit: 32
+                limit: olderTimelinePageLimit
             )
             segments = page.segments.reversed() + segments
             sleepOverlays = mergeSleepTimelineOverlays(existing: sleepOverlays, incoming: page.sleepOverlays)
@@ -937,7 +942,7 @@ private struct MovementLifeTimelineView: View {
                     let page = try await appModel.syncClient.fetchMovementTimeline(
                         payload: renewedPairing,
                         before: nextCursor,
-                        limit: 32
+                        limit: olderTimelinePageLimit
                     )
                     segments = page.segments.reversed() + segments
                     sleepOverlays = mergeSleepTimelineOverlays(existing: sleepOverlays, incoming: page.sleepOverlays)
@@ -961,6 +966,47 @@ private struct MovementLifeTimelineView: View {
                 : "Showing repaired local movement history while Forge reconnects. \(error.localizedDescription)"
             hasMore = false
         }
+    }
+
+    private func fetchMovementTimelineWindow(
+        payload: PairingPayload,
+        before: String?,
+        targetLimit: Int
+    ) async throws -> ForgeMovementTimelinePage {
+        var cursor = before
+        var collectedSegments: [ForgeMovementTimelineSegment] = []
+        var collectedSleepOverlays: [ForgeMovementTimelineSleepOverlay] = []
+        var nextCursor: String?
+        var hasMore = false
+
+        while collectedSegments.count < targetLimit {
+            let remaining = targetLimit - collectedSegments.count
+            let pageLimit = min(remaining, ForgeSyncClient.movementTimelineServerCompatibleLimit)
+            let page = try await appModel.syncClient.fetchMovementTimeline(
+                payload: payload,
+                before: cursor,
+                limit: pageLimit
+            )
+            collectedSegments.append(contentsOf: page.segments)
+            collectedSleepOverlays = mergeSleepTimelineOverlays(
+                existing: collectedSleepOverlays,
+                incoming: page.sleepOverlays
+            )
+            nextCursor = page.nextCursor
+            hasMore = page.hasMore
+
+            guard page.hasMore, let pageCursor = page.nextCursor, page.segments.isEmpty == false else {
+                break
+            }
+            cursor = pageCursor
+        }
+
+        return ForgeMovementTimelinePage(
+            segments: collectedSegments,
+            sleepOverlays: collectedSleepOverlays,
+            nextCursor: nextCursor,
+            hasMore: hasMore
+        )
     }
 
     private func saveEditor(_ draft: MovementTimelineEditorDraft) async {
@@ -2356,6 +2402,7 @@ private struct MovementTimelineDetailSheet: View {
                             }
                             .buttonStyle(.borderedProminent)
                             .tint(CompanionStyle.accentStrong)
+                            .accessibilityIdentifier("MovementTimelineDetailSheetLabelLocationButton")
                         }
                         MovementTimelineMapCard(
                             title: "Stay map",
@@ -2424,6 +2471,7 @@ private struct MovementTimelineDetailSheet: View {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button("Edit", action: edit)
                             .disabled(snapshot.kind == .missing)
+                            .accessibilityIdentifier("MovementTimelineDetailSheetEditButton")
                     }
                 }
             }
@@ -2521,6 +2569,27 @@ private func movementDetailRegion(
     )
 }
 
+private struct MovementTimelineCapsuleActionButtonModifier: ViewModifier {
+    let tint: Color
+
+    func body(content: Content) -> some View {
+        content
+            .font(.system(size: 12, weight: .semibold, design: .rounded))
+            .foregroundStyle(CompanionStyle.textPrimary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.82)
+            .frame(minHeight: 44)
+            .padding(.horizontal, 10)
+            .background(tint, in: Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
+            )
+            .contentShape(Capsule())
+            .buttonStyle(.plain)
+    }
+}
+
 private struct MovementTimelineRow: View {
     let item: MovementLifeTimelineItem
     let width: CGFloat
@@ -2534,18 +2603,20 @@ private struct MovementTimelineRow: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            segmentPanel
-                .frame(width: segmentWidth, alignment: item.isCurrent ? .center : item.laneSide == .left ? .leading : .trailing)
+            segmentPanelContainer
                 .offset(x: isSelected ? item.selectionOffset : 0)
+                .allowsHitTesting(isSelected == false)
 
             if detailOnTrailingSide {
                 HStack {
                     Spacer(minLength: max(0, width * 0.47))
                     detailPanel
                         .frame(width: detailWidth)
+                        .zIndex(2)
                         .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                .allowsHitTesting(true)
             }
         }
         .frame(maxWidth: .infinity, minHeight: rowHeight, maxHeight: rowHeight, alignment: .top)
@@ -2557,30 +2628,55 @@ private struct MovementTimelineRow: View {
         isSelected
     }
 
-    private var segmentWidth: CGFloat {
-        max(176, detailOnTrailingSide ? width * 0.46 : width * 0.92)
-    }
-
     private var detailWidth: CGFloat {
         max(176, width * 0.39)
     }
 
-    private var segmentPanel: some View {
-        Button(action: onSelect) {
-            VStack(alignment: .leading, spacing: 10) {
-                if item.kind == .stay {
-                    MovementTimelineStayShape(item: item)
-                } else if item.kind == .trip {
-                    MovementTimelineTripShape(item: item)
-                } else if item.kind == .missing {
-                    MovementTimelineMissingShape(item: item)
-                } else {
-                    currentAnchor
-                }
+    private var segmentPanelContainer: some View {
+        HStack(spacing: 0) {
+            if item.isCurrent {
+                Spacer(minLength: 0)
+                segmentPanel
+                Spacer(minLength: 0)
+            } else if item.laneSide == .left {
+                segmentPanel
+                Spacer(minLength: 0)
+            } else {
+                Spacer(minLength: 0)
+                segmentPanel
             }
-            .padding(.horizontal, 4)
         }
-        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private var segmentPanel: some View {
+        Group {
+            if isSelected {
+                segmentPanelContent
+                    .accessibilityHidden(true)
+            } else {
+                Button(action: onSelect) {
+                    segmentPanelContent
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier(segmentButtonAccessibilityIdentifier)
+            }
+        }
+    }
+
+    private var segmentPanelContent: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if item.kind == .stay {
+                MovementTimelineStayShape(item: item)
+            } else if item.kind == .trip {
+                MovementTimelineTripShape(item: item)
+            } else if item.kind == .missing {
+                MovementTimelineMissingShape(item: item)
+            } else {
+                currentAnchor
+            }
+        }
+        .padding(.horizontal, 4)
     }
 
     private var detailPanel: some View {
@@ -2614,6 +2710,7 @@ private struct MovementTimelineRow: View {
                         .background(Color.pink.opacity(0.18), in: Capsule())
                 }
             }
+            actionToolbar
             Text(item.subtitle)
                 .font(.system(size: 12, weight: .medium, design: .rounded))
                 .foregroundStyle(CompanionStyle.textSecondary)
@@ -2657,38 +2754,9 @@ private struct MovementTimelineRow: View {
             if item.tags.isEmpty == false {
                 FlowTagCloud(tags: item.tags)
             }
-            if item.kind == .stay && item.isSleepOverlay == false {
-                Button("Label location") {
-                    onDefinePlace()
-                }
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundStyle(CompanionStyle.textPrimary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(Color.blue.opacity(0.16), in: Capsule())
-                .overlay(
-                    Capsule()
-                        .stroke(Color.blue.opacity(0.22), lineWidth: 1)
-                )
-                .buttonStyle(.plain)
-            }
             HStack {
                 Spacer()
                 HStack(spacing: 8) {
-                    Button("Details") {
-                        onDetail()
-                    }
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .foregroundStyle(CompanionStyle.textPrimary)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 9)
-                    .background(Color.white.opacity(0.08), in: Capsule())
-                    .overlay(
-                        Capsule()
-                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                    )
-                    .buttonStyle(.plain)
-                    .disabled(item.isSleepOverlay)
                     if item.sourceKind == "user_defined" {
                         Button("Delete") {
                             onDelete()
@@ -2728,6 +2796,45 @@ private struct MovementTimelineRow: View {
         }
         .padding(16)
         .background(CompanionStyle.sheetBackground(cornerRadius: 24))
+        .contentShape(Rectangle())
+    }
+
+    private var canLabelLocation: Bool {
+        item.kind == .stay && item.isSleepOverlay == false
+    }
+
+    private var segmentButtonAccessibilityIdentifier: String {
+        if item.kind == .stay && item.isSleepOverlay == false {
+            return "MovementTimelineStaySegmentButton"
+        }
+        if item.kind == .trip {
+            return "MovementTimelineTripSegmentButton"
+        }
+        if item.kind == .missing {
+            return "MovementTimelineMissingSegmentButton"
+        }
+        return "MovementTimelineSegmentButton"
+    }
+
+    private var actionToolbar: some View {
+        HStack(spacing: 6) {
+            Button("Details") {
+                onDetail()
+            }
+            .modifier(MovementTimelineCapsuleActionButtonModifier(tint: Color.white.opacity(0.08)))
+            .disabled(item.isSleepOverlay)
+            .accessibilityIdentifier("MovementTimelineInlineDetailsButton")
+
+            if canLabelLocation {
+                Button("Label location") {
+                    onDefinePlace()
+                }
+                .modifier(MovementTimelineCapsuleActionButtonModifier(tint: Color.blue.opacity(0.16)))
+                .accessibilityIdentifier("MovementTimelineInlineLabelLocationButton")
+            }
+
+            Spacer(minLength: 0)
+        }
     }
 
     private func detailRow(_ label: String, _ value: String) -> some View {
@@ -2983,6 +3090,7 @@ enum MovementTimelineViewportLayout {
     static let futureGridHours: Int = 1
     static let historyCapHeight: CGFloat = 64
     static let historyCapBottomSpacing: CGFloat = 18
+    static let selectedActionPanelMinHeight: CGFloat = 520
 }
 
 struct MovementTimelineViewportItemMetric: Identifiable {
@@ -3055,9 +3163,14 @@ func movementViewportDisplayRatio(
 }
 
 func movementViewportItemDisplayHeight(
-    for item: MovementLifeTimelineItem
+    for item: MovementLifeTimelineItem,
+    selectedItemId: String? = nil
 ) -> CGFloat {
-    item.kind == .missing ? max(112, item.displayHeight * 0.72) : item.displayHeight
+    let baseHeight = item.kind == .missing ? max(112, item.displayHeight * 0.72) : item.displayHeight
+    guard item.id == selectedItemId else {
+        return baseHeight
+    }
+    return max(baseHeight, MovementTimelineViewportLayout.selectedActionPanelMinHeight)
 }
 
 func movementViewportYPosition(
@@ -3102,7 +3215,8 @@ func movementViewportYPosition(
 
 func buildMovementViewportLayoutMetrics(
     items: [MovementLifeTimelineItem],
-    safeTopInset: CGFloat
+    safeTopInset: CGFloat,
+    selectedItemId: String? = nil
 ) -> (historyHeaderHeight: CGFloat, leadHeight: CGFloat, items: [MovementTimelineViewportItemMetric]) {
     let timelineItems = items.filter { $0.kind != .anchor }
     let historyHeaderHeight =
@@ -3125,7 +3239,7 @@ func buildMovementViewportLayoutMetrics(
                 * MovementTimelineViewportLayout.gridRowHeight
         } ?? 0
         cursor += gapBefore
-        let boxHeight = movementViewportItemDisplayHeight(for: item)
+        let boxHeight = movementViewportItemDisplayHeight(for: item, selectedItemId: selectedItemId)
         let boxTop = cursor
         let metric = MovementTimelineViewportItemMetric(
             id: item.id,
@@ -3178,11 +3292,13 @@ func buildMovementViewportLayoutModel(
     viewportHeight: CGFloat,
     safeTopInset: CGFloat,
     bottomPadding: CGFloat,
-    rangeEnd: Date
+    rangeEnd: Date,
+    selectedItemId: String? = nil
 ) -> MovementTimelineViewportLayoutModel {
     let metrics = buildMovementViewportLayoutMetrics(
         items: items,
-        safeTopInset: safeTopInset
+        safeTopInset: safeTopInset,
+        selectedItemId: selectedItemId
     )
     let trailingReference = items.last(where: { $0.kind != .anchor })?.endedAtDate ?? rangeEnd
     let baseTailHeight = max(

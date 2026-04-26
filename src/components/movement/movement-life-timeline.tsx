@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
+import { createPortal } from "react-dom";
 import * as Dialog from "@radix-ui/react-dialog";
 import { motion } from "framer-motion";
 import {
@@ -11,9 +12,11 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   ArrowUpRight,
   Database,
+  Menu,
   MapPin,
   MoonStar,
   PencilLine,
+  Plus,
   Route,
   Save,
   Trash2,
@@ -67,6 +70,7 @@ const MAX_DISPLAY_SECONDS = 6 * 60 * 60;
 const HISTORY_LEAD_HOURS = 5;
 const FUTURE_GRID_HOURS = 1;
 const HISTORY_CAP_HEIGHT = 104;
+const TIMELINE_ROW_OVERSCAN_PX = GRID_ROW_HEIGHT * 8;
 
 type MovementLifeTimelineProps = {
   userIds?: string[];
@@ -412,9 +416,9 @@ function segmentDisplayHeight(
 ) {
   const cappedHours = Math.min(durationSeconds, MAX_DISPLAY_SECONDS) / 3600;
   const isSleep = syncSource === "sleep overlay";
-  const minHeight = isSleep ? 144 : kind === "stay" ? 132 : 124;
-  const maxHeight = isSleep ? 364 : kind === "stay" ? 404 : 328;
-  const height = minHeight + cappedHours * 44;
+  const minHeight = isSleep ? 112 : kind === "stay" ? 104 : 92;
+  const maxHeight = isSleep ? 272 : kind === "stay" ? 288 : 232;
+  const height = minHeight + cappedHours * 30;
   return Math.max(minHeight, Math.min(maxHeight, height));
 }
 
@@ -1002,16 +1006,132 @@ function MovementTimelineHistoryCap({
   );
 }
 
+function resolveStickyTimelineDay(
+  layout: MovementTimelineLayoutModel,
+  scrollTop: number,
+  viewportHeight: number
+) {
+  const anchorY = scrollTop + Math.max(96, Math.min(viewportHeight * 0.28, 220));
+  const visibleItem =
+    layout.items.find((item) => item.boxBottom >= anchorY) ??
+    layout.items[layout.items.length - 1] ??
+    null;
+  return visibleItem ? formatStickyDate(visibleItem.segment.startedAt) : null;
+}
+
+type MovementTimelineActionMenuItem = {
+  id: string;
+  label: string;
+  description: string;
+  icon: ComponentType<{ className?: string }>;
+  onSelect: () => void;
+};
+
+function MovementTimelineActionMenu({
+  open,
+  anchor,
+  items,
+  onClose
+}: {
+  open: boolean;
+  anchor: { top: number; right: number } | null;
+  items: MovementTimelineActionMenuItem[];
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+    const onPointerDown = () => onClose();
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [onClose, open]);
+
+  if (!open || !anchor || typeof document === "undefined") {
+    return null;
+  }
+
+  const menuTop = Math.max(12, Math.min(anchor.top, window.innerHeight - 360));
+  const menuMaxHeight = Math.max(220, window.innerHeight - menuTop - 96);
+  const menuWidth = Math.min(368, window.innerWidth - 24);
+  const menuRight = Math.max(
+    12,
+    Math.min(anchor.right, window.innerWidth - menuWidth - 12)
+  );
+
+  return createPortal(
+    <div className="fixed inset-0 z-[70] pointer-events-none">
+      <div
+        className="pointer-events-auto fixed z-[71] overflow-y-auto overscroll-contain rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,40,0.985),rgba(8,13,24,0.985))] p-2 shadow-[0_28px_90px_rgba(3,8,18,0.48)] backdrop-blur-xl"
+        style={{
+          top: `${menuTop}px`,
+          right: `${menuRight}px`,
+          width: `${menuWidth}px`,
+          maxHeight: `${menuMaxHeight}px`
+        }}
+        onPointerDown={(event) => event.stopPropagation()}
+      >
+        <div className="rounded-[22px] border border-white/8 bg-white/[0.035] px-4 py-3">
+          <div className="font-label text-[10px] uppercase tracking-[0.2em] text-white/40">
+            Movement actions
+          </div>
+          <div className="mt-1 text-sm text-white/70">
+            Add boxes, inspect raw data, and adjust timeline overlays.
+          </div>
+        </div>
+        <div className="mt-2 grid gap-1">
+          {items.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className="flex w-full items-start gap-3 rounded-[20px] bg-white/[0.035] px-4 py-3 text-left text-white/76 transition hover:bg-white/[0.08] hover:text-white"
+                onClick={() => {
+                  item.onSelect();
+                  onClose();
+                }}
+              >
+                <span className="rounded-[14px] bg-[var(--primary)]/12 p-2 text-[var(--primary)]">
+                  <Icon className="size-4" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium">{item.label}</span>
+                  <span className="mt-1 block text-xs leading-5 text-white/48">
+                    {item.description}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 function MovementTimelineDetailCard({
   segment,
   onEdit,
   onOpenDetail,
-  onDefinePlace
+  onDefinePlace,
+  onClose
 }: {
   segment: MovementTimelineSegment;
   onEdit: () => void;
   onOpenDetail: () => void;
   onDefinePlace: () => void;
+  onClose?: () => void;
 }) {
   const sleepOverlay = isSleepOverlaySegment(segment);
   return (
@@ -1071,6 +1191,16 @@ function MovementTimelineDetailCard({
           >
             <PencilLine className="size-4" />
           </Button>
+          {onClose ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-full border border-white/10 bg-white/[0.04] p-2 text-white/64 transition hover:bg-white/[0.08] hover:text-white"
+              aria-label="Close movement segment actions"
+            >
+              <X className="size-4" />
+            </button>
+          ) : null}
           <ArrowUpRight className="size-4 text-white/42" />
         </div>
       </div>
@@ -1444,6 +1574,47 @@ function MovementTimelineDetailDialog({
                 </div>
               ) : null}
             </div>
+          ) : null}
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
+function MovementTimelineSelectionDialog({
+  open,
+  segment,
+  onOpenChange,
+  onEdit,
+  onOpenDetail,
+  onDefinePlace
+}: {
+  open: boolean;
+  segment: MovementTimelineSegment | null;
+  onOpenChange: (open: boolean) => void;
+  onEdit: () => void;
+  onOpenDetail: () => void;
+  onDefinePlace: () => void;
+}) {
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-[rgba(3,7,18,0.74)] backdrop-blur-sm" />
+        <Dialog.Content className="fixed left-1/2 top-[6vh] z-50 max-h-[88vh] w-[min(36rem,calc(100vw-1.25rem))] -translate-x-1/2 overflow-y-auto rounded-[30px] outline-none">
+          <Dialog.Title className="sr-only">
+            {segment ? `${displaySegmentTitle(segment)} actions` : "Movement actions"}
+          </Dialog.Title>
+          <Dialog.Description className="sr-only">
+            Inspect, edit, or label the selected movement box.
+          </Dialog.Description>
+          {segment ? (
+            <MovementTimelineDetailCard
+              segment={segment}
+              onEdit={onEdit}
+              onOpenDetail={onOpenDetail}
+              onDefinePlace={onDefinePlace}
+              onClose={() => onOpenChange(false)}
+            />
           ) : null}
         </Dialog.Content>
       </Dialog.Portal>
@@ -1906,22 +2077,13 @@ function MovementTripEndpointBox({
 function MovementTimelineRow({
   layout,
   selected,
-  onToggle,
-  onEdit,
-  onOpenDetail,
-  onDefinePlace
+  onToggle
 }: {
   layout: TimelineItemLayoutMetric;
   selected: boolean;
   onToggle: () => void;
-  onEdit: () => void;
-  onOpenDetail: () => void;
-  onDefinePlace: () => void;
 }) {
   const { segment } = layout;
-  const lane = segment.laneSide;
-  const detailSide = lane === "right" ? "left" : "right";
-  const shiftX = selected ? (detailSide === "right" ? -176 : 176) : 0;
   const sleepOverlay = isSleepOverlaySegment(segment);
   const displayHeight = layout.displayHeight;
   const staySurface =
@@ -1946,7 +2108,7 @@ function MovementTimelineRow({
   return (
     <div
       className={cn(
-        "absolute left-0 w-full px-6",
+        "absolute left-0 w-full px-3 sm:px-6",
         selected ? "z-40" : "z-10"
       )}
       data-testid="movement-timeline-row"
@@ -1963,7 +2125,7 @@ function MovementTimelineRow({
         {segment.kind === "trip" ? (
           <motion.div
             layout
-            animate={{ x: shiftX }}
+            animate={{ x: 0 }}
             transition={{ type: "spring", stiffness: 240, damping: 30 }}
             className="absolute inset-x-0 top-0 h-full z-10"
           >
@@ -1991,7 +2153,7 @@ function MovementTimelineRow({
               type="button"
               onClick={onToggle}
               className={cn(
-                "group absolute top-1/2 max-w-[min(9rem,calc(100vw-9rem))] -translate-y-1/2 rounded-[18px] border border-white/8 bg-[linear-gradient(180deg,rgba(9,14,24,0.58),rgba(8,12,22,0.42))] px-3 py-2 text-left shadow-[0_12px_24px_rgba(0,0,0,0.14)] backdrop-blur-sm transition hover:border-white/14",
+                "group absolute top-1/2 max-w-[min(8rem,calc(100vw-8rem))] -translate-y-1/2 rounded-[16px] border border-white/8 bg-[linear-gradient(180deg,rgba(9,14,24,0.58),rgba(8,12,22,0.42))] px-2.5 py-2 text-left shadow-[0_12px_24px_rgba(0,0,0,0.14)] backdrop-blur-sm transition hover:border-white/14 sm:max-w-[9rem] sm:px-3",
                 "left-1/2 -translate-x-1/2",
                 selected ? "ring-1 ring-[rgba(126,229,255,0.38)]" : ""
               )}
@@ -2022,15 +2184,15 @@ function MovementTimelineRow({
         ) : (
           <motion.div
             layout
-            animate={{ x: shiftX }}
+            animate={{ x: 0 }}
             transition={{ type: "spring", stiffness: 260, damping: 28 }}
-            className="absolute top-0 left-1/2 z-10 w-[min(22rem,calc(100vw-5rem))] -translate-x-1/2"
+            className="absolute top-0 left-1/2 z-10 w-[min(18.5rem,calc(100vw-3.25rem))] -translate-x-1/2 sm:w-[min(21rem,calc(100vw-5rem))]"
           >
             <button
               type="button"
               onClick={onToggle}
               className={cn(
-                "group relative w-full overflow-hidden rounded-[30px] border text-left shadow-[0_26px_68px_rgba(3,8,20,0.42)] transition",
+                "group relative w-full overflow-hidden rounded-[24px] border text-left shadow-[0_20px_52px_rgba(3,8,20,0.36)] transition sm:rounded-[30px]",
                 staySurface,
                 selected ? "ring-1 ring-[rgba(126,229,255,0.42)]" : "hover:border-white/22"
               )}
@@ -2038,37 +2200,37 @@ function MovementTimelineRow({
             >
               <MovementStayHandle position="top" />
               <MovementStayHandle position="bottom" />
-              <div className="relative z-10 flex h-full flex-col justify-between p-5">
+              <div className="relative z-10 flex h-full flex-col justify-between p-3.5 sm:p-5">
                 <div className="flex items-center justify-between gap-3">
                   <Badge tone="signal" className="bg-white/10 text-white/82">
                     {sleepOverlay ? "Sleep" : "Stay"}
                   </Badge>
-                  <div className="text-xs tracking-[0.18em] text-white/46">
+                  <div className="text-[11px] tracking-[0.16em] text-white/46 sm:text-xs sm:tracking-[0.18em]">
                     {formatDurationLabel(segment.durationSeconds)}
                   </div>
                 </div>
-                <div className="mt-5 min-w-0">
-                  <div className="truncate font-display text-[1.12rem] tracking-[-0.04em] text-white">
+                <div className="mt-3 min-w-0 sm:mt-5">
+                  <div className="truncate font-display text-[1rem] tracking-[-0.03em] text-white sm:text-[1.12rem]">
                     {displaySegmentTitle(segment)}
                   </div>
                   {segment.kind === "stay" &&
                   resolveSegmentPlaceLabel(segment) &&
                   !sleepOverlay ? (
-                    <div className="mt-3 flex flex-wrap gap-2">
+                    <div className="mt-2 flex flex-wrap gap-2 sm:mt-3">
                       <Badge className="max-w-full truncate bg-white/[0.08] text-white/76">
                         {resolveSegmentPlaceLabel(segment)}
                       </Badge>
                     </div>
                   ) : sleepOverlay ? (
-                    <div className="mt-3 flex flex-wrap gap-2">
+                    <div className="mt-2 flex flex-wrap gap-2 sm:mt-3">
                       <Badge className="max-w-full truncate bg-cyan-400/12 text-cyan-50">
                         {segment.subtitle}
                       </Badge>
                     </div>
                   ) : null}
                 </div>
-                <div className="mt-auto pt-8">
-                  <div className="font-label text-[10px] uppercase tracking-[0.22em] text-white/34">
+                <div className="mt-auto pt-4 sm:pt-8">
+                  <div className="font-label text-[9px] uppercase tracking-[0.2em] text-white/34 sm:text-[10px] sm:tracking-[0.22em]">
                     {compactTimeLabel(segment.startedAt)} → {compactTimeLabel(segment.endedAt)}
                   </div>
                 </div>
@@ -2077,25 +2239,6 @@ function MovementTimelineRow({
           </motion.div>
         )}
 
-        {selected ? (
-          <motion.div
-            layout
-            initial={{ opacity: 0, x: detailSide === "right" ? 28 : -28 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: detailSide === "right" ? 28 : -28 }}
-            className={cn(
-              "absolute top-0 z-50 w-[min(22rem,calc(100vw-4rem))]",
-              detailSide === "right" ? "right-[3%]" : "left-[3%]"
-            )}
-          >
-            <MovementTimelineDetailCard
-              segment={segment}
-              onEdit={onEdit}
-              onOpenDetail={onOpenDetail}
-              onDefinePlace={onDefinePlace}
-            />
-          </motion.div>
-        ) : null}
       </div>
     </div>
   );
@@ -2105,10 +2248,17 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
   const queryClient = useQueryClient();
   const scrollParentRef = useRef<HTMLDivElement | null>(null);
   const dataListRef = useRef<HTMLDivElement | null>(null);
+  const actionMenuButtonRef = useRef<HTMLDivElement | null>(null);
   const initializedRef = useRef(false);
   const autoSelectedRef = useRef(false);
   const prependAnchorRef = useRef<{ count: number; size: number } | null>(null);
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
+  const [selectionDialogOpen, setSelectionDialogOpen] = useState(false);
+  const [actionMenuOpen, setActionMenuOpen] = useState(false);
+  const [actionMenuAnchor, setActionMenuAnchor] = useState<{
+    top: number;
+    right: number;
+  } | null>(null);
   const [draftById, setDraftById] = useState<Record<string, TimelineDraft>>({});
   const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
   const [creatingDraft, setCreatingDraft] = useState<TimelineDraft | null>(null);
@@ -2222,6 +2372,10 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
     () => displaySegments.find((segment) => segment.id === detailSegmentId) ?? null,
     [detailSegmentId, displaySegments]
   );
+  const selectedSegment = useMemo(
+    () => displaySegments.find((segment) => segment.id === selectedSegmentId) ?? null,
+    [displaySegments, selectedSegmentId]
+  );
   const detailQuery = useQuery({
     queryKey: ["forge-movement-box-detail", detailSegment?.boxId ?? null, ...userIds],
     queryFn: async () =>
@@ -2254,6 +2408,69 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
         timelineLayout.items.map((item) => [item.segment.id, item] as const)
       ),
     [timelineLayout.items]
+  );
+  const visibleTimelineItems = useMemo(() => {
+    const visibleStart = Math.max(0, scrollTop - TIMELINE_ROW_OVERSCAN_PX);
+    const visibleEnd =
+      scrollTop +
+      Math.max(viewportHeight, GRID_ROW_HEIGHT * 8) +
+      TIMELINE_ROW_OVERSCAN_PX;
+    return timelineLayout.items.filter((item) => {
+      if (item.segment.id === selectedSegmentId) {
+        return true;
+      }
+      return item.boxBottom >= visibleStart && item.boxTop <= visibleEnd;
+    });
+  }, [scrollTop, selectedSegmentId, timelineLayout.items, viewportHeight]);
+  const stickyDayLabel = useMemo(
+    () => resolveStickyTimelineDay(timelineLayout, scrollTop, viewportHeight),
+    [scrollTop, timelineLayout, viewportHeight]
+  );
+  const openActionMenu = () => {
+    const rect = actionMenuButtonRef.current?.getBoundingClientRect();
+    if (!rect) {
+      setActionMenuOpen((current) => !current);
+      return;
+    }
+    setActionMenuAnchor({
+      top: rect.bottom + 10,
+      right: Math.max(12, window.innerWidth - rect.right)
+    });
+    setActionMenuOpen((current) => !current);
+  };
+  const actionMenuItems = useMemo<MovementTimelineActionMenuItem[]>(
+    () => [
+      {
+        id: "add-box",
+        label: "Add box",
+        description: "Create a user-defined stay, move, or missing-data interval.",
+        icon: Plus,
+        onSelect: () => setCreatingDraft(buildNewDraft("stay", segments.at(-1) ?? null))
+      },
+      {
+        id: "sleep",
+        label: sleepOverlayVisible ? "Hide sleep" : "Show sleep",
+        description: "Toggle sleep overlays without rewriting the movement boxes.",
+        icon: MoonStar,
+        onSelect: () =>
+          setSleepOverlayVisible((current) => {
+            const nextValue = !current;
+            if (nextValue && mostRelevantSleepSegmentId) {
+              setSelectedSegmentId(mostRelevantSleepSegmentId);
+              setSelectionDialogOpen(true);
+            }
+            return nextValue;
+          })
+      },
+      {
+        id: "view-data",
+        label: "View data",
+        description: "Open the canonical loaded records and raw-data filters.",
+        icon: Database,
+        onSelect: () => setDataModalOpen(true)
+      }
+    ],
+    [mostRelevantSleepSegmentId, segments, sleepOverlayVisible]
   );
 
   const scrollToTimelineItem = (
@@ -2373,6 +2590,7 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
     }
     if (!displaySegments.some((segment) => segment.id === selectedSegmentId)) {
       setSelectedSegmentId(displaySegments.at(-1)?.id ?? null);
+      setSelectionDialogOpen(false);
     }
   }, [displaySegments, selectedSegmentId]);
 
@@ -2588,6 +2806,7 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
     },
     onSuccess: async (_, segment) => {
       setSelectedSegmentId((current) => (current === segment.id ? null : current));
+      setSelectionDialogOpen(false);
       setEditingSegmentId((current) => (current === segment.id ? null : current));
       queryClient.setQueryData(
         ["forge-movement-life-timeline", ...userIds],
@@ -2789,60 +3008,45 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
   const contentHeight = timelineLayout.totalHeight;
   return (
     <section className="grid gap-4">
-      <Card className="overflow-hidden rounded-[34px] border border-white/8 bg-[radial-gradient(circle_at_top,rgba(88,182,255,0.08),transparent_28%),linear-gradient(180deg,rgba(4,8,17,0.99),rgba(5,9,18,0.97))] p-4">
-            <div className="mb-3 flex items-center justify-between gap-3 px-1">
+      <Card className="overflow-hidden rounded-[28px] border border-white/8 bg-[radial-gradient(circle_at_top,rgba(88,182,255,0.08),transparent_28%),linear-gradient(180deg,rgba(4,8,17,0.99),rgba(5,9,18,0.97))] p-3 sm:rounded-[34px] sm:p-4">
+        <div className="mb-3 flex items-center justify-between gap-3 px-1">
           <div className="font-label text-[11px] uppercase tracking-[0.22em] text-white/34">
             Movement
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 rounded-full border border-white/10 bg-white/[0.04] px-3 text-white/72 hover:bg-white/[0.08] hover:text-white"
-              onClick={() => setCreatingDraft(buildNewDraft("stay", segments.at(-1) ?? null))}
-            >
-              <PencilLine className="size-3.5" />
-              Add box
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 rounded-full border border-white/10 bg-white/[0.04] px-3 text-white/72 hover:bg-white/[0.08] hover:text-white"
-              onClick={() =>
-                setSleepOverlayVisible((current) => {
-                  const nextValue = !current;
-                  if (nextValue && mostRelevantSleepSegmentId) {
-                    setSelectedSegmentId(mostRelevantSleepSegmentId);
-                  }
-                  return nextValue;
-                })
-              }
-            >
-              <MoonStar className="size-3.5" />
-              {sleepOverlayVisible ? "Hide sleep" : "Show sleep"}
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 rounded-full border border-white/10 bg-white/[0.04] px-3 text-white/72 hover:bg-white/[0.08] hover:text-white"
-              onClick={() => setDataModalOpen(true)}
-            >
-              <Database className="size-3.5" />
-              View data
-            </Button>
+          <div className="flex min-w-0 items-center justify-end gap-2">
             {invalidSegmentCount > 0 ? (
-              <Badge className="bg-amber-500/10 text-amber-100">
+              <Badge className="hidden bg-amber-500/10 text-amber-100 sm:inline-flex">
                 {invalidSegmentCount} invalid hidden
               </Badge>
             ) : null}
-            <Badge className="bg-white/[0.06] text-white/68">
+            <Badge className="hidden bg-white/[0.06] text-white/68 sm:inline-flex">
               {displaySegments.length} visible
             </Badge>
+            <div ref={actionMenuButtonRef}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                aria-expanded={actionMenuOpen}
+                aria-haspopup="dialog"
+                className={cn(
+                  "h-9 rounded-full border border-white/10 bg-white/[0.05] px-3 text-white/78 hover:bg-white/[0.1] hover:text-white",
+                  actionMenuOpen ? "ring-1 ring-[rgba(126,229,255,0.34)]" : ""
+                )}
+                onClick={openActionMenu}
+              >
+                <Menu className="size-4" />
+                Actions
+              </Button>
+            </div>
           </div>
         </div>
+        <MovementTimelineActionMenu
+          open={actionMenuOpen}
+          anchor={actionMenuAnchor}
+          items={actionMenuItems}
+          onClose={() => setActionMenuOpen(false)}
+        />
         {sleepOverlayVisible && renderedSleepSegments.length === 0 ? (
           <p className="mb-3 px-1 text-sm text-amber-100/80">
             No sleep session overlaps the currently loaded timeline range yet.
@@ -2859,6 +3063,13 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
             scrollTop={scrollTop}
             viewportHeight={viewportHeight}
           />
+          {stickyDayLabel ? (
+            <div className="pointer-events-none sticky top-3 z-50 flex h-0 justify-center">
+              <div className="rounded-full border border-white/10 bg-[rgba(8,13,24,0.86)] px-3 py-1.5 font-label text-[10px] uppercase tracking-[0.18em] text-white/70 shadow-[0_16px_36px_rgba(0,0,0,0.28)] backdrop-blur-xl">
+                {stickyDayLabel}
+              </div>
+            </div>
+          ) : null}
 
           <div
             className="relative"
@@ -2872,7 +3083,7 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
                 <MovementTimelineHistoryCap segment={displaySegments[0] ?? null} />
               </div>
             ) : null}
-            {timelineLayout.items.map((itemLayout) => {
+            {visibleTimelineItems.map((itemLayout) => {
               const segment = itemLayout.segment;
               return (
                 <MovementTimelineRow
@@ -2880,18 +3091,11 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
                   layout={itemLayout}
                   selected={selectedSegmentId === segment.id}
                   onToggle={() =>
-                    setSelectedSegmentId((current) =>
-                      current === segment.id ? null : segment.id
-                    )
-                  }
-                  onEdit={() => {
-                    if (!segment.editable) {
-                      return;
+                    {
+                      setSelectedSegmentId(segment.id);
+                      setSelectionDialogOpen(true);
                     }
-                    setEditingSegmentId(segment.id);
-                  }}
-                  onOpenDetail={() => setDetailSegmentId(segment.id)}
-                  onDefinePlace={() => openPlaceLabelDialog(segment)}
+                  }
                 />
               );
             })}
@@ -2971,6 +3175,34 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
               setDataModalOpen(true);
             }
           }
+        }}
+      />
+      <MovementTimelineSelectionDialog
+        open={selectionDialogOpen && selectedSegment !== null}
+        onOpenChange={(open) => {
+          setSelectionDialogOpen(open);
+        }}
+        segment={selectedSegment}
+        onEdit={() => {
+          if (!selectedSegment?.editable) {
+            return;
+          }
+          setEditingSegmentId(selectedSegment.id);
+          setSelectionDialogOpen(false);
+        }}
+        onOpenDetail={() => {
+          if (!selectedSegment) {
+            return;
+          }
+          setDetailSegmentId(selectedSegment.id);
+          setSelectionDialogOpen(false);
+        }}
+        onDefinePlace={() => {
+          if (!selectedSegment) {
+            return;
+          }
+          openPlaceLabelDialog(selectedSegment);
+          setSelectionDialogOpen(false);
         }}
       />
       <MovementTimelineDetailDialog

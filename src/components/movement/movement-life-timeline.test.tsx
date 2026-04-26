@@ -138,6 +138,16 @@ function renderTimeline(ui: ReactNode) {
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
 }
 
+function selectMovementAction(name: RegExp) {
+  fireEvent.click(screen.getByRole("button", { name: /Actions/i }));
+  fireEvent.click(screen.getByRole("button", { name }));
+}
+
+async function openFirstTimelineRow() {
+  const rows = await screen.findAllByTestId("movement-timeline-row");
+  fireEvent.click(within(rows[0]!).getByRole("button"));
+}
+
 describe("MovementLifeTimeline", () => {
   beforeEach(() => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
@@ -271,7 +281,7 @@ describe("MovementLifeTimeline", () => {
     renderTimeline(<MovementLifeTimeline userIds={["user_operator"]} />);
 
     expect(await screen.findByText("Movement")).toBeInTheDocument();
-    screen.getByText("View data").closest("button")?.click();
+    selectMovementAction(/View data/i);
     expect(await screen.findByText("Canonical boxes")).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -304,8 +314,8 @@ describe("MovementLifeTimeline", () => {
     renderTimeline(<MovementLifeTimeline userIds={["user_operator"]} />);
 
     expect(await screen.findByText("Movement")).toBeInTheDocument();
-    screen.getByText("View data").closest("button")?.click();
-    expect(await screen.findByText("Missing data")).toBeInTheDocument();
+    selectMovementAction(/View data/i);
+    expect((await screen.findAllByText("Missing data")).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Raw trips 1/i).length).toBeGreaterThan(0);
     await waitFor(() => {
       expect(screen.getAllByText("Missing").length).toBeGreaterThan(0);
@@ -332,7 +342,7 @@ describe("MovementLifeTimeline", () => {
     renderTimeline(<MovementLifeTimeline userIds={["user_operator"]} />);
 
     expect(await screen.findByText("Movement")).toBeInTheDocument();
-    screen.getByText("Add box").closest("button")?.click();
+    selectMovementAction(/Add box/i);
     expect(await screen.findByText("Overlap guidance")).toBeInTheDocument();
     await waitFor(() => {
       expect(
@@ -398,6 +408,7 @@ describe("MovementLifeTimeline", () => {
     renderTimeline(<MovementLifeTimeline userIds={["user_operator"]} />);
 
     expect(await screen.findByText("Movement")).toBeInTheDocument();
+    await openFirstTimelineRow();
     expect(await screen.findByRole("button", { name: /Label location/i })).toBeInTheDocument();
     screen.getByRole("button", { name: "Details" }).click();
 
@@ -592,6 +603,7 @@ describe("MovementLifeTimeline", () => {
 
     renderTimeline(<MovementLifeTimeline userIds={["user_operator"]} />);
 
+    await openFirstTimelineRow();
     expect(await screen.findByRole("button", { name: /Label location/i })).toBeInTheDocument();
     screen.getByRole("button", { name: /Label location/i }).click();
 
@@ -684,6 +696,7 @@ describe("MovementLifeTimeline", () => {
 
     renderTimeline(<MovementLifeTimeline userIds={["user_operator"]} />);
 
+    await openFirstTimelineRow();
     expect(await screen.findByRole("button", { name: /Label location/i })).toBeInTheDocument();
     screen.getByRole("button", { name: /Label location/i }).click();
     (await screen.findByRole("button", { name: /Distant Office/i })).click();
@@ -770,6 +783,7 @@ describe("MovementLifeTimeline", () => {
 
     renderTimeline(<MovementLifeTimeline userIds={["user_operator"]} />);
 
+    await openFirstTimelineRow();
     expect(await screen.findByRole("button", { name: /Label location/i })).toBeInTheDocument();
     screen.getByRole("button", { name: /Label location/i }).click();
     expect(await screen.findByText(/Label stay location/i)).toBeInTheDocument();
@@ -835,6 +849,7 @@ describe("MovementLifeTimeline", () => {
 
     renderTimeline(<MovementLifeTimeline userIds={["user_operator"]} />);
 
+    await openFirstTimelineRow();
     expect(await screen.findByRole("button", { name: /Label location/i })).toBeInTheDocument();
     screen.getByRole("button", { name: /Label location/i }).click();
 
