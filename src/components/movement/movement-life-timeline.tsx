@@ -1945,7 +1945,12 @@ function MovementTimelineRow({
 
   return (
     <div
-      className="absolute left-0 w-full px-6"
+      className={cn(
+        "absolute left-0 w-full px-6",
+        selected ? "z-40" : "z-10"
+      )}
+      data-testid="movement-timeline-row"
+      data-selected={selected ? "true" : "false"}
       style={{
         top: `${layout.boxTop}px`,
         height: `${displayHeight}px`
@@ -2079,7 +2084,7 @@ function MovementTimelineRow({
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: detailSide === "right" ? 28 : -28 }}
             className={cn(
-              "absolute top-0 w-[min(22rem,calc(100vw-4rem))]",
+              "absolute top-0 z-50 w-[min(22rem,calc(100vw-4rem))]",
               detailSide === "right" ? "right-[3%]" : "left-[3%]"
             )}
           >

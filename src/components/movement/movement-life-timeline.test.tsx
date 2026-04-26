@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -404,6 +404,117 @@ describe("MovementLifeTimeline", () => {
     expect(await screen.findByText(/Home details/i)).toBeInTheDocument();
     expect(await screen.findByText(/Average position:/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Label location/i })).toBeInTheDocument();
+  });
+
+  it("keeps selected stay details above overlapping timeline rows so location labels remain clickable", async () => {
+    getMovementTimelineMock.mockResolvedValueOnce({
+      movement: {
+        segments: [
+          createSegment({
+            id: "segment_unlinked_stay",
+            boxId: "segment_unlinked_stay",
+            title: "Home",
+            subtitle: "Unlinked stay",
+            placeLabel: null,
+            rawStayIds: ["stay_home"],
+            stay: {
+              id: "stay_home",
+              externalUid: "stay_home",
+              pairingSessionId: null,
+              userId: "user_operator",
+              placeId: null,
+              label: "Home",
+              status: "completed",
+              classification: "stationary",
+              startedAt: "2026-04-06T08:00:00.000Z",
+              endedAt: "2026-04-06T09:00:00.000Z",
+              durationSeconds: 3600,
+              centerLatitude: 46.5191,
+              centerLongitude: 6.6323,
+              radiusMeters: 120,
+              sampleCount: 3,
+              weather: {},
+              metrics: {},
+              metadata: {},
+              publishedNoteId: null,
+              createdAt: "2026-04-06T09:00:00.000Z",
+              updatedAt: "2026-04-06T09:00:00.000Z",
+              place: null,
+              note: null,
+              estimatedScreenTimeSeconds: 0,
+              pickupCount: 0,
+              notificationCount: 0,
+              topApps: [],
+              topCategories: []
+            }
+          }),
+          createSegment({
+            id: "segment_later_home",
+            boxId: "segment_later_home",
+            laneSide: "right",
+            title: "Home",
+            startedAt: "2026-04-06T09:15:00.000Z",
+            endedAt: "2026-04-06T10:15:00.000Z",
+            trueStartedAt: "2026-04-06T09:15:00.000Z",
+            trueEndedAt: "2026-04-06T10:15:00.000Z",
+            visibleStartedAt: "2026-04-06T09:15:00.000Z",
+            visibleEndedAt: "2026-04-06T10:15:00.000Z",
+            cursor: "2026-04-06T10:15:00.000Z::segment_later_home",
+            rawStayIds: ["stay_later_home"],
+            stay: {
+              id: "stay_later_home",
+              externalUid: "stay_later_home",
+              pairingSessionId: null,
+              userId: "user_operator",
+              placeId: null,
+              label: "Home",
+              status: "completed",
+              classification: "stationary",
+              startedAt: "2026-04-06T09:15:00.000Z",
+              endedAt: "2026-04-06T10:15:00.000Z",
+              durationSeconds: 3600,
+              centerLatitude: 46.5191,
+              centerLongitude: 6.6323,
+              radiusMeters: 120,
+              sampleCount: 3,
+              weather: {},
+              metrics: {},
+              metadata: {},
+              publishedNoteId: null,
+              createdAt: "2026-04-06T10:15:00.000Z",
+              updatedAt: "2026-04-06T10:15:00.000Z",
+              place: null,
+              note: null,
+              estimatedScreenTimeSeconds: 0,
+              pickupCount: 0,
+              notificationCount: 0,
+              topApps: [],
+              topCategories: []
+            }
+          })
+        ],
+        nextCursor: null,
+        hasMore: false,
+        invalidSegmentCount: 0
+      }
+    });
+
+    renderTimeline(<MovementLifeTimeline userIds={["user_operator"]} />);
+
+    const rows = await screen.findAllByTestId("movement-timeline-row");
+    const firstRow = rows[0]!;
+    const stayButton = within(firstRow).getByRole("button");
+    fireEvent.click(stayButton);
+
+    const selectedRow = stayButton.closest('[data-testid="movement-timeline-row"]');
+    expect(selectedRow).toHaveAttribute("data-selected", "true");
+    expect(selectedRow).toHaveClass("z-40");
+
+    const labelButton = await screen.findByRole("button", { name: /Label location/i });
+    expect(labelButton.closest(".z-50")).not.toBeNull();
+    fireEvent.click(labelButton);
+
+    expect(await screen.findByText(/Label stay location/i)).toBeInTheDocument();
   });
 
   it("lets the user assign an existing known place from the stay label dialog", async () => {
