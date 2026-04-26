@@ -319,7 +319,6 @@ actor HealthSyncStore {
             }
         }
     }
-
     func buildSyncPayload(
         pairing: PairingPayload,
         healthKitAuthorized: Bool,
@@ -1121,6 +1120,24 @@ actor HealthSyncStore {
             || nsError.localizedDescription == "No data available for the specified predicate."
     }
 
+    nonisolated func safeDoubleValue(
+        _ quantity: HKQuantity?,
+        for unit: HKUnit,
+        context: String
+    ) -> Double? {
+        guard let quantity else {
+            return nil
+        }
+        guard quantity.is(compatibleWith: unit) else {
+            companionDebugLog(
+                "HealthSyncStore",
+                "skipping incompatible quantity conversion context=\(context) targetUnit=\(unit) quantity=\(quantity)"
+            )
+            return nil
+        }
+        return quantity.doubleValue(for: unit)
+    }
+
     private func mapSleepSegment(sample: HKCategorySample) -> SleepSegment? {
         let mapping: (label: String, bucket: SleepBucket)?
         switch sample.value {
@@ -1155,24 +1172,6 @@ actor HealthSyncStore {
     private func mapRawSleepSegment(_ segment: SleepSegment) -> CompanionSyncPayload.SleepSegment {
         let sourceTimezone = sourceTimeZoneIdentifier()
         return CompanionSyncPayload.SleepSegment(
-    nonisolated func safeDoubleValue(
-        _ quantity: HKQuantity?,
-        for unit: HKUnit,
-        context: String
-    ) -> Double? {
-        guard let quantity else {
-            return nil
-        }
-        guard quantity.is(compatibleWith: unit) else {
-            companionDebugLog(
-                "HealthSyncStore",
-                "skipping incompatible quantity conversion context=\(context) targetUnit=\(unit) quantity=\(quantity)"
-            )
-            return nil
-        }
-        return quantity.doubleValue(for: unit)
-    }
-
             externalUid: segment.externalUid,
             startedAt: isoString(segment.startDate),
             endedAt: isoString(segment.endDate),
@@ -1620,6 +1619,7 @@ actor HealthSyncStore {
                     for: unit,
                     context: "workout.metadata.\(metadataKey)"
                 )
+            else {
                 return
             }
             metrics.append(
@@ -1654,7 +1654,6 @@ actor HealthSyncStore {
             unitLabel: "m/s",
             statistic: "max"
         )
-            else {
         appendQuantityMetric(
             HKMetadataKeyAverageMETs,
             key: "average_mets",
@@ -1831,6 +1830,15 @@ actor HealthSyncStore {
             else {
                 return
             }
+            guard
+                let value = safeDoubleValue(
+                    quantity,
+                    for: unit,
+                    context: "workout.activity.\(identifier.rawValue).\(statistic)"
+                )
+            else {
+                return
+            }
             metrics.append(
                 .init(
                     key: key,
@@ -1865,15 +1873,6 @@ actor HealthSyncStore {
             resolver: { $0.averageQuantity() }
         )
         appendStatistic(
-            guard
-                let value = safeDoubleValue(
-                    quantity,
-                    for: unit,
-                    context: "workout.activity.\(identifier.rawValue).\(statistic)"
-                )
-            else {
-                return
-            }
             identifier: .heartRate,
             key: "heart_rate_max",
             label: "Max heart rate",

@@ -1,4 +1,3 @@
-Forge Companion 1.0.33 further hardens HealthKit sync on iPhone. The app now guards
-all workout and vital quantity conversions against incompatible units, so unexpected
-HealthKit payloads are skipped safely instead of crashing the TestFlight build during
-sync.
+Forge Companion 1.0.34 hardens HealthKit sync on iPhone. The app now guards workout
+and vital quantity conversions against incompatible units, so unexpected HealthKit
+payloads are skipped safely instead of crashing during sync.
