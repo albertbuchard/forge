@@ -232,9 +232,10 @@ export const movementSelectionAggregateSchema = z.object({
     userIds: z.array(z.string().trim().min(1)).default([])
 });
 export const movementSettingsPatchSchema = movementSettingsInputSchema.partial();
+const MOVEMENT_TIMELINE_MAX_LIMIT = 360;
 export const movementTimelineQuerySchema = z.object({
     before: z.string().trim().min(1).optional(),
-    limit: z.coerce.number().int().min(1).max(120).default(40),
+    limit: z.coerce.number().int().min(1).max(MOVEMENT_TIMELINE_MAX_LIMIT).default(40),
     includeInvalid: z.coerce.boolean().default(false),
     userIds: z.array(z.string().trim().min(1)).default([])
 });
@@ -345,7 +346,7 @@ export const movementMobileBootstrapSchema = z.object({
 });
 export const movementMobileTimelineSchema = movementMobileBootstrapSchema.extend({
     before: z.string().trim().min(1).optional(),
-    limit: z.coerce.number().int().min(1).max(120).default(40)
+    limit: z.coerce.number().int().min(1).max(MOVEMENT_TIMELINE_MAX_LIMIT).default(40)
 });
 export const movementMobilePlaceMutationSchema = movementMobileBootstrapSchema.extend({
     place: movementPlaceMutationSchema.omit({ userId: true, source: true })
@@ -5031,7 +5032,7 @@ export function getMovementMobileBootstrap(pairing) {
         deletedTripExternalUids: listMovementTripTombstones(pairing.user_id).map((row) => row.trip_external_uid),
         projectedBoxes: getMovementTimeline({
             userIds: [pairing.user_id],
-            limit: 80
+            limit: MOVEMENT_TIMELINE_MAX_LIMIT
         }).segments
     };
 }

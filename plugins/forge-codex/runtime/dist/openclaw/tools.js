@@ -226,7 +226,7 @@ export function registerForgePluginTools(api, config) {
     registerReadTool(api, config, {
         name: "forge_get_operator_overview",
         label: "Forge Operator Overview",
-        description: "Start here for most Forge work. Read the one-shot operator overview with current priorities, momentum, and onboarding guidance before searching or mutating.",
+        description: "Start here for most Forge work. Read the compact progressive overview with current priorities, today/yesterday context, health, calendar, psyche signals, note previews, IDs, and drill-down routes before searching or mutating.",
         parameters: scopedReadSchema,
         path: (params) => withUserIds("/api/v1/operator/overview", params.userIds)
     });
