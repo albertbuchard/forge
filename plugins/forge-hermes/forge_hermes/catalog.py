@@ -416,7 +416,7 @@ PREFERENCE_FEATURE_WEIGHTS = {
 TOOL_CATALOG: List[ToolSpec] = [
     {
         "name": "forge_get_operator_overview",
-        "description": "Start here for most Forge work. Read the one-shot operator overview with current priorities, momentum, and onboarding guidance before searching or mutating.",
+        "description": "Start here for most Forge work. Read the compact progressive overview with current priorities, today/yesterday context, health, calendar, psyche signals, note previews, IDs, and drill-down routes before searching or mutating.",
         "parameters": scoped_read_schema(),
         "method": "GET",
         "path_builder": lambda args: with_query("/api/v1/operator/overview", args, ["userIds"]),

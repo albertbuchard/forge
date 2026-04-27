@@ -2767,9 +2767,19 @@ export function buildOpenApiDocument() {
     additionalProperties: false,
     required: [
       "generatedAt",
+      "detailMode",
+      "summary",
+      "signalMatrix",
       "snapshot",
       "operator",
+      "today",
+      "yesterday",
+      "calendar",
+      "notes",
       "sleep",
+      "fitness",
+      "vitals",
+      "lifeForce",
       "domains",
       "psyche",
       "onboarding",
@@ -2779,12 +2789,92 @@ export function buildOpenApiDocument() {
     ],
     properties: {
       generatedAt: { type: "string", format: "date-time" },
-      snapshot: { $ref: "#/components/schemas/ForgeSnapshot" },
-      operator: { $ref: "#/components/schemas/OperatorContextPayload" },
-      sleep: { $ref: "#/components/schemas/SleepViewData" },
-      domains: arrayOf({ $ref: "#/components/schemas/Domain" }),
-      psyche: nullable({ $ref: "#/components/schemas/PsycheOverviewPayload" }),
-      onboarding: { $ref: "#/components/schemas/AgentOnboardingPayload" },
+      detailMode: { type: "string", enum: ["compact"] },
+      summary: { type: "string" },
+      signalMatrix: arrayOf({
+        type: "object",
+        additionalProperties: false,
+        required: ["lane", "signal", "ids"],
+        properties: {
+          lane: { type: "string" },
+          signal: { type: "string" },
+          ids: arrayOf({ type: "string" })
+        }
+      }),
+      snapshot: {
+        type: "object",
+        additionalProperties: true,
+        description:
+          "Compact strategic snapshot with counts, active goals/projects/tasks, short summaries, IDs, and /api/v1/context as the full drill-down route."
+      },
+      operator: {
+        type: "object",
+        additionalProperties: true,
+        description:
+          "Compact operator context with focus tasks, board counts, XP summary, recent activity, recent task runs, IDs, and /api/v1/operator/context as the full drill-down route."
+      },
+      today: {
+        type: "object",
+        additionalProperties: true,
+        description: "Compact today context with directive, timeline summaries, habits, quests, and momentum."
+      },
+      yesterday: {
+        type: "object",
+        additionalProperties: true,
+        description: "Compact yesterday context using the same shape as today."
+      },
+      calendar: {
+        type: "object",
+        additionalProperties: true,
+        description:
+          "Two-day calendar digest for today and yesterday with every same-day event, work-block, and timebox represented as compact ID/title/time records."
+      },
+      notes: {
+        type: "object",
+        additionalProperties: true,
+        description:
+          "Recent observed/updated note digest with IDs, titles, tags, links, and short previews. Full note bodies are intentionally omitted."
+      },
+      sleep: {
+        type: "object",
+        additionalProperties: true,
+        description:
+          "Compact sleep summary with latest night, trends, recent session IDs, and the full sleep route."
+      },
+      fitness: {
+        type: "object",
+        additionalProperties: true,
+        description:
+          "Compact sports summary with recent workout IDs and the full fitness route."
+      },
+      vitals: {
+        type: "object",
+        additionalProperties: true,
+        description:
+          "Compact vitals summary with latest metric values and the full vitals route."
+      },
+      lifeForce: {
+        type: "object",
+        additionalProperties: true,
+        description:
+          "Compact Life Force state for today's AP budget, drains, warnings, and recommendations."
+      },
+      domains: arrayOf({
+        type: "object",
+        additionalProperties: true
+      }),
+      psyche: nullable({
+        type: "object",
+        additionalProperties: true,
+        description:
+          "Compact Psyche digest with counts, values, patterns, beliefs, modes, recent reports, schema pressure, committed actions, IDs, and /api/v1/psyche/overview as the full drill-down route."
+      }),
+      onboarding: {
+        type: "object",
+        additionalProperties: true,
+        description:
+          "Compact onboarding subset with base URLs, effective scope policy, route families, and /api/v1/agents/onboarding as the full onboarding route."
+      },
       capabilities: {
         type: "object",
         additionalProperties: false,

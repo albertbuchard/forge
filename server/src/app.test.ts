@@ -1065,6 +1065,42 @@ test("goal detail, operator context, and retroactive work logging are available 
     assert.ok(Array.isArray(context.currentBoard.backlog));
     assert.ok(typeof context.xp.profile.level === "number");
 
+    const today = new Date();
+    const todayAt = (hour: number) =>
+      new Date(
+        today.getFullYear(),
+        today.getMonth(),
+        today.getDate(),
+        hour,
+        0,
+        0,
+        0
+      ).toISOString();
+    for (let index = 0; index < 14; index += 1) {
+      createCalendarEvent({
+        title: `Operator overview calendar event ${index + 1}`,
+        description: `Calendar event ${index + 1} should appear in the compact operator overview.`,
+        location: "",
+        place: {
+          label: "",
+          address: "",
+          timezone: "",
+          latitude: null,
+          longitude: null,
+          source: "",
+          externalPlaceId: ""
+        },
+        startAt: todayAt(6 + index),
+        endAt: todayAt(7 + index),
+        timezone: "Europe/Zurich",
+        isAllDay: false,
+        availability: "busy",
+        eventType: "",
+        categories: [],
+        links: []
+      });
+    }
+
     const operatorOverview = await app.inject({
       method: "GET",
       url: "/api/v1/operator/overview",
@@ -1077,8 +1113,19 @@ test("goal detail, operator context, and retroactive work logging are available 
     const overview = (
       operatorOverview.json() as {
         overview: {
+          detailMode: string;
+          signalMatrix: Array<unknown>;
           snapshot: { goals: Array<{ id: string }> };
           operator: { focusTasks: Array<unknown> };
+          calendar: {
+            today: {
+              events: Array<{ title: string }>;
+            };
+            counts: {
+              todayEvents: number;
+            };
+          };
+          notes: { notes: Array<unknown> };
           sleep: {
             summary: {
               totalSleepSeconds: number;
@@ -1127,6 +1174,27 @@ test("goal detail, operator context, and retroactive work logging are available 
       "http://127.0.0.1:4317/api/v1/openapi.json"
     );
     assert.equal(overview.onboarding.webAppUrl, "http://127.0.0.1:4317/forge/");
+    assert.equal(overview.detailMode, "compact");
+    assert.ok(Array.isArray(overview.signalMatrix));
+    assert.ok(overview.calendar.today.events.length >= 14);
+    assert.equal(
+      overview.calendar.counts.todayEvents,
+      overview.calendar.today.events.length
+    );
+    assert.ok(
+      overview.calendar.today.events.some(
+        (event) => event.title === "Operator overview calendar event 14"
+      )
+    );
+    assert.ok(Array.isArray(overview.notes.notes));
+    assert.ok(
+      operatorOverview.body.length < 200_000,
+      `operator overview should stay compact, got ${operatorOverview.body.length} characters`
+    );
+    assert.ok(
+      !operatorOverview.body.includes("contentMarkdown"),
+      "operator overview should expose note IDs/titles/previews, not full note bodies"
+    );
 
     const logged = await app.inject({
       method: "POST",
@@ -5980,7 +6048,11 @@ test("watch bootstrap serves compact habit state and watch habit check-ins prese
             dueToday: boolean;
             alignedActionLabel: string;
             unalignedActionLabel: string;
-            last7History: Array<{ current: boolean; state: string }>;
+            last7History: Array<{
+              current: boolean;
+              periodKey: string;
+              state: string;
+            }>;
           }>;
         };
       }
@@ -6022,7 +6094,11 @@ test("watch bootstrap serves compact habit state and watch habit check-ins prese
         habits: Array<{
           id: string;
           currentPeriodStatus: string;
-          last7History: Array<{ current: boolean; periodKey: string; state: string }>;
+          last7History: Array<{
+            current: boolean;
+            periodKey: string;
+            state: string;
+          }>;
         }>;
       };
     };

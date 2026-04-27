@@ -4049,6 +4049,10 @@
           "recommendedTrustLevel",
           "recommendedAutonomyMode",
           "recommendedApprovalMode",
+          "defaultBootstrapPolicy",
+          "effectiveBootstrapPolicy",
+          "defaultScopePolicy",
+          "effectiveScopePolicy",
           "authModes",
           "tokenRecovery",
           "requiredHeaders",
@@ -4136,6 +4140,18 @@
               "high_impact_only",
               "none"
             ]
+          },
+          "defaultBootstrapPolicy": {
+            "$ref": "#/components/schemas/AgentBootstrapPolicy"
+          },
+          "effectiveBootstrapPolicy": {
+            "$ref": "#/components/schemas/AgentBootstrapPolicy"
+          },
+          "defaultScopePolicy": {
+            "$ref": "#/components/schemas/AgentScopePolicy"
+          },
+          "effectiveScopePolicy": {
+            "$ref": "#/components/schemas/AgentScopePolicy"
           },
           "authModes": {
             "type": "object",
@@ -4819,17 +4835,26 @@
               "movementTimeline",
               "movementAllTime",
               "movementPlaces",
+              "movementBoxDetail",
+              "movementSettings",
+              "movementSettingsUpdate",
               "movementTripDetail",
               "movementSelection",
               "movementUserBoxPreflight",
               "movementUserBoxUpdate",
+              "movementUserBoxDelete",
               "movementAutomaticBoxInvalidate",
               "movementStayUpdate",
+              "movementStayDelete",
               "movementTripUpdate",
+              "movementTripDelete",
               "movementTripPointUpdate",
+              "movementTripPointDelete",
+              "workbenchBoxCatalog",
               "workbenchFlows",
               "workbenchFlowBySlug",
               "workbenchPublishedOutput",
+              "workbenchRuns",
               "workbenchRunDetail",
               "workbenchNodeResult",
               "workbenchLatestNodeOutput",
@@ -4886,6 +4911,15 @@
               "movementPlaces": {
                 "type": "string"
               },
+              "movementBoxDetail": {
+                "type": "string"
+              },
+              "movementSettings": {
+                "type": "string"
+              },
+              "movementSettingsUpdate": {
+                "type": "string"
+              },
               "movementTripDetail": {
                 "type": "string"
               },
@@ -4898,16 +4932,31 @@
               "movementUserBoxUpdate": {
                 "type": "string"
               },
+              "movementUserBoxDelete": {
+                "type": "string"
+              },
               "movementAutomaticBoxInvalidate": {
                 "type": "string"
               },
               "movementStayUpdate": {
                 "type": "string"
               },
+              "movementStayDelete": {
+                "type": "string"
+              },
               "movementTripUpdate": {
                 "type": "string"
               },
+              "movementTripDelete": {
+                "type": "string"
+              },
               "movementTripPointUpdate": {
+                "type": "string"
+              },
+              "movementTripPointDelete": {
+                "type": "string"
+              },
+              "workbenchBoxCatalog": {
                 "type": "string"
               },
               "workbenchFlows": {
@@ -4917,6 +4966,9 @@
                 "type": "string"
               },
               "workbenchPublishedOutput": {
+                "type": "string"
+              },
+              "workbenchRuns": {
                 "type": "string"
               },
               "workbenchRunDetail": {
@@ -5342,6 +5394,11 @@
           "id",
           "label",
           "agentType",
+          "identityKey",
+          "provider",
+          "machineKey",
+          "personaKey",
+          "linkedUsers",
           "trustLevel",
           "autonomyMode",
           "approvalMode",
@@ -5360,6 +5417,81 @@
           },
           "agentType": {
             "type": "string"
+          },
+          "identityKey": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "openclaw",
+                  "hermes",
+                  "codex"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "machineKey": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "personaKey": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "linkedUsers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "userId",
+                "role",
+                "user"
+              ],
+              "properties": {
+                "userId": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "user": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/UserSummary"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
           },
           "trustLevel": {
             "type": "string",
@@ -5722,6 +5854,93 @@
           }
         }
       },
+      "AgentBootstrapPolicy": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mode",
+          "goalsLimit",
+          "projectsLimit",
+          "tasksLimit",
+          "habitsLimit",
+          "strategiesLimit",
+          "peoplePageLimit",
+          "includePeoplePages"
+        ],
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "disabled",
+              "active_only",
+              "scoped",
+              "full"
+            ]
+          },
+          "goalsLimit": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "projectsLimit": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "tasksLimit": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "habitsLimit": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "strategiesLimit": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "peoplePageLimit": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 50
+          },
+          "includePeoplePages": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AgentScopePolicy": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "userIds",
+          "projectIds",
+          "tagIds"
+        ],
+        "properties": {
+          "userIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "projectIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tagIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "AgentTokenSummary": {
         "type": "object",
         "additionalProperties": false,
@@ -5736,6 +5955,8 @@
           "autonomyMode",
           "approvalMode",
           "description",
+          "bootstrapPolicy",
+          "scopePolicy",
           "lastUsedAt",
           "revokedAt",
           "createdAt",
@@ -5804,6 +6025,12 @@
           },
           "description": {
             "type": "string"
+          },
+          "bootstrapPolicy": {
+            "$ref": "#/components/schemas/AgentBootstrapPolicy"
+          },
+          "scopePolicy": {
+            "$ref": "#/components/schemas/AgentScopePolicy"
           },
           "lastUsedAt": {
             "anyOf": [
@@ -7249,6 +7476,12 @@
           "userId",
           "source",
           "sourceType",
+          "sourceSystem",
+          "workoutTypeLabel",
+          "activityFamily",
+          "activityFamilyLabel",
+          "activity",
+          "details",
           "workoutType",
           "sourceDevice",
           "startedAt",
@@ -7304,8 +7537,48 @@
           "sourceType": {
             "type": "string"
           },
+          "sourceSystem": {
+            "type": "string"
+          },
+          "sourceBundleIdentifier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sourceProductType": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "workoutType": {
             "type": "string"
+          },
+          "workoutTypeLabel": {
+            "type": "string"
+          },
+          "activityFamily": {
+            "type": "string"
+          },
+          "activityFamilyLabel": {
+            "type": "string"
+          },
+          "activity": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "details": {
+            "type": "object",
+            "additionalProperties": true
           },
           "sourceDevice": {
             "type": "string"
@@ -8515,9 +8788,19 @@
         "additionalProperties": false,
         "required": [
           "generatedAt",
+          "detailMode",
+          "summary",
+          "signalMatrix",
           "snapshot",
           "operator",
+          "today",
+          "yesterday",
+          "calendar",
+          "notes",
           "sleep",
+          "fitness",
+          "vitals",
+          "lifeForce",
           "domains",
           "psyche",
           "onboarding",
@@ -8530,25 +8813,104 @@
             "type": "string",
             "format": "date-time"
           },
+          "detailMode": {
+            "type": "string",
+            "enum": [
+              "compact"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "signalMatrix": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "lane",
+                "signal",
+                "ids"
+              ],
+              "properties": {
+                "lane": {
+                  "type": "string"
+                },
+                "signal": {
+                  "type": "string"
+                },
+                "ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
           "snapshot": {
-            "$ref": "#/components/schemas/ForgeSnapshot"
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Compact strategic snapshot with counts, active goals/projects/tasks, short summaries, IDs, and /api/v1/context as the full drill-down route."
           },
           "operator": {
-            "$ref": "#/components/schemas/OperatorContextPayload"
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Compact operator context with focus tasks, board counts, XP summary, recent activity, recent task runs, IDs, and /api/v1/operator/context as the full drill-down route."
+          },
+          "today": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Compact today context with directive, timeline summaries, habits, quests, and momentum."
+          },
+          "yesterday": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Compact yesterday context using the same shape as today."
+          },
+          "calendar": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Two-day calendar digest for today and yesterday with every same-day event, work-block, and timebox represented as compact ID/title/time records."
+          },
+          "notes": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Recent observed/updated note digest with IDs, titles, tags, links, and short previews. Full note bodies are intentionally omitted."
           },
           "sleep": {
-            "$ref": "#/components/schemas/SleepViewData"
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Compact sleep summary with latest night, trends, recent session IDs, and the full sleep route."
+          },
+          "fitness": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Compact sports summary with recent workout IDs and the full fitness route."
+          },
+          "vitals": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Compact vitals summary with latest metric values and the full vitals route."
+          },
+          "lifeForce": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Compact Life Force state for today's AP budget, drains, warnings, and recommendations."
           },
           "domains": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/Domain"
+              "type": "object",
+              "additionalProperties": true
             }
           },
           "psyche": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/PsycheOverviewPayload"
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Compact Psyche digest with counts, values, patterns, beliefs, modes, recent reports, schema pressure, committed actions, IDs, and /api/v1/psyche/overview as the full drill-down route."
               },
               {
                 "type": "null"
@@ -8556,7 +8918,9 @@
             ]
           },
           "onboarding": {
-            "$ref": "#/components/schemas/AgentOnboardingPayload"
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Compact onboarding subset with base URLs, effective scope policy, route families, and /api/v1/agents/onboarding as the full onboarding route."
           },
           "capabilities": {
             "type": "object",
@@ -9721,6 +10085,39 @@
           "Movement"
         ],
         "operationId": "deletemovement_stays_id"
+      }
+    },
+    "/api/v1/movement/boxes/{id}": {
+      "get": {
+        "summary": "Read one movement box with projected detail, provenance, and raw linked evidence",
+        "responses": {
+          "200": {
+            "description": "Movement box detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "movement"
+                  ],
+                  "properties": {
+                    "movement": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Movement"
+        ],
+        "operationId": "getmovement_boxes_id"
       }
     },
     "/api/v1/movement/trips/{id}": {
@@ -17649,7 +18046,7 @@
     },
     {
       "name": "Wiki",
-      "description": "File-first wiki settings, pages, ingest, sync, health, and search."
+      "description": "SQLite-backed wiki settings, pages, ingest, sync, health, and search."
     },
     {
       "name": "Preferences",

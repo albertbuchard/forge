@@ -106,6 +106,7 @@ import {
   buildNotesSummaryByEntity,
   createNote,
   getNoteById,
+  listNotesByObservedAtRange,
   listNotes,
   updateNote
 } from "./repositories/notes.js";
@@ -578,6 +579,7 @@ import {
   type CrudEntityType,
   type Goal,
   type Habit,
+  type ProjectSummary,
   type Task,
   type TaskTimeSummary,
   type WorkAdjustmentEntityType
@@ -5091,6 +5093,14 @@ function buildAgentOnboardingPayload(request: {
             release: "/api/v1/task-runs/:id/release"
           }
         },
+        work_adjustment: {
+          readModel: "/api/v1/operator/context",
+          actions: {
+            adjustMinutes: "/api/v1/work-adjustments"
+          },
+          writeModel:
+            "Apply a signed minute correction to an existing task or project. Use this instead of creating a fake task_run for work that already happened."
+        },
         questionnaire_run: {
           read: "/api/v1/psyche/questionnaire-runs/:id",
           actions: {
@@ -6386,6 +6396,638 @@ function buildOperatorOverviewRouteGuide() {
   };
 }
 
+const COMPACT_TEXT_LIMIT = 180;
+const NOTE_PREVIEW_LIMIT = 100;
+
+function compactText(value: unknown, limit = COMPACT_TEXT_LIMIT) {
+  if (typeof value !== "string") {
+    return "";
+  }
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= limit) {
+    return normalized;
+  }
+  return `${normalized.slice(0, Math.max(0, limit - 1)).trimEnd()}…`;
+}
+
+function readStringField(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return typeof value === "string" ? value : "";
+}
+
+function readNullableStringField(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return typeof value === "string" ? value : null;
+}
+
+function toRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function compactGoal(goal: Goal) {
+  return {
+    id: goal.id,
+    title: goal.title,
+    summary: compactText(goal.description),
+    horizon: goal.horizon,
+    status: goal.status,
+    targetPoints: goal.targetPoints,
+    tagIds: goal.tagIds.slice(0, 8),
+    userId: goal.userId,
+    updatedAt: goal.updatedAt,
+    detailRoute: `/api/v1/entities/search?entityType=goal&query=${encodeURIComponent(goal.id)}`
+  };
+}
+
+function compactProject(project: ProjectSummary) {
+  return {
+    id: project.id,
+    title: project.title,
+    summary: compactText(
+      project.description || project.productRequirementsDocument
+    ),
+    goalId: project.goalId,
+    goalTitle: project.goalTitle,
+    status: project.status,
+    workflowStatus: project.workflowStatus,
+    progress: project.progress,
+    activeTaskCount: project.activeTaskCount,
+    completedTaskCount: project.completedTaskCount,
+    nextTaskId: project.nextTaskId,
+    nextTaskTitle: project.nextTaskTitle,
+    userId: project.userId,
+    updatedAt: project.updatedAt,
+    detailRoute: `/api/v1/projects/${project.id}`
+  };
+}
+
+function compactTask(task: Task) {
+  return {
+    id: task.id,
+    title: task.title,
+    summary: compactText(task.description || task.aiInstructions),
+    level: task.level,
+    status: task.status,
+    priority: task.priority,
+    goalId: task.goalId,
+    projectId: task.projectId,
+    parentWorkItemId: task.parentWorkItemId,
+    dueDate: task.dueDate,
+    points: task.points,
+    plannedDurationSeconds: task.plannedDurationSeconds,
+    userId: task.userId,
+    updatedAt: task.updatedAt,
+    detailRoute: `/api/v1/tasks/${task.id}`
+  };
+}
+
+function compactHabit(habit: Habit) {
+  return {
+    id: habit.id,
+    title: habit.title,
+    summary: compactText(habit.description),
+    status: habit.status,
+    polarity: habit.polarity,
+    frequency: habit.frequency,
+    targetCount: habit.targetCount,
+    linkedGoalIds: habit.linkedGoalIds.slice(0, 8),
+    linkedProjectIds: habit.linkedProjectIds.slice(0, 8),
+    linkedTaskIds: habit.linkedTaskIds.slice(0, 8),
+    userId: habit.userId,
+    detailRoute: `/api/v1/entities/search?entityType=habit&query=${encodeURIComponent(habit.id)}`
+  };
+}
+
+function compactNote(note: Note) {
+  const observedAt =
+    typeof note.frontmatter.observedAt === "string"
+      ? note.frontmatter.observedAt
+      : null;
+  return {
+    id: note.id,
+    title: compactText(note.title, 80),
+    preview: compactText(
+      note.summary || note.contentPlain || note.contentMarkdown,
+      NOTE_PREVIEW_LIMIT
+    ),
+    kind: note.kind,
+    spaceId: note.spaceId,
+    observedAt,
+    updatedAt: note.updatedAt,
+    createdAt: note.createdAt,
+    tags: note.tags.slice(0, 8),
+    links: note.links.slice(0, 8),
+    userId: note.userId,
+    detailRoute: `/api/v1/notes/${note.id}`
+  };
+}
+
+function compactActivityEvent(event: unknown) {
+  const record = toRecord(event);
+  return {
+    id: readStringField(record, "id"),
+    entityType: readStringField(record, "entityType"),
+    entityId: readStringField(record, "entityId"),
+    title: compactText(readStringField(record, "title"), 120),
+    description: compactText(readStringField(record, "description"), 160),
+    createdAt: readStringField(record, "createdAt"),
+    source: record.source
+  };
+}
+
+function compactTaskRun(run: unknown) {
+  const record = toRecord(run);
+  return {
+    id: readStringField(record, "id"),
+    taskId: readStringField(record, "taskId"),
+    taskTitle: compactText(readStringField(record, "taskTitle"), 120),
+    actor: readStringField(record, "actor"),
+    status: readStringField(record, "status"),
+    isCurrent: Boolean(record.isCurrent),
+    heartbeatAt: readStringField(record, "heartbeatAt"),
+    detailRoute: `/api/v1/task-runs/${readStringField(record, "id")}`
+  };
+}
+
+function compactNamedRecord(
+  value: unknown,
+  options: {
+    fallbackTitle?: string;
+    summaryFields?: string[];
+    limit?: number;
+  } = {}
+) {
+  const record = toRecord(value);
+  const summaryFields = options.summaryFields ?? [
+    "summary",
+    "description",
+    "overview",
+    "note",
+    "eventSituation",
+    "alternative",
+    "protectiveJob",
+    "burden"
+  ];
+  const summary = summaryFields
+    .map((field) => readStringField(record, field))
+    .find((fieldValue) => fieldValue.trim().length > 0);
+  return {
+    id: readStringField(record, "id"),
+    title:
+      compactText(readStringField(record, "title"), 100) ||
+      options.fallbackTitle ||
+      readStringField(record, "label"),
+    summary: compactText(summary ?? "", options.limit ?? COMPACT_TEXT_LIMIT),
+    status: readNullableStringField(record, "status"),
+    userId: readNullableStringField(record, "userId"),
+    updatedAt: readNullableStringField(record, "updatedAt")
+  };
+}
+
+function localDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function localDayRange(date: Date) {
+  const start = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+    0,
+    0,
+    0,
+    0
+  );
+  const end = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate() + 1,
+    0,
+    0,
+    0,
+    0
+  );
+  return {
+    dateKey: localDateKey(start),
+    from: start.toISOString(),
+    to: end.toISOString()
+  };
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function compactDailyContext(context: ReturnType<typeof getTodayContext>) {
+  return {
+    generatedAt: context.generatedAt,
+    directive: {
+      task: context.directive.task ? compactTask(context.directive.task) : null,
+      goalTitle: context.directive.goalTitle,
+      rewardXp: context.directive.rewardXp,
+      sessionLabel: context.directive.sessionLabel
+    },
+    timeline: context.timeline.map((bucket) => ({
+      id: bucket.id,
+      label: bucket.label,
+      taskCount: bucket.tasks.length,
+      tasks: bucket.tasks.slice(0, 6).map(compactTask)
+    })),
+    dueHabits: context.dueHabits.slice(0, 8).map(compactHabit),
+    dailyQuests: context.dailyQuests,
+    momentum: context.momentum,
+    milestoneRewards: context.milestoneRewards.slice(0, 5),
+    recentHabitRewards: context.recentHabitRewards.slice(0, 5)
+  };
+}
+
+function compactOperatorContext(context: ReturnType<typeof buildOperatorContext>) {
+  return {
+    generatedAt: context.generatedAt,
+    activeProjects: context.activeProjects.map(compactProject),
+    focusTasks: context.focusTasks.map(compactTask),
+    dueHabits: context.dueHabits.map(compactHabit),
+    currentBoard: Object.fromEntries(
+      Object.entries(context.currentBoard).map(([lane, tasks]) => [
+        lane,
+        {
+          count: tasks.length,
+          tasks: tasks.slice(0, 5).map(compactTask)
+        }
+      ])
+    ),
+    recentActivity: context.recentActivity.slice(0, 10).map(compactActivityEvent),
+    recentTaskRuns: context.recentTaskRuns.slice(0, 8).map(compactTaskRun),
+    recommendedNextTask: context.recommendedNextTask
+      ? compactTask(context.recommendedNextTask)
+      : null,
+    xp: {
+      profile: context.xp.profile,
+      momentumPulse: context.xp.momentumPulse,
+      achievements: context.xp.achievements.slice(0, 5),
+      milestoneRewards: context.xp.milestoneRewards.slice(0, 5),
+      recentLedger: context.xp.recentLedger.slice(0, 6),
+      dailyAmbientXp: context.xp.dailyAmbientXp,
+      dailyAmbientCap: context.xp.dailyAmbientCap,
+      ruleCount: context.xp.rules.length
+    },
+    detailRoute: "/api/v1/operator/context"
+  };
+}
+
+function compactSleep(sleep: ReturnType<typeof getSleepViewData>) {
+  return {
+    summary: sleep.summary,
+    latestNight: sleep.latestNight
+      ? {
+          id: sleep.latestNight.sleepId,
+          dateKey: sleep.latestNight.dateKey,
+          startedAt: sleep.latestNight.startedAt,
+          endedAt: sleep.latestNight.endedAt,
+          sleepScore: sleep.latestNight.score,
+          regularityScore: sleep.latestNight.regularity,
+          qualitySummary: compactText(sleep.latestNight.qualitySummary),
+          detailRoute: `/api/v1/health/sleep/${sleep.latestNight.sleepId}`
+        }
+      : null,
+    weeklyTrend: sleep.weeklyTrend,
+    stageAverages: sleep.stageAverages,
+    linkBreakdown: sleep.linkBreakdown,
+    sessions: sleep.sessions.slice(0, 7).map((session) => ({
+      id: session.id,
+      localDateKey: session.localDateKey,
+      startedAt: session.startedAt,
+      endedAt: session.endedAt,
+      asleepSeconds: session.asleepSeconds,
+      sleepScore: session.sleepScore,
+      regularityScore: session.regularityScore,
+      detailRoute: `/api/v1/health/sleep/${session.id}`
+    })),
+    detailRoute: "/api/v1/health/sleep"
+  };
+}
+
+function compactFitness(fitness: ReturnType<typeof getFitnessViewData>) {
+  return {
+    summary: fitness.summary,
+    weeklyTrend: fitness.weeklyTrend,
+    typeBreakdown: fitness.typeBreakdown.slice(0, 8),
+    sessions: fitness.sessions.slice(0, 8).map((session) => ({
+      id: session.id,
+      title: compactText(
+        session.plannedContext || session.workoutTypeLabel || session.workoutType,
+        100
+      ),
+      workoutType: session.workoutType,
+      workoutTypeLabel: session.workoutTypeLabel,
+      activityFamily: session.activityFamily,
+      activityFamilyLabel: session.activityFamilyLabel,
+      startedAt: session.startedAt,
+      durationSeconds: session.durationSeconds,
+      energyKcal: session.totalEnergyKcal ?? session.activeEnergyKcal ?? null,
+      detailRoute: `/api/v1/health/workouts/${session.id}`
+    })),
+    detailRoute: "/api/v1/health/fitness"
+  };
+}
+
+function compactVitals(vitals: ReturnType<typeof getVitalsViewData>) {
+  return {
+    summary: vitals.summary,
+    metrics: vitals.metrics.slice(0, 12).map((metric) => ({
+      metric: metric.metric,
+      label: metric.label,
+      category: metric.category,
+      unit: metric.unit,
+      latestValue: metric.latestValue,
+      latestDateKey: metric.latestDateKey,
+      baselineValue: metric.baselineValue,
+      deltaValue: metric.deltaValue,
+      coverageDays: metric.coverageDays
+    })),
+    detailRoute: "/api/v1/health/vitals"
+  };
+}
+
+function compactLifeForce(lifeForce: ReturnType<typeof buildLifeForcePayload>) {
+  return {
+    userId: lifeForce.userId,
+    dateKey: lifeForce.dateKey,
+    dailyBudgetAp: lifeForce.dailyBudgetAp,
+    spentTodayAp: lifeForce.spentTodayAp,
+    remainingAp: lifeForce.remainingAp,
+    forecastAp: lifeForce.forecastAp,
+    instantFreeApPerHour: lifeForce.instantFreeApPerHour,
+    overloadApPerHour: lifeForce.overloadApPerHour,
+    currentDrainApPerHour: lifeForce.currentDrainApPerHour,
+    fatigueBufferApPerHour: lifeForce.fatigueBufferApPerHour,
+    sleepRecoveryMultiplier: lifeForce.sleepRecoveryMultiplier,
+    readinessMultiplier: lifeForce.readinessMultiplier,
+    activeDrains: lifeForce.activeDrains.slice(0, 8),
+    plannedDrains: lifeForce.plannedDrains.slice(0, 8),
+    warnings: lifeForce.warnings,
+    recommendations: lifeForce.recommendations,
+    updatedAt: lifeForce.updatedAt,
+    detailRoute: "/api/v1/life-force"
+  };
+}
+
+function compactPsyche(psyche: ReturnType<typeof getPsycheOverview> | null) {
+  if (!psyche) {
+    return null;
+  }
+  return {
+    generatedAt: psyche.generatedAt,
+    domain: {
+      id: psyche.domain.id,
+      title: psyche.domain.title,
+      slug: psyche.domain.slug
+    },
+    counts: {
+      values: psyche.values.length,
+      patterns: psyche.patterns.length,
+      behaviors: psyche.behaviors.length,
+      beliefs: psyche.beliefs.length,
+      modes: psyche.modes.length,
+      reports: psyche.reports.length,
+      openInsights: psyche.openInsights,
+      openNotes: psyche.openNotes
+    },
+    values: psyche.values.slice(0, 8).map((value) =>
+      compactNamedRecord(value, {
+        summaryFields: ["summary", "description", "whyItMatters"]
+      })
+    ),
+    patterns: psyche.patterns.slice(0, 8).map((pattern) =>
+      compactNamedRecord(pattern, {
+        summaryFields: ["loopSummary", "longTermCost", "preferredResponse"]
+      })
+    ),
+    behaviors: psyche.behaviors.slice(0, 8).map((behavior) =>
+      compactNamedRecord(behavior, {
+        summaryFields: ["description", "function", "cost", "alternative"]
+      })
+    ),
+    beliefs: psyche.beliefs.slice(0, 8).map((belief) =>
+      compactNamedRecord(belief, {
+        summaryFields: ["statement", "evidenceFor", "alternative"]
+      })
+    ),
+    modes: psyche.modes.slice(0, 8).map((mode) =>
+      compactNamedRecord(mode, {
+        summaryFields: ["description", "fear", "burden", "protectiveJob"]
+      })
+    ),
+    recentReports: psyche.reports.slice(0, 5).map((report) =>
+      compactNamedRecord(report, {
+        summaryFields: ["eventSituation", "customEventType"]
+      })
+    ),
+    schemaPressure: psyche.schemaPressure,
+    committedActions: psyche.committedActions.slice(0, 12).map((action) =>
+      compactText(action, 120)
+    ),
+    detailRoute: "/api/v1/psyche/overview"
+  };
+}
+
+function compactCalendarItem(item: unknown) {
+  const record = toRecord(item);
+  return {
+    id: readStringField(record, "id"),
+    title: compactText(readStringField(record, "title"), 100),
+    startAt:
+      readStringField(record, "startAt") || readStringField(record, "startsAt"),
+    endAt: readStringField(record, "endAt") || readStringField(record, "endsAt"),
+    status: readNullableStringField(record, "status"),
+    availability: readNullableStringField(record, "availability"),
+    eventType: readNullableStringField(record, "eventType"),
+    taskId: readNullableStringField(record, "taskId"),
+    projectId: readNullableStringField(record, "projectId")
+  };
+}
+
+function compactCalendarForDays(
+  calendar: ReturnType<typeof readCalendarOverview>,
+  todayKey: string,
+  yesterdayKey: string
+) {
+  const itemDateKey = (item: unknown) => {
+    const record = toRecord(item);
+    const startAt =
+      readStringField(record, "startAt") || readStringField(record, "startsAt");
+    return startAt ? localDateKey(new Date(startAt)) : "";
+  };
+  const events = calendar.events.map((event) => ({
+    ...compactCalendarItem(event),
+    dateKey: itemDateKey(event)
+  }));
+  const workBlocks = calendar.workBlockInstances.map((block) => ({
+    ...compactCalendarItem(block),
+    dateKey: itemDateKey(block)
+  }));
+  const timeboxes = calendar.timeboxes.map((timebox) => ({
+    ...compactCalendarItem(timebox),
+    dateKey: itemDateKey(timebox)
+  }));
+  const byDay = (dateKey: string) => ({
+    dateKey,
+    events: events.filter((event) => event.dateKey === dateKey),
+    workBlocks: workBlocks.filter((block) => block.dateKey === dateKey),
+    timeboxes: timeboxes.filter((timebox) => timebox.dateKey === dateKey)
+  });
+  const today = byDay(todayKey);
+  const yesterday = byDay(yesterdayKey);
+  return {
+    generatedAt: calendar.generatedAt,
+    today,
+    yesterday,
+    counts: {
+      connections: calendar.connections.length,
+      calendars: calendar.calendars.length,
+      events: calendar.events.length,
+      workBlockInstances: calendar.workBlockInstances.length,
+      timeboxes: calendar.timeboxes.length,
+      todayEvents: today.events.length,
+      todayWorkBlocks: today.workBlocks.length,
+      todayTimeboxes: today.timeboxes.length,
+      yesterdayEvents: yesterday.events.length,
+      yesterdayWorkBlocks: yesterday.workBlocks.length,
+      yesterdayTimeboxes: yesterday.timeboxes.length
+    },
+    detailRoute: "/api/v1/calendar/overview"
+  };
+}
+
+function compactOnboardingPayload(
+  onboarding: ReturnType<typeof buildAgentOnboardingPayload>
+) {
+  return {
+    forgeBaseUrl: onboarding.forgeBaseUrl,
+    webAppUrl: onboarding.webAppUrl,
+    apiBaseUrl: onboarding.apiBaseUrl,
+    openApiUrl: onboarding.openApiUrl,
+    pluginBasePath: onboarding.pluginBasePath,
+    defaultConnectionMode: onboarding.defaultConnectionMode,
+    defaultActorLabel: onboarding.defaultActorLabel,
+    effectiveBootstrapPolicy: onboarding.effectiveBootstrapPolicy,
+    effectiveScopePolicy: onboarding.effectiveScopePolicy,
+    readModelOnlySurfaces: onboarding.entityRouteModel.readModelOnlySurfaces,
+    batchRoutes: onboarding.entityRouteModel.batchRoutes,
+    specializedDomainRoutes:
+      onboarding.entityRouteModel.specializedDomainSurfaces,
+    fullOnboardingRoute: "/api/v1/agents/onboarding"
+  };
+}
+
+function buildRecentNoteDigest(input: {
+  from: string;
+  to: string;
+  fromDateKey: string;
+  toDateKey: string;
+  userIds?: string[];
+}) {
+  const observed = listNotesByObservedAtRange({
+    from: input.from,
+    to: input.to,
+    userIds: input.userIds,
+    limit: 40
+  });
+  const updated = listNotes({
+    updatedFrom: input.fromDateKey,
+    updatedTo: input.toDateKey,
+    userIds: input.userIds,
+    limit: 40
+  });
+  const notesById = new Map<string, Note>();
+  for (const note of [...observed, ...updated]) {
+    notesById.set(note.id, note);
+  }
+  const notes = [...notesById.values()]
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+    .slice(0, 20);
+  return {
+    window: {
+      from: input.from,
+      to: input.to
+    },
+    notes: notes.map(compactNote),
+    counts: {
+      observed: observed.length,
+      updated: updated.length,
+      returned: notes.length
+    },
+    detailRoute: "/api/v1/notes"
+  };
+}
+
+function buildSignalMatrix(input: {
+  overview: ReturnType<typeof getOverviewContext>;
+  operator: ReturnType<typeof compactOperatorContext>;
+  today: ReturnType<typeof compactDailyContext>;
+  lifeForce: ReturnType<typeof compactLifeForce>;
+  sleep: ReturnType<typeof compactSleep>;
+  psyche: ReturnType<typeof compactPsyche>;
+}) {
+  return [
+    {
+      lane: "direction",
+      signal: `${input.overview.activeGoals.length} active goals; ${input.overview.projects.length} projects surfaced in strategic context.`,
+      ids: input.overview.activeGoals.slice(0, 5).map((goal) => goal.id)
+    },
+    {
+      lane: "today",
+      signal:
+        input.today.directive.task?.title ??
+        "No active directive selected for today.",
+      ids: input.today.directive.task ? [input.today.directive.task.id] : []
+    },
+    {
+      lane: "execution",
+      signal: `${input.operator.focusTasks.length} focus tasks; recommended next task is ${input.operator.recommendedNextTask?.title ?? "not set"}.`,
+      ids: [
+        ...input.operator.focusTasks.slice(0, 4).map((task) => task.id),
+        ...(input.operator.recommendedNextTask
+          ? [input.operator.recommendedNextTask.id]
+          : [])
+      ]
+    },
+    {
+      lane: "energy",
+      signal: `${input.lifeForce.remainingAp} AP remaining; ${input.lifeForce.instantFreeApPerHour} AP/hour free now.`,
+      ids: input.lifeForce.activeDrains
+        .slice(0, 4)
+        .map((drain) => drain.sourceId)
+    },
+    {
+      lane: "sleep",
+      signal: input.sleep.latestNight
+        ? `Latest night ${input.sleep.latestNight.dateKey}: ${Math.round(input.sleep.summary.averageSleepSeconds / 3600)}h average sleep, score ${input.sleep.latestNight.sleepScore ?? "n/a"}.`
+        : "No recent sleep session is available.",
+      ids: input.sleep.latestNight ? [input.sleep.latestNight.id] : []
+    },
+    {
+      lane: "psyche",
+      signal: input.psyche
+        ? `${input.psyche.counts.values} values, ${input.psyche.counts.patterns} patterns, ${input.psyche.counts.modes} modes, ${input.psyche.counts.openNotes} linked notes.`
+        : "Psyche summary unavailable for this token.",
+      ids: input.psyche
+        ? [
+            ...input.psyche.values.slice(0, 3).map((value) => value.id),
+            ...input.psyche.modes.slice(0, 3).map((mode) => mode.id)
+          ]
+        : []
+    }
+  ];
+}
+
 function buildOperatorOverview(request: {
   protocol: string;
   hostname: string;
@@ -6403,20 +7045,153 @@ function buildOperatorOverview(request: {
   const canReadPsyche = auth.token
     ? hasTokenScope(auth.token, "psyche.read")
     : true;
+  const requestedDetailMode =
+    typeof request.query?.detail === "string" ? request.query.detail : "compact";
   const warnings = canReadPsyche
     ? []
     : [
         "Psyche summary omitted because the active token does not include psyche.read."
       ];
+  if (requestedDetailMode !== "compact") {
+    warnings.push(
+      "Operator overview always returns the compact progressive payload. Use drill-down routes such as /api/v1/context, /api/v1/operator/context, /api/v1/notes/:id, or /api/v1/entities/search for full records."
+    );
+  }
+
+  const now = new Date();
+  const todayRange = localDayRange(now);
+  const yesterdayRange = localDayRange(addDays(now, -1));
+  const projects = applyProjectScope(
+    listProjectSummaries({ userIds }),
+    readScope
+  );
+  const tasks = applyTaskScope(
+    filterOwnedEntities("task", listTasks(), userIds),
+    readScope
+  );
+  const goals = applyGoalScope(
+    filterOwnedEntities("goal", listGoals(), userIds),
+    readScope,
+    new Set(
+      [...projects.map((project) => project.goalId), ...tasks.map((task) => task.goalId)]
+        .filter((value): value is string => typeof value === "string" && value.length > 0)
+    )
+  );
+  const habits = applyHabitScope(
+    filterOwnedEntities("habit", listHabits(), userIds),
+    readScope,
+    new Set(goals.map((goal) => goal.id)),
+    new Set(tasks.map((task) => task.id))
+  );
+  const operator = compactOperatorContext(buildOperatorContext(readScope));
+  const overview = getOverviewContext(now, { userIds });
+  const today = compactDailyContext(getTodayContext(now, { userIds }));
+  const yesterday = compactDailyContext(
+    getTodayContext(addDays(now, -1), { userIds })
+  );
+  const sleep = compactSleep(getSleepViewData(userIds));
+  const fitness = compactFitness(getFitnessViewData(userIds));
+  const vitals = compactVitals(getVitalsViewData(userIds));
+  const lifeForce = compactLifeForce(buildLifeForcePayload(now, userIds));
+  const psyche = canReadPsyche ? compactPsyche(getPsycheOverview(userIds)) : null;
+  const onboarding = compactOnboardingPayload(buildAgentOnboardingPayload(request));
+  const calendar = compactCalendarForDays(
+    readCalendarOverview({
+      from: yesterdayRange.from,
+      to: todayRange.to,
+      userIds
+    }),
+    todayRange.dateKey,
+    yesterdayRange.dateKey
+  );
+  const notes = buildRecentNoteDigest({
+    from: yesterdayRange.from,
+    to: todayRange.to,
+    fromDateKey: yesterdayRange.dateKey,
+    toDateKey: todayRange.dateKey,
+    userIds
+  });
 
   return {
-    generatedAt: new Date().toISOString(),
-    snapshot: buildV1Context(readScope),
-    operator: buildOperatorContext(readScope),
-    sleep: getSleepViewData(userIds),
-    domains: listDomains(),
-    psyche: canReadPsyche ? getPsycheOverview(userIds) : null,
-    onboarding: buildAgentOnboardingPayload(request),
+    generatedAt: now.toISOString(),
+    detailMode: "compact" as const,
+    summary:
+      "Compact operator overview for agent continuity. It keeps current direction, today/yesterday, health, calendar, psyche, notes, and IDs, while full records stay behind drill-down routes.",
+    signalMatrix: buildSignalMatrix({
+      overview,
+      operator,
+      today,
+      lifeForce,
+      sleep,
+      psyche
+    }),
+    snapshot: {
+      generatedAt: now.toISOString(),
+      userScope: {
+        selectedUserIds: userIds ?? [],
+        selectedUsers:
+          userIds === undefined
+            ? users
+            : users.filter((user) => userIds.includes(user.id))
+      },
+      counts: {
+        goals: goals.length,
+        activeGoals: goals.filter((goal) => goal.status === "active").length,
+        projects: projects.length,
+        activeProjects: projects.filter((project) => project.status === "active")
+          .length,
+        tasks: tasks.length,
+        focusTasks: tasks.filter(
+          (task) => task.status === "focus" || task.status === "in_progress"
+        ).length,
+        habits: habits.length
+      },
+      overview: {
+        generatedAt: overview.generatedAt,
+        strategicHeader: overview.strategicHeader,
+        activeGoals: overview.activeGoals.slice(0, 8).map(compactGoal),
+        projects: overview.projects.slice(0, 8).map(compactProject),
+        topTasks: overview.topTasks.slice(0, 8).map(compactTask),
+        dueHabits: overview.dueHabits.slice(0, 8).map(compactHabit),
+        recentEvidence: overview.recentEvidence
+          .slice(0, 10)
+          .map(compactActivityEvent),
+        achievements: overview.achievements.slice(0, 6),
+        domainBalance: overview.domainBalance,
+        neglectedGoals: overview.neglectedGoals
+      },
+      goals: goals
+        .filter((goal) => goal.status === "active")
+        .slice(0, 12)
+        .map(compactGoal),
+      projects: projects
+        .filter((project) => project.status === "active")
+        .slice(0, 12)
+        .map(compactProject),
+      tasks: tasks
+        .filter((task) => task.status !== "done")
+        .slice(0, 16)
+        .map(compactTask),
+      fullContextRoute: "/api/v1/context"
+    },
+    operator,
+    today,
+    yesterday,
+    calendar,
+    notes,
+    sleep,
+    fitness,
+    vitals,
+    lifeForce,
+    domains: listDomains().map((domain) => ({
+      id: domain.id,
+      slug: domain.slug,
+      title: domain.title,
+      summary: compactText(domain.description),
+      color: domain.themeColor
+    })),
+    psyche,
+    onboarding,
     capabilities: {
       tokenPresent: Boolean(auth.token),
       scopes: auth.token?.scopes ?? [],
