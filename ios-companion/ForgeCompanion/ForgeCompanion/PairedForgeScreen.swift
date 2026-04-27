@@ -3149,6 +3149,7 @@ struct MovementTimelineViewportItemMetric: Identifiable {
 
 struct MovementTimelineHourMarker: Identifiable {
     let id: String
+    let date: Date
     let y: CGFloat
     let label: String
     let strong: Bool
@@ -3340,6 +3341,7 @@ func buildMovementViewportHourMarkers(
             markers.append(
                 MovementTimelineHourMarker(
                     id: "timeline-hour-\(hour.timeIntervalSince1970)",
+                    date: hour,
                     y: y,
                     label: movementViewportHourMarkerLabel(for: hour),
                     strong: isStrong
@@ -3406,19 +3408,27 @@ private struct MovementTimelineViewportGrid: View {
                 .fill(Color.clear)
                 .frame(height: layout.contentHeight)
             ForEach(layout.markers) { marker in
-                VStack(alignment: .leading, spacing: 2) {
-                    Rectangle()
-                        .fill(Color.white.opacity(marker.strong ? 0.14 : 0.07))
-                        .frame(height: 1)
-                    Text(marker.label)
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
-                        .foregroundStyle(Color.white.opacity(marker.strong ? 0.26 : 0.12))
-                }
-                .offset(x: 12, y: marker.y - 10)
+                Rectangle()
+                    .fill(Color.white.opacity(marker.strong ? 0.14 : 0.07))
+                    .frame(height: 1)
+                    .offset(y: movementViewportHourMarkerLineOffset(for: marker))
+
+                Text(marker.label)
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color.white.opacity(marker.strong ? 0.26 : 0.12))
+                    .offset(x: 12, y: movementViewportHourMarkerLabelOffset(for: marker))
             }
         }
         .allowsHitTesting(false)
     }
+}
+
+func movementViewportHourMarkerLineOffset(for marker: MovementTimelineHourMarker) -> CGFloat {
+    marker.y
+}
+
+func movementViewportHourMarkerLabelOffset(for marker: MovementTimelineHourMarker) -> CGFloat {
+    marker.y - 10
 }
 
 private struct MovementTimelineTripEndpointCapsule: View {

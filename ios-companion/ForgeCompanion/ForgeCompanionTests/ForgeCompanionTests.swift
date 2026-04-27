@@ -1718,11 +1718,57 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(overlaid.count, 3)
         XCTAssertEqual(overlaid[0].startedAtDate, formatter.date(from: "2026-04-19T20:00:00Z"))
         XCTAssertEqual(overlaid[0].endedAtDate, formatter.date(from: "2026-04-19T21:59:59Z"))
+        XCTAssertEqual(overlaid[0].durationSeconds, 7_199)
         XCTAssertTrue(overlaid[1].isSleepOverlay)
         XCTAssertEqual(overlaid[1].startedAtDate, formatter.date(from: "2026-04-19T22:00:00Z"))
         XCTAssertEqual(overlaid[1].endedAtDate, formatter.date(from: "2026-04-20T06:30:00Z"))
         XCTAssertEqual(overlaid[2].startedAtDate, formatter.date(from: "2026-04-20T06:30:01Z"))
         XCTAssertEqual(overlaid[2].endedAtDate, formatter.date(from: "2026-04-20T07:00:00Z"))
+        XCTAssertEqual(overlaid[2].durationSeconds, 1_799)
+    }
+
+    func testSleepOverlaySlicesRecalculateDisplayDurationFromTrimmedDates() throws {
+        let formatter = ISO8601DateFormatter()
+        let sourceStay = makeDisplayItem(
+            id: "long-source-stay",
+            kind: .stay,
+            title: "Home",
+            placeLabel: "Home",
+            startedAt: formatter.date(from: "2026-04-18T19:19:00Z") ?? Date(),
+            endedAt: formatter.date(from: "2026-04-19T04:05:00Z") ?? Date(),
+            durationSeconds: 86_400,
+            origin: .recorded
+        )
+        let overlay = ForgeMovementTimelineSleepOverlay(
+            id: "sleep-slice",
+            externalUid: "sleep-slice",
+            startedAt: "2026-04-19T01:43:00Z",
+            endedAt: "2026-04-19T03:54:00Z",
+            localDateKey: "2026-04-19",
+            sourceTimezone: "Europe/Zurich",
+            asleepSeconds: 7_860,
+            timeInBedSeconds: 7_860,
+            sleepScore: 84,
+            regularityScore: 77,
+            efficiency: 0.94,
+            recoveryState: "rested"
+        )
+
+        let overlaid = MovementTimelineSleepOverlayNormalizer.overlay(
+            items: [sourceStay],
+            overlays: [overlay],
+            referenceDate: formatter.date(from: "2026-04-19T06:00:00Z") ?? Date()
+        )
+
+        XCTAssertEqual(overlaid.count, 3)
+        XCTAssertEqual(overlaid[0].startedAtDate, formatter.date(from: "2026-04-18T19:19:00Z"))
+        XCTAssertEqual(overlaid[0].endedAtDate, formatter.date(from: "2026-04-19T01:42:59Z"))
+        XCTAssertEqual(overlaid[0].durationSeconds, 23_039)
+        XCTAssertTrue(overlaid[1].isSleepOverlay)
+        XCTAssertEqual(overlaid[2].startedAtDate, formatter.date(from: "2026-04-19T03:54:01Z"))
+        XCTAssertEqual(overlaid[2].endedAtDate, formatter.date(from: "2026-04-19T04:05:00Z"))
+        XCTAssertEqual(overlaid[2].durationSeconds, 659)
+        XCTAssertEqual(overlaid[2].durationLabel, "10m")
     }
 
     func testSleepOverlayNormalizerHidesFullyCoveredBoxes() {
@@ -1893,6 +1939,46 @@ final class ForgeCompanionTests: XCTestCase {
                 next.y > previous.y
             }
         )
+    }
+
+    func testViewportHourMarkerLinesUseExactFractionalHourCoordinates() throws {
+        let formatter = ISO8601DateFormatter()
+        let postSleepStay = makeDisplayItem(
+            id: "post-sleep-home",
+            kind: .stay,
+            title: "Home",
+            placeLabel: "Home",
+            startedAt: formatter.date(from: "2026-04-19T03:54:00Z") ?? Date(),
+            endedAt: formatter.date(from: "2026-04-19T04:05:00Z") ?? Date(),
+            durationSeconds: 660,
+            origin: .recorded
+        )
+
+        let rangeEnd = formatter.date(from: "2026-04-19T05:00:00Z") ?? Date()
+        let fourAm = formatter.date(from: "2026-04-19T04:00:00Z") ?? Date()
+        let layout = buildMovementViewportLayoutModel(
+            items: [postSleepStay],
+            viewportHeight: 844,
+            safeTopInset: 0,
+            bottomPadding: 0,
+            rangeEnd: rangeEnd
+        )
+        let row = try XCTUnwrap(layout.items.first)
+        let fourAmY = try XCTUnwrap(
+            movementViewportYPosition(for: fourAm, layout: layout, rangeEnd: rangeEnd)
+        )
+        let fourAmMarker = try XCTUnwrap(
+            buildMovementViewportHourMarkers(layout: layout, rangeEnd: rangeEnd)
+                .first { $0.date == fourAm }
+        )
+        let expectedRatio = CGFloat(fourAm.timeIntervalSince(postSleepStay.startedAtDate) / postSleepStay.endedAtDate.timeIntervalSince(postSleepStay.startedAtDate))
+
+        XCTAssertEqual(fourAmMarker.y, fourAmY, accuracy: 0.5)
+        XCTAssertEqual(movementViewportHourMarkerLineOffset(for: fourAmMarker), fourAmY, accuracy: 0.5)
+        XCTAssertEqual(fourAmY - row.boxTop, row.boxHeight * expectedRatio, accuracy: 0.5)
+        XCTAssertEqual(row.boxBottom - fourAmY, row.boxHeight * (1 - expectedRatio), accuracy: 0.5)
+        XCTAssertLessThan(row.boxTop, movementViewportHourMarkerLineOffset(for: fourAmMarker))
+        XCTAssertGreaterThan(row.boxBottom, movementViewportHourMarkerLineOffset(for: fourAmMarker))
     }
 
     func testViewportVirtualizationUsesAbsoluteTimelineGeometry() throws {
