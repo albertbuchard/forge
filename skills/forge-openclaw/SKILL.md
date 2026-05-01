@@ -1,6 +1,6 @@
 ---
 name: forge-openclaw-plugin
-description: use when the user wants to save, search, update, review, start, stop, reward, explain, compare, or run Forge records, or when the conversation is clearly about a Forge entity such as a goal, project, strategy, task, habit, note, calendar_event, work_block_template, task_timebox, task_run, insight, preference item, preference context, preference catalog, questionnaire instrument, questionnaire run, self observation, psyche_value, behavior_pattern, behavior, belief_entry, mode_profile, mode_guide_session, trigger_report, event_type, emotion_definition, sleep_session, or workout_session. identify the exact Forge object, keep the main conversation natural, guide psyche intake with active listening before storing it, and for psyche issues that need understanding first usually begin with one exploratory question before any formulation or save suggestion.
+description: use when the user wants to save, search, update, review, start, stop, reward, explain, compare, or run Forge records, or when the conversation is clearly about a Forge entity or domain surface such as a goal, project, strategy, task, habit, note, wiki_page, calendar_event, calendar_connection, work_block_template, task_timebox, task_run, work_adjustment, insight, preference item, preference context, preference catalog, preference judgment, preference signal, questionnaire instrument, questionnaire run, self observation, movement, life_force, workbench, psyche_value, behavior_pattern, behavior, belief_entry, mode_profile, mode_guide_session, trigger_report, event_type, emotion_definition, sleep_session, or workout_session. identify the exact Forge object or specialized surface, keep the main conversation natural, guide psyche intake with active listening before storing it, and for psyche issues that need understanding first usually begin with one exploratory question before any formulation or save suggestion.
 ---
 
 Forge is the user's structured system for planning work, doing work, reflecting on patterns, and keeping a truthful record of what is happening. Use it when the user is clearly working inside that system, or when they are describing something that naturally belongs there and would benefit from being stored, updated, reviewed, or acted on in Forge. Keep the conversation natural first. Do not turn every message into intake. When a real Forge entity is clearly present, name the exact entity type plainly, help with the substance of the conversation, and then offer Forge once, lightly, if storing it would genuinely help.
@@ -59,9 +59,31 @@ PM surface rule:
   human/bot ownership filters.
 - Guided modal flows handle create, edit, move, link, and closeout actions.
 
-Forge has four major surfaces. The planning side covers goals, projects, strategies, tasks, habits, notes, calendar events, recurring work blocks, task timeboxes, live work sessions, and agent-authored insights. The Health side covers sleep sessions, sports and workout sessions, companion pairing, and habit-generated workout records that should still stay linked to the broader Forge graph. The Preferences side covers contextual taste modeling, pairwise comparisons, direct signals, editable concept libraries, and preference items that can come from Forge entities or seeded concept domains such as food, activities, places, countries, fashion, people, media, and tools. The Psyche side covers values, patterns, behaviors, beliefs, modes, guided mode sessions, trigger reports, event types, and reusable emotion definitions. Forge also has a SQLite-backed Wiki memory layer with explicit spaces, Markdown content in database rows, backlinks, optional embeddings, and structured links back to Forge entities. Forge is also multi-user: every entity can belong to a typed `human` or `bot` user through `userId`, and read routes can scope to one or many users with `userId` or repeated `userIds`. The current access posture is configurable through a directional user graph, but the live default is still permissive: Forge can list users directly, every relationship edge starts open, and a user can read or affect another user's linked records when the route explicitly asks for them. Use `forge_get_user_directory` when owner identity or cross-user access matters. Strategies can also be locked into a contract with `isLocked`; once locked, do not mutate the graph or target structure unless the user explicitly wants the strategy unlocked first. The model should use the real entity names, not vague substitutes. Say `project`, not “initiative”. Say `behavior_pattern`, not “theme”. Say `trigger_report`, not “incident note”.
+Forge has four major stored-entity surfaces and three specialized domain surfaces. The planning side covers goals, projects, strategies, tasks, habits, notes, calendar events, recurring work blocks, task timeboxes, live work sessions, and agent-authored insights. The Health side covers sleep sessions, sports and workout sessions, companion pairing, and habit-generated workout records that should still stay linked to the broader Forge graph. The Preferences side covers contextual taste modeling, pairwise comparisons, direct signals, editable concept libraries, and preference items that can come from Forge entities or seeded concept domains such as food, activities, places, countries, fashion, people, media, and tools. The Psyche side covers values, patterns, behaviors, beliefs, modes, guided mode sessions, trigger reports, event types, and reusable emotion definitions. The specialized domain surfaces are Movement, Life Force, and Workbench; agents must use their dedicated route families instead of forcing them through batch CRUD. Forge also has a SQLite-backed Wiki memory layer with explicit spaces, Markdown content in database rows, backlinks, optional embeddings, and structured links back to Forge entities. Forge is also multi-user: every entity can belong to a typed `human` or `bot` user through `userId`, and read routes can scope to one or many users with `userId` or repeated `userIds`. The current access posture is configurable through a directional user graph, but the live default is still permissive: Forge can list users directly, every relationship edge starts open, and a user can read or affect another user's linked records when the route explicitly asks for them. Use `forge_get_user_directory` when owner identity or cross-user access matters. Strategies can also be locked into a contract with `isLocked`; once locked, do not mutate the graph or target structure unless the user explicitly wants the strategy unlocked first. The model should use the real entity names, not vague substitutes. Say `project`, not “initiative”. Say `behavior_pattern`, not “theme”. Say `trigger_report`, not “incident note”.
 Habits are a first-class recurring entity in the planning side.
 NEGATIVE HABIT CHECK-IN RULE: for a `negative` habit, the correct aligned/resisted outcome is `missed`. `missed` means the bad habit was resisted, the user stayed aligned, and the habit should award its XP bonus.
+
+## Entity Route Posture
+
+Before asking for lower-level details, decide whether the user's request is normal
+stored-entity CRUD, an action workflow, specialized CRUD, or a specialized domain
+surface. Name the path plainly enough that another agent could follow it without
+guessing.
+
+- Batch CRUD is the default for normal stored entities, including `goal`, `project`,
+  `strategy`, `task`, `habit`, `tag`, `note`, `insight`, `calendar_event`,
+  `work_block_template`, `task_timebox`, all main Psyche records, basic Preferences
+  CRUD records, `questionnaire_instrument`, `sleep_session`, and `workout_session`.
+- `wiki_page` and `calendar_connection` are specialized CRUD surfaces. Use the wiki
+  tools for wiki pages and the calendar connection tools for provider setup and sync.
+- `task_run`, `work_adjustment`, `questionnaire_run`, `preference_judgment`,
+  `preference_signal`, and `self_observation` are action workflows. Use their
+  dedicated tools or note-backed write model instead of generic entity create/update
+  when the action route is the real product behavior.
+- Movement, Life Force, and Workbench are specialized domain surfaces. Read
+  `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces` and use
+  the dedicated route families for timeline/overlay repair, energy templates/signals,
+  and flow execution/results.
 
 Preferences rule:
 
@@ -74,6 +96,11 @@ Preferences rule:
 Wiki rule:
 
 - Treat the Wiki as the canonical long-form memory surface, not as a loose note dump.
+- Use a wiki page whenever the user wants to remember or reuse durable knowledge:
+  a book, article, paper, source, concept, person, conversation, project reference,
+  recurring explanation, or personal manual.
+- Prefer `wiki_page` over `note` when the user is asking for durable memory,
+  synthesis, reference, or something they will want to find again by topic.
 - Use the wiki tools when the user wants SQLite-backed reference pages, backlink-aware recall, ingest from a URL or local file, or wiki maintenance work such as unresolved-link cleanup.
 - `forge_ingest_wiki_source` now queues the ingest as background work; use the Forge UI handoff when the user wants to review or keep only selected wiki/entity candidates after the ingest finishes.
 - Keep evidence notes and wiki pages conceptually distinct: evidence notes are linked operating records, while wiki pages are curated long-form memory.
@@ -118,23 +145,24 @@ Entity conversation rule:
 - When the user is vague, ask for one small concrete example, stake, or desired outcome before you ask them to name the record.
 - When the user is clear, say what the record seems to be becoming and ask only for the last missing detail.
 - When the user wants to review, compare, inspect, or navigate an existing Forge
-  record, ask what they are trying to understand first and prefer the read path before
-  you reopen create or update intake.
+  record, ask what they are trying to understand first and look up the existing record
+  before you reopen create or update intake.
 - When updating an entity, start with what is changing, what should stay true, and what prompted the update now.
 - When enough is clear, briefly summarize what you heard in the user's own language before asking for the last missing structural detail.
 - The quick intake prompts later in this file are fallback checkpoints, not a script to read aloud.
 
 Forge data location rule:
 
-- by default, Forge stores data under the active runtime root at `forge.sqlite`
-- on a normal OpenClaw install, this usually means `~/.openclaw/extensions/forge-openclaw-plugin/forge.sqlite`
-- on a linked repo-local install, this usually means `<repo>/openclaw-plugin/forge.sqlite`
+- by default, current Forge plugins converge on the shared local Forge home at `~/.forge/forge.sqlite`
+- the exact storage root is the active runtime `dataRoot`; when `dataRoot` is set in plugin config, Forge stores `forge.sqlite` directly inside that folder
+- on repo-local development installs, keep using the configured shared `dataRoot` unless the user explicitly asks to move data
 - if the user wants the data somewhere else for persistence, backup, or manual control, tell them to set `plugins.entries["forge-openclaw-plugin"].config.dataRoot` and restart the OpenClaw gateway
 - if the user asks where the data is stored or how to move it, explain the current default plainly and show the exact config field
 
 Psyche interview rule:
 
-- For `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`, `mode_guide_session`, and `trigger_report`, do not jump straight to raw field collection.
+- For `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`, `mode_guide_session`, `trigger_report`, `event_type`, and `emotion_definition`, do not jump straight to raw field collection.
+- Treat `event_type` and `emotion_definition` as psychologically meaningful Psyche records, not cold taxonomy labels; start from the repeated lived moment or felt signature before wording the reusable label.
 - First use the active-listening playbooks in [`psyche_entity_playbooks.md`](./psyche_entity_playbooks.md).
 - Ask permission before going deeper, ask one or two focused questions at a time, reflect back what you heard, and summarize before moving on.
 - Start from a recent concrete example before naming an abstract pattern, belief, or mode.
@@ -155,6 +183,26 @@ Psyche interview rule:
 - When the conversation reveals an adjacent entity such as a linked belief, mode, value, pattern, or note, name that gently and ask whether the user wants to map it too.
 - If nuance matters, preserve it in a linked Markdown `note` instead of forcing every detail into normalized fields.
 - If the user shows imminent risk of self-harm, suicide, violence, inability to stay safe, or severe disorientation, stop normal intake and prioritize urgent human support or emergency help instead.
+
+Self-observation rule:
+
+- Do not use `self_observation` as the default bucket for Psyche material.
+- A self-observation is a lightweight observed episode, written as a note-backed
+  calendar observation with `frontmatter.observedAt`.
+- When the user describes an episode, help map the chain:
+  situation -> cue -> emotion/body -> thought/meaning -> behavior/urge ->
+  consequence.
+- If the chain is one emotionally meaningful episode, prefer `trigger_report`.
+- If it is a recurring loop, prefer `behavior_pattern` and do a functional analysis.
+- If the core is one repeated action, prefer `behavior`.
+- If the core is a sentence the user believes, prefer `belief_entry`.
+- If a part-state, protector, critic, child state, or healthy-adult stance is active,
+  prefer `mode_guide_session` or `mode_profile`.
+- If a schema theme is visible, do not bury it in self-observation: preserve it as
+  the belief, recurring pattern, active mode, guided mode session, trigger report, or
+  wiki explanation that best matches the material.
+- If the user wants durable memory about a book, article, concept, source, or personal
+  manual, prefer `wiki_page`.
 
 Use these exact entity meanings when deciding what the user is describing.
 
@@ -383,7 +431,9 @@ Use the dedicated domain routes for specialized surfaces that are not simple bat
   same specialized families are exposed under `/forge/v1/movement/*`,
   `/forge/v1/life-force/*`, and `/forge/v1/workbench/*`.
 - Workbench lane hints:
-  use `/api/v1/workbench/flows` for flow catalog and CRUD,
+  use `GET /api/v1/workbench/flows` for flow catalog,
+  `POST /api/v1/workbench/flows` for flow creation,
+  `PATCH /api/v1/workbench/flows/:id` and `DELETE /api/v1/workbench/flows/:id` for saved-flow edits or deletion,
   `/api/v1/workbench/flows/:id/run` or `/api/v1/workbench/run` for execution,
   `/api/v1/workbench/flows/:id/output` for published outputs, and the run/node routes
   under `/api/v1/workbench/flows/:id` for run history and node-level inspection.
@@ -568,37 +618,55 @@ When the user asks which Forge tools are available, list exactly these tools:
 `forge_get_operator_context`
 `forge_get_agent_onboarding`
 `forge_get_user_directory`
+`forge_get_ui_entrypoint`
 `forge_get_psyche_overview`
-`forge_get_sleep_overview`
-`forge_get_sports_overview`
 `forge_get_xp_metrics`
 `forge_get_weekly_review`
-`forge_get_current_work`
-`forge_get_ui_entrypoint`
 `forge_get_wiki_settings`
 `forge_list_wiki_pages`
 `forge_get_wiki_page`
+`forge_get_wiki_health`
 `forge_search_wiki`
 `forge_upsert_wiki_page`
-`forge_get_wiki_health`
 `forge_sync_wiki_vault`
 `forge_reindex_wiki_embeddings`
 `forge_ingest_wiki_source`
+`forge_get_current_work`
+`forge_get_sleep_overview`
+`forge_get_sports_overview`
+`forge_update_sleep_session`
+`forge_update_workout_session`
+`forge_get_preferences_workspace`
+`forge_start_preferences_game`
+`forge_merge_preferences_contexts`
+`forge_enqueue_preferences_item_from_entity`
+`forge_submit_preferences_judgment`
+`forge_submit_preferences_signal`
+`forge_update_preferences_score`
+`forge_list_questionnaires`
+`forge_get_questionnaire`
+`forge_clone_questionnaire`
+`forge_ensure_questionnaire_draft`
+`forge_publish_questionnaire_draft`
+`forge_start_questionnaire_run`
+`forge_get_questionnaire_run`
+`forge_update_questionnaire_run`
+`forge_complete_questionnaire_run`
+`forge_get_self_observation_calendar`
 `forge_search_entities`
 `forge_create_entities`
 `forge_update_entities`
 `forge_delete_entities`
 `forge_restore_entities`
 `forge_grant_reward_bonus`
-`forge_update_sleep_session`
-`forge_update_workout_session`
+`forge_adjust_work_minutes`
+`forge_post_insight`
 `forge_log_work`
 `forge_start_task_run`
 `forge_heartbeat_task_run`
 `forge_focus_task_run`
 `forge_complete_task_run`
 `forge_release_task_run`
-`forge_post_insight`
 `forge_get_calendar_overview`
 `forge_connect_calendar_provider`
 `forge_sync_calendar_connection`

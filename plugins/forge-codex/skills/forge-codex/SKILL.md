@@ -4,7 +4,8 @@ Use this plugin when you want Codex to work directly with Forge through the cura
 MCP tool surface.
 
 Forge has planning, health, preferences, Psyche, questionnaire, self-observation,
-and wiki surfaces. The planning side covers goals, projects, strategies, tasks,
+wiki surfaces, and specialized Movement, Life Force, and Workbench domain surfaces.
+The planning side covers goals, projects, strategies, tasks,
 habits, tags, notes, calendar events, recurring work blocks, task timeboxes, live
 task runs, and agent-authored insights. The health side covers `sleep_session` and
 `workout_session`. The preferences side covers `preference_catalog`,
@@ -12,7 +13,8 @@ task runs, and agent-authored insights. The health side covers `sleep_session` a
 judgments, and signals. The Psyche side covers values, patterns, behaviors, beliefs,
 modes, guided mode sessions, trigger reports, event types, reusable emotion
 definitions, `questionnaire_instrument`, `questionnaire_run`, and the note-backed
-self-observation calendar. Forge is explicitly multi-user: every stored entity can
+self-observation calendar. Movement, Life Force, and Workbench use dedicated route
+families and must not be forced through batch CRUD. Forge is explicitly multi-user: every stored entity can
 belong to a typed `human` or `bot` user through `userId`, reads can scope to one or
 many users with `userId` or repeated `userIds`, and cross-user links are valid when
 the request is intentional.
@@ -20,6 +22,28 @@ the request is intentional.
 Write to Forge only with clear user consent. If the user is still thinking aloud,
 help first and offer storage lightly only when it would genuinely help. When the user
 does want to save or update something, ask only for what is missing or unclear.
+
+## Entity Route Posture
+
+Before asking for lower-level details, decide whether the user's request is normal
+stored-entity CRUD, an action workflow, specialized CRUD, or a specialized domain
+surface. Name the path plainly enough that another Codex agent could follow it
+without guessing.
+
+- Batch CRUD is the default for normal stored entities, including `goal`, `project`,
+  `strategy`, `task`, `habit`, `tag`, `note`, `insight`, `calendar_event`,
+  `work_block_template`, `task_timebox`, all main Psyche records, basic Preferences
+  CRUD records, `questionnaire_instrument`, `sleep_session`, and `workout_session`.
+- `wiki_page` and `calendar_connection` are specialized CRUD surfaces. Use the wiki
+  tools for wiki pages and the calendar connection tools for provider setup and sync.
+- `task_run`, `work_adjustment`, `questionnaire_run`, `preference_judgment`,
+  `preference_signal`, and `self_observation` are action workflows. Use their
+  dedicated tools or note-backed write model instead of generic entity create/update
+  when the action route is the real product behavior.
+- Movement, Life Force, and Workbench are specialized domain surfaces. Read
+  `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces` and use
+  the dedicated route families for timeline/overlay repair, energy templates/signals,
+  and flow execution/results.
 
 ## Project Management Hierarchy Rule
 
@@ -79,7 +103,11 @@ Surface rule:
   fall back to field-by-field intake.
 - For Psyche entities, use [`psyche_entity_playbooks.md`](./psyche_entity_playbooks.md)
   before storing `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`,
-  `mode_profile`, `mode_guide_session`, or `trigger_report`.
+  `mode_profile`, `mode_guide_session`, `trigger_report`, `event_type`, or
+  `emotion_definition`.
+- Treat `event_type` and `emotion_definition` as psychologically meaningful Psyche
+  records, not plain taxonomy rows. Start from the repeated lived moment or felt
+  signature before settling the reusable label.
 - Let each question have one job. Know what you are trying to clarify before you ask it.
 - Ask one to three focused questions at a time. One is usually best when the user is
   uncertain, reflective, or emotionally loaded.
@@ -107,8 +135,8 @@ Surface rule:
 - When the user is clear, state the working formulation and ask only for the last
   missing detail.
 - When the user wants to review, compare, inspect, or navigate an existing Forge
-  record, ask what they are trying to understand first and prefer the read path before
-  you reopen create or update intake.
+  record, ask what they are trying to understand first and look up the existing record
+  before you reopen create or update intake.
 - Before saving, briefly summarize the working formulation in the user's own language
   when that would reduce ambiguity.
 - Search before creating duplicates when the entity is ambiguous.
@@ -167,6 +195,9 @@ Surface rule:
      `preference_item`
    - `questionnaire_instrument`, `sleep_session`, `workout_session`
 5. Specialized CRUD entities are `wiki_page` and `calendar_connection`.
+   Use wiki pages whenever the user wants durable memory for a book, article, paper,
+   source, concept, person, conversation, project reference, recurring explanation,
+   or personal manual.
 6. Action and workflow entities are `task_run`, `questionnaire_run`, the
    preferences game and judgment/signal tools, calendar sync/setup flows, work-log
    adjustments, and similar action-heavy operations.
@@ -212,6 +243,14 @@ Surface rule:
 - Preferred mutation path for questionnaires: use batch CRUD for
   `questionnaire_instrument`, and use the run, clone, draft, and publish tools for
   questionnaire workflows.
+- Self-observation is only for lightweight observed episode notes. When the user
+  describes a psychological chain, map situation, cue, emotion/body, thought/meaning,
+  behavior/urge, and consequence; use `trigger_report` for one meaningful episode,
+  `behavior_pattern` for recurring-loop functional analysis, `behavior` for one
+  repeated move, `belief_entry` for a core sentence, `mode_guide_session` or
+  `mode_profile` for a part-state, and `wiki_page` for durable memory. If a schema
+  theme is visible, preserve it through the matching belief, pattern, mode, trigger
+  report, or wiki explanation instead of hiding it in self-observation.
 - Preferred mutation path for wiki content: use the wiki tools instead of batch CRUD.
 - Habit outcome writes in the shared agent model should go through `forge_update_entities` on `entityType: "habit"` with `patch.checkIn`, not direct raw calls to `/api/v1/habits/:id/check-ins`.
 - `patch.checkIn` accepts `status` plus optional `dateKey`, `note`, and `description`; if `description` is provided, it replaces the habit's stored `description` in the same write.
@@ -219,9 +258,10 @@ Surface rule:
   route families published in `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces`.
 - When that onboarding payload includes `routeSelectionQuestions`, use them before
   improvising follow-up questions for Movement, Life Force, or Workbench.
-- After the lane is clear, talk in route-relevant nouns such as timeline, overlay,
-  weekday template, published output, run detail, or node result rather than generic
-  "record" language.
+- After the lane is clear, talk in product nouns such as timeline, overlay, weekday
+  template, published output, run detail, or node result rather than generic "record"
+  language. Keep implementation words like surface, CRUD, payload, read path, and
+  mutation path out of user-facing questions unless the user asks about implementation.
 - If the truth of the current Movement, Life Force, or Workbench state is still
   unclear, prefer the dedicated read before the mutation so the correction stays
   truthful.
@@ -245,7 +285,9 @@ Surface rule:
   are `PATCH /api/v1/life-force/profile`, weekday curve edits are
   `PUT /api/v1/life-force/templates/:weekday`, and real-time tired or recovered
   reports are `POST /api/v1/life-force/fatigue-signals`.
-- Workbench lane hints: flow catalog and CRUD live under `/api/v1/workbench/flows`,
+- Workbench lane hints: flow catalog reads use `GET /api/v1/workbench/flows`,
+  flow creation uses `POST /api/v1/workbench/flows`, saved-flow edits and deletion use
+  `PATCH /api/v1/workbench/flows/:id` and `DELETE /api/v1/workbench/flows/:id`,
   execution uses `/api/v1/workbench/flows/:id/run` or `/api/v1/workbench/run`,
   published outputs use `/api/v1/workbench/flows/:id/output`, and per-run or per-node
   inspection uses the run and node-result routes under `/api/v1/workbench/flows/:id`.

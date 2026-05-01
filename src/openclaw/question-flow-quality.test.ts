@@ -38,20 +38,20 @@ describe("question flow quality coverage", () => {
       ["Habit", /strengthen or interrupt/i, /honest check-in/i],
       ["Tag", /help you notice or find again later/i, /inside versus outside/i],
       ["Note", /worth preserving in a note/i, /durable or temporary/i],
-      ["Wiki Page", /main reference for/i, /durable reference page/i],
+      ["Wiki Page", /remember or reuse later/i, /durable memory/i],
       ["Insight", /future-you or the agent/i, /practical recommendation/i],
       ["Calendar Event", /when should it happen in your local time/i, /timezone/i],
       ["Work Block Template", /when should it repeat/i, /allows or blocks work/i],
       ["Task Timebox", /make time for/i, /planned work with completed work/i],
       ["Task Run", /Which task should I start/i, /Start the run instead of turning it into intake/i],
       ["Work Adjustment", /time correction belong to/i, /truthfully/i],
-      ["Self Observation", /notice most clearly in that moment/i, /support later reflection/i],
+      ["Self Observation", /what happened in the situation/i, /situation, cue, emotion\/body, thought\/meaning, behavior\/urge, and consequence/i],
       ["Sleep Session", /important enough to remember or connect/i, /reflective takeaway/i],
       ["Workout Session", /most worth remembering or connecting/i, /subjective effort, mood, meaning/i],
       ["Calendar Connection", /calendar provider are you trying to connect/i, /workflow they are trying to unlock/i],
       ["Preference Judgment", /comparison are you actually trying to settle/i, /pairwise preference decision/i],
       ["Preference Signal", /remember about this item right now/i, /favorite, veto, bookmark,[\s\S]*compare-later/i],
-      ["Movement", /understand, correct, or preserve/i, /dedicated movement read or write path/i],
+      ["Movement", /understand, correct, or preserve/i, /timeline[\s\S]*overlay[\s\S]*repair/i],
       ["Life Force", /energy picture right now/i, /dedicated life-force path/i],
       ["Workbench", /inspect, change, run, or publish/i, /dedicated workbench route family/i],
       ["Preference Catalog", /decision or taste question should this catalog help with/i, /comparison pool/i],
@@ -59,9 +59,7 @@ describe("question flow quality coverage", () => {
       ["Preference Context", /treat your preferences differently here/i, /inside versus outside/i],
       ["Preference Item", /make clearer by saving this item/i, /favorite, veto, or compare-later/i],
       ["Questionnaire Instrument", /help someone notice or track/i, /reusable questionnaire/i],
-      ["Questionnaire Run", /start, continue, review, or finish a questionnaire run/i, /next answer or note that matters/i],
-      ["Event Type", /keeps happening/i, /future reports stay[\s\S]*consistent/i],
-      ["Emotion Definition", /not a nearby one/i, /future reports stay precise/i]
+      ["Questionnaire Run", /start, continue, review, or finish a questionnaire run/i, /next answer or note that matters/i]
     ] as const;
 
     for (const [section, opening, purpose] of scenarios) {
@@ -156,13 +154,25 @@ describe("question flow quality coverage", () => {
     expect(entityPlaybook).toMatch(/run[\s\S]*summary/i);
     expect(entityPlaybook).toMatch(/latest node output/i);
     expect(entityPlaybook).toMatch(/published output/i);
+    expect(entityPlaybook).toMatch(/POST \/api\/v1\/workbench\/flows/);
+    expect(entityPlaybook).toMatch(/PATCH \/api\/v1\/workbench\/flows\/:id/);
+    expect(entityPlaybook).toMatch(/DELETE \/api\/v1\/workbench\/flows\/:id/);
     expect(entityPlaybook).toMatch(
       /inspect one already-saved movement correction before editing/i
     );
     expect(entityPlaybook).toMatch(/DELETE \/api\/v1\/movement\/user-boxes\/:id/i);
     expect(entityPlaybook).toMatch(/send one follow-up message into a saved flow chat/i);
     expect(entityPlaybook).toMatch(
-      /what felt most important to name before it gets smoothed over or forgotten/i
+      /Self-observation is not the default container for psychological material/i
+    );
+    expect(entityPlaybook).toMatch(
+      /functional analysis:[\s\S]*situation -> cue -> emotion\/body -> thought\/meaning -> behavior\/urge/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Use `behavior_pattern` for a recurring loop/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Use `wiki_page` when the user wants durable memory, a book\/article\/source summary/i
     );
     expect(entityPlaybook).toMatch(
       /what sentence future-you would need to recover from this note later/i
@@ -174,7 +184,20 @@ describe("question flow quality coverage", () => {
       /what belongs inside the boundary and what can stay out if the scope still[\s\S]*feels muddy/i
     );
     expect(entityPlaybook).toMatch(
-      /smallest concrete slice if the observation still feels vague[\s\S]*global/i
+      /what happened in the situation[\s\S]*cue, trigger[\s\S]*emotion, body signal[\s\S]*what the user did/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Do not promote self-observation over functional analysis/i
+    );
+    expect(entityPlaybook).toMatch(
+      /book, article, source, concept, person, conversation, project\s+reference, or personal manual/i
+    );
+    expect(psychePlaybook).toMatch(/## Schema Theme Routing/i);
+    expect(psychePlaybook).toMatch(
+      /schema theme[\s\S]*belief_entry[\s\S]*behavior_pattern[\s\S]*mode_profile/i
+    );
+    expect(psychePlaybook).toMatch(
+      /wiki_page[\s\S]*durable explanation of a schema theme/i
     );
     expect(entityPlaybook).toMatch(
       /do not ask a broad review question again[\s\S]*then act/i
@@ -184,6 +207,43 @@ describe("question flow quality coverage", () => {
     );
     expect(entityPlaybook).toMatch(
       /what would make the instrument distinct instead of redundant/i
+    );
+    expect(entityPlaybook).toMatch(/## Route posture checkpoint/i);
+    expect(entityPlaybook).toMatch(
+      /Normal stored Forge entities use the shared batch entity routes by default/i
+    );
+    expect(entityPlaybook).toMatch(
+      /wiki_page[\s\S]*calendar_connection[\s\S]*specialized CRUD areas/i
+    );
+    expect(entityPlaybook).toMatch(
+      /task_run[\s\S]*work_adjustment[\s\S]*questionnaire_run[\s\S]*preference_judgment[\s\S]*preference_signal[\s\S]*self_observation[\s\S]*action workflows/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Do not ask route-neutral reflective questions[\s\S]*action path is already obvious/i
+    );
+    expect(entityPlaybook).toMatch(
+      /preference_judgment[\s\S]*POST \/api\/v1\/preferences\/judgments[\s\S]*not batch\s+CRUD/i
+    );
+    expect(entityPlaybook).toMatch(
+      /preference_signal[\s\S]*POST \/api\/v1\/preferences\/signals[\s\S]*not batch\s+CRUD/i
+    );
+    expect(entityPlaybook).toMatch(
+      /preference_catalog[\s\S]*normal stored Preferences CRUD/i
+    );
+    expect(entityPlaybook).toMatch(
+      /preference_catalog_item[\s\S]*normal stored Preferences CRUD/i
+    );
+    expect(entityPlaybook).toMatch(
+      /preference_context[\s\S]*normal stored Preferences CRUD/i
+    );
+    expect(entityPlaybook).toMatch(
+      /preference_item[\s\S]*normal stored Preferences CRUD/i
+    );
+    expect(entityPlaybook).toMatch(
+      /questionnaire_instrument[\s\S]*normal stored CRUD/i
+    );
+    expect(entityPlaybook).toMatch(
+      /questionnaire_run[\s\S]*action workflow/i
     );
   });
 
@@ -195,7 +255,9 @@ describe("question flow quality coverage", () => {
       ["Belief", /what does it start telling you/i, /one explicit sentence/i],
       ["Mode Profile", /what feels most at risk/i, /protect, prevent, or control/i],
       ["Mode Guide Session", /what just happened/i, /candidate mode labels only after enough evidence exists/i],
-      ["Trigger Report", /what happened in that moment/i, /emotionally meaningful episode/i]
+      ["Trigger Report", /what happened in that moment/i, /emotionally meaningful episode/i],
+      ["Event Type", /keeps happening/i, /emotionally meaningful kind of moment/i],
+      ["Emotion Definition", /not a nearby one/i, /lived signature/i]
     ] as const;
 
     for (const [section, opening, anchor] of scenarios) {

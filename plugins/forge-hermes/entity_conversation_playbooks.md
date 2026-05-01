@@ -47,16 +47,16 @@ Forge correctly, and gather only the structure that still matters.
   task runs, use a fast path:
   one brief confirming sentence -> one operational question.
 - For action-heavy flows such as work adjustments, preference judgments, preference
-  signals, and specialized surface work in Movement, Life Force, or Workbench, first
+  signals, and Movement, Life Force, or Workbench work, first
   ask what the user is trying to understand, change, add, update, link, or run, then
-  route to the dedicated action or surface path instead of pretending it is normal
+  route to the dedicated action or domain path instead of pretending it is normal
   CRUD.
-- For specialized surfaces, ask what would make the answer or change useful before you
+- For specialized domain areas, ask what would make the answer or change useful before you
   ask route-shaped details such as provider, weekday, flow id, run id, or trip id.
-- For specialized surfaces, start from the user's real job in plain language, then
+- For specialized domain areas, start from the user's real job in plain language, then
   narrow to the route family. Do not open with a route menu unless the user already
   named the exact object and action.
-- For specialized surfaces, if the truth of the current state is still uncertain, read
+- For specialized domain areas, if the truth of the current state is still uncertain, read
   the relevant dedicated view before you mutate it.
 - When the user has already named a precise correction or review target, do not widen
   back out into a meta lane question. Confirm only the missing route-selecting detail
@@ -90,6 +90,46 @@ Forge correctly, and gather only the structure that still matters.
   last missing structural detail.
 - When the record is already clear enough to save, save it instead of performing a
   ceremonial extra question.
+
+## Plain-language rule
+
+Keep API and architecture nouns inside your own reasoning. Do not ask the user about
+"surfaces", "route families", "CRUD", "payloads", "mutation paths", or "read paths".
+With the user, say the human thing:
+
+- "Movement timeline", "place", "trip", "missing block", or "time window"
+- "Energy model", "weekday pattern", or "fatigue signal"
+- "Workbench flow", "run", "published output", or "node result"
+- "Wiki page", "note", "trigger report", "behavior pattern", "belief", or "mode"
+
+The API path still matters, but it should not leak into the question unless the user
+is explicitly asking about implementation.
+
+## Psyche and memory routing
+
+Self-observation is not the default container for psychological material. Use it only
+when the user wants a lightweight observed event note or a quick calendar entry.
+
+When the user describes a psychological episode or repeated difficulty, actively route
+to the stronger container:
+
+- Use `trigger_report` for one emotionally meaningful episode.
+- Use `behavior_pattern` for a recurring loop that needs functional analysis:
+  situation -> cue -> emotion/body -> thought/meaning -> behavior/urge ->
+  short-term payoff -> long-term cost -> replacement response.
+- Use `behavior` for one recurring move inside a loop.
+- Use `belief_entry` when a sentence about self, others, safety, worth, or outcome is
+  visible.
+- Use `mode_profile` when a recurring part-state, protector, critic, child state, or
+  healthy-adult stance is visible.
+- Use `mode_guide_session` when the active part is not yet clear and the user needs
+  guided exploration.
+- Use `event_type` and `emotion_definition` when the reusable category or feeling
+  label will improve future trigger reports.
+- Use `wiki_page` when the user wants durable memory, a book/article/source summary,
+  a reference page, a concept page, or a reusable personal manual.
+- Use a linked `note` when nuance should be preserved without pretending it is the
+  whole structured model.
 
 ## Conversation arc
 
@@ -149,8 +189,30 @@ Use this before you choose an API path or ask for more structure.
   block", or "run this flow again".
 - For simple stored entities, once the lane is clear, fall back to the shared batch
   CRUD flow.
-- For specialized surfaces such as Movement, Life Force, and Workbench, use the lane
+- For Movement, Life Force, and Workbench, use the lane
   to choose the dedicated route family before you ask for lower-level details.
+
+## Route posture checkpoint
+
+Use this quick split before the conversation gets too detailed.
+
+- Normal stored Forge entities use the shared batch entity routes by default:
+  `/api/v1/entities/search`, `/api/v1/entities/create`,
+  `/api/v1/entities/update`, `/api/v1/entities/delete`, and
+  `/api/v1/entities/restore`.
+- `wiki_page` and `calendar_connection` are specialized CRUD areas. Use the wiki
+  page routes and calendar connection setup or sync routes instead of pretending they
+  are simple batch records.
+- `task_run`, `work_adjustment`, `questionnaire_run`, `preference_judgment`,
+  `preference_signal`, and `self_observation` are action workflows. Start from what
+  the user is trying to do, then use the dedicated action tool or note-backed write
+  model.
+- Movement, Life Force, and Workbench are specialized domain areas. Use their
+  dedicated route families for timelines and overlays, energy profile/templates and
+  fatigue signals, and Workbench flow execution or result artifacts.
+- Once the route posture is clear, keep the questioning focused on the missing detail
+  that selects the route or payload. Do not ask route-neutral reflective questions
+  after the action path is already obvious.
 
 ## Active-listening patterns
 
@@ -244,7 +306,7 @@ exists.
 - When the user wants review rather than mutation, ask what answer they need from the
   read:
   what this would help them decide later is often the clearest scope signal.
-- For specialized surfaces, ask what exact saved object, span, weekday, flow, run, or
+- For Movement, Life Force, and Workbench, ask what exact saved object, span, weekday, flow, run, or
   node the user wants to check before you ask why it matters.
 - If the next answer would not change the route, wording, timing, links, or useful
   interpretation, stop asking and act.
@@ -263,12 +325,12 @@ Use this when the user wants to inspect, compare, review, or navigate existing F
 records rather than create something new.
 
 - Start by asking what they are trying to understand, decide, compare, or check.
-- Ask only for the scoping detail that changes the read path most:
+- Ask only for the scoping detail that changes what you need to look up:
   entity, owner, timeframe, context, or comparison target.
 - If the record already exists and the user wants review, do not reopen a creation
   intake. Route to search, list, overview, or detail first.
 - For review-heavy questions, the useful progression is:
-  user goal -> scope -> read path -> interpretation -> optional follow-up write.
+  user goal -> scope -> lookup -> interpretation -> optional follow-up write.
 - Only drift back into create or update intake if the user actually wants the record
   changed after the review.
 
@@ -425,7 +487,7 @@ Connect:
   to save, decide, review, or change, not make them perform the schema out loud.
 - For review or correction work, do not slip back into a create-style opener once the
   saved object is already known.
-- Once a specialized-surface lane is clear, speak in route-relevant nouns such as
+- Once the Movement, Life Force, or Workbench job is clear, speak in product nouns such as
   timeline, overlay, weekday template, published output, run detail, or node result
   instead of generic "record" language.
 - If the user is emotionally loaded but the record is still non-Psyche, reflect the
@@ -681,22 +743,37 @@ Preferred opening question:
 
 ## Wiki Page
 
-Aim: create a durable reference page with a clear scope instead of dumping raw notes
-into the wiki.
+Aim: create durable memory when the user wants to remember, study, cite, explain, or
+return to something later. Wiki pages are the right default for books, articles,
+sources, concepts, people, conversations, reusable instructions, and personal manuals.
 
 Arc:
 
-1. Ask what topic this page should become the canonical place for.
-2. Ask whether it is a durable wiki page or supporting evidence.
-3. Ask what future lookup, decision, or collaboration this page should support.
-4. Ask about linked entities, aliases, or tags only if they will make the page more
+1. Ask what this page should help the user remember, understand, or reuse later.
+2. Ask whether the material is a book, article, source, concept, person, conversation,
+   project reference, or personal manual.
+3. Ask what the page should contain now: summary, key claims, quotes to verify,
+   personal interpretation, action implications, or links.
+4. Ask whether it should be the durable wiki page itself or supporting evidence linked
+   to another page.
+5. Ask about linked entities, aliases, or tags only if they will make the page more
    navigable later.
 
 Helpful follow-up lanes:
 
-- what this page should be the home for
-- what should belong on the page versus remain linked evidence
-- who would open this page later and what they should quickly understand
+- what the user wants to remember or reuse
+- whether this is a book, article, source, concept, person, conversation, project
+  reference, or personal manual
+- what belongs on the durable page versus a supporting evidence note
+- what Forge entities, Psyche records, goals, projects, or tasks this memory should
+  link to
+
+Routing rule:
+
+- When the user says they want to remember something, save a reference, preserve a
+  book or article, keep a concept, or build a reusable explanation, consider
+  `wiki_page` before `note`. Use `note` for temporary evidence, work logs, or linked
+  detail; use `wiki_page` for durable memory.
 
 Ready to save when:
 
@@ -706,7 +783,7 @@ Ready to save when:
 
 Preferred opening question:
 
-- "What should this page become the main reference for?"
+- "What do you want this wiki page to help you remember or reuse later?"
 
 ## Insight
 
@@ -871,39 +948,63 @@ Preferred opening question:
 
 ## Self Observation
 
-Aim: capture one observation clearly enough that it can support later reflection
-without pretending it is already a full interpretation.
+Aim: capture one observed episode in a structured chain without letting a loose note
+replace the stronger Psyche model. A self-observation should usually name the
+situation, cue, emotion/body, thought/meaning, behavior/urge, and consequence. If the
+material reveals a recurring loop, belief, mode, schema theme, or
+trigger chain, route toward the structured Psyche record instead of parking it as an
+unstructured observation.
 
 Arc:
 
-1. Ask what was observed.
-2. Reflect the moment without pretending it is already a finished interpretation.
-3. Ask what felt most important to name before it gets smoothed over or forgotten.
-4. Ask for the smallest concrete slice if the observation still feels vague or
-   global.
-5. Ask when it happened or became noticeable.
-6. Ask what it may connect to: pattern, belief, value, mode, task, project, or note.
-7. Ask for tags or extra context only if that will help later review.
+1. Ask what happened in the situation.
+2. Ask what cue, trigger, or shift made the episode noticeable.
+3. Ask what emotion, body signal, thought, or meaning showed up.
+4. Ask what behavior showed up: what the user did, wanted to do, avoided, or
+   repeated next.
+5. Ask what happened immediately after, including short-term relief or cost if it is
+   visible.
+6. Decide whether this should stay a lightweight self-observation or become a
+   `trigger_report`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`,
+   `mode_guide_session`, `event_type`, `emotion_definition`, or wiki page.
+7. Link the observation to the structured record when the structured record is the
+   real container.
+
+Helpful follow-up lanes:
+
+- situation or event
+- cue, trigger, or body shift
+- emotion and intensity
+- thought, meaning, belief sentence, or schema theme
+- behavior, urge, avoidance, or coping move
+- short-term payoff and later cost
+- whether this is one episode, a recurring pattern, an active mode, or durable memory
 
 Route note:
 
 - `self_observation` is note-backed. Read the calendar first, then create or update an
   observed `note` with `frontmatter.observedAt` instead of inventing a standalone CRUD
   write.
+- Do not promote self-observation over functional analysis. If the user is describing
+  a loop, use `behavior_pattern`; if they are describing one emotionally meaningful
+  episode, use `trigger_report`; if a part-state is central, use `mode_guide_session`
+  or `mode_profile`; if a belief sentence is central, use `belief_entry`.
+- If the user wants to remember a source, concept, book, article, or durable personal
+  explanation, use `wiki_page` rather than self-observation.
 
-If the user already gave the moment or timing, move straight to what they noticed most
-clearly instead of re-asking when.
+If the user already gave the event or timing, move straight to the missing part of the
+chain: cue, emotion, thought, behavior, consequence, or structured Psyche link.
 
 Ready to save when:
 
-- the observation itself is clear
-- the lived point of the observation is clear enough to revisit later
+- the situation/event is clear
+- at least one emotion/body signal, thought/meaning, or behavior/urge is clear
 - timing is clear enough
-- any useful links are captured
+- any better structured container has been chosen or linked
 
 Preferred opening question:
 
-- "What did you notice most clearly in that moment?"
+- "What happened in the situation, and what did you feel, think, or do next?"
 
 ## Sleep Session
 
@@ -1009,6 +1110,12 @@ Helpful follow-up lanes:
 - which preference context should own the signal
 - whether the choice feels decisive, weak, tied, or not ready
 
+Route note:
+
+- `preference_judgment` is an action workflow. Submit it through
+  `POST /api/v1/preferences/judgments` with the preferences judgment tool, not batch
+  CRUD.
+
 Ready to act when:
 
 - the left and right items are clear
@@ -1036,6 +1143,11 @@ Helpful follow-up lanes:
 - what item is being marked
 - whether this is a favorite, veto, bookmark, neutral, or compare-later signal
 - what context makes the signal meaningful
+
+Route note:
+
+- `preference_signal` is an action workflow. Submit it through
+  `POST /api/v1/preferences/signals` with the preferences signal tool, not batch CRUD.
 
 Ready to act when:
 
@@ -1068,7 +1180,8 @@ Arc:
    detail before you mutate it.
 8. Skip the meta lane question when the user already named the exact correction or
    review target and only one ambiguity remains.
-9. Route to the dedicated movement read or write path once the surface is clear.
+9. Use the dedicated movement route once you know whether the user needs timeline
+   review, overlay, place or trip detail, selection summary, or repair.
 
 Direct action rules:
 
@@ -1133,7 +1246,7 @@ Lane-to-route map:
 
 Ready to act when:
 
-- the movement surface is clear
+- the movement question or correction is clear
 - the time range, place, stay, trip, or selection is clear enough
 - the user goal is clear enough to tell review, overlay, and repair apart
 - the user goal is clear enough to choose the route
@@ -1242,7 +1355,8 @@ Lane-to-route map:
 - discover or inspect flows:
   `/api/v1/workbench/flows`, `/api/v1/workbench/flows/:id`, or `/api/v1/workbench/flows/by-slug/:slug`
 - create, update, or delete a flow:
-  `POST/PATCH/DELETE /api/v1/workbench/flows`
+  `POST /api/v1/workbench/flows`, then `PATCH /api/v1/workbench/flows/:id` or
+  `DELETE /api/v1/workbench/flows/:id` for an existing saved flow
 - run a known flow:
   `/api/v1/workbench/flows/:id/run`
 - run from a payload-first contract:
@@ -1304,6 +1418,12 @@ Helpful follow-up lanes:
 - what belongs in scope
 - what would make the catalog immediately useful instead of bloated
 
+Route note:
+
+- `preference_catalog` is normal stored Preferences CRUD. Use the shared batch entity
+  routes unless the user is playing the comparison game or submitting a judgment or
+  signal.
+
 Ready to save when:
 
 - the catalog has a stable purpose
@@ -1332,6 +1452,11 @@ Helpful follow-up lanes:
 - what would distinguish it from nearby items
 - whether the label alone will be clear later
 
+Route note:
+
+- `preference_catalog_item` is normal stored Preferences CRUD. Use batch entity
+  create/update/search for catalog membership and wording changes.
+
 Ready to save when:
 
 - the item label is clear
@@ -1359,6 +1484,11 @@ Helpful follow-up lanes:
 - what decisions this context should shape
 - what belongs inside versus outside the mode
 - whether it should be default or explicitly separate
+
+Route note:
+
+- `preference_context` is normal stored Preferences CRUD. Use batch entity
+  create/update/search for context definition changes.
 
 Ready to save when:
 
@@ -1390,6 +1520,12 @@ Helpful follow-up lanes:
 - what context makes the preference meaningful
 - whether this is a signal or a comparison candidate
 - what distinguishes the item from nearby options
+
+Route note:
+
+- `preference_item` is normal stored Preferences CRUD when saving or editing a
+  candidate. Use `preference_judgment` or `preference_signal` routes only when the
+  user is recording a comparison outcome or direct mark.
 
 Ready to act when:
 
@@ -1423,6 +1559,12 @@ Helpful follow-up lanes:
 - who will answer it and under what circumstances
 - what would make the instrument distinct instead of redundant
 
+Route note:
+
+- `questionnaire_instrument` is normal stored CRUD for ordinary create, update,
+  delete, and search work. Use clone, draft, and publish action routes only when the
+  user is working with instrument version state.
+
 Ready to act when:
 
 - the purpose is clear
@@ -1450,6 +1592,11 @@ Helpful follow-up lanes:
 - whether the job is to begin, resume, review, or complete
 - what questionnaire or run is in scope
 - what next answer, uncertainty, or note is actually blocking progress
+
+Route note:
+
+- `questionnaire_run` is an action workflow. Use the questionnaire run start, read,
+  update, and complete routes instead of treating answers as generic batch CRUD.
 
 Ready to act when:
 

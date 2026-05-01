@@ -5,7 +5,8 @@ tool surface.
 
 ## Core model
 
-Forge has four major surfaces. The planning side covers goals, projects, strategies,
+Forge has four major stored-entity surfaces and three specialized domain surfaces.
+The planning side covers goals, projects, strategies,
 tasks, habits, notes, calendar events, recurring work blocks, task timeboxes, live
 task runs, and agent-authored insights. The Health side covers sleep sessions,
 sports and workout sessions, companion pairing, and habit-generated workout records.
@@ -15,7 +16,9 @@ values, patterns, behaviors, beliefs, modes, guided mode sessions, trigger repor
 event types, reusable emotion definitions, structured questionnaires, questionnaire
 runs, and a self-observation calendar backed by note-based observations. Forge also has a SQLite-backed Wiki
 memory layer with explicit spaces, Markdown content in database rows, backlinks, optional
-embeddings, and structured Forge links. Forge is also multi-user: every entity can belong to a
+embeddings, and structured Forge links. The specialized domain surfaces are Movement,
+Life Force, and Workbench; Hermes must use their dedicated route families instead of
+forcing them through batch CRUD. Forge is also multi-user: every entity can belong to a
 typed `human` or `bot` user through `userId`, and Hermes can scope reads with `userId`
 or repeated `userIds`. The user directory exposes a directional relationship graph
 between humans and bots; use `forge_get_user_directory` before assuming cross-owner
@@ -32,7 +35,11 @@ memory`.
 For Psyche entities, do not treat Forge like a raw schema form. Use the active-listening
 playbooks in [`psyche_entity_playbooks.md`](./psyche_entity_playbooks.md) before
 persisting `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`,
-`mode_profile`, `mode_guide_session`, or `trigger_report`.
+`mode_profile`, `mode_guide_session`, `trigger_report`, `event_type`, or
+`emotion_definition`.
+Treat `event_type` and `emotion_definition` as psychologically meaningful Psyche
+records: begin with the repeated lived moment or felt signature before you settle the
+reusable label.
 Sound like a grounded therapist-like collaborator for Psyche work: reflect briefly,
 stay accurate, ask one lane question at a time, and start updates with what feels
 newly true versus what should stay true.
@@ -54,13 +61,35 @@ When the operation is not already explicit, identify the job first:
 add, update, review, compare, navigate, link, or run. Skip that meta question when
 the action is already obvious from the user's wording.
 When the user wants to review, compare, inspect, or navigate an existing Forge
-record, ask what they are trying to understand first and prefer the read path before
-you reopen create or update intake.
+record, ask what they are trying to understand first and look up the existing record
+before you reopen create or update intake.
 If the user already named the exact correction in usable language, keep the next
 question narrow. Confirm only the scope, timing, or route-selecting detail that is
 still missing, then act.
 If the next answer would not change the route, wording, or save payload in a useful
 way, stop asking and write.
+
+## Entity Route Posture
+
+Before asking for lower-level details, decide whether the user's request is normal
+stored-entity CRUD, an action workflow, specialized CRUD, or a specialized domain
+surface. Name the path plainly enough that another Hermes agent could follow it
+without guessing.
+
+- Batch CRUD is the default for normal stored entities, including `goal`, `project`,
+  `strategy`, `task`, `habit`, `tag`, `note`, `insight`, `calendar_event`,
+  `work_block_template`, `task_timebox`, all main Psyche records, basic Preferences
+  CRUD records, `questionnaire_instrument`, `sleep_session`, and `workout_session`.
+- `wiki_page` and `calendar_connection` are specialized CRUD surfaces. Use the wiki
+  tools for wiki pages and the calendar connection tools for provider setup and sync.
+- `task_run`, `work_adjustment`, `questionnaire_run`, `preference_judgment`,
+  `preference_signal`, and `self_observation` are action workflows. Use their
+  dedicated tools or note-backed write model instead of generic entity create/update
+  when the action route is the real product behavior.
+- Movement, Life Force, and Workbench are specialized domain surfaces. Read
+  `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces` and use
+  the dedicated route families for timeline/overlay repair, energy templates/signals,
+  and flow execution/results.
 
 ## Project Management Hierarchy Rule
 
@@ -196,9 +225,10 @@ For wiki-specific recall:
 - Use the dedicated API families for Movement, Life Force, and Workbench. Those routes are published in `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces` and are the preferred contract for movement stays, trips, time-in-place and travel-behavior queries, life-force state, and workbench execution/result work.
 - When that onboarding payload includes `routeSelectionQuestions`, use them before
   improvising follow-up questions for Movement, Life Force, or Workbench.
-- After the lane is clear, talk in route-relevant nouns such as timeline, overlay,
-  weekday template, published output, run detail, or node result rather than generic
-  "record" language.
+- After the lane is clear, talk in product nouns such as timeline, overlay, weekday
+  template, published output, run detail, or node result rather than generic "record"
+  language. Keep implementation words like surface, CRUD, payload, read path, and
+  mutation path out of user-facing questions unless the user asks about implementation.
 - If the truth of the current Movement, Life Force, or Workbench state is still unclear, prefer the dedicated read before the mutation so the correction stays truthful.
 - In the live onboarding catalog, those domains should appear as `specialized_domain_surface`. If the route family and the catalog classification disagree, trust the specialized route family and fix the contract mismatch before guessing a CRUD path.
 - Movement lane hints: review spans through `/api/v1/movement/day`,
@@ -214,7 +244,9 @@ For wiki-specific recall:
   are `PATCH /api/v1/life-force/profile`, weekday curve edits are
   `PUT /api/v1/life-force/templates/:weekday`, and real-time tired or recovered
   reports are `POST /api/v1/life-force/fatigue-signals`.
-- Workbench lane hints: flow catalog and CRUD live under `/api/v1/workbench/flows`,
+- Workbench lane hints: flow catalog reads use `GET /api/v1/workbench/flows`,
+  flow creation uses `POST /api/v1/workbench/flows`, saved-flow edits and deletion use
+  `PATCH /api/v1/workbench/flows/:id` and `DELETE /api/v1/workbench/flows/:id`,
   execution uses `/api/v1/workbench/flows/:id/run` or `/api/v1/workbench/run`,
   published outputs use `/api/v1/workbench/flows/:id/output`, and per-run or per-node
   inspection uses the run and node-result routes under `/api/v1/workbench/flows/:id`.
@@ -222,7 +254,7 @@ For wiki-specific recall:
 - For `work_adjustment`, ask what existing task or project the correction belongs to, whether time should be added or removed, and what truthful reason should stay with it before calling `forge_adjust_work_minutes`.
 - For `preference_judgment` and `preference_signal`, ask what comparison or direct mark the user is actually trying to make, what context it belongs to, and only then call the dedicated judgment or signal route.
 - Keep dedicated questionnaire tools only for real flow actions and read models: list/get, clone, ensure draft, publish, start run, update run, complete run.
-- Self-observation is note-backed. Read the calendar through the dedicated self-observation tool, but create or update the stored observation through `note` with tag `Self-observation`, `frontmatter.observedAt`, and links to the relevant Psyche or Forge records.
+- Self-observation is note-backed, but it is only for lightweight observed episode notes. When the user describes a psychological chain, map situation, cue, emotion/body, thought/meaning, behavior/urge, and consequence; use `trigger_report` for one meaningful episode, `behavior_pattern` for recurring-loop functional analysis, `behavior` for one repeated move, `belief_entry` for a core sentence, `mode_guide_session` or `mode_profile` for a part-state, and `wiki_page` for durable memory. If a schema theme is visible, preserve it through the matching belief, pattern, mode, trigger report, or wiki explanation instead of hiding it in self-observation. Read the calendar through the dedicated self-observation tool, but create or update the stored observation through `note` with tag `Self-observation`, `frontmatter.observedAt`, and links to the relevant Psyche or Forge records.
 - Exact create-shape expectations live in `forge_get_agent_onboarding`. Use its `entityCatalog` as the schema source of truth for `minimumCreateFields`, `fieldGuide`, examples, classification, and preferred mutation path instead of guessing field names.
 - High-signal minimums worth remembering:
   `goal { title }`, `project { goalId, title }`, `strategy { title, graph }`, `task { title }`, `habit { title }`, `tag { label }`, `note { contentMarkdown, links }`, `calendar_event { title, startAt, endAt }`, `work_block_template { title, kind, timezone, weekDays, startMinute, endMinute, blockingState }`, `task_timebox { taskId, title, startsAt, endsAt }`, `psyche_value { title }`, `behavior_pattern { title }`, `behavior { kind, title }`, `belief_entry { statement, beliefType }`, `mode_profile { family, title }`, `mode_guide_session { summary, answers }`, `trigger_report { title }`, `event_type { label }`, `emotion_definition { label }`, `preference_catalog { userId, domain, title }`, `preference_catalog_item { catalogId, label }`, `preference_context { userId, domain, name }`, `preference_item { userId, domain, label }`, `questionnaire_instrument { title, sourceClass, availability, isSelfReport, versionLabel, definition, scoring, provenance }`, `sleep_session { startedAt, endedAt }`, `workout_session { workoutType, startedAt, endedAt }`.
@@ -239,7 +271,7 @@ For wiki-specific recall:
 - Project lifecycle changes are status patches on `project.status`, not separate suspend or finish routes.
 - User-aware writes should set `userId` when ownership matters explicitly, especially when Hermes is working across human and bot accounts.
 - Notes are searchable and editable records, not comment strings. If the user cares about durable context, preserve it as a note.
-- The wiki is the durable long-form memory surface. Use it for canonical reference pages, ingest, and backlink-aware recall rather than overloading normal notes.
+- The wiki is the durable long-form memory surface. Use it for canonical reference pages, ingest, backlink-aware recall, books, articles, sources, concepts, and personal manuals rather than overloading normal notes or self-observation.
 - The UI route is `/sports`, but the backend overview route is `/api/v1/health/fitness`. Treat both as the same sports surface.
 - Use `forge_update_sleep_session` and `forge_update_workout_session` only to enrich those records with reflective context, tags, and links. Normal stored-record CRUD for those entities belongs on the shared batch routes.
 - Ephemeral notes are appropriate for scratch memory, temporary handoffs, or “what just happened” captures that should disappear automatically later.

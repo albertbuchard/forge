@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildOpenApiDocument } from "../../server/src/openapi";
-import { collectSupportedPluginApiRouteKeys } from "./parity";
+import { collectSupportedPluginApiRouteKeys, type ApiRouteKey } from "./parity";
 import { buildRouteParityReport, collectMirroredApiRouteKeys } from "./routes";
 
 describe("forge plugin route parity", () => {
@@ -57,18 +57,32 @@ describe("forge plugin route parity", () => {
     expect(report.mirrored).toContain("GET /api/v1/calendar/overview");
     expect(report.mirrored).toContain("GET /api/v1/calendar/connections");
     expect(report.mirrored).toContain("POST /api/v1/calendar/connections");
-    expect(report.mirrored).toContain("POST /api/v1/calendar/connections/:id/sync");
-    expect(report.mirrored).toContain("POST /api/v1/calendar/work-block-templates");
-    expect(report.mirrored).toContain("POST /api/v1/calendar/timeboxes/recommend");
+    expect(report.mirrored).toContain(
+      "POST /api/v1/calendar/connections/:id/sync"
+    );
+    expect(report.mirrored).toContain(
+      "POST /api/v1/calendar/work-block-templates"
+    );
+    expect(report.mirrored).toContain(
+      "POST /api/v1/calendar/timeboxes/recommend"
+    );
     expect(report.mirrored).toContain("POST /api/v1/calendar/timeboxes");
     expect(report.mirrored).toContain("GET /api/v1/preferences/workspace");
     expect(report.mirrored).toContain("POST /api/v1/preferences/game/start");
     expect(report.mirrored).toContain("POST /api/v1/preferences/catalogs");
-    expect(report.mirrored).toContain("PATCH /api/v1/preferences/items/:id/score");
+    expect(report.mirrored).toContain(
+      "PATCH /api/v1/preferences/items/:id/score"
+    );
     expect(report.mirrored).toContain("GET /api/v1/psyche/questionnaires");
-    expect(report.mirrored).toContain("POST /api/v1/psyche/questionnaires/:id/runs");
-    expect(report.mirrored).toContain("GET /api/v1/psyche/questionnaire-runs/:id");
-    expect(report.mirrored).toContain("GET /api/v1/psyche/self-observation/calendar");
+    expect(report.mirrored).toContain(
+      "POST /api/v1/psyche/questionnaires/:id/runs"
+    );
+    expect(report.mirrored).toContain(
+      "GET /api/v1/psyche/questionnaire-runs/:id"
+    );
+    expect(report.mirrored).toContain(
+      "GET /api/v1/psyche/self-observation/calendar"
+    );
     expect(report.mirrored).toContain("POST /api/v1/entities/search");
     expect(report.mirrored).toContain("POST /api/v1/entities/create");
     expect(report.mirrored).toContain("POST /api/v1/entities/update");
@@ -94,16 +108,87 @@ describe("forge plugin route parity", () => {
     expect(supported.has("POST /api/v1/life-force/fatigue-signals")).toBe(true);
     expect(supported.has("GET /api/v1/workbench/catalog/boxes")).toBe(true);
     expect(supported.has("GET /api/v1/workbench/flows/:id/runs")).toBe(true);
-    expect(supported.has("GET /api/v1/workbench/flows/by-slug/:slug")).toBe(true);
+    expect(supported.has("GET /api/v1/workbench/flows/by-slug/:slug")).toBe(
+      true
+    );
     expect(supported.has("GET /api/v1/calendar/overview")).toBe(true);
     expect(supported.has("POST /api/v1/calendar/connections")).toBe(true);
     expect(supported.has("POST /api/v1/calendar/timeboxes")).toBe(true);
     expect(supported.has("GET /api/v1/preferences/workspace")).toBe(true);
     expect(supported.has("GET /api/v1/psyche/questionnaires")).toBe(true);
-    expect(supported.has("GET /api/v1/psyche/self-observation/calendar")).toBe(true);
+    expect(supported.has("GET /api/v1/psyche/self-observation/calendar")).toBe(
+      true
+    );
     expect(supported.has("POST /api/v1/entities/search")).toBe(true);
     expect(supported.has("POST /api/v1/work-adjustments")).toBe(true);
     expect(supported.has("POST /api/v1/insights")).toBe(true);
+  });
+
+  it("keeps specialized domain route families explicit in the plugin contract", () => {
+    const supported = collectSupportedPluginApiRouteKeys();
+
+    for (const route of [
+      "GET /api/v1/movement/day",
+      "GET /api/v1/movement/month",
+      "GET /api/v1/movement/all-time",
+      "GET /api/v1/movement/timeline",
+      "GET /api/v1/movement/places",
+      "GET /api/v1/movement/boxes/:id",
+      "GET /api/v1/movement/trips/:id",
+      "POST /api/v1/movement/selection",
+      "POST /api/v1/movement/user-boxes/preflight",
+      "POST /api/v1/movement/user-boxes",
+      "PATCH /api/v1/movement/user-boxes/:id",
+      "DELETE /api/v1/movement/user-boxes/:id",
+      "POST /api/v1/movement/automatic-boxes/:id/invalidate",
+      "PATCH /api/v1/movement/stays/:id",
+      "DELETE /api/v1/movement/stays/:id",
+      "PATCH /api/v1/movement/trips/:id",
+      "DELETE /api/v1/movement/trips/:id",
+      "PATCH /api/v1/movement/trips/:id/points/:pointId",
+      "DELETE /api/v1/movement/trips/:id/points/:pointId"
+    ]) {
+      expect(
+        supported.has(route as ApiRouteKey),
+        `${route} should stay mirrored`
+      ).toBe(true);
+    }
+
+    for (const route of [
+      "GET /api/v1/life-force",
+      "PATCH /api/v1/life-force/profile",
+      "PUT /api/v1/life-force/templates/:weekday",
+      "POST /api/v1/life-force/fatigue-signals"
+    ]) {
+      expect(
+        supported.has(route as ApiRouteKey),
+        `${route} should stay mirrored`
+      ).toBe(true);
+    }
+
+    for (const route of [
+      "GET /api/v1/workbench/catalog/boxes",
+      "GET /api/v1/workbench/flows",
+      "POST /api/v1/workbench/flows",
+      "GET /api/v1/workbench/flows/:id",
+      "PATCH /api/v1/workbench/flows/:id",
+      "DELETE /api/v1/workbench/flows/:id",
+      "GET /api/v1/workbench/flows/by-slug/:slug",
+      "POST /api/v1/workbench/flows/:id/run",
+      "POST /api/v1/workbench/run",
+      "POST /api/v1/workbench/flows/:id/chat",
+      "GET /api/v1/workbench/flows/:id/output",
+      "GET /api/v1/workbench/flows/:id/runs",
+      "GET /api/v1/workbench/flows/:id/runs/:runId",
+      "GET /api/v1/workbench/flows/:id/runs/:runId/nodes",
+      "GET /api/v1/workbench/flows/:id/runs/:runId/nodes/:nodeId",
+      "GET /api/v1/workbench/flows/:id/nodes/:nodeId/output"
+    ]) {
+      expect(
+        supported.has(route as ApiRouteKey),
+        `${route} should stay mirrored`
+      ).toBe(true);
+    }
   });
 
   it("mirrors exactly the curated upstream routes", () => {

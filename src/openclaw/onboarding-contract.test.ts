@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildServer } from "../../server/src/app";
+import { buildOpenApiDocument } from "../../server/src/openapi";
 
 const tempRoots: string[] = [];
 
@@ -59,6 +60,7 @@ async function loadOnboardingPayload() {
       openingQuestion: string;
       askSequence: string[];
     }>;
+    conversationRules: string[];
     psycheCoachingPlaybooks: Array<{
       focus: string;
       askSequence: string[];
@@ -71,6 +73,7 @@ async function loadOnboardingPayload() {
       specializedDomainSurfaces: Record<
         string,
         {
+          classification?: string;
           readRoutes: Record<string, string>;
           writeRoutes: Record<string, string>;
           routeSelectionQuestions?: string[];
@@ -88,6 +91,20 @@ async function loadOnboardingPayload() {
       };
     };
   };
+}
+
+function normalizeRouteTemplate(route: string) {
+  return route.replace(/:([A-Za-z0-9_]+)/g, "{$1}");
+}
+
+function collectRouteStrings(value: unknown): string[] {
+  if (typeof value === "string") {
+    return value.startsWith("/api/v1/") ? [value] : [];
+  }
+  if (!value || typeof value !== "object") {
+    return [];
+  }
+  return Object.values(value).flatMap((child) => collectRouteStrings(child));
 }
 
 describe("forge onboarding contract", () => {
@@ -171,9 +188,10 @@ describe("forge onboarding contract", () => {
     ] as const;
 
     for (const entityType of expected) {
-      expect(entityTypes.has(entityType), `${entityType} should be published`).toBe(
-        true
-      );
+      expect(
+        entityTypes.has(entityType),
+        `${entityType} should be published`
+      ).toBe(true);
     }
 
     for (const focus of [
@@ -221,11 +239,14 @@ describe("forge onboarding contract", () => {
       "belief_entry",
       "mode_profile",
       "mode_guide_session",
-      "trigger_report"
+      "trigger_report",
+      "event_type",
+      "emotion_definition"
     ] as const) {
-      expect(psycheFocuses.has(focus), `${focus} psyche playbook should exist`).toBe(
-        true
-      );
+      expect(
+        psycheFocuses.has(focus),
+        `${focus} psyche playbook should exist`
+      ).toBe(true);
     }
   });
 
@@ -276,7 +297,24 @@ describe("forge onboarding contract", () => {
         workspace: "/api/v1/preferences/workspace"
       })
     );
+    expect(routeModel.actionEntities.preference_judgment).toEqual(
+      expect.objectContaining({
+        action: "/api/v1/preferences/judgments",
+        tool: "forge_submit_preferences_judgment"
+      })
+    );
+    expect(routeModel.actionEntities.preference_signal).toEqual(
+      expect.objectContaining({
+        action: "/api/v1/preferences/signals",
+        tool: "forge_submit_preferences_signal"
+      })
+    );
     expect(routeModel.actionEntities.selfObservation).toEqual(
+      expect.objectContaining({
+        read: "/api/v1/psyche/self-observation/calendar"
+      })
+    );
+    expect(routeModel.actionEntities.self_observation).toEqual(
       expect.objectContaining({
         read: "/api/v1/psyche/self-observation/calendar"
       })
@@ -295,6 +333,9 @@ describe("forge onboarding contract", () => {
         selection: "/api/v1/movement/selection"
       })
     );
+    expect(routeModel.specializedDomainSurfaces.movement.classification).toBe(
+      "specialized_domain_surface"
+    );
     expect(routeModel.specializedDomainSurfaces.movement.writeRoutes).toEqual(
       expect.objectContaining({
         settingsUpdate: "/api/v1/movement/settings",
@@ -312,7 +353,9 @@ describe("forge onboarding contract", () => {
       routeModel.specializedDomainSurfaces.movement.routeSelectionQuestions
     ).toEqual(
       expect.arrayContaining([
-        expect.stringMatching(/day, month, all-time, timeline, place, trip detail/i),
+        expect.stringMatching(
+          /day, month, all-time, timeline, place, trip detail/i
+        ),
         expect.stringMatching(/missing-gap overlay|saved-overlay repair/i)
       ])
     );
@@ -321,6 +364,9 @@ describe("forge onboarding contract", () => {
       expect.objectContaining({
         overview: "/api/v1/life-force"
       })
+    );
+    expect(routeModel.specializedDomainSurfaces.lifeForce.classification).toBe(
+      "specialized_domain_surface"
     );
     expect(routeModel.specializedDomainSurfaces.lifeForce.writeRoutes).toEqual(
       expect.objectContaining({
@@ -333,7 +379,9 @@ describe("forge onboarding contract", () => {
       routeModel.specializedDomainSurfaces.lifeForce.routeSelectionQuestions
     ).toEqual(
       expect.arrayContaining([
-        expect.stringMatching(/overview, change durable profile assumptions, change a weekday curve, or log a right-now fatigue signal/i)
+        expect.stringMatching(
+          /overview, change durable profile assumptions, change a weekday curve, or log a right-now fatigue signal/i
+        )
       ])
     );
 
@@ -347,9 +395,14 @@ describe("forge onboarding contract", () => {
         latestNodeOutput: "/api/v1/workbench/flows/:id/nodes/:nodeId/output"
       })
     );
+    expect(routeModel.specializedDomainSurfaces.workbench.classification).toBe(
+      "specialized_domain_surface"
+    );
     expect(routeModel.specializedDomainSurfaces.workbench.writeRoutes).toEqual(
       expect.objectContaining({
         createFlow: "/api/v1/workbench/flows",
+        updateFlow: "/api/v1/workbench/flows/:id",
+        deleteFlow: "/api/v1/workbench/flows/:id",
         runFlow: "/api/v1/workbench/flows/:id/run",
         runByPayload: "/api/v1/workbench/run"
       })
@@ -358,7 +411,9 @@ describe("forge onboarding contract", () => {
       routeModel.specializedDomainSurfaces.workbench.routeSelectionQuestions
     ).toEqual(
       expect.arrayContaining([
-        expect.stringMatching(/flow discovery, flow editing, execution, published output, run detail, node result, latest node output/i)
+        expect.stringMatching(
+          /flow discovery, flow editing, execution, published output, run detail, node result, latest node output/i
+        )
       ])
     );
 
@@ -524,7 +579,7 @@ describe("forge onboarding contract", () => {
     expect(onboarding.interactionGuidance).toEqual(
       expect.objectContaining({
         specializedSurfaceRule: expect.stringMatching(
-          /Movement, Life Force, and Workbench[\s\S]*read the relevant specialized view back[\s\S]*\/forge\/v1\/movement[\s\S]*\/forge\/v1\/life-force[\s\S]*\/forge\/v1\/workbench/i
+          /Movement, Life Force, and Workbench[\s\S]*read the relevant view back[\s\S]*\/forge\/v1\/movement[\s\S]*\/forge\/v1\/life-force[\s\S]*\/forge\/v1\/workbench/i
         ),
         reviewShortcutRule: expect.stringMatching(
           /reviewing or correcting an existing record/i
@@ -539,7 +594,10 @@ describe("forge onboarding contract", () => {
   it("keeps specialized and Psyche playbooks explicit about active listening and route narrowing", async () => {
     const onboarding = await loadOnboardingPayload();
     const playbookByFocus = new Map(
-      onboarding.entityConversationPlaybooks.map((entry) => [entry.focus, entry])
+      onboarding.entityConversationPlaybooks.map((entry) => [
+        entry.focus,
+        entry
+      ])
     );
     const psycheByFocus = new Map(
       onboarding.psycheCoachingPlaybooks.map((entry) => [entry.focus, entry])
@@ -550,14 +608,62 @@ describe("forge onboarding contract", () => {
         openingQuestion: "Which task should I start?"
       })
     );
-    expect(
-      playbookByFocus.get("task_run")?.askSequence.join(" ")
-    ).toMatch(/dedicated task-run tool/i);
+    expect(playbookByFocus.get("task_run")?.askSequence.join(" ")).toMatch(
+      /dedicated task-run tool/i
+    );
+    expect(onboarding.conversationRules.join(" ")).toMatch(
+      /task_run, work_adjustment, questionnaire_run, preference_judgment, preference_signal, and self_observation[\s\S]*do not downgrade[\s\S]*generic batch CRUD/i
+    );
+    expect(onboarding.conversationRules.join(" ")).toMatch(
+      /normal stored Preferences and questionnaire records[\s\S]*batch CRUD by default/i
+    );
+    expect(onboarding.conversationRules.join(" ")).toMatch(
+      /Self-observation is not the default container[\s\S]*behavior_pattern for a recurring loop and functional analysis/i
+    );
+    expect(onboarding.conversationRules.join(" ")).toMatch(
+      /Do not bury schema work in self-observation[\s\S]*belief_entry[\s\S]*behavior_pattern[\s\S]*mode_profile/i
+    );
+    expect(onboarding.conversationRules.join(" ")).toMatch(
+      /book, article, paper, source, concept, person, conversation, project reference/i
+    );
 
+    expect(playbookByFocus.get("wiki_page")?.openingQuestion).toMatch(
+      /remember or reuse later/i
+    );
+    expect(playbookByFocus.get("wiki_page")?.askSequence.join(" ")).toMatch(
+      /book, article, source, concept, person, conversation, project reference, or personal manual/i
+    );
+    expect(playbookByFocus.get("self_observation")?.openingQuestion).toMatch(
+      /what happened in the situation/i
+    );
+    expect(playbookByFocus.get("self_observation")?.askSequence.join(" ")).toMatch(
+      /situation[\s\S]*cue[\s\S]*emotion[\s\S]*thought[\s\S]*behavior[\s\S]*consequence/i
+    );
+    expect(playbookByFocus.get("self_observation")?.askSequence.join(" ")).toMatch(
+      /Do not promote self-observation over functional analysis/i
+    );
+
+    expect(playbookByFocus.get("preference_item")?.askSequence.join(" ")).toMatch(
+      /batch CRUD[\s\S]*preference judgment or signal route/i
+    );
     expect(
-      playbookByFocus.get("movement")?.askSequence.join(" ")
-    ).toMatch(
+      playbookByFocus.get("preference_judgment")?.askSequence.join(" ")
+    ).toMatch(/dedicated preference judgment action route[\s\S]*instead of batch CRUD/i);
+    expect(
+      playbookByFocus.get("preference_signal")?.askSequence.join(" ")
+    ).toMatch(/dedicated preference signal action route[\s\S]*instead of batch CRUD/i);
+    expect(
+      playbookByFocus.get("questionnaire_instrument")?.askSequence.join(" ")
+    ).toMatch(/batch CRUD[\s\S]*clone, draft, and publish actions/i);
+    expect(
+      playbookByFocus.get("questionnaire_run")?.askSequence.join(" ")
+    ).toMatch(/dedicated questionnaire run start, read, update, and complete routes/i);
+
+    expect(playbookByFocus.get("movement")?.askSequence.join(" ")).toMatch(
       /day, month, all-time, timeline, places, trip-detail,[\s\S]*selection route/i
+    );
+    expect(playbookByFocus.get("movement")?.askSequence[0]).toMatch(
+      /make clearer, repair, or preserve/i
     );
     expect(playbookByFocus.get("movement")?.askSequence.join(" ")).toMatch(
       /exact correction or review target/i
@@ -569,8 +675,17 @@ describe("forge onboarding contract", () => {
     expect(playbookByFocus.get("life_force")?.askSequence.join(" ")).toMatch(
       /read the overview back/i
     );
+    expect(playbookByFocus.get("life_force")?.openingQuestion).toMatch(
+      /energy picture right now/i
+    );
+    expect(playbookByFocus.get("life_force")?.askSequence[0]).toMatch(
+      /before you reduce it to one life-force lane/i
+    );
     expect(playbookByFocus.get("life_force")?.askSequence.join(" ")).toMatch(
       /Mondays crash after lunch|weekday-template question/i
+    );
+    expect(playbookByFocus.get("workbench")?.askSequence[0]).toMatch(
+      /before you narrow to flow discovery/i
     );
     expect(playbookByFocus.get("workbench")?.askSequence.join(" ")).toMatch(
       /stable public input contract or published output/i
@@ -588,13 +703,85 @@ describe("forge onboarding contract", () => {
     expect(psycheByFocus.get("mode_guide_session")?.notes.join(" ")).toMatch(
       /exploration worksheet|interpretations tentative/i
     );
+    expect(psycheByFocus.get("event_type")?.askSequence.join(" ")).toMatch(
+      /repeated emotional or relational stake/i
+    );
+    expect(
+      psycheByFocus.get("emotion_definition")?.askSequence.join(" ")
+    ).toMatch(/felt signature/i);
+  });
+
+  it("keeps specialized onboarding routes present in generated OpenAPI", async () => {
+    const onboarding = await loadOnboardingPayload();
+    const openapi = buildOpenApiDocument();
+    const openApiPaths = new Set(Object.keys(openapi.paths ?? {}));
+    const openapiSchemas = (
+      openapi.components as {
+        schemas?: Record<string, { properties?: Record<string, any> }>;
+      }
+    )?.schemas;
+    const routeModelSchema =
+      openapiSchemas?.AgentOnboardingPayload?.properties?.entityRouteModel;
+    const specializedSurfaceSchema =
+      routeModelSchema?.properties?.specializedDomainSurfaces
+        ?.additionalProperties;
+
+    expect(specializedSurfaceSchema).toEqual(
+      expect.objectContaining({
+        additionalProperties: false,
+        required: expect.arrayContaining([
+          "classification",
+          "summary",
+          "readRoutes",
+          "writeRoutes",
+          "routeSelectionQuestions",
+          "notes"
+        ]),
+        properties: expect.objectContaining({
+          classification: expect.objectContaining({
+            enum: ["specialized_domain_surface"]
+          }),
+          readRoutes: expect.objectContaining({
+            additionalProperties: { type: "string" }
+          }),
+          writeRoutes: expect.objectContaining({
+            additionalProperties: { type: "string" }
+          })
+        })
+      })
+    );
+
+    for (const [surfaceName, surface] of Object.entries(
+      onboarding.entityRouteModel.specializedDomainSurfaces
+    )) {
+      const routeEntries = [
+        ...Object.entries(surface.readRoutes ?? {}),
+        ...Object.entries(surface.writeRoutes ?? {})
+      ];
+
+      for (const [routeName, route] of routeEntries) {
+        expect(
+          openApiPaths.has(normalizeRouteTemplate(route)),
+          `${surfaceName}.${routeName} should exist in OpenAPI`
+        ).toBe(true);
+      }
+    }
+
+    for (const [entityName, actionModel] of Object.entries(
+      onboarding.entityRouteModel.actionEntities
+    )) {
+      for (const route of collectRouteStrings(actionModel)) {
+        expect(
+          openApiPaths.has(normalizeRouteTemplate(route)),
+          `${entityName} action route ${route} should exist in OpenAPI`
+        ).toBe(true);
+      }
+    }
   });
 
   it("keeps the OpenClaw connection guide aligned with the repo-local install path", async () => {
     const onboarding = await loadOnboardingPayload();
-    expect(
-      onboarding.connectionGuides?.openclaw?.verifyCommands ?? []
-    ).toEqual(
+    expect(onboarding.connectionGuides?.openclaw?.verifyCommands ?? []).toEqual(
       expect.arrayContaining([
         "openclaw plugins install ./projects/forge/openclaw-plugin",
         "openclaw plugins info forge-openclaw-plugin",

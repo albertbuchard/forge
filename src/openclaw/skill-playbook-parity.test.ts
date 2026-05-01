@@ -8,6 +8,25 @@ function readRepoFile(relativePath: string) {
   return readFileSync(path.join(repoRoot, relativePath), "utf8");
 }
 
+function extractOpenClawToolList(skill: string) {
+  const startMarker =
+    "When the user asks which Forge tools are available, list exactly these tools:";
+  const endMarker = "\n\nAdditional first-class surfaces:";
+  const start = skill.indexOf(startMarker);
+  expect(start, "OpenClaw tool-list marker should exist").toBeGreaterThanOrEqual(0);
+  const end = skill.indexOf(endMarker, start);
+  expect(end, "OpenClaw tool-list end marker should exist").toBeGreaterThanOrEqual(0);
+  return Array.from(skill.slice(start, end).matchAll(/`(forge_[a-z0-9_]+)`/g)).map(
+    (match) => match[1]
+  );
+}
+
+function extractRegisteredOpenClawTools(source: string) {
+  return Array.from(source.matchAll(/name:\s*"(forge_[a-z0-9_]+)"/g)).map(
+    (match) => match[1]
+  );
+}
+
 describe("forge skill playbook parity", () => {
   it("keeps the shared Psyche playbook aligned across agent surfaces", () => {
     const canonical = readRepoFile(
@@ -84,6 +103,23 @@ describe("forge skill playbook parity", () => {
     expect(openclawSkill).toMatch(/forge_submit_preferences_judgment/);
     expect(openclawSkill).toMatch(/forge_submit_preferences_signal/);
     expect(openclawSkill).toMatch(/Batch CRUD is the default for simple entities|shared batch entity tools/i);
+    expect(openclawSkill).toMatch(/four major stored-entity surfaces and three specialized domain surfaces/i);
+    expect(openclawSkill).toMatch(/specialized domain surfaces are Movement, Life Force, and Workbench/i);
+    expect(openclawSkill).toMatch(/dedicated route families instead of forcing them through batch CRUD/i);
+    for (const skill of [openclawSkill, hermesSkill, codexSkill]) {
+      expect(skill).toMatch(/## Entity Route Posture/i);
+      expect(skill).toMatch(/Batch CRUD is the default for normal stored entities/i);
+      expect(skill).toMatch(/wiki_page[\s\S]*calendar_connection[\s\S]*specialized CRUD surfaces/i);
+      expect(skill).toMatch(/task_run[\s\S]*work_adjustment[\s\S]*questionnaire_run[\s\S]*preference_judgment[\s\S]*preference_signal[\s\S]*self_observation[\s\S]*action workflows/i);
+      expect(skill).toMatch(/Movement, Life Force, and Workbench are specialized domain surfaces/i);
+      expect(skill).toMatch(/entityRouteModel\.specializedDomainSurfaces/i);
+    }
+    expect(openclawSkill).toMatch(/conversation is clearly about a Forge entity or domain surface/i);
+    expect(openclawSkill).toMatch(/movement, life_force, workbench/i);
+    expect(openclawSkill).toMatch(/wiki_page/i);
+    expect(openclawSkill).toMatch(/calendar_connection/i);
+    expect(openclawSkill).toMatch(/preference judgment/i);
+    expect(openclawSkill).toMatch(/work_adjustment/i);
 
     expect(hermesSkill).toMatch(/high-level batch routes for basic Preferences CRUD/i);
     expect(hermesSkill).toMatch(/high-level batch routes for basic questionnaire CRUD/i);
@@ -115,12 +151,48 @@ describe("forge skill playbook parity", () => {
     expect(codexSkill).toMatch(/\/api\/v1\/movement\/automatic-boxes\/:id\/invalidate/i);
     expect(codexSkill).toMatch(/\/api\/v1\/life-force\/profile/i);
     expect(codexSkill).toMatch(/\/api\/v1\/workbench\/flows\/:id\/run/i);
-    expect(codexSkill).toMatch(/timeline,[\s\S]*overlay,[\s\S]*weekday template,[\s\S]*published output,[\s\S]*run detail,[\s\S]*node result/i);
-    expect(hermesSkill).toMatch(/timeline,[\s\S]*overlay,[\s\S]*weekday template,[\s\S]*published output,[\s\S]*run detail,[\s\S]*node result/i);
+    expect(codexSkill).toMatch(/PATCH \/api\/v1\/workbench\/flows\/:id/i);
+    expect(codexSkill).toMatch(/DELETE \/api\/v1\/workbench\/flows\/:id/i);
+    expect(codexSkill).toMatch(/timeline,[\s\S]*overlay,[\s\S]*weekday\s+template,[\s\S]*published output,[\s\S]*run detail,[\s\S]*node result/i);
+    expect(hermesSkill).toMatch(/timeline,[\s\S]*overlay,[\s\S]*weekday\s+template,[\s\S]*published output,[\s\S]*run detail,[\s\S]*node result/i);
+    expect(hermesSkill).toMatch(/PATCH \/api\/v1\/workbench\/flows\/:id/i);
+    expect(hermesSkill).toMatch(/DELETE \/api\/v1\/workbench\/flows\/:id/i);
+    expect(hermesSkill).toMatch(/four major stored-entity surfaces and three specialized domain surfaces/i);
+    expect(hermesSkill).toMatch(/specialized domain surfaces are Movement,[\s\S]*Life Force,[\s\S]*Workbench/i);
+    expect(hermesSkill).toMatch(/dedicated route families instead of[\s\S]*batch CRUD/i);
     expect(codexSkill).toMatch(/\/forge\/v1\/movement/i);
     expect(codexSkill).toMatch(/forge_adjust_work_minutes/);
     expect(codexSkill).toMatch(/preference_judgment/i);
     expect(codexSkill).toMatch(/preference_signal/i);
+    expect(codexSkill).toMatch(/specialized Movement, Life Force, and Workbench domain surfaces/i);
+    expect(codexSkill).toMatch(/Movement, Life Force, and Workbench use dedicated route[\s\S]*batch CRUD/i);
+
+    for (const skill of [openclawSkill, hermesSkill, codexSkill]) {
+      expect(skill).toMatch(/`event_type`[\s\S]*`emotion_definition`/);
+      expect(skill).toMatch(/psychologically meaningful Psyche\s+records/i);
+      expect(skill).toMatch(/repeated lived moment or felt\s+signature/i);
+    }
+  });
+
+  it("keeps OpenClaw's exact tool list aligned with the current curated tool surface", () => {
+    const openclawSkill = readRepoFile("skills/forge-openclaw/SKILL.md");
+    const toolSource = readRepoFile("src/openclaw/tools.ts");
+    const listedTools = extractOpenClawToolList(openclawSkill);
+
+    expect(listedTools).toEqual(extractRegisteredOpenClawTools(toolSource));
+  });
+
+  it("keeps OpenClaw data-root guidance on the shared local Forge home", () => {
+    const openclawSkill = readRepoFile("skills/forge-openclaw/SKILL.md");
+    const dataLocationSlice = openclawSkill.slice(
+      openclawSkill.indexOf("Forge data location rule:"),
+      openclawSkill.indexOf("Psyche interview rule:")
+    );
+
+    expect(dataLocationSlice).toMatch(/shared local Forge home at `~\/\.forge\/forge\.sqlite`/);
+    expect(dataLocationSlice).toMatch(/active runtime `dataRoot`/);
+    expect(dataLocationSlice).not.toMatch(/~\/\.openclaw\/extensions\/forge-openclaw-plugin\/forge\.sqlite/);
+    expect(dataLocationSlice).not.toMatch(/<repo>\/openclaw-plugin\/forge\.sqlite/);
   });
 
   it("keeps OpenClaw and Hermes explicit about habit semantics and the shared check-in path", () => {
@@ -208,7 +280,10 @@ describe("forge skill playbook parity", () => {
     );
     expect(entityPlaybook).toMatch(/stable public input contract or published output/i);
     expect(entityPlaybook).toMatch(/favorite, veto, or compare-later/i);
-    expect(entityPlaybook).toMatch(/specialized surface work in Movement, Life Force, or Workbench/i);
+    expect(entityPlaybook).toMatch(/Movement, Life Force, or Workbench work/i);
+    expect(entityPlaybook).toMatch(/Do not promote self-observation over functional analysis/i);
+    expect(entityPlaybook).toMatch(/behavior_pattern` for recurring loops|Use `behavior_pattern` for a recurring loop/i);
+    expect(entityPlaybook).toMatch(/wiki_page` when the user wants durable memory|Use `wiki_page` when the user wants durable memory/i);
     expect(entityPlaybook).toMatch(/candidate label[\s\S]*what kinds of moments belong inside it/i);
     expect(entityPlaybook).toMatch(/keep it provisional[\s\S]*future use are clear/i);
     expect(entityPlaybook).toMatch(/When the record is already clear enough to save, save it/i);
@@ -226,6 +301,13 @@ describe("forge skill playbook parity", () => {
     expect(psychePlaybook).toMatch(/feels true enough/i);
     expect(psychePlaybook).toMatch(/accuracy and steadiness/i);
     expect(psychePlaybook).toMatch(/Therapist micro-skills/i);
+    expect(psychePlaybook).toMatch(/## Schema Theme Routing/i);
+    expect(psychePlaybook).toMatch(
+      /schema theme[\s\S]*belief_entry[\s\S]*behavior_pattern[\s\S]*mode_profile/i
+    );
+    expect(psychePlaybook).toMatch(
+      /wiki_page[\s\S]*durable explanation of a schema theme/i
+    );
     expect(psychePlaybook).toMatch(/Prefer "what", "when", and "how" early/i);
     expect(psychePlaybook).toMatch(/whether it feels true, too sharp, or still misses something important/i);
     expect(psychePlaybook).toMatch(/one brief reflection[\s\S]*one missing-detail question/i);
@@ -245,6 +327,10 @@ describe("forge skill playbook parity", () => {
     expect(psychePlaybook).toMatch(/What happened the last time this pattern showed up/i);
     expect(psychePlaybook).toMatch(/What did you find yourself doing the last time this move showed up/i);
     expect(psychePlaybook).toMatch(/When that reaction hits, what does it start telling you about you, them, or what happens next/i);
+    expect(psychePlaybook).toMatch(/What kind of moment keeps happening that you want future reports to name the same way each time/i);
+    expect(psychePlaybook).toMatch(/When this feeling is present, what tells you it is this feeling and not a nearby one/i);
+    expect(psychePlaybook).toMatch(/emotionally meaningful kind of moment/i);
+    expect(psychePlaybook).toMatch(/lived signature/i);
     expect(psychePlaybook).not.toMatch(/disappearing like that/i);
     expect(psychePlaybook).not.toMatch(/send the long message/i);
     expect(psychePlaybook).not.toMatch(/polished and unreachable/i);
@@ -363,6 +449,13 @@ describe("forge skill playbook parity", () => {
     expect(appSource).toMatch(/entityType:\s*"workbench"/);
     expect(appSource).toMatch(/specialized_domain_surface/);
     expect(appSource).toMatch(/workAdjustment:/);
+    expect(appSource).toMatch(/work_adjustment:\s*\{/);
+    expect(appSource).toMatch(/preference_judgment:\s*\{/);
+    expect(appSource).toMatch(/preference_signal:\s*\{/);
+    expect(appSource).toMatch(/self_observation:\s*\{/);
+    expect(appSource).toMatch(/adjustMinutes:\s*"\/api\/v1\/work-adjustments"/);
+    expect(appSource).toMatch(/action:\s*"\/api\/v1\/preferences\/judgments"/);
+    expect(appSource).toMatch(/action:\s*"\/api\/v1\/preferences\/signals"/);
     expect(appSource).toMatch(/specializedDomainSurfaces:/);
     expect(appSource).toMatch(/movementAllTime:/);
     expect(appSource).toMatch(/movementAutomaticBoxInvalidate:/);
@@ -370,7 +463,7 @@ describe("forge skill playbook parity", () => {
     expect(appSource).toMatch(/workbenchFlows:/);
     expect(appSource).toMatch(/specializedSurfaceRule:/);
     expect(appSource).toMatch(/another agent could follow the same path without guessing/i);
-    expect(appSource).toMatch(/read the relevant specialized view before you mutate it/i);
+    expect(appSource).toMatch(/read the relevant dedicated view before you mutate it/i);
     expect(appSource).toMatch(/shared batch CRUD path for ordinary sleep_session create or update work/i);
     expect(appSource).toMatch(/shared batch CRUD path for ordinary workout_session create or update work/i);
 
