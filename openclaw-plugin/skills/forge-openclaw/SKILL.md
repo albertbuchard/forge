@@ -412,7 +412,7 @@ Use the dedicated domain routes for specialized surfaces that are not simple bat
 - Movement lives under `/api/v1/movement/*`. Treat it as a dedicated timeline of `stays` and `trips`, not as generic batch CRUD. A `stay` means the user remained in the same place for a span of time. A `trip` means the user traveled between places. Use the movement routes when the user wants to understand time in place, travel behavior, specific stays or trips, known places, or selected-span aggregates such as "how long was I at home in the past 2 weeks?" or "when did I travel last month?".
 - In the live onboarding catalog, Movement, Life Force, and Workbench should appear as `specialized_domain_surface`. If the classification and route family disagree, trust the specialized route family and fix the contract mismatch instead of inventing a batch CRUD path.
 - Movement user actions are: query movement behavior, add a place or manual stay/trip overlay, update an existing stay/trip/place, or link a specific movement item to another Forge entity. Keep the explanation user-facing: where they stayed, when they traveled, what changed, and what this movement should be linked to.
-- Movement read lanes map cleanly to the dedicated routes:
+- For movement review, choose the route that matches the user's question:
   `/api/v1/movement/day`, `/api/v1/movement/month`, `/api/v1/movement/all-time`,
   `/api/v1/movement/timeline`, `/api/v1/movement/places`,
   `/api/v1/movement/selection`, and `/api/v1/movement/trips/:id`.

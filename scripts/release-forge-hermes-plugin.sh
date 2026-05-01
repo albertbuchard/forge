@@ -12,6 +12,8 @@ HERMES_PLUGIN_PYTHON_DIST="${HERMES_PLUGIN_DIR}/python-dist"
 HERMES_PLUGIN_BUILD_DIR="${HERMES_PLUGIN_DIR}/build"
 HERMES_PLUGIN_EGG_INFO_DIR="${HERMES_PLUGIN_DIR}/forge_hermes_plugin.egg-info"
 HERMES_TAG_PREFIX="hermes-v"
+CODEX_RUNTIME_DIST_DIR="${FORGE_DIR}/plugins/forge-codex/runtime/dist"
+CODEX_RUNTIME_MIGRATIONS_DIR="${FORGE_DIR}/plugins/forge-codex/runtime/server/migrations"
 OPENCLAW_PLUGIN_PACKAGE_JSON="${FORGE_DIR}/openclaw-plugin/package.json"
 RELEASE_MODE="${FORGE_RELEASE_MODE:-full}"
 SKIP_UPLOAD="${FORGE_RELEASE_SKIP_UPLOAD:-0}"
@@ -115,6 +117,13 @@ require_git_auth() {
   git -C "${FORGE_DIR}" remote get-url origin >/dev/null 2>&1 || fail "Forge git remote 'origin' is not configured"
   git -C "${FORGE_DIR}" push --dry-run origin HEAD:refs/heads/main >/dev/null 2>&1 \
     || fail "GitHub push auth failed for Forge origin. Fix SSH credentials first."
+}
+
+restore_openclaw_build_side_effects() {
+  rm -rf "${CODEX_RUNTIME_DIST_DIR}" "${CODEX_RUNTIME_MIGRATIONS_DIR}"
+  git -C "${FORGE_DIR}" restore --source=HEAD --worktree -- \
+    "plugins/forge-codex/runtime/dist" \
+    "plugins/forge-codex/runtime/server/migrations" >/dev/null 2>&1 || true
 }
 
 ensure_packaging_env() {
@@ -303,6 +312,7 @@ run_verification_suite() {
     cd "${FORGE_DIR}"
     node ./plugins/forge-hermes/scripts/build-package-runtime.mjs
   )
+  restore_openclaw_build_side_effects
   if is_publish_from_tag_mode; then
     echo "+ python3 -m py_compile plugins/forge-hermes/__init__.py plugins/forge-hermes/forge_hermes/*.py"
     (

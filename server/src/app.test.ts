@@ -16111,7 +16111,7 @@ test("settings and local agent token management persist through the versioned AP
     assert.ok(wikiConversationPlaybook);
     assert.match(
       wikiConversationPlaybook.openingQuestion,
-      /main reference for/i
+      /remember or reuse later/i
     );
     const insightConversationPlaybook =
       onboardingBody.onboarding.entityConversationPlaybooks.find(
@@ -16163,11 +16163,11 @@ test("settings and local agent token management persist through the versioned AP
     assert.ok(selfObservationConversationPlaybook);
     assert.match(
       selfObservationConversationPlaybook.openingQuestion,
-      /notice most clearly in that moment/i
+      /what happened in the situation/i
     );
     assert.ok(
-      selfObservationConversationPlaybook.askSequence.some((step) =>
-        /finished interpretation/i.test(step)
+      /situation[\s\S]*cue[\s\S]*emotion[\s\S]*thought[\s\S]*behavior[\s\S]*consequence/i.test(
+        selfObservationConversationPlaybook.askSequence.join(" ")
       )
     );
     const sleepConversationPlaybook =
