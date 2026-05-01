@@ -264,7 +264,39 @@ NODE
 }
 
 write_release_versions() {
-  node --input-type=module - "$1" "${@:2}" <<'NODE'
+  local version="$1"
+  shift
+  local json_files=()
+  local file
+  for file in "$@"; do
+    if [[ "${file}" == "${HERMES_PLUGIN_MANIFEST}" ]]; then
+      python3 - "${version}" "${file}" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+version = sys.argv[1]
+path = Path(sys.argv[2])
+text = path.read_text(encoding="utf-8")
+text, count = re.subn(
+    r"^version:\s*[0-9]+\.[0-9]+\.[0-9]+\s*$",
+    f"version: {version}",
+    text,
+    count=1,
+    flags=re.MULTILINE,
+)
+if count != 1:
+    raise SystemExit(f"Could not update version in {path}")
+path.write_text(text, encoding="utf-8")
+PY
+    else
+      json_files+=("${file}")
+    fi
+  done
+  if [[ ${#json_files[@]} -eq 0 ]]; then
+    return 0
+  fi
+  node --input-type=module - "${version}" "${json_files[@]}" <<'NODE'
 import fs from "node:fs";
 
 const version = process.argv[2];
@@ -298,6 +330,9 @@ process.stdout.write(JSON.stringify(versions));
 NODE
 )"
   [[ "${actual}" == "[\"${version}\",\"${version}\",\"${version}:${version}\",\"${version}\",\"${version}\",\"${version}\"]" ]] || fail "plugin versions are not aligned: ${actual}"
+  local hermes_manifest_version
+  hermes_manifest_version="$(read_hermes_manifest_version "${HERMES_PLUGIN_MANIFEST}")"
+  [[ "${hermes_manifest_version}" == "${version}" ]] || fail "Hermes plugin manifest version mismatch: ${hermes_manifest_version}"
 }
 
 verify_openclaw_host_floor() {
@@ -357,7 +392,7 @@ push_release() {
   local version="$1"
   (
     cd "${FORGE_DIR}"
-    git push -u origin main
+    git push -u origin HEAD:main
     git push origin "v${version}"
   )
 }
@@ -407,6 +442,7 @@ main() {
   require_command git
   require_command node
   require_command npm
+  require_command python3
   if ! is_publish_from_tag_mode; then
     require_command lsof
     require_command curl

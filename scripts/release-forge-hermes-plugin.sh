@@ -436,7 +436,7 @@ push_release() {
   local version="$1"
   (
     cd "${FORGE_DIR}"
-    git push -u origin main
+    git push -u origin HEAD:main
     git push origin "${HERMES_TAG_PREFIX}${version}"
   )
 }
