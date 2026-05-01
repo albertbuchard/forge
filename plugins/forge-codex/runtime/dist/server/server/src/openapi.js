@@ -3193,7 +3193,32 @@ export function buildOpenApiDocument() {
                         type: "object",
                         additionalProperties: {
                             type: "object",
-                            additionalProperties: true
+                            additionalProperties: false,
+                            required: [
+                                "classification",
+                                "summary",
+                                "readRoutes",
+                                "writeRoutes",
+                                "routeSelectionQuestions",
+                                "notes"
+                            ],
+                            properties: {
+                                classification: {
+                                    type: "string",
+                                    enum: ["specialized_domain_surface"]
+                                },
+                                summary: { type: "string" },
+                                readRoutes: {
+                                    type: "object",
+                                    additionalProperties: { type: "string" }
+                                },
+                                writeRoutes: {
+                                    type: "object",
+                                    additionalProperties: { type: "string" }
+                                },
+                                routeSelectionQuestions: arrayOf({ type: "string" }),
+                                notes: arrayOf({ type: "string" })
+                            }
                         }
                     },
                     readModelOnlySurfaces: {

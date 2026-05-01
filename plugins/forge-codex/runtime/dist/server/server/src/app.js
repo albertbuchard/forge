@@ -2763,7 +2763,7 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
     "Use a progression of concrete example or intent, working name, purpose or meaning, placement in Forge, operational details, and linked context.",
     "Ask one to three focused questions at a time. One is usually best when the user is uncertain or emotionally loaded.",
     "One focused question is the default. Only stack a second question when both serve the same clarification job and the user is steady enough for it.",
-    "When the user wants review, comparison, or navigation around an existing record, ask what they are trying to understand first and route to the read path before reopening create or update intake.",
+    "When the user wants review, comparison, or navigation around an existing record, ask what they are trying to understand first and look up the existing record before reopening create or update intake.",
     "If the user already answered the normal opening question, do not repeat it. Move to the next missing clarification.",
     "Do not over-therapize logistical entities. For tasks, calendar events, work blocks, timeboxes, and task runs, one brief confirming sentence plus one question is usually enough.",
     "After each substantive answer, briefly say what is becoming clearer and ask only for the next thing that still changes the record shape or usefulness.",
@@ -2776,18 +2776,24 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
     "For review requests, ask what practical question the user wants the read to answer before you ask for more scope.",
     "The opening question should help the user understand what they are actually trying to save, decide, review, or change, not make them perform the schema out loud.",
     "If the user already named the exact correction in usable language, confirm only the missing scope, timing, or route-selecting detail that still matters, then act.",
-    "Once a specialized-surface lane is clear, speak in route-relevant nouns such as timeline, overlay, weekday template, published output, run detail, or node result instead of generic record language.",
+    "Keep API and architecture nouns out of user-facing questions unless the user asks about implementation. Do not ask the user about surfaces, route families, CRUD, payloads, mutation paths, or read paths; ask about the human object such as a wiki page, note, trigger report, behavior pattern, belief, mode, movement timeline, energy model, weekday pattern, flow, run, or node result.",
+    "Self-observation is not the default container for Psyche material. Use it only for a lightweight observed event note; prefer trigger_report for one emotionally meaningful episode, behavior_pattern for a recurring loop and functional analysis, behavior for one repeated move, belief_entry for a core sentence, mode_guide_session or mode_profile for an active part-state, and wiki_page for durable memory.",
+    "Do not bury schema work in self-observation. If the user is describing a schema theme, preserve it through a belief_entry, behavior_pattern, mode_profile, mode_guide_session, trigger_report, or wiki_page depending on whether it appears as a rule, loop, part-state, live exploration, one episode, or durable explanation.",
+    "Once the Movement, Life Force, or Workbench job is clear, speak in product nouns such as timeline, overlay, weekday template, published output, run detail, or node result instead of generic record language.",
     "If the next answer would not change the route, wording, timing, or write payload in a meaningful way, stop asking and act.",
     "Before saving, briefly summarize the working formulation in the user's own language when that would reduce ambiguity.",
     "Once the record is clear enough to name, stop exploring broadly and ask only for the last structural detail that still matters.",
     "If the record is already clear enough to save, save it instead of performing a ceremonial extra question.",
     "If the user accepts the wording or record shape, move to the write instead of reopening the intake.",
     "When updating an entity, start with what is changing, what should stay true, and what prompted the update now.",
-    "For action-heavy flows such as work adjustments, preference judgments, preference signals, and specialized Movement, Life Force, or Workbench work, first ask what the user is trying to understand, change, add, update, link, or run, then choose the dedicated action or surface route instead of forcing the request into generic CRUD.",
-    "For specialized surfaces, ask what would make the answer or change useful before you ask route-shaped details such as provider, weekday, flow id, run id, or trip id.",
+    "For action-heavy flows such as work adjustments, preference judgments, preference signals, and Movement, Life Force, or Workbench work, first ask what the user is trying to understand, change, add, update, link, or run, then choose the dedicated action or domain route instead of forcing the request into generic CRUD.",
+    "For Movement, Life Force, and Workbench, ask what would make the answer or change useful before you ask route-shaped details such as provider, weekday, flow id, run id, or trip id.",
     "When the user already named a precise correction or review target, do not widen back out into a meta lane question. Confirm only the missing route-selecting detail and then act.",
     "Once the route family is clear, say it plainly enough that another agent could follow the same path without guessing.",
     "For Movement specifically, treat missing-data corrections as user-defined overlay boxes unless the user is editing an already-recorded stay or trip. When the user already gave a clear instruction like 'that missing block was home', act after only the last ambiguity is resolved.",
+    "For action workflows such as task_run, work_adjustment, questionnaire_run, preference_judgment, preference_signal, and self_observation, keep the question focused on the missing action payload and do not downgrade the request into generic batch CRUD.",
+    "For normal stored Preferences and questionnaire records, use batch CRUD by default; switch to dedicated action routes only for judgments, signals, run answers, clone/draft/publish lifecycle, or visual comparison gameplay.",
+    "When the user wants to remember a book, article, paper, source, concept, person, conversation, project reference, recurring explanation, or personal manual, consider wiki_page before note or self_observation.",
     "For meaning-bearing updates, especially in Psyche, briefly say what feels newly true before you ask for the one structural detail that still changes the save."
 ];
 const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
@@ -2876,12 +2882,13 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     },
     {
         focus: "wiki_page",
-        openingQuestion: "What should this page become the main reference for?",
-        coachingGoal: "Create a durable reference page with a clear scope instead of dumping raw notes into the wiki.",
+        openingQuestion: "What do you want this wiki page to help you remember or reuse later?",
+        coachingGoal: "Create durable memory for books, articles, sources, concepts, people, conversations, project references, reusable instructions, or personal manuals.",
         askSequence: [
-            "Ask what topic this page should become the canonical place for.",
-            "Ask whether it is a durable wiki page or supporting evidence.",
-            "Ask what future lookup, decision, or collaboration this page should support.",
+            "Ask what this page should help the user remember, understand, or reuse later.",
+            "Ask whether the material is a book, article, source, concept, person, conversation, project reference, or personal manual.",
+            "Ask what the page should contain now: summary, key claims, quotes to verify, personal interpretation, action implications, or links.",
+            "Ask whether it should be the durable wiki page itself or supporting evidence linked to another page.",
             "Ask about linked entities, aliases, or tags only if they will make the page more navigable later."
         ]
     },
@@ -2964,17 +2971,17 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     },
     {
         focus: "self_observation",
-        openingQuestion: "What did you notice most clearly in that moment?",
-        coachingGoal: "Capture one observation clearly enough that it can support later reflection without pretending it is already a full interpretation.",
+        openingQuestion: "What happened in the situation, and what did you feel, think, or do next?",
+        coachingGoal: "Capture one observed episode as situation, cue, emotion/body, thought/meaning, behavior/urge, and consequence, then choose the stronger Psyche or wiki container when one is visible.",
         askSequence: [
-            "Ask what was observed.",
-            "Reflect the moment without pretending it is already a finished interpretation.",
-            "Ask what felt most important to name before it gets smoothed over or forgotten.",
-            "Ask for the smallest concrete slice if the observation still feels vague or global.",
-            "Ask when it happened or became noticeable unless timing is already clear.",
-            "Remember that self-observation is note-backed and should be written through an observed note with frontmatter.observedAt.",
-            "Ask what it may connect to: pattern, belief, value, mode, task, project, or note.",
-            "Ask for tags or extra context only if that will help later review."
+            "Ask what happened in the situation.",
+            "Ask what cue, trigger, or body shift made the episode noticeable.",
+            "Ask what emotion, body signal, thought, or meaning showed up.",
+            "Ask what behavior showed up: what the user did, wanted to do, avoided, or repeated next.",
+            "Ask what the immediate consequence was, including short-term relief or cost if it is visible.",
+            "Decide whether this should stay a lightweight self-observation or become a trigger_report, behavior_pattern, behavior, belief_entry, mode_profile, mode_guide_session, event_type, emotion_definition, or wiki page.",
+            "Remember that self-observation is note-backed and should be written through an observed note with frontmatter.observedAt only when a lightweight observation is the right container.",
+            "Do not promote self-observation over functional analysis: use behavior_pattern for recurring loops, trigger_report for one emotionally meaningful episode, mode_guide_session or mode_profile for a central part-state, belief_entry for a central sentence, and wiki_page for durable memory."
         ]
     },
     {
@@ -3044,6 +3051,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
             "Ask what preference or taste question this item belongs to.",
             "Ask what domain or context it should live in.",
             "Ask whether the user is saving a comparison candidate or a direct signal such as favorite, veto, or compare-later.",
+            "If the user is saving or editing a candidate, keep it on batch CRUD; if they are recording a comparison outcome or direct mark, switch to the preference judgment or signal route.",
             "Ask what makes the item distinct enough to compare usefully only if it is still a comparison candidate."
         ]
     },
@@ -3055,6 +3063,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
             "Ask what comparison the user is actually trying to settle.",
             "Ask which context or domain this judgment belongs to.",
             "Ask whether the result is left, right, tie, or skip.",
+            "Use the dedicated preference judgment action route instead of batch CRUD once the pair and outcome are clear.",
             "Ask for reason tags or strength only if they will improve later interpretation."
         ]
     },
@@ -3066,6 +3075,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
             "Ask what item the user wants to mark.",
             "Ask what signal they want to give it.",
             "Ask what domain or context this belongs to if that is still unclear.",
+            "Use the dedicated preference signal action route instead of batch CRUD once the item and signal are clear.",
             "Ask about strength only if the user is expressing a gradient rather than a simple mark."
         ]
     },
@@ -3079,6 +3089,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
             "Ask what kind of honest moment or decision it should help someone answer before getting into item wording.",
             "Reflect the practical use case back in plain language.",
             "Ask what would make the instrument distinct instead of redundant if a near-duplicate risk is visible.",
+            "Use batch CRUD for ordinary questionnaire instrument create or update work; use clone, draft, and publish actions only for version lifecycle.",
             "Move to draft creation once the purpose is clear."
         ]
     },
@@ -3090,6 +3101,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
             "Ask what the user wants from the run right now: start, continue, review, or finish.",
             "Ask which questionnaire or existing run this is about.",
             "If the user wants to continue or finish, ask what feels most stuck, unfinished, or important before asking for more content.",
+            "Use the dedicated questionnaire run start, read, update, and complete routes instead of generic entity CRUD.",
             "If answering is still in progress, ask only for the next answer or note that matters."
         ]
     },
@@ -3098,6 +3110,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
         openingQuestion: "What are you trying to understand, correct, or preserve about where you stayed and traveled?",
         coachingGoal: "Clarify whether the user wants a time-in-place query, travel-history review, a missing-gap overlay, one stay or trip change, one place summary, or a link before choosing the dedicated movement route.",
         askSequence: [
+            "Ask what they are trying to make clearer, repair, or preserve about where they were before you narrow to the exact movement lane.",
             "Ask whether the user is trying to query behavior, add something manually, update an existing movement item, or link movement to another Forge entity.",
             "Ask whether the focus is a stay, a trip, a place, a timeline window, or a selected span.",
             "Ask for the time window, place, or movement item that makes the question concrete.",
@@ -3114,9 +3127,10 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     },
     {
         focus: "life_force",
-        openingQuestion: "Do you want to understand the current energy picture, change how Forge models it, or log how you feel right now?",
+        openingQuestion: "What feels most off, important, or worth understanding in your energy picture right now?",
         coachingGoal: "Clarify whether the job is overview, profile change, weekday-template editing, or a real-time fatigue signal before choosing the dedicated life-force route.",
         askSequence: [
+            "Ask what feels off, important, or worth tracking in their energy picture before you reduce it to one life-force lane.",
             "Ask whether the job is overview, profile change, weekday-template change, or fatigue signaling.",
             "Ask what part of the current energy picture feels most important or inaccurate.",
             "Ask what should stay true if they are changing profile or template assumptions.",
@@ -3133,10 +3147,10 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
         openingQuestion: "What are you trying to inspect, change, run, or publish through Workbench?",
         coachingGoal: "Clarify whether the user wants flow discovery, editing, execution, run history, published outputs, or node-level inspection before using the dedicated workbench route family.",
         askSequence: [
+            "Ask what they are trying to learn, repair, publish, or run through Workbench before you narrow to flow discovery, editing, execution, or results.",
             "Ask whether the job is flow discovery, one flow edit, execution, run history, published output, node-level inspection, or latest-node-output lookup.",
             "Ask which flow, slug, run, or node the request is about.",
             "Ask whether they need the stable flow contract, one run result, one published output, one node result, or the latest node output.",
-            "Ask what the user is trying to learn, repair, or publish through that flow.",
             "If the user already named the flow and action clearly, skip the meta lane question and ask only for the missing run, node, or output scope.",
             "If the user wants a stable public input contract or published output, prefer those dedicated reads instead of detouring through run history first.",
             "If the user is still shaping a payload or edit, prefer flow detail or box catalog reads before asking for structured inputs.",
@@ -3446,6 +3460,72 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
             "Use eventTypeId only when a known event taxonomy item fits; otherwise use customEventType.",
             "Use emotionDefinitionId only when a known emotion definition fits; otherwise keep the raw label.",
             "If the user becomes overwhelmed, slow down, summarize, and return to one segment of the chain at a time instead of pushing for the full report in one turn."
+        ]
+    },
+    {
+        focus: "event_type",
+        useWhen: "Use for a repeated emotionally meaningful kind of moment that should make future trigger reports consistent without erasing the lived stake.",
+        coachingGoal: "Help the user name the repeated episode type through a recent example, emotional stake, and boundary from nearby incidents before saving the taxonomy label.",
+        askSequence: [
+            "Ask what kind of moment keeps recurring and why it matters to name it consistently.",
+            "Reflect the repeated emotional or relational stake in plain language before wording the category.",
+            "Ask for one recent example if the boundary is still abstract.",
+            "Clarify what belongs inside this event type and what should stay outside it.",
+            "Offer one concise candidate label once the repeated moment is clear.",
+            "Link it to trigger reports, beliefs, patterns, modes, or emotion definitions only after the category itself feels accurate."
+        ],
+        requiredForCreate: ["label"],
+        highValueOptionalFields: [
+            "description",
+            "linkedReportIds",
+            "linkedPatternIds",
+            "linkedBeliefIds",
+            "linkedModeIds"
+        ],
+        exampleQuestions: [
+            "What kind of moment keeps happening that you want future reports to name the same way each time?",
+            "What feels threatened, exposed, relieved, or important in those moments?",
+            "What would make a future incident count as this type instead of a nearby one?",
+            "Which reports or patterns should this help organize later?"
+        ],
+        notes: [
+            "event_type is a Psyche taxonomy record, but it still needs active listening because it names emotionally meaningful episodes.",
+            "Do not open with pure label wording unless the lived category and boundary are already clear.",
+            "Offer a candidate label after the repeated moment is understood, and keep the user's wording when it already fits."
+        ]
+    },
+    {
+        focus: "emotion_definition",
+        useWhen: "Use for a reusable feeling label that should help trigger reports and Psyche records name an emotion consistently in the user's own language.",
+        coachingGoal: "Define the feeling through its lived signature, boundary from nearby feelings, and likely signal or protective function before saving the label.",
+        askSequence: [
+            "Ask when this feeling was present recently and what made it recognizable.",
+            "Reflect the felt signature before asking for a category or label polish.",
+            "Ask what distinguishes it from nearby feelings if the boundary matters.",
+            "Ask what the feeling tends to signal, protect, or ask for.",
+            "Offer one concise definition in the user's language and invite correction.",
+            "Link it to trigger reports, modes, beliefs, or patterns only after the definition feels steady."
+        ],
+        requiredForCreate: ["label"],
+        highValueOptionalFields: [
+            "description",
+            "family",
+            "bodySignals",
+            "linkedReportIds",
+            "linkedModeIds",
+            "linkedBeliefIds",
+            "linkedPatternIds"
+        ],
+        exampleQuestions: [
+            "When this feeling is present, what tells you it is this feeling and not a nearby one?",
+            "What body signal, urge, image, thought, or relational meaning identifies it?",
+            "What does this feeling usually warn about, long for, protect, or demand?",
+            "Which reports or patterns should use this label later?"
+        ],
+        notes: [
+            "emotion_definition is a Psyche taxonomy record, not a generic dictionary entry.",
+            "Start from the lived feeling before asking for category or browsing fields.",
+            "If the user already gives a good label, reflect the felt signature and ask only for the one boundary or definition detail that still matters."
         ]
     }
 ];
@@ -4120,7 +4200,7 @@ function buildAgentOnboardingPayload(request) {
                 task_run: {
                     readModel: "/api/v1/operator/context",
                     actions: {
-                        start: "/api/v1/tasks/:taskId/runs",
+                        start: "/api/v1/tasks/:id/runs",
                         heartbeat: "/api/v1/task-runs/:id/heartbeat",
                         focus: "/api/v1/task-runs/:id/focus",
                         complete: "/api/v1/task-runs/:id/complete",
@@ -4153,6 +4233,18 @@ function buildAgentOnboardingPayload(request) {
                         overrideScore: "/api/v1/preferences/items/:id/score"
                     }
                 },
+                preference_judgment: {
+                    readModel: "/api/v1/preferences/workspace",
+                    action: "/api/v1/preferences/judgments",
+                    tool: "forge_submit_preferences_judgment",
+                    writeModel: "Submit one pairwise preference judgment through the dedicated Preferences action route, not batch CRUD."
+                },
+                preference_signal: {
+                    readModel: "/api/v1/preferences/workspace",
+                    action: "/api/v1/preferences/signals",
+                    tool: "forge_submit_preferences_signal",
+                    writeModel: "Submit one direct preference signal through the dedicated Preferences action route, not batch CRUD."
+                },
                 questionnaires: {
                     list: "/api/v1/psyche/questionnaires",
                     detail: "/api/v1/psyche/questionnaires/:id",
@@ -4165,10 +4257,15 @@ function buildAgentOnboardingPayload(request) {
                 selfObservation: {
                     read: "/api/v1/psyche/self-observation/calendar",
                     writeModel: "Create or update an observed note with frontmatter.observedAt. Manual reflections usually carry the Self-observation tag, while movement sync can also publish rolling observed notes tagged movement."
+                },
+                self_observation: {
+                    read: "/api/v1/psyche/self-observation/calendar",
+                    writeModel: "Read the self-observation calendar, then create or update an observed note with frontmatter.observedAt; do not invent a standalone self_observation CRUD route."
                 }
             },
             specializedDomainSurfaces: {
                 movement: {
+                    classification: "specialized_domain_surface",
                     summary: "Dedicated movement workspace API. Use these routes for stays, trips, time-in-place questions, visited places, trip detail, selection aggregates, user-defined overlays, and repair actions on already-recorded movement data.",
                     routeSelectionQuestions: [
                         "Is the user asking for a day, month, all-time, timeline, place, trip detail, or selected-span answer?",
@@ -4211,6 +4308,7 @@ function buildAgentOnboardingPayload(request) {
                     ]
                 },
                 lifeForce: {
+                    classification: "specialized_domain_surface",
                     summary: "Dedicated life-force API. Use it to read the current energy budget, drains, recommendations, and warnings, then patch only the parts that are meant to be user-controlled.",
                     routeSelectionQuestions: [
                         "Is the user trying to understand the overview, change durable profile assumptions, change a weekday curve, or log a right-now fatigue signal?",
@@ -4235,6 +4333,7 @@ function buildAgentOnboardingPayload(request) {
                     ]
                 },
                 workbench: {
+                    classification: "specialized_domain_surface",
                     summary: "Dedicated graph-flow API. Use it for flow catalog reads, flow CRUD, execution, run history, published outputs, node results, and latest successful node outputs.",
                     routeSelectionQuestions: [
                         "Is the job flow discovery, flow editing, execution, published output, run detail, node result, latest node output, or flow chat follow-up?",
@@ -4484,9 +4583,9 @@ function buildAgentOnboardingPayload(request) {
             saveSuggestionTone: "gentle_optional",
             maxQuestionsPerTurn: 1,
             psycheExplorationRule: "When a Psyche entity needs understanding first, begin with one exploratory question before any working formulation, replacement belief, suggested title, or save pitch. Keep the opening reflection to one or two short sentences, stay in plain prose instead of bullets or numbered lists, keep that first reply short, do not mention Forge search or save structure yet, avoid colons or list-shaped phrasing, prefer what/when/how over why until the experience is grounded, wait for the user's answer before offering a fuller formulation, ask permission before moving from charged exploration into naming or challenge when needed, make the next question help the user feel more able to name the experience rather than more examined, do not widen into adjacent entities until the current one has a working sentence the user recognizes, and once the lived experience is coherent stop deepening and help the user name it cleanly. When the user is updating a Psyche record because of one fresh episode, anchor in that episode before renaming the durable formulation, begin with the smallest part of the old wording that no longer fits, and do not reopen the full origin story unless the new understanding is truly structural. If the user accepts the wording, move toward the save instead of reopening deeper exploration.",
-            specializedSurfaceRule: "For Movement, Life Force, and Workbench, clarify the lane first, then name the dedicated route family in plain language and do not guess at a generic CRUD path. Use specializedDomainSurfaces.routeSelectionQuestions when they are present so the next follow-up stays route-selective instead of generic. Once the lane is clear, talk in route-relevant nouns such as timeline, overlay, weekday template, published output, run detail, or node result rather than generic record language. If the truth of the current state is still uncertain, read the relevant specialized view before you mutate it. When the user already named a precise correction or review target, confirm only the route-selecting detail that is still missing. After a concrete specialized-surface correction, read the relevant specialized view back when the user is trying to understand the result rather than just store it. The canonical runtime routes stay under /api/v1/*, and the OpenClaw HTTP mirror exposes the same families under /forge/v1/movement, /forge/v1/life-force, and /forge/v1/workbench.",
+            specializedSurfaceRule: "For Movement, Life Force, and Workbench, clarify the job first, then choose the dedicated route family internally and do not guess at a generic CRUD path. Use specializedDomainSurfaces.routeSelectionQuestions when they are present so the next follow-up selects the right route instead of asking generic questions. In user-facing language, talk about timeline, overlay, weekday template, published output, run detail, or node result rather than surfaces, payloads, read paths, mutation paths, or CRUD. If the truth of the current state is still uncertain, read the relevant dedicated view before you mutate it. When the user already named a precise correction or review target, confirm only the route-selecting detail that is still missing. After a concrete Movement, Life Force, or Workbench correction, read the relevant view back when the user is trying to understand the result rather than just store it. The canonical runtime routes stay under /api/v1/*, and the OpenClaw HTTP mirror exposes the same families under /forge/v1/movement, /forge/v1/life-force, and /forge/v1/workbench.",
             reviewShortcutRule: "When the user is reviewing or correcting an existing record, ask what practical question they want the read or correction to answer, then narrow the saved object, timeframe, or route family first. Do not reopen the whole intake unless the user is actually redefining the record.",
-            readModelWriteRule: "Self-observation is note-backed and should be written through observed notes with frontmatter.observedAt. Sleep and workout sessions stay on batch CRUD by default; use the reflective review helpers only when enriching one already-known record after review.",
+            readModelWriteRule: "Self-observation is note-backed and should be written through observed notes with frontmatter.observedAt only when a lightweight episode observation is the right container. Do not use it as the default bucket for Psyche material: prefer trigger_report for one emotionally meaningful episode, behavior_pattern for functional analysis of a recurring loop, behavior for one repeated move, belief_entry for a core sentence, mode_guide_session or mode_profile for a central part-state, and wiki_page for durable memory such as books, articles, concepts, sources, or personal manuals. Sleep and workout sessions stay on batch CRUD by default; use the reflective review helpers only when enriching one already-known record after review.",
             psycheOpeningQuestionRule: "Prefer a concrete opening question tied to the entity: ask when the value mattered, what happened the last time the pattern appeared, what cue or body signal came first before the behavior, what the belief starts saying about self or outcome, what feels most at risk inside the mode, what the part is trying to get the user to do or stop doing, or where the shift began in the incident. Reflect briefly before the question, choose one follow-up lane at a time, say what is becoming clearer before the next deeper question, and if several Psyche entities are visible hold the adjacent ones lightly until the main container is clear.",
             duplicateCheckRoute: "/api/v1/entities/search",
             uiSuggestionRule: "offer_visual_ui_when_review_or_editing_would_be_easier",
