@@ -209,7 +209,10 @@ Use this quick split before the conversation gets too detailed.
   model.
 - Movement, Life Force, and Workbench are specialized domain areas. Use their
   dedicated route families for timelines and overlays, energy profile/templates and
-  fatigue signals, and Workbench flow execution or result artifacts.
+  fatigue signals, and Workbench flow execution or result artifacts. When available,
+  use `forge_call_movement_route`, `forge_call_life_force_route`, or
+  `forge_call_workbench_route` after selecting the lane; do not route these through
+  batch entity tools.
 - Once the route posture is clear, keep the questioning focused on the missing detail
   that selects the route or payload. Do not ask route-neutral reflective questions
   after the action path is already obvious.

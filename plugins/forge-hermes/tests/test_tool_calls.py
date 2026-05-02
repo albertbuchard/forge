@@ -6,9 +6,13 @@ import pytest
 
 from forge_hermes import tools
 from forge_hermes.catalog import (
+    LIFE_FORCE_ROUTE_SPECS,
+    MOVEMENT_ROUTE_SPECS,
     TOOL_CATALOG,
+    WORKBENCH_ROUTE_SPECS,
     release_task_run_body,
     release_task_run_path,
+    specialized_route_path,
     start_task_run_body,
     start_task_run_path,
 )
@@ -159,6 +163,140 @@ def test_update_entities_tool_description_mentions_habit_checkins():
 
     assert "habit.patch.checkIn" in description
     assert "official habit outcome logging" in description
+
+
+def test_specialized_domain_tools_are_explicit_route_key_tools():
+    specs = {tool["name"]: tool for tool in TOOL_CATALOG}
+
+    assert set(
+        specs["forge_call_movement_route"]["parameters"]["properties"]["routeKey"]["enum"]
+    ) >= {
+        "timeline",
+        "places",
+        "tripDetail",
+        "selection",
+        "userBoxPreflight",
+        "userBoxCreate",
+        "automaticBoxInvalidate",
+        "stayUpdate",
+        "tripPointUpdate",
+    }
+    assert specs["forge_call_life_force_route"]["parameters"]["properties"]["routeKey"][
+        "enum"
+    ] == ["fatigueSignal", "overview", "profile", "weekdayTemplate"]
+    assert set(
+        specs["forge_call_workbench_route"]["parameters"]["properties"]["routeKey"]["enum"]
+    ) >= {
+        "boxCatalog",
+        "listFlows",
+        "createFlow",
+        "runFlow",
+        "publishedOutput",
+        "runDetail",
+        "nodeResult",
+        "latestNodeOutput",
+    }
+
+    assert specialized_route_path(
+        LIFE_FORCE_ROUTE_SPECS,
+        {"routeKey": "weekdayTemplate", "pathParams": {"weekday": "monday"}},
+    ) == "/api/v1/life-force/templates/monday"
+    assert specialized_route_path(
+        MOVEMENT_ROUTE_SPECS,
+        {
+            "routeKey": "tripPointUpdate",
+            "pathParams": {"id": "trip 1", "pointId": "point/2"},
+        },
+    ) == "/api/v1/movement/trips/trip%201/points/point%2F2"
+    assert specialized_route_path(
+        WORKBENCH_ROUTE_SPECS,
+        {
+            "routeKey": "latestNodeOutput",
+            "pathParams": {"id": "flow_123", "nodeId": "node_456"},
+            "query": {"format": "json", "userIds": ["user_a", "user_b"]},
+        },
+    ) == (
+        "/api/v1/workbench/flows/flow_123/nodes/node_456/output"
+        "?format=json&userIds=user_a&userIds=user_b"
+    )
+
+
+def test_life_force_route_handler_uses_dedicated_put_route(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    config = tools.ForgeConfig(
+        origin="http://127.0.0.1",
+        port=4317,
+        base_url="http://127.0.0.1:4317",
+        web_app_url="http://127.0.0.1:4317/forge/",
+        data_root="",
+        api_token="",
+        actor_label="",
+        timeout_ms=4000,
+    )
+    monkeypatch.setattr(tools, "_load_config", lambda: config)
+    monkeypatch.setattr(tools, "_ensure_runtime", lambda current: current)
+
+    calls: list[dict[str, object]] = []
+
+    class FakeResponse:
+        def __init__(self, body: object, headers: dict[str, str] | None = None):
+            self._body = json.dumps(body).encode("utf-8")
+            self.headers = headers or {}
+
+        def read(self) -> bytes:
+            return self._body
+
+        def close(self) -> None:
+            return None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    def fake_urlopen(req, timeout=0):  # noqa: ANN001 - urllib request object
+        body = json.loads(req.data.decode("utf-8")) if req.data else None
+        calls.append(
+            {
+                "url": req.full_url,
+                "method": req.get_method(),
+                "body": body,
+            }
+        )
+        if req.full_url.endswith("/api/v1/auth/operator-session"):
+            return FakeResponse(
+                {"session": {"id": "ses_local", "actorLabel": "Albert"}},
+                headers={
+                    "Set-Cookie": "forge_operator_session=fg_session_cookie; Path=/; HttpOnly"
+                },
+            )
+        if req.full_url.endswith("/api/v1/life-force/templates/monday"):
+            return FakeResponse({"lifeForce": {"weekday": "monday"}})
+        raise AssertionError(f"Unexpected Hermes request: {req.full_url}")
+
+    monkeypatch.setattr(tools.request, "urlopen", fake_urlopen)
+
+    handler = tools.build_handler("forge_call_life_force_route")
+    payload = json.loads(
+        handler(
+            {
+                "routeKey": "weekdayTemplate",
+                "pathParams": {"weekday": "monday"},
+                "body": {"points": [{"hour": 13, "freeAp": -4}]},
+            }
+        )
+    )
+
+    assert payload == {"lifeForce": {"weekday": "monday"}}
+    assert [call["url"] for call in calls] == [
+        "http://127.0.0.1:4317/api/v1/auth/operator-session",
+        "http://127.0.0.1:4317/api/v1/life-force/templates/monday",
+    ]
+    assert calls[1]["method"] == "PUT"
+    assert calls[1]["body"] == {"points": [{"hour": 13, "freeAp": -4}]}
+    assert all("/api/v1/entities" not in str(call["url"]) for call in calls)
 
 
 def test_update_entities_handler_uses_batch_route_for_habit_checkins(

@@ -716,9 +716,10 @@ def _request_json(
     method: str,
     path: str,
     body: Optional[Any] = None,
+    write: Optional[bool] = None,
     retry_with_fresh_session: bool = True,
 ) -> Any:
-    if _requires_remote_token(config, method != "GET"):
+    if _requires_remote_token(config, (method != "GET") if write is None else write):
         raise ForgePluginError(
             "forge_api_token_required",
             "Forge apiToken is required for remote Hermes mutations when this target cannot use local or Tailscale operator-session bootstrap.",
@@ -763,7 +764,7 @@ def _request_json(
 
         if exc.code == 401 and "cookie" in headers and retry_with_fresh_session:
             SESSION_COOKIES.pop(session_key, None)
-            return _request_json(config, method, path, body=body, retry_with_fresh_session=False)
+            return _request_json(config, method, path, body=body, write=write, retry_with_fresh_session=False)
 
         if isinstance(parsed_payload, dict):
             message = parsed_payload.get("message") or parsed_payload.get("error") or payload_text or exc.reason
@@ -895,6 +896,14 @@ def _resolve_body(spec: Dict[str, Any], args: Dict[str, Any], config: ForgeConfi
     return args
 
 
+def _resolve_write(spec: Dict[str, Any], args: Dict[str, Any], method: str) -> bool:
+    if "write_builder" in spec:
+        return bool(spec["write_builder"](args))
+    if "write" in spec:
+        return bool(spec["write"])
+    return method != "GET"
+
+
 def _resolve_ui_entrypoint(config: ForgeConfig) -> Dict[str, Any]:
     web_app_url = config.web_app_url
     try:
@@ -996,8 +1005,9 @@ def _execute_spec(spec: Dict[str, Any], args: Dict[str, Any]) -> Dict[str, Any]:
 
     path = _resolve_path(spec, args)
     method = _resolve_method(spec, args)
-    body = None if method == "GET" else _resolve_body(spec, args, config)
-    return _request_json(config, method, path, body=body)
+    body = None if method in {"GET", "DELETE"} else _resolve_body(spec, args, config)
+    write = _resolve_write(spec, args, method)
+    return _request_json(config, method, path, body=body, write=write)
 
 
 TOOL_SPECS = {spec["name"]: spec for spec in TOOL_CATALOG}

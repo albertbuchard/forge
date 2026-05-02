@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 
 JsonSchema = Dict[str, Any]
@@ -65,6 +65,144 @@ def with_query(path: str, args: Dict[str, Any], allowed_keys: List[str]) -> str:
     if not query_parts:
         return path
     return f"{path}?{urlencode(query_parts, doseq=True)}"
+
+
+def _encode_query_value(value: Any) -> List[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(item) for item in value if item is not None]
+    return [str(value)]
+
+
+def with_any_query(path: str, query: Any) -> str:
+    if not isinstance(query, dict):
+        return path
+    query_parts = []
+    for key, value in query.items():
+        for item in _encode_query_value(value):
+            query_parts.append((str(key), item))
+    if not query_parts:
+        return path
+    return f"{path}?{urlencode(query_parts, doseq=True)}"
+
+
+MOVEMENT_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
+    "day": {"method": "GET", "path": "/api/v1/movement/day"},
+    "month": {"method": "GET", "path": "/api/v1/movement/month"},
+    "allTime": {"method": "GET", "path": "/api/v1/movement/all-time"},
+    "timeline": {"method": "GET", "path": "/api/v1/movement/timeline"},
+    "places": {"method": "GET", "path": "/api/v1/movement/places"},
+    "settings": {"method": "GET", "path": "/api/v1/movement/settings"},
+    "boxDetail": {"method": "GET", "path": "/api/v1/movement/boxes/:id"},
+    "tripDetail": {"method": "GET", "path": "/api/v1/movement/trips/:id"},
+    "selection": {"method": "POST", "path": "/api/v1/movement/selection"},
+    "settingsUpdate": {"method": "PATCH", "path": "/api/v1/movement/settings", "write": True},
+    "placeCreate": {"method": "POST", "path": "/api/v1/movement/places", "write": True},
+    "placeUpdate": {"method": "PATCH", "path": "/api/v1/movement/places/:id", "write": True},
+    "userBoxPreflight": {"method": "POST", "path": "/api/v1/movement/user-boxes/preflight", "write": True},
+    "userBoxCreate": {"method": "POST", "path": "/api/v1/movement/user-boxes", "write": True},
+    "userBoxUpdate": {"method": "PATCH", "path": "/api/v1/movement/user-boxes/:id", "write": True},
+    "userBoxDelete": {"method": "DELETE", "path": "/api/v1/movement/user-boxes/:id", "write": True},
+    "automaticBoxInvalidate": {"method": "POST", "path": "/api/v1/movement/automatic-boxes/:id/invalidate", "write": True},
+    "stayUpdate": {"method": "PATCH", "path": "/api/v1/movement/stays/:id", "write": True},
+    "stayDelete": {"method": "DELETE", "path": "/api/v1/movement/stays/:id", "write": True},
+    "tripUpdate": {"method": "PATCH", "path": "/api/v1/movement/trips/:id", "write": True},
+    "tripDelete": {"method": "DELETE", "path": "/api/v1/movement/trips/:id", "write": True},
+    "tripPointUpdate": {"method": "PATCH", "path": "/api/v1/movement/trips/:id/points/:pointId", "write": True},
+    "tripPointDelete": {"method": "DELETE", "path": "/api/v1/movement/trips/:id/points/:pointId", "write": True},
+}
+
+LIFE_FORCE_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
+    "overview": {"method": "GET", "path": "/api/v1/life-force"},
+    "profile": {"method": "PATCH", "path": "/api/v1/life-force/profile", "write": True},
+    "weekdayTemplate": {"method": "PUT", "path": "/api/v1/life-force/templates/:weekday", "write": True},
+    "fatigueSignal": {"method": "POST", "path": "/api/v1/life-force/fatigue-signals", "write": True},
+}
+
+WORKBENCH_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
+    "boxCatalog": {"method": "GET", "path": "/api/v1/workbench/catalog/boxes"},
+    "listFlows": {"method": "GET", "path": "/api/v1/workbench/flows"},
+    "flowById": {"method": "GET", "path": "/api/v1/workbench/flows/:id"},
+    "flowBySlug": {"method": "GET", "path": "/api/v1/workbench/flows/by-slug/:slug"},
+    "createFlow": {"method": "POST", "path": "/api/v1/workbench/flows", "write": True},
+    "updateFlow": {"method": "PATCH", "path": "/api/v1/workbench/flows/:id", "write": True},
+    "deleteFlow": {"method": "DELETE", "path": "/api/v1/workbench/flows/:id", "write": True},
+    "runFlow": {"method": "POST", "path": "/api/v1/workbench/flows/:id/run", "write": True},
+    "runByPayload": {"method": "POST", "path": "/api/v1/workbench/run", "write": True},
+    "chatFlow": {"method": "POST", "path": "/api/v1/workbench/flows/:id/chat", "write": True},
+    "publishedOutput": {"method": "GET", "path": "/api/v1/workbench/flows/:id/output"},
+    "runs": {"method": "GET", "path": "/api/v1/workbench/flows/:id/runs"},
+    "runDetail": {"method": "GET", "path": "/api/v1/workbench/flows/:id/runs/:runId"},
+    "runNodes": {"method": "GET", "path": "/api/v1/workbench/flows/:id/runs/:runId/nodes"},
+    "nodeResult": {"method": "GET", "path": "/api/v1/workbench/flows/:id/runs/:runId/nodes/:nodeId"},
+    "latestNodeOutput": {"method": "GET", "path": "/api/v1/workbench/flows/:id/nodes/:nodeId/output"},
+}
+
+
+def specialized_route_parameters(route_specs: Dict[str, Dict[str, Any]]) -> JsonSchema:
+    return object_schema(
+        {
+            "routeKey": {"enum": sorted(route_specs.keys())},
+            "pathParams": {
+                "type": "object",
+                "additionalProperties": {"type": "string"},
+                "description": "Path parameters such as id, weekday, runId, nodeId, or slug.",
+            },
+            "query": {
+                "type": "object",
+                "additionalProperties": True,
+                "description": "Optional query parameters for the selected route.",
+            },
+            "body": {
+                "type": "object",
+                "description": "JSON body for POST, PATCH, and PUT route keys.",
+            },
+        },
+        required=["routeKey"],
+    )
+
+
+def _specialized_route_spec(route_specs: Dict[str, Dict[str, Any]], args: Dict[str, Any]) -> Dict[str, Any]:
+    route_key = str(args.get("routeKey") or "").strip()
+    spec = route_specs.get(route_key)
+    if not spec:
+        raise ValueError(f"Unknown specialized Forge route key: {route_key}")
+    return spec
+
+
+def _render_specialized_route_path(template: str, args: Dict[str, Any]) -> str:
+    path_params = args.get("pathParams")
+    if not isinstance(path_params, dict):
+        path_params = {}
+
+    path = template
+    for part in template.split("/"):
+        if not part.startswith(":"):
+            continue
+        key = part[1:]
+        value = str(path_params.get(key) or "").strip()
+        if not value:
+            raise ValueError(f"Missing pathParams.{key} for {template}.")
+        path = path.replace(f":{key}", quote(value, safe=""))
+    return with_any_query(path, args.get("query"))
+
+
+def specialized_route_path(route_specs: Dict[str, Dict[str, Any]], args: Dict[str, Any]) -> str:
+    spec = _specialized_route_spec(route_specs, args)
+    return _render_specialized_route_path(str(spec["path"]), args)
+
+
+def specialized_route_method(route_specs: Dict[str, Dict[str, Any]], args: Dict[str, Any]) -> str:
+    return str(_specialized_route_spec(route_specs, args).get("method", "GET"))
+
+
+def specialized_route_body(args: Dict[str, Any], _config: Any) -> Any:
+    return args.get("body") if args.get("body") is not None else {}
+
+
+def specialized_route_write(route_specs: Dict[str, Dict[str, Any]], args: Dict[str, Any]) -> bool:
+    return bool(_specialized_route_spec(route_specs, args).get("write"))
 
 
 def calendar_overview_path(args: Dict[str, Any]) -> str:
@@ -434,6 +572,33 @@ TOOL_CATALOG: List[ToolSpec] = [
         "parameters": object_schema({}),
         "method": "GET",
         "path": "/api/v1/agents/onboarding",
+    },
+    {
+        "name": "forge_call_movement_route",
+        "description": "Call one allowed dedicated Movement route after the conversation has narrowed to day, month, all-time, timeline, place, trip detail, selection aggregate, overlay, or repair work. Do not use this for normal stored entities; those stay on batch CRUD.",
+        "parameters": specialized_route_parameters(MOVEMENT_ROUTE_SPECS),
+        "method_builder": lambda args: specialized_route_method(MOVEMENT_ROUTE_SPECS, args),
+        "path_builder": lambda args: specialized_route_path(MOVEMENT_ROUTE_SPECS, args),
+        "body_builder": specialized_route_body,
+        "write_builder": lambda args: specialized_route_write(MOVEMENT_ROUTE_SPECS, args),
+    },
+    {
+        "name": "forge_call_life_force_route",
+        "description": "Call one allowed dedicated Life Force route after the conversation has narrowed to overview, profile update, weekday template, or fatigue signal. Do not use batch CRUD for Life Force.",
+        "parameters": specialized_route_parameters(LIFE_FORCE_ROUTE_SPECS),
+        "method_builder": lambda args: specialized_route_method(LIFE_FORCE_ROUTE_SPECS, args),
+        "path_builder": lambda args: specialized_route_path(LIFE_FORCE_ROUTE_SPECS, args),
+        "body_builder": specialized_route_body,
+        "write_builder": lambda args: specialized_route_write(LIFE_FORCE_ROUTE_SPECS, args),
+    },
+    {
+        "name": "forge_call_workbench_route",
+        "description": "Call one allowed dedicated Workbench route after the conversation has narrowed to flow catalog, flow CRUD, execution, run history, published output, node result, or latest node output. Do not use batch CRUD for Workbench.",
+        "parameters": specialized_route_parameters(WORKBENCH_ROUTE_SPECS),
+        "method_builder": lambda args: specialized_route_method(WORKBENCH_ROUTE_SPECS, args),
+        "path_builder": lambda args: specialized_route_path(WORKBENCH_ROUTE_SPECS, args),
+        "body_builder": specialized_route_body,
+        "write_builder": lambda args: specialized_route_write(WORKBENCH_ROUTE_SPECS, args),
     },
     {
         "name": "forge_get_doctor",

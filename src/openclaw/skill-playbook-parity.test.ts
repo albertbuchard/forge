@@ -116,6 +116,9 @@ describe("forge skill playbook parity", () => {
       expect(skill).toMatch(/task_run[\s\S]*work_adjustment[\s\S]*questionnaire_run[\s\S]*preference_judgment[\s\S]*preference_signal[\s\S]*self_observation[\s\S]*action workflows/i);
       expect(skill).toMatch(/Movement, Life Force, and Workbench are specialized domain surfaces/i);
       expect(skill).toMatch(/entityRouteModel\.specializedDomainSurfaces/i);
+      expect(skill).toMatch(/forge_call_movement_route/);
+      expect(skill).toMatch(/forge_call_life_force_route/);
+      expect(skill).toMatch(/forge_call_workbench_route/);
     }
     expect(openclawSkill).toMatch(/conversation is clearly about a Forge entity or domain surface/i);
     expect(openclawSkill).toMatch(/movement, life_force, workbench/i);

@@ -1,11 +1,14 @@
 name: forge
-version: 0.2.50
+version: 0.2.58
 description: Structured memory plugin for project management and mental health tracking in Hermes
 author: Forge
 provides_tools:
   - forge_get_operator_overview
   - forge_get_operator_context
   - forge_get_agent_onboarding
+  - forge_call_movement_route
+  - forge_call_life_force_route
+  - forge_call_workbench_route
   - forge_get_doctor
   - forge_get_user_directory
   - forge_get_wiki_settings

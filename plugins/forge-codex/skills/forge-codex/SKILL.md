@@ -43,7 +43,9 @@ without guessing.
 - Movement, Life Force, and Workbench are specialized domain surfaces. Read
   `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces` and use
   the dedicated route families for timeline/overlay repair, energy templates/signals,
-  and flow execution/results.
+  and flow execution/results. When an adapter exposes `forge_call_movement_route`,
+  `forge_call_life_force_route`, or `forge_call_workbench_route`, use those
+  route-key tools after the conversation has selected the lane.
 
 ## Project Management Hierarchy Rule
 
@@ -232,7 +234,10 @@ Surface rule:
     review, manual overlays, edits, and links to other Forge records.
     When those domains matter, consult
     `forge_get_agent_onboarding` and follow its `entityRouteModel.specializedDomainSurfaces`
-    route families instead of trying to squeeze them through generic CRUD.
+    route families instead of trying to squeeze them through generic CRUD. When an
+    adapter exposes them, prefer `forge_call_movement_route`,
+    `forge_call_life_force_route`, or `forge_call_workbench_route` after selecting
+    the route key.
 14. Use `forge_get_ui_entrypoint` when the Forge UI is the better surface for Kanban,
    detailed review, graph exploration, or complex Psyche work.
 
@@ -263,6 +268,8 @@ Surface rule:
 - `patch.checkIn` accepts `status` plus optional `dateKey`, `note`, and `description`; if `description` is provided, it replaces the habit's stored `description` in the same write.
 - Preferred API path for Movement, Life Force, and Workbench: use the dedicated
   route families published in `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces`.
+  Prefer `forge_call_movement_route`, `forge_call_life_force_route`, or
+  `forge_call_workbench_route` when those route-key tools are present.
 - When that onboarding payload includes `routeSelectionQuestions`, use them before
   improvising follow-up questions for Movement, Life Force, or Workbench.
 - After the lane is clear, talk in product nouns such as timeline, overlay, weekday

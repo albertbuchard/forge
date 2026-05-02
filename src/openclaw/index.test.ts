@@ -403,6 +403,9 @@ describe("forge openclaw plugin", () => {
     const toolNames = tools.map((tool) => tool.name).sort();
     expect(toolNames).toEqual([
       "forge_adjust_work_minutes",
+      "forge_call_life_force_route",
+      "forge_call_movement_route",
+      "forge_call_workbench_route",
       "forge_clone_questionnaire",
       "forge_complete_questionnaire_run",
       "forge_complete_task_run",

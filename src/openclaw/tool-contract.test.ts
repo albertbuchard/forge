@@ -9,6 +9,7 @@ import { registerForgePluginTools } from "./tools";
 
 type RegisteredTool = {
   name: string;
+  description?: string;
   parameters?: Record<string, unknown>;
 };
 
@@ -110,5 +111,49 @@ describe("openclaw tool contracts", () => {
 
     expect(providerValues).toEqual(backendProviderValues);
     expect(required).toEqual(["label", "provider", "selectedCalendarUrls"]);
+  });
+
+  it("publishes dedicated route-key tools for specialized domain surfaces", () => {
+    const tools = collectRegisteredTools();
+    const movement = requireTool(tools, "forge_call_movement_route");
+    const lifeForce = requireTool(tools, "forge_call_life_force_route");
+    const workbench = requireTool(tools, "forge_call_workbench_route");
+
+    expect(readTypeBoxUnionValues(movement.parameters ?? {}, "routeKey")).toEqual(
+      expect.arrayContaining([
+        "timeline",
+        "places",
+        "tripDetail",
+        "selection",
+        "userBoxPreflight",
+        "userBoxCreate",
+        "automaticBoxInvalidate",
+        "stayUpdate",
+        "tripPointUpdate"
+      ])
+    );
+    expect(readTypeBoxUnionValues(lifeForce.parameters ?? {}, "routeKey")).toEqual(
+      ["fatigueSignal", "overview", "profile", "weekdayTemplate"]
+    );
+    expect(readTypeBoxUnionValues(workbench.parameters ?? {}, "routeKey")).toEqual(
+      expect.arrayContaining([
+        "boxCatalog",
+        "listFlows",
+        "createFlow",
+        "runFlow",
+        "publishedOutput",
+        "runDetail",
+        "nodeResult",
+        "latestNodeOutput"
+      ])
+    );
+
+    for (const tool of [movement, lifeForce, workbench]) {
+      expect(tool.parameters?.required).toEqual(["routeKey"]);
+      expect(tool.description ?? "").toMatch(/dedicated/i);
+      expect(tool.description ?? "").toMatch(
+        /Do not use.*batch CRUD|normal stored entities.*batch CRUD/i
+      );
+    }
   });
 });

@@ -83,7 +83,10 @@ guessing.
 - Movement, Life Force, and Workbench are specialized domain surfaces. Read
   `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces` and use
   the dedicated route families for timeline/overlay repair, energy templates/signals,
-  and flow execution/results.
+  and flow execution/results. When the adapter exposes `forge_call_movement_route`,
+  `forge_call_life_force_route`, or `forge_call_workbench_route`, use those
+  route-key tools after the conversation has selected the lane; otherwise use the
+  exact `/api/v1/*` route or OpenClaw `/forge/v1/*` mirror published in onboarding.
 
 Preferences rule:
 
@@ -411,6 +414,12 @@ Use the health tools for review and reflective enrichment, not as the default CR
 
 Use the dedicated domain routes for specialized surfaces that are not simple batch entities:
 
+OpenClaw and Hermes expose route-key tools for these surfaces when available:
+`forge_call_movement_route`, `forge_call_life_force_route`, and
+`forge_call_workbench_route`. Choose the route key from live onboarding or the tool
+schema after the user's job is clear. Do not send Movement, Life Force, or Workbench
+through `forge_create_entities` or `forge_update_entities`.
+
 - Movement lives under `/api/v1/movement/*`. Treat it as a dedicated timeline of `stays` and `trips`, not as generic batch CRUD. A `stay` means the user remained in the same place for a span of time. A `trip` means the user traveled between places. Use the movement routes when the user wants to understand time in place, travel behavior, specific stays or trips, known places, or selected-span aggregates such as "how long was I at home in the past 2 weeks?" or "when did I travel last month?".
 - In the live onboarding catalog, Movement, Life Force, and Workbench should appear as `specialized_domain_surface`. If the classification and route family disagree, trust the specialized route family and fix the contract mismatch instead of inventing a batch CRUD path.
 - Movement user actions are: query movement behavior, add a place or manual stay/trip overlay, update an existing stay/trip/place, or link a specific movement item to another Forge entity. Keep the explanation user-facing: where they stayed, when they traveled, what changed, and what this movement should be linked to.
@@ -619,6 +628,9 @@ When the user asks which Forge tools are available, list exactly these tools:
 `forge_get_operator_overview`
 `forge_get_operator_context`
 `forge_get_agent_onboarding`
+`forge_call_movement_route`
+`forge_call_life_force_route`
+`forge_call_workbench_route`
 `forge_get_user_directory`
 `forge_get_ui_entrypoint`
 `forge_get_psyche_overview`

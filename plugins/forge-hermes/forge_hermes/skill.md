@@ -89,7 +89,9 @@ without guessing.
 - Movement, Life Force, and Workbench are specialized domain surfaces. Read
   `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces` and use
   the dedicated route families for timeline/overlay repair, energy templates/signals,
-  and flow execution/results.
+  and flow execution/results. When Hermes exposes `forge_call_movement_route`,
+  `forge_call_life_force_route`, or `forge_call_workbench_route`, use those
+  route-key tools after the conversation has selected the lane.
 
 ## Project Management Hierarchy Rule
 
@@ -185,7 +187,7 @@ When Hermes is trying to find the right wiki record, use these search patterns:
    `forge_ingest_wiki_source` queues background ingest work; when the user wants to review candidate pages or entities before publishing, hand off to the Forge UI instead of pretending Hermes already has an inline review tool.
 6. Use the health tools for sleep and sports review and reflective enrichment:
    `forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_update_sleep_session`, `forge_update_workout_session`.
-7. Movement, Life Force, and Workbench are specialized Forge API surfaces rather than simple batch entities. When Hermes needs those domains, read `forge_get_agent_onboarding` and follow `entityRouteModel.specializedDomainSurfaces` for the dedicated route families.
+7. Movement, Life Force, and Workbench are specialized Forge API surfaces rather than simple batch entities. When Hermes needs those domains, read `forge_get_agent_onboarding`, choose the route from `entityRouteModel.specializedDomainSurfaces`, and use `forge_call_movement_route`, `forge_call_life_force_route`, or `forge_call_workbench_route` when the route-key tools are available.
    After a concrete correction there, read the relevant specialized view back when the
    user is trying to understand the result rather than only store it.
 8. Treat narrow calendar helpers as convenience helpers, not the default architecture:
@@ -222,7 +224,7 @@ For wiki-specific recall:
 - Use the high-level batch routes for basic Preferences CRUD. `preference_catalog`, `preference_catalog_item`, `preference_context`, and `preference_item` should normally flow through `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`.
 - Use the high-level batch routes for basic questionnaire CRUD too. `questionnaire_instrument` should normally flow through `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`.
 - Use the high-level batch routes for ordinary health-session CRUD too. `sleep_session` and `workout_session` should normally flow through `forge_search_entities`, `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`. Keep `forge_get_sleep_overview` and `forge_get_sports_overview` for read models, and keep `forge_update_sleep_session` and `forge_update_workout_session` for reflective enrichment on one already-existing record.
-- Use the dedicated API families for Movement, Life Force, and Workbench. Those routes are published in `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces` and are the preferred contract for movement stays, trips, time-in-place and travel-behavior queries, life-force state, and workbench execution/result work.
+- Use the dedicated API families for Movement, Life Force, and Workbench. Those routes are published in `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces` and are the preferred contract for movement stays, trips, time-in-place and travel-behavior queries, life-force state, and workbench execution/result work. Prefer `forge_call_movement_route`, `forge_call_life_force_route`, or `forge_call_workbench_route` when those route-key tools are present.
 - When that onboarding payload includes `routeSelectionQuestions`, use them before
   improvising follow-up questions for Movement, Life Force, or Workbench.
 - After the lane is clear, talk in product nouns such as timeline, overlay, weekday

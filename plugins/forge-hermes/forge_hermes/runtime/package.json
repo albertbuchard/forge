@@ -1,6 +1,6 @@
 {
   "name": "forge-hermes-runtime",
-  "version": "0.2.50",
+  "version": "0.2.58",
   "private": true,
   "type": "module",
   "dependencies": {

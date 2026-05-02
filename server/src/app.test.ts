@@ -16446,9 +16446,9 @@ test("settings and local agent token management persist through the versioned AP
     );
     assert.ok(movementEntity);
     assert.equal(movementEntity.classification, "specialized_domain_surface");
-    assert.match(
-      movementEntity.preferredMutationTool ?? "",
-      /specializedDomainSurfaces/
+    assert.equal(
+      movementEntity.preferredMutationTool,
+      "forge_call_movement_route"
     );
     const lifeForceEntity = onboardingBody.onboarding.entityCatalog.find(
       (entity) => entity.entityType === "life_force"
@@ -16458,11 +16458,19 @@ test("settings and local agent token management persist through the versioned AP
       lifeForceEntity.classification,
       "specialized_domain_surface"
     );
+    assert.equal(
+      lifeForceEntity.preferredMutationTool,
+      "forge_call_life_force_route"
+    );
     const workbenchEntity = onboardingBody.onboarding.entityCatalog.find(
       (entity) => entity.entityType === "workbench"
     );
     assert.ok(workbenchEntity);
     assert.equal(workbenchEntity.classification, "specialized_domain_surface");
+    assert.equal(
+      workbenchEntity.preferredMutationTool,
+      "forge_call_workbench_route"
+    );
     const createTool = onboardingBody.onboarding.toolInputCatalog.find(
       (tool) => tool.toolName === "forge_create_entities"
     );

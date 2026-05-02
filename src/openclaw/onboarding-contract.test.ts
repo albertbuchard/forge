@@ -87,6 +87,8 @@ async function loadOnboardingPayload() {
       readModelOnlySurfaces: Record<string, string>;
     };
     interactionGuidance: Record<string, string>;
+    mutationGuidance: Record<string, string | Record<string, string> | boolean>;
+    recommendedPluginTools?: Record<string, string[]>;
     connectionGuides?: {
       openclaw?: {
         installSteps?: string[];
@@ -551,8 +553,7 @@ describe("forge onboarding contract", () => {
         preferredMutationPath:
           "Use the dedicated Movement route family for day, month, all-time, timeline, places, trip detail, selection aggregates, overlays, and repair actions.",
         preferredReadPath: "/api/v1/movement/timeline",
-        preferredMutationTool:
-          "Follow forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces for the dedicated route family."
+        preferredMutationTool: "forge_call_movement_route"
       })
     );
     expect(entityByType.get("life_force")).toEqual(
@@ -561,8 +562,7 @@ describe("forge onboarding contract", () => {
         preferredMutationPath:
           "Use the dedicated Life Force route family for overview, profile edits, weekday templates, and fatigue signals.",
         preferredReadPath: "/api/v1/life-force",
-        preferredMutationTool:
-          "Follow forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces for the dedicated route family."
+        preferredMutationTool: "forge_call_life_force_route"
       })
     );
     expect(entityByType.get("workbench")).toEqual(
@@ -571,8 +571,7 @@ describe("forge onboarding contract", () => {
         preferredMutationPath:
           "Use the dedicated Workbench route family for flow CRUD, execution, run history, published outputs, node results, and latest-node-output reads.",
         preferredReadPath: "/api/v1/workbench/flows",
-        preferredMutationTool:
-          "Follow forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces for the dedicated route family."
+        preferredMutationTool: "forge_call_workbench_route"
       })
     );
   });
@@ -583,7 +582,7 @@ describe("forge onboarding contract", () => {
     expect(onboarding.interactionGuidance).toEqual(
       expect.objectContaining({
         specializedSurfaceRule: expect.stringMatching(
-          /Movement, Life Force, and Workbench[\s\S]*read the relevant view back[\s\S]*\/forge\/v1\/movement[\s\S]*\/forge\/v1\/life-force[\s\S]*\/forge\/v1\/workbench/i
+          /Movement, Life Force, and Workbench[\s\S]*forge_call_movement_route[\s\S]*forge_call_life_force_route[\s\S]*forge_call_workbench_route[\s\S]*read the relevant view back[\s\S]*\/forge\/v1\/movement[\s\S]*\/forge\/v1\/life-force[\s\S]*\/forge\/v1\/workbench/i
         ),
         reviewShortcutRule: expect.stringMatching(
           /reviewing or correcting an existing record/i
@@ -592,6 +591,19 @@ describe("forge onboarding contract", () => {
           /Self-observation is note-backed[\s\S]*Sleep and workout sessions stay on batch CRUD by default/i
         )
       })
+    );
+    expect(onboarding.recommendedPluginTools?.specializedDomainWorkflow).toEqual(
+      [
+        "forge_call_movement_route",
+        "forge_call_life_force_route",
+        "forge_call_workbench_route"
+      ]
+    );
+    expect(onboarding.mutationGuidance.specializedRouteToolRule).toMatch(
+      /forge_call_movement_route[\s\S]*forge_call_life_force_route[\s\S]*forge_call_workbench_route[\s\S]*routeKey[\s\S]*pathParams[\s\S]*query[\s\S]*body[\s\S]*batch entity tools/i
+    );
+    expect(onboarding.mutationGuidance.specializedRouteToolExample).toMatch(
+      /weekdayTemplate[\s\S]*monday/i
     );
   });
 
@@ -810,6 +822,8 @@ describe("forge onboarding contract", () => {
     const entityPlaybookSchema =
       openapiSchemas?.AgentOnboardingPayload?.properties
         ?.entityConversationPlaybooks?.items;
+    const mutationGuidanceSchema =
+      openapiSchemas?.AgentOnboardingPayload?.properties?.mutationGuidance;
     const specializedSurfaceSchema =
       routeModelSchema?.properties?.specializedDomainSurfaces
         ?.additionalProperties;
@@ -848,6 +862,19 @@ describe("forge onboarding contract", () => {
           writeRoutes: expect.objectContaining({
             additionalProperties: { type: "string" }
           })
+        })
+      })
+    );
+    expect(mutationGuidanceSchema).toEqual(
+      expect.objectContaining({
+        additionalProperties: false,
+        required: expect.arrayContaining([
+          "specializedRouteToolRule",
+          "specializedRouteToolExample"
+        ]),
+        properties: expect.objectContaining({
+          specializedRouteToolRule: { type: "string" },
+          specializedRouteToolExample: { type: "string" }
         })
       })
     );

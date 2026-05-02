@@ -71,6 +71,165 @@ const emptyObjectSchema = Type.Object({});
 const scopedReadSchema = Type.Object({
     userIds: Type.Optional(Type.Array(Type.String()))
 });
+const movementRouteSpecs = {
+    day: { method: "GET", path: "/api/v1/movement/day" },
+    month: { method: "GET", path: "/api/v1/movement/month" },
+    allTime: { method: "GET", path: "/api/v1/movement/all-time" },
+    timeline: { method: "GET", path: "/api/v1/movement/timeline" },
+    places: { method: "GET", path: "/api/v1/movement/places" },
+    settings: { method: "GET", path: "/api/v1/movement/settings" },
+    boxDetail: { method: "GET", path: "/api/v1/movement/boxes/:id" },
+    tripDetail: { method: "GET", path: "/api/v1/movement/trips/:id" },
+    selection: { method: "POST", path: "/api/v1/movement/selection" },
+    settingsUpdate: {
+        method: "PATCH",
+        path: "/api/v1/movement/settings",
+        requiresToken: true
+    },
+    placeCreate: {
+        method: "POST",
+        path: "/api/v1/movement/places",
+        requiresToken: true
+    },
+    placeUpdate: {
+        method: "PATCH",
+        path: "/api/v1/movement/places/:id",
+        requiresToken: true
+    },
+    userBoxPreflight: {
+        method: "POST",
+        path: "/api/v1/movement/user-boxes/preflight",
+        requiresToken: true
+    },
+    userBoxCreate: {
+        method: "POST",
+        path: "/api/v1/movement/user-boxes",
+        requiresToken: true
+    },
+    userBoxUpdate: {
+        method: "PATCH",
+        path: "/api/v1/movement/user-boxes/:id",
+        requiresToken: true
+    },
+    userBoxDelete: {
+        method: "DELETE",
+        path: "/api/v1/movement/user-boxes/:id",
+        requiresToken: true
+    },
+    automaticBoxInvalidate: {
+        method: "POST",
+        path: "/api/v1/movement/automatic-boxes/:id/invalidate",
+        requiresToken: true
+    },
+    stayUpdate: {
+        method: "PATCH",
+        path: "/api/v1/movement/stays/:id",
+        requiresToken: true
+    },
+    stayDelete: {
+        method: "DELETE",
+        path: "/api/v1/movement/stays/:id",
+        requiresToken: true
+    },
+    tripUpdate: {
+        method: "PATCH",
+        path: "/api/v1/movement/trips/:id",
+        requiresToken: true
+    },
+    tripDelete: {
+        method: "DELETE",
+        path: "/api/v1/movement/trips/:id",
+        requiresToken: true
+    },
+    tripPointUpdate: {
+        method: "PATCH",
+        path: "/api/v1/movement/trips/:id/points/:pointId",
+        requiresToken: true
+    },
+    tripPointDelete: {
+        method: "DELETE",
+        path: "/api/v1/movement/trips/:id/points/:pointId",
+        requiresToken: true
+    }
+};
+const lifeForceRouteSpecs = {
+    overview: { method: "GET", path: "/api/v1/life-force" },
+    profile: {
+        method: "PATCH",
+        path: "/api/v1/life-force/profile",
+        requiresToken: true
+    },
+    weekdayTemplate: {
+        method: "PUT",
+        path: "/api/v1/life-force/templates/:weekday",
+        requiresToken: true
+    },
+    fatigueSignal: {
+        method: "POST",
+        path: "/api/v1/life-force/fatigue-signals",
+        requiresToken: true
+    }
+};
+const workbenchRouteSpecs = {
+    boxCatalog: { method: "GET", path: "/api/v1/workbench/catalog/boxes" },
+    listFlows: { method: "GET", path: "/api/v1/workbench/flows" },
+    flowById: { method: "GET", path: "/api/v1/workbench/flows/:id" },
+    flowBySlug: {
+        method: "GET",
+        path: "/api/v1/workbench/flows/by-slug/:slug"
+    },
+    createFlow: {
+        method: "POST",
+        path: "/api/v1/workbench/flows",
+        requiresToken: true
+    },
+    updateFlow: {
+        method: "PATCH",
+        path: "/api/v1/workbench/flows/:id",
+        requiresToken: true
+    },
+    deleteFlow: {
+        method: "DELETE",
+        path: "/api/v1/workbench/flows/:id",
+        requiresToken: true
+    },
+    runFlow: {
+        method: "POST",
+        path: "/api/v1/workbench/flows/:id/run",
+        requiresToken: true
+    },
+    runByPayload: {
+        method: "POST",
+        path: "/api/v1/workbench/run",
+        requiresToken: true
+    },
+    chatFlow: {
+        method: "POST",
+        path: "/api/v1/workbench/flows/:id/chat",
+        requiresToken: true
+    },
+    publishedOutput: {
+        method: "GET",
+        path: "/api/v1/workbench/flows/:id/output"
+    },
+    runs: { method: "GET", path: "/api/v1/workbench/flows/:id/runs" },
+    runDetail: {
+        method: "GET",
+        path: "/api/v1/workbench/flows/:id/runs/:runId"
+    },
+    runNodes: {
+        method: "GET",
+        path: "/api/v1/workbench/flows/:id/runs/:runId/nodes"
+    },
+    nodeResult: {
+        method: "GET",
+        path: "/api/v1/workbench/flows/:id/runs/:runId/nodes/:nodeId"
+    },
+    latestNodeOutput: {
+        method: "GET",
+        path: "/api/v1/workbench/flows/:id/nodes/:nodeId/output"
+    }
+};
 const optionalString = () => Type.Optional(Type.String());
 const optionalNullableString = () => Type.Optional(Type.Union([Type.String(), Type.Null()]));
 const optionalDeleteMode = () => Type.Optional(Type.Union([Type.Literal("soft"), Type.Literal("hard")]));
@@ -195,6 +354,75 @@ function withQueryParams(path, params, allowedKeys) {
     }
     return search.size > 0 ? `${path}?${search.toString()}` : path;
 }
+function buildRouteKeySchema(routeSpecs) {
+    return Type.Union(Object.keys(routeSpecs).map((routeKey) => Type.Literal(routeKey)));
+}
+function specializedRouteParametersSchema(routeSpecs) {
+    return Type.Object({
+        routeKey: buildRouteKeySchema(routeSpecs),
+        pathParams: Type.Optional(Type.Record(Type.String(), Type.String())),
+        query: Type.Optional(Type.Record(Type.String(), Type.Any())),
+        body: Type.Optional(Type.Any())
+    });
+}
+function appendAnyQueryParams(path, query) {
+    if (!query || typeof query !== "object") {
+        return path;
+    }
+    const search = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) {
+        if (value === null || value === undefined) {
+            continue;
+        }
+        const values = Array.isArray(value) ? value : [value];
+        for (const item of values) {
+            if (item === null || item === undefined) {
+                continue;
+            }
+            search.append(key, String(item));
+        }
+    }
+    return search.size > 0 ? `${path}?${search.toString()}` : path;
+}
+function resolveRouteTemplate(template, pathParams = {}) {
+    return template.replace(/:([A-Za-z0-9_]+)/g, (_match, key) => {
+        const value = pathParams[key];
+        if (typeof value !== "string" || value.trim().length === 0) {
+            throw new Error(`Missing pathParams.${key} for ${template}.`);
+        }
+        return encodeURIComponent(value.trim());
+    });
+}
+async function callSpecializedRoute(config, routeSpecs, params) {
+    const routeKey = normalizeText(params.routeKey);
+    const spec = routeSpecs[routeKey];
+    if (!spec) {
+        throw new Error(`Unknown specialized Forge route key: ${routeKey}`);
+    }
+    if (spec.requiresToken) {
+        requireApiToken(config);
+    }
+    const path = appendAnyQueryParams(resolveRouteTemplate(spec.path, (params.pathParams ?? {})), params.query);
+    const body = spec.method === "GET" || spec.method === "DELETE"
+        ? undefined
+        : (params.body ?? {});
+    return expectForgeSuccess(await callConfiguredForgeApi(config, {
+        method: spec.method,
+        path,
+        body
+    }));
+}
+function registerSpecializedRouteTool(api, config, options) {
+    api.registerTool({
+        name: options.name,
+        label: options.label,
+        description: options.description,
+        parameters: specializedRouteParametersSchema(options.routeSpecs),
+        async execute(_toolCallId, params) {
+            return jsonResult(await callSpecializedRoute(config, options.routeSpecs, (params ?? {})));
+        }
+    });
+}
 function registerReadTool(api, config, options) {
     api.registerTool({
         name: options.name,
@@ -242,6 +470,24 @@ export function registerForgePluginTools(api, config) {
         label: "Forge Agent Onboarding",
         description: "Fetch the live Forge onboarding contract with the exact Forge tool list, batch payload rules, UI handoff rules, and verification guidance.",
         path: () => "/api/v1/agents/onboarding"
+    });
+    registerSpecializedRouteTool(api, config, {
+        name: "forge_call_movement_route",
+        label: "Forge Movement Route",
+        description: "Call one allowed dedicated Movement route after the conversation has narrowed to day, month, all-time, timeline, place, trip detail, selection aggregate, overlay, or repair work. Do not use this for normal stored entities; those stay on batch CRUD.",
+        routeSpecs: movementRouteSpecs
+    });
+    registerSpecializedRouteTool(api, config, {
+        name: "forge_call_life_force_route",
+        label: "Forge Life Force Route",
+        description: "Call one allowed dedicated Life Force route after the conversation has narrowed to overview, profile update, weekday template, or fatigue signal. Do not use batch CRUD for Life Force.",
+        routeSpecs: lifeForceRouteSpecs
+    });
+    registerSpecializedRouteTool(api, config, {
+        name: "forge_call_workbench_route",
+        label: "Forge Workbench Route",
+        description: "Call one allowed dedicated Workbench route after the conversation has narrowed to flow catalog, flow CRUD, execution, run history, published output, node result, or latest node output. Do not use batch CRUD for Workbench.",
+        routeSpecs: workbenchRouteSpecs
     });
     registerReadTool(api, config, {
         name: "forge_get_user_directory",

@@ -3910,6 +3910,7 @@ export function buildOpenApiDocument() {
           "bootstrap",
           "readModels",
           "uiWorkflow",
+          "specializedDomainWorkflow",
           "entityWorkflow",
           "wikiWorkflow",
           "healthWorkflow",
@@ -3922,6 +3923,7 @@ export function buildOpenApiDocument() {
           bootstrap: arrayOf({ type: "string" }),
           readModels: arrayOf({ type: "string" }),
           uiWorkflow: arrayOf({ type: "string" }),
+          specializedDomainWorkflow: arrayOf({ type: "string" }),
           entityWorkflow: arrayOf({ type: "string" }),
           wikiWorkflow: arrayOf({ type: "string" }),
           healthWorkflow: arrayOf({ type: "string" }),
@@ -3986,8 +3988,10 @@ export function buildOpenApiDocument() {
           "searchRule",
           "createRule",
           "updateRule",
+          "specializedRouteToolRule",
           "createExample",
-          "updateExample"
+          "updateExample",
+          "specializedRouteToolExample"
         ],
         properties: {
           preferredBatchRoutes: {
@@ -4010,8 +4014,10 @@ export function buildOpenApiDocument() {
           searchRule: { type: "string" },
           createRule: { type: "string" },
           updateRule: { type: "string" },
+          specializedRouteToolRule: { type: "string" },
           createExample: { type: "string" },
-          updateExample: { type: "string" }
+          updateExample: { type: "string" },
+          specializedRouteToolExample: { type: "string" }
         }
       }
     }
