@@ -13,6 +13,7 @@ const devModeFlag = (process.env.FORGE_OPENCLAW_DEV ?? "").trim().toLowerCase();
 const useDevRuntime = devModeFlag === "1" || devModeFlag === "true" || devModeFlag === "yes";
 
 if (!useDevRuntime) {
+  process.chdir(packageRoot);
   await import(pathToFileURL(builtRuntimeEntry).href);
 } else {
   if (!existsSync(devRuntimeEntry) || !existsSync(devDataRootWrapper) || !existsSync(tsxCliEntry)) {

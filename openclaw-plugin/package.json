@@ -1,6 +1,6 @@
 {
   "name": "forge-openclaw-plugin",
-  "version": "0.2.58",
+  "version": "0.2.59",
   "description": "Curated OpenClaw adapter for the Forge collaboration API, UI entrypoint, and localhost auto-start runtime.",
   "type": "module",
   "license": "MIT",

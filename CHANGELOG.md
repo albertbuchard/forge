@@ -3,7 +3,14 @@
 ## Since 0.2.34
 
 This changelog covers the Forge OpenClaw, Hermes, and Codex agent surfaces from
-`v0.2.34` through the `0.2.58` release line.
+`v0.2.34` through the `0.2.59` release line.
+
+### 0.2.59
+
+- Repaired the gamification XP/trophy asset packaging for normal OpenClaw and Hermes installs.
+- Replaced expanded packaged sprite directories with one validated `sprites.zip` runtime bundle containing only catalog-referenced 256/512 WEBP item and mascot sprites.
+- Added backend first-run materialization of the sprite bundle into the Forge runtime data root and served gamification sprite URLs from that extracted cache.
+- Anchored the packaged OpenClaw server entrypoint to its installed package root so normal `node_modules` installs resolve bundled `dist` assets correctly.
 
 ### 0.2.58
 
