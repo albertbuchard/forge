@@ -251,6 +251,9 @@ describe("question flow simulation cycles", () => {
     );
     expect(psychePlaybook).toMatch(/emotionally meaningful kind of moment/i);
     expect(psychePlaybook).toMatch(/lived signature/i);
+    expect(psychePlaybook).toMatch(/Interpretive Hypotheses/i);
+    expect(psychePlaybook).toMatch(/collaborative formulations/i);
+    expect(psychePlaybook).toMatch(/protecting, predicting, relieving, or\s+costing/i);
 
     const reflectiveNonPsyche = [
       "Goal",

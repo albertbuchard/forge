@@ -48,5 +48,9 @@ forge-companion-post-fix-3.png
 !plugins/forge-codex/runtime/package.json
 !plugins/forge-codex/runtime/dist/
 !plugins/forge-codex/runtime/dist/**
+
+# Generated gamification raster batches are multi-gigabyte local artifacts.
+public/gamification/
+plugins/forge-codex/runtime/dist/gamification/
 .vision/psyche-template/views/screenshot_2026_03_23_at_17.10.30.png/
 .vision/knowledge_graph_template/**/screen.png

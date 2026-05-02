@@ -28,6 +28,7 @@ import { EntityNotesSurface } from "@/components/notes/entity-notes-surface";
 import { PreferenceEntityHandoffButton } from "@/components/preferences/preference-entity-handoff-button";
 import { TaskDialog } from "@/components/task-dialog";
 import { WorkAdjustmentDialog } from "@/components/work-adjustment-dialog";
+import { GamificationMiniHud } from "@/components/gamification/gamification-widgets";
 import { PageHero } from "@/components/shell/page-hero";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -598,6 +599,7 @@ export function TaskDetailPage() {
         }
         actions={
           <div className="flex flex-wrap gap-2">
+            <GamificationMiniHud metrics={shell.snapshot.metrics} />
             <PreferenceEntityHandoffButton
               userId={defaultUserId}
               domain="tasks"

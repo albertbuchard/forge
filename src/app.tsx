@@ -54,6 +54,7 @@ import { SettingsModelsPage } from "@/pages/settings-models-page";
 import { SettingsLogsPage } from "@/pages/settings-logs-page";
 import { SettingsRewardsPage } from "@/pages/settings-rewards-page";
 import { SettingsUsersPage } from "@/pages/settings-users-page";
+import { RewardsPage } from "@/pages/rewards-page";
 import { SleepPage } from "@/pages/sleep-page";
 import { SportsPage } from "@/pages/sports-page";
 import { TaskDetailPage } from "@/pages/task-detail-page";
@@ -637,6 +638,15 @@ export function App() {
               "Settings rewards",
               "Rewards and XP rule settings.",
               <SettingsRewardsPage />
+            )}
+          />
+          <Route
+            path="rewards"
+            element={surface(
+              "rewards",
+              "Trophy Hall",
+              "Trophies, unlocks, streak pressure, and Forge Smith progression.",
+              <RewardsPage />
             )}
           />
           <Route

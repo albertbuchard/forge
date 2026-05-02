@@ -6,7 +6,10 @@ import { cn } from "@/lib/utils";
 export type HeroCopyMode = "title_only" | "title_plus_orientation";
 
 function normalizeCopyValue(value: string) {
-  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ");
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ");
 }
 
 function resolveHeroMeta({
@@ -26,13 +29,20 @@ function resolveHeroMeta({
 
   const eyebrowValue = normalizeCopyValue(eyebrow);
   const titleValue = titleText ? normalizeCopyValue(titleText) : null;
-  const entityLabelValue = entityKind ? normalizeCopyValue(getEntityVisual(entityKind).label) : null;
+  const entityLabelValue = entityKind
+    ? normalizeCopyValue(getEntityVisual(entityKind).label)
+    : null;
 
   if (!eyebrowValue) {
     return null;
   }
 
-  if (titleValue && (eyebrowValue === titleValue || titleValue.includes(eyebrowValue) || eyebrowValue.includes(titleValue))) {
+  if (
+    titleValue &&
+    (eyebrowValue === titleValue ||
+      titleValue.includes(eyebrowValue) ||
+      eyebrowValue.includes(titleValue))
+  ) {
     return null;
   }
 
@@ -64,11 +74,16 @@ export function PageHero({
 }) {
   const entityVisual = entityKind ? getEntityVisual(entityKind) : null;
   const Icon = entityVisual?.icon;
-  const resolvedEyebrow = resolveHeroMeta({ eyebrow, titleText, entityKind, copyMode });
+  const resolvedEyebrow = resolveHeroMeta({
+    eyebrow,
+    titleText,
+    entityKind,
+    copyMode
+  });
   const hasHeaderMeta = Boolean(entityVisual || resolvedEyebrow || badge);
   return (
     <header
-      className="relative min-w-0 w-full max-w-full overflow-hidden border-b border-white/6 px-5 py-5 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end lg:px-7 lg:py-6"
+      className="relative min-w-0 w-full max-w-full overflow-visible border-b border-white/6 px-5 py-5 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end lg:px-7 lg:py-6"
       style={{
         background: "var(--hero-gradient)",
         paddingTop: "var(--forge-shell-hero-padding-top)",
@@ -97,12 +112,14 @@ export function PageHero({
               </span>
             ) : null}
             {resolvedEyebrow ? (
-              <span className="text-[var(--secondary)]/80">{resolvedEyebrow}</span>
+              <span className="text-[var(--secondary)]/80">
+                {resolvedEyebrow}
+              </span>
             ) : null}
             {badge ? (
               <Badge
                 tone="signal"
-                className="h-8 rounded-full border border-white/8 bg-white/[0.04] px-3 text-[11px] font-medium tracking-[0.14em] text-white/80 uppercase"
+                className="h-8 overflow-visible rounded-full border border-white/8 bg-white/[0.04] px-3 text-[11px] font-medium tracking-[0.14em] text-white/80 uppercase"
               >
                 {badge}
               </Badge>

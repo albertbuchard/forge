@@ -348,6 +348,15 @@ export function normalizeForgeSnapshot(
       level: raw.metrics?.level ?? 1,
       currentLevelXp: raw.metrics?.currentLevelXp ?? 0,
       nextLevelXp: raw.metrics?.nextLevelXp ?? 120,
+      xpIntoLevel:
+        raw.metrics?.xpIntoLevel ?? raw.metrics?.currentLevelXp ?? 0,
+      xpToNextLevel:
+        raw.metrics?.xpToNextLevel ?? raw.metrics?.nextLevelXp ?? 120,
+      currentLevelStartXp: raw.metrics?.currentLevelStartXp ?? 0,
+      nextLevelTotalXp:
+        raw.metrics?.nextLevelTotalXp ??
+        (raw.metrics?.totalXp ?? 0) + (raw.metrics?.nextLevelXp ?? 120),
+      levelCurveVersion: raw.metrics?.levelCurveVersion ?? "legacy-linear-120",
       weeklyXp: raw.metrics?.weeklyXp ?? 0,
       streakDays: raw.metrics?.streakDays ?? 0,
       comboMultiplier: raw.metrics?.comboMultiplier ?? 1,
@@ -392,6 +401,15 @@ export function normalizeForgeSnapshot(
         level: raw.metrics?.level ?? 1,
         currentLevelXp: raw.metrics?.currentLevelXp ?? 0,
         nextLevelXp: raw.metrics?.nextLevelXp ?? 120,
+        xpIntoLevel:
+          raw.metrics?.xpIntoLevel ?? raw.metrics?.currentLevelXp ?? 0,
+        xpToNextLevel:
+          raw.metrics?.xpToNextLevel ?? raw.metrics?.nextLevelXp ?? 120,
+        currentLevelStartXp: raw.metrics?.currentLevelStartXp ?? 0,
+        nextLevelTotalXp:
+          raw.metrics?.nextLevelTotalXp ??
+          (raw.metrics?.totalXp ?? 0) + (raw.metrics?.nextLevelXp ?? 120),
+        levelCurveVersion: raw.metrics?.levelCurveVersion ?? "legacy-linear-120",
         weeklyXp: raw.metrics?.weeklyXp ?? 0,
         streakDays: raw.metrics?.streakDays ?? 0,
         comboMultiplier: raw.metrics?.comboMultiplier ?? 1,

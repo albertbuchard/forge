@@ -45,9 +45,118 @@ async function parseResponseBody(response) {
         return text;
     }
 }
-async function request(path, init) {
+const DIAGNOSTICS_LOGS_PATH = "/api/v1/diagnostics/logs";
+const OPERATOR_SESSION_PATH = "/api/v1/auth/operator-session";
+const UI_SOURCE_HEADER = "x-forge-source";
+const UI_SOURCE_VALUE = "ui";
+function readResponseObject(body) {
+    return typeof body === "object" && body !== null
+        ? body
+        : null;
+}
+function readApiErrorCode(body) {
+    const maybeBody = readResponseObject(body);
+    return typeof maybeBody?.code === "string"
+        ? maybeBody.code
+        : typeof maybeBody?.error === "string"
+            ? maybeBody.error
+            : "request_failed";
+}
+function isAuthRequiredResponse(response, body) {
+    return response.status === 401 && readApiErrorCode(body) === "auth_required";
+}
+function isDiagnosticsLogPath(path) {
+    return path === DIAGNOSTICS_LOGS_PATH;
+}
+function canReplayRequestBody(init) {
+    if (init?.body === undefined || init.body === null) {
+        return true;
+    }
+    if (typeof init.body === "string") {
+        return true;
+    }
+    if (typeof URLSearchParams !== "undefined" &&
+        init.body instanceof URLSearchParams) {
+        return true;
+    }
+    if (typeof FormData !== "undefined" && init.body instanceof FormData) {
+        return true;
+    }
+    if (typeof Blob !== "undefined" && init.body instanceof Blob) {
+        return true;
+    }
+    if (typeof ArrayBuffer !== "undefined" && init.body instanceof ArrayBuffer) {
+        return true;
+    }
+    if (ArrayBuffer.isView(init.body)) {
+        return true;
+    }
+    return false;
+}
+function shouldBootstrapAndRetryOperatorSession(input) {
+    return (input.path !== OPERATOR_SESSION_PATH &&
+        isAuthRequiredResponse(input.response, input.body) &&
+        canReplayRequestBody(input.init));
+}
+function createApiError(path, response, body) {
+    const maybeBody = readResponseObject(body);
+    const details = Array.isArray(maybeBody?.details)
+        ? maybeBody.details
+        : [];
+    return new ForgeApiError({
+        status: response.status,
+        code: readApiErrorCode(body),
+        message: typeof maybeBody?.error === "string"
+            ? maybeBody.error
+            : typeof maybeBody?.message === "string"
+                ? maybeBody.message
+                : typeof body === "string"
+                    ? body
+                    : `Request failed: ${response.status}`,
+        requestPath: path,
+        details,
+        response: typeof body === "string"
+            ? body
+            : body && typeof body === "object"
+                ? body
+                : null
+    });
+}
+function publishRequestFailure(path, response, body) {
+    if (isDiagnosticsLogPath(path)) {
+        return;
+    }
+    const maybeBody = readResponseObject(body);
+    const details = Array.isArray(maybeBody?.details)
+        ? maybeBody.details
+        : [];
+    void publishUiDiagnosticLog({
+        level: response.status >= 500 ? "error" : "warning",
+        scope: "frontend_api",
+        eventKey: "request_failed",
+        message: `API request failed: ${path}`,
+        route: path,
+        functionName: "request",
+        details: {
+            statusCode: response.status,
+            code: readApiErrorCode(body),
+            response: typeof body === "string"
+                ? body
+                : body && typeof body === "object"
+                    ? body
+                    : null,
+            validationIssues: details
+        }
+    });
+}
+async function sendApiRequest(path, init) {
+    const response = await fetchApi(path, init);
+    const body = await parseResponseBody(response);
+    return { response, body };
+}
+async function fetchApi(path, init) {
     const headers = new Headers(init?.headers);
-    headers.set("x-forge-source", "ui");
+    headers.set(UI_SOURCE_HEADER, UI_SOURCE_VALUE);
     if (init?.body !== undefined &&
         !(typeof FormData !== "undefined" && init.body instanceof FormData) &&
         !headers.has("content-type")) {
@@ -56,13 +165,13 @@ async function request(path, init) {
     let response;
     try {
         response = await fetch(resolveForgePath(path), {
+            ...init,
             credentials: "same-origin",
-            headers,
-            ...init
+            headers
         });
     }
     catch (error) {
-        if (path !== "/api/v1/diagnostics/logs") {
+        if (!isDiagnosticsLogPath(path)) {
             void publishUiDiagnosticLog({
                 level: "error",
                 scope: "frontend_api",
@@ -83,96 +192,49 @@ async function request(path, init) {
         }
         throw error;
     }
-    const body = await parseResponseBody(response);
-    if (!response.ok) {
-        const maybeBody = typeof body === "object" && body !== null
-            ? body
-            : null;
-        const details = Array.isArray(maybeBody?.details)
-            ? maybeBody.details
-            : [];
-        if (path !== "/api/v1/diagnostics/logs") {
-            void publishUiDiagnosticLog({
-                level: response.status >= 500 ? "error" : "warning",
-                scope: "frontend_api",
-                eventKey: "request_failed",
-                message: `API request failed: ${path}`,
-                route: path,
-                functionName: "request",
-                details: {
-                    statusCode: response.status,
-                    code: typeof maybeBody?.code === "string"
-                        ? maybeBody.code
-                        : typeof maybeBody?.error === "string"
-                            ? maybeBody.error
-                            : "request_failed",
-                    response: typeof body === "string"
-                        ? body
-                        : body && typeof body === "object"
-                            ? body
-                            : null,
-                    validationIssues: details
-                }
-            });
-        }
-        throw new ForgeApiError({
-            status: response.status,
-            code: typeof maybeBody?.code === "string"
-                ? maybeBody.code
-                : typeof maybeBody?.error === "string"
-                    ? maybeBody.error
-                    : "request_failed",
-            message: typeof maybeBody?.error === "string"
-                ? maybeBody.error
-                : typeof maybeBody?.message === "string"
-                    ? maybeBody.message
-                    : typeof body === "string"
-                        ? body
-                        : `Request failed: ${response.status}`,
-            requestPath: path,
-            details,
-            response: typeof body === "string"
-                ? body
-                : body && typeof body === "object"
-                    ? body
-                    : null
+    return response;
+}
+let operatorSessionBootstrapPromise = null;
+async function bootstrapOperatorSession() {
+    if (!operatorSessionBootstrapPromise) {
+        operatorSessionBootstrapPromise = (async () => {
+            const { response, body } = await sendApiRequest(OPERATOR_SESSION_PATH);
+            if (!response.ok) {
+                publishRequestFailure(OPERATOR_SESSION_PATH, response, body);
+                throw createApiError(OPERATOR_SESSION_PATH, response, body);
+            }
+        })().finally(() => {
+            operatorSessionBootstrapPromise = null;
         });
+    }
+    await operatorSessionBootstrapPromise;
+}
+async function request(path, init) {
+    let { response, body } = await sendApiRequest(path, init);
+    if (shouldBootstrapAndRetryOperatorSession({ path, init, response, body })) {
+        await bootstrapOperatorSession();
+        ({ response, body } = await sendApiRequest(path, init));
+    }
+    if (!response.ok) {
+        publishRequestFailure(path, response, body);
+        throw createApiError(path, response, body);
     }
     return body;
 }
 async function requestBlob(path, init) {
-    const headers = new Headers(init?.headers);
-    headers.set("x-forge-source", "ui");
-    const response = await fetch(resolveForgePath(path), {
-        credentials: "same-origin",
-        headers,
-        ...init
-    });
+    let response = await fetchApi(path, init);
+    let body = null;
     if (!response.ok) {
-        const body = await parseResponseBody(response);
-        const maybeBody = typeof body === "object" && body !== null
-            ? body
-            : null;
-        throw new ForgeApiError({
-            status: response.status,
-            code: typeof maybeBody?.code === "string"
-                ? maybeBody.code
-                : typeof maybeBody?.error === "string"
-                    ? maybeBody.error
-                    : "request_failed",
-            message: typeof maybeBody?.error === "string"
-                ? maybeBody.error
-                : typeof maybeBody?.message === "string"
-                    ? maybeBody.message
-                    : `Request failed: ${response.status}`,
-            requestPath: path,
-            details: [],
-            response: typeof body === "string"
-                ? body
-                : body && typeof body === "object"
-                    ? body
-                    : null
-        });
+        body = await parseResponseBody(response);
+    }
+    if (shouldBootstrapAndRetryOperatorSession({ path, init, response, body })) {
+        await bootstrapOperatorSession();
+        response = await fetchApi(path, init);
+        body = response.ok ? null : await parseResponseBody(response);
+    }
+    if (!response.ok) {
+        publishRequestFailure(path, response, body);
+        throw createApiError(path, response, body);
     }
     const disposition = response.headers.get("content-disposition");
     const fileNameMatch = disposition?.match(/filename=\"([^\"]+)\"/i);
@@ -1989,8 +2051,37 @@ export function createManualRewardGrant(input) {
 export function listRewardLedger(limit = 50) {
     return request(`/api/v1/rewards/ledger?limit=${limit}`);
 }
-export function getXpMetrics() {
-    return request("/api/v1/metrics/xp");
+export function getXpMetrics(userIds) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(userIds));
+    const suffix = search.toString() ? `?${search}` : "";
+    return request(`/api/v1/metrics/xp${suffix}`);
+}
+export function getGamificationCatalog(userIds) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(userIds));
+    const suffix = search.toString() ? `?${search}` : "";
+    return request(`/api/v1/gamification/catalog${suffix}`);
+}
+export function getGamificationEquipment(userIds) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(userIds));
+    const suffix = search.toString() ? `?${search}` : "";
+    return request(`/api/v1/gamification/equipment${suffix}`);
+}
+export function updateGamificationEquipment(input, userIds) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(userIds));
+    const suffix = search.toString() ? `?${search}` : "";
+    return request(`/api/v1/gamification/equipment${suffix}`, {
+        method: "PUT",
+        body: JSON.stringify(input)
+    });
+}
+export function markGamificationCelebrationSeen(celebrationId) {
+    return request(`/api/v1/gamification/celebrations/${celebrationId}/seen`, {
+        method: "POST"
+    });
 }
 export function listEventLog(limit = 50) {
     return request(`/api/v1/events?limit=${limit}`);

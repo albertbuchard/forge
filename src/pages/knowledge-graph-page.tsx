@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { KnowledgeGraphEntityPanel } from "@/components/knowledge-graph/knowledge-graph-entity-panel";
+import { GamificationMiniHud } from "@/components/gamification/gamification-widgets";
 import {
   KnowledgeGraphForceView,
   type KnowledgeGraphForceViewHandle
@@ -944,6 +945,9 @@ export function KnowledgeGraphPage() {
   return (
     <div className="-mx-4 -mb-2.5 h-[calc(100dvh-var(--forge-mobile-nav-clearance)-5.25rem)] overflow-hidden lg:-mx-6 lg:-mb-3 lg:-mt-3 lg:h-[calc(100dvh-10rem)]">
       <div className="relative h-full bg-[radial-gradient(circle_at_top,rgba(125,211,252,0.08),transparent_26%),linear-gradient(180deg,rgba(7,12,23,0.98),rgba(5,10,19,1))]">
+        <div className="pointer-events-auto absolute right-3 top-3 z-30 hidden md:block">
+          <GamificationMiniHud metrics={shell.snapshot.metrics} />
+        </div>
         <KnowledgeGraphRendererBoundary
           resetKey={graphSurfaceResetKey}
           fallback={(error) => (

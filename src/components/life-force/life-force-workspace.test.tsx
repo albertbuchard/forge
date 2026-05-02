@@ -11,6 +11,7 @@ import {
   LifeForceOverviewWorkspace,
   LifeForceTodayCard
 } from "./life-force-workspace";
+import { installMockDate } from "@/test/mock-date";
 import type { LifeForcePayload } from "@/lib/types";
 
 const {
@@ -22,6 +23,8 @@ const {
   getLifeForceMock: vi.fn(),
   updateLifeForceTemplateMock: vi.fn()
 }));
+
+let restoreDate: (() => void) | null = null;
 
 vi.mock("@/lib/api", () => ({
   createFatigueSignal: createFatigueSignalMock,
@@ -174,6 +177,7 @@ function renderWithQueryClient(node: React.ReactNode) {
 
 describe("Life Force workspace", () => {
   beforeEach(() => {
+    restoreDate = installMockDate("2026-04-11T09:00:00.000Z");
     vi.clearAllMocks();
     const payload = createLifeForcePayload();
     getLifeForceMock.mockResolvedValue({
@@ -200,6 +204,8 @@ describe("Life Force workspace", () => {
   });
 
   afterEach(() => {
+    restoreDate?.();
+    restoreDate = null;
     cleanup();
   });
 

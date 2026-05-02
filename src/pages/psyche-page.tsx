@@ -7,6 +7,7 @@ import {
 } from "@/components/customization/editable-surface";
 import { AiSurfaceWorkspace } from "@/components/customization/ai-surface-workspace";
 import { buildGoalGravityScene } from "@/components/psyche/goal-gravity-scene";
+import { GamificationMiniHud } from "@/components/gamification/gamification-widgets";
 import { PsycheGraphCanvas } from "@/components/psyche/psyche-graph";
 import { ReflectFlowDialog } from "@/components/psyche/reflect-flow-dialog";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
@@ -134,12 +135,15 @@ export function PsychePage() {
   const heroDescription =
     "Values, patterns, behaviors, beliefs, habits, and reports in one live field.";
   const heroActions = (
-    <Link
-      to="/psyche/goal-map"
-      className="inline-flex min-h-10 min-w-0 max-w-full items-center justify-center rounded-full bg-white/[0.08] px-4 py-2 text-sm whitespace-nowrap text-white transition hover:bg-white/[0.12]"
-    >
-      Open goal map
-    </Link>
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <GamificationMiniHud metrics={shell.snapshot.metrics} />
+      <Link
+        to="/psyche/goal-map"
+        className="inline-flex min-h-10 min-w-0 max-w-full items-center justify-center rounded-full bg-white/[0.08] px-4 py-2 text-sm whitespace-nowrap text-white transition hover:bg-white/[0.12]"
+      >
+        Open goal map
+      </Link>
+    </div>
   );
 
   const customWidgets: SurfaceWidgetDefinition[] = [

@@ -71,6 +71,7 @@ actor HealthSyncStore {
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter
     }()
+    private var loggedUnavailableAuthorizationStatus = false
 
     private var vitalMetricDefinitions: [VitalMetricDefinition] {
         [
@@ -266,6 +267,10 @@ actor HealthSyncStore {
     }
 
     func requestAuthorization() async throws -> Bool {
+        guard canAccessHealthAuthorizationStatus else {
+            logUnavailableAuthorizationStatusIfNeeded()
+            return false
+        }
         let readTypes = requestedReadTypes
         companionDebugLog("HealthSyncStore", "requestAuthorization start readTypes=\(readTypes.count)")
         return try await withCheckedThrowingContinuation { continuation in
@@ -285,6 +290,10 @@ actor HealthSyncStore {
     }
 
     func accessStatus(previousStoredStatus: HealthAccessStatus = .notSet) async -> HealthAccessStatus {
+        guard canAccessHealthAuthorizationStatus else {
+            logUnavailableAuthorizationStatusIfNeeded()
+            return previousStoredStatus == .notSet ? .notSet : previousStoredStatus
+        }
         let statuses = requestedReadTypes.map { store.authorizationStatus(for: $0) }
         let authorizedCount = statuses.filter { $0 == .sharingAuthorized }.count
         companionDebugLog(
@@ -312,6 +321,9 @@ actor HealthSyncStore {
     }
 
     private func authorizationRequestStatus() async -> HKAuthorizationRequestStatus {
+        guard canAccessHealthAuthorizationStatus else {
+            return .unknown
+        }
         let readTypes = requestedReadTypes
         return await withCheckedContinuation { continuation in
             store.getRequestStatusForAuthorization(toShare: [], read: readTypes) { status, _ in
@@ -319,6 +331,29 @@ actor HealthSyncStore {
             }
         }
     }
+
+    private var canAccessHealthAuthorizationStatus: Bool {
+        guard HKHealthStore.isHealthDataAvailable() else {
+            return false
+        }
+#if targetEnvironment(simulator)
+        return false
+#else
+        return true
+#endif
+    }
+
+    private func logUnavailableAuthorizationStatusIfNeeded() {
+        guard loggedUnavailableAuthorizationStatus == false else {
+            return
+        }
+        loggedUnavailableAuthorizationStatus = true
+        companionDebugLog(
+            "HealthSyncStore",
+            "skipping HealthKit authorization probes because HealthKit is unavailable or the runtime entitlement is missing"
+        )
+    }
+
     func buildSyncPayload(
         pairing: PairingPayload,
         healthKitAuthorized: Bool,

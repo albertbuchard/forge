@@ -106,6 +106,9 @@ describe("forge skill playbook parity", () => {
     expect(openclawSkill).toMatch(/four major stored-entity surfaces and three specialized domain surfaces/i);
     expect(openclawSkill).toMatch(/specialized domain surfaces are Movement, Life Force, and Workbench/i);
     expect(openclawSkill).toMatch(/dedicated route families instead of forcing them through batch CRUD/i);
+    expect(openclawSkill).toMatch(/Movement is a specialized domain surface, not batch CRUD/i);
+    expect(openclawSkill).toMatch(/Life Force is a specialized domain surface, not batch CRUD/i);
+    expect(openclawSkill).toMatch(/Workbench is a specialized domain surface, not batch CRUD/i);
     for (const skill of [openclawSkill, hermesSkill, codexSkill]) {
       expect(skill).toMatch(/## Entity Route Posture/i);
       expect(skill).toMatch(/Batch CRUD is the default for normal stored entities/i);
@@ -171,6 +174,9 @@ describe("forge skill playbook parity", () => {
       expect(skill).toMatch(/`event_type`[\s\S]*`emotion_definition`/);
       expect(skill).toMatch(/psychologically meaningful Psyche\s+records/i);
       expect(skill).toMatch(/repeated lived moment or felt\s+signature/i);
+      expect(skill).toMatch(/Do not minimize functional analysis/i);
+      expect(skill).toMatch(/interpretive hypothesis/i);
+      expect(skill).toMatch(/collaborative and testable/i);
     }
   });
 

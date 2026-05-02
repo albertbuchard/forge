@@ -12,6 +12,7 @@ import { ExecutionBoard } from "@/components/execution-board";
 import { NoteMarkdown } from "@/components/notes/note-markdown";
 import { EntityNotesSurface } from "@/components/notes/entity-notes-surface";
 import { PreferenceEntityHandoffButton } from "@/components/preferences/preference-entity-handoff-button";
+import { GamificationMiniHud } from "@/components/gamification/gamification-widgets";
 import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -292,6 +293,7 @@ export function ProjectDetailPage() {
         }
         actions={
           <div className="flex flex-wrap gap-2">
+            <GamificationMiniHud metrics={shell.snapshot.metrics} />
             <PreferenceEntityHandoffButton
               userId={defaultUserId}
               domain="projects"

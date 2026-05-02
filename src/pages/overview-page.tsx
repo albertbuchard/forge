@@ -1,9 +1,7 @@
 import { AiSurfaceWorkspace } from "@/components/customization/ai-surface-workspace";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import {
-  type SurfaceWidgetDefinition
-} from "@/components/customization/editable-surface";
+import { type SurfaceWidgetDefinition } from "@/components/customization/editable-surface";
 import {
   MiniCalendarWidget,
   QuickCaptureWidget,
@@ -12,6 +10,7 @@ import {
   WeatherWidget
 } from "@/components/customization/utility-widgets";
 import { FlagshipSignalDeck } from "@/components/experience/flagship-signal-deck";
+import { GamificationOverviewWidget } from "@/components/gamification/gamification-widgets";
 import { LifeForceOverviewWorkspace } from "@/components/life-force/life-force-workspace";
 import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
 import { useForgeShell } from "@/components/shell/app-shell";
@@ -24,6 +23,7 @@ import { EntityBadge } from "@/components/ui/entity-badge";
 import { EntityName } from "@/components/ui/entity-name";
 import {
   getFitnessView,
+  getXpMetrics,
   getMovementDay,
   getSleepView,
   getVitalsView
@@ -45,8 +45,16 @@ import type {
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-function normalizeOverviewLayout(layout: SurfaceLayoutPayload): SurfaceLayoutPayload {
-  const orderedIds = ["summary", "body-signals", "signals"] as const;
+function normalizeOverviewLayout(
+  layout: SurfaceLayoutPayload
+): SurfaceLayoutPayload {
+  const orderedIds = [
+    "gamification",
+    "summary",
+    "pipeline",
+    "body-signals",
+    "signals"
+  ] as const;
   const nextOrder = [...layout.order];
   let mutated = false;
 
@@ -58,10 +66,16 @@ function normalizeOverviewLayout(layout: SurfaceLayoutPayload): SurfaceLayoutPay
   }
 
   const summaryIndex = nextOrder.indexOf("summary");
+  const pipelineIndex = nextOrder.indexOf("pipeline");
   const bodySignalsIndex = nextOrder.indexOf("body-signals");
   const signalsIndex = nextOrder.indexOf("signals");
 
-  if (summaryIndex === -1 || bodySignalsIndex === -1 || signalsIndex === -1) {
+  if (
+    summaryIndex === -1 ||
+    pipelineIndex === -1 ||
+    bodySignalsIndex === -1 ||
+    signalsIndex === -1
+  ) {
     return mutated
       ? {
           ...layout,
@@ -70,7 +84,12 @@ function normalizeOverviewLayout(layout: SurfaceLayoutPayload): SurfaceLayoutPay
       : layout;
   }
 
-  if (summaryIndex < bodySignalsIndex && bodySignalsIndex < signalsIndex && !mutated) {
+  if (
+    summaryIndex < pipelineIndex &&
+    pipelineIndex < bodySignalsIndex &&
+    bodySignalsIndex < signalsIndex &&
+    !mutated
+  ) {
     return layout;
   }
 
@@ -143,7 +162,9 @@ function buildVitalsHighlightRows(vitals: VitalsViewData | undefined) {
   ] as const;
   return desiredMetrics
     .map((key) => vitals.metrics.find((metric) => metric.metric === key))
-    .filter((metric): metric is VitalsViewData["metrics"][number] => Boolean(metric))
+    .filter((metric): metric is VitalsViewData["metrics"][number] =>
+      Boolean(metric)
+    )
     .slice(0, 3);
 }
 
@@ -184,7 +205,11 @@ export function OverviewPage() {
     }) ?? {};
   const movementDayQuery =
     useQuery({
-      queryKey: ["forge-overview-movement-day", todayDateKey, ...selectedUserIds],
+      queryKey: [
+        "forge-overview-movement-day",
+        todayDateKey,
+        ...selectedUserIds
+      ],
       queryFn: async () =>
         (
           await getMovementDay({
@@ -198,13 +223,17 @@ export function OverviewPage() {
       queryKey: ["forge-overview-vitals", ...selectedUserIds],
       queryFn: async () => (await getVitalsView(selectedUserIds)).vitals
     }) ?? {};
+  const xpMetricsQuery =
+    useQuery({
+      queryKey: ["forge-xp-metrics", ...selectedUserIds],
+      queryFn: async () => getXpMetrics(selectedUserIds)
+    }) ?? {};
   const nextMilestone =
     snapshot.dashboard.milestoneRewards.find((reward) => !reward.completed) ??
     snapshot.dashboard.milestoneRewards[0] ??
     null;
   const topTask = snapshot.overview.topTasks[0] ?? null;
   const topHabit = snapshot.overview.dueHabits[0] ?? null;
-  const driftGoal = snapshot.overview.neglectedGoals[0] ?? null;
   const latestEvidence = snapshot.overview.recentEvidence[0] ?? null;
   const projectLookup = new Map(
     snapshot.projects.map((project) => [project.id, project])
@@ -219,19 +248,21 @@ export function OverviewPage() {
   const fitnessSummary = fitnessQuery.data?.summary ?? null;
   const movementDay = movementDayQuery.data;
   const vitalsSummary = vitalsQuery.data ?? null;
-  const vitalsHighlightRows = buildVitalsHighlightRows(vitalsSummary ?? undefined);
+  const vitalsHighlightRows = buildVitalsHighlightRows(
+    vitalsSummary ?? undefined
+  );
   const movementPlaceBreakdown = buildMovementPlaceBreakdown(movementDay);
   const hasHealthData =
-    sleepSummary !== null ||
-    fitnessSummary !== null ||
-    vitalsSummary !== null;
+    sleepSummary !== null || fitnessSummary !== null || vitalsSummary !== null;
   const hasMovementData =
     movementDay !== undefined &&
     (movementDay.summary.tripCount > 0 ||
       movementDay.summary.stayCount > 0 ||
       movementDay.summary.totalMovingSeconds > 0 ||
       movementPlaceBreakdown.length > 0);
+  const hasGamificationData = true;
   const hasOverviewData =
+    hasGamificationData ||
     snapshot.lifeForce !== undefined ||
     snapshot.overview.activeGoals.length > 0 ||
     snapshot.overview.projects.length > 0 ||
@@ -368,75 +399,131 @@ export function OverviewPage() {
       )
     },
     {
+      id: "gamification",
+      title: "Forge Smith",
+      description: "Selected-user level, XP, streak, trophy, and unlock state.",
+      defaultWidth: 12,
+      defaultHeight: 4,
+      removable: false,
+      minHeight: 3,
+      surfaceChrome: "none",
+      defaultTitleVisible: false,
+      defaultDescriptionVisible: false,
+      render: ({ compact }) =>
+        xpMetricsQuery.data ? (
+          <GamificationOverviewWidget
+            metrics={xpMetricsQuery.data.metrics}
+            compact={compact}
+          />
+        ) : (
+          <GamificationOverviewWidget
+            metrics={{
+              scope: {
+                mode: "operator_fallback",
+                userIds: snapshot.userScope.selectedUserIds,
+                users: snapshot.userScope.selectedUsers,
+                label:
+                  snapshot.userScope.selectedUsers[0]?.displayName ?? "Forge"
+              },
+              profile: snapshot.metrics,
+              achievements: [],
+              milestoneRewards: [],
+              momentumPulse: {
+                status:
+                  snapshot.metrics.momentumScore >= 80
+                    ? "surging"
+                    : snapshot.metrics.momentumScore >= 60
+                      ? "steady"
+                      : "recovering",
+                headline: `${snapshot.metrics.streakDays}-day streak`,
+                detail: `${snapshot.metrics.currentLevelXp}/${snapshot.metrics.nextLevelXp} XP in level ${snapshot.metrics.level}.`,
+                celebrationLabel: "Forge Smith",
+                nextMilestoneId: null,
+                nextMilestoneLabel: "Next unlock"
+              },
+              catalogPreview: [],
+              unlockedItemCount: 0,
+              totalItemCount: 144,
+              nextUnlock: null,
+              newestUnlock: null,
+              nextTargets: [],
+              equipment: {
+                selectedMascotSkin: null,
+                selectedHudTreatment: null,
+                selectedStreakEffect: null,
+                selectedTrophyShelf: null,
+                selectedCelebrationVariant: null,
+                updatedAt: null
+              },
+              mascot: {
+                mood: "wise",
+                spriteKey: "mascot-state-014",
+                streakSpriteKey: "mascot-state-017",
+                headline: "Small heat still counts.",
+                line: "Return to the anvil today.",
+                pressureLevel: 0,
+                missedDays: 0,
+                lastActiveDateKey: null
+              },
+              celebrations: [],
+              recentLedger: [],
+              rules: [],
+              dailyAmbientXp: 0,
+              dailyAmbientCap: 12
+            }}
+            compact={compact}
+          />
+        )
+    },
+    {
       id: "summary",
       title: "Momentum summary",
       description:
         "Smaller titles and denser metrics free space for the widgets themselves.",
       defaultWidth: 12,
-      defaultHeight: 4,
+      defaultHeight: 3,
       minWidth: 6,
       render: ({ compact }) => (
-        <div className="grid h-full gap-3 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)]">
-          <div className="rounded-[24px] bg-white/[0.04] p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
-                  Momentum summary
-                </div>
-                <div className="mt-2 text-lg font-semibold text-white">
-                  Core live metrics
-                </div>
-                <div className="mt-1 text-sm leading-6 text-white/56">
-                  Life Force, momentum, XP, and instant headroom stay grouped
-                  here so the title bar can stay clean.
-                </div>
+        <div className="rounded-[24px] bg-white/[0.04] p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                Momentum summary
               </div>
-              <Badge className="bg-white/[0.08] text-white/70">
-                {heroStatus}
-              </Badge>
+              <div className="mt-2 text-lg font-semibold text-white">
+                Core live metrics
+              </div>
+              <div className="mt-1 text-sm leading-6 text-white/56">
+                Life Force, momentum, XP, and instant headroom stay grouped
+                here.
+              </div>
             </div>
-            <div
-              className={cn(
-                "mt-4 grid gap-3",
-                compact
-                  ? "grid-cols-2"
-                  : "sm:grid-cols-2 xl:grid-cols-5"
-              )}
-            >
-              {summaryMetrics.map((metric) => (
-                <div
-                  key={metric.label}
-                  className="rounded-[20px] border border-white/8 bg-white/[0.04] px-4 py-3"
-                >
-                  <div className="text-[10px] uppercase tracking-[0.16em] text-white/40">
-                    {metric.label}
-                  </div>
-                  <div className="mt-1 text-lg font-semibold text-white">
-                    {metric.value}
-                  </div>
-                  <div className="mt-1 text-xs leading-5 text-white/54">
-                    {metric.detail}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <Badge className="bg-white/[0.08] text-white/70">
+              {heroStatus}
+            </Badge>
           </div>
-          <div className="rounded-[20px] bg-white/[0.04] p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-[12px] uppercase tracking-[0.16em] text-white/38">
-                Goal needing attention
+          <div
+            className={cn(
+              "mt-4 grid gap-3",
+              compact ? "grid-cols-2" : "sm:grid-cols-2 xl:grid-cols-5"
+            )}
+          >
+            {summaryMetrics.map((metric) => (
+              <div
+                key={metric.label}
+                className="rounded-[20px] border border-white/8 bg-white/[0.04] px-4 py-3"
+              >
+                <div className="text-[10px] uppercase tracking-[0.16em] text-white/40">
+                  {metric.label}
+                </div>
+                <div className="mt-1 text-lg font-semibold text-white">
+                  {metric.value}
+                </div>
+                <div className="mt-1 text-xs leading-5 text-white/54">
+                  {metric.detail}
+                </div>
               </div>
-              <Badge className="bg-white/[0.08] text-white/70">
-                {driftGoal?.risk ?? "stable"}
-              </Badge>
-            </div>
-            <div className="mt-3 text-base font-semibold text-white">
-              {driftGoal?.title ?? "No goal is drifting hard right now"}
-            </div>
-            <div className="mt-2 text-sm leading-6 text-white/58">
-              {driftGoal?.summary ??
-                `Only ${snapshot.overview.strategicHeader.overdueTasks} overdue task${snapshot.overview.strategicHeader.overdueTasks === 1 ? "" : "s"} are slowing the system.`}
-            </div>
+            ))}
           </div>
         </div>
       )
@@ -449,7 +536,7 @@ export function OverviewPage() {
       defaultWidth: 12,
       defaultHeight: 7,
       minWidth: 6,
-      render: () => (
+      render: () =>
         snapshot.lifeForce ? (
           <LifeForceOverviewWorkspace
             selectedUserIds={selectedUserIds}
@@ -459,11 +546,11 @@ export function OverviewPage() {
           />
         ) : (
           <Card className="rounded-[24px] border-white/8 bg-white/[0.04] p-5 text-sm leading-6 text-white/60">
-            Life Force is not configured for this user yet. Once a profile exists,
-            the full capacity curve, drains, and recommendations will appear here.
+            Life Force is not configured for this user yet. Once a profile
+            exists, the full capacity curve, drains, and recommendations will
+            appear here.
           </Card>
         )
-      )
     },
     {
       id: "body-signals",
@@ -507,7 +594,9 @@ export function OverviewPage() {
                   Body signals
                 </div>
                 <div className="mt-2 text-lg font-semibold text-white">
-                  {hasHealthData ? "Recovery, training, and vitals" : "No health data yet"}
+                  {hasHealthData
+                    ? "Recovery, training, and vitals"
+                    : "No health data yet"}
                 </div>
               </div>
               {vitalsSummary ? (
@@ -516,7 +605,9 @@ export function OverviewPage() {
                 </Badge>
               ) : null}
             </div>
-            {sleepQuery.isLoading || fitnessQuery.isLoading || vitalsQuery.isLoading ? (
+            {sleepQuery.isLoading ||
+            fitnessQuery.isLoading ||
+            vitalsQuery.isLoading ? (
               <div className="mt-3 text-sm leading-6 text-white/58">
                 Loading recent sleep, workout, and body-signal metrics…
               </div>
@@ -571,7 +662,8 @@ export function OverviewPage() {
               </div>
             ) : (
               <div className="mt-3 text-sm leading-6 text-white/58">
-                Sleep, workout, and vitals summaries appear here as soon as Forge has recent HealthKit records.
+                Sleep, workout, and vitals summaries appear here as soon as
+                Forge has recent HealthKit records.
               </div>
             )}
           </Card>
@@ -583,12 +675,17 @@ export function OverviewPage() {
                   Movement
                 </div>
                 <div className="mt-2 text-lg font-semibold text-white">
-                  {hasMovementData ? "Today's place balance" : "No movement timeline yet"}
+                  {hasMovementData
+                    ? "Today's place balance"
+                    : "No movement timeline yet"}
                 </div>
               </div>
               {hasMovementData ? (
                 <Badge className="bg-white/[0.08] text-white/72">
-                  {formatCompactDuration(movementDay?.summary.totalMovingSeconds ?? 0)} moving
+                  {formatCompactDuration(
+                    movementDay?.summary.totalMovingSeconds ?? 0
+                  )}{" "}
+                  moving
                 </Badge>
               ) : null}
             </div>
@@ -609,18 +706,28 @@ export function OverviewPage() {
                   ))}
                   {(movementDay?.summary.totalMovingSeconds ?? 0) > 0 ? (
                     <Badge className="bg-[rgba(78,222,163,0.14)] text-[var(--secondary)]">
-                      {formatCompactDuration(movementDay?.summary.totalMovingSeconds ?? 0)} moving
+                      {formatCompactDuration(
+                        movementDay?.summary.totalMovingSeconds ?? 0
+                      )}{" "}
+                      moving
                     </Badge>
                   ) : null}
                 </div>
                 <div className="text-sm leading-6 text-white/58">
-                  {(movementDay?.summary.tripCount ?? 0)} trip{(movementDay?.summary.tripCount ?? 0) === 1 ? "" : "s"} and{" "}
-                  {formatCompactDistance(movementDay?.summary.totalDistanceMeters ?? 0)} tracked today.
+                  {movementDay?.summary.tripCount ?? 0} trip
+                  {(movementDay?.summary.tripCount ?? 0) === 1
+                    ? ""
+                    : "s"} and{" "}
+                  {formatCompactDistance(
+                    movementDay?.summary.totalDistanceMeters ?? 0
+                  )}{" "}
+                  tracked today.
                 </div>
               </div>
             ) : (
               <div className="mt-3 text-sm leading-6 text-white/58">
-                Movement summaries appear here once the companion has synced stays, trips, or known places.
+                Movement summaries appear here once the companion has synced
+                stays, trips, or known places.
               </div>
             )}
           </Card>
@@ -679,8 +786,8 @@ export function OverviewPage() {
               badge:
                 nextMilestone?.rewardLabel ??
                 `${snapshot.metrics.comboMultiplier.toFixed(2)}x combo`,
-              href: "/today",
-              actionLabel: "Open today"
+              href: "/rewards",
+              actionLabel: "Open rewards"
             },
             {
               id: "recent-activity",
@@ -712,42 +819,48 @@ export function OverviewPage() {
           {snapshot.overview.activeGoals
             .slice(0, compact ? 2 : 4)
             .map((goal) => (
-              <Link
+              <div
                 key={goal.id}
-                to={`/goals/${goal.id}`}
-                className="rounded-[20px] bg-white/[0.04] p-4 transition hover:bg-white/[0.06]"
+                className="group relative rounded-[20px] bg-white/[0.04] p-4 transition hover:bg-white/[0.06]"
               >
-                <div className="flex min-w-0 items-center justify-between gap-3">
-                  <EntityBadge
-                    kind="goal"
-                    label={goal.tags[0]?.name ?? goal.horizon}
-                    compact
-                    gradient={false}
-                  />
-                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
-                    {goal.progress}%
+                <Link
+                  to={`/goals/${goal.id}`}
+                  className="absolute inset-0 rounded-[20px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
+                  aria-label={`Open goal ${goal.title}`}
+                />
+                <div className="pointer-events-none relative z-10">
+                  <div className="flex min-w-0 items-center justify-between gap-3">
+                    <EntityBadge
+                      kind="goal"
+                      label={goal.tags[0]?.name ?? goal.horizon}
+                      compact
+                      gradient={false}
+                    />
+                    <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+                      {goal.progress}%
+                    </div>
+                  </div>
+                  <div className="mt-3">
+                    <EntityName
+                      kind="goal"
+                      label={goal.title}
+                      variant="heading"
+                      size={compact ? "md" : "lg"}
+                      lines={2}
+                      className="max-w-full"
+                      labelClassName="[overflow-wrap:anywhere]"
+                    />
+                  </div>
+                  {!compact ? (
+                    <p className="mt-2 text-sm leading-6 text-white/60">
+                      {goal.description}
+                    </p>
+                  ) : null}
+                  <div className="mt-3">
+                    <ProgressMeter value={goal.progress} />
                   </div>
                 </div>
-                <div className="mt-3">
-                  <EntityName
-                    kind="goal"
-                    label={goal.title}
-                    variant="heading"
-                    size={compact ? "md" : "lg"}
-                    lines={2}
-                    className="max-w-full"
-                    labelClassName="[overflow-wrap:anywhere]"
-                  />
-                </div>
-                {!compact ? (
-                  <p className="mt-2 text-sm leading-6 text-white/60">
-                    {goal.description}
-                  </p>
-                ) : null}
-                <div className="mt-3">
-                  <ProgressMeter value={goal.progress} />
-                </div>
-                <div className="mt-3">
+                <div className="relative z-20 mt-3">
                   <EntityNoteCountLink
                     entityType="goal"
                     entityId={goal.id}
@@ -760,7 +873,7 @@ export function OverviewPage() {
                     }
                   />
                 </div>
-              </Link>
+              </div>
             ))}
         </div>
       )
@@ -815,9 +928,11 @@ export function OverviewPage() {
             {snapshot.overview.dueHabits
               .slice(0, compact ? 3 : 4)
               .map((habit) => (
-                <div
+                <Link
                   key={habit.id}
-                  className="rounded-[18px] bg-white/[0.04] px-4 py-3"
+                  to="/habits"
+                  aria-label={`Open habit ${habit.title}`}
+                  className="rounded-[18px] bg-white/[0.04] px-4 py-3 transition hover:bg-white/[0.06]"
                 >
                   <div className="flex min-w-0 items-center justify-between gap-3">
                     <div className="min-w-0">
@@ -834,7 +949,7 @@ export function OverviewPage() {
                       {habit.rewardXp} xp
                     </Badge>
                   </div>
-                </div>
+                </Link>
               ))}
           </div>
           <div className="grid gap-3">

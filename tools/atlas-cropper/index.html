@@ -1,0 +1,1013 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Forge Atlas Cropper</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #080b12;
+        --panel: rgba(17, 22, 34, 0.92);
+        --panel-2: rgba(255, 255, 255, 0.055);
+        --line: rgba(255, 255, 255, 0.12);
+        --ink: rgba(255, 255, 255, 0.92);
+        --muted: rgba(255, 255, 255, 0.6);
+        --faint: rgba(255, 255, 255, 0.38);
+        --gold: #f5b54d;
+        --cyan: #51c7ff;
+        --green: #65f0a0;
+        --danger: #ff6f8e;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at 18% 0%, rgba(245, 181, 77, 0.16), transparent 28rem),
+          radial-gradient(circle at 92% 10%, rgba(81, 199, 255, 0.13), transparent 28rem),
+          var(--bg);
+        color: var(--ink);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      button,
+      input,
+      select {
+        font: inherit;
+      }
+
+      button,
+      .file-button {
+        min-height: 38px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.075);
+        color: var(--ink);
+        padding: 0 12px;
+        cursor: pointer;
+      }
+
+      button:hover,
+      .file-button:hover {
+        border-color: rgba(255, 255, 255, 0.28);
+        background: rgba(255, 255, 255, 0.11);
+      }
+
+      button.primary {
+        border-color: rgba(245, 181, 77, 0.42);
+        background: linear-gradient(135deg, rgba(245, 181, 77, 0.22), rgba(81, 199, 255, 0.11));
+      }
+
+      input,
+      select,
+      textarea {
+        min-height: 38px;
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: rgba(0, 0, 0, 0.24);
+        color: var(--ink);
+        padding: 8px 10px;
+        outline: none;
+      }
+
+      input:focus,
+      select:focus,
+      textarea:focus {
+        border-color: rgba(81, 199, 255, 0.55);
+      }
+
+      label {
+        display: grid;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .app {
+        display: grid;
+        grid-template-columns: 340px minmax(0, 1fr) 330px;
+        gap: 14px;
+        min-height: 100vh;
+        padding: 14px;
+      }
+
+      .panel {
+        min-width: 0;
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: var(--panel);
+        box-shadow: 0 18px 44px rgba(0, 0, 0, 0.28);
+        backdrop-filter: blur(18px);
+      }
+
+      .side {
+        display: grid;
+        align-content: start;
+        gap: 14px;
+        padding: 14px;
+        max-height: calc(100vh - 28px);
+        overflow: auto;
+      }
+
+      .title {
+        display: grid;
+        gap: 6px;
+      }
+
+      .title h1 {
+        margin: 0;
+        font-size: 22px;
+        letter-spacing: 0;
+      }
+
+      .title p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.5;
+        font-size: 13px;
+      }
+
+      .section {
+        display: grid;
+        gap: 10px;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: var(--panel-2);
+      }
+
+      .section-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--faint);
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .row-3 {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .stage {
+        position: relative;
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+        overflow: hidden;
+      }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .status {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .canvas-wrap {
+        position: relative;
+        min-height: 0;
+        overflow: hidden;
+        background:
+          linear-gradient(45deg, rgba(255, 255, 255, 0.035) 25%, transparent 25%),
+          linear-gradient(-45deg, rgba(255, 255, 255, 0.035) 25%, transparent 25%),
+          linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.035) 75%),
+          linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.035) 75%),
+          #060910;
+        background-position:
+          0 0,
+          0 10px,
+          10px -10px,
+          -10px 0;
+        background-size: 20px 20px;
+      }
+
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        cursor: crosshair;
+      }
+
+      .hint {
+        padding: 9px 14px;
+        border-top: 1px solid var(--line);
+        color: var(--faint);
+        font-size: 12px;
+      }
+
+      .region-list {
+        display: grid;
+        max-height: 250px;
+        overflow: auto;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+      }
+
+      .region-row {
+        display: grid;
+        grid-template-columns: 48px minmax(0, 1fr);
+        gap: 8px;
+        align-items: center;
+        border: 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+        border-radius: 0;
+        background: transparent;
+        padding: 8px 10px;
+        text-align: left;
+      }
+
+      .region-row[aria-current="true"] {
+        background: rgba(245, 181, 77, 0.16);
+        color: white;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        padding: 4px 8px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      textarea {
+        min-height: 220px;
+        resize: vertical;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 11px;
+        line-height: 1.45;
+      }
+
+      .save-state {
+        min-height: 18px;
+        color: var(--green);
+        font-size: 12px;
+      }
+
+      .save-state.error {
+        color: var(--danger);
+      }
+
+      @media (max-width: 1180px) {
+        .app {
+          grid-template-columns: 320px minmax(0, 1fr);
+        }
+
+        .right {
+          grid-column: 1 / -1;
+          max-height: none;
+        }
+      }
+
+      @media (max-width: 760px) {
+        .app {
+          grid-template-columns: 1fr;
+        }
+
+        .side {
+          max-height: none;
+        }
+
+        .stage {
+          min-height: 72vh;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <aside class="panel side">
+        <div class="title">
+          <h1>Forge Atlas Cropper</h1>
+          <p>
+            Place exact crop squares on each generated atlas. Auto-fill the grid first, then manually move or resize any sprite.
+          </p>
+        </div>
+
+        <section class="section">
+          <div class="section-title">Atlas</div>
+          <label>
+            Theme
+            <select id="theme">
+              <option value="dark-fantasy">Dark Fantasy</option>
+              <option value="dramatic-smithie">Lighthearted Smithie</option>
+              <option value="mind-locksmith">Mind Locksmith</option>
+            </select>
+          </label>
+          <label>
+            Sheet
+            <select id="atlas">
+              <option value="trophies">Trophies 10x10</option>
+              <option value="unlocks">Cosmetic unlocks 10x10</option>
+              <option value="mascots">Mascot states 6x5</option>
+            </select>
+          </label>
+          <div class="buttons">
+            <button id="load" class="primary" type="button">Load atlas</button>
+            <button id="loadExisting" type="button">Load saved JSON</button>
+          </div>
+          <label class="file-button">
+            Load local image
+            <input id="file" type="file" accept="image/*" hidden />
+          </label>
+        </section>
+
+        <section class="section">
+          <div class="section-title">Grid seed</div>
+          <div class="row-3">
+            <label>Cols <input id="cols" type="number" min="1" value="10" /></label>
+            <label>Rows <input id="rows" type="number" min="1" value="10" /></label>
+            <label>Count <input id="count" type="number" min="1" value="100" /></label>
+          </div>
+          <div class="row-3">
+            <label>Inset X % <input id="insetX" type="number" min="0" max="45" step="0.1" value="0" /></label>
+            <label>Inset Y % <input id="insetY" type="number" min="0" max="45" step="0.1" value="0" /></label>
+            <label>Bottom % <input id="bottomTrim" type="number" min="0" max="45" step="0.1" value="0" /></label>
+          </div>
+          <div class="buttons">
+            <button id="autoGrid" class="primary" type="button">Create grid crops</button>
+            <button id="fitView" type="button">Fit view</button>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-title">View</div>
+          <label>Zoom <input id="zoom" type="range" min="0.15" max="4" step="0.01" value="1" /></label>
+          <div class="buttons">
+            <button id="zoomOut" type="button">Zoom out</button>
+            <button id="zoomIn" type="button">Zoom in</button>
+            <button id="centerSelected" type="button">Center selected</button>
+          </div>
+        </section>
+      </aside>
+
+      <section class="panel stage">
+        <div class="toolbar">
+          <div>
+            <div class="section-title">Canvas</div>
+            <div id="status" class="status">Load an atlas to begin.</div>
+          </div>
+          <div class="buttons">
+            <button id="prev" type="button">Prev</button>
+            <button id="next" type="button">Next</button>
+          </div>
+        </div>
+        <div id="canvasWrap" class="canvas-wrap">
+          <canvas id="canvas"></canvas>
+        </div>
+        <div class="hint">
+          Drag inside a square to move it. Drag a corner handle to resize. Hold Shift with arrow keys for 10px nudges.
+        </div>
+      </section>
+
+      <aside class="panel side right">
+        <section class="section">
+          <div class="section-title">
+            Selected
+            <span id="selectedPill" class="pill">none</span>
+          </div>
+          <div class="row">
+            <label>X <input id="x" type="number" step="1" /></label>
+            <label>Y <input id="y" type="number" step="1" /></label>
+            <label>Width <input id="w" type="number" min="1" step="1" /></label>
+            <label>Height <input id="h" type="number" min="1" step="1" /></label>
+          </div>
+          <div class="buttons">
+            <button id="square" type="button">Make square</button>
+            <button id="duplicatePrev" type="button">Copy previous size</button>
+            <button id="applyRowBand" type="button">Apply to row</button>
+            <button id="applyColumnBand" type="button">Apply to column</button>
+            <button id="tileRow" type="button">Tile row</button>
+            <button id="tileColumn" type="button">Tile column</button>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-title">Regions</div>
+          <div id="regionList" class="region-list"></div>
+        </section>
+
+        <section class="section">
+          <div class="section-title">Export</div>
+          <div class="buttons">
+            <button id="refreshExport" type="button">Refresh JSON</button>
+            <button id="download" type="button">Download JSON</button>
+            <button id="save" class="primary" type="button">Save to project</button>
+          </div>
+          <div id="saveState" class="save-state"></div>
+          <textarea id="json" spellcheck="false"></textarea>
+        </section>
+      </aside>
+    </main>
+
+    <script>
+      const atlasConfigs = {
+        trophies: { file: "trophies-100.png", columns: 10, rows: 10, count: 100 },
+        unlocks: { file: "unlocks-100.png", columns: 10, rows: 10, count: 100 },
+        mascots: { file: "mascot-states-30.png", columns: 6, rows: 5, count: 30 }
+      };
+
+      const $ = (id) => document.getElementById(id);
+      const state = {
+        image: null,
+        imageName: "",
+        imageUrl: "",
+        regions: [],
+        selected: -1,
+        zoom: 1,
+        panX: 0,
+        panY: 0,
+        drag: null
+      };
+
+      const canvas = $("canvas");
+      const ctx = canvas.getContext("2d");
+      const wrap = $("canvasWrap");
+
+      function currentConfig() {
+        return atlasConfigs[$("atlas").value];
+      }
+
+      function setGridInputs(config) {
+        $("cols").value = config.columns;
+        $("rows").value = config.rows;
+        $("count").value = config.count;
+      }
+
+      function atlasUrl() {
+        const theme = $("theme").value;
+        const config = currentConfig();
+        return `/gamification/source/themes/${theme}/atlases/${config.file}`;
+      }
+
+      function fitView() {
+        if (!state.image) return;
+        const rect = wrap.getBoundingClientRect();
+        const fit = Math.min(rect.width / state.image.width, rect.height / state.image.height);
+        state.zoom = Math.max(0.05, fit);
+        state.panX = (rect.width - state.image.width * state.zoom) / 2;
+        state.panY = (rect.height - state.image.height * state.zoom) / 2;
+        $("zoom").value = Math.min(4, Math.max(0.15, state.zoom));
+        draw();
+      }
+
+      function resizeCanvas() {
+        const rect = wrap.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+        canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        draw();
+      }
+
+      function imageToCanvas(point) {
+        return {
+          x: state.panX + point.x * state.zoom,
+          y: state.panY + point.y * state.zoom
+        };
+      }
+
+      function canvasToImage(point) {
+        return {
+          x: (point.x - state.panX) / state.zoom,
+          y: (point.y - state.panY) / state.zoom
+        };
+      }
+
+      function draw() {
+        const rect = wrap.getBoundingClientRect();
+        ctx.clearRect(0, 0, rect.width, rect.height);
+        if (!state.image) return;
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(
+          state.image,
+          state.panX,
+          state.panY,
+          state.image.width * state.zoom,
+          state.image.height * state.zoom
+        );
+        for (const region of state.regions) {
+          drawRegion(region);
+        }
+      }
+
+      function drawRegion(region) {
+        const selected = region.index === state.selected;
+        const topLeft = imageToCanvas({ x: region.x, y: region.y });
+        const width = region.width * state.zoom;
+        const height = region.height * state.zoom;
+        ctx.save();
+        ctx.lineWidth = selected ? 3 : 1.5;
+        ctx.strokeStyle = selected ? "#f5b54d" : "rgba(81,199,255,0.9)";
+        ctx.fillStyle = selected ? "rgba(245,181,77,0.11)" : "rgba(81,199,255,0.055)";
+        ctx.fillRect(topLeft.x, topLeft.y, width, height);
+        ctx.strokeRect(topLeft.x, topLeft.y, width, height);
+        ctx.fillStyle = selected ? "#f5b54d" : "#51c7ff";
+        ctx.font = "12px ui-monospace, monospace";
+        ctx.fillText(String(region.index + 1).padStart(3, "0"), topLeft.x + 6, topLeft.y + 16);
+        if (selected) {
+          for (const handle of handlesFor(region)) {
+            ctx.fillStyle = "#080b12";
+            ctx.strokeStyle = "#f5b54d";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.rect(handle.x - 6, handle.y - 6, 12, 12);
+            ctx.fill();
+            ctx.stroke();
+          }
+        }
+        ctx.restore();
+      }
+
+      function handlesFor(region) {
+        const p = imageToCanvas({ x: region.x, y: region.y });
+        const right = p.x + region.width * state.zoom;
+        const bottom = p.y + region.height * state.zoom;
+        return [
+          { name: "nw", x: p.x, y: p.y },
+          { name: "ne", x: right, y: p.y },
+          { name: "sw", x: p.x, y: bottom },
+          { name: "se", x: right, y: bottom }
+        ];
+      }
+
+      function handleAtPoint(point, region) {
+        const radius = 12;
+        for (const handle of handlesFor(region)) {
+          if (Math.abs(point.x - handle.x) <= radius && Math.abs(point.y - handle.y) <= radius) {
+            return handle.name;
+          }
+        }
+        return null;
+      }
+
+      function bodyContainsPoint(point, region) {
+        const p = imageToCanvas({ x: region.x, y: region.y });
+        const right = p.x + region.width * state.zoom;
+        const bottom = p.y + region.height * state.zoom;
+        return point.x >= p.x && point.x <= right && point.y >= p.y && point.y <= bottom;
+      }
+
+      function clampRegion(region) {
+        if (!state.image) return region;
+        region.width = Math.max(1, Math.round(region.width));
+        region.height = Math.max(1, Math.round(region.height));
+        region.x = Math.round(Math.max(0, Math.min(region.x, state.image.width - region.width)));
+        region.y = Math.round(Math.max(0, Math.min(region.y, state.image.height - region.height)));
+        return region;
+      }
+
+      function createGridRegions() {
+        if (!state.image) return;
+        const columns = Number($("cols").value);
+        const rows = Number($("rows").value);
+        const count = Number($("count").value);
+        const insetXRatio = Number($("insetX").value) / 100;
+        const insetYRatio = Number($("insetY").value) / 100;
+        const bottomTrimRatio = Number($("bottomTrim").value) / 100;
+        const regions = [];
+        for (let index = 0; index < count; index += 1) {
+          const column = index % columns;
+          const row = Math.floor(index / columns);
+          const left = Math.round((column * state.image.width) / columns);
+          const right = Math.round(((column + 1) * state.image.width) / columns);
+          const top = Math.round((row * state.image.height) / rows);
+          const bottom = Math.round(((row + 1) * state.image.height) / rows);
+          const cellWidth = right - left;
+          const cellHeight = bottom - top;
+          const insetX = Math.round(cellWidth * insetXRatio);
+          const insetY = Math.round(cellHeight * insetYRatio);
+          const bottomTrim = Math.round(cellHeight * bottomTrimRatio);
+          regions.push({
+            index,
+            row: row + 1,
+            column: column + 1,
+            x: left + insetX,
+            y: top + insetY,
+            width: Math.max(1, cellWidth - insetX * 2),
+            height: Math.max(1, cellHeight - insetY - bottomTrim)
+          });
+        }
+        state.regions = regions;
+        selectRegion(Math.min(Math.max(state.selected, 0), regions.length - 1));
+        updateExport();
+      }
+
+      function selectRegion(index) {
+        state.selected = index;
+        const region = state.regions[index];
+        $("selectedPill").textContent = region ? String(index + 1).padStart(3, "0") : "none";
+        for (const id of ["x", "y", "w", "h"]) $(id).value = "";
+        if (region) {
+          $("x").value = region.x;
+          $("y").value = region.y;
+          $("w").value = region.width;
+          $("h").value = region.height;
+        }
+        renderRegionList();
+        draw();
+      }
+
+      function renderRegionList() {
+        const list = $("regionList");
+        list.innerHTML = "";
+        for (const region of state.regions) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "region-row";
+          button.setAttribute("aria-current", region.index === state.selected ? "true" : "false");
+          button.innerHTML = `<span class="pill">${String(region.index + 1).padStart(3, "0")}</span><span>x ${region.x}, y ${region.y}, ${region.width}x${region.height}</span>`;
+          button.addEventListener("click", () => selectRegion(region.index));
+          list.append(button);
+        }
+      }
+
+      function updateStatus() {
+        const config = currentConfig();
+        $("status").textContent = state.image
+          ? `${state.imageName || config.file} · ${state.image.width}x${state.image.height}px · ${state.regions.length} crops`
+          : "Load an atlas to begin.";
+      }
+
+      function exportPayload() {
+        const config = currentConfig();
+        return {
+          schema: "forge-gamification-atlas-crops-v1",
+          theme: $("theme").value,
+          atlasKey: $("atlas").value,
+          atlasFile: config.file,
+          image: state.image
+            ? { width: state.image.width, height: state.image.height }
+            : null,
+          grid: {
+            columns: Number($("cols").value),
+            rows: Number($("rows").value),
+            count: Number($("count").value)
+          },
+          regions: state.regions.map((region) => ({ ...region }))
+        };
+      }
+
+      function updateExport() {
+        updateStatus();
+        $("json").value = JSON.stringify(exportPayload(), null, 2);
+      }
+
+      async function loadAtlas(url = atlasUrl(), name = currentConfig().file) {
+        const image = new Image();
+        image.onload = () => {
+          state.image = image;
+          state.imageUrl = url;
+          state.imageName = name;
+          state.regions = [];
+          state.selected = -1;
+          fitView();
+          updateExport();
+        };
+        image.onerror = () => {
+          setSaveState(`Could not load ${url}`, true);
+        };
+        image.src = `${url}${url.includes("?") ? "&" : "?"}cache=${Date.now()}`;
+      }
+
+      async function loadExisting() {
+        const response = await fetch(`/api/crop-regions?theme=${encodeURIComponent($("theme").value)}&atlas=${encodeURIComponent($("atlas").value)}`);
+        if (!response.ok) {
+          setSaveState("No saved crop JSON for this atlas yet.", true);
+          return;
+        }
+        const payload = await response.json();
+        applyPayload(payload);
+        setSaveState("Loaded saved crop JSON.");
+      }
+
+      function applyPayload(payload) {
+        if (payload.grid) {
+          $("cols").value = payload.grid.columns ?? $("cols").value;
+          $("rows").value = payload.grid.rows ?? $("rows").value;
+          $("count").value = payload.grid.count ?? $("count").value;
+        }
+        state.regions = (payload.regions ?? []).map((region, index) =>
+          clampRegion({
+            index: region.index ?? index,
+            row: region.row ?? Math.floor(index / Number($("cols").value)) + 1,
+            column: region.column ?? (index % Number($("cols").value)) + 1,
+            x: Number(region.x),
+            y: Number(region.y),
+            width: Number(region.width),
+            height: Number(region.height)
+          })
+        );
+        selectRegion(state.regions.length ? 0 : -1);
+        updateExport();
+      }
+
+      function setSaveState(message, error = false) {
+        $("saveState").textContent = message;
+        $("saveState").className = `save-state${error ? " error" : ""}`;
+      }
+
+      function pointerPosition(event) {
+        const rect = canvas.getBoundingClientRect();
+        return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+      }
+
+      function hitTest(point) {
+        if (state.selected >= 0) {
+          const selectedRegion = state.regions[state.selected];
+          const selectedHandle = selectedRegion ? handleAtPoint(point, selectedRegion) : null;
+          if (selectedHandle) {
+            return { index: state.selected, mode: selectedHandle };
+          }
+        }
+
+        for (let index = state.regions.length - 1; index >= 0; index -= 1) {
+          const region = state.regions[index];
+          const handle = handleAtPoint(point, region);
+          if (handle) {
+            return { index, mode: handle };
+          }
+        }
+
+        for (let index = state.regions.length - 1; index >= 0; index -= 1) {
+          const region = state.regions[index];
+          if (bodyContainsPoint(point, region)) {
+            return { index, mode: "move" };
+          }
+        }
+        return null;
+      }
+
+      function syncAfterBulkEdit(message) {
+        for (const region of state.regions) {
+          clampRegion(region);
+        }
+        selectRegion(state.selected);
+        updateExport();
+        setSaveState(message);
+      }
+
+      function selectedRegion() {
+        return state.selected >= 0 ? state.regions[state.selected] : null;
+      }
+
+      function applyRowBand() {
+        const selected = selectedRegion();
+        if (!selected) return;
+        for (const region of state.regions) {
+          if (region.row === selected.row) {
+            region.y = selected.y;
+            region.height = selected.height;
+          }
+        }
+        syncAfterBulkEdit(`Applied y/height to row ${selected.row}.`);
+      }
+
+      function applyColumnBand() {
+        const selected = selectedRegion();
+        if (!selected) return;
+        for (const region of state.regions) {
+          if (region.column === selected.column) {
+            region.x = selected.x;
+            region.width = selected.width;
+          }
+        }
+        syncAfterBulkEdit(`Applied x/width to column ${selected.column}.`);
+      }
+
+      function tileRowFromSelected() {
+        const selected = selectedRegion();
+        if (!selected) return;
+        const leftEdge = selected.x - (selected.column - 1) * selected.width;
+        for (const region of state.regions) {
+          if (region.row === selected.row) {
+            region.x = leftEdge + (region.column - 1) * selected.width;
+            region.y = selected.y;
+            region.width = selected.width;
+            region.height = selected.height;
+          }
+        }
+        syncAfterBulkEdit(`Tiled row ${selected.row} from selected crop.`);
+      }
+
+      function tileColumnFromSelected() {
+        const selected = selectedRegion();
+        if (!selected) return;
+        const topEdge = selected.y - (selected.row - 1) * selected.height;
+        for (const region of state.regions) {
+          if (region.column === selected.column) {
+            region.x = selected.x;
+            region.y = topEdge + (region.row - 1) * selected.height;
+            region.width = selected.width;
+            region.height = selected.height;
+          }
+        }
+        syncAfterBulkEdit(`Tiled column ${selected.column} from selected crop.`);
+      }
+
+      canvas.addEventListener("mousedown", (event) => {
+        if (!state.image) return;
+        const point = pointerPosition(event);
+        const hit = hitTest(point);
+        if (!hit) return;
+        event.preventDefault();
+        selectRegion(hit.index);
+        state.drag = {
+          mode: hit.mode,
+          startPoint: canvasToImage(point),
+          original: { ...state.regions[hit.index] }
+        };
+      });
+
+      window.addEventListener("mousemove", (event) => {
+        if (!state.drag || state.selected < 0) return;
+        const point = canvasToImage(pointerPosition(event));
+        const dx = point.x - state.drag.startPoint.x;
+        const dy = point.y - state.drag.startPoint.y;
+        const next = { ...state.drag.original };
+        if (state.drag.mode === "move") {
+          next.x += dx;
+          next.y += dy;
+        } else {
+          if (state.drag.mode.includes("w")) {
+            next.x += dx;
+            next.width -= dx;
+          }
+          if (state.drag.mode.includes("e")) {
+            next.width += dx;
+          }
+          if (state.drag.mode.includes("n")) {
+            next.y += dy;
+            next.height -= dy;
+          }
+          if (state.drag.mode.includes("s")) {
+            next.height += dy;
+          }
+        }
+        state.regions[state.selected] = clampRegion(next);
+        selectRegion(state.selected);
+        updateExport();
+      });
+
+      window.addEventListener("mouseup", () => {
+        state.drag = null;
+      });
+
+      window.addEventListener("keydown", (event) => {
+        if (state.selected < 0 || ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) return;
+        const region = state.regions[state.selected];
+        const step = event.shiftKey ? 10 : 1;
+        if (event.key === "ArrowLeft") region.x -= step;
+        else if (event.key === "ArrowRight") region.x += step;
+        else if (event.key === "ArrowUp") region.y -= step;
+        else if (event.key === "ArrowDown") region.y += step;
+        else return;
+        event.preventDefault();
+        clampRegion(region);
+        selectRegion(state.selected);
+        updateExport();
+      });
+
+      for (const id of ["x", "y", "w", "h"]) {
+        $(id).addEventListener("input", () => {
+          if (state.selected < 0) return;
+          const region = state.regions[state.selected];
+          region.x = Number($("x").value);
+          region.y = Number($("y").value);
+          region.width = Number($("w").value);
+          region.height = Number($("h").value);
+          clampRegion(region);
+          renderRegionList();
+          draw();
+          updateExport();
+        });
+      }
+
+      $("theme").addEventListener("change", () => loadAtlas());
+      $("atlas").addEventListener("change", () => {
+        setGridInputs(currentConfig());
+        loadAtlas();
+      });
+      $("load").addEventListener("click", () => loadAtlas());
+      $("loadExisting").addEventListener("click", () => loadExisting());
+      $("autoGrid").addEventListener("click", createGridRegions);
+      $("fitView").addEventListener("click", fitView);
+      $("prev").addEventListener("click", () => selectRegion(Math.max(0, state.selected - 1)));
+      $("next").addEventListener("click", () => selectRegion(Math.min(state.regions.length - 1, state.selected + 1)));
+      $("centerSelected").addEventListener("click", () => {
+        const region = state.regions[state.selected];
+        if (!region) return;
+        const rect = wrap.getBoundingClientRect();
+        state.panX = rect.width / 2 - (region.x + region.width / 2) * state.zoom;
+        state.panY = rect.height / 2 - (region.y + region.height / 2) * state.zoom;
+        draw();
+      });
+      $("zoom").addEventListener("input", () => {
+        state.zoom = Number($("zoom").value);
+        draw();
+      });
+      $("zoomIn").addEventListener("click", () => {
+        state.zoom = Math.min(4, state.zoom * 1.18);
+        $("zoom").value = state.zoom;
+        draw();
+      });
+      $("zoomOut").addEventListener("click", () => {
+        state.zoom = Math.max(0.05, state.zoom / 1.18);
+        $("zoom").value = state.zoom;
+        draw();
+      });
+      $("square").addEventListener("click", () => {
+        const region = state.regions[state.selected];
+        if (!region) return;
+        const size = Math.max(region.width, region.height);
+        region.width = size;
+        region.height = size;
+        clampRegion(region);
+        selectRegion(state.selected);
+        updateExport();
+      });
+      $("duplicatePrev").addEventListener("click", () => {
+        if (state.selected <= 0) return;
+        const previous = state.regions[state.selected - 1];
+        const region = state.regions[state.selected];
+        region.width = previous.width;
+        region.height = previous.height;
+        clampRegion(region);
+        selectRegion(state.selected);
+        updateExport();
+      });
+      $("applyRowBand").addEventListener("click", applyRowBand);
+      $("applyColumnBand").addEventListener("click", applyColumnBand);
+      $("tileRow").addEventListener("click", tileRowFromSelected);
+      $("tileColumn").addEventListener("click", tileColumnFromSelected);
+      $("refreshExport").addEventListener("click", updateExport);
+      $("download").addEventListener("click", () => {
+        updateExport();
+        const blob = new Blob([$("json").value], { type: "application/json" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `${$("theme").value}-${$("atlas").value}-crop-regions.json`;
+        link.click();
+        URL.revokeObjectURL(link.href);
+      });
+      $("save").addEventListener("click", async () => {
+        updateExport();
+        const response = await fetch("/api/crop-regions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: $("json").value
+        });
+        if (!response.ok) {
+          setSaveState(await response.text(), true);
+          return;
+        }
+        const result = await response.json();
+        setSaveState(`Saved ${result.path}`);
+      });
+      $("file").addEventListener("change", (event) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        const url = URL.createObjectURL(file);
+        loadAtlas(url, file.name);
+      });
+
+      window.addEventListener("resize", resizeCanvas);
+      setGridInputs(currentConfig());
+      resizeCanvas();
+      loadAtlas();
+    </script>
+  </body>
+</html>

@@ -6,7 +6,13 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["dist", "server", "src-tauri/target"]
+    ignores: [
+      "dist",
+      "server",
+      "src-tauri/target",
+      "openclaw-plugin/docs/**",
+      "plugins/**/runtime/dist/**"
+    ]
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

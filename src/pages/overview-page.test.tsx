@@ -17,12 +17,16 @@ const {
   getSleepViewMock,
   getFitnessViewMock,
   getMovementDayMock,
-  getVitalsViewMock
+  getVitalsViewMock,
+  getXpMetricsMock,
+  getSettingsMock
 } = vi.hoisted(() => ({
   getSleepViewMock: vi.fn(),
   getFitnessViewMock: vi.fn(),
   getMovementDayMock: vi.fn(),
-  getVitalsViewMock: vi.fn()
+  getVitalsViewMock: vi.fn(),
+  getXpMetricsMock: vi.fn(),
+  getSettingsMock: vi.fn()
 }));
 
 vi.mock("@/components/shell/app-shell", () => ({
@@ -33,14 +37,19 @@ vi.mock("@/lib/api", () => ({
   getSleepView: (...args: unknown[]) => getSleepViewMock(...args),
   getFitnessView: (...args: unknown[]) => getFitnessViewMock(...args),
   getMovementDay: (...args: unknown[]) => getMovementDayMock(...args),
-  getVitalsView: (...args: unknown[]) => getVitalsViewMock(...args)
+  getVitalsView: (...args: unknown[]) => getVitalsViewMock(...args),
+  getXpMetrics: (...args: unknown[]) => getXpMetricsMock(...args),
+  getSettings: (...args: unknown[]) => getSettingsMock(...args)
 }));
 
 vi.mock("@/components/customization/ai-surface-workspace", () => ({
   AiSurfaceWorkspace: ({
     baseWidgets
   }: {
-    baseWidgets: Array<{ id: string; render: (args: { compact: boolean }) => ReactNode }>;
+    baseWidgets: Array<{
+      id: string;
+      render: (args: { compact: boolean }) => ReactNode;
+    }>;
   }) => (
     <div>
       {baseWidgets.map((widget) => (
@@ -76,7 +85,29 @@ vi.mock("@/components/life-force/life-force-workspace", () => ({
 }));
 
 vi.mock("@/components/experience/flagship-signal-deck", () => ({
-  FlagshipSignalDeck: () => <div>Signals</div>
+  FlagshipSignalDeck: ({
+    items
+  }: {
+    items: Array<{
+      id: string;
+      title: ReactNode;
+      href?: string;
+      actionLabel?: string;
+    }>;
+  }) => (
+    <div>
+      Signals
+      {items.map((item) =>
+        item.href ? (
+          <a key={item.id} href={item.href}>
+            {item.actionLabel ?? "Open"} {item.title}
+          </a>
+        ) : (
+          <div key={item.id}>{item.title}</div>
+        )
+      )}
+    </div>
+  )
 }));
 
 vi.mock("@/components/customization/utility-widgets", () => ({
@@ -236,6 +267,11 @@ function createSnapshot(): ForgeSnapshot {
 
 describe("OverviewPage", () => {
   beforeEach(() => {
+    getSettingsMock.mockResolvedValue({
+      settings: {
+        gamificationTheme: "dark-fantasy"
+      }
+    });
     getSleepViewMock.mockResolvedValue({
       sleep: {
         summary: {
@@ -451,6 +487,48 @@ describe("OverviewPage", () => {
         ]
       }
     });
+    const snapshot = createSnapshot();
+    getXpMetricsMock.mockResolvedValue({
+      metrics: {
+        scope: {
+          mode: "operator_fallback",
+          userIds: ["user_operator"],
+          users: [],
+          label: "Operator"
+        },
+        profile: snapshot.metrics,
+        achievements: [],
+        milestoneRewards: [],
+        momentumPulse: {
+          status: "surging",
+          headline: "9-day streak online",
+          detail: "Forge is compounding.",
+          celebrationLabel: "Forge Smith",
+          nextMilestoneId: null,
+          nextMilestoneLabel: "Next unlock"
+        },
+        catalogPreview: [],
+        unlockedItemCount: 0,
+        totalItemCount: 120,
+        nextUnlock: null,
+        newestUnlock: null,
+        mascot: {
+          mood: "wise",
+          spriteKey: "mascot-state-014",
+          streakSpriteKey: "mascot-state-017",
+          headline: "A real streak is forming.",
+          line: "Keep swinging while the metal is hot.",
+          pressureLevel: 0,
+          missedDays: 0,
+          lastActiveDateKey: null
+        },
+        celebrations: [],
+        recentLedger: [],
+        rules: [],
+        dailyAmbientXp: 0,
+        dailyAmbientCap: 12
+      }
+    });
   });
 
   afterEach(() => {
@@ -515,6 +593,99 @@ describe("OverviewPage", () => {
       summaryHeading.compareDocumentPosition(signalsHeading) &
         Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
+  });
+
+  it("links overview entity cards to their owning views", () => {
+    const snapshot = createSnapshot();
+    snapshot.dashboard.milestoneRewards = [
+      {
+        id: "reward_level_8",
+        title: "Level 8 threshold",
+        summary: "Reach the next level.",
+        rewardLabel: "Level 8",
+        progressLabel: "1800/2000 XP",
+        current: 1800,
+        target: 2000,
+        completed: false
+      }
+    ];
+    snapshot.overview.projects = [
+      {
+        id: "project_md",
+        title: "Advance the MD thesis experiments",
+        description: "Move the experiment work forward.",
+        earnedPoints: 280
+      } as ForgeSnapshot["overview"]["projects"][number]
+    ];
+    snapshot.overview.dueHabits = [
+      {
+        id: "habit_sleep",
+        title: "Go to bed before 11",
+        description: "Protect tomorrow's runway.",
+        rewardXp: 10
+      } as ForgeSnapshot["overview"]["dueHabits"][number]
+    ];
+    snapshot.overview.topTasks = [
+      {
+        id: "task_brain",
+        title: "Attribution to brain inference pipeline",
+        description: "Finish the attribution pass.",
+        status: "in_progress",
+        points: 80
+      } as ForgeSnapshot["overview"]["topTasks"][number]
+    ];
+    snapshot.overview.activeGoals = [
+      {
+        id: "goal_great",
+        title: "Be a great man",
+        description: "Keep the lifetime goal visible.",
+        horizon: "lifetime",
+        progress: 93,
+        tags: []
+      } as unknown as ForgeSnapshot["overview"]["activeGoals"][number]
+    ];
+
+    useForgeShellMock.mockReturnValue({
+      snapshot,
+      selectedUserIds: [],
+      refresh: vi.fn()
+    });
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false }
+      }
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <OverviewPage />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    expect(
+      screen.getByRole("link", {
+        name: /Advance the MD thesis experiments/i
+      })
+    ).toHaveAttribute("href", "/projects/project_md");
+    expect(
+      screen.getByRole("link", { name: "Open habit Go to bed before 11" })
+    ).toHaveAttribute("href", "/habits");
+    expect(
+      screen
+        .getAllByRole("link", {
+          name: /Attribution to brain inference pipeline/i
+        })
+        .some((link) => link.getAttribute("href") === "/tasks/task_brain")
+    ).toBe(true);
+    expect(
+      screen.getByRole("link", { name: "Open goal Be a great man" })
+    ).toHaveAttribute("href", "/goals/goal_great");
+    expect(
+      screen.getByRole("link", { name: /Open rewards Level 8 threshold/i })
+    ).toHaveAttribute("href", "/rewards");
   });
 
   it("renders the overview Life Force surface in compact mode", () => {

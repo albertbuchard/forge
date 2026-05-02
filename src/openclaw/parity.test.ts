@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { buildOpenApiDocument } from "../../server/src/openapi";
-import { collectSupportedPluginApiRouteKeys, type ApiRouteKey } from "./parity";
+import {
+  collectSupportedPluginApiRouteKeys,
+  FORGE_SUPPORTED_PLUGIN_API_ROUTES,
+  type ApiRouteKey
+} from "./parity";
 import { buildRouteParityReport, collectMirroredApiRouteKeys } from "./routes";
 
 describe("forge plugin route parity", () => {
@@ -189,6 +193,32 @@ describe("forge plugin route parity", () => {
         `${route} should stay mirrored`
       ).toBe(true);
     }
+  });
+
+  it("labels specialized domain route families with their own route purposes", () => {
+    const purposeByRoute = new Map(
+      FORGE_SUPPORTED_PLUGIN_API_ROUTES.map((route) => [
+        `${route.method} ${route.path}`,
+        route.purpose
+      ])
+    );
+
+    expect(purposeByRoute.get("GET /api/v1/movement/timeline")).toBe(
+      "movement"
+    );
+    expect(purposeByRoute.get("POST /api/v1/movement/user-boxes")).toBe(
+      "movement"
+    );
+    expect(purposeByRoute.get("GET /api/v1/life-force")).toBe("life_force");
+    expect(
+      purposeByRoute.get("POST /api/v1/life-force/fatigue-signals")
+    ).toBe("life_force");
+    expect(purposeByRoute.get("GET /api/v1/workbench/flows")).toBe(
+      "workbench"
+    );
+    expect(
+      purposeByRoute.get("GET /api/v1/workbench/flows/:id/nodes/:nodeId/output")
+    ).toBe("workbench");
   });
 
   it("mirrors exactly the curated upstream routes", () => {

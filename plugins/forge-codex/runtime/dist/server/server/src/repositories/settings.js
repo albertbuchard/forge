@@ -165,6 +165,9 @@ function toSettingsFileOverrideInput(input) {
     if (input.themePreference !== undefined) {
         next.themePreference = input.themePreference;
     }
+    if (input.gamificationTheme !== undefined) {
+        next.gamificationTheme = input.gamificationTheme;
+    }
     if (input.customTheme !== undefined) {
         if (input.customTheme === null) {
             next.customTheme = null;
@@ -467,16 +470,16 @@ function upsertAgentIdentity(input) {
 function ensureSettingsRow(now = new Date().toISOString()) {
     getDatabase()
         .prepare(`INSERT OR IGNORE INTO app_settings (
-        id, operator_name, operator_email, operator_title, theme_preference, locale_preference, goal_drift_alerts,
+        id, operator_name, operator_email, operator_title, theme_preference, gamification_theme, locale_preference, goal_drift_alerts,
         daily_quest_reminders, achievement_celebrations, max_active_tasks, time_accounting_mode, integrity_score, last_audit_at, created_at, updated_at
-      ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run("Master Architect", "architect@kineticforge.ai", "Local-first operator", "obsidian", "en", 1, 1, 1, 2, "split", 98, now, now, now);
+      ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run("Master Architect", "architect@kineticforge.ai", "Local-first operator", "obsidian", "dark-fantasy", "en", 1, 1, 1, 2, "split", 98, now, now, now);
 }
 function readSettingsRow() {
     ensureSettingsRow();
     return getDatabase()
         .prepare(`SELECT
-        operator_name, operator_email, operator_title, theme_preference, custom_theme_json, locale_preference,
+        operator_name, operator_email, operator_title, theme_preference, gamification_theme, custom_theme_json, locale_preference,
         goal_drift_alerts, daily_quest_reminders, achievement_celebrations, max_active_tasks, time_accounting_mode,
         integrity_score, last_audit_at, psyche_auth_required, google_client_id, google_client_secret, microsoft_client_id, microsoft_tenant_id, microsoft_redirect_uri,
         forge_basic_chat_connection_id, forge_basic_chat_model, forge_wiki_connection_id, forge_wiki_model, created_at, updated_at
@@ -606,6 +609,7 @@ function buildSettingsPayloadFromDatabase() {
             timeAccountingMode: row.time_accounting_mode
         },
         themePreference: row.theme_preference,
+        gamificationTheme: row.gamification_theme,
         customTheme,
         localePreference: row.locale_preference,
         security: {
@@ -795,6 +799,7 @@ function updateSettingsInternal(input, options = {}) {
                     current.execution.timeAccountingMode
             },
             themePreference: parsed.themePreference ?? current.themePreference,
+            gamificationTheme: parsed.gamificationTheme ?? current.gamificationTheme,
             customTheme: parsed.customTheme === undefined
                 ? (current.customTheme ?? null)
                 : parsed.customTheme,
@@ -838,12 +843,12 @@ function updateSettingsInternal(input, options = {}) {
         };
         getDatabase()
             .prepare(`UPDATE app_settings
-         SET operator_name = ?, operator_email = ?, operator_title = ?, theme_preference = ?, custom_theme_json = ?, locale_preference = ?,
+         SET operator_name = ?, operator_email = ?, operator_title = ?, theme_preference = ?, gamification_theme = ?, custom_theme_json = ?, locale_preference = ?,
              goal_drift_alerts = ?, daily_quest_reminders = ?, achievement_celebrations = ?, max_active_tasks = ?, time_accounting_mode = ?,
              psyche_auth_required = ?, google_client_id = ?, google_client_secret = ?, microsoft_client_id = ?, microsoft_tenant_id = ?, microsoft_redirect_uri = ?,
              forge_basic_chat_connection_id = ?, forge_basic_chat_model = ?, forge_wiki_connection_id = ?, forge_wiki_model = ?, updated_at = ?
          WHERE id = 1`)
-            .run(next.profile.operatorName, next.profile.operatorEmail, next.profile.operatorTitle, next.themePreference, next.customTheme ? JSON.stringify(next.customTheme) : "", next.localePreference, toInt(next.notifications.goalDriftAlerts), toInt(next.notifications.dailyQuestReminders), toInt(next.notifications.achievementCelebrations), next.execution.maxActiveTasks, next.execution.timeAccountingMode, toInt(next.psycheAuthRequired), nextGoogleClientId, nextGoogleClientSecret, next.calendarProviders.microsoft.clientId, next.calendarProviders.microsoft.tenantId, next.calendarProviders.microsoft.redirectUri, next.modelSettings.forgeAgent.basicChat.connectionId, next.modelSettings.forgeAgent.basicChat.model, next.modelSettings.forgeAgent.wiki.connectionId, next.modelSettings.forgeAgent.wiki.model, now);
+            .run(next.profile.operatorName, next.profile.operatorEmail, next.profile.operatorTitle, next.themePreference, next.gamificationTheme, next.customTheme ? JSON.stringify(next.customTheme) : "", next.localePreference, toInt(next.notifications.goalDriftAlerts), toInt(next.notifications.dailyQuestReminders), toInt(next.notifications.achievementCelebrations), next.execution.maxActiveTasks, next.execution.timeAccountingMode, toInt(next.psycheAuthRequired), nextGoogleClientId, nextGoogleClientSecret, next.calendarProviders.microsoft.clientId, next.calendarProviders.microsoft.tenantId, next.calendarProviders.microsoft.redirectUri, next.modelSettings.forgeAgent.basicChat.connectionId, next.modelSettings.forgeAgent.basicChat.model, next.modelSettings.forgeAgent.wiki.connectionId, next.modelSettings.forgeAgent.wiki.model, now);
         logCalendarSettingsDebug("update_settings_committed", {
             persistedGoogleClientId: nextGoogleClientId,
             persistedGoogleClientSecret: nextGoogleClientSecret.length > 0,
@@ -859,11 +864,12 @@ function updateSettingsInternal(input, options = {}) {
                 entityId: "app_settings",
                 eventType: "settings_updated",
                 title: "Forge settings updated",
-                description: `Theme is now ${next.themePreference}. Language is ${next.localePreference}.`,
+                description: `Theme is now ${next.themePreference}. Gamification is ${next.gamificationTheme}. Language is ${next.localePreference}.`,
                 actor: options.activity.actor ?? null,
                 source: options.activity.source,
                 metadata: {
                     themePreference: next.themePreference,
+                    gamificationTheme: next.gamificationTheme,
                     customThemeLabel: next.customTheme?.label ?? null,
                     localePreference: next.localePreference,
                     goalDriftAlerts: next.notifications.goalDriftAlerts,

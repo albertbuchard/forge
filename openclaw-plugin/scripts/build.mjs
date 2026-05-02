@@ -193,6 +193,35 @@ async function patchCompiledJsSpecifiers(directory) {
   }
 }
 
+async function removeMatchingFiles(directory, predicate) {
+  const entries = await readdir(directory, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      await removeMatchingFiles(fullPath, predicate);
+      continue;
+    }
+    if (entry.isFile() && predicate(fullPath)) {
+      await rm(fullPath, { force: true });
+    }
+  }
+}
+
+async function trimPackagedGamificationAssets() {
+  const gamificationDistDir = path.join(pluginDistDir, "gamification");
+  const sourceThemesDir = path.join(gamificationDistDir, "source", "themes");
+  const spritesDir = path.join(gamificationDistDir, "sprites");
+
+  // The packaged web UI only references transparent 256/512 WEBP sprites.
+  // Keep local repo source assets for future regridding, but do not ship
+  // multi-hundred-MB atlas/source payloads or unused PNG/1024 variants.
+  await removePath(sourceThemesDir);
+  await removeMatchingFiles(
+    spritesDir,
+    (filePath) => filePath.endsWith(".png") || filePath.endsWith("-1024.webp")
+  );
+}
+
 await removePath(pluginDistDir);
 await removePath(pluginServerDir);
 await mkdir(pluginDistDir, { recursive: true });
@@ -213,6 +242,7 @@ await patchCompiledJsSpecifiers(path.join(pluginDistDir, "server"));
 await run("npm", ["run", "build"], repoRoot);
 
 await cp(repoWebDistDir, pluginDistDir, { recursive: true, force: true });
+await trimPackagedGamificationAssets();
 await mkdir(path.join(pluginDistDir, "server", "server"), { recursive: true });
 await cp(repoMigrationsDir, path.join(pluginDistDir, "server", "server", "migrations"), { recursive: true, force: true });
 await mkdir(path.join(pluginServerDir), { recursive: true });

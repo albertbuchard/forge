@@ -101,7 +101,8 @@
     color-mix(in srgb, var(--surface-panel) 98%, transparent),
     color-mix(in srgb, var(--surface-low) 96%, transparent)
   );
-  --ui-surface-modal: radial-gradient(
+  --ui-surface-modal:
+    radial-gradient(
       circle at top,
       color-mix(in srgb, var(--primary) 18%, transparent),
       transparent 38%
@@ -182,6 +183,42 @@ body {
   overflow-x: clip;
 }
 
+.user-relationship-flow .react-flow__controls {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  background: rgba(8, 13, 24, 0.92);
+  box-shadow: 0 18px 48px rgba(3, 8, 18, 0.42);
+}
+
+.user-relationship-flow .react-flow__controls-button {
+  width: 2.35rem;
+  height: 2.35rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(13, 20, 35, 0.94);
+  color: rgba(238, 242, 255, 0.76);
+}
+
+.user-relationship-flow .react-flow__controls-button:hover {
+  background: rgba(192, 193, 255, 0.14);
+  color: rgba(255, 255, 255, 0.94);
+}
+
+.user-relationship-flow .react-flow__controls-button svg {
+  fill: currentColor;
+}
+
+.user-relationship-flow .react-flow__attribution {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(8, 13, 24, 0.78);
+  color: rgba(238, 242, 255, 0.48);
+}
+
+.user-relationship-flow .react-flow__minimap {
+  display: none;
+}
+
 body.theme-forge-dark {
   color-scheme: dark;
 }
@@ -196,14 +233,42 @@ body.theme-forge-light {
   --ui-ink-on-accent: color-mix(in srgb, var(--primary) 78%, black 22%);
   --ui-border-subtle: rgba(24, 34, 53, 0.1);
   --ui-border-strong: rgba(24, 34, 53, 0.16);
-  --ui-surface-1: color-mix(in srgb, var(--surface-high) 84%, var(--surface-panel) 16%);
-  --ui-surface-2: color-mix(in srgb, var(--surface-high) 68%, var(--surface-panel) 32%);
-  --ui-surface-3: color-mix(in srgb, var(--surface-panel) 84%, var(--surface-low) 16%);
-  --ui-surface-hover: color-mix(in srgb, var(--surface-panel) 78%, var(--surface-low) 22%);
-  --ui-surface-active: color-mix(in srgb, var(--primary) 14%, var(--surface-high) 86%);
+  --ui-surface-1: color-mix(
+    in srgb,
+    var(--surface-high) 84%,
+    var(--surface-panel) 16%
+  );
+  --ui-surface-2: color-mix(
+    in srgb,
+    var(--surface-high) 68%,
+    var(--surface-panel) 32%
+  );
+  --ui-surface-3: color-mix(
+    in srgb,
+    var(--surface-panel) 84%,
+    var(--surface-low) 16%
+  );
+  --ui-surface-hover: color-mix(
+    in srgb,
+    var(--surface-panel) 78%,
+    var(--surface-low) 22%
+  );
+  --ui-surface-active: color-mix(
+    in srgb,
+    var(--primary) 14%,
+    var(--surface-high) 86%
+  );
   --ui-overlay-backdrop: rgba(24, 34, 53, 0.28);
-  --ui-accent-soft: color-mix(in srgb, var(--primary) 12%, var(--surface-high) 88%);
-  --ui-accent-soft-hover: color-mix(in srgb, var(--primary) 18%, var(--surface-high) 82%);
+  --ui-accent-soft: color-mix(
+    in srgb,
+    var(--primary) 12%,
+    var(--surface-high) 88%
+  );
+  --ui-accent-soft-hover: color-mix(
+    in srgb,
+    var(--primary) 18%,
+    var(--surface-high) 82%
+  );
   --ui-success-soft: color-mix(in srgb, #10b981 18%, var(--surface-high) 82%);
   --ui-shadow-soft: 0 16px 38px rgba(24, 34, 53, 0.09);
   --ui-shadow-floating: 0 28px 88px rgba(24, 34, 53, 0.16);
@@ -457,20 +522,32 @@ body.theme-forge-light [class*="text-white/30"] {
 body.theme-forge-light [class*="bg-white/[0.03]"],
 body.theme-forge-light [class*="bg-white/[0.04]"],
 body.theme-forge-light [class*="bg-white/[0.05]"] {
-  background-color: color-mix(in srgb, var(--surface-high) 86%, var(--surface-panel) 14%) !important;
+  background-color: color-mix(
+    in srgb,
+    var(--surface-high) 86%,
+    var(--surface-panel) 14%
+  ) !important;
 }
 
 body.theme-forge-light [class*="bg-white/[0.06]"],
 body.theme-forge-light [class*="bg-white/[0.08]"],
 body.theme-forge-light [class*="bg-white/[0.12]"] {
-  background-color: color-mix(in srgb, var(--surface-panel) 88%, var(--surface-low) 12%) !important;
+  background-color: color-mix(
+    in srgb,
+    var(--surface-panel) 88%,
+    var(--surface-low) 12%
+  ) !important;
 }
 
 body.theme-forge-light [class*="border-white/8"],
 body.theme-forge-light [class*="border-white/10"],
 body.theme-forge-light [class*="border-white/12"],
 body.theme-forge-light [class*="border-white/25"] {
-  border-color: color-mix(in srgb, var(--forge-body-text) 12%, transparent) !important;
+  border-color: color-mix(
+    in srgb,
+    var(--forge-body-text) 12%,
+    transparent
+  ) !important;
 }
 
 .font-display {
@@ -641,7 +718,11 @@ select {
 .surface-grid-layout > .react-grid-item.react-grid-placeholder {
   border-radius: 24px;
   background:
-    linear-gradient(180deg, rgba(192, 193, 255, 0.18), rgba(78, 222, 163, 0.12)),
+    linear-gradient(
+      180deg,
+      rgba(192, 193, 255, 0.18),
+      rgba(78, 222, 163, 0.12)
+    ),
     rgba(255, 255, 255, 0.04);
   border: 1px dashed rgba(192, 193, 255, 0.3);
 }
@@ -668,7 +749,9 @@ select {
 }
 
 .surface-grid-layout--editing .react-grid-item:hover .react-resizable-handle,
-.surface-grid-layout--editing .react-grid-item.react-resizable-resizing .react-resizable-handle {
+.surface-grid-layout--editing
+  .react-grid-item.react-resizable-resizing
+  .react-resizable-handle {
   opacity: 1;
 }
 
@@ -712,10 +795,26 @@ input[type="radio"] {
   inset: 0;
   pointer-events: none;
   background-image:
-    radial-gradient(circle at 18% 24%, var(--knowledge-graph-constellation) 0 1px, transparent 1.5px),
-    radial-gradient(circle at 72% 32%, var(--knowledge-graph-constellation) 0 1px, transparent 1.5px),
-    radial-gradient(circle at 56% 72%, var(--knowledge-graph-constellation) 0 1px, transparent 1.5px),
-    radial-gradient(circle at 84% 66%, var(--knowledge-graph-constellation) 0 1px, transparent 1.5px);
+    radial-gradient(
+      circle at 18% 24%,
+      var(--knowledge-graph-constellation) 0 1px,
+      transparent 1.5px
+    ),
+    radial-gradient(
+      circle at 72% 32%,
+      var(--knowledge-graph-constellation) 0 1px,
+      transparent 1.5px
+    ),
+    radial-gradient(
+      circle at 56% 72%,
+      var(--knowledge-graph-constellation) 0 1px,
+      transparent 1.5px
+    ),
+    radial-gradient(
+      circle at 84% 66%,
+      var(--knowledge-graph-constellation) 0 1px,
+      transparent 1.5px
+    );
   opacity: 0.9;
 }
 

@@ -6,12 +6,21 @@ import {
   createProject,
   createTask,
   getCalendarOverview,
+  listWikiPages,
   patchTask
 } from "./api";
 
 function mockJsonResponse(body: unknown) {
   return {
     ok: true,
+    text: vi.fn().mockResolvedValue(JSON.stringify(body))
+  } as unknown as Response;
+}
+
+function mockJsonErrorResponse(status: number, body: unknown) {
+  return {
+    ok: false,
+    status,
     text: vi.fn().mockResolvedValue(JSON.stringify(body))
   } as unknown as Response;
 }
@@ -132,7 +141,9 @@ describe("create entity payload normalization", () => {
       .fn()
       .mockResolvedValueOnce(mockJsonResponse({ task: { id: "task_1" } }))
       .mockResolvedValueOnce(mockJsonResponse({ taskRun: { id: "run_1" } }))
-      .mockResolvedValueOnce(mockJsonResponse({ connection: { id: "conn_1" } }));
+      .mockResolvedValueOnce(
+        mockJsonResponse({ connection: { id: "conn_1" } })
+      );
     vi.stubGlobal("fetch", fetchMock);
 
     await patchTask("task_1", {
@@ -186,7 +197,10 @@ describe("create entity payload normalization", () => {
       plannedDurationSeconds: 1800
     });
 
-    const [connectionUrl, connectionInit] = fetchMock.mock.calls[2] as [string, RequestInit];
+    const [connectionUrl, connectionInit] = fetchMock.mock.calls[2] as [
+      string,
+      RequestInit
+    ];
     expect(connectionUrl).toContain("/api/v1/calendar/connections");
     expect(JSON.parse(String(connectionInit.body))).toMatchObject({
       provider: "caldav",
@@ -280,5 +294,87 @@ describe("create entity payload normalization", () => {
       { id: "cal_google", dedupedName: "Forge (Google)" },
       { id: "cal_apple", dedupedName: "Forge (Apple)" }
     ]);
+  });
+
+  it("bootstraps an operator session and retries protected reads after auth expiry", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        mockJsonErrorResponse(401, {
+          code: "auth_required",
+          error: "A token or operator session is required."
+        })
+      )
+      .mockResolvedValueOnce(
+        mockJsonResponse({
+          session: {
+            id: "ses_1",
+            actorLabel: "Albert",
+            expiresAt: "2026-05-03T13:37:35.000Z"
+          }
+        })
+      )
+      .mockResolvedValueOnce(
+        mockJsonResponse({
+          pages: [{ id: "note_1", title: "Albert", slug: "albert" }]
+        })
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await listWikiPages({ kind: "wiki", limit: 25 });
+
+    expect(result.pages).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[0]?.[0]).toContain(
+      "/api/v1/wiki/pages?kind=wiki&limit=25"
+    );
+    expect(fetchMock.mock.calls[1]?.[0]).toContain(
+      "/api/v1/auth/operator-session"
+    );
+    expect(fetchMock.mock.calls[2]?.[0]).toContain(
+      "/api/v1/wiki/pages?kind=wiki&limit=25"
+    );
+  });
+
+  it("deduplicates concurrent operator-session bootstrap requests", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        mockJsonErrorResponse(401, {
+          code: "auth_required",
+          error: "A token or operator session is required."
+        })
+      )
+      .mockResolvedValueOnce(
+        mockJsonErrorResponse(401, {
+          code: "auth_required",
+          error: "A token or operator session is required."
+        })
+      )
+      .mockResolvedValueOnce(
+        mockJsonResponse({
+          session: {
+            id: "ses_1",
+            actorLabel: "Albert",
+            expiresAt: "2026-05-03T13:37:35.000Z"
+          }
+        })
+      )
+      .mockResolvedValueOnce(mockJsonResponse({ pages: [] }))
+      .mockResolvedValueOnce(mockJsonResponse({ pages: [] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await Promise.all([
+      listWikiPages({ kind: "wiki", limit: 25 }),
+      listWikiPages({ kind: "wiki", limit: 25 })
+    ]);
+
+    const requestedPaths = fetchMock.mock.calls.map((call) => String(call[0]));
+    expect(
+      requestedPaths.filter((path) =>
+        path.includes("/api/v1/auth/operator-session")
+      )
+    ).toHaveLength(1);
+    expect(requestedPaths).toHaveLength(5);
   });
 });

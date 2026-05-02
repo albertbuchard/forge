@@ -30,6 +30,8 @@ Forge should stay modern and production-grade:
 - OpenClaw, Hermes, and Codex adapter surfaces
 - Swift iPhone companion
 
+Forge should also make progress feel alive through a selected-user-first gamified layer. XP, levels, streaks, trophies, cosmetic unlocks, and the Forge Smith mascot should be grounded in the existing auditable reward ledger, not in a disconnected points game. The mascot should feel like a dramatic blacksmith mentor: visually enchanting, sometimes wise, sometimes stern, and forceful enough to make streak drift visible without becoming unsafe or cruel.
+
 ## 2. What It Shouldn't Be
 
 Forge should not collapse into a generic todo app, a flat corporate project tracker, or a decorative “AI productivity” shell.
@@ -83,3 +85,13 @@ Finally, Forge still needs the workflow and documentation layer to match the run
 - `goal_alignment.md` in this exact four-part format
 - skill flows for PRD authoring, PRD -> issues, issues -> tasks, and task closeout
 - public docs that explicitly describe the full hierarchy and the direct-to-`main` workflow
+
+Forge also needs the progression layer to behave like a real achievement system, not a decorative XP readout:
+
+- Progression uses one canonical gamification catalog with 96 trophies and 48 cosmetic unlocks in the current release.
+- trophy requirements should be hard, behavior-specific, and evaluated from real Forge data: tasks, task runs, projects, goals, wiki/notes, links, Psyche values/modes/triggers/behaviors/patterns/beliefs, habits, Life Force, health imports, and collaboration.
+- cosmetic unlocks can change mascot skins, poses, HUD treatment, streak flame, trophy shelf, icon frame, and celebration effects, but core Forge functionality must never be locked.
+- selected-user XP, streak, level, next targets, mascot state, and latest trophies should be visible on the front page.
+- the Trophy Hall should show large unique icon art, locked progress, near-completion rails, recently earned rewards, Mascot Armory equipment, and Streak Forge power/absence states.
+- gamification art should be selectable in Settings, starting with `Fantasy`, `Dramatic Smithie`, and `Mind Locksmith`, and every theme should use clean transparent sprite outputs rather than opaque image-card backgrounds.
+- Stale pre-release unlock rows may stay in SQLite for audit, but only current source-controlled catalog item IDs may unlock current trophies or cosmetics.

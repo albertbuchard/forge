@@ -16,6 +16,26 @@ info() {
   printf '[forge-release] %s\n' "$1"
 }
 
+ensure_rubygems_source() {
+  local ruby_bin="$1"
+  if ! "${ruby_bin}" -S gem sources --list 2>/dev/null | grep -q 'https://rubygems.org'; then
+    info "Adding https://rubygems.org as a gem source for ${ruby_bin}."
+    "${ruby_bin}" -S gem sources --add https://rubygems.org >/dev/null
+  fi
+}
+
+unlock_release_keychain_if_configured() {
+  command -v security >/dev/null 2>&1 || return 0
+
+  local keychain_path="${FORGE_IOS_KEYCHAIN_PATH:-${FORGE_IOS_SIGNING_KEYCHAIN_PATH:-$HOME/Library/Keychains/login.keychain-db}}"
+  [[ -f "${keychain_path}" ]] || return 0
+
+  if [[ "${FORGE_IOS_KEYCHAIN_PASSWORD+x}" == "x" ]]; then
+    info "Unlocking keychain ${keychain_path} for release signing."
+    security unlock-keychain -p "${FORGE_IOS_KEYCHAIN_PASSWORD}" "${keychain_path}"
+  fi
+}
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -81,10 +101,14 @@ fi
 "${RUBY_BIN}" -e 'required = Gem::Version.new("2.7.0"); current = Gem::Version.new(RUBY_VERSION); exit(current >= required ? 0 : 1)' \
   || fail "Ruby ${RUBY_BIN} is too old for the release toolchain."
 
+ensure_rubygems_source "${RUBY_BIN}"
+
 if ! "${RUBY_BIN}" -S bundle -v >/dev/null 2>&1; then
   info "Installing Bundler for the release toolchain."
   "${RUBY_BIN}" -S gem install bundler --no-document
 fi
+
+unlock_release_keychain_if_configured
 
 info "Installing Fastlane gems locally under ios-companion/vendor/bundle."
 (
@@ -122,6 +146,7 @@ info "Running Fastlane lane '${FASTLANE_LANE}'. Artifacts will be written to ${A
   BUNDLE_GEMFILE="${IOS_DIR}/Gemfile" \
   BUNDLE_PATH="${IOS_DIR}/vendor/bundle" \
   FORGE_RELEASE_ARTIFACT_DIR="${ARTIFACT_DIR}" \
+  FASTLANE_SKIP_UPDATE_CHECK=1 \
   "${RUBY_BIN}" -S bundle exec fastlane ios "${FASTLANE_LANE}" artifact_dir:"${ARTIFACT_DIR}" mode:"${MODE}"
 )
 

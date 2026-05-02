@@ -97,7 +97,9 @@ The script bootstraps a local Fastlane toolchain under `ios-companion/vendor/bun
 runs Forge repo checks, archives the canonical generated Xcode project at
 `ios-companion/ForgeCompanion.xcodeproj`, and then uploads or submits
 depending on the selected mode. It prefers an already-installed modern Ruby and only
-falls back to Homebrew Ruby bootstrap when no suitable Ruby is available.
+falls back to Homebrew Ruby bootstrap when no suitable Ruby is available. It also
+repairs a missing `rubygems.org` source for that Ruby automatically and can unlock a
+local signing keychain when `FORGE_IOS_KEYCHAIN_PASSWORD` is set.
 
 This repo now also includes tag-driven GitHub Actions release workflows:
 
@@ -113,6 +115,9 @@ match `ios-companion/release/release.yml`.
 
 1. Copy `ios-companion/.release.env.example` to `ios-companion/.release.env`
 2. Fill in the App Store Connect API key values
+   Optional:
+   set `FORGE_IOS_KEYCHAIN_PATH` and `FORGE_IOS_KEYCHAIN_PASSWORD` if your local
+   signing identities live in a locked keychain
 3. Replace placeholder values in:
    - `ios-companion/fastlane/metadata/en-US/support_url.txt`
    - `ios-companion/fastlane/metadata/en-US/marketing_url.txt`

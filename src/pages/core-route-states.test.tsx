@@ -234,13 +234,13 @@ function renderWithProviders(element: React.ReactNode, initialEntry = "/") {
 }
 
 describe("core route states", () => {
-  it("shows the overview empty state when no strategic data exists", async () => {
+  it("shows the overview shell when only gamification metrics exist", async () => {
     useForgeShellMock.mockReturnValue({ snapshot: createSnapshot() });
 
     renderWithProviders(<OverviewPage />);
 
-    expect(screen.getByText("No overview yet")).toBeInTheDocument();
-    expect(screen.getByText("Open life goals")).toBeInTheDocument();
+    expect(screen.getAllByText("Overview").length).toBeGreaterThan(0);
+    expect(screen.getByText("Momentum 0")).toBeInTheDocument();
   });
 
   it("shows the goals empty state when no goals exist yet", async () => {

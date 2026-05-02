@@ -288,6 +288,19 @@ describe("question flow quality coverage", () => {
     expect(psychePlaybook).toMatch(
       /Do not ask for evidence, alternative beliefs, or repair plans before the user has had/i
     );
+    expect(psychePlaybook).toMatch(/## Interpretive Hypotheses/i);
+    expect(psychePlaybook).toMatch(
+      /Do not minimize functional analysis, trigger chains, behavior patterns, modes,\s+beliefs, or schema themes/i
+    );
+    expect(psychePlaybook).toMatch(
+      /After at least one concrete example is clear, offer one tentative interpretive\s+hypothesis/i
+    );
+    expect(psychePlaybook).toMatch(
+      /what the response protects,[\s\S]*what danger it predicts,[\s\S]*what belief or mode may be active/i
+    );
+    expect(psychePlaybook).toMatch(
+      /If the user rejects the hypothesis, accept the correction and revise once/i
+    );
     expect(psychePlaybook).toMatch(
       /moment is still hot[\s\S]*painful, dangerous, or protective/i
     );

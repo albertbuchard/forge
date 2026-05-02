@@ -17,6 +17,9 @@ export type ForgeSupportedPluginApiRoute = {
     | "insights"
     | "wiki"
     | "health"
+    | "movement"
+    | "life_force"
+    | "workbench"
     | "preferences"
     | "questionnaires";
 };
@@ -53,116 +56,116 @@ export const FORGE_SUPPORTED_PLUGIN_API_ROUTES: ForgeSupportedPluginApiRoute[] =
     { method: "PATCH", path: "/api/v1/health/sleep/:id", purpose: "health" },
     { method: "GET", path: "/api/v1/health/fitness", purpose: "health" },
     { method: "PATCH", path: "/api/v1/health/workouts/:id", purpose: "health" },
-    { method: "GET", path: "/api/v1/movement/day", purpose: "health" },
-    { method: "GET", path: "/api/v1/movement/month", purpose: "health" },
-    { method: "GET", path: "/api/v1/movement/all-time", purpose: "health" },
-    { method: "GET", path: "/api/v1/movement/timeline", purpose: "health" },
-    { method: "GET", path: "/api/v1/movement/places", purpose: "health" },
-    { method: "GET", path: "/api/v1/movement/boxes/:id", purpose: "health" },
-    { method: "POST", path: "/api/v1/movement/places", purpose: "health" },
-    { method: "PATCH", path: "/api/v1/movement/places/:id", purpose: "health" },
-    { method: "GET", path: "/api/v1/movement/trips/:id", purpose: "health" },
-    { method: "POST", path: "/api/v1/movement/selection", purpose: "health" },
-    { method: "GET", path: "/api/v1/movement/settings", purpose: "health" },
-    { method: "PATCH", path: "/api/v1/movement/settings", purpose: "health" },
-    { method: "POST", path: "/api/v1/movement/user-boxes", purpose: "health" },
+    { method: "GET", path: "/api/v1/movement/day", purpose: "movement" },
+    { method: "GET", path: "/api/v1/movement/month", purpose: "movement" },
+    { method: "GET", path: "/api/v1/movement/all-time", purpose: "movement" },
+    { method: "GET", path: "/api/v1/movement/timeline", purpose: "movement" },
+    { method: "GET", path: "/api/v1/movement/places", purpose: "movement" },
+    { method: "GET", path: "/api/v1/movement/boxes/:id", purpose: "movement" },
+    { method: "POST", path: "/api/v1/movement/places", purpose: "movement" },
+    { method: "PATCH", path: "/api/v1/movement/places/:id", purpose: "movement" },
+    { method: "GET", path: "/api/v1/movement/trips/:id", purpose: "movement" },
+    { method: "POST", path: "/api/v1/movement/selection", purpose: "movement" },
+    { method: "GET", path: "/api/v1/movement/settings", purpose: "movement" },
+    { method: "PATCH", path: "/api/v1/movement/settings", purpose: "movement" },
+    { method: "POST", path: "/api/v1/movement/user-boxes", purpose: "movement" },
     {
       method: "POST",
       path: "/api/v1/movement/user-boxes/preflight",
-      purpose: "health"
+      purpose: "movement"
     },
     {
       method: "PATCH",
       path: "/api/v1/movement/user-boxes/:id",
-      purpose: "health"
+      purpose: "movement"
     },
     {
       method: "DELETE",
       path: "/api/v1/movement/user-boxes/:id",
-      purpose: "health"
+      purpose: "movement"
     },
     {
       method: "POST",
       path: "/api/v1/movement/automatic-boxes/:id/invalidate",
-      purpose: "health"
+      purpose: "movement"
     },
-    { method: "PATCH", path: "/api/v1/movement/stays/:id", purpose: "health" },
-    { method: "DELETE", path: "/api/v1/movement/stays/:id", purpose: "health" },
-    { method: "PATCH", path: "/api/v1/movement/trips/:id", purpose: "health" },
-    { method: "DELETE", path: "/api/v1/movement/trips/:id", purpose: "health" },
+    { method: "PATCH", path: "/api/v1/movement/stays/:id", purpose: "movement" },
+    { method: "DELETE", path: "/api/v1/movement/stays/:id", purpose: "movement" },
+    { method: "PATCH", path: "/api/v1/movement/trips/:id", purpose: "movement" },
+    { method: "DELETE", path: "/api/v1/movement/trips/:id", purpose: "movement" },
     {
       method: "PATCH",
       path: "/api/v1/movement/trips/:id/points/:pointId",
-      purpose: "health"
+      purpose: "movement"
     },
     {
       method: "DELETE",
       path: "/api/v1/movement/trips/:id/points/:pointId",
-      purpose: "health"
+      purpose: "movement"
     },
-    { method: "GET", path: "/api/v1/life-force", purpose: "health" },
-    { method: "PATCH", path: "/api/v1/life-force/profile", purpose: "health" },
+    { method: "GET", path: "/api/v1/life-force", purpose: "life_force" },
+    { method: "PATCH", path: "/api/v1/life-force/profile", purpose: "life_force" },
     {
       method: "PUT",
       path: "/api/v1/life-force/templates/:weekday",
-      purpose: "health"
+      purpose: "life_force"
     },
     {
       method: "POST",
       path: "/api/v1/life-force/fatigue-signals",
-      purpose: "health"
+      purpose: "life_force"
     },
-    { method: "GET", path: "/api/v1/workbench/catalog/boxes", purpose: "work" },
-    { method: "GET", path: "/api/v1/workbench/flows", purpose: "work" },
-    { method: "POST", path: "/api/v1/workbench/flows", purpose: "work" },
-    { method: "GET", path: "/api/v1/workbench/flows/:id", purpose: "work" },
-    { method: "PATCH", path: "/api/v1/workbench/flows/:id", purpose: "work" },
-    { method: "DELETE", path: "/api/v1/workbench/flows/:id", purpose: "work" },
+    { method: "GET", path: "/api/v1/workbench/catalog/boxes", purpose: "workbench" },
+    { method: "GET", path: "/api/v1/workbench/flows", purpose: "workbench" },
+    { method: "POST", path: "/api/v1/workbench/flows", purpose: "workbench" },
+    { method: "GET", path: "/api/v1/workbench/flows/:id", purpose: "workbench" },
+    { method: "PATCH", path: "/api/v1/workbench/flows/:id", purpose: "workbench" },
+    { method: "DELETE", path: "/api/v1/workbench/flows/:id", purpose: "workbench" },
     {
       method: "GET",
       path: "/api/v1/workbench/flows/by-slug/:slug",
-      purpose: "work"
+      purpose: "workbench"
     },
     {
       method: "POST",
       path: "/api/v1/workbench/flows/:id/run",
-      purpose: "work"
+      purpose: "workbench"
     },
-    { method: "POST", path: "/api/v1/workbench/run", purpose: "work" },
+    { method: "POST", path: "/api/v1/workbench/run", purpose: "workbench" },
     {
       method: "POST",
       path: "/api/v1/workbench/flows/:id/chat",
-      purpose: "work"
+      purpose: "workbench"
     },
     {
       method: "GET",
       path: "/api/v1/workbench/flows/:id/output",
-      purpose: "work"
+      purpose: "workbench"
     },
     {
       method: "GET",
       path: "/api/v1/workbench/flows/:id/runs",
-      purpose: "work"
+      purpose: "workbench"
     },
     {
       method: "GET",
       path: "/api/v1/workbench/flows/:id/runs/:runId",
-      purpose: "work"
+      purpose: "workbench"
     },
     {
       method: "GET",
       path: "/api/v1/workbench/flows/:id/runs/:runId/nodes",
-      purpose: "work"
+      purpose: "workbench"
     },
     {
       method: "GET",
       path: "/api/v1/workbench/flows/:id/runs/:runId/nodes/:nodeId",
-      purpose: "work"
+      purpose: "workbench"
     },
     {
       method: "GET",
       path: "/api/v1/workbench/flows/:id/nodes/:nodeId/output",
-      purpose: "work"
+      purpose: "workbench"
     },
     { method: "GET", path: "/api/v1/calendar/overview", purpose: "calendar" },
     {

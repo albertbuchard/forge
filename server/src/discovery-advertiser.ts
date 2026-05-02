@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import os from "node:os";
 import { promisify } from "node:util";
 import { Bonjour } from "bonjour-service";
+import { logForgeDebug } from "./debug.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -26,7 +27,10 @@ type TailscaleStatus = {
 export async function startForgeDiscoveryAdvertiser(
   options: ForgeDiscoveryAdvertiserOptions
 ): Promise<ForgeDiscoveryAdvertiserHandle | null> {
-  if (options.enabled === false || process.env.FORGE_DISABLE_DISCOVERY_ADVERTISEMENT === "1") {
+  if (
+    options.enabled === false ||
+    process.env.FORGE_DISABLE_DISCOVERY_ADVERTISEMENT === "1"
+  ) {
     return null;
   }
 
@@ -37,24 +41,38 @@ export async function startForgeDiscoveryAdvertiser(
     basePath
   });
 
-  const bonjour = new Bonjour();
-  const service = bonjour.publish({
-    name: buildServiceName(),
-    type: "forge",
-    protocol: "tcp",
-    port: options.port,
-    txt: {
-      apiPath: "/api/v1",
-      uiPath: basePath,
-      tsApiBaseUrl: tailscaleTargets.apiBaseUrl ?? "",
-      tsUiBaseUrl: tailscaleTargets.uiBaseUrl ?? "",
-      tsDnsName: tailscaleTargets.dnsName ?? "",
-      watchReady: "1"
-    }
+  const bonjour = new Bonjour({}, (error: unknown) => {
+    logForgeDebug(
+      `[forge-discovery] ignored mDNS advertisement error: ${formatDiscoveryError(error)}`
+    );
   });
 
-  if (typeof service.start === "function") {
-    service.start();
+  let service: ReturnType<Bonjour["publish"]>;
+  try {
+    service = bonjour.publish({
+      name: buildServiceName(),
+      type: "forge",
+      protocol: "tcp",
+      port: options.port,
+      txt: {
+        apiPath: "/api/v1",
+        uiPath: basePath,
+        tsApiBaseUrl: tailscaleTargets.apiBaseUrl ?? "",
+        tsUiBaseUrl: tailscaleTargets.uiBaseUrl ?? "",
+        tsDnsName: tailscaleTargets.dnsName ?? "",
+        watchReady: "1"
+      }
+    });
+
+    if (typeof service.start === "function") {
+      service.start();
+    }
+  } catch (error) {
+    bonjour.destroy();
+    logForgeDebug(
+      `[forge-discovery] disabled mDNS advertisement after startup error: ${formatDiscoveryError(error)}`
+    );
+    return null;
   }
 
   return {
@@ -70,6 +88,15 @@ export async function startForgeDiscoveryAdvertiser(
   };
 }
 
+function formatDiscoveryError(error: unknown) {
+  if (error instanceof Error) {
+    const code =
+      "code" in error && typeof error.code === "string" ? ` ${error.code}` : "";
+    return `${error.name}${code}: ${error.message}`;
+  }
+  return String(error);
+}
+
 function buildServiceName() {
   const hostname = os.hostname().trim();
   return hostname ? `Forge on ${hostname}` : "Forge";
@@ -80,7 +107,9 @@ function normalizeBasePath(value: string) {
     return "/";
   }
   const withLeadingSlash = value.startsWith("/") ? value : `/${value}`;
-  return withLeadingSlash.endsWith("/") ? withLeadingSlash : `${withLeadingSlash}/`;
+  return withLeadingSlash.endsWith("/")
+    ? withLeadingSlash
+    : `${withLeadingSlash}/`;
 }
 
 async function resolveTailscaleTargets(input: {

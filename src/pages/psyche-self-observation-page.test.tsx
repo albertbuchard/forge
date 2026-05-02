@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { PsycheSelfObservationPage } from "@/pages/psyche-self-observation-page";
+import { installMockDate } from "@/test/mock-date";
 
 const {
   useForgeShellMock,
@@ -34,6 +35,8 @@ const {
   listModesMock: vi.fn(),
   listTriggerReportsMock: vi.fn()
 }));
+
+let restoreDate: (() => void) | null = null;
 
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual<typeof import("react-router-dom")>(
@@ -282,9 +285,7 @@ describe("PsycheSelfObservationPage", () => {
   let activity: ReturnType<typeof createActivity>[];
 
   beforeEach(() => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-04-06T12:00:00.000Z"));
-
+    restoreDate = installMockDate("2026-04-08T09:00:00.000Z");
     observations = [
       createObservation({
         id: "note_human",
@@ -561,6 +562,8 @@ describe("PsycheSelfObservationPage", () => {
   });
 
   afterEach(() => {
+    restoreDate?.();
+    restoreDate = null;
     cleanup();
     vi.useRealTimers();
     vi.restoreAllMocks();

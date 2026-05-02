@@ -35,6 +35,20 @@
                ReferencedContainer = "container:ForgeCompanion.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "DFF8B6BF1F6FACFC3EDFB8B2"
+               BuildableName = "ForgeCompanionUITests.xctest"
+               BlueprintName = "ForgeCompanionUITests"
+               ReferencedContainer = "container:ForgeCompanion.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -61,6 +75,17 @@
                BlueprintIdentifier = "8FD7D58A7178F1BDF93DBE66"
                BuildableName = "ForgeCompanionTests.xctest"
                BlueprintName = "ForgeCompanionTests"
+               ReferencedContainer = "container:ForgeCompanion.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "DFF8B6BF1F6FACFC3EDFB8B2"
+               BuildableName = "ForgeCompanionUITests.xctest"
+               BlueprintName = "ForgeCompanionUITests"
                ReferencedContainer = "container:ForgeCompanion.xcodeproj">
             </BuildableReference>
          </TestableReference>

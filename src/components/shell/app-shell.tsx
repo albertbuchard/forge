@@ -28,6 +28,7 @@ import {
   useIsFetching,
   useIsMutating,
   useMutation,
+  useQuery,
   useQueryClient
 } from "@tanstack/react-query";
 import {
@@ -63,6 +64,7 @@ import {
   Settings,
   SlidersHorizontal,
   Target,
+  Trophy,
   UserRound,
   Users,
   Zap
@@ -78,6 +80,10 @@ import {
 } from "react-router-dom";
 import type { Location as RouterLocation } from "react-router-dom";
 import { AmbientActivityPill } from "@/components/experience/ambient-activity-pill";
+import {
+  GamificationCelebrationLayer,
+  GamificationMiniHud
+} from "@/components/gamification/gamification-widgets";
 import { ActionBar } from "@/components/experience/action-bar";
 import { RouteTransitionFrame } from "@/components/experience/route-transition-frame";
 import { SheetScaffold } from "@/components/experience/sheet-scaffold";
@@ -101,6 +107,8 @@ import {
   createGoal,
   createProject,
   createTask,
+  getXpMetrics,
+  markGamificationCelebrationSeen,
   patchGoal,
   patchProject,
   patchTask,
@@ -118,7 +126,10 @@ import { formatLifeForceRate } from "@/lib/life-force-display";
 import { getEntityNotesHref } from "@/lib/note-helpers";
 import { cn } from "@/lib/utils";
 import { isShellRouteReady } from "@/features/shell/route-readiness";
-import { selectPendingRtkRequestCount, selectSelectedUserIds } from "@/features/shell/selectors";
+import {
+  selectPendingRtkRequestCount,
+  selectSelectedUserIds
+} from "@/features/shell/selectors";
 import { useShellBackgroundActivity } from "@/features/shell/use-shell-background-activity";
 import { useShellCollapseController } from "@/features/shell/use-shell-collapse-controller";
 import { useShellRouteHandoff } from "@/features/shell/use-shell-route-handoff";
@@ -203,7 +214,8 @@ type ShellContextValue = {
 
 function sameSelectedUserIds(left: string[], right: string[]) {
   return (
-    left.length === right.length && left.every((entry, index) => entry === right[index])
+    left.length === right.length &&
+    left.every((entry, index) => entry === right[index])
   );
 }
 
@@ -389,7 +401,8 @@ const PRIMARY_ROUTES: ShellRouteDefinition[] = [
     id: "vitals",
     to: "/vitals",
     label: "Vitals",
-    detail: "Recovery, cardio fitness, breathing, composition, and body signals",
+    detail:
+      "Recovery, cardio fitness, breathing, composition, and body signals",
     icon: HeartPulse
   },
   {
@@ -405,6 +418,13 @@ const PRIMARY_ROUTES: ShellRouteDefinition[] = [
     labelKey: "common.routeLabels.today",
     detailKey: "common.routeDetails.today",
     icon: Clock3
+  },
+  {
+    id: "rewards",
+    to: "/rewards",
+    label: "Trophy Hall",
+    detail: "Forge Smith levels, streaks, trophies, and cosmetic unlocks",
+    icon: Trophy
   },
   {
     id: "notes",
@@ -495,6 +515,7 @@ const MOBILE_MORE_ROUTES = [
   requirePrimaryRoute("habits"),
   requirePrimaryRoute("projects"),
   requirePrimaryRoute("strategies"),
+  requirePrimaryRoute("rewards"),
   requirePrimaryRoute("calendar"),
   requirePrimaryRoute("knowledge-graph"),
   requirePrimaryRoute("workbench"),
@@ -973,6 +994,7 @@ export function UserScopeSelector({
     () => resolveUserScopeOption(users, selectedUserIds),
     [selectedUserIds, users]
   );
+  const ActiveScopeIcon = activeOption.icon;
 
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
@@ -984,7 +1006,13 @@ export function UserScopeSelector({
             compact ? "px-2.5 text-[12px]" : "px-3.5 text-[13px]"
           )}
         >
-          <span className="shell-scope-avatar">{activeOption.token}</span>
+          <span className="shell-scope-avatar">
+            {activeOption.id === "all" ? (
+              <ActiveScopeIcon className="size-3.5" />
+            ) : (
+              activeOption.token
+            )}
+          </span>
           <span
             className={cn(
               "truncate text-left",
@@ -1369,7 +1397,9 @@ function ShellNavEditor({
                 route={route}
                 prefix={prefix}
                 label={getRouteLabel(route, t)}
-                onRemove={() => removeFromList(ids, route.id, onChange, minimum)}
+                onRemove={() =>
+                  removeFromList(ids, route.id, onChange, minimum)
+                }
               />
             ))}
           </SortableContext>
@@ -1438,10 +1468,12 @@ function ShellNavEditor({
               Metric strip position
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
-              {([
-                ["above", "Above navigation"],
-                ["below", "Below navigation"]
-              ] as const).map(([value, label]) => (
+              {(
+                [
+                  ["above", "Above navigation"],
+                  ["below", "Below navigation"]
+                ] as const
+              ).map(([value, label]) => (
                 <button
                   key={value}
                   type="button"
@@ -1672,7 +1704,8 @@ function ShellFrame({
   const wikiSurface = isWikiRoute(routeLocation.pathname);
   const psycheSurface = isPsycheRoute(routeLocation.pathname);
   const workbenchSurface = routeLocation.pathname.startsWith("/workbench");
-  const knowledgeGraphSurface = routeLocation.pathname.startsWith("/knowledge-graph");
+  const knowledgeGraphSurface =
+    routeLocation.pathname.startsWith("/knowledge-graph");
   const autoCollapseSurface =
     wikiSurface || psycheSurface || workbenchSurface || knowledgeGraphSurface;
   const immersiveMobileSurface = false;
@@ -1928,11 +1961,7 @@ function ShellFrame({
   );
 
   return (
-    <div
-      ref={shellRootRef}
-      className="min-h-screen"
-      style={shellRootStyle}
-    >
+    <div ref={shellRootRef} className="min-h-screen" style={shellRootStyle}>
       <ActionBar
         open={actionBarOpen}
         onOpenChange={setActionBarOpen}
@@ -2025,7 +2054,9 @@ function ShellFrame({
             {!navCollapsed ? "Customize nav" : null}
           </Button>
 
-          {desktopSidebarMetricsPosition === "above" ? sidebarMetricsPanel : null}
+          {desktopSidebarMetricsPosition === "above"
+            ? sidebarMetricsPanel
+            : null}
 
           <div className={cn("grid gap-2", navCollapsed ? "mt-6" : "mt-8")}>
             {desktopRoutes.map((route) => (
@@ -2033,7 +2064,9 @@ function ShellFrame({
             ))}
           </div>
 
-          {desktopSidebarMetricsPosition === "below" ? sidebarMetricsPanel : null}
+          {desktopSidebarMetricsPosition === "below"
+            ? sidebarMetricsPanel
+            : null}
         </aside>
 
         <div className="min-h-screen">
@@ -2084,6 +2117,10 @@ function ShellFrame({
                   </div>
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                  <GamificationMiniHud
+                    metrics={shell.snapshot.metrics}
+                    className="hidden xl:inline-flex"
+                  />
                   <AmbientActivityPill
                     active={activityCount > 0 || hasActiveIngestJobs}
                     label={activityLabel}
@@ -2217,102 +2254,105 @@ function ShellFrame({
                 background:
                   "color-mix(in srgb, var(--surface-glass) 96%, transparent)",
                 paddingTop: "var(--forge-shell-mobile-header-padding-top)",
-                paddingBottom: "var(--forge-shell-mobile-header-padding-bottom)",
+                paddingBottom:
+                  "var(--forge-shell-mobile-header-padding-bottom)",
                 willChange: "padding, background-color"
               }}
             >
-            <div
-              className="flex items-center justify-between gap-2"
-              style={{
-                transform:
-                  "translateY(var(--forge-shell-mobile-primary-translate-y)) scale(var(--forge-shell-mobile-primary-scale))",
-                transformOrigin: "top center",
-                willChange: "transform"
-              }}
-            >
-              <div className="flex min-w-0 flex-1 items-center gap-3">
-                <div
-                  className="min-w-0 truncate font-display text-white"
-                  style={{
-                    fontSize: "var(--forge-shell-mobile-title-size)",
-                    willChange: "font-size"
-                  }}
-                >
-                  {getRouteLabel(active, t)}
+              <div
+                className="flex items-center justify-between gap-2"
+                style={{
+                  transform:
+                    "translateY(var(--forge-shell-mobile-primary-translate-y)) scale(var(--forge-shell-mobile-primary-scale))",
+                  transformOrigin: "top center",
+                  willChange: "transform"
+                }}
+              >
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <div
+                    className="min-w-0 truncate font-display text-white"
+                    style={{
+                      fontSize: "var(--forge-shell-mobile-title-size)",
+                      willChange: "font-size"
+                    }}
+                  >
+                    {getRouteLabel(active, t)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <TaskTimerRailBar
+                      runs={shell.snapshot.activeTaskRuns}
+                      tasks={shell.snapshot.tasks}
+                      generatedAt={shell.snapshot.meta.generatedAt}
+                      timeAccountingMode={settings.execution.timeAccountingMode}
+                      pending={timerPending}
+                      onOpenStartWork={() => onOpenStartWork()}
+                      onPause={onPauseRun}
+                      onFocus={onFocusRun}
+                    />
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <TaskTimerRailBar
-                    runs={shell.snapshot.activeTaskRuns}
-                    tasks={shell.snapshot.tasks}
-                    generatedAt={shell.snapshot.meta.generatedAt}
-                    timeAccountingMode={settings.execution.timeAccountingMode}
-                    pending={timerPending}
-                    onOpenStartWork={() => onOpenStartWork()}
-                    onPause={onPauseRun}
-                    onFocus={onFocusRun}
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="min-h-[2.125rem] px-2.5"
+                    onClick={() => setActionBarOpen(true)}
+                  >
+                    <Search className="size-4" />
+                  </Button>
+                  <div className="inline-flex min-h-[2.125rem] items-center gap-1.5 rounded-full border border-white/8 bg-white/[0.05] px-2.5 text-[12px] font-medium text-[var(--primary)]">
+                    <Zap className="size-3.5 shrink-0" />
+                    <span className="max-w-[9rem] truncate">
+                      L{shell.snapshot.metrics.level} ·{" "}
+                      {formatCompactNumber(shell.snapshot.metrics.totalXp)} XP ·{" "}
+                      {shell.snapshot.metrics.streakDays}d
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Expanded work detail — full width below the title row ── */}
+              <TaskTimerRailPanel
+                runs={shell.snapshot.activeTaskRuns}
+                tasks={shell.snapshot.tasks}
+                generatedAt={shell.snapshot.meta.generatedAt}
+                timeAccountingMode={settings.execution.timeAccountingMode}
+                pending={timerPending}
+                onOpenStartWork={() => onOpenStartWork()}
+                onFocus={onFocusRun}
+                onPause={onPauseRun}
+                onComplete={onCompleteRun}
+              />
+
+              <div
+                className="overflow-hidden"
+                style={{
+                  opacity: "var(--forge-shell-mobile-copy-opacity)",
+                  maxHeight: "var(--forge-shell-mobile-copy-max-height)",
+                  transform:
+                    "translateY(var(--forge-shell-mobile-copy-translate-y))",
+                  willChange: "opacity, max-height, transform"
+                }}
+              >
+                <div className="mt-2 text-[13px] leading-5 text-white/52">
+                  {getRouteDetail(active, t)}
+                </div>
+                <div className="mt-2">
+                  <AmbientActivityPill
+                    active={activityCount > 0 || hasActiveIngestJobs}
+                    label={activityLabel}
+                    onClick={() => setBackgroundActivityOpen(true)}
+                  />
+                </div>
+                <div className="mt-3 overflow-x-auto pb-1">
+                  <UserScopeSelector
+                    users={shell.snapshot.users}
+                    selectedUserIds={shell.selectedUserIds}
+                    onChange={shell.setSelectedUserIds}
+                    compact
                   />
                 </div>
               </div>
-              <div className="flex shrink-0 items-center gap-1.5">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="min-h-[2.125rem] px-2.5"
-                  onClick={() => setActionBarOpen(true)}
-                >
-                  <Search className="size-4" />
-                </Button>
-                <div className="inline-flex min-h-[2.125rem] items-center gap-1.5 rounded-full border border-white/8 bg-white/[0.05] px-2.5 text-[12px] font-medium text-[var(--primary)]">
-                  <Zap className="size-3.5 shrink-0" />
-                  <span className="max-w-[5.5rem] truncate">
-                    {formatCompactNumber(shell.snapshot.metrics.totalXp)} XP
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* ── Expanded work detail — full width below the title row ── */}
-            <TaskTimerRailPanel
-              runs={shell.snapshot.activeTaskRuns}
-              tasks={shell.snapshot.tasks}
-              generatedAt={shell.snapshot.meta.generatedAt}
-              timeAccountingMode={settings.execution.timeAccountingMode}
-              pending={timerPending}
-              onOpenStartWork={() => onOpenStartWork()}
-              onFocus={onFocusRun}
-              onPause={onPauseRun}
-              onComplete={onCompleteRun}
-            />
-
-            <div
-              className="overflow-hidden"
-              style={{
-                opacity: "var(--forge-shell-mobile-copy-opacity)",
-                maxHeight: "var(--forge-shell-mobile-copy-max-height)",
-                transform:
-                  "translateY(var(--forge-shell-mobile-copy-translate-y))",
-                willChange: "opacity, max-height, transform"
-              }}
-            >
-              <div className="mt-2 text-[13px] leading-5 text-white/52">
-                {getRouteDetail(active, t)}
-              </div>
-              <div className="mt-2">
-                <AmbientActivityPill
-                  active={activityCount > 0 || hasActiveIngestJobs}
-                  label={activityLabel}
-                  onClick={() => setBackgroundActivityOpen(true)}
-                />
-              </div>
-              <div className="mt-3 overflow-x-auto pb-1">
-                <UserScopeSelector
-                  users={shell.snapshot.users}
-                  selectedUserIds={shell.selectedUserIds}
-                  onChange={shell.setSelectedUserIds}
-                  compact
-                />
-              </div>
-            </div>
             </header>
           ) : null}
         </TaskTimerRailProvider>
@@ -2341,20 +2381,24 @@ function ShellFrame({
         <main
           className={cn(
             "overflow-x-clip pb-2.5 lg:pb-24",
-            knowledgeGraphSurface ? "px-0" : immersiveMobileSurface ? "px-0" : "px-4"
+            knowledgeGraphSurface
+              ? "px-0"
+              : immersiveMobileSurface
+                ? "px-0"
+                : "px-4"
           )}
           style={{
             paddingBottom: "calc(var(--forge-mobile-nav-clearance) + 2.5rem)",
             paddingLeft: knowledgeGraphSurface
               ? "var(--forge-safe-area-left)"
               : immersiveMobileSurface
-              ? "var(--forge-safe-area-left)"
-              : "max(1rem, calc(var(--forge-safe-area-left) + 1rem))",
+                ? "var(--forge-safe-area-left)"
+                : "max(1rem, calc(var(--forge-safe-area-left) + 1rem))",
             paddingRight: knowledgeGraphSurface
               ? "var(--forge-safe-area-right)"
               : immersiveMobileSurface
-              ? "var(--forge-safe-area-right)"
-              : "max(1rem, calc(var(--forge-safe-area-right) + 1rem))"
+                ? "var(--forge-safe-area-right)"
+                : "max(1rem, calc(var(--forge-safe-area-right) + 1rem))"
           }}
         >
           <RouteTransitionFrame
@@ -2375,7 +2419,9 @@ function ShellFrame({
           desktopNavIds={desktopNavIds}
           onDesktopNavIdsChange={setDesktopNavIds}
           desktopSidebarMetricsPosition={desktopSidebarMetricsPosition}
-          onDesktopSidebarMetricsPositionChange={setDesktopSidebarMetricsPosition}
+          onDesktopSidebarMetricsPositionChange={
+            setDesktopSidebarMetricsPosition
+          }
           mobileNavIds={mobileNavIds}
           onMobileNavIdsChange={setMobileNavIds}
         />
@@ -2394,8 +2440,8 @@ function ShellFrame({
                   Background activity
                 </Dialog.Title>
                 <Dialog.Description className="mt-1 text-[13px] leading-6 text-white/56">
-                  Follow active KarpaWiki ingest jobs and reopen completed reviews
-                  without leaving your current context.
+                  Follow active KarpaWiki ingest jobs and reopen completed
+                  reviews without leaving your current context.
                 </Dialog.Description>
               </div>
               <Dialog.Close asChild>
@@ -2522,8 +2568,19 @@ export function AppShell() {
   const snapshotQuery = useGetSnapshotQuery(selectedUserIds, {
     skip: !operatorSessionQuery.isSuccess
   });
+  const xpMetricsQuery = useQuery({
+    queryKey: ["forge-xp-metrics", ...selectedUserIds],
+    queryFn: () => getXpMetrics(selectedUserIds),
+    enabled: operatorSessionQuery.isSuccess
+  });
   const settingsQuery = useGetSettingsQuery(undefined, {
     skip: !operatorSessionQuery.isSuccess
+  });
+  const celebrationSeenMutation = useMutation({
+    mutationFn: markGamificationCelebrationSeen,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["forge-xp-metrics"] });
+    }
   });
   const routeReady = isShellRouteReady(routerLocation.pathname, {
     bootstrapReady:
@@ -2631,6 +2688,7 @@ export function AppShell() {
     }
 
     setXpNotice({ deltaXp, totalXp });
+    void queryClient.invalidateQueries({ queryKey: ["forge-xp-metrics"] });
     if (xpTimerRef.current !== null) {
       window.clearTimeout(xpTimerRef.current);
     }
@@ -2638,7 +2696,7 @@ export function AppShell() {
       setXpNotice(null);
       xpTimerRef.current = null;
     }, 2600);
-  }, [snapshotQuery.data?.metrics.totalXp]);
+  }, [queryClient, snapshotQuery.data?.metrics.totalXp]);
 
   useEffect(() => {
     return () => {
@@ -2693,8 +2751,8 @@ export function AppShell() {
         options?.completedTodayWorkSeconds === undefined
       ) {
         const taskTitle =
-          snapshotQuery.data?.tasks.find((entry) => entry.id === taskId)?.title ??
-          "this task";
+          snapshotQuery.data?.tasks.find((entry) => entry.id === taskId)
+            ?.title ?? "this task";
         setTaskCompletionPrompt({
           taskId,
           title: taskTitle,
@@ -2712,9 +2770,13 @@ export function AppShell() {
       return;
     }
     try {
-      await submitTaskStatusPatch(taskCompletionPrompt.taskId, taskCompletionPrompt.status, {
-        completedTodayWorkSeconds
-      });
+      await submitTaskStatusPatch(
+        taskCompletionPrompt.taskId,
+        taskCompletionPrompt.status,
+        {
+          completedTodayWorkSeconds
+        }
+      );
       setTaskCompletionPrompt(null);
     } catch (error) {
       setTaskCompletionPrompt((current) =>
@@ -2888,7 +2950,10 @@ export function AppShell() {
     selectedUserIds,
     setSelectedUserIds,
     refresh: async () => {
-      await Promise.all([snapshotQuery.refetch(), refreshLegacySnapshotQueries()]);
+      await Promise.all([
+        snapshotQuery.refetch(),
+        refreshLegacySnapshotQueries()
+      ]);
     },
     createTask: async (input) => {
       await createTaskMutation(input).unwrap();
@@ -3076,15 +3141,17 @@ export function AppShell() {
                       Log today&apos;s work before closing
                     </Dialog.Title>
                     <Dialog.Description className="mt-2 text-sm leading-6 text-white/64">
-                      Forge closes tasks from actual time worked today, not from the
-                      checkbox itself. Add the time you spent on{" "}
+                      Forge closes tasks from actual time worked today, not from
+                      the checkbox itself. Add the time you spent on{" "}
                       <span className="font-medium text-white">
                         {taskCompletionPrompt?.title ?? "this task"}
                       </span>{" "}
                       today, or confirm that you did not work on it today.
                     </Dialog.Description>
                   </div>
-                  <ModalCloseButton onClick={() => setTaskCompletionPrompt(null)} />
+                  <ModalCloseButton
+                    onClick={() => setTaskCompletionPrompt(null)}
+                  />
                 </div>
 
                 <div className="mt-5">
@@ -3164,7 +3231,9 @@ export function AppShell() {
                       if (!taskCompletionPrompt) {
                         return;
                       }
-                      const minutes = Number(taskCompletionPrompt.customMinutes);
+                      const minutes = Number(
+                        taskCompletionPrompt.customMinutes
+                      );
                       if (!Number.isFinite(minutes) || minutes < 0) {
                         setTaskCompletionPrompt((current) =>
                           current
@@ -3210,26 +3279,15 @@ export function AppShell() {
               </div>
             </div>
           ) : null}
-          {xpNotice ? (
-            <div className="pointer-events-none fixed inset-x-0 bottom-24 z-50 flex justify-center px-4 lg:bottom-6">
-              <div
-                className={cn(
-                  "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium shadow-[0_18px_48px_rgba(3,8,18,0.38)] backdrop-blur-xl",
-                  xpNotice.deltaXp > 0
-                    ? "border-emerald-400/30 bg-emerald-500/14 text-emerald-100"
-                    : "border-rose-400/30 bg-rose-500/14 text-rose-100"
-                )}
-              >
-                <Zap className="size-4 shrink-0" />
-                <span>
-                  {xpNotice.deltaXp > 0
-                    ? `XP +${xpNotice.deltaXp}`
-                    : `XP ${xpNotice.deltaXp}`}{" "}
-                  · {formatCompactNumber(xpNotice.totalXp)} total
-                </span>
-              </div>
-            </div>
-          ) : null}
+          <GamificationCelebrationLayer
+            xpNotice={xpNotice}
+            celebrations={xpMetricsQuery.data?.metrics.celebrations ?? []}
+            onSeen={(celebrationId) => {
+              if (!celebrationSeenMutation.isPending) {
+                celebrationSeenMutation.mutate(celebrationId);
+              }
+            }}
+          />
         </>
       </ShellContext.Provider>
     </I18nProvider>

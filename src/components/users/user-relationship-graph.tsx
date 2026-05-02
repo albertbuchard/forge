@@ -315,10 +315,41 @@ function buildNodes(
 ): Node[] {
   const humans = users.filter((user) => user.kind === "human");
   const bots = users.filter((user) => user.kind === "bot");
-  const groups = [
-    { entries: humans, x: 120 },
-    { entries: bots, x: 1040 }
-  ] as const;
+  const center = { x: 560, y: 360 };
+  const nodeSize = { width: 226, height: 132 };
+  const primaryHuman = humans[0] ?? null;
+  const orbitingHumans = humans.slice(primaryHuman ? 1 : 0);
+  const orbitingUsers = [
+    ...orbitingHumans.map((user) => ({ user, radius: 245, offset: -90 })),
+    ...bots.map((user) => ({ user, radius: 390, offset: -90 }))
+  ];
+  const totalOrbitingUsers = orbitingUsers.length;
+  const positionedUsers = [
+    ...(primaryHuman
+      ? [
+          {
+            user: primaryHuman,
+            position: {
+              x: center.x - nodeSize.width / 2,
+              y: center.y - nodeSize.height / 2
+            }
+          }
+        ]
+      : []),
+    ...orbitingUsers.map((entry, index) => {
+      const angle =
+        ((entry.offset + (360 / Math.max(totalOrbitingUsers, 1)) * index) *
+          Math.PI) /
+        180;
+      return {
+        user: entry.user,
+        position: {
+          x: center.x + Math.cos(angle) * entry.radius - nodeSize.width / 2,
+          y: center.y + Math.sin(angle) * entry.radius - nodeSize.height / 2
+        }
+      };
+    })
+  ];
   const highlightedUserIds = new Set(
     options.selectedGrant
       ? [
@@ -330,47 +361,45 @@ function buildNodes(
         : []
   );
 
-  return groups.flatMap((group) =>
-    group.entries.map((user, index) => {
-      const isHighlighted = highlightedUserIds.has(user.id);
-      const isSelected = user.id === options.selectedUserId;
-      return {
-        id: user.id,
-        position: { x: group.x, y: 64 + index * 168 },
-        draggable: false,
-        selectable: false,
-        data: {
-          label: (
-            <div
-              className={`min-w-[206px] rounded-[22px] border px-4 py-4 shadow-[0_24px_60px_rgba(0,0,0,0.28)] transition ${
-                isSelected
-                  ? "border-[rgba(244,185,122,0.45)] bg-[rgba(27,16,10,0.92)]"
-                  : isHighlighted
-                    ? "border-white/18 bg-[rgba(14,20,34,0.94)]"
-                    : "border-white/10 bg-[rgba(9,15,28,0.92)]"
-              }`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <UserBadge user={user} />
-                <Badge className="bg-white/[0.08] text-white/65">
-                  {user.kind}
-                </Badge>
-              </div>
-              <div className="mt-3 text-xs text-white/52">@{user.handle}</div>
-              <div className="mt-2 line-clamp-2 text-xs leading-5 text-white/46">
-                {user.description || "No user description yet."}
-              </div>
+  return positionedUsers.map(({ user, position }) => {
+    const isHighlighted = highlightedUserIds.has(user.id);
+    const isSelected = user.id === options.selectedUserId;
+    return {
+      id: user.id,
+      position,
+      draggable: false,
+      selectable: false,
+      data: {
+        label: (
+          <div
+            className={`min-w-[206px] rounded-[22px] border px-4 py-4 shadow-[0_24px_60px_rgba(0,0,0,0.28)] transition ${
+              isSelected
+                ? "border-[rgba(244,185,122,0.45)] bg-[rgba(27,16,10,0.92)]"
+                : isHighlighted
+                  ? "border-white/18 bg-[rgba(14,20,34,0.94)]"
+                  : "border-white/10 bg-[rgba(9,15,28,0.92)]"
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <UserBadge user={user} />
+              <Badge className="bg-white/[0.08] text-white/65">
+                {user.kind}
+              </Badge>
             </div>
-          )
-        },
-        style: {
-          background: "transparent",
-          border: "none",
-          padding: 0
-        }
-      };
-    })
-  );
+            <div className="mt-3 text-xs text-white/52">@{user.handle}</div>
+            <div className="mt-2 line-clamp-2 text-xs leading-5 text-white/46">
+              {user.description || "No user description yet."}
+            </div>
+          </div>
+        )
+      },
+      style: {
+        background: "transparent",
+        border: "none",
+        padding: 0
+      }
+    };
+  });
 }
 
 function buildEdges(
@@ -409,6 +438,15 @@ function buildEdges(
           fontSize: 11,
           fontWeight: 600
         },
+        labelBgStyle: {
+          fill: isSelected ? "rgba(34,23,16,0.96)" : "rgba(8,13,24,0.94)",
+          stroke: isSelected
+            ? "rgba(244,185,122,0.36)"
+            : "rgba(255,255,255,0.14)",
+          strokeWidth: 1
+        },
+        labelBgPadding: [7, 5] as [number, number],
+        labelBgBorderRadius: 8,
         style: {
           stroke,
           strokeWidth: isSelected ? 2.5 : touchesSelectedUser ? 1.8 : 1.25
@@ -523,10 +561,11 @@ export function UserRelationshipGraph({
 
       <div className="h-[min(72vh,54rem)] min-h-[34rem] bg-[radial-gradient(circle_at_top,rgba(244,185,122,0.08),transparent_34%),linear-gradient(180deg,rgba(6,10,20,0.97),rgba(8,14,26,0.94))]">
         <ReactFlow
+          className="user-relationship-flow"
           nodes={nodes}
           edges={edges}
           fitView
-          fitViewOptions={{ padding: 0.12, maxZoom: 1 }}
+          fitViewOptions={{ padding: 0.18, maxZoom: 0.95 }}
           nodesDraggable={false}
           nodesConnectable={false}
           elementsSelectable

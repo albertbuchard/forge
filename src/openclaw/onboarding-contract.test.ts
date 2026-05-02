@@ -59,12 +59,16 @@ async function loadOnboardingPayload() {
       focus: string;
       openingQuestion: string;
       askSequence: string[];
+      routePosture: string;
+      apiAccessHint: string;
     }>;
     conversationRules: string[];
     psycheCoachingPlaybooks: Array<{
       focus: string;
       askSequence: string[];
       notes: string[];
+      routePosture: string;
+      apiAccessHint: string;
     }>;
     entityRouteModel: {
       batchCrudEntities: string[];
@@ -603,6 +607,69 @@ describe("forge onboarding contract", () => {
       onboarding.psycheCoachingPlaybooks.map((entry) => [entry.focus, entry])
     );
 
+    for (const entry of [
+      ...onboarding.entityConversationPlaybooks,
+      ...onboarding.psycheCoachingPlaybooks
+    ]) {
+      expect(entry.routePosture, `${entry.focus} route posture`).toBeTruthy();
+      expect(entry.apiAccessHint, `${entry.focus} API hint`).toMatch(
+        /Route posture:/
+      );
+    }
+
+    expect(playbookByFocus.get("goal")).toEqual(
+      expect.objectContaining({
+        routePosture: "batch_crud_entity",
+        apiAccessHint: expect.stringMatching(
+          /\/api\/v1\/entities\/create[\s\S]*\/api\/v1\/goals/
+        )
+      })
+    );
+    expect(playbookByFocus.get("wiki_page")).toEqual(
+      expect.objectContaining({
+        routePosture: "specialized_crud_entity",
+        apiAccessHint: expect.stringMatching(/\/api\/v1\/wiki\/pages/)
+      })
+    );
+    expect(playbookByFocus.get("task_run")).toEqual(
+      expect.objectContaining({
+        routePosture: "action_workflow_entity",
+        apiAccessHint: expect.stringMatching(/forge_start_task_run/)
+      })
+    );
+    expect(playbookByFocus.get("self_observation")).toEqual(
+      expect.objectContaining({
+        routePosture: "read_model_only_surface",
+        apiAccessHint: expect.stringMatching(
+          /\/api\/v1\/psyche\/self-observation\/calendar/
+        )
+      })
+    );
+    expect(playbookByFocus.get("movement")).toEqual(
+      expect.objectContaining({
+        routePosture: "specialized_domain_surface",
+        apiAccessHint: expect.stringMatching(/\/api\/v1\/movement\/timeline/)
+      })
+    );
+    expect(playbookByFocus.get("life_force")).toEqual(
+      expect.objectContaining({
+        routePosture: "specialized_domain_surface",
+        apiAccessHint: expect.stringMatching(/\/api\/v1\/life-force/)
+      })
+    );
+    expect(playbookByFocus.get("workbench")).toEqual(
+      expect.objectContaining({
+        routePosture: "specialized_domain_surface",
+        apiAccessHint: expect.stringMatching(/\/api\/v1\/workbench\/flows/)
+      })
+    );
+    expect(psycheByFocus.get("behavior_pattern")).toEqual(
+      expect.objectContaining({
+        routePosture: "batch_crud_entity",
+        apiAccessHint: expect.stringMatching(/\/api\/v1\/entities\/create/)
+      })
+    );
+
     expect(playbookByFocus.get("task_run")).toEqual(
       expect.objectContaining({
         openingQuestion: "Which task should I start?"
@@ -622,6 +689,12 @@ describe("forge onboarding contract", () => {
     );
     expect(onboarding.conversationRules.join(" ")).toMatch(
       /Do not bury schema work in self-observation[\s\S]*belief_entry[\s\S]*behavior_pattern[\s\S]*mode_profile/i
+    );
+    expect(onboarding.conversationRules.join(" ")).toMatch(
+      /Do not minimize functional analysis[\s\S]*interpretive hypothesis/i
+    );
+    expect(onboarding.conversationRules.join(" ")).toMatch(
+      /collaborative and testable[\s\S]*not as verdicts/i
     );
     expect(onboarding.conversationRules.join(" ")).toMatch(
       /book, article, paper, source, concept, person, conversation, project reference/i
@@ -700,6 +773,15 @@ describe("forge onboarding contract", () => {
     expect(psycheByFocus.get("behavior_pattern")?.notes.join(" ")).toMatch(
       /Before you ask how to change the loop, ask what it is protecting/i
     );
+    expect(psycheByFocus.get("behavior_pattern")?.notes.join(" ")).toMatch(
+      /tentative functional-analysis hypothesis/i
+    );
+    expect(psycheByFocus.get("belief_entry")?.notes.join(" ")).toMatch(
+      /rule or prediction[\s\S]*invite correction/i
+    );
+    expect(psycheByFocus.get("mode_profile")?.notes.join(" ")).toMatch(
+      /protective job, fear, or burden/i
+    );
     expect(psycheByFocus.get("mode_guide_session")?.notes.join(" ")).toMatch(
       /exploration worksheet|interpretations tentative/i
     );
@@ -722,9 +804,28 @@ describe("forge onboarding contract", () => {
     )?.schemas;
     const routeModelSchema =
       openapiSchemas?.AgentOnboardingPayload?.properties?.entityRouteModel;
+    const psychePlaybookSchema =
+      openapiSchemas?.AgentOnboardingPayload?.properties?.psycheCoachingPlaybooks
+        ?.items;
+    const entityPlaybookSchema =
+      openapiSchemas?.AgentOnboardingPayload?.properties
+        ?.entityConversationPlaybooks?.items;
     const specializedSurfaceSchema =
       routeModelSchema?.properties?.specializedDomainSurfaces
         ?.additionalProperties;
+
+    for (const schema of [psychePlaybookSchema, entityPlaybookSchema]) {
+      expect(schema).toEqual(
+        expect.objectContaining({
+          additionalProperties: false,
+          required: expect.arrayContaining(["routePosture", "apiAccessHint"]),
+          properties: expect.objectContaining({
+            routePosture: { type: "string" },
+            apiAccessHint: { type: "string" }
+          })
+        })
+      );
+    }
 
     expect(specializedSurfaceSchema).toEqual(
       expect.objectContaining({

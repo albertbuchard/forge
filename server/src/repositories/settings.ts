@@ -70,6 +70,7 @@ type SettingsRow = {
     | "atelier"
     | "custom"
     | "system";
+  gamification_theme: "dark-fantasy" | "dramatic-smithie" | "mind-locksmith";
   custom_theme_json: string;
   locale_preference: "en" | "fr";
   goal_drift_alerts: number;
@@ -316,6 +317,9 @@ function toSettingsFileOverrideInput(
 
   if (input.themePreference !== undefined) {
     next.themePreference = input.themePreference;
+  }
+  if (input.gamificationTheme !== undefined) {
+    next.gamificationTheme = input.gamificationTheme;
   }
   if (input.customTheme !== undefined) {
     if (input.customTheme === null) {
@@ -718,15 +722,16 @@ function ensureSettingsRow(now = new Date().toISOString()) {
   getDatabase()
     .prepare(
       `INSERT OR IGNORE INTO app_settings (
-        id, operator_name, operator_email, operator_title, theme_preference, locale_preference, goal_drift_alerts,
+        id, operator_name, operator_email, operator_title, theme_preference, gamification_theme, locale_preference, goal_drift_alerts,
         daily_quest_reminders, achievement_celebrations, max_active_tasks, time_accounting_mode, integrity_score, last_audit_at, created_at, updated_at
-      ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       "Master Architect",
       "architect@kineticforge.ai",
       "Local-first operator",
       "obsidian",
+      "dark-fantasy",
       "en",
       1,
       1,
@@ -745,7 +750,7 @@ function readSettingsRow(): SettingsRow {
   return getDatabase()
     .prepare(
       `SELECT
-        operator_name, operator_email, operator_title, theme_preference, custom_theme_json, locale_preference,
+        operator_name, operator_email, operator_title, theme_preference, gamification_theme, custom_theme_json, locale_preference,
         goal_drift_alerts, daily_quest_reminders, achievement_celebrations, max_active_tasks, time_accounting_mode,
         integrity_score, last_audit_at, psyche_auth_required, google_client_id, google_client_secret, microsoft_client_id, microsoft_tenant_id, microsoft_redirect_uri,
         forge_basic_chat_connection_id, forge_basic_chat_model, forge_wiki_connection_id, forge_wiki_model, created_at, updated_at
@@ -895,6 +900,7 @@ function buildSettingsPayloadFromDatabase(): SettingsPayload {
       timeAccountingMode: row.time_accounting_mode
     },
     themePreference: row.theme_preference,
+    gamificationTheme: row.gamification_theme,
     customTheme,
     localePreference: row.locale_preference,
     security: {
@@ -1124,6 +1130,8 @@ function updateSettingsInternal(
           current.execution.timeAccountingMode
       },
       themePreference: parsed.themePreference ?? current.themePreference,
+      gamificationTheme:
+        parsed.gamificationTheme ?? current.gamificationTheme,
       customTheme:
         parsed.customTheme === undefined
           ? (current.customTheme ?? null)
@@ -1184,7 +1192,7 @@ function updateSettingsInternal(
     getDatabase()
       .prepare(
         `UPDATE app_settings
-         SET operator_name = ?, operator_email = ?, operator_title = ?, theme_preference = ?, custom_theme_json = ?, locale_preference = ?,
+         SET operator_name = ?, operator_email = ?, operator_title = ?, theme_preference = ?, gamification_theme = ?, custom_theme_json = ?, locale_preference = ?,
              goal_drift_alerts = ?, daily_quest_reminders = ?, achievement_celebrations = ?, max_active_tasks = ?, time_accounting_mode = ?,
              psyche_auth_required = ?, google_client_id = ?, google_client_secret = ?, microsoft_client_id = ?, microsoft_tenant_id = ?, microsoft_redirect_uri = ?,
              forge_basic_chat_connection_id = ?, forge_basic_chat_model = ?, forge_wiki_connection_id = ?, forge_wiki_model = ?, updated_at = ?
@@ -1195,6 +1203,7 @@ function updateSettingsInternal(
         next.profile.operatorEmail,
         next.profile.operatorTitle,
         next.themePreference,
+        next.gamificationTheme,
         next.customTheme ? JSON.stringify(next.customTheme) : "",
         next.localePreference,
         toInt(next.notifications.goalDriftAlerts),
@@ -1232,11 +1241,12 @@ function updateSettingsInternal(
         entityId: "app_settings",
         eventType: "settings_updated",
         title: "Forge settings updated",
-        description: `Theme is now ${next.themePreference}. Language is ${next.localePreference}.`,
+        description: `Theme is now ${next.themePreference}. Gamification is ${next.gamificationTheme}. Language is ${next.localePreference}.`,
         actor: options.activity.actor ?? null,
         source: options.activity.source,
         metadata: {
           themePreference: next.themePreference,
+          gamificationTheme: next.gamificationTheme,
           customThemeLabel: next.customTheme?.label ?? null,
           localePreference: next.localePreference,
           goalDriftAlerts: next.notifications.goalDriftAlerts,

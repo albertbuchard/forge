@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { forgeCustomThemeSchema, forgeThemePreferenceSchema } from "./theme-system.js";
 export const appLocaleSchema = z.enum(["en", "fr"]);
+export const gamificationThemeSchema = z.enum([
+    "dark-fantasy",
+    "dramatic-smithie",
+    "mind-locksmith"
+]);
 export const inlineCreateNoteSchema = z.object({
     contentMarkdown: z.string().trim().min(1, "Note content is required"),
     author: z.string().trim()
@@ -51,6 +56,7 @@ export const settingsMutationSchema = z.object({
         timeAccountingMode: z.enum(["split", "parallel", "primary_only"])
     }),
     themePreference: forgeThemePreferenceSchema,
+    gamificationTheme: gamificationThemeSchema.default("dark-fantasy"),
     customTheme: forgeCustomThemeSchema.nullable().optional(),
     localePreference: appLocaleSchema,
     calendarProviders: z

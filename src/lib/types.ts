@@ -2321,6 +2321,196 @@ export interface MilestoneReward {
   completed: boolean;
 }
 
+export type GamificationCatalogKind = "trophy" | "unlock";
+export type GamificationCatalogCategory =
+  | "xp_levels"
+  | "streaks"
+  | "tasks"
+  | "projects"
+  | "habits"
+  | "psyche"
+  | "wiki"
+  | "agents";
+export type GamificationCatalogTier =
+  | "bronze"
+  | "silver"
+  | "gold"
+  | "platinum";
+export type GamificationCatalogRarity =
+  | "common"
+  | "rare"
+  | "epic"
+  | "legendary";
+export type GamificationDifficulty =
+  | "intro"
+  | "standard"
+  | "hard"
+  | "legendary";
+export type GamificationUnlockType =
+  | "mascot_skin"
+  | "mascot_pose"
+  | "hud_treatment"
+  | "streak_effect"
+  | "trophy_shelf"
+  | "icon_frame"
+  | "celebration_variant";
+export type GamificationMetricKey =
+  | "totalXp"
+  | "nonManualXp"
+  | "level"
+  | "streakDays"
+  | "longestStreakDays"
+  | "comebackCount"
+  | "comebackAfter7Count"
+  | "taskCompletionCount"
+  | "goalLinkedCompletionCount"
+  | "goalLinkedTaskCompletionCount"
+  | "distinctGoalsWithCompletions"
+  | "projectLinkedTaskCompletionCount"
+  | "projectCompletionCount"
+  | "activeProjectCount"
+  | "strategyCount"
+  | "focusRunCount"
+  | "plannedFocusRunCount"
+  | "creditedFocusMinutes"
+  | "taskCloseoutReportCount"
+  | "habitAlignedCount"
+  | "habitStreakMax"
+  | "distinctHabitCount"
+  | "recoveryEventCount"
+  | "lifeForceSnapshotCount"
+  | "healthSleepSessionCount"
+  | "workoutSessionCount"
+  | "wikiPageCount"
+  | "wikiPageWithSummaryCount"
+  | "wikiLinkCount"
+  | "linkedWikiPageCount"
+  | "noteCount"
+  | "knowledgeGraphNodeCount"
+  | "psycheValueCount"
+  | "modeProfileCount"
+  | "linkedModeProfileCount"
+  | "modeGuideSessionCount"
+  | "triggerReportCount"
+  | "triggerReportCompletedCount"
+  | "triggerReportRichCount"
+  | "behaviorPatternCount"
+  | "behaviorPatternWithReplacementCount"
+  | "behaviorCount"
+  | "beliefEntryCount"
+  | "beliefFlexibleAlternativeCount"
+  | "questionnaireRunCount"
+  | "agentActionCount"
+  | "agentCompletedActionCount"
+  | "collaborationRewardCount"
+  | "activeCategoryCount";
+
+export type GamificationRequirement =
+  | {
+      metric: GamificationMetricKey;
+      threshold: number;
+      windowDays?: number;
+      distinctBy?: string;
+      entityType?: string;
+      status?: string;
+      linkedEntityType?: string;
+      minLinkedCount?: number;
+    }
+  | { allOf: GamificationRequirement[] }
+  | { anyOf: GamificationRequirement[] };
+
+export interface GamificationCatalogItem {
+  id: string;
+  kind: GamificationCatalogKind;
+  category: GamificationCatalogCategory;
+  tier: GamificationCatalogTier;
+  difficulty: GamificationDifficulty;
+  hidden: boolean;
+  title: string;
+  summary: string;
+  requirement: GamificationRequirement;
+  requirementText: string;
+  reward: string;
+  unlockType: GamificationUnlockType | null;
+  rewardPayload: Record<string, string | number | boolean | null>;
+  assetKey: string;
+  sheetKey: string;
+  rarity: GamificationCatalogRarity;
+  sortOrder: number;
+}
+
+export interface GamificationCatalogEntry extends GamificationCatalogItem {
+  unlocked: boolean;
+  unlockedAt: string | null;
+  progressCurrent: number;
+  progressTarget: number;
+  progressPercent: number;
+  celebrationSeenAt: string | null;
+}
+
+export interface GamificationMascotState {
+  mood:
+    | "idle"
+    | "forging"
+    | "wise"
+    | "celebrating"
+    | "pressure"
+    | "comeback"
+    | "exhausted"
+    | "proud"
+    | "absent";
+  spriteKey: string;
+  streakSpriteKey: string;
+  headline: string;
+  line: string;
+  pressureLevel: number;
+  missedDays: number;
+  lastActiveDateKey: string | null;
+}
+
+export interface GamificationEquipment {
+  selectedMascotSkin: string | null;
+  selectedHudTreatment: string | null;
+  selectedStreakEffect: string | null;
+  selectedTrophyShelf: string | null;
+  selectedCelebrationVariant: string | null;
+  updatedAt: string | null;
+}
+
+export interface GamificationCelebration {
+  id: string;
+  userId: string;
+  kind: "xp" | "level" | "trophy" | "unlock" | "streak" | "comeback";
+  itemId: string | null;
+  title: string;
+  summary: string;
+  assetKey: string;
+  metadata: Record<string, string | number | boolean | null>;
+  createdAt: string;
+  seenAt: string | null;
+}
+
+export interface GamificationScope {
+  mode: "selected_user" | "operator_fallback" | "aggregate_fallback";
+  userIds: string[];
+  users: UserSummary[];
+  label: string;
+}
+
+export interface GamificationCatalogPayload {
+  scope: GamificationScope;
+  equipment: GamificationEquipment;
+  items: GamificationCatalogEntry[];
+  totalCount: number;
+  unlockedCount: number;
+  trophyCount: number;
+  unlockCount: number;
+  nextUnlock: GamificationCatalogEntry | null;
+  newestUnlock: GamificationCatalogEntry | null;
+  nextTargets: GamificationCatalogEntry[];
+  recentlyUnlocked: GamificationCatalogEntry[];
+}
+
 export interface ProjectSummary extends Project {
   goalTitle: string;
   activeTaskCount: number;
@@ -3240,10 +3430,20 @@ export interface XpMomentumPulse {
 }
 
 export interface XpMetricsPayload {
+  scope: GamificationScope;
   profile: ForgeSnapshot["metrics"];
   achievements: AchievementSignal[];
   milestoneRewards: MilestoneReward[];
   momentumPulse: XpMomentumPulse;
+  catalogPreview: GamificationCatalogEntry[];
+  unlockedItemCount: number;
+  totalItemCount: number;
+  nextUnlock: GamificationCatalogEntry | null;
+  newestUnlock: GamificationCatalogEntry | null;
+  nextTargets: GamificationCatalogEntry[];
+  equipment: GamificationEquipment;
+  mascot: GamificationMascotState;
+  celebrations: GamificationCelebration[];
   recentLedger: RewardLedgerEvent[];
   rules: RewardRule[];
   dailyAmbientXp: number;
@@ -3266,6 +3466,7 @@ export interface SettingsPayload {
     timeAccountingMode: TimeAccountingMode;
   };
   themePreference: ForgeThemePreference;
+  gamificationTheme: "dark-fantasy" | "dramatic-smithie" | "mind-locksmith";
   customTheme?: ForgeCustomTheme | null;
   localePreference: AppLocale;
   security: {
@@ -3359,14 +3560,16 @@ export interface AgentOnboardingFieldGuide {
   nullable?: boolean;
 }
 
+export type AgentOnboardingEntityClassification =
+  | "batch_crud_entity"
+  | "specialized_crud_entity"
+  | "action_workflow_entity"
+  | "specialized_domain_surface"
+  | "read_model_only_surface";
+
 export interface AgentOnboardingEntityGuide {
   entityType: string;
-  classification:
-    | "batch_crud_entity"
-    | "specialized_crud_entity"
-    | "action_workflow_entity"
-    | "specialized_domain_surface"
-    | "read_model_only_surface";
+  classification: AgentOnboardingEntityClassification;
   purpose: string;
   minimumCreateFields: string[];
   relationshipRules: string[];
@@ -3398,6 +3601,8 @@ export interface AgentOnboardingPsychePlaybook {
   highValueOptionalFields: string[];
   exampleQuestions: string[];
   notes: string[];
+  routePosture: AgentOnboardingEntityClassification;
+  apiAccessHint: string;
 }
 
 export interface AgentOnboardingPayload {
@@ -3491,6 +3696,8 @@ export interface AgentOnboardingPayload {
     openingQuestion: string;
     coachingGoal: string;
     askSequence: string[];
+    routePosture: AgentOnboardingEntityClassification;
+    apiAccessHint: string;
   }>;
   relationshipModel: string[];
   entityRouteModel: {
@@ -3696,6 +3903,11 @@ export interface ForgeSnapshot {
     level: number;
     currentLevelXp: number;
     nextLevelXp: number;
+    xpIntoLevel?: number;
+    xpToNextLevel?: number;
+    currentLevelStartXp?: number;
+    nextLevelTotalXp?: number;
+    levelCurveVersion?: string;
     weeklyXp: number;
     streakDays: number;
     comboMultiplier: number;

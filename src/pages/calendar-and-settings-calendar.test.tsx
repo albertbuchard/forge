@@ -6,6 +6,7 @@ import { CalendarPage } from "@/pages/calendar-page";
 import { SettingsCalendarPage } from "@/pages/settings-calendar-page";
 import { describeGoogleRouteRequirement } from "@/components/calendar/calendar-connection-flow-dialog";
 import { ForgeApiError } from "@/lib/api-error";
+import { installMockDate } from "@/test/mock-date";
 import { useForgeClipboardStore } from "@/store/use-forge-clipboard";
 import type { ForgeSnapshot } from "@/lib/types";
 
@@ -76,6 +77,8 @@ const {
   syncCalendarConnectionMock: vi.fn(),
   deleteCalendarConnectionMock: vi.fn()
 }));
+
+let restoreDate: (() => void) | null = null;
 
 vi.mock("@/components/shell/app-shell", () => ({
   useForgeShell: useForgeShellMock
@@ -428,9 +431,7 @@ function createDeferred<T>() {
 }
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(new Date("2026-04-13T12:00:00.000Z"));
-
+  restoreDate = installMockDate("2026-04-15T09:00:00.000Z");
   window.history.replaceState({}, "", "http://localhost:3000/");
   window.localStorage.clear();
   useForgeShellMock.mockReturnValue({
@@ -744,6 +745,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  restoreDate?.();
+  restoreDate = null;
   cleanup();
   vi.useRealTimers();
   window.localStorage.clear();

@@ -18,7 +18,9 @@ import {
   useParams,
   useSearchParams
 } from "react-router-dom";
+import { GamificationMiniHud } from "@/components/gamification/gamification-widgets";
 import { OpenInGraphButton } from "@/components/knowledge-graph/open-in-graph-button";
+import { useForgeShell } from "@/components/shell/app-shell";
 import { WikiArticleMarkdown } from "@/components/wiki/wiki-article-markdown";
 import { WikiIngestModal } from "@/components/wiki/wiki-ingest-modal";
 import { Badge } from "@/components/ui/badge";
@@ -199,6 +201,7 @@ function WikiSpacePickerDialog({
 }
 
 export function WikiPage() {
+  const shell = useForgeShell();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { slug } = useParams<{ slug?: string }>();
@@ -536,6 +539,10 @@ export function WikiPage() {
               <span className="text-[11px] uppercase tracking-[0.16em] text-white/42">
                 {formatUpdatedAt(selectedPage.updatedAt)}
               </span>
+              <GamificationMiniHud
+                metrics={shell.snapshot.metrics}
+                className="ml-auto"
+              />
             </div>
 
             <div className="mt-3 flex flex-col gap-2 lg:flex-row lg:items-center">

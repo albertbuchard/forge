@@ -1342,6 +1342,11 @@ export const gamificationProfileSchema = z.object({
     level: z.number().int().positive(),
     currentLevelXp: z.number().int().nonnegative(),
     nextLevelXp: z.number().int().positive(),
+    xpIntoLevel: z.number().int().nonnegative(),
+    xpToNextLevel: z.number().int().nonnegative(),
+    currentLevelStartXp: z.number().int().nonnegative(),
+    nextLevelTotalXp: z.number().int().positive(),
+    levelCurveVersion: z.string(),
     weeklyXp: z.number().int().nonnegative(),
     streakDays: z.number().int().nonnegative(),
     comboMultiplier: z.number().nonnegative(),
@@ -1386,6 +1391,209 @@ export const xpMomentumPulseSchema = z.object({
     celebrationLabel: z.string(),
     nextMilestoneId: z.string().nullable(),
     nextMilestoneLabel: z.string()
+});
+export const gamificationCatalogKindSchema = z.enum(["trophy", "unlock"]);
+export const gamificationCatalogCategorySchema = z.enum([
+    "xp_levels",
+    "streaks",
+    "tasks",
+    "projects",
+    "habits",
+    "psyche",
+    "wiki",
+    "agents"
+]);
+export const gamificationCatalogTierSchema = z.enum([
+    "bronze",
+    "silver",
+    "gold",
+    "platinum"
+]);
+export const gamificationCatalogRaritySchema = z.enum([
+    "common",
+    "rare",
+    "epic",
+    "legendary"
+]);
+export const gamificationDifficultySchema = z.enum([
+    "intro",
+    "standard",
+    "hard",
+    "legendary"
+]);
+export const gamificationUnlockTypeSchema = z.enum([
+    "mascot_skin",
+    "mascot_pose",
+    "hud_treatment",
+    "streak_effect",
+    "trophy_shelf",
+    "icon_frame",
+    "celebration_variant"
+]);
+export const gamificationMetricKeySchema = z.enum([
+    "totalXp",
+    "nonManualXp",
+    "level",
+    "streakDays",
+    "longestStreakDays",
+    "comebackCount",
+    "comebackAfter7Count",
+    "taskCompletionCount",
+    "goalLinkedTaskCompletionCount",
+    "distinctGoalsWithCompletions",
+    "projectLinkedTaskCompletionCount",
+    "projectCompletionCount",
+    "activeProjectCount",
+    "strategyCount",
+    "focusRunCount",
+    "plannedFocusRunCount",
+    "creditedFocusMinutes",
+    "taskCloseoutReportCount",
+    "habitAlignedCount",
+    "habitStreakMax",
+    "distinctHabitCount",
+    "recoveryEventCount",
+    "lifeForceSnapshotCount",
+    "healthSleepSessionCount",
+    "workoutSessionCount",
+    "wikiPageCount",
+    "wikiPageWithSummaryCount",
+    "wikiLinkCount",
+    "linkedWikiPageCount",
+    "noteCount",
+    "knowledgeGraphNodeCount",
+    "psycheValueCount",
+    "modeProfileCount",
+    "linkedModeProfileCount",
+    "modeGuideSessionCount",
+    "triggerReportCount",
+    "triggerReportCompletedCount",
+    "triggerReportRichCount",
+    "behaviorPatternCount",
+    "behaviorPatternWithReplacementCount",
+    "behaviorCount",
+    "beliefEntryCount",
+    "beliefFlexibleAlternativeCount",
+    "questionnaireRunCount",
+    "agentActionCount",
+    "agentCompletedActionCount",
+    "collaborationRewardCount",
+    "activeCategoryCount"
+]);
+export const gamificationRequirementSchema = z.lazy(() => z.union([
+    z.object({
+        metric: gamificationMetricKeySchema,
+        threshold: z.number().int().positive(),
+        windowDays: z.number().int().positive().optional(),
+        distinctBy: z.string().optional(),
+        entityType: z.string().optional(),
+        status: z.string().optional(),
+        linkedEntityType: z.string().optional(),
+        minLinkedCount: z.number().int().positive().optional()
+    }),
+    z.object({ allOf: z.array(gamificationRequirementSchema).min(1) }),
+    z.object({ anyOf: z.array(gamificationRequirementSchema).min(1) })
+]));
+export const gamificationCatalogItemSchema = z.object({
+    id: z.string(),
+    kind: gamificationCatalogKindSchema,
+    category: gamificationCatalogCategorySchema,
+    tier: gamificationCatalogTierSchema,
+    difficulty: gamificationDifficultySchema,
+    hidden: z.boolean(),
+    title: z.string(),
+    summary: z.string(),
+    requirement: gamificationRequirementSchema,
+    requirementText: z.string(),
+    reward: z.string(),
+    unlockType: gamificationUnlockTypeSchema.nullable(),
+    rewardPayload: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
+    assetKey: z.string(),
+    sheetKey: z.string(),
+    rarity: gamificationCatalogRaritySchema,
+    sortOrder: z.number().int().nonnegative()
+});
+export const gamificationCatalogEntrySchema = gamificationCatalogItemSchema.extend({
+    unlocked: z.boolean(),
+    unlockedAt: z.string().nullable(),
+    progressCurrent: z.number().int().nonnegative(),
+    progressTarget: z.number().int().positive(),
+    progressPercent: z.number().min(0).max(100),
+    celebrationSeenAt: z.string().nullable()
+});
+export const gamificationMascotStateSchema = z.object({
+    mood: z.enum([
+        "idle",
+        "forging",
+        "wise",
+        "celebrating",
+        "pressure",
+        "comeback",
+        "exhausted",
+        "proud",
+        "absent"
+    ]),
+    spriteKey: z.string(),
+    streakSpriteKey: z.string(),
+    headline: z.string(),
+    line: z.string(),
+    pressureLevel: z.number().int().min(0).max(5),
+    missedDays: z.number().int().nonnegative(),
+    lastActiveDateKey: z.string().nullable()
+});
+export const gamificationEquipmentSchema = z.object({
+    selectedMascotSkin: z.string().nullable(),
+    selectedHudTreatment: z.string().nullable(),
+    selectedStreakEffect: z.string().nullable(),
+    selectedTrophyShelf: z.string().nullable(),
+    selectedCelebrationVariant: z.string().nullable(),
+    updatedAt: z.string().nullable()
+});
+export const gamificationEquipmentInputSchema = z.object({
+    selectedMascotSkin: z.string().nullable().optional(),
+    selectedHudTreatment: z.string().nullable().optional(),
+    selectedStreakEffect: z.string().nullable().optional(),
+    selectedTrophyShelf: z.string().nullable().optional(),
+    selectedCelebrationVariant: z.string().nullable().optional()
+});
+export const gamificationCelebrationKindSchema = z.enum([
+    "xp",
+    "level",
+    "trophy",
+    "unlock",
+    "streak",
+    "comeback"
+]);
+export const gamificationCelebrationSchema = z.object({
+    id: z.string(),
+    userId: z.string(),
+    kind: gamificationCelebrationKindSchema,
+    itemId: z.string().nullable(),
+    title: z.string(),
+    summary: z.string(),
+    assetKey: z.string(),
+    metadata: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
+    createdAt: z.string(),
+    seenAt: z.string().nullable()
+});
+export const gamificationScopeSchema = z.object({
+    mode: z.enum(["selected_user", "operator_fallback", "aggregate_fallback"]),
+    userIds: z.array(z.string()),
+    users: z.array(userSummarySchema),
+    label: z.string()
+});
+export const gamificationCatalogPayloadSchema = z.object({
+    scope: gamificationScopeSchema,
+    equipment: gamificationEquipmentSchema,
+    items: z.array(gamificationCatalogEntrySchema),
+    totalCount: z.number().int().nonnegative(),
+    unlockedCount: z.number().int().nonnegative(),
+    trophyCount: z.number().int().nonnegative(),
+    unlockCount: z.number().int().nonnegative(),
+    nextUnlock: gamificationCatalogEntrySchema.nullable(),
+    newestUnlock: gamificationCatalogEntrySchema.nullable(),
+    nextTargets: z.array(gamificationCatalogEntrySchema),
+    recentlyUnlocked: z.array(gamificationCatalogEntrySchema)
 });
 export const dashboardPayloadSchema = z.object({
     stats: dashboardStatsSchema,
@@ -1624,6 +1832,11 @@ export const themePreferenceSchema = z.enum([
     "atelier",
     "custom",
     "system"
+]);
+export const gamificationThemeSchema = z.enum([
+    "dark-fantasy",
+    "dramatic-smithie",
+    "mind-locksmith"
 ]);
 export const customThemeSchema = z.object({
     label: z.string().trim().min(1).max(40),
@@ -2402,10 +2615,20 @@ export const sessionEventSchema = z.object({
     createdAt: z.string()
 });
 export const xpMetricsPayloadSchema = z.object({
+    scope: gamificationScopeSchema,
     profile: gamificationProfileSchema,
     achievements: z.array(achievementSignalSchema),
     milestoneRewards: z.array(milestoneRewardSchema),
     momentumPulse: xpMomentumPulseSchema,
+    catalogPreview: z.array(gamificationCatalogEntrySchema),
+    unlockedItemCount: z.number().int().nonnegative(),
+    totalItemCount: z.number().int().nonnegative(),
+    nextUnlock: gamificationCatalogEntrySchema.nullable(),
+    newestUnlock: gamificationCatalogEntrySchema.nullable(),
+    nextTargets: z.array(gamificationCatalogEntrySchema),
+    equipment: gamificationEquipmentSchema,
+    mascot: gamificationMascotStateSchema,
+    celebrations: z.array(gamificationCelebrationSchema),
     recentLedger: z.array(rewardLedgerEventSchema),
     rules: z.array(rewardRuleSchema),
     dailyAmbientXp: z.number().int().nonnegative(),
@@ -2467,6 +2690,7 @@ export const settingsPayloadSchema = z.object({
     notifications: notificationPreferencesSchema,
     execution: executionSettingsSchema,
     themePreference: themePreferenceSchema,
+    gamificationTheme: gamificationThemeSchema.default("dark-fantasy"),
     customTheme: customThemeSchema.nullable(),
     localePreference: appLocaleSchema,
     security: z.object({
@@ -3404,6 +3628,7 @@ export const updateSettingsSchema = z.object({
     notifications: notificationPreferencesSchema.partial().optional(),
     execution: executionSettingsSchema.partial().optional(),
     themePreference: themePreferenceSchema.optional(),
+    gamificationTheme: gamificationThemeSchema.optional(),
     customTheme: customThemeSchema.nullable().optional(),
     localePreference: appLocaleSchema.optional(),
     security: z

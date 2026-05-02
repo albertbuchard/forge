@@ -79,6 +79,9 @@ import type {
   PreferenceJudgmentInput,
   RewardLedgerEvent,
   RewardRule,
+  GamificationCatalogPayload,
+  GamificationCelebration,
+  GamificationEquipment,
   SettingsPayload,
   SettingsBinPayload,
   MovementAllTimeData,
@@ -230,9 +233,152 @@ async function parseResponseBody(response: Response) {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+const DIAGNOSTICS_LOGS_PATH = "/api/v1/diagnostics/logs";
+const OPERATOR_SESSION_PATH = "/api/v1/auth/operator-session";
+const UI_SOURCE_HEADER = "x-forge-source";
+const UI_SOURCE_VALUE = "ui";
+
+type ParsedApiResponse = {
+  response: Response;
+  body: unknown;
+};
+
+function readResponseObject(body: unknown) {
+  return typeof body === "object" && body !== null
+    ? (body as Record<string, unknown>)
+    : null;
+}
+
+function readApiErrorCode(body: unknown) {
+  const maybeBody = readResponseObject(body);
+  return typeof maybeBody?.code === "string"
+    ? maybeBody.code
+    : typeof maybeBody?.error === "string"
+      ? maybeBody.error
+      : "request_failed";
+}
+
+function isAuthRequiredResponse(response: Response, body: unknown) {
+  return response.status === 401 && readApiErrorCode(body) === "auth_required";
+}
+
+function isDiagnosticsLogPath(path: string) {
+  return path === DIAGNOSTICS_LOGS_PATH;
+}
+
+function canReplayRequestBody(init?: RequestInit) {
+  if (init?.body === undefined || init.body === null) {
+    return true;
+  }
+  if (typeof init.body === "string") {
+    return true;
+  }
+  if (
+    typeof URLSearchParams !== "undefined" &&
+    init.body instanceof URLSearchParams
+  ) {
+    return true;
+  }
+  if (typeof FormData !== "undefined" && init.body instanceof FormData) {
+    return true;
+  }
+  if (typeof Blob !== "undefined" && init.body instanceof Blob) {
+    return true;
+  }
+  if (typeof ArrayBuffer !== "undefined" && init.body instanceof ArrayBuffer) {
+    return true;
+  }
+  if (ArrayBuffer.isView(init.body)) {
+    return true;
+  }
+  return false;
+}
+
+function shouldBootstrapAndRetryOperatorSession(input: {
+  path: string;
+  init?: RequestInit;
+  response: Response;
+  body: unknown;
+}) {
+  return (
+    input.path !== OPERATOR_SESSION_PATH &&
+    isAuthRequiredResponse(input.response, input.body) &&
+    canReplayRequestBody(input.init)
+  );
+}
+
+function createApiError(path: string, response: Response, body: unknown) {
+  const maybeBody = readResponseObject(body);
+  const details = Array.isArray(maybeBody?.details)
+    ? (maybeBody.details as ForgeValidationIssue[])
+    : [];
+  return new ForgeApiError({
+    status: response.status,
+    code: readApiErrorCode(body),
+    message:
+      typeof maybeBody?.error === "string"
+        ? maybeBody.error
+        : typeof maybeBody?.message === "string"
+          ? maybeBody.message
+          : typeof body === "string"
+            ? body
+            : `Request failed: ${response.status}`,
+    requestPath: path,
+    details,
+    response:
+      typeof body === "string"
+        ? body
+        : body && typeof body === "object"
+          ? (body as Record<string, unknown>)
+          : null
+  });
+}
+
+function publishRequestFailure(
+  path: string,
+  response: Response,
+  body: unknown
+) {
+  if (isDiagnosticsLogPath(path)) {
+    return;
+  }
+  const maybeBody = readResponseObject(body);
+  const details = Array.isArray(maybeBody?.details)
+    ? (maybeBody.details as ForgeValidationIssue[])
+    : [];
+  void publishUiDiagnosticLog({
+    level: response.status >= 500 ? "error" : "warning",
+    scope: "frontend_api",
+    eventKey: "request_failed",
+    message: `API request failed: ${path}`,
+    route: path,
+    functionName: "request",
+    details: {
+      statusCode: response.status,
+      code: readApiErrorCode(body),
+      response:
+        typeof body === "string"
+          ? body
+          : body && typeof body === "object"
+            ? body
+            : null,
+      validationIssues: details
+    }
+  });
+}
+
+async function sendApiRequest(
+  path: string,
+  init?: RequestInit
+): Promise<ParsedApiResponse> {
+  const response = await fetchApi(path, init);
+  const body = await parseResponseBody(response);
+  return { response, body };
+}
+
+async function fetchApi(path: string, init?: RequestInit) {
   const headers = new Headers(init?.headers);
-  headers.set("x-forge-source", "ui");
+  headers.set(UI_SOURCE_HEADER, UI_SOURCE_VALUE);
 
   if (
     init?.body !== undefined &&
@@ -245,12 +391,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
     response = await fetch(resolveForgePath(path), {
+      ...init,
       credentials: "same-origin",
-      headers,
-      ...init
+      headers
     });
   } catch (error) {
-    if (path !== "/api/v1/diagnostics/logs") {
+    if (!isDiagnosticsLogPath(path)) {
       void publishUiDiagnosticLog({
         level: "error",
         scope: "frontend_api",
@@ -273,67 +419,37 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw error;
   }
 
-  const body = await parseResponseBody(response);
+  return response;
+}
+
+let operatorSessionBootstrapPromise: Promise<void> | null = null;
+
+async function bootstrapOperatorSession() {
+  if (!operatorSessionBootstrapPromise) {
+    operatorSessionBootstrapPromise = (async () => {
+      const { response, body } = await sendApiRequest(OPERATOR_SESSION_PATH);
+      if (!response.ok) {
+        publishRequestFailure(OPERATOR_SESSION_PATH, response, body);
+        throw createApiError(OPERATOR_SESSION_PATH, response, body);
+      }
+    })().finally(() => {
+      operatorSessionBootstrapPromise = null;
+    });
+  }
+  await operatorSessionBootstrapPromise;
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  let { response, body } = await sendApiRequest(path, init);
+
+  if (shouldBootstrapAndRetryOperatorSession({ path, init, response, body })) {
+    await bootstrapOperatorSession();
+    ({ response, body } = await sendApiRequest(path, init));
+  }
 
   if (!response.ok) {
-    const maybeBody =
-      typeof body === "object" && body !== null
-        ? (body as Record<string, unknown>)
-        : null;
-    const details = Array.isArray(maybeBody?.details)
-      ? (maybeBody.details as ForgeValidationIssue[])
-      : [];
-    if (path !== "/api/v1/diagnostics/logs") {
-      void publishUiDiagnosticLog({
-        level: response.status >= 500 ? "error" : "warning",
-        scope: "frontend_api",
-        eventKey: "request_failed",
-        message: `API request failed: ${path}`,
-        route: path,
-        functionName: "request",
-        details: {
-          statusCode: response.status,
-          code:
-            typeof maybeBody?.code === "string"
-              ? maybeBody.code
-              : typeof maybeBody?.error === "string"
-                ? maybeBody.error
-                : "request_failed",
-          response:
-            typeof body === "string"
-              ? body
-              : body && typeof body === "object"
-                ? body
-                : null,
-          validationIssues: details
-        }
-      });
-    }
-    throw new ForgeApiError({
-      status: response.status,
-      code:
-        typeof maybeBody?.code === "string"
-          ? maybeBody.code
-          : typeof maybeBody?.error === "string"
-            ? maybeBody.error
-            : "request_failed",
-      message:
-        typeof maybeBody?.error === "string"
-          ? maybeBody.error
-          : typeof maybeBody?.message === "string"
-            ? maybeBody.message
-            : typeof body === "string"
-              ? body
-              : `Request failed: ${response.status}`,
-      requestPath: path,
-      details,
-      response:
-        typeof body === "string"
-          ? body
-          : body && typeof body === "object"
-            ? (body as Record<string, unknown>)
-            : null
-    });
+    publishRequestFailure(path, response, body);
+    throw createApiError(path, response, body);
   }
 
   return body as T;
@@ -343,42 +459,19 @@ async function requestBlob(
   path: string,
   init?: RequestInit
 ): Promise<{ blob: Blob; fileName: string | null; mimeType: string }> {
-  const headers = new Headers(init?.headers);
-  headers.set("x-forge-source", "ui");
-  const response = await fetch(resolveForgePath(path), {
-    credentials: "same-origin",
-    headers,
-    ...init
-  });
+  let response = await fetchApi(path, init);
+  let body: unknown = null;
   if (!response.ok) {
-    const body = await parseResponseBody(response);
-    const maybeBody =
-      typeof body === "object" && body !== null
-        ? (body as Record<string, unknown>)
-        : null;
-    throw new ForgeApiError({
-      status: response.status,
-      code:
-        typeof maybeBody?.code === "string"
-          ? maybeBody.code
-          : typeof maybeBody?.error === "string"
-            ? maybeBody.error
-            : "request_failed",
-      message:
-        typeof maybeBody?.error === "string"
-          ? maybeBody.error
-          : typeof maybeBody?.message === "string"
-            ? maybeBody.message
-            : `Request failed: ${response.status}`,
-      requestPath: path,
-      details: [],
-      response:
-        typeof body === "string"
-          ? body
-          : body && typeof body === "object"
-            ? (body as Record<string, unknown>)
-            : null
-    });
+    body = await parseResponseBody(response);
+  }
+  if (shouldBootstrapAndRetryOperatorSession({ path, init, response, body })) {
+    await bootstrapOperatorSession();
+    response = await fetchApi(path, init);
+    body = response.ok ? null : await parseResponseBody(response);
+  }
+  if (!response.ok) {
+    publishRequestFailure(path, response, body);
+    throw createApiError(path, response, body);
   }
   const disposition = response.headers.get("content-disposition");
   const fileNameMatch = disposition?.match(/filename=\"([^\"]+)\"/i);
@@ -793,7 +886,10 @@ export function listQuestionnaires(userIds?: string[] | unknown) {
   );
 }
 
-export function getQuestionnaire(instrumentId: string, userIds?: string[] | unknown) {
+export function getQuestionnaire(
+  instrumentId: string,
+  userIds?: string[] | unknown
+) {
   const search = new URLSearchParams();
   appendUserIds(search, coerceUserIds(userIds));
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
@@ -874,7 +970,10 @@ export function startQuestionnaireRun(
   );
 }
 
-export function getQuestionnaireRun(runId: string, userIds?: string[] | unknown) {
+export function getQuestionnaireRun(
+  runId: string,
+  userIds?: string[] | unknown
+) {
   const search = new URLSearchParams();
   appendUserIds(search, coerceUserIds(userIds));
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
@@ -1953,19 +2052,17 @@ export function getPsycheObservationCalendar(
   );
 }
 
-export function exportPsycheObservationCalendar(
-  input: {
-    from?: string;
-    to?: string;
-    userIds?: string[] | unknown;
-    tags?: string[];
-    includeObservations?: boolean;
-    includeActivity?: boolean;
-    onlyHumanOwned?: boolean;
-    search?: string;
-    format: "json" | "csv" | "markdown" | "ics";
-  }
-) {
+export function exportPsycheObservationCalendar(input: {
+  from?: string;
+  to?: string;
+  userIds?: string[] | unknown;
+  tags?: string[];
+  includeObservations?: boolean;
+  includeActivity?: boolean;
+  onlyHumanOwned?: boolean;
+  search?: string;
+  format: "json" | "csv" | "markdown" | "ics";
+}) {
   const search = new URLSearchParams();
   if (input.from) {
     search.set("from", input.from);
@@ -3107,7 +3204,10 @@ export function getWorkbenchFlowRunNode(
   }>(`/api/v1/workbench/flows/${connectorId}/runs/${runId}/nodes/${nodeId}`);
 }
 
-export function getWorkbenchFlowNodeOutput(connectorId: string, nodeId: string) {
+export function getWorkbenchFlowNodeOutput(
+  connectorId: string,
+  nodeId: string
+) {
   return request<{
     flow: import("./types").AiConnector;
     run: import("./types").AiConnectorRun;
@@ -3165,7 +3265,9 @@ export function getMovementDay(input?: {
   }
   appendUserIds(search, coerceUserIds(input?.userIds));
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
-  return request<{ movement: MovementDayData }>(`/api/v1/movement/day${suffix}`);
+  return request<{ movement: MovementDayData }>(
+    `/api/v1/movement/day${suffix}`
+  );
 }
 
 export function getMovementMonth(input?: {
@@ -3301,10 +3403,13 @@ export function createMovementPlace(
   const search = new URLSearchParams();
   appendUserIds(search, coerceUserIds(userIds));
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
-  return request<{ place: MovementKnownPlace }>(`/api/v1/movement/places${suffix}`, {
-    method: "POST",
-    body: JSON.stringify(input)
-  });
+  return request<{ place: MovementKnownPlace }>(
+    `/api/v1/movement/places${suffix}`,
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
 }
 
 export function patchMovementPlace(
@@ -3767,7 +3872,9 @@ export function listAgents() {
 }
 
 export function listAgentRuntimeSessions() {
-  return request<{ sessions: AgentRuntimeSession[] }>("/api/v1/agents/sessions");
+  return request<{ sessions: AgentRuntimeSession[] }>(
+    "/api/v1/agents/sessions"
+  );
 }
 
 export function getAgentRuntimeSessionHistory(sessionId: string) {
@@ -3868,8 +3975,54 @@ export function listRewardLedger(limit = 50) {
   );
 }
 
-export function getXpMetrics() {
-  return request<{ metrics: XpMetricsPayload }>("/api/v1/metrics/xp");
+export function getXpMetrics(userIds?: string[] | unknown) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.toString() ? `?${search}` : "";
+  return request<{ metrics: XpMetricsPayload }>(`/api/v1/metrics/xp${suffix}`);
+}
+
+export function getGamificationCatalog(userIds?: string[] | unknown) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.toString() ? `?${search}` : "";
+  return request<{ catalog: GamificationCatalogPayload }>(
+    `/api/v1/gamification/catalog${suffix}`
+  );
+}
+
+export function getGamificationEquipment(userIds?: string[] | unknown) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.toString() ? `?${search}` : "";
+  return request<{ equipment: GamificationEquipment }>(
+    `/api/v1/gamification/equipment${suffix}`
+  );
+}
+
+export function updateGamificationEquipment(
+  input: Partial<Omit<GamificationEquipment, "updatedAt">>,
+  userIds?: string[] | unknown
+) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.toString() ? `?${search}` : "";
+  return request<{ equipment: GamificationEquipment }>(
+    `/api/v1/gamification/equipment${suffix}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
+export function markGamificationCelebrationSeen(celebrationId: string) {
+  return request<{ celebration: GamificationCelebration }>(
+    `/api/v1/gamification/celebrations/${celebrationId}/seen`,
+    {
+      method: "POST"
+    }
+  );
 }
 
 export function listEventLog(limit = 50) {

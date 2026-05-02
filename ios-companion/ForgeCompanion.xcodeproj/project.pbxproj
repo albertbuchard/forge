@@ -93,6 +93,7 @@
 		94EC5E5C1CDAEEF245BEDE03 /* CompanionStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B6E10A66DA56D9BF5CC4237 /* CompanionStyle.swift */; };
 		956F6951305AA41B11C3EC8B /* github-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = 749845DB8B75676500B84932 /* github-dark.json */; };
 		95CB103A56B1A9A0B502F192 /* vitesse-black.json in Resources */ = {isa = PBXBuildFile; fileRef = C7FEA151F0257B65D58F52FE /* vitesse-black.json */; };
+		979DCB8705BD6A231E03574D /* ForgeCompanionUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 971A5A64D8E7E39356BE88EE /* ForgeCompanionUITestsLaunchTests.swift */; };
 		994978D8CD08859187B7FE58 /* dracula.json in Resources */ = {isa = PBXBuildFile; fileRef = 31A83A563B26CCDA7F1721B6 /* dracula.json */; };
 		9F986E5B0046BCA20652BE4C /* rose-pine-moon.json in Resources */ = {isa = PBXBuildFile; fileRef = CEC035122131067EB6564289 /* rose-pine-moon.json */; };
 		A0D29BA35E3F456EF59A51AA /* one-dark-pro-D.json in Resources */ = {isa = PBXBuildFile; fileRef = B581CDAE6D6E5B9AB7C8B4D4 /* one-dark-pro-D.json */; };
@@ -118,6 +119,7 @@
 		C077AC5A77E343A669130237 /* SetupManualScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 821F0E988CBBF75B7935C8BA /* SetupManualScreen.swift */; };
 		C224862477CF7D3F1A2E0253 /* proof-light.json in Resources */ = {isa = PBXBuildFile; fileRef = D51F734BE700F50B999ADC66 /* proof-light.json */; };
 		C456398A5AA670F146063B1E /* MovementSyncStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D58974CBFD49611754BECE2 /* MovementSyncStore.swift */; };
+		C64A03A14D5B09D00168DFC4 /* ForgeCompanionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11C0AE180C664D1063628E7C /* ForgeCompanionUITests.swift */; };
 		C75975A0534324588D5C55B4 /* material-theme-ocean.json in Resources */ = {isa = PBXBuildFile; fileRef = A72370BD020E096D2388F265 /* material-theme-ocean.json */; };
 		C7ABF7112F39AD6D2661ECEB /* tokyo-night.json in Resources */ = {isa = PBXBuildFile; fileRef = FF2731A57CE0EB5B0912A9E8 /* tokyo-night.json */; };
 		CC9A0068DC77A7E82B6A0880 /* temple-dark.json in Resources */ = {isa = PBXBuildFile; fileRef = 0B16BD6500AACAA761DED54F /* temple-dark.json */; };
@@ -143,6 +145,13 @@
 
 /* Begin PBXContainerItemProxy section */
 		59A2508E530D6D8B95677332 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 4F8558956D3C63F60D8E5542 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A3D7B3F69A15FB337E820D99;
+			remoteInfo = ForgeCompanion;
+		};
+		98C93D900C14357C8AB0159A /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 4F8558956D3C63F60D8E5542 /* Project object */;
 			proxyType = 1;
@@ -180,6 +189,7 @@
 		0BB7C4D639104DAE20AB76F2 /* slack-ochin-CRg.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "slack-ochin-CRg.json"; sourceTree = "<group>"; };
 		10872B0DA517770C134D17B7 /* ForgeWatchBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeWatchBundle.swift; sourceTree = "<group>"; };
 		10F1932A79199E826E23023A /* WatchCheckInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchCheckInView.swift; sourceTree = "<group>"; };
+		11C0AE180C664D1063628E7C /* ForgeCompanionUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ForgeCompanionUITests.swift; sourceTree = "<group>"; };
 		137AF77ADC4D773B632201D1 /* matrix-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "matrix-dark.json"; sourceTree = "<group>"; };
 		14239158BB642B26FE6D796E /* codex-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "codex-light.json"; sourceTree = "<group>"; };
 		1445CEF627878D05ACAD5821 /* ForgeCompanionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeCompanionTests.swift; sourceTree = "<group>"; };
@@ -217,6 +227,7 @@
 		442250B4A055510386087866 /* WatchAppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchAppModel.swift; sourceTree = "<group>"; };
 		4488FD3178035D328C1AA09D /* kanagawa-wave.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "kanagawa-wave.json"; sourceTree = "<group>"; };
 		4B1CB3E6790DB1D4A37C3D34 /* ManagedSettings.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ManagedSettings.framework; path = System/Library/Frameworks/ManagedSettings.framework; sourceTree = SDKROOT; };
+		4B226346218DB40CA48ED80C /* ForgeCompanionUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ForgeCompanionUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		4DD2A3B790D968098D39D5A7 /* FamilyControls.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = FamilyControls.framework; path = System/Library/Frameworks/FamilyControls.framework; sourceTree = SDKROOT; };
 		4F94FB086CBD734970306FC2 /* github-light-high-contrast.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "github-light-high-contrast.json"; sourceTree = "<group>"; };
 		508A7FDE47AAB237525B75FA /* ForgeSyncClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeSyncClient.swift; sourceTree = "<group>"; };
@@ -251,6 +262,7 @@
 		965ABC2E8A2C966EDD4A3F93 /* ScreenTimeSettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenTimeSettingsSheet.swift; sourceTree = "<group>"; };
 		969FEA21AED198B191D1E324 /* ForgeWatchExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ForgeWatchExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		96D7DAF444A0D52A81F2C001 /* github-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "github-light.json"; sourceTree = "<group>"; };
+		971A5A64D8E7E39356BE88EE /* ForgeCompanionUITestsLaunchTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ForgeCompanionUITestsLaunchTests.swift; sourceTree = "<group>"; };
 		981F5275D642B9EB0002BDBC /* solarized-light.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "solarized-light.json"; sourceTree = "<group>"; };
 		993F6F1A53311219E315BBF3 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		99479E5F7A837885AA5945E8 /* AppIntents.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppIntents.framework; path = System/Library/Frameworks/AppIntents.framework; sourceTree = SDKROOT; };
@@ -311,6 +323,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		38D6F931C0611DA164524CE7 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		5FC5F9DD2F880AA4A26023CD /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -403,6 +422,7 @@
 				8FA0A1EC0034341F6FD6810C /* ForgeScreenTimeReportExtension.appex */,
 				8933BA68703A3C4D4539E369 /* ForgeWatch Watch App.app */,
 				969FEA21AED198B191D1E324 /* ForgeWatchExtension.appex */,
+				4B226346218DB40CA48ED80C /* ForgeCompanionUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -546,6 +566,16 @@
 			path = Themes;
 			sourceTree = "<group>";
 		};
+		B615B1EF64B3C1728EC20538 /* ForgeCompanionUITests */ = {
+			isa = PBXGroup;
+			children = (
+				11C0AE180C664D1063628E7C /* ForgeCompanionUITests.swift */,
+				971A5A64D8E7E39356BE88EE /* ForgeCompanionUITestsLaunchTests.swift */,
+			);
+			name = ForgeCompanionUITests;
+			path = ForgeCompanion/ForgeCompanionUITests;
+			sourceTree = "<group>";
+		};
 		DEADB038720040B65D496C71 = {
 			isa = PBXGroup;
 			children = (
@@ -557,6 +587,7 @@
 				0278F021C1813799D6A2CEF5 /* ScreenTimeShared */,
 				241801ADB48EE78E3F5836EA /* Frameworks */,
 				2EC5B307B0F081E32DA4D076 /* Products */,
+				B615B1EF64B3C1728EC20538 /* ForgeCompanionUITests */,
 			);
 			sourceTree = "<group>";
 		};
@@ -585,8 +616,6 @@
 			dependencies = (
 			);
 			name = ForgeWatchExtension;
-			packageProductDependencies = (
-			);
 			productName = ForgeWatchExtension;
 			productReference = 969FEA21AED198B191D1E324 /* ForgeWatchExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
@@ -603,8 +632,6 @@
 				4586B3F28F466F7A9A8C8310 /* PBXTargetDependency */,
 			);
 			name = ForgeCompanionTests;
-			packageProductDependencies = (
-			);
 			productName = ForgeCompanionTests;
 			productReference = 2F8724E4FB8BE98D88523A61 /* ForgeCompanionTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -622,8 +649,6 @@
 			dependencies = (
 			);
 			name = ForgeCompanion;
-			packageProductDependencies = (
-			);
 			productName = ForgeCompanion;
 			productReference = C1A9435D3CAA407E2081FE14 /* ForgeCompanion.app */;
 			productType = "com.apple.product-type.application";
@@ -642,8 +667,6 @@
 				F2A7D809B1659085AF87DF01 /* PBXTargetDependency */,
 			);
 			name = "ForgeWatch Watch App";
-			packageProductDependencies = (
-			);
 			productName = "ForgeWatch Watch App";
 			productReference = 8933BA68703A3C4D4539E369 /* ForgeWatch Watch App.app */;
 			productType = "com.apple.product-type.application.watchapp2";
@@ -660,11 +683,27 @@
 			dependencies = (
 			);
 			name = ForgeScreenTimeReportExtension;
-			packageProductDependencies = (
-			);
 			productName = ForgeScreenTimeReportExtension;
 			productReference = 8FA0A1EC0034341F6FD6810C /* ForgeScreenTimeReportExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
+		};
+		DFF8B6BF1F6FACFC3EDFB8B2 /* ForgeCompanionUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 347C17CD6724318B9D0EB555 /* Build configuration list for PBXNativeTarget "ForgeCompanionUITests" */;
+			buildPhases = (
+				EE4B8142BE10B2B5E2389767 /* Sources */,
+				38D6F931C0611DA164524CE7 /* Frameworks */,
+				B2DA1D1E4A538DA1A8C7BFDC /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				45633DC1738FC83E8965F3D3 /* PBXTargetDependency */,
+			);
+			name = ForgeCompanionUITests;
+			productName = ForgeCompanionUITests;
+			productReference = 4B226346218DB40CA48ED80C /* ForgeCompanionUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
 
@@ -716,6 +755,7 @@
 				D7BDBCC2AC0457C8DAB50B41 /* ForgeScreenTimeReportExtension */,
 				CE0FC6E6FCEABEEC93BE5F8D /* ForgeWatch Watch App */,
 				7716D39194A1C5D167013748 /* ForgeWatchExtension */,
+				DFF8B6BF1F6FACFC3EDFB8B2 /* ForgeCompanionUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -726,6 +766,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				AE7794F2FBF25CACC5183CC6 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B2DA1D1E4A538DA1A8C7BFDC /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -904,9 +951,24 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		EE4B8142BE10B2B5E2389767 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C64A03A14D5B09D00168DFC4 /* ForgeCompanionUITests.swift in Sources */,
+				979DCB8705BD6A231E03574D /* ForgeCompanionUITestsLaunchTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		45633DC1738FC83E8965F3D3 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = ForgeCompanion;
+			target = A3D7B3F69A15FB337E820D99 /* ForgeCompanion */;
+			targetProxy = 98C93D900C14357C8AB0159A /* PBXContainerItemProxy */;
+		};
 		4586B3F28F466F7A9A8C8310 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = A3D7B3F69A15FB337E820D99 /* ForgeCompanion */;
@@ -1091,6 +1153,29 @@
 			};
 			name = Release;
 		};
+		64629E83419F88F6AE4A0558 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = KZ65F7924F;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanionUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = ForgeCompanion;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		69A19A3B9611C926DD08C0CB /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1101,13 +1186,11 @@
 				CURRENT_PROJECT_VERSION = 24;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				INFOPLIST_FILE = ForgeCompanion/Info.plist;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = (
-					UIInterfaceOrientationPortrait,
-				);
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1120,6 +1203,28 @@
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Release;
+		};
+		77F9069D1ADC9C8C9DF71DE6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = KZ65F7924F;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanionUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = ForgeCompanion;
+			};
+			name = Debug;
 		};
 		8B9DFB010DABAB7A2F0F4452 /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -1151,13 +1256,11 @@
 				CURRENT_PROJECT_VERSION = 24;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				INFOPLIST_FILE = ForgeCompanion/Info.plist;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = (
-					UIInterfaceOrientationPortrait,
-				);
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1268,6 +1371,15 @@
 			buildConfigurations = (
 				CC147B4ED8C0AB5B3FC1081E /* Debug */,
 				5900F9AC90473A351222C509 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		347C17CD6724318B9D0EB555 /* Build configuration list for PBXNativeTarget "ForgeCompanionUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				77F9069D1ADC9C8C9DF71DE6 /* Debug */,
+				64629E83419F88F6AE4A0558 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

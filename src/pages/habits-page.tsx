@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
 import { NoteMarkdown } from "@/components/notes/note-markdown";
+import { GamificationMiniHud } from "@/components/gamification/gamification-widgets";
 import {
   psycheFocusClass,
   usePsycheFocusTarget
@@ -727,15 +728,18 @@ export function HabitsPage() {
         description="Habits track recurring commitments and recurring slips with explicit daily consequences, linked behaviors, and real XP movement."
         badge={`${activeHabits.length} habits`}
         actions={
-          <Button
-            onClick={() => {
-              setEditingHabit(null);
-              setDialogOpen(true);
-            }}
-          >
-            <Sparkles className="size-4" />
-            New habit
-          </Button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <GamificationMiniHud metrics={shell.snapshot.metrics} />
+            <Button
+              onClick={() => {
+                setEditingHabit(null);
+                setDialogOpen(true);
+              }}
+            >
+              <Sparkles className="size-4" />
+              New habit
+            </Button>
+          </div>
         }
       />
 

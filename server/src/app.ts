@@ -251,7 +251,6 @@ import type {
 } from "../../src/lib/knowledge-graph-types.js";
 import {
   createManualRewardGrant,
-  getDailyAmbientXp,
   getRewardRuleById,
   listRewardLedger,
   listRewardRules,
@@ -259,6 +258,7 @@ import {
   recordSessionEvent,
   updateRewardRule
 } from "./repositories/rewards.js";
+import { markGamificationCelebrationSeen } from "./repositories/gamification.js";
 import {
   getSettingsFileStatus,
   listAgentIdentities,
@@ -345,9 +345,12 @@ import {
   getTodayContext
 } from "./services/context.js";
 import {
+  buildGamificationCatalogPayload,
   buildGamificationOverview,
   buildGamificationProfile,
-  buildXpMomentumPulse
+  buildXpMetricsPayloadModel,
+  LockedGamificationCosmeticError,
+  updateGamificationEquipmentSelection
 } from "./services/gamification.js";
 import { getInsightsPayload } from "./services/insights.js";
 import {
@@ -572,6 +575,7 @@ import {
   runAiProcessorSchema,
   workAdjustmentResultSchema,
   finalizeWeeklyReviewResultSchema,
+  gamificationEquipmentInputSchema,
   goalListQuerySchema,
   recommendTaskTimeboxesSchema,
   strategyListQuerySchema,
@@ -3526,6 +3530,8 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
   "Keep API and architecture nouns out of user-facing questions unless the user asks about implementation. Do not ask the user about surfaces, route families, CRUD, payloads, mutation paths, or read paths; ask about the human object such as a wiki page, note, trigger report, behavior pattern, belief, mode, movement timeline, energy model, weekday pattern, flow, run, or node result.",
   "Self-observation is not the default container for Psyche material. Use it only for a lightweight observed event note; prefer trigger_report for one emotionally meaningful episode, behavior_pattern for a recurring loop and functional analysis, behavior for one repeated move, belief_entry for a core sentence, mode_guide_session or mode_profile for an active part-state, and wiki_page for durable memory.",
   "Do not bury schema work in self-observation. If the user is describing a schema theme, preserve it through a belief_entry, behavior_pattern, mode_profile, mode_guide_session, trigger_report, or wiki_page depending on whether it appears as a rule, loop, part-state, live exploration, one episode, or durable explanation.",
+  "Do not minimize functional analysis, trigger chains, behavior patterns, modes, beliefs, or schema themes. After at least one concrete example is clear, offer one careful interpretive hypothesis when it would help the user understand what the reaction may be protecting, predicting, relieving, or costing.",
+  "Phrase Psyche interpretive hypotheses as collaborative and testable, not as verdicts. Ask whether the hypothesis lands or needs correction before turning it into a saved belief, pattern, mode, trigger report, or note.",
   "Once the Movement, Life Force, or Workbench job is clear, speak in product nouns such as timeline, overlay, weekday template, published output, run detail, or node result instead of generic record language.",
   "If the next answer would not change the route, wording, timing, or write payload in a meaningful way, stop asking and act.",
   "Before saving, briefly summarize the working formulation in the user's own language when that would reduce ambiguity.",
@@ -4069,7 +4075,8 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
       "If the user is describing one specific episode rather than a repeated loop, prefer a trigger report.",
       "Reflect before the next question, and avoid interrogating through the schema fields in order.",
       "If the user asks to understand the loop first, do not lead with a finished working diagnosis or title before asking at least one clarifying question.",
-      "Before you ask how to change the loop, ask what it is protecting, preventing, or managing for the user."
+      "Before you ask how to change the loop, ask what it is protecting, preventing, or managing for the user.",
+      "Once one example is clear, it is appropriate to offer one tentative functional-analysis hypothesis about cue, protection, payoff, cost, or replacement need, then ask whether it lands."
     ]
   },
   {
@@ -4157,7 +4164,8 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
       "Schema catalog entries are reference concepts; belief_entry is the user-owned record.",
       "If no schema catalog match is known, omit schemaId rather than inventing one.",
       "Do not argue the user out of the belief. Reflect it, understand its function, and then collaboratively test for flexibility.",
-      "When the wording is nearly there, ask whether it feels true enough before you move into confidence, evidence, or alternative-belief details."
+      "When the wording is nearly there, ask whether it feels true enough before you move into confidence, evidence, or alternative-belief details.",
+      "A useful hypothesis should name the rule or prediction the moment seems to activate and then invite correction before saving it as the belief sentence."
     ]
   },
   {
@@ -4203,7 +4211,8 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
       "Mode profiles are durable parts descriptions.",
       "Mode guide sessions are the guided reasoning process that can lead toward a mode profile.",
       "Do not overpathologize. The point is to understand the part's job and cost, then increase choice.",
-      "If the user asks to understand the mode first, start from a recent moment and ask what the part is trying to do before you name it."
+      "If the user asks to understand the mode first, start from a recent moment and ask what the part is trying to do before you name it.",
+      "When enough evidence is present, offer one tentative hypothesis about the mode's protective job, fear, or burden before choosing the family label."
     ]
   },
   {
@@ -4231,7 +4240,8 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
     ],
     notes: [
       "A mode_guide_session is the exploration worksheet, not the final identity claim.",
-      "Store the user's answers faithfully and keep interpretations tentative unless the user wants a durable mode_profile."
+      "Store the user's answers faithfully and keep interpretations tentative unless the user wants a durable mode_profile.",
+      "Use candidate mode interpretations as testable hypotheses tied to the user's answers, not as certain labels."
     ]
   },
   {
@@ -4278,7 +4288,8 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
     notes: [
       "Use eventTypeId only when a known event taxonomy item fits; otherwise use customEventType.",
       "Use emotionDefinitionId only when a known emotion definition fits; otherwise keep the raw label.",
-      "If the user becomes overwhelmed, slow down, summarize, and return to one segment of the chain at a time instead of pushing for the full report in one turn."
+      "If the user becomes overwhelmed, slow down, summarize, and return to one segment of the chain at a time instead of pushing for the full report in one turn.",
+      "Only hypothesize about the incident sequence after the situation, emotion, meaning, behavior, and consequence are at least partly visible."
     ]
   },
   {
@@ -4352,6 +4363,38 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
     ]
   }
 ] as const;
+
+function buildPlaybookRouteInfo(focus: string) {
+  const guide = AGENT_ONBOARDING_ENTITY_CATALOG.find(
+    (entry) => entry.entityType === focus
+  );
+  const routePosture = guide?.classification ?? classifyOnboardingEntity(focus);
+  const apiAccessHint = [
+    `Route posture: ${routePosture}.`,
+    guide?.preferredMutationPath
+      ? `Mutation: ${guide.preferredMutationPath}.`
+      : null,
+    guide?.preferredReadPath ? `Read: ${guide.preferredReadPath}.` : null,
+    guide?.preferredMutationTool ? `Tool: ${guide.preferredMutationTool}.` : null
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return {
+    routePosture,
+    apiAccessHint:
+      apiAccessHint || "Route posture is not published for this playbook focus."
+  };
+}
+
+function enrichConversationPlaybookWithRouteInfo<T extends { focus: string }>(
+  playbook: T
+) {
+  return {
+    ...playbook,
+    ...buildPlaybookRouteInfo(playbook.focus)
+  };
+}
 
 const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
   {
@@ -5099,9 +5142,14 @@ function buildAgentOnboardingPayload(request: {
       triggerReport:
         "A trigger report is the one-episode incident chain: situation, emotions, thoughts, behaviors, consequences, extra mode labels, schema themes, and next moves."
     },
-    psycheCoachingPlaybooks: AGENT_ONBOARDING_PSYCHE_PLAYBOOKS,
+    psycheCoachingPlaybooks: AGENT_ONBOARDING_PSYCHE_PLAYBOOKS.map(
+      enrichConversationPlaybookWithRouteInfo
+    ),
     conversationRules: AGENT_ONBOARDING_CONVERSATION_RULES,
-    entityConversationPlaybooks: AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS,
+    entityConversationPlaybooks:
+      AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS.map(
+        enrichConversationPlaybookWithRouteInfo
+      ),
     relationshipModel: [
       "Every Forge record belongs to one typed user owner: either human or bot.",
       "Read routes may scope to one user with userId or to several users with repeated userIds.",
@@ -6158,7 +6206,9 @@ function buildV1Context(
       backend: "forge-node-runtime",
       mode: "transitional-node" as const
     },
-    metrics: buildGamificationProfile(goals, tasks, habits),
+    metrics: buildGamificationProfile(goals, tasks, habits, new Date(), {
+      userIds: scopedUserIdsForReads
+    }),
     dashboard,
     overview: getOverviewContext(new Date(), { userIds: scopedUserIdsForReads }),
     today: getTodayContext(new Date(), { userIds: scopedUserIdsForReads }),
@@ -6189,30 +6239,17 @@ function buildXpMetricsPayload(input: {
   goals?: Goal[];
   tasks?: Task[];
   habits?: Habit[];
+  userIds?: string[];
 } = {}) {
   const goals = input.goals ?? listGoals();
   const tasks = input.tasks ?? listTasks();
   const habits = input.habits ?? listHabits();
-  const rules = listRewardRules();
-  const gamificationOverview = buildGamificationOverview(goals, tasks, habits);
-  const dailyAmbientCap =
-    rules
-      .filter((rule) => rule.family === "ambient")
-      .reduce(
-        (max, rule) => Math.max(max, Number(rule.config.dailyCap ?? 0)),
-        0
-      ) || 12;
-
-  return {
-    profile: gamificationOverview.profile,
-    achievements: gamificationOverview.achievements,
-    milestoneRewards: gamificationOverview.milestoneRewards,
-    momentumPulse: buildXpMomentumPulse(goals, tasks, habits),
-    recentLedger: listRewardLedger({ limit: 25 }),
-    rules,
-    dailyAmbientXp: getDailyAmbientXp(new Date().toISOString().slice(0, 10)),
-    dailyAmbientCap
-  };
+  return buildXpMetricsPayloadModel({
+    goals,
+    tasks,
+    habits,
+    userIds: input.userIds
+  });
 }
 
 function resolveWorkAdjustmentTarget(
@@ -6358,7 +6395,12 @@ function buildOperatorContext(
       userIds: scopedUserIdsForReads
     }),
     recommendedNextTask,
-    xp: buildXpMetricsPayload({ goals, tasks, habits: scopedHabits })
+    xp: buildXpMetricsPayload({
+      goals,
+      tasks,
+      habits: scopedHabits,
+      userIds: scopedUserIdsForReads
+    })
   };
 }
 
@@ -11790,12 +11832,96 @@ export async function buildServer(
     }
     return { event };
   });
-  app.get("/api/v1/metrics", async () => ({
-    metrics: buildGamificationOverview(listGoals(), listTasks(), listHabits())
-  }));
-  app.get("/api/v1/metrics/xp", async () => ({
-    metrics: buildXpMetricsPayload()
-  }));
+  app.get("/api/v1/metrics", async (request) => {
+    const userIds = resolveScopedUserIds(
+      request.query as Record<string, unknown>
+    );
+    return {
+      metrics: buildGamificationOverview(
+        filterOwnedEntities("goal", listGoals(), userIds),
+        filterOwnedEntities("task", listTasks({ userIds }), userIds),
+        filterOwnedEntities("habit", listHabits(), userIds),
+        new Date(),
+        { userIds }
+      )
+    };
+  });
+  app.get("/api/v1/metrics/xp", async (request) => {
+    const userIds = resolveScopedUserIds(
+      request.query as Record<string, unknown>
+    );
+    return {
+      metrics: buildXpMetricsPayload({
+        goals: filterOwnedEntities("goal", listGoals(), userIds),
+        tasks: filterOwnedEntities("task", listTasks({ userIds }), userIds),
+        habits: filterOwnedEntities("habit", listHabits(), userIds),
+        userIds
+      })
+    };
+  });
+  app.get("/api/v1/gamification/catalog", async (request) => {
+    const userIds = resolveScopedUserIds(
+      request.query as Record<string, unknown>
+    );
+    return {
+      catalog: buildGamificationCatalogPayload(
+        filterOwnedEntities("goal", listGoals(), userIds),
+        filterOwnedEntities("task", listTasks({ userIds }), userIds),
+        filterOwnedEntities("habit", listHabits(), userIds),
+        { userIds }
+      )
+    };
+  });
+  app.get("/api/v1/gamification/equipment", async (request) => {
+    const userIds = resolveScopedUserIds(
+      request.query as Record<string, unknown>
+    );
+    const catalog = buildGamificationCatalogPayload(
+      filterOwnedEntities("goal", listGoals(), userIds),
+      filterOwnedEntities("task", listTasks({ userIds }), userIds),
+      filterOwnedEntities("habit", listHabits(), userIds),
+      { userIds }
+    );
+    return { equipment: catalog.equipment };
+  });
+  app.put("/api/v1/gamification/equipment", async (request, reply) => {
+    requireOperatorSession(request.headers as Record<string, unknown>, {
+      route: "/api/v1/gamification/equipment"
+    });
+    const userIds = resolveScopedUserIds(
+      request.query as Record<string, unknown>
+    );
+    const equipmentInput = gamificationEquipmentInputSchema.parse(request.body ?? {});
+    try {
+      return {
+        equipment: updateGamificationEquipmentSelection({
+          goals: filterOwnedEntities("goal", listGoals(), userIds),
+          tasks: filterOwnedEntities("task", listTasks({ userIds }), userIds),
+          habits: filterOwnedEntities("habit", listHabits(), userIds),
+          userIds,
+          equipment: equipmentInput
+        })
+      };
+    } catch (error) {
+      if (error instanceof LockedGamificationCosmeticError) {
+        reply.code(400);
+        return { error: error.message };
+      }
+      throw error;
+    }
+  });
+  app.post("/api/v1/gamification/celebrations/:id/seen", async (request, reply) => {
+    requireOperatorSession(request.headers as Record<string, unknown>, {
+      route: "/api/v1/gamification/celebrations/:id/seen"
+    });
+    const { id } = request.params as { id: string };
+    const celebration = markGamificationCelebrationSeen(id);
+    if (!celebration) {
+      reply.code(404);
+      return { error: "Gamification celebration not found" };
+    }
+    return { celebration };
+  });
   app.get("/api/v1/insights", async (request) => ({
     insights: getInsightsPayload(new Date(), {
       userIds: resolveScopedUserIds(request.query as Record<string, unknown>)

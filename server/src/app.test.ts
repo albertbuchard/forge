@@ -16163,11 +16163,11 @@ test("settings and local agent token management persist through the versioned AP
     assert.ok(selfObservationConversationPlaybook);
     assert.match(
       selfObservationConversationPlaybook.openingQuestion,
-      /what happened in the situation/i
+      /feel, think, or do next/i
     );
     assert.ok(
-      /situation[\s\S]*cue[\s\S]*emotion[\s\S]*thought[\s\S]*behavior[\s\S]*consequence/i.test(
-        selfObservationConversationPlaybook.askSequence.join(" ")
+      selfObservationConversationPlaybook.askSequence.some((step) =>
+        /cue, trigger, or body shift/i.test(step)
       )
     );
     const sleepConversationPlaybook =

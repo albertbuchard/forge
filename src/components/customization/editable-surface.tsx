@@ -309,6 +309,7 @@ export function EditableSurface({
     queryKey: ["forge-surface-layout", surfaceId],
     queryFn: () => getSurfaceLayout(surfaceId)
   });
+  const remoteSurfaceLayout = layoutQuery?.data?.layout;
 
   const saveMutation = useMutation({
     mutationFn: (payload: SurfaceLayoutPayload) =>
@@ -327,7 +328,9 @@ export function EditableSurface({
       mergeSurfaceLayoutPayload(
         surfaceId,
         widgets,
-        layoutQuery.data?.layout ?? readCachedSurfaceLayout(surfaceId) ?? defaults
+        remoteSurfaceLayout ??
+          readCachedSurfaceLayout(surfaceId) ??
+          defaults
       )
     );
     setLayoutPayload((current) =>
@@ -338,7 +341,7 @@ export function EditableSurface({
     hydrationCompleteRef.current = true;
   }, [
     defaults,
-    layoutQuery.data?.layout,
+    remoteSurfaceLayout,
     normalizeLayout,
     surfaceId,
     widgetLayoutSignature,
@@ -543,7 +546,7 @@ export function EditableSurface({
               size="sm"
               variant={editing ? "primary" : "secondary"}
               className={cn(
-                "h-8 rounded-full px-2.5 text-[12px] backdrop-blur-xl",
+                "h-8 rounded-full px-2 text-[12px] backdrop-blur-xl [&>span]:gap-1.5",
                 editing
                   ? "bg-[var(--primary)] text-slate-950 hover:opacity-95"
                   : "border-white/10 bg-[rgba(30,39,69,0.82)] text-white/78 hover:bg-[rgba(37,47,81,0.94)] hover:text-white"
@@ -551,7 +554,7 @@ export function EditableSurface({
               onClick={() => setEditing((current) => !current)}
             >
               <LayoutGrid className="size-3.5" />
-              <span className="hidden sm:inline">
+              <span className="hidden xl:inline">
                 {editing ? "Done" : "Layout"}
               </span>
             </Button>
@@ -590,7 +593,10 @@ export function EditableSurface({
                   width={width}
                 >
                   <WorkbenchBox
-                    boxId={widget.workbenchBoxId ?? `surface:${surfaceId}:${widget.id}`}
+                    boxId={
+                      widget.workbenchBoxId ??
+                      `surface:${surfaceId}:${widget.id}`
+                    }
                     surfaceId={surfaceId}
                   >
                     {widget.render({

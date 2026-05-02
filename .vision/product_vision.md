@@ -9,12 +9,42 @@ Tailwind CSS 4, Fastify 5, SQLite, generated OpenAPI contracts, OpenClaw/Hermes/
 adapter surfaces, and a Swift iPhone companion that syncs HealthKit and other phone-native
 signals into the same canonical Forge data model.
 
+Forge's progression layer uses that same stack: SQLite reward projections, Fastify API
+read models, React surfaces, Framer Motion celebration effects, and project-owned raster
+sprites for the Forge Smith mascot, trophies, unlocks, and streak states.
+
+The progression layer's current product direction is canonical Forge Gamification. It should feel like
+an enchanting blacksmith game interface wrapped around real Forge use: 144 authored
+achievements/unlocks, one unique transparent icon per item per theme, 30 atlas-cropped Forge Smith mascot states, and a
+single released catalog model that ignores stale pre-release unlock rows unless they match
+current source-controlled catalog item IDs.
+
 ## Main Product Shape
 
 Forge is not one page. The planning side spans goals, strategies, projects, issues, tasks,
 subtasks, and live task runs. The reflection side spans notes, Psyche, preferences, wiki,
 and health. The companion side includes the iPhone app and related agent/tooling surfaces.
 All of those pieces should use one shared entity language and one shared data model.
+
+The gamified layer should make the operating system feel consequential without turning it
+into a toy. The Forge Smith mascot, level ring, XP progress, streak state, Trophy Hall,
+and compact content-page HUDs should help the user see momentum at a glance. Trophies and
+unlocks are visual recognition and cosmetic customization; they must never lock core work,
+reflection, health, or agent functionality behind a game mechanic.
+
+Gamification art is selectable independently from the shell theme. `Fantasy` carries
+the dramatic black-iron Forge Smith direction, `Dramatic Smithie` gives the same
+catalog and mascot states a warmer, funnier animated-mascot tone, and `Mind Locksmith`
+turns the blacksmith into a modern metaphorical locksmith of the mind: smart, product-grade,
+and anchored in planning, memory, Psyche, health evidence, and agent collaboration.
+Sprite outputs should be transparent and theme-specific so trophies, unlocks, and mascot
+states sit cleanly inside the real Forge UI.
+
+Trophies should mostly be earned from specific behaviors inside Forge rather than XP alone:
+goal-linked execution, task runs, closeout reports, wiki pages and links, Psyche modes and
+trigger reports, behavior patterns, flexible beliefs, habit consistency, Life Force and
+health evidence, and agent collaboration. The mascot should become stronger with longer
+streaks and visibly colder after absence, while remaining emotionally safe and non-graphic.
 
 ## Health And Sleep Direction
 

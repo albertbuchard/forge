@@ -201,8 +201,7 @@ function resolveTagsForPath(path) {
     if (path.startsWith("/api/v1/auth")) {
         return ["Auth"];
     }
-    if (path.startsWith("/api/v1/health") ||
-        path.startsWith("/api/v1/mobile")) {
+    if (path.startsWith("/api/v1/health") || path.startsWith("/api/v1/mobile")) {
         return ["Health"];
     }
     if (path.startsWith("/api/v1/movement")) {
@@ -259,7 +258,8 @@ function resolveTagsForPath(path) {
     if (path.startsWith("/api/v1/strategies")) {
         return ["Strategies"];
     }
-    if (path.startsWith("/api/v1/projects") || path.startsWith("/api/v1/campaigns")) {
+    if (path.startsWith("/api/v1/projects") ||
+        path.startsWith("/api/v1/campaigns")) {
         return ["Projects"];
     }
     if (path.startsWith("/api/v1/goals")) {
@@ -287,7 +287,8 @@ function resolveTagsForPath(path) {
         return ["Activity"];
     }
     if (path.startsWith("/api/v1/metrics") ||
-        path.startsWith("/api/v1/rewards")) {
+        path.startsWith("/api/v1/rewards") ||
+        path.startsWith("/api/v1/gamification")) {
         return ["Metrics"];
     }
     if (path.startsWith("/api/v1/reviews")) {
@@ -359,6 +360,30 @@ export function buildOpenApiDocument() {
             expectedShape: {
                 $ref: "#/components/schemas/ValidationExpectedShape"
             }
+        }
+    };
+    const userSummary = {
+        type: "object",
+        additionalProperties: false,
+        required: [
+            "id",
+            "kind",
+            "handle",
+            "displayName",
+            "description",
+            "accentColor",
+            "createdAt",
+            "updatedAt"
+        ],
+        properties: {
+            id: { type: "string" },
+            kind: { type: "string", enum: ["human", "bot"] },
+            handle: { type: "string" },
+            displayName: { type: "string" },
+            description: { type: "string" },
+            accentColor: { type: "string" },
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" }
         }
     };
     const tag = {
@@ -1196,6 +1221,11 @@ export function buildOpenApiDocument() {
             "level",
             "currentLevelXp",
             "nextLevelXp",
+            "xpIntoLevel",
+            "xpToNextLevel",
+            "currentLevelStartXp",
+            "nextLevelTotalXp",
+            "levelCurveVersion",
             "weeklyXp",
             "streakDays",
             "comboMultiplier",
@@ -1208,6 +1238,11 @@ export function buildOpenApiDocument() {
             level: { type: "integer" },
             currentLevelXp: { type: "integer" },
             nextLevelXp: { type: "integer" },
+            xpIntoLevel: { type: "integer" },
+            xpToNextLevel: { type: "integer" },
+            currentLevelStartXp: { type: "integer" },
+            nextLevelTotalXp: { type: "integer" },
+            levelCurveVersion: { type: "string" },
             weeklyXp: { type: "integer" },
             streakDays: { type: "integer" },
             comboMultiplier: { type: "number" },
@@ -2099,7 +2134,17 @@ export function buildOpenApiDocument() {
             },
             themePreference: {
                 type: "string",
-                enum: ["obsidian", "solar", "aurora", "ember", "paper", "dawn", "atelier", "custom", "system"]
+                enum: [
+                    "obsidian",
+                    "solar",
+                    "aurora",
+                    "ember",
+                    "paper",
+                    "dawn",
+                    "atelier",
+                    "custom",
+                    "system"
+                ]
             },
             customTheme: nullable({
                 type: "object",
@@ -2156,7 +2201,10 @@ export function buildOpenApiDocument() {
             label: { type: "string" },
             agentType: { type: "string" },
             identityKey: nullable({ type: "string" }),
-            provider: nullable({ type: "string", enum: ["openclaw", "hermes", "codex"] }),
+            provider: nullable({
+                type: "string",
+                enum: ["openclaw", "hermes", "codex"]
+            }),
             machineKey: nullable({ type: "string" }),
             personaKey: nullable({ type: "string" }),
             linkedUsers: arrayOf({
@@ -2599,26 +2647,286 @@ export function buildOpenApiDocument() {
             nextMilestoneLabel: { type: "string" }
         }
     };
+    const gamificationCatalogItem = {
+        type: "object",
+        additionalProperties: false,
+        required: [
+            "id",
+            "kind",
+            "category",
+            "tier",
+            "difficulty",
+            "hidden",
+            "title",
+            "summary",
+            "requirement",
+            "requirementText",
+            "reward",
+            "unlockType",
+            "rewardPayload",
+            "assetKey",
+            "sheetKey",
+            "rarity",
+            "sortOrder"
+        ],
+        properties: {
+            id: { type: "string" },
+            kind: { type: "string", enum: ["trophy", "unlock"] },
+            category: {
+                type: "string",
+                enum: [
+                    "xp_levels",
+                    "streaks",
+                    "tasks",
+                    "projects",
+                    "habits",
+                    "psyche",
+                    "wiki",
+                    "agents"
+                ]
+            },
+            tier: { type: "string", enum: ["bronze", "silver", "gold", "platinum"] },
+            difficulty: {
+                type: "string",
+                enum: ["intro", "standard", "hard", "legendary"]
+            },
+            hidden: { type: "boolean" },
+            title: { type: "string" },
+            summary: { type: "string" },
+            requirement: {
+                type: "object",
+                additionalProperties: true,
+                description: "Typed requirement: atomic metric threshold, allOf, or anyOf composite gate."
+            },
+            requirementText: { type: "string" },
+            reward: { type: "string" },
+            unlockType: nullable({
+                type: "string",
+                enum: [
+                    "mascot_skin",
+                    "mascot_pose",
+                    "hud_treatment",
+                    "streak_effect",
+                    "trophy_shelf",
+                    "icon_frame",
+                    "celebration_variant"
+                ]
+            }),
+            rewardPayload: { type: "object", additionalProperties: true },
+            assetKey: { type: "string" },
+            sheetKey: { type: "string" },
+            rarity: { type: "string", enum: ["common", "rare", "epic", "legendary"] },
+            sortOrder: { type: "integer" }
+        }
+    };
+    const gamificationCatalogEntry = {
+        allOf: [
+            { $ref: "#/components/schemas/GamificationCatalogItem" },
+            {
+                type: "object",
+                required: [
+                    "unlocked",
+                    "unlockedAt",
+                    "progressCurrent",
+                    "progressTarget",
+                    "progressPercent",
+                    "celebrationSeenAt"
+                ],
+                properties: {
+                    unlocked: { type: "boolean" },
+                    unlockedAt: nullable({ type: "string", format: "date-time" }),
+                    progressCurrent: { type: "integer" },
+                    progressTarget: { type: "integer" },
+                    progressPercent: { type: "number" },
+                    celebrationSeenAt: nullable({ type: "string", format: "date-time" })
+                }
+            }
+        ]
+    };
+    const gamificationMascotState = {
+        type: "object",
+        additionalProperties: false,
+        required: [
+            "mood",
+            "spriteKey",
+            "streakSpriteKey",
+            "headline",
+            "line",
+            "pressureLevel",
+            "missedDays",
+            "lastActiveDateKey"
+        ],
+        properties: {
+            mood: {
+                type: "string",
+                enum: [
+                    "idle",
+                    "forging",
+                    "wise",
+                    "celebrating",
+                    "pressure",
+                    "comeback",
+                    "exhausted",
+                    "proud",
+                    "absent"
+                ]
+            },
+            spriteKey: { type: "string" },
+            streakSpriteKey: { type: "string" },
+            headline: { type: "string" },
+            line: { type: "string" },
+            pressureLevel: { type: "integer" },
+            missedDays: { type: "integer" },
+            lastActiveDateKey: nullable({ type: "string" })
+        }
+    };
+    const gamificationEquipment = {
+        type: "object",
+        additionalProperties: false,
+        required: [
+            "selectedMascotSkin",
+            "selectedHudTreatment",
+            "selectedStreakEffect",
+            "selectedTrophyShelf",
+            "selectedCelebrationVariant",
+            "updatedAt"
+        ],
+        properties: {
+            selectedMascotSkin: nullable({ type: "string" }),
+            selectedHudTreatment: nullable({ type: "string" }),
+            selectedStreakEffect: nullable({ type: "string" }),
+            selectedTrophyShelf: nullable({ type: "string" }),
+            selectedCelebrationVariant: nullable({ type: "string" }),
+            updatedAt: nullable({ type: "string", format: "date-time" })
+        }
+    };
+    const gamificationCelebration = {
+        type: "object",
+        additionalProperties: false,
+        required: [
+            "id",
+            "userId",
+            "kind",
+            "itemId",
+            "title",
+            "summary",
+            "assetKey",
+            "metadata",
+            "createdAt",
+            "seenAt"
+        ],
+        properties: {
+            id: { type: "string" },
+            userId: { type: "string" },
+            kind: {
+                type: "string",
+                enum: ["xp", "level", "trophy", "unlock", "streak", "comeback"]
+            },
+            itemId: nullable({ type: "string" }),
+            title: { type: "string" },
+            summary: { type: "string" },
+            assetKey: { type: "string" },
+            metadata: { type: "object", additionalProperties: true },
+            createdAt: { type: "string", format: "date-time" },
+            seenAt: nullable({ type: "string", format: "date-time" })
+        }
+    };
+    const gamificationScope = {
+        type: "object",
+        additionalProperties: false,
+        required: ["mode", "userIds", "users", "label"],
+        properties: {
+            mode: {
+                type: "string",
+                enum: ["selected_user", "operator_fallback", "aggregate_fallback"]
+            },
+            userIds: arrayOf({ type: "string" }),
+            users: arrayOf({ $ref: "#/components/schemas/UserSummary" }),
+            label: { type: "string" }
+        }
+    };
+    const gamificationCatalogPayload = {
+        type: "object",
+        additionalProperties: false,
+        required: [
+            "scope",
+            "equipment",
+            "items",
+            "totalCount",
+            "unlockedCount",
+            "trophyCount",
+            "unlockCount",
+            "nextUnlock",
+            "newestUnlock",
+            "nextTargets",
+            "recentlyUnlocked"
+        ],
+        properties: {
+            scope: { $ref: "#/components/schemas/GamificationScope" },
+            equipment: { $ref: "#/components/schemas/GamificationEquipment" },
+            items: arrayOf({ $ref: "#/components/schemas/GamificationCatalogEntry" }),
+            totalCount: { type: "integer" },
+            unlockedCount: { type: "integer" },
+            trophyCount: { type: "integer" },
+            unlockCount: { type: "integer" },
+            nextUnlock: nullable({
+                $ref: "#/components/schemas/GamificationCatalogEntry"
+            }),
+            newestUnlock: nullable({
+                $ref: "#/components/schemas/GamificationCatalogEntry"
+            }),
+            nextTargets: arrayOf({ $ref: "#/components/schemas/GamificationCatalogEntry" }),
+            recentlyUnlocked: arrayOf({ $ref: "#/components/schemas/GamificationCatalogEntry" })
+        }
+    };
     const xpMetricsPayload = {
         type: "object",
         additionalProperties: false,
         required: [
+            "scope",
             "profile",
             "achievements",
             "milestoneRewards",
             "momentumPulse",
+            "catalogPreview",
+            "unlockedItemCount",
+            "totalItemCount",
+            "nextUnlock",
+            "newestUnlock",
+            "nextTargets",
+            "equipment",
+            "mascot",
+            "celebrations",
             "recentLedger",
             "rules",
             "dailyAmbientXp",
             "dailyAmbientCap"
         ],
         properties: {
+            scope: { $ref: "#/components/schemas/GamificationScope" },
             profile: { $ref: "#/components/schemas/GamificationProfile" },
             achievements: arrayOf({ $ref: "#/components/schemas/AchievementSignal" }),
             milestoneRewards: arrayOf({
                 $ref: "#/components/schemas/MilestoneReward"
             }),
             momentumPulse: { $ref: "#/components/schemas/XpMomentumPulse" },
+            catalogPreview: arrayOf({
+                $ref: "#/components/schemas/GamificationCatalogEntry"
+            }),
+            unlockedItemCount: { type: "integer" },
+            totalItemCount: { type: "integer" },
+            nextUnlock: nullable({
+                $ref: "#/components/schemas/GamificationCatalogEntry"
+            }),
+            newestUnlock: nullable({
+                $ref: "#/components/schemas/GamificationCatalogEntry"
+            }),
+            nextTargets: arrayOf({ $ref: "#/components/schemas/GamificationCatalogEntry" }),
+            equipment: { $ref: "#/components/schemas/GamificationEquipment" },
+            mascot: { $ref: "#/components/schemas/GamificationMascotState" },
+            celebrations: arrayOf({
+                $ref: "#/components/schemas/GamificationCelebration"
+            }),
             recentLedger: arrayOf({ $ref: "#/components/schemas/RewardLedgerEvent" }),
             rules: arrayOf({ $ref: "#/components/schemas/RewardRule" }),
             dailyAmbientXp: { type: "integer" },
@@ -2849,7 +3157,17 @@ export function buildOpenApiDocument() {
             execution: { $ref: "#/components/schemas/ExecutionSettings" },
             themePreference: {
                 type: "string",
-                enum: ["obsidian", "solar", "aurora", "ember", "paper", "dawn", "atelier", "custom", "system"]
+                enum: [
+                    "obsidian",
+                    "solar",
+                    "aurora",
+                    "ember",
+                    "paper",
+                    "dawn",
+                    "atelier",
+                    "custom",
+                    "system"
+                ]
             },
             customTheme: nullable({
                 type: "object",
@@ -3124,7 +3442,9 @@ export function buildOpenApiDocument() {
                     "requiredForCreate",
                     "highValueOptionalFields",
                     "exampleQuestions",
-                    "notes"
+                    "notes",
+                    "routePosture",
+                    "apiAccessHint"
                 ],
                 properties: {
                     focus: { type: "string" },
@@ -3134,19 +3454,30 @@ export function buildOpenApiDocument() {
                     requiredForCreate: arrayOf({ type: "string" }),
                     highValueOptionalFields: arrayOf({ type: "string" }),
                     exampleQuestions: arrayOf({ type: "string" }),
-                    notes: arrayOf({ type: "string" })
+                    notes: arrayOf({ type: "string" }),
+                    routePosture: { type: "string" },
+                    apiAccessHint: { type: "string" }
                 }
             }),
             conversationRules: arrayOf({ type: "string" }),
             entityConversationPlaybooks: arrayOf({
                 type: "object",
                 additionalProperties: false,
-                required: ["focus", "openingQuestion", "coachingGoal", "askSequence"],
+                required: [
+                    "focus",
+                    "openingQuestion",
+                    "coachingGoal",
+                    "askSequence",
+                    "routePosture",
+                    "apiAccessHint"
+                ],
                 properties: {
                     focus: { type: "string" },
                     openingQuestion: { type: "string" },
                     coachingGoal: { type: "string" },
-                    askSequence: arrayOf({ type: "string" })
+                    askSequence: arrayOf({ type: "string" }),
+                    routePosture: { type: "string" },
+                    apiAccessHint: { type: "string" }
                 }
             }),
             relationshipModel: arrayOf({ type: "string" }),
@@ -4330,6 +4661,7 @@ export function buildOpenApiDocument() {
                 ValidationIssue: validationIssue,
                 ValidationExpectedShape: validationExpectedShape,
                 ErrorResponse: errorResponse,
+                UserSummary: userSummary,
                 Tag: tag,
                 Goal: goal,
                 DashboardGoal: dashboardGoal,
@@ -4417,6 +4749,13 @@ export function buildOpenApiDocument() {
                 RewardRule: rewardRule,
                 RewardLedgerEvent: rewardLedgerEvent,
                 EventLogEntry: eventLogEntry,
+                GamificationCatalogItem: gamificationCatalogItem,
+                GamificationCatalogEntry: gamificationCatalogEntry,
+                GamificationCatalogPayload: gamificationCatalogPayload,
+                GamificationEquipment: gamificationEquipment,
+                GamificationMascotState: gamificationMascotState,
+                GamificationCelebration: gamificationCelebration,
+                GamificationScope: gamificationScope,
                 XpMetricsPayload: xpMetricsPayload,
                 OperatorContextPayload: operatorContextPayload,
                 OperatorOverviewPayload: operatorOverviewPayload
@@ -6170,7 +6509,14 @@ export function buildOpenApiDocument() {
                     responses: {
                         "201": jsonResponse({
                             type: "object",
-                            required: ["run", "instrument", "version", "answers", "scores", "history"],
+                            required: [
+                                "run",
+                                "instrument",
+                                "version",
+                                "answers",
+                                "scores",
+                                "history"
+                            ],
                             properties: {
                                 run: {
                                     type: "object",
@@ -6208,7 +6554,14 @@ export function buildOpenApiDocument() {
                     responses: {
                         "200": jsonResponse({
                             type: "object",
-                            required: ["run", "instrument", "version", "answers", "scores", "history"],
+                            required: [
+                                "run",
+                                "instrument",
+                                "version",
+                                "answers",
+                                "scores",
+                                "history"
+                            ],
                             properties: {
                                 run: {
                                     type: "object",
@@ -6244,7 +6597,14 @@ export function buildOpenApiDocument() {
                     responses: {
                         "200": jsonResponse({
                             type: "object",
-                            required: ["run", "instrument", "version", "answers", "scores", "history"],
+                            required: [
+                                "run",
+                                "instrument",
+                                "version",
+                                "answers",
+                                "scores",
+                                "history"
+                            ],
                             properties: {
                                 run: {
                                     type: "object",
@@ -6282,7 +6642,14 @@ export function buildOpenApiDocument() {
                     responses: {
                         "200": jsonResponse({
                             type: "object",
-                            required: ["run", "instrument", "version", "answers", "scores", "history"],
+                            required: [
+                                "run",
+                                "instrument",
+                                "version",
+                                "answers",
+                                "scores",
+                                "history"
+                            ],
                             properties: {
                                 run: {
                                     type: "object",
@@ -8098,6 +8465,17 @@ export function buildOpenApiDocument() {
             "/api/v1/metrics/xp": {
                 get: {
                     summary: "Get explainable XP metrics and reward-ledger state",
+                    parameters: [
+                        {
+                            name: "userIds",
+                            in: "query",
+                            required: false,
+                            schema: arrayOf({ type: "string" }),
+                            style: "form",
+                            explode: true,
+                            description: "Selected Forge user IDs. Exactly one valid ID returns selected-user progression; otherwise the API falls back to the active operator and then aggregate progression."
+                        }
+                    ],
                     responses: {
                         "200": jsonResponse({
                             type: "object",
@@ -8106,6 +8484,126 @@ export function buildOpenApiDocument() {
                                 metrics: { $ref: "#/components/schemas/XpMetricsPayload" }
                             }
                         }, "XP metrics payload")
+                    }
+                }
+            },
+            "/api/v1/gamification/catalog": {
+                get: {
+                    summary: "Get the source-controlled trophy and cosmetic unlock catalog with selected-user progress",
+                    parameters: [
+                        {
+                            name: "userIds",
+                            in: "query",
+                            required: false,
+                            schema: arrayOf({ type: "string" }),
+                            style: "form",
+                            explode: true,
+                            description: "Selected Forge user IDs used to resolve catalog progress and unlock state."
+                        }
+                    ],
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["catalog"],
+                            properties: {
+                                catalog: {
+                                    $ref: "#/components/schemas/GamificationCatalogPayload"
+                                }
+                            }
+                        }, "Gamification catalog payload")
+                    }
+                }
+            },
+            "/api/v1/gamification/equipment": {
+                get: {
+                    summary: "Get selected-user equipped gamification cosmetics",
+                    parameters: [
+                        {
+                            name: "userIds",
+                            in: "query",
+                            required: false,
+                            schema: arrayOf({ type: "string" }),
+                            style: "form",
+                            explode: true
+                        }
+                    ],
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["equipment"],
+                            properties: {
+                                equipment: {
+                                    $ref: "#/components/schemas/GamificationEquipment"
+                                }
+                            }
+                        }, "Equipped cosmetics")
+                    }
+                },
+                put: {
+                    summary: "Equip unlocked gamification cosmetics",
+                    parameters: [
+                        {
+                            name: "userIds",
+                            in: "query",
+                            required: false,
+                            schema: arrayOf({ type: "string" }),
+                            style: "form",
+                            explode: true
+                        }
+                    ],
+                    requestBody: {
+                        required: true,
+                        content: {
+                            "application/json": {
+                                schema: {
+                                    type: "object",
+                                    additionalProperties: false,
+                                    properties: {
+                                        selectedMascotSkin: nullable({ type: "string" }),
+                                        selectedHudTreatment: nullable({ type: "string" }),
+                                        selectedStreakEffect: nullable({ type: "string" }),
+                                        selectedTrophyShelf: nullable({ type: "string" }),
+                                        selectedCelebrationVariant: nullable({ type: "string" })
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["equipment"],
+                            properties: {
+                                equipment: {
+                                    $ref: "#/components/schemas/GamificationEquipment"
+                                }
+                            }
+                        }, "Updated equipped cosmetics")
+                    }
+                }
+            },
+            "/api/v1/gamification/celebrations/{id}/seen": {
+                post: {
+                    summary: "Mark a queued gamification celebration as seen",
+                    parameters: [
+                        {
+                            name: "id",
+                            in: "path",
+                            required: true,
+                            schema: { type: "string" },
+                            description: "Celebration ID to mark consumed."
+                        }
+                    ],
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["celebration"],
+                            properties: {
+                                celebration: {
+                                    $ref: "#/components/schemas/GamificationCelebration"
+                                }
+                            }
+                        }, "Updated gamification celebration")
                     }
                 }
             },

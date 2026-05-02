@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { Link } from "react-router-dom";
+import { Check, Info, Sparkles } from "lucide-react";
 import { ThemeCustomizerDialog } from "@/components/settings/theme-customizer-dialog";
 import { SettingsSectionNav } from "@/components/settings/settings-section-nav";
 import { PageHero } from "@/components/shell/page-hero";
@@ -13,6 +14,7 @@ import { ErrorState } from "@/components/ui/page-state";
 import { useI18n } from "@/lib/i18n";
 import {
   ensureOperatorSession,
+  getCompanionOverview,
   getSettings,
   patchSettings,
   revokeOperatorSession
@@ -21,6 +23,11 @@ import {
   settingsMutationSchema,
   type SettingsMutationInput
 } from "@/lib/schemas";
+import {
+  gamificationThemeOptions,
+  getGamificationSpriteUrl,
+  type GamificationThemePreference
+} from "@/lib/gamification-assets";
 import {
   applyForgeThemeToDocument,
   defaultCustomTheme,
@@ -35,17 +42,225 @@ function ThemePreviewSwatches({
   theme: ReturnType<typeof getForgeThemePreview>;
 }) {
   return (
-    <div className="mt-4 grid grid-cols-4 gap-2">
+    <div className="mt-3 grid grid-cols-4 gap-2">
       {[theme.primary, theme.secondary, theme.tertiary, theme.panelHigh].map(
         (color) => (
           <div
             key={color}
-            className="h-10 rounded-[14px] border border-black/10"
+            className="h-6 rounded-[10px] border border-black/10"
             style={{ background: color }}
           />
         )
       )}
     </div>
+  );
+}
+
+function GamificationStylePreview({
+  selected,
+  theme
+}: {
+  selected: boolean;
+  theme: GamificationThemePreference;
+}) {
+  return (
+    <div className="relative min-h-[138px] overflow-hidden rounded-[18px] border border-white/10 bg-[radial-gradient(circle_at_24%_10%,rgba(255,199,104,0.22),transparent_30%),radial-gradient(circle_at_88%_12%,rgba(84,191,255,0.16),transparent_32%),linear-gradient(145deg,rgba(255,255,255,0.08),rgba(255,255,255,0.025))]">
+      <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/42 to-transparent" />
+      <img
+        src={getGamificationSpriteUrl("mascot-state-014", 512, theme)}
+        alt=""
+        className="absolute bottom-1 left-1/2 h-[128px] w-[128px] -translate-x-1/2 object-contain drop-shadow-[0_18px_30px_rgba(0,0,0,0.34)]"
+      />
+      <div className="absolute left-3 top-3 flex items-center gap-2 rounded-full border border-white/10 bg-black/28 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-white/78 backdrop-blur-md">
+        <Sparkles className="size-3 text-amber-200" />
+        Live rewards
+      </div>
+      <div className="absolute bottom-3 left-3 flex items-center gap-1.5">
+        {[
+          "item-trophy-xp-levels-the-first-heat",
+          "item-trophy-tasks-anvil-marathon",
+          "item-unlock-streaks-molten-crown-fire"
+        ].map((assetKey) => (
+          <span
+            key={assetKey}
+            className="grid size-10 place-items-center rounded-[12px] border border-white/12 bg-black/26 shadow-[0_12px_22px_rgba(0,0,0,0.22)] backdrop-blur-md"
+          >
+            <img
+              src={getGamificationSpriteUrl(assetKey, 256, theme)}
+              alt=""
+              className="size-8 object-contain"
+            />
+          </span>
+        ))}
+      </div>
+      <span
+        className={`absolute right-3 top-3 grid size-7 place-items-center rounded-full border ${
+          selected
+            ? "border-emerald-200/55 bg-emerald-300/18 text-emerald-100"
+            : "border-white/15 bg-black/20 text-white/40"
+        }`}
+      >
+        {selected ? <Check className="size-4" /> : null}
+      </span>
+    </div>
+  );
+}
+
+function MobileCompanionSettingsCard({ healthy }: { healthy: boolean }) {
+  return (
+    <Card className="p-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="min-w-0">
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            Mobile companion
+          </div>
+          <div className="mt-1 text-base font-medium text-white">
+            {healthy ? "iPhone bridge is syncing" : "Connect the iPhone bridge"}
+          </div>
+          <div className="mt-1 max-w-3xl text-sm leading-6 text-white/58">
+            {healthy
+              ? "Review HealthKit, movement, and background sync permissions."
+              : "Pair or refresh the native companion before relying on HealthKit, movement, or watch signals."}
+          </div>
+        </div>
+        <Link
+          to="/settings/mobile"
+          className="inline-flex min-h-10 items-center rounded-[14px] bg-white/[0.08] px-3 py-2 text-sm text-white transition hover:bg-white/[0.12]"
+        >
+          Open mobile settings
+        </Link>
+      </div>
+    </Card>
+  );
+}
+
+function formatAuditDate(value: string) {
+  return new Date(value).toLocaleString();
+}
+
+function getIntegrityExplanation({
+  integrityScore,
+  storageMode,
+  lastAuditAt
+}: {
+  integrityScore: number;
+  storageMode: string;
+  lastAuditAt: string;
+}) {
+  if (integrityScore >= 100) {
+    return [
+      "All currently reported settings and storage checks passed.",
+      `Latest audit: ${formatAuditDate(lastAuditAt)}.`
+    ];
+  }
+
+  const gap = Math.max(0, 100 - integrityScore);
+  return [
+    `Forge is holding back ${gap}% because the latest settings and storage audit reported a consistency warning.`,
+    "The current audit only exposes the aggregate score, so per-check details are not available yet.",
+    `Storage mode: ${storageMode}. Latest audit: ${formatAuditDate(lastAuditAt)}.`
+  ];
+}
+
+function IntegrityHelpPill({
+  integrityScore,
+  storageMode,
+  lastAuditAt
+}: {
+  integrityScore: number;
+  storageMode: string;
+  lastAuditAt: string;
+}) {
+  const explanation = getIntegrityExplanation({
+    integrityScore,
+    storageMode,
+    lastAuditAt
+  });
+
+  return (
+    <details className="group relative inline-flex">
+      <summary
+        className="inline-flex cursor-pointer list-none items-center gap-1 rounded-full border border-white/10 bg-white/[0.05] px-2.5 py-1 text-[11px] font-medium normal-case tracking-normal text-white/72 transition marker:hidden hover:border-white/18 hover:bg-white/[0.08] hover:text-white/88 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(192,193,255,0.35)] [&::-webkit-details-marker]:hidden"
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.currentTarget.parentElement?.removeAttribute("open");
+          }
+        }}
+      >
+        <Info className="size-3.5" aria-hidden="true" />
+        {integrityScore}% integrity
+      </summary>
+      <span
+        role="tooltip"
+        className="absolute right-0 top-[calc(100%+0.55rem)] z-50 hidden w-[min(19rem,calc(100vw-2rem))] rounded-[16px] border border-white/10 bg-[rgba(10,15,27,0.98)] px-3 py-2.5 text-left text-xs leading-5 tracking-normal text-white/70 normal-case shadow-[0_18px_48px_rgba(3,8,18,0.46)] group-open:block"
+      >
+        <span className="block font-medium text-white/88">
+          {integrityScore >= 100
+            ? "Integrity is complete"
+            : `Why this is ${integrityScore}%`}
+        </span>
+        {explanation.map((line) => (
+          <span key={line} className="mt-1 block">
+            {line}
+          </span>
+        ))}
+      </span>
+    </details>
+  );
+}
+
+function SecurityPostureCard({
+  integrityScore,
+  storageMode,
+  lastAuditAt
+}: {
+  integrityScore: number;
+  storageMode: string;
+  lastAuditAt: string;
+}) {
+  const [primaryExplanation] = getIntegrityExplanation({
+    integrityScore,
+    storageMode,
+    lastAuditAt
+  });
+
+  return (
+    <Card className="p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            Security posture
+          </div>
+          <div className="mt-1 text-sm leading-6 text-white/58">
+            Local-first means Forge stores its runtime data on this machine.
+            Integrity is the latest internal consistency score from settings and
+            data checks.
+          </div>
+          <div className="mt-2 text-xs leading-5 text-white/50">
+            {primaryExplanation}
+          </div>
+        </div>
+        <IntegrityHelpPill
+          integrityScore={integrityScore}
+          storageMode={storageMode}
+          lastAuditAt={lastAuditAt}
+        />
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-2">
+        <div className="rounded-[14px] bg-white/[0.04] px-3 py-3">
+          <div className="text-xs text-white/54">Storage mode</div>
+          <div className="mt-1 text-base font-medium text-white">
+            {storageMode}
+          </div>
+        </div>
+        <div className="rounded-[14px] bg-white/[0.04] px-3 py-3">
+          <div className="text-xs text-white/54">Last audit</div>
+          <div className="mt-1 text-base font-medium text-white">
+            {formatAuditDate(lastAuditAt)}
+          </div>
+        </div>
+      </div>
+    </Card>
   );
 }
 
@@ -65,6 +280,12 @@ export function SettingsPage() {
     queryFn: getSettings,
     enabled: operatorReady
   });
+  const companionOverviewQuery = useQuery({
+    queryKey: ["forge-companion-overview"],
+    queryFn: async () => (await getCompanionOverview()).overview,
+    enabled: operatorReady,
+    staleTime: 30_000
+  });
 
   const settingsForm = useForm<SettingsMutationInput>({
     defaultValues: {
@@ -83,6 +304,7 @@ export function SettingsPage() {
         timeAccountingMode: "split"
       },
       themePreference: "obsidian",
+      gamificationTheme: "dark-fantasy",
       customTheme: defaultCustomTheme,
       localePreference: "en"
     }
@@ -110,6 +332,15 @@ export function SettingsPage() {
     }
   });
 
+  const gamificationThemeMutation = useMutation({
+    mutationFn: (input: Pick<SettingsMutationInput, "gamificationTheme">) =>
+      patchSettings(input),
+    onSuccess: async (response) => {
+      queryClient.setQueryData(["forge-settings"], response);
+      await invalidateSettings();
+    }
+  });
+
   const revokeSessionMutation = useMutation({
     mutationFn: revokeOperatorSession,
     onSuccess: async () => {
@@ -127,7 +358,10 @@ export function SettingsPage() {
 
   const settings = settingsQuery.data?.settings;
   const selectedTheme = settingsForm.watch("themePreference");
+  const selectedGamificationTheme = settingsForm.watch("gamificationTheme");
   const customTheme = settingsForm.watch("customTheme") ?? defaultCustomTheme;
+  const hasHealthyMobileCompanion =
+    companionOverviewQuery.data?.healthState === "healthy_sync";
 
   const saveThemeSelection = async (
     themePreference: ForgeThemePreference,
@@ -147,6 +381,15 @@ export function SettingsPage() {
       themePreference,
       customTheme: nextCustomTheme ?? defaultCustomTheme
     });
+  };
+
+  const saveGamificationThemeSelection = async (
+    gamificationTheme: GamificationThemePreference
+  ) => {
+    settingsForm.setValue("gamificationTheme", gamificationTheme, {
+      shouldDirty: true
+    });
+    await gamificationThemeMutation.mutateAsync({ gamificationTheme });
   };
 
   useEffect(() => {
@@ -210,7 +453,13 @@ export function SettingsPage() {
       <PageHero
         title="Settings"
         description="Tune execution policy, timer behaviour, and personal preferences."
-        badge={`${settings.security.integrityScore}% integrity`}
+        badge={
+          <IntegrityHelpPill
+            integrityScore={settings.security.integrityScore}
+            storageMode={settings.security.storageMode}
+            lastAuditAt={settings.security.lastAuditAt}
+          />
+        }
       />
 
       {import.meta.env.DEV ? (
@@ -247,18 +496,22 @@ export function SettingsPage() {
         </div>
       ) : null}
 
-      <div className="grid gap-5">
-        <Card>
-          <form
-            className="grid gap-4"
-            onSubmit={settingsForm.handleSubmit(async (values) => {
-              await updateMutation.mutateAsync(values);
-            })}
-          >
+      <div className="grid gap-4">
+        {!hasHealthyMobileCompanion ? (
+          <MobileCompanionSettingsCard healthy={false} />
+        ) : null}
+
+        <form
+          className="grid gap-4"
+          onSubmit={settingsForm.handleSubmit(async (values) => {
+            await updateMutation.mutateAsync(values);
+          })}
+        >
+          <Card className="p-4">
             <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
               Operator profile
             </div>
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-3 md:grid-cols-2">
               <label className="grid gap-2">
                 <span className="text-sm text-white/58">Name</span>
                 <Input {...settingsForm.register("profile.operatorName")} />
@@ -276,7 +529,7 @@ export function SettingsPage() {
             <div className="mt-2 font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
               Execution policy
             </div>
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)]">
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)]">
               <label className="grid gap-2">
                 <span className="text-sm text-white/58">
                   Maximum active tasks
@@ -294,7 +547,7 @@ export function SettingsPage() {
                 <div className="text-sm text-white/58">
                   Time accounting mode
                 </div>
-                <div className="grid gap-3 md:grid-cols-3">
+                <div className="grid gap-2 md:grid-cols-3">
                   {(
                     [
                       {
@@ -319,7 +572,7 @@ export function SettingsPage() {
                   ).map((mode) => (
                     <label
                       key={mode.value}
-                      className="grid gap-2 rounded-[18px] bg-white/[0.04] px-4 py-4"
+                      className="grid gap-2 rounded-[16px] bg-white/[0.04] px-3 py-3"
                     >
                       <span className="flex items-center gap-3">
                         <input
@@ -331,7 +584,7 @@ export function SettingsPage() {
                         />
                         <span className="text-white/82">{mode.label}</span>
                       </span>
-                      <span className="text-sm leading-6 text-white/56">
+                      <span className="text-xs leading-5 text-white/56">
                         {mode.description}
                       </span>
                     </label>
@@ -343,21 +596,21 @@ export function SettingsPage() {
             <div className="mt-2 font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
               Notification rules
             </div>
-            <label className="flex items-center justify-between rounded-[18px] bg-white/[0.04] px-4 py-3">
+            <label className="flex items-center justify-between rounded-[16px] bg-white/[0.04] px-3 py-2.5">
               <span className="text-white/72">Goal drift alerts</span>
               <input
                 type="checkbox"
                 {...settingsForm.register("notifications.goalDriftAlerts")}
               />
             </label>
-            <label className="flex items-center justify-between rounded-[18px] bg-white/[0.04] px-4 py-3">
+            <label className="flex items-center justify-between rounded-[16px] bg-white/[0.04] px-3 py-2.5">
               <span className="text-white/72">Daily quest reminders</span>
               <input
                 type="checkbox"
                 {...settingsForm.register("notifications.dailyQuestReminders")}
               />
             </label>
-            <label className="flex items-center justify-between rounded-[18px] bg-white/[0.04] px-4 py-3">
+            <label className="flex items-center justify-between rounded-[16px] bg-white/[0.04] px-3 py-2.5">
               <span className="text-white/72">Achievement celebrations</span>
               <input
                 type="checkbox"
@@ -366,15 +619,17 @@ export function SettingsPage() {
                 )}
               />
             </label>
+          </Card>
 
-            <div className="mt-2 font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+          <Card className="p-4">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
               Theme calibration
             </div>
             <p className="text-sm text-white/58">
               Switch between Forge dark and light presets, follow the system
               palette, or save your own shell theme.
             </p>
-            <div className="grid gap-3 xl:grid-cols-3">
+            <div className="grid gap-2 xl:grid-cols-3">
               {forgeThemeOptions.map((themeOption) => {
                 const preview = getForgeThemePreview(
                   themeOption.value,
@@ -393,7 +648,7 @@ export function SettingsPage() {
                           : customTheme
                       )
                     }
-                    className={`rounded-[24px] border px-4 py-4 text-left transition ${
+                    className={`rounded-[18px] border px-3 py-3 text-left transition ${
                       selected
                         ? "border-[rgba(192,193,255,0.28)] bg-[rgba(192,193,255,0.14)] shadow-[0_18px_36px_rgba(5,12,24,0.24)]"
                         : "border-white/8 bg-white/[0.04] hover:bg-white/[0.07]"
@@ -406,7 +661,7 @@ export function SettingsPage() {
                             ? customTheme.label
                             : themeOption.label}
                         </div>
-                        <div className="mt-2 text-sm leading-6 text-white/58">
+                        <div className="mt-1 line-clamp-2 text-xs leading-5 text-white/58">
                           {themeOption.description}
                         </div>
                       </div>
@@ -423,7 +678,7 @@ export function SettingsPage() {
                 );
               })}
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] bg-white/[0.04] px-4 py-4">
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-[16px] bg-white/[0.04] px-3 py-3">
               <div>
                 <div className="text-sm font-medium text-white">
                   Custom theme editor
@@ -444,8 +699,57 @@ export function SettingsPage() {
                   : "Create custom theme"}
               </Button>
             </div>
+          </Card>
 
-            <div className="mt-2 font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+          <Card className="p-4">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+              Gamification style
+            </div>
+            <p className="text-sm text-white/58">
+              Choose the visual style used by the Forge Smith, trophies,
+              unlocks, streak states, and reward celebrations.
+            </p>
+            <div className="grid gap-2 xl:grid-cols-3">
+              {gamificationThemeOptions.map((themeOption) => {
+                const selected =
+                  selectedGamificationTheme === themeOption.value;
+                return (
+                  <button
+                    key={themeOption.value}
+                    type="button"
+                    onClick={() =>
+                      void saveGamificationThemeSelection(themeOption.value)
+                    }
+                    className={`grid gap-2 rounded-[18px] border p-2.5 text-left transition ${
+                      selected
+                        ? "border-amber-200/28 bg-amber-300/[0.09] shadow-[0_18px_42px_rgba(0,0,0,0.26)]"
+                        : "border-white/8 bg-white/[0.035] hover:border-white/16 hover:bg-white/[0.065]"
+                    }`}
+                    aria-pressed={selected}
+                  >
+                    <GamificationStylePreview
+                      selected={selected}
+                      theme={themeOption.value}
+                    />
+                    <span className="grid gap-1 px-1 pb-1">
+                      <span className="text-sm font-semibold text-white">
+                        {themeOption.label}
+                      </span>
+                      <span className="line-clamp-2 text-xs leading-5 text-white/58">
+                        {themeOption.description}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            {gamificationThemeMutation.isPending ? (
+              <div className="text-sm text-white/48">Saving reward style…</div>
+            ) : null}
+          </Card>
+
+          <Card className="p-4">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
               {t("common.settings.localeLabel")}
             </div>
             <p className="text-sm text-white/58">
@@ -460,7 +764,7 @@ export function SettingsPage() {
               ).map((locale) => (
                 <label
                   key={locale.value}
-                  className="flex items-center gap-3 rounded-[18px] bg-white/[0.04] px-4 py-4"
+                  className="flex items-center gap-3 rounded-[16px] bg-white/[0.04] px-3 py-3"
                 >
                   <input
                     type="radio"
@@ -479,48 +783,18 @@ export function SettingsPage() {
             >
               Save settings
             </Button>
-          </form>
-        </Card>
+          </Card>
+        </form>
 
-        <Card>
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-                Mobile companion
-              </div>
-              <div className="mt-2 text-lg text-white">
-                Pair the native iPhone bridge for HealthKit, background sync,
-                and future watch or location signals.
-              </div>
-            </div>
-            <Link
-              to="/settings/mobile"
-              className="inline-flex min-h-11 items-center rounded-[16px] bg-white/[0.08] px-4 py-3 text-sm text-white transition hover:bg-white/[0.12]"
-            >
-              Open mobile settings
-            </Link>
-          </div>
-        </Card>
+        {hasHealthyMobileCompanion ? (
+          <MobileCompanionSettingsCard healthy />
+        ) : null}
 
-        <Card>
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-            Security posture
-          </div>
-          <div className="mt-4 grid gap-3">
-            <div className="rounded-[18px] bg-white/[0.04] p-4">
-              <div className="text-sm text-white/58">Storage mode</div>
-              <div className="mt-2 font-display text-2xl text-white">
-                {settings.security.storageMode}
-              </div>
-            </div>
-            <div className="rounded-[18px] bg-white/[0.04] p-4">
-              <div className="text-sm text-white/58">Last audit</div>
-              <div className="mt-2 text-white">
-                {new Date(settings.security.lastAuditAt).toLocaleString()}
-              </div>
-            </div>
-          </div>
-        </Card>
+        <SecurityPostureCard
+          integrityScore={settings.security.integrityScore}
+          storageMode={settings.security.storageMode}
+          lastAuditAt={settings.security.lastAuditAt}
+        />
       </div>
 
       <ThemeCustomizerDialog
