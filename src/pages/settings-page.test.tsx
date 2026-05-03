@@ -14,13 +14,17 @@ import type { ForgeCustomTheme } from "@/lib/theme-system";
 const {
   ensureOperatorSessionMock,
   getCompanionOverviewMock,
+  getGamificationAssetStatusMock,
   getSettingsMock,
+  installGamificationAssetStyleMock,
   patchSettingsMock,
   revokeOperatorSessionMock
 } = vi.hoisted(() => ({
   ensureOperatorSessionMock: vi.fn(),
   getCompanionOverviewMock: vi.fn(),
+  getGamificationAssetStatusMock: vi.fn(),
   getSettingsMock: vi.fn(),
+  installGamificationAssetStyleMock: vi.fn(),
   patchSettingsMock: vi.fn(),
   revokeOperatorSessionMock: vi.fn()
 }));
@@ -66,7 +70,9 @@ vi.mock("@/components/settings/theme-customizer-dialog", () => ({
 vi.mock("@/lib/api", () => ({
   ensureOperatorSession: ensureOperatorSessionMock,
   getCompanionOverview: getCompanionOverviewMock,
+  getGamificationAssetStatus: getGamificationAssetStatusMock,
   getSettings: getSettingsMock,
+  installGamificationAssetStyle: installGamificationAssetStyleMock,
   patchSettings: patchSettingsMock,
   revokeOperatorSession: revokeOperatorSessionMock
 }));
@@ -117,7 +123,7 @@ describe("SettingsPage theme persistence", () => {
           timeAccountingMode: "split"
         },
         themePreference: "obsidian",
-        gamificationTheme: "dark-fantasy",
+        gamificationTheme: "dramatic-smithie",
         customTheme: null,
         localePreference: "en",
         security: {
@@ -149,6 +155,64 @@ describe("SettingsPage theme persistence", () => {
         }
       }
     });
+    getGamificationAssetStatusMock.mockResolvedValue({
+      assets: {
+        version: "0.2.59",
+        defaultStyle: "dramatic-smithie",
+        styles: [
+          {
+            id: "dramatic-smithie",
+            label: "Fantasy",
+            description: "Warm, lighthearted 3D forge art.",
+            previewUrl: "/gamification-previews/dramatic-smithie-mascot.webp",
+            fileName: "forge-gamification-dramatic-smithie-0.2.59.zip",
+            downloadUrl:
+              "https://api.github.com/repos/albertbuchard/aurel-monorepo/releases/assets/411057831",
+            sha256: "407c98a89626d723f9f92e79411df7c999458459c96e0e09e73020b3d3ce14c0",
+            installed: false,
+            spriteCount: 0,
+            expectedSpriteCount: 348,
+            installedAt: null
+          },
+          {
+            id: "dark-fantasy",
+            label: "Dark Fantasy",
+            description: "Obsidian iron and ember gold.",
+            previewUrl: "/gamification-previews/dark-fantasy-mascot.webp",
+            fileName: "forge-gamification-dark-fantasy-0.2.59.zip",
+            downloadUrl:
+              "https://api.github.com/repos/albertbuchard/aurel-monorepo/releases/assets/411057833",
+            sha256: "9545900906784a23d15f4536eb8c32683ffff0ef42006d06c70cea101c1db570",
+            installed: false,
+            spriteCount: 0,
+            expectedSpriteCount: 348,
+            installedAt: null
+          },
+          {
+            id: "mind-locksmith",
+            label: "Mind Locksmith",
+            description: "Modern locksmith-of-the-mind art.",
+            previewUrl: "/gamification-previews/mind-locksmith-mascot.webp",
+            fileName: "forge-gamification-mind-locksmith-0.2.59.zip",
+            downloadUrl:
+              "https://api.github.com/repos/albertbuchard/aurel-monorepo/releases/assets/411057834",
+            sha256: "cfdfd4259145e589e6e0fba8e1deb69d30931cfabbe6d626c0053e4f4cfe5f10",
+            installed: false,
+            spriteCount: 0,
+            expectedSpriteCount: 348,
+            installedAt: null
+          }
+        ]
+      }
+    });
+    installGamificationAssetStyleMock.mockResolvedValue({
+      style: {
+        id: "mind-locksmith",
+        installed: true,
+        spriteCount: 348,
+        expectedSpriteCount: 348
+      }
+    });
     patchSettingsMock.mockImplementation(
       async (input: Record<string, unknown>) => ({
         settings: {
@@ -167,7 +231,7 @@ describe("SettingsPage theme persistence", () => {
             timeAccountingMode: "split"
           },
           themePreference: input.themePreference ?? "obsidian",
-          gamificationTheme: input.gamificationTheme ?? "dark-fantasy",
+          gamificationTheme: input.gamificationTheme ?? "dramatic-smithie",
           customTheme: input.customTheme ?? null,
           localePreference: "en",
           security: {
@@ -224,10 +288,31 @@ describe("SettingsPage theme persistence", () => {
     renderSettingsPage();
 
     const mindLocksmithButtons = await screen.findAllByRole("button", {
-      name: /Mind Locksmith/i
+      name: /Select Mind Locksmith/i
     });
     fireEvent.click(mindLocksmithButtons[0]);
 
+    await waitFor(() =>
+      expect(patchSettingsMock).toHaveBeenCalledWith(
+        expect.objectContaining({ gamificationTheme: "mind-locksmith" })
+      )
+    );
+  });
+
+  it("downloads the selected gamification asset style from settings", async () => {
+    renderSettingsPage();
+
+    await screen.findByText("Selected style not downloaded");
+    const downloadButtons = await screen.findAllByRole("button", {
+      name: "Download"
+    });
+    fireEvent.click(downloadButtons[2]);
+
+    await waitFor(() =>
+      expect(installGamificationAssetStyleMock).toHaveBeenCalledWith(
+        "mind-locksmith"
+      )
+    );
     await waitFor(() =>
       expect(patchSettingsMock).toHaveBeenCalledWith(
         expect.objectContaining({ gamificationTheme: "mind-locksmith" })

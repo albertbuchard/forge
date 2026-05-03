@@ -1,19 +1,21 @@
 export const gamificationThemeOptions = [
   {
-    value: "dark-fantasy",
-    label: "Dark Fantasy",
-    description: "Obsidian iron, ember gold, high-pressure streak energy, and mythic trophy silhouettes."
-  },
-  {
     value: "dramatic-smithie",
     label: "Fantasy",
-    description: "Expressive, warm reward art with brighter mascot reactions and playful forge trophies."
+    description:
+      "Warm, lighthearted 3D forge art with brighter mascot reactions and playful trophies."
+  },
+  {
+    value: "dark-fantasy",
+    label: "Dark Fantasy",
+    description:
+      "Obsidian iron, ember gold, high-pressure streak energy, and mythic trophy silhouettes."
   },
   {
     value: "mind-locksmith",
     label: "Mind Locksmith",
     description:
-      "Modern, smart, Pixar-like forge metaphors for planning, memory, Psyche, health, and agent work."
+      "Modern locksmith-of-the-mind art for planning, memory, Psyche, health, and agent work."
   }
 ] as const;
 
@@ -21,7 +23,7 @@ export type GamificationThemePreference =
   (typeof gamificationThemeOptions)[number]["value"];
 
 export const defaultGamificationTheme: GamificationThemePreference =
-  "dark-fantasy";
+  "dramatic-smithie";
 
 export function normalizeGamificationTheme(
   value: string | null | undefined
@@ -46,6 +48,15 @@ export function getGamificationSpriteUrl(
         ? "mascots"
         : "";
   return `${normalizedBase}gamification/sprites/themes/${normalizedTheme}/${folder ? `${folder}/` : ""}${assetKey}-${size}.webp`;
+}
+
+export function getGamificationThemePreviewUrl(
+  theme: GamificationThemePreference = defaultGamificationTheme
+) {
+  const base = import.meta.env.BASE_URL || "/";
+  const normalizedBase = base.endsWith("/") ? base : `${base}/`;
+  const normalizedTheme = normalizeGamificationTheme(theme);
+  return `${normalizedBase}gamification-previews/${normalizedTheme}-mascot.webp`;
 }
 
 export function getGamificationPngUrl(

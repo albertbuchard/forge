@@ -2511,6 +2511,26 @@ export interface GamificationCatalogPayload {
   recentlyUnlocked: GamificationCatalogEntry[];
 }
 
+export interface GamificationAssetStyleStatus {
+  id: "dark-fantasy" | "dramatic-smithie" | "mind-locksmith";
+  label: string;
+  description: string;
+  previewUrl: string;
+  fileName: string;
+  downloadUrl: string;
+  sha256: string;
+  installed: boolean;
+  spriteCount: number;
+  expectedSpriteCount: number;
+  installedAt: string | null;
+}
+
+export interface GamificationAssetStatusPayload {
+  version: string;
+  defaultStyle: GamificationAssetStyleStatus["id"];
+  styles: GamificationAssetStyleStatus[];
+}
+
 export interface ProjectSummary extends Project {
   goalTitle: string;
   activeTaskCount: number;

@@ -473,7 +473,7 @@ function ensureSettingsRow(now = new Date().toISOString()) {
         id, operator_name, operator_email, operator_title, theme_preference, gamification_theme, locale_preference, goal_drift_alerts,
         daily_quest_reminders, achievement_celebrations, max_active_tasks, time_accounting_mode, integrity_score, last_audit_at, created_at, updated_at
       ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run("Master Architect", "architect@kineticforge.ai", "Local-first operator", "obsidian", "dark-fantasy", "en", 1, 1, 1, 2, "split", 98, now, now, now);
+        .run("Master Architect", "architect@kineticforge.ai", "Local-first operator", "obsidian", "dramatic-smithie", "en", 1, 1, 1, 2, "split", 98, now, now, now);
 }
 function readSettingsRow() {
     ensureSettingsRow();

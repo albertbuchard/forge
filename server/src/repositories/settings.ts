@@ -731,7 +731,7 @@ function ensureSettingsRow(now = new Date().toISOString()) {
       "architect@kineticforge.ai",
       "Local-first operator",
       "obsidian",
-      "dark-fantasy",
+      "dramatic-smithie",
       "en",
       1,
       1,

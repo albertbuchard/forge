@@ -2063,6 +2063,15 @@ export function getGamificationCatalog(userIds) {
     const suffix = search.toString() ? `?${search}` : "";
     return request(`/api/v1/gamification/catalog${suffix}`);
 }
+export function getGamificationAssetStatus() {
+    return request("/api/v1/gamification/assets");
+}
+export function installGamificationAssetStyle(style) {
+    return request("/api/v1/gamification/assets/install", {
+        method: "POST",
+        body: JSON.stringify({ style })
+    });
+}
 export function getGamificationEquipment(userIds) {
     const search = new URLSearchParams();
     appendUserIds(search, coerceUserIds(userIds));

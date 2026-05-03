@@ -10,8 +10,11 @@ adapter surfaces, and a Swift iPhone companion that syncs HealthKit and other ph
 signals into the same canonical Forge data model.
 
 Forge's progression layer uses that same stack: SQLite reward projections, Fastify API
-read models, React surfaces, Framer Motion celebration effects, and project-owned raster
-sprites for the Forge Smith mascot, trophies, unlocks, and streak states.
+read models, React surfaces, Framer Motion celebration effects, source-controlled catalog
+data, small in-repo mascot previews, and optional per-style raster sprite archives hosted
+as GitHub Release downloadable content. Heavy generated mascot, trophy, unlock, atlas, and
+source sprites must stay out of the monorepo and out of the default npm/PyPI plugin
+packages.
 
 The progression layer's current product direction is canonical Forge Gamification. It should feel like
 an enchanting blacksmith game interface wrapped around real Forge use: 144 authored
@@ -32,13 +35,13 @@ and compact content-page HUDs should help the user see momentum at a glance. Tro
 unlocks are visual recognition and cosmetic customization; they must never lock core work,
 reflection, health, or agent functionality behind a game mechanic.
 
-Gamification art is selectable independently from the shell theme. `Fantasy` carries
-the dramatic black-iron Forge Smith direction, `Dramatic Smithie` gives the same
-catalog and mascot states a warmer, funnier animated-mascot tone, and `Mind Locksmith`
-turns the blacksmith into a modern metaphorical locksmith of the mind: smart, product-grade,
-and anchored in planning, memory, Psyche, health evidence, and agent collaboration.
-Sprite outputs should be transparent and theme-specific so trophies, unlocks, and mascot
-states sit cleanly inside the real Forge UI.
+Gamification art is selectable independently from the shell theme. `Fantasy` is the
+default lighthearted animated-mascot style, `Dark Fantasy` carries the dramatic black-iron
+Forge Smith direction, and `Mind Locksmith` turns the blacksmith into a modern metaphorical
+locksmith of the mind: smart, product-grade, and anchored in planning, memory, Psyche,
+health evidence, and agent collaboration. Full sprite outputs should be transparent,
+theme-specific, and installed only after explicit operator choice so trophies, unlocks,
+and mascot states sit cleanly inside the real Forge UI without bloating the base package.
 
 Trophies should mostly be earned from specific behaviors inside Forge rather than XP alone:
 goal-linked execution, task runs, closeout reports, wiki pages and links, Psyche modes and

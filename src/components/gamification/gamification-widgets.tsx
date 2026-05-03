@@ -1,10 +1,20 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Flame, Sparkles, Trophy, Zap } from "lucide-react";
+import type { SyntheticEvent } from "react";
+import { Download, Flame, Settings, Sparkles, Trophy, Zap } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { ProgressMeter } from "@/components/ui/progress-meter";
 import { useGamificationTheme } from "@/components/gamification/use-gamification-theme";
-import { getGamificationSpriteUrl } from "@/lib/gamification-assets";
+import {
+  getGamificationAssetStatus,
+  installGamificationAssetStyle
+} from "@/lib/api";
+import {
+  getGamificationSpriteUrl,
+  getGamificationThemePreviewUrl,
+} from "@/lib/gamification-assets";
 import type { GamificationCelebration, XpMetricsPayload } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +46,10 @@ const DEFAULT_PROFILE: GamificationProfile = {
   topGoalId: null,
   topGoalTitle: null
 };
+
+function hideMissingGamificationImage(event: SyntheticEvent<HTMLImageElement>) {
+  event.currentTarget.hidden = true;
+}
 
 function normalizeProfile(
   profile: PartialGamificationProfile
@@ -138,6 +152,19 @@ export function GamificationOverviewWidget({
   compact?: boolean;
 }) {
   const gamificationTheme = useGamificationTheme();
+  const queryClient = useQueryClient();
+  const assetStatusQuery = useQuery({
+    queryKey: ["forge-gamification-assets"],
+    queryFn: getGamificationAssetStatus
+  });
+  const assetInstallMutation = useMutation({
+    mutationFn: installGamificationAssetStyle,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["forge-gamification-assets"]
+      });
+    }
+  });
   const profile = normalizeProfile(metrics.profile);
   const progress = Math.min(
     100,
@@ -162,6 +189,89 @@ export function GamificationOverviewWidget({
     ...catalogPreview.filter((item) => item.unlocked && item.id !== newest?.id)
   ].slice(0, 5);
   const equippedSkin = metrics.equipment?.selectedMascotSkin ?? "default smith";
+  const selectedAssetStatus = assetStatusQuery.data?.assets.styles.find(
+    (style) => style.id === gamificationTheme
+  );
+  const selectedStyleLabel =
+    selectedAssetStatus?.label ??
+    gamificationTheme
+      .split("-")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+
+  if (selectedAssetStatus && !selectedAssetStatus.installed) {
+    const isDownloading =
+      assetInstallMutation.isPending &&
+      assetInstallMutation.variables === gamificationTheme;
+    return (
+      <section className="relative isolate min-w-0 overflow-hidden rounded-[24px] border border-white/8 bg-[linear-gradient(135deg,rgba(10,15,28,0.96),rgba(13,22,28,0.94))] p-4 shadow-[0_20px_58px_rgba(3,8,18,0.28)]">
+        <div className="grid min-w-0 gap-4 sm:grid-cols-[4.5rem_minmax(0,1fr)] sm:items-center">
+          <div className="grid size-18 place-items-center overflow-hidden rounded-[18px] border border-white/10 bg-white/[0.055]">
+            <img
+              src={getGamificationThemePreviewUrl(gamificationTheme)}
+              alt={`${selectedStyleLabel} preview`}
+              className="size-16 object-contain"
+            />
+          </div>
+          <div className="min-w-0">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <Badge className="bg-black/24 text-[var(--tertiary)]">
+                Level {profile.level}
+              </Badge>
+              <Badge className="bg-black/24 text-white/72">
+                {profile.currentLevelXp}/{profile.nextLevelXp} XP
+              </Badge>
+              <Badge className="bg-amber-400/14 text-amber-100">
+                Assets not downloaded
+              </Badge>
+            </div>
+            <div className="mt-3 flex min-w-0 flex-wrap items-end justify-between gap-3">
+              <div className="min-w-0">
+                <div className="font-display text-xl text-white">
+                  Download {selectedStyleLabel} rewards
+                </div>
+                <p className="mt-1 max-w-2xl text-sm leading-6 text-white/58">
+                  This installs the optional mascot, trophy, and unlock art for
+                  the selected reward style.
+                </p>
+              </div>
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  pending={isDownloading}
+                  pendingLabel="Downloading"
+                  onClick={() => assetInstallMutation.mutate(gamificationTheme)}
+                >
+                  <Download className="size-3.5" />
+                  Download
+                </Button>
+                <Link
+                  to="/settings"
+                  className="inline-flex min-h-[2.125rem] items-center gap-2 rounded-[var(--radius-control)] border border-white/10 bg-white/[0.055] px-2.5 py-[0.4375rem] text-[13px] font-medium text-white/72 transition hover:border-white/16 hover:bg-white/[0.08] hover:text-white"
+                >
+                  <Settings className="size-3.5" />
+                  Settings
+                </Link>
+              </div>
+            </div>
+            {assetInstallMutation.isError ? (
+              <div className="mt-3 text-sm text-rose-200">
+                {assetInstallMutation.error instanceof Error
+                  ? assetInstallMutation.error.message
+                  : "Could not download reward assets."}
+              </div>
+            ) : (
+              <div className="mt-3 text-[11px] uppercase tracking-[0.16em] text-white/38">
+                {selectedAssetStatus.spriteCount}/
+                {selectedAssetStatus.expectedSpriteCount} sprites installed
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="relative isolate min-w-0 overflow-hidden rounded-[28px] border border-white/8 bg-[linear-gradient(135deg,rgba(10,15,28,0.98),rgba(19,13,28,0.94)_48%,rgba(8,20,30,0.94))] p-4 shadow-[0_24px_70px_rgba(3,8,18,0.34)] md:p-5">
       <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_18%_20%,rgba(249,115,22,0.18),transparent_34%),radial-gradient(circle_at_82%_10%,rgba(56,189,248,0.14),transparent_32%),radial-gradient(circle_at_76%_82%,rgba(167,139,250,0.12),transparent_34%)]" />
@@ -174,6 +284,7 @@ export function GamificationOverviewWidget({
               gamificationTheme
             )}
             alt="Forge Smith mascot"
+            onError={hideMissingGamificationImage}
             className="absolute inset-x-0 bottom-3 mx-auto h-[15.5rem] max-w-none object-contain drop-shadow-[0_24px_40px_rgba(0,0,0,0.52)]"
           />
           <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/76 to-transparent p-4">
@@ -250,6 +361,7 @@ export function GamificationOverviewWidget({
                             gamificationTheme
                           )}
                           alt=""
+                          onError={hideMissingGamificationImage}
                           className="size-8 object-contain opacity-90"
                         />
                         <div className="min-w-0">
@@ -289,6 +401,7 @@ export function GamificationOverviewWidget({
                         )}
                         alt={item.title}
                         title={item.title}
+                        onError={hideMissingGamificationImage}
                         className="size-11 rounded-2xl bg-black/22 object-contain p-1"
                       />
                     ))
@@ -368,6 +481,7 @@ export function GamificationCelebrationLayer({
                   gamificationTheme
                 )}
                 alt=""
+                onError={hideMissingGamificationImage}
                 className={cn(
                   "shrink-0 object-contain",
                   isMajor ? "size-24" : "size-14"

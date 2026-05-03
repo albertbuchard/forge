@@ -29,6 +29,7 @@ Forge should stay modern and production-grade:
 - generated OpenAPI
 - OpenClaw, Hermes, and Codex adapter surfaces
 - Swift iPhone companion
+- optional GitHub Release-hosted gamification art packs installed into the local Forge data root
 
 Forge should also make progress feel alive through a selected-user-first gamified layer. XP, levels, streaks, trophies, cosmetic unlocks, and the Forge Smith mascot should be grounded in the existing auditable reward ledger, not in a disconnected points game. The mascot should feel like a dramatic blacksmith mentor: visually enchanting, sometimes wise, sometimes stern, and forceful enough to make streak drift visible without becoming unsafe or cruel.
 
@@ -93,5 +94,5 @@ Forge also needs the progression layer to behave like a real achievement system,
 - cosmetic unlocks can change mascot skins, poses, HUD treatment, streak flame, trophy shelf, icon frame, and celebration effects, but core Forge functionality must never be locked.
 - selected-user XP, streak, level, next targets, mascot state, and latest trophies should be visible on the front page.
 - the Trophy Hall should show large unique icon art, locked progress, near-completion rails, recently earned rewards, Mascot Armory equipment, and Streak Forge power/absence states.
-- gamification art should be selectable in Settings, starting with `Fantasy`, `Dramatic Smithie`, and `Mind Locksmith`, and every theme should use clean transparent sprite outputs rather than opaque image-card backgrounds.
+- gamification art should be selectable in Settings, starting with `Fantasy`, `Dark Fantasy`, and `Mind Locksmith`, and every theme should use clean transparent sprite outputs rather than opaque image-card backgrounds. Heavy trophy, unlock, and mascot sprites must not live in the monorepo package by default; they are downloadable per-style assets, with `Fantasy` as the default lighthearted style.
 - Stale pre-release unlock rows may stay in SQLite for audit, but only current source-controlled catalog item IDs may unlock current trophies or cosmetics.

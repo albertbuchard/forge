@@ -1,19 +1,13 @@
 import { request as httpRequest, type IncomingMessage } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { spawn, type ChildProcess } from "node:child_process";
-import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import type { Duplex } from "node:stream";
 import { setTimeout as delay } from "node:timers/promises";
-import AdmZip from "adm-zip";
 import type { FastifyInstance, FastifyReply } from "fastify";
-import { getEffectiveDataRoot } from "./db.js";
-import {
-  GAMIFICATION_CATALOG,
-  GAMIFICATION_MASCOT_KEYS
-} from "../../src/lib/gamification-catalog.js";
+import { resolveGamificationSpriteAssetPath } from "./services/gamification-assets.js";
 
 const distDir = path.join(process.cwd(), "dist");
 const packagedRuntimeDistDir = path.join(
@@ -37,14 +31,6 @@ const contentTypes: Record<string, string> = {
 };
 
 const gamificationSpriteRoutePrefix = "/gamification/sprites/";
-const gamificationSpriteArchivePath = path.join("gamification", "sprites.zip");
-const gamificationSpriteThemes = [
-  "dark-fantasy",
-  "dramatic-smithie",
-  "mind-locksmith"
-];
-const gamificationSpriteSizes = [256, 512];
-let gamificationAssetExtractionPromise: Promise<string> | null = null;
 
 function normalizeBasePath(value: string) {
   if (!value || value === "/") {
@@ -168,126 +154,10 @@ function resolveAsset(clientDir: string, requestPath: string): string {
   return path.join(clientDir, safePath);
 }
 
-function buildExpectedGamificationSpritePaths() {
-  const itemAssetKeys = [
-    ...new Set(GAMIFICATION_CATALOG.map((item) => item.assetKey))
-  ];
-  const expectedPaths = new Set<string>();
-  for (const theme of gamificationSpriteThemes) {
-    for (const size of gamificationSpriteSizes) {
-      for (const key of itemAssetKeys) {
-        expectedPaths.add(`themes/${theme}/items/${key}-${size}.webp`);
-      }
-      for (const key of GAMIFICATION_MASCOT_KEYS) {
-        expectedPaths.add(`themes/${theme}/mascots/${key}-${size}.webp`);
-      }
-    }
-  }
-  return expectedPaths;
-}
-
-function assertSafeZipEntryName(entryName: string) {
-  if (
-    entryName.startsWith("/") ||
-    entryName.includes("\\") ||
-    entryName.split("/").some((segment) => segment === "..")
-  ) {
-    throw new Error(`Unsafe gamification asset archive entry: ${entryName}`);
-  }
-}
-
-async function countReadableFiles(root: string, relativePaths: Set<string>) {
-  let count = 0;
-  for (const relativePath of relativePaths) {
-    try {
-      await access(path.join(root, relativePath));
-      count += 1;
-    } catch {
-      // Missing files are counted by the caller.
-    }
-  }
-  return count;
-}
-
-async function materializeGamificationAssets(clientDir: string) {
-  const archivePath = path.join(clientDir, gamificationSpriteArchivePath);
-  const archivePayload = await readFile(archivePath);
-  const archiveHash = createHash("sha256")
-    .update(archivePayload)
-    .digest("hex")
-    .slice(0, 16);
-  const targetRoot = path.join(
-    getEffectiveDataRoot(),
-    "runtime-assets",
-    "gamification",
-    `sprites-${archiveHash}`
-  );
-  const markerPath = path.join(targetRoot, ".forge-gamification-sprites-ready.json");
-  const expectedPaths = buildExpectedGamificationSpritePaths();
-
-  if (
-    existsSync(markerPath) &&
-    (await countReadableFiles(targetRoot, expectedPaths)) === expectedPaths.size
-  ) {
-    return targetRoot;
-  }
-
-  const archive = new AdmZip(archivePayload);
-  const entriesByName = new Map(
-    archive
-      .getEntries()
-      .filter((entry) => !entry.isDirectory)
-      .map((entry) => {
-        assertSafeZipEntryName(entry.entryName);
-        return [entry.entryName, entry] as const;
-      })
-  );
-  const missing = [...expectedPaths].filter((entryName) => !entriesByName.has(entryName));
-  const unexpected = [...entriesByName.keys()].filter((entryName) => !expectedPaths.has(entryName));
-  if (missing.length > 0 || unexpected.length > 0) {
-    throw new Error(
-      `Invalid gamification sprite archive. Missing ${missing.length}, unexpected ${unexpected.length}.`
-    );
-  }
-
-  await rm(targetRoot, { recursive: true, force: true });
-  for (const relativePath of expectedPaths) {
-    const entry = entriesByName.get(relativePath);
-    if (!entry) {
-      throw new Error(`Missing gamification sprite archive entry: ${relativePath}`);
-    }
-    const targetPath = path.join(targetRoot, relativePath);
-    await mkdir(path.dirname(targetPath), { recursive: true });
-    await writeFile(targetPath, entry.getData());
-  }
-  await writeFile(
-    markerPath,
-    `${JSON.stringify(
-      {
-        archiveHash,
-        spriteCount: expectedPaths.size,
-        materializedAt: new Date().toISOString()
-      },
-      null,
-      2
-    )}\n`,
-    "utf8"
-  );
-  return targetRoot;
-}
-
 async function resolveBuiltAsset(clientDir: string, requestPath: string): Promise<string> {
   if (requestPath.startsWith(gamificationSpriteRoutePrefix)) {
     const relativeSpritePath = requestPath.slice(gamificationSpriteRoutePrefix.length);
-    const safePath = relativeSpritePath.replace(/^\/+/, "");
-    if (!gamificationAssetExtractionPromise) {
-      gamificationAssetExtractionPromise = materializeGamificationAssets(clientDir).catch((error) => {
-        gamificationAssetExtractionPromise = null;
-        throw error;
-      });
-    }
-    const spriteRoot = await gamificationAssetExtractionPromise;
-    return path.join(spriteRoot, safePath);
+    return resolveGamificationSpriteAssetPath(relativeSpritePath);
   }
   return resolveAsset(clientDir, requestPath);
 }
@@ -584,7 +454,12 @@ async function serveAsset(
     getDefaultBasePath()
   );
 
-  const devWebOrigin = await options.devWebRuntime.ensureReady();
+  const handlesLocalGamificationSprite = normalizedRequestPath.startsWith(
+    gamificationSpriteRoutePrefix
+  );
+  const devWebOrigin = handlesLocalGamificationSprite
+    ? null
+    : await options.devWebRuntime.ensureReady();
   if (devWebOrigin) {
     try {
       return await proxyDevAsset({

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type SyntheticEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
@@ -23,7 +23,9 @@ import {
   getXpMetrics,
   updateGamificationEquipment
 } from "@/lib/api";
-import { getGamificationSpriteUrl } from "@/lib/gamification-assets";
+import {
+  getGamificationSpriteUrl
+} from "@/lib/gamification-assets";
 import type { GamificationThemePreference } from "@/lib/gamification-assets";
 import {
   GAMIFICATION_CATEGORIES,
@@ -38,6 +40,10 @@ import type {
   GamificationUnlockType
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+function hideMissingGamificationImage(event: SyntheticEvent<HTMLImageElement>) {
+  event.currentTarget.hidden = true;
+}
 
 type RewardsTab = "trophies" | "unlocks" | "armory" | "streak";
 
@@ -143,6 +149,7 @@ function RewardTile({
         <img
           src={getGamificationSpriteUrl(item.assetKey, 512, gamificationTheme)}
           alt=""
+          onError={hideMissingGamificationImage}
           className={cn(
             "size-36 object-contain drop-shadow-[0_22px_34px_rgba(0,0,0,0.44)] transition group-hover:scale-[1.03]",
             !item.unlocked && "grayscale"
@@ -340,7 +347,12 @@ export function RewardsPage() {
               onClick={() => setSelectedItem(target)}
               className="grid grid-cols-[2.75rem_minmax(0,1fr)_3rem] items-center gap-3 rounded-2xl bg-white/[0.045] p-2 text-left"
             >
-              <img src={getGamificationSpriteUrl(target.assetKey, 256, gamificationTheme)} alt="" className="size-11 object-contain" />
+              <img
+                src={getGamificationSpriteUrl(target.assetKey, 256, gamificationTheme)}
+                alt=""
+                onError={hideMissingGamificationImage}
+                className="size-11 object-contain"
+              />
               <span className="min-w-0">
                 <span className="block truncate text-sm text-white/82">{target.title}</span>
                 <span className="block truncate text-[11px] text-white/42">{target.requirementText}</span>
@@ -361,6 +373,7 @@ export function RewardsPage() {
                 gamificationTheme
               )}
               alt="Forge Smith mascot"
+              onError={hideMissingGamificationImage}
               className="absolute inset-x-0 bottom-0 mx-auto h-[23rem] object-contain"
             />
             <div className="relative z-10">
@@ -389,6 +402,7 @@ export function RewardsPage() {
                   <img
                     src={getGamificationSpriteUrl(item.assetKey, 256, gamificationTheme)}
                     alt=""
+                    onError={hideMissingGamificationImage}
                     className={cn("mx-auto mt-3 size-28 object-contain", !item.unlocked && "grayscale")}
                   />
                   <div className="mt-3 font-display text-lg text-white">{item.title}</div>
@@ -423,7 +437,12 @@ export function RewardsPage() {
             <div className="mt-4 grid gap-3 sm:grid-cols-2 md:grid-cols-4 xl:grid-cols-5">
               {GAMIFICATION_STREAK_POWER_DAY_KEYS.map(([days, key]) => (
                 <div key={key} className="rounded-[18px] border border-white/8 bg-white/[0.04] p-3">
-                  <img src={getGamificationSpriteUrl(key, 256, gamificationTheme)} alt="" className="mx-auto size-28 object-contain" />
+                  <img
+                    src={getGamificationSpriteUrl(key, 256, gamificationTheme)}
+                    alt=""
+                    onError={hideMissingGamificationImage}
+                    className="mx-auto size-28 object-contain"
+                  />
                   <div className="mt-2 text-center text-sm text-white/74">{days} day power</div>
                 </div>
               ))}
@@ -437,7 +456,12 @@ export function RewardsPage() {
             <div className="mt-4 grid gap-3 sm:grid-cols-2 md:grid-cols-4 xl:grid-cols-5">
               {GAMIFICATION_STREAK_AWAY_DAY_KEYS.map(([days, key]) => (
                 <div key={key} className="rounded-[18px] border border-white/8 bg-white/[0.04] p-3">
-                  <img src={getGamificationSpriteUrl(key, 256, gamificationTheme)} alt="" className="mx-auto size-28 object-contain" />
+                  <img
+                    src={getGamificationSpriteUrl(key, 256, gamificationTheme)}
+                    alt=""
+                    onError={hideMissingGamificationImage}
+                    className="mx-auto size-28 object-contain"
+                  />
                   <div className="mt-2 text-center text-sm text-white/74">{days} days away</div>
                 </div>
               ))}
@@ -480,7 +504,12 @@ export function RewardsPage() {
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start gap-4">
-              <img src={getGamificationSpriteUrl(selectedItem.assetKey, 512, gamificationTheme)} alt="" className="size-32 object-contain" />
+              <img
+                src={getGamificationSpriteUrl(selectedItem.assetKey, 512, gamificationTheme)}
+                alt=""
+                onError={hideMissingGamificationImage}
+                className="size-32 object-contain"
+              />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap gap-2">
                   <Badge className={cn("border bg-black/18", tierTone(selectedItem.tier))}>{selectedItem.tier}</Badge>

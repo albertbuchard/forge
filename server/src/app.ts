@@ -352,6 +352,10 @@ import {
   LockedGamificationCosmeticError,
   updateGamificationEquipmentSelection
 } from "./services/gamification.js";
+import {
+  getGamificationAssetStatus,
+  installGamificationAssetStyle
+} from "./services/gamification-assets.js";
 import { getInsightsPayload } from "./services/insights.js";
 import {
   buildLifeForcePayload,
@@ -11886,6 +11890,32 @@ export async function buildServer(
         { userIds }
       )
     };
+  });
+  app.get("/api/v1/gamification/assets", async () => ({
+    assets: await getGamificationAssetStatus()
+  }));
+  app.post("/api/v1/gamification/assets/install", async (request, reply) => {
+    requireOperatorSession(request.headers as Record<string, unknown>, {
+      route: "/api/v1/gamification/assets/install"
+    });
+    const input = z
+      .object({
+        style: z.enum(["dark-fantasy", "dramatic-smithie", "mind-locksmith"])
+      })
+      .parse(request.body ?? {});
+    try {
+      return {
+        style: await installGamificationAssetStyle(input.style)
+      };
+    } catch (error) {
+      reply.code(502);
+      return {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Could not install gamification assets."
+      };
+    }
   });
   app.get("/api/v1/gamification/equipment", async (request) => {
     const userIds = resolveScopedUserIds(

@@ -51,6 +51,9 @@ forge-companion-post-fix-3.png
 
 # Generated gamification raster batches are multi-gigabyte local artifacts.
 public/gamification/
+openclaw-plugin/assets/gamification/
+openclaw-plugin/dist/gamification/
+plugins/forge-hermes/forge_hermes/runtime/dist/gamification/
 plugins/forge-codex/runtime/dist/gamification/
 .vision/psyche-template/views/screenshot_2026_03_23_at_17.10.30.png/
 .vision/knowledge_graph_template/**/screen.png

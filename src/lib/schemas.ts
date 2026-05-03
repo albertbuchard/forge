@@ -64,7 +64,7 @@ export const settingsMutationSchema = z.object({
     timeAccountingMode: z.enum(["split", "parallel", "primary_only"])
   }),
   themePreference: forgeThemePreferenceSchema,
-  gamificationTheme: gamificationThemeSchema.default("dark-fantasy"),
+  gamificationTheme: gamificationThemeSchema.default("dramatic-smithie"),
   customTheme: forgeCustomThemeSchema.nullable().optional(),
   localePreference: appLocaleSchema,
   calendarProviders: z

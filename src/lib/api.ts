@@ -81,6 +81,7 @@ import type {
   RewardRule,
   GamificationCatalogPayload,
   GamificationCelebration,
+  GamificationAssetStatusPayload,
   GamificationEquipment,
   SettingsPayload,
   SettingsBinPayload,
@@ -3988,6 +3989,24 @@ export function getGamificationCatalog(userIds?: string[] | unknown) {
   const suffix = search.toString() ? `?${search}` : "";
   return request<{ catalog: GamificationCatalogPayload }>(
     `/api/v1/gamification/catalog${suffix}`
+  );
+}
+
+export function getGamificationAssetStatus() {
+  return request<{ assets: GamificationAssetStatusPayload }>(
+    "/api/v1/gamification/assets"
+  );
+}
+
+export function installGamificationAssetStyle(
+  style: GamificationAssetStatusPayload["defaultStyle"]
+) {
+  return request<{ style: GamificationAssetStatusPayload["styles"][number] }>(
+    "/api/v1/gamification/assets/install",
+    {
+      method: "POST",
+      body: JSON.stringify({ style })
+    }
   );
 }
 

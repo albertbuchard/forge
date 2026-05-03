@@ -40,6 +40,7 @@ import { createCalendarEvent, createTaskTimebox, createWorkBlockTemplate, delete
 import { getDashboard } from "./services/dashboard.js";
 import { getOverviewContext, getRiskContext, getTodayContext } from "./services/context.js";
 import { buildGamificationCatalogPayload, buildGamificationOverview, buildGamificationProfile, buildXpMetricsPayloadModel, LockedGamificationCosmeticError, updateGamificationEquipmentSelection } from "./services/gamification.js";
+import { getGamificationAssetStatus, installGamificationAssetStyle } from "./services/gamification-assets.js";
 import { getInsightsPayload } from "./services/insights.js";
 import { buildLifeForcePayload, createFatigueSignal, listLifeForceTemplates, resolveLifeForceUser, updateLifeForceProfile, updateLifeForceTemplate } from "./services/life-force.js";
 import { createEntities, deleteEntities, deleteEntity, getSettingsBinPayload, restoreEntities, searchEntities, updateEntities } from "./services/entity-crud.js";
@@ -9136,6 +9137,32 @@ export async function buildServer(options = {}) {
         return {
             catalog: buildGamificationCatalogPayload(filterOwnedEntities("goal", listGoals(), userIds), filterOwnedEntities("task", listTasks({ userIds }), userIds), filterOwnedEntities("habit", listHabits(), userIds), { userIds })
         };
+    });
+    app.get("/api/v1/gamification/assets", async () => ({
+        assets: await getGamificationAssetStatus()
+    }));
+    app.post("/api/v1/gamification/assets/install", async (request, reply) => {
+        requireOperatorSession(request.headers, {
+            route: "/api/v1/gamification/assets/install"
+        });
+        const input = z
+            .object({
+            style: z.enum(["dark-fantasy", "dramatic-smithie", "mind-locksmith"])
+        })
+            .parse(request.body ?? {});
+        try {
+            return {
+                style: await installGamificationAssetStyle(input.style)
+            };
+        }
+        catch (error) {
+            reply.code(502);
+            return {
+                error: error instanceof Error
+                    ? error.message
+                    : "Could not install gamification assets."
+            };
+        }
     });
     app.get("/api/v1/gamification/equipment", async (request) => {
         const userIds = resolveScopedUserIds(request.query);

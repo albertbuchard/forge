@@ -2690,7 +2690,7 @@ export const settingsPayloadSchema = z.object({
     notifications: notificationPreferencesSchema,
     execution: executionSettingsSchema,
     themePreference: themePreferenceSchema,
-    gamificationTheme: gamificationThemeSchema.default("dark-fantasy"),
+    gamificationTheme: gamificationThemeSchema.default("dramatic-smithie"),
     customTheme: customThemeSchema.nullable(),
     localePreference: appLocaleSchema,
     security: z.object({

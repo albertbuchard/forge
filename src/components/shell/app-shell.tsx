@@ -84,6 +84,7 @@ import {
   GamificationCelebrationLayer,
   GamificationMiniHud
 } from "@/components/gamification/gamification-widgets";
+import { GamificationAssetSetupDialog } from "@/components/gamification/gamification-asset-setup-dialog";
 import { ActionBar } from "@/components/experience/action-bar";
 import { RouteTransitionFrame } from "@/components/experience/route-transition-frame";
 import { SheetScaffold } from "@/components/experience/sheet-scaffold";
@@ -3011,6 +3012,7 @@ export function AppShell() {
     <I18nProvider locale={settingsQuery.data.settings.localePreference}>
       <ShellContext.Provider value={contextValue}>
         <>
+          <GamificationAssetSetupDialog />
           <ShellFrame
             routeLocation={visibleLocation}
             settings={settingsQuery.data.settings}

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { Link } from "react-router-dom";
-import { Check, Info, Sparkles } from "lucide-react";
+import { Check, Download, Info, Sparkles, Trophy } from "lucide-react";
 import { ThemeCustomizerDialog } from "@/components/settings/theme-customizer-dialog";
 import { SettingsSectionNav } from "@/components/settings/settings-section-nav";
 import { PageHero } from "@/components/shell/page-hero";
@@ -15,7 +15,9 @@ import { useI18n } from "@/lib/i18n";
 import {
   ensureOperatorSession,
   getCompanionOverview,
+  getGamificationAssetStatus,
   getSettings,
+  installGamificationAssetStyle,
   patchSettings,
   revokeOperatorSession
 } from "@/lib/api";
@@ -25,7 +27,7 @@ import {
 } from "@/lib/schemas";
 import {
   gamificationThemeOptions,
-  getGamificationSpriteUrl,
+  getGamificationThemePreviewUrl,
   type GamificationThemePreference
 } from "@/lib/gamification-assets";
 import {
@@ -67,7 +69,7 @@ function GamificationStylePreview({
     <div className="relative min-h-[138px] overflow-hidden rounded-[18px] border border-white/10 bg-[radial-gradient(circle_at_24%_10%,rgba(255,199,104,0.22),transparent_30%),radial-gradient(circle_at_88%_12%,rgba(84,191,255,0.16),transparent_32%),linear-gradient(145deg,rgba(255,255,255,0.08),rgba(255,255,255,0.025))]">
       <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/42 to-transparent" />
       <img
-        src={getGamificationSpriteUrl("mascot-state-014", 512, theme)}
+        src={getGamificationThemePreviewUrl(theme)}
         alt=""
         className="absolute bottom-1 left-1/2 h-[128px] w-[128px] -translate-x-1/2 object-contain drop-shadow-[0_18px_30px_rgba(0,0,0,0.34)]"
       />
@@ -85,11 +87,7 @@ function GamificationStylePreview({
             key={assetKey}
             className="grid size-10 place-items-center rounded-[12px] border border-white/12 bg-black/26 shadow-[0_12px_22px_rgba(0,0,0,0.22)] backdrop-blur-md"
           >
-            <img
-              src={getGamificationSpriteUrl(assetKey, 256, theme)}
-              alt=""
-              className="size-8 object-contain"
-            />
+            <Trophy className="size-5 text-amber-100" />
           </span>
         ))}
       </div>
@@ -286,6 +284,12 @@ export function SettingsPage() {
     enabled: operatorReady,
     staleTime: 30_000
   });
+  const gamificationAssetsQuery = useQuery({
+    queryKey: ["forge-gamification-assets"],
+    queryFn: getGamificationAssetStatus,
+    enabled: operatorReady,
+    staleTime: 30_000
+  });
 
   const settingsForm = useForm<SettingsMutationInput>({
     defaultValues: {
@@ -304,7 +308,7 @@ export function SettingsPage() {
         timeAccountingMode: "split"
       },
       themePreference: "obsidian",
-      gamificationTheme: "dark-fantasy",
+      gamificationTheme: "dramatic-smithie",
       customTheme: defaultCustomTheme,
       localePreference: "en"
     }
@@ -340,6 +344,19 @@ export function SettingsPage() {
       await invalidateSettings();
     }
   });
+  const gamificationAssetInstallMutation = useMutation({
+    mutationFn: async (gamificationTheme: GamificationThemePreference) => {
+      await installGamificationAssetStyle(gamificationTheme);
+      return patchSettings({ gamificationTheme });
+    },
+    onSuccess: async (response) => {
+      queryClient.setQueryData(["forge-settings"], response);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["forge-settings"] }),
+        queryClient.invalidateQueries({ queryKey: ["forge-gamification-assets"] })
+      ]);
+    }
+  });
 
   const revokeSessionMutation = useMutation({
     mutationFn: revokeOperatorSession,
@@ -359,6 +376,11 @@ export function SettingsPage() {
   const settings = settingsQuery.data?.settings;
   const selectedTheme = settingsForm.watch("themePreference");
   const selectedGamificationTheme = settingsForm.watch("gamificationTheme");
+  const gamificationAssetStyles =
+    gamificationAssetsQuery.data?.assets.styles ?? [];
+  const selectedGamificationAssetStatus = gamificationAssetStyles.find(
+    (style) => style.id === selectedGamificationTheme
+  );
   const customTheme = settingsForm.watch("customTheme") ?? defaultCustomTheme;
   const hasHealthyMobileCompanion =
     companionOverviewQuery.data?.healthState === "healthy_sync";
@@ -702,35 +724,60 @@ export function SettingsPage() {
           </Card>
 
           <Card className="p-4">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-              Gamification style
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+                  Gamification style
+                </div>
+                <p className="text-sm text-white/58">
+                  Choose the reward art style and download its optional trophy,
+                  unlock, and mascot sprites.
+                </p>
+              </div>
+              {selectedGamificationAssetStatus?.installed ? (
+                <span className="inline-flex rounded-full border border-emerald-200/18 bg-emerald-300/10 px-3 py-1 text-xs font-medium text-emerald-100">
+                  Selected style downloaded
+                </span>
+              ) : (
+                <span className="inline-flex rounded-full border border-amber-200/18 bg-amber-300/10 px-3 py-1 text-xs font-medium text-amber-100">
+                  Selected style not downloaded
+                </span>
+              )}
             </div>
-            <p className="text-sm text-white/58">
-              Choose the visual style used by the Forge Smith, trophies,
-              unlocks, streak states, and reward celebrations.
-            </p>
-            <div className="grid gap-2 xl:grid-cols-3">
+            <div className="mt-3 grid gap-2 xl:grid-cols-3">
               {gamificationThemeOptions.map((themeOption) => {
                 const selected =
                   selectedGamificationTheme === themeOption.value;
+                const assetStatus = gamificationAssetStyles.find(
+                  (style) => style.id === themeOption.value
+                );
+                const installed = assetStatus?.installed ?? false;
+                const installing =
+                  gamificationAssetInstallMutation.isPending &&
+                  gamificationAssetInstallMutation.variables === themeOption.value;
                 return (
-                  <button
+                  <div
                     key={themeOption.value}
-                    type="button"
-                    onClick={() =>
-                      void saveGamificationThemeSelection(themeOption.value)
-                    }
                     className={`grid gap-2 rounded-[18px] border p-2.5 text-left transition ${
                       selected
                         ? "border-amber-200/28 bg-amber-300/[0.09] shadow-[0_18px_42px_rgba(0,0,0,0.26)]"
                         : "border-white/8 bg-white/[0.035] hover:border-white/16 hover:bg-white/[0.065]"
                     }`}
-                    aria-pressed={selected}
                   >
-                    <GamificationStylePreview
-                      selected={selected}
-                      theme={themeOption.value}
-                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void saveGamificationThemeSelection(themeOption.value)
+                      }
+                      className="grid gap-2 text-left"
+                      aria-label={`Select ${themeOption.label}`}
+                      aria-pressed={selected}
+                    >
+                      <GamificationStylePreview
+                        selected={selected}
+                        theme={themeOption.value}
+                      />
+                    </button>
                     <span className="grid gap-1 px-1 pb-1">
                       <span className="text-sm font-semibold text-white">
                         {themeOption.label}
@@ -738,13 +785,37 @@ export function SettingsPage() {
                       <span className="line-clamp-2 text-xs leading-5 text-white/58">
                         {themeOption.description}
                       </span>
+                      <span className="mt-1 text-[11px] uppercase tracking-[0.14em] text-white/42">
+                        {installed
+                          ? `Downloaded ${assetStatus?.spriteCount ?? 0}/${assetStatus?.expectedSpriteCount ?? 0}`
+                          : "Not downloaded"}
+                      </span>
+                      <Button
+                        type="button"
+                        variant={installed ? "secondary" : "primary"}
+                        pending={installing}
+                        disabled={installed || gamificationAssetInstallMutation.isPending}
+                        onClick={() =>
+                          gamificationAssetInstallMutation.mutate(themeOption.value)
+                        }
+                      >
+                        <Download className="size-4" />
+                        {installed ? "Downloaded" : "Download"}
+                      </Button>
                     </span>
-                  </button>
+                  </div>
                 );
               })}
             </div>
             {gamificationThemeMutation.isPending ? (
               <div className="text-sm text-white/48">Saving reward style…</div>
+            ) : null}
+            {gamificationAssetInstallMutation.isError ? (
+              <div className="mt-3 rounded-[14px] border border-red-300/20 bg-red-500/10 px-3 py-2 text-sm text-red-100">
+                {gamificationAssetInstallMutation.error instanceof Error
+                  ? gamificationAssetInstallMutation.error.message
+                  : "Could not download the selected reward art."}
+              </div>
             ) : null}
           </Card>
 

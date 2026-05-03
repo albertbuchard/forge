@@ -5,6 +5,7 @@ import { existsSync } from "node:fs";
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { resolveGamificationSpriteAssetPath } from "./services/gamification-assets.js";
 const distDir = path.join(process.cwd(), "dist");
 const packagedRuntimeDistDir = path.join(process.cwd(), "plugins", "forge-codex", "runtime", "dist");
 const contentTypes = {
@@ -14,9 +15,11 @@ const contentTypes = {
     ".json": "application/json; charset=utf-8",
     ".map": "application/json; charset=utf-8",
     ".svg": "image/svg+xml",
+    ".webp": "image/webp",
     ".woff": "font/woff",
     ".woff2": "font/woff2"
 };
+const gamificationSpriteRoutePrefix = "/gamification/sprites/";
 function normalizeBasePath(value) {
     if (!value || value === "/") {
         return "/";
@@ -109,6 +112,13 @@ function resolveAsset(clientDir, requestPath) {
     }
     const safePath = requestPath.replace(/^\/+/, "");
     return path.join(clientDir, safePath);
+}
+async function resolveBuiltAsset(clientDir, requestPath) {
+    if (requestPath.startsWith(gamificationSpriteRoutePrefix)) {
+        const relativeSpritePath = requestPath.slice(gamificationSpriteRoutePrefix.length);
+        return resolveGamificationSpriteAssetPath(relativeSpritePath);
+    }
+    return resolveAsset(clientDir, requestPath);
 }
 async function getClientDir() {
     try {
@@ -328,7 +338,10 @@ async function serveAsset(requestPath, reply, options) {
         return { error: "Not found" };
     }
     const normalizedRequestPath = stripBasePath(requestTarget.pathname, getDefaultBasePath());
-    const devWebOrigin = await options.devWebRuntime.ensureReady();
+    const handlesLocalGamificationSprite = normalizedRequestPath.startsWith(gamificationSpriteRoutePrefix);
+    const devWebOrigin = handlesLocalGamificationSprite
+        ? null
+        : await options.devWebRuntime.ensureReady();
     if (devWebOrigin) {
         try {
             return await proxyDevAsset({
@@ -344,7 +357,7 @@ async function serveAsset(requestPath, reply, options) {
         }
     }
     const clientDir = await getClientDir();
-    const assetPath = resolveAsset(clientDir, normalizedRequestPath);
+    const assetPath = await resolveBuiltAsset(clientDir, normalizedRequestPath);
     const ext = path.extname(assetPath);
     try {
         const payload = await readFile(assetPath);

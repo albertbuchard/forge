@@ -49,7 +49,7 @@ export default defineConfig(({ command }) => {
       strictPort: true
     },
     build: {
-      sourcemap: true,
+      sourcemap: false,
       rollupOptions: {
         output: {
           manualChunks(id) {
