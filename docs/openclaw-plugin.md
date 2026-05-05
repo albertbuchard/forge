@@ -313,7 +313,7 @@ openclaw forge health
 openclaw forge ui
 ```
 
-Forge can start a local runtime, so OpenClaw builds that scan plugin startup behavior may require `--dangerously-force-unsafe-install`. That flag is the explicit approval for Forge's local runtime startup.
+Tested on OpenClaw `2026.5.4`: plain `openclaw plugins install forge-openclaw-plugin` is blocked by the plugin scanner because Forge contains local runtime startup helpers. The documented command uses OpenClaw's explicit approval flag and installs without the old config-edit workaround.
 
 Verify what OpenClaw loaded:
 

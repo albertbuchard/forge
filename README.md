@@ -36,7 +36,7 @@ openclaw forge health
 openclaw forge ui
 ```
 
-Why the install flag exists: Forge is a local app plugin. It can start a local Forge runtime on your machine, so current OpenClaw installers may require explicit approval for that behavior. The source is public in this repository, and the package is `forge-openclaw-plugin` on npm.
+Why the install flag exists: tested on OpenClaw `2026.5.4`, plain `openclaw plugins install forge-openclaw-plugin` is blocked by the plugin scanner because Forge contains local runtime startup helpers. The documented command uses OpenClaw's explicit approval flag and installs without the old config-edit workaround. The source is public in this repository, and the package is `forge-openclaw-plugin` on npm.
 
 After install, the usual local addresses are:
 

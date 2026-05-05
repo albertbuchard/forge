@@ -108,8 +108,9 @@ userId:   explicit on writes</code></pre>
                 <code>--dangerously-force-unsafe-install</code>, then restart
                 the gateway and run
                 <code>openclaw plugins inspect forge-openclaw-plugin</code>.
-                Forge can start a local runtime, so OpenClaw may require that
-                explicit approval during install.
+                On OpenClaw <code>2026.5.4</code>, the plain install is
+                blocked by the scanner because Forge contains local runtime
+                startup helpers; the explicit approval flag is required.
               </p>
             </article>
             <article class="card">
