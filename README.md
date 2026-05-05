@@ -83,10 +83,17 @@ Use the published PyPI package when you want Hermes to load the released plugin:
 
 ```bash
 ~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
+~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade pip
 ~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade forge-hermes-plugin
 ```
 
-Use `--editable ./plugins/forge-hermes` from this repo instead when you want Hermes to follow local source edits.
+Use this from the Forge repo instead when you want Hermes to follow local source edits:
+
+```bash
+~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
+~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade pip
+~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade --editable ./plugins/forge-hermes
+```
 
 ### Codex
 

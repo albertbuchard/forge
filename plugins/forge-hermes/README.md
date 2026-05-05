@@ -43,6 +43,7 @@ Use the published package when you want Hermes to load the released Forge plugin
 
 ```bash
 ~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
+~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade pip
 ~/.hermes/hermes-agent/venv/bin/python -m pip uninstall -y forge-hermes-plugin
 ~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade forge-hermes-plugin
 ```
@@ -51,6 +52,7 @@ Use the local editable install when you are developing Forge from this repo:
 
 ```bash
 ~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
+~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade pip
 ~/.hermes/hermes-agent/venv/bin/python -m pip uninstall -y forge-hermes-plugin
 ~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade --editable ./plugins/forge-hermes
 ```
@@ -77,6 +79,7 @@ If you want to install from the local repo without editable mode:
 
 ```bash
 ~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
+~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade pip
 ~/.hermes/hermes-agent/venv/bin/python -m pip uninstall -y forge-hermes-plugin
 ~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade ./plugins/forge-hermes
 ```

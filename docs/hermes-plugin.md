@@ -67,6 +67,7 @@ Use the published PyPI package for a normal Hermes install:
 
 ```bash
 ~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
+~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade pip
 ~/.hermes/hermes-agent/venv/bin/python -m pip uninstall -y forge-hermes-plugin
 ~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade forge-hermes-plugin
 ```
@@ -84,6 +85,7 @@ If you are developing Forge from this repo and want Hermes to follow source edit
 
 ```bash
 ~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
+~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade pip
 ~/.hermes/hermes-agent/venv/bin/python -m pip uninstall -y forge-hermes-plugin
 ~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade --editable ./plugins/forge-hermes
 ```
