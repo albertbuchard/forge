@@ -1,14 +1,16 @@
 # Forge OpenClaw Plugin
 
-`forge-openclaw-plugin` is the publishable OpenClaw package for Forge.
-When the plugin targets `localhost` or `127.0.0.1`, it auto-starts the bundled Forge runtime so the local install path stays one-step.
+`forge-openclaw-plugin` is the OpenClaw bridge for Forge.
 
-OpenClaw install note:
+It gives OpenClaw a clear way to:
 
-- `openclaw plugins enable forge-openclaw-plugin` is not always enough by itself.
-- If `forge-openclaw-plugin` is missing from `plugins.allow`, OpenClaw can still refuse to load it.
-- The install section below includes the `node -e ...` step that repairs `plugins.allow` safely.
-- I re-verified on April 21, 2026 that OpenClaw `2026.4.15` still blocks both the published package install and the repo-local install because Forge launches a local runtime and gets flagged by the installer scanner. The bypass sections below are still current.
+- start or reach the local Forge runtime
+- open the Forge web app
+- read the current operator overview
+- create and update goals, projects, issues, tasks, notes, wiki pages, health records, preferences, and Psyche records
+- run Forge Doctor when the local setup looks wrong
+
+When the plugin targets `localhost` or `127.0.0.1`, it can auto-start the bundled Forge runtime. That is why current OpenClaw installers may ask for explicit approval during install.
 
 ## Open the UI
 
@@ -35,10 +37,13 @@ If you want Forge to use a specific local data folder, set `dataRoot` in the plu
 
 Default data path:
 
-- local installs now default to the shared Forge home at `~/.forge/forge.sqlite`
-- set `dataRoot` only when you intentionally want a different shared database
+- local installs default to `~/.forge/forge.sqlite`
+- the user can set `dataRoot` to use another folder
+- when `dataRoot` is set, Forge stores `forge.sqlite` directly inside that folder
 
-If you want the data to live somewhere else for persistence or backup reasons, set `dataRoot` explicitly in the plugin config and restart the gateway.
+If you want the data to live somewhere specific for persistence or backup reasons, set `dataRoot` explicitly in the plugin config and restart the gateway. When debugging storage, check the config and the live runtime path before moving or merging database files.
+
+The Forge web app also exposes these controls in `Settings -> Data`. Use it to see the live data folder, move current data, adopt an existing Forge data folder, create a manual backup, enable automatic backups, and choose how many days of automatic backups Forge should keep. Automatic retention only cleans automatic backups; manual and safety backups stay in place.
 
 ## What Forge looks like
 
@@ -116,8 +121,8 @@ Recommended shared setup:
 
 1. Run one shared Forge runtime.
 2. Point OpenClaw, Hermes, and the browser UI at that same runtime.
-3. Let the default shared Forge home `~/.forge` stand unless you intentionally
-   want a different shared database.
+3. Use one explicit shared `dataRoot` when several adapters must share the same
+   database.
 4. Create the human and bot users in `Settings -> Users`.
 5. Use `userId` on writes and `userIds` on reads.
 
@@ -130,9 +135,9 @@ Current sharing behavior is intentionally clear:
   tasks, notes, or strategy nodes
 
 If OpenClaw and Hermes are supposed to collaborate inside one Forge system, the
-important thing is not only matching `origin` and `port`. Local installs now
-converge on the same `~/.forge` data root automatically. Only override
-`dataRoot` when you deliberately want a different shared database.
+important thing is not only matching `origin` and `port`. Either leave every
+adapter on the default `~/.forge` root or set one explicit `dataRoot`, then
+verify that each live runtime has opened that database.
 
 ## Strategies And Alignment Metrics
 
@@ -215,45 +220,91 @@ The sports UI route is `/forge/sports`, while the backend overview route remains
 
 ## Install
 
-Current OpenClaw builds should use package discovery:
+### Published Package
+
+Use this path when you want the released Forge plugin from npm:
 
 ```bash
-openclaw plugins install forge-openclaw-plugin
+openclaw plugins install --dangerously-force-unsafe-install forge-openclaw-plugin
 openclaw plugins enable forge-openclaw-plugin
-node -e 'const fs=require("fs"); const p=process.env.HOME+"/.openclaw/openclaw.json"; const j=JSON.parse(fs.readFileSync(p,"utf8")); j.plugins ??= {}; j.plugins.allow = Array.from(new Set([...(j.plugins.allow || []), "forge-openclaw-plugin"])); fs.writeFileSync(p, JSON.stringify(j, null, 2)+"\n");'
 openclaw gateway restart
+openclaw forge health
+openclaw forge ui
+```
+
+The `--dangerously-force-unsafe-install` flag is expected for Forge on OpenClaw builds that scan plugins for local process startup. Forge can start a local runtime, so the installer asks you to approve that behavior explicitly.
+
+Check what OpenClaw loaded:
+
+```bash
+openclaw plugins inspect forge-openclaw-plugin
 openclaw forge health
 ```
 
-If the install path is blocked on your OpenClaw build, use this temporary npm bypass instead. This is still required on OpenClaw `2026.4.15` as of April 21, 2026:
+### Local Development From This Repo
+
+Use this path when you are editing Forge and want OpenClaw to load this checkout directly:
+
+```bash
+openclaw plugins install --link --dangerously-force-unsafe-install ./openclaw-plugin
+openclaw plugins enable forge-openclaw-plugin
+openclaw gateway restart
+openclaw plugins inspect forge-openclaw-plugin
+openclaw forge health
+```
+
+Use `--link` for active local development. Omit `--link` when you want to test the copied package layout that a normal install receives.
+
+If you are running the command from the monorepo root instead of the Forge repo root, use:
+
+```bash
+openclaw plugins install --link --dangerously-force-unsafe-install ./projects/forge/openclaw-plugin
+```
+
+### Manual Fallback For Older OpenClaw Builds
+
+Use this only if your OpenClaw installer does not support `--dangerously-force-unsafe-install` or still refuses to install Forge. It installs the npm package, adds the package folder to `plugins.load.paths`, enables the plugin, and keeps the default local Forge runtime on `127.0.0.1:4317`.
 
 ```bash
 npm install -g forge-openclaw-plugin
-node -e 'const cp=require("child_process"); const fs=require("fs"); const path=require("path"); const p=process.env.HOME+"/.openclaw/openclaw.json"; const j=JSON.parse(fs.readFileSync(p,"utf8")); const pluginPath=path.join(cp.execSync("npm root -g",{encoding:"utf8"}).trim(),"forge-openclaw-plugin"); j.plugins ??= {}; j.plugins.allow = Array.from(new Set([...(j.plugins.allow || []), "forge-openclaw-plugin"])); j.plugins.load ??= {}; j.plugins.load.paths = Array.from(new Set([...(j.plugins.load.paths || []), pluginPath])); j.plugins.entries ??= {}; j.plugins.entries["forge-openclaw-plugin"] = { enabled: true, config: { origin: "http://127.0.0.1", port: 4317, actorLabel: "", timeoutMs: 15000 } }; fs.writeFileSync(p, JSON.stringify(j, null, 2)+"\n"); console.log("Configured", pluginPath);'
+node <<'NODE'
+const cp = require("node:child_process");
+const fs = require("node:fs");
+const path = require("node:path");
+
+const configPath = path.join(process.env.HOME, ".openclaw", "openclaw.json");
+const pluginPath = path.join(
+  cp.execSync("npm root -g", { encoding: "utf8" }).trim(),
+  "forge-openclaw-plugin"
+);
+const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+
+config.plugins ??= {};
+config.plugins.allow = Array.from(
+  new Set([...(config.plugins.allow ?? []), "forge-openclaw-plugin"])
+);
+config.plugins.load ??= {};
+config.plugins.load.paths = Array.from(
+  new Set([...(config.plugins.load.paths ?? []), pluginPath])
+);
+config.plugins.entries ??= {};
+config.plugins.entries["forge-openclaw-plugin"] = {
+  enabled: true,
+  config: {
+    origin: "http://127.0.0.1",
+    port: 4317,
+    actorLabel: "",
+    timeoutMs: 15000
+  }
+};
+
+fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+console.log(`Configured ${pluginPath}`);
+NODE
 openclaw gateway restart
-openclaw plugins info forge-openclaw-plugin
+openclaw plugins inspect forge-openclaw-plugin
 openclaw forge health
 ```
-
-That bypass still uses the published npm package. It just tells OpenClaw to load the npm-installed folder directly from `plugins.load.paths`, which avoids the installer block that still happens on OpenClaw `2026.4.15`.
-
-`openclaw plugins enable forge-openclaw-plugin` marks the plugin enabled, but it does not guarantee that `plugins.allow` was repaired. The `node -e ...` command above preserves the current allow list and appends `"forge-openclaw-plugin"` if it is missing.
-
-For release-parity local development from this repo:
-
-```bash
-openclaw plugins install ./projects/forge/openclaw-plugin
-openclaw plugins enable forge-openclaw-plugin
-node -e 'const fs=require("fs"); const p=process.env.HOME+"/.openclaw/openclaw.json"; const j=JSON.parse(fs.readFileSync(p,"utf8")); j.plugins ??= {}; j.plugins.allow = Array.from(new Set([...(j.plugins.allow || []), "forge-openclaw-plugin"])); fs.writeFileSync(p, JSON.stringify(j, null, 2)+"\n");'
-openclaw gateway restart
-openclaw forge health
-```
-
-OpenClaw `2026.4.15` still blocks that repo-local install on this machine, so keep
-the repo folder on `plugins.load.paths`, make sure
-`openclaw plugins info forge-openclaw-plugin` still points at the local Forge source
-path, then restart the gateway and verify health. That fallback still keeps OpenClaw
-on the local code folder instead of switching to the published package.
 
 Equivalent config:
 
@@ -265,7 +316,7 @@ Equivalent config:
       "forge-openclaw-plugin": {
         enabled: true,
         config: {
-          dataRoot: "~/.forge",
+          dataRoot: "/absolute/path/to/forge-data",
           actorLabel: "",
           apiToken: ""
         }
@@ -295,7 +346,8 @@ Recommended local behavior:
 
 - leave `actorLabel` blank so Forge can inherit the trusted local operator label automatically
 - leave `apiToken` blank for localhost and trusted Tailscale setups
-- leave `dataRoot` alone unless you intentionally want a different shared local Forge home
+- keep `dataRoot` aligned across OpenClaw, Hermes, Codex, and the browser runtime when they should share data
+- before changing or merging data roots, back up every candidate Forge database and verify which database the live runtime is using
 
 ## Doctor And Runtime Config
 
@@ -318,10 +370,12 @@ Diagnostic entrypoints:
 
 ```bash
 openclaw forge doctor
+openclaw forge doctor --json
+openclaw forge doctor --fix
 npm run doctor --prefix ./projects/forge
 ```
 
-The doctor output now includes `settingsFile` details such as the resolved path, validity, sync state, parse errors, and which override keys were applied from `forge.json`.
+The doctor output includes explicit runtime, settings, SQLite storage, entity-link, hierarchy, reward, and gamification checks. It also returns concrete issues and proposed fixes. Fixes are never applied by a normal read; `openclaw forge doctor --fix` applies only Doctor-marked safe fixes.
 
 Then restart the gateway:
 
@@ -329,14 +383,7 @@ Then restart the gateway:
 openclaw gateway restart
 ```
 
-Older OpenClaw builds can keep using the repo-root fallback entry during the transition:
-
-```bash
-openclaw plugins install ./projects/forge
-openclaw gateway restart
-```
-
-That repo-local path is the fallback only. The published package stays on the SDK `definePluginEntry` entrypoint. The OpenClaw plugin id is `forge-openclaw-plugin`, while the product name stays `Forge` and the CLI namespace stays `forge`.
+The OpenClaw plugin id is `forge-openclaw-plugin`, the product name is `Forge`, and the CLI namespace is `forge`.
 
 ## Recommended usage
 
@@ -465,7 +512,7 @@ The startup error now points at that log file when the child process exits befor
 The reliable publication path for the Forge plugin is:
 
 1. publish `forge-openclaw-plugin` to npm
-2. verify `openclaw plugins install forge-openclaw-plugin`
+2. verify `openclaw plugins install --dangerously-force-unsafe-install forge-openclaw-plugin`
 3. add Forge to the OpenClaw community plugin listing with the npm package and GitHub repo
 
 The repo now supports a tag-driven GitHub Actions release path for step 1. The normal

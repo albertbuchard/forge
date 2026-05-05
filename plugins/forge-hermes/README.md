@@ -39,7 +39,15 @@ Forge PM behavior Hermes should understand is:
 
 ## Install
 
-From the Forge repo:
+Use the published package when you want Hermes to load the released Forge plugin:
+
+```bash
+~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
+~/.hermes/hermes-agent/venv/bin/python -m pip uninstall -y forge-hermes-plugin
+~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade forge-hermes-plugin
+```
+
+Use the local editable install when you are developing Forge from this repo:
 
 ```bash
 ~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
@@ -49,15 +57,23 @@ From the Forge repo:
 
 That installs the package into Hermes' own Python environment through `pip`, keeps the
 live code pointed at this local dev folder, creates
-`~/.hermes/forge/config.json` automatically on first plugin load if it is missing, and defaults the Forge runtime data root to
-the shared local Forge home at `~/.forge` so Hermes, OpenClaw, Codex, and the
-browser converge on the same local runtime out of the box.
+`~/.hermes/forge/config.json` automatically on first plugin load if it is missing.
+When `FORGE_DATA_ROOT` or `dataRoot` is set, that explicit value decides where
+Forge stores `forge.sqlite`; use the same value for Hermes, OpenClaw, Codex, and
+the browser when they should share one local runtime. If no explicit value is
+set, the local default is `~/.forge`.
+
+The Forge web app also exposes these controls in `Settings -> Data`. Users can
+see the live data folder, move current data, adopt an existing Forge data
+folder, create a manual backup, enable automatic backups, and choose how many
+days of automatic backups Forge should keep. Automatic retention only removes
+automatic backups; manual and safety backups are kept.
 
 Use `~/.hermes/hermes-agent/venv/bin/python` so the package lands in the Python
 environment Hermes actually runs and Hermes can discover Forge through the package
 entry point on the next startup.
 
-If you want a non-editable wheel-style install instead:
+If you want to install from the local repo without editable mode:
 
 ```bash
 ~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
@@ -69,7 +85,7 @@ If you want a non-editable wheel-style install instead:
 
 - defaults to `FORGE_ORIGIN=http://127.0.0.1` and `FORGE_PORT=4317`
 - defaults `FORGE_ACTOR_LABEL` to blank and inherits the trusted local operator label when available
-- defaults `FORGE_DATA_ROOT` to `~/.forge`
+- defaults `FORGE_DATA_ROOT` to `~/.forge` unless the user sets `FORGE_DATA_ROOT` or `dataRoot`
 - supports `FORGE_API_TOKEN` for remote or explicitly scoped access
 - supports `FORGE_DATA_ROOT` when you want Forge to use a specific local data folder
 - when Forge is local and not already running, the plugin calls the repo's tested Forge local-runtime bootstrap helper instead of maintaining a separate startup implementation
@@ -115,7 +131,8 @@ If you want Hermes to share the same Forge users and records:
 
 - use the same `FORGE_ORIGIN`
 - use the same `FORGE_PORT`
-- leave the default `FORGE_DATA_ROOT=~/.forge` unless you intentionally want a different shared local database
+- set the same explicit `FORGE_DATA_ROOT` or `dataRoot` for every adapter that should use a custom local database, or leave every adapter on the default `~/.forge`
+- before changing or merging data roots, back up every candidate Forge database and verify which database the live runtime has opened
 - leave `FORGE_ACTOR_LABEL` blank when Hermes should inherit the local operator automatically
 - set `FORGE_ACTOR_LABEL` only when Hermes or a spawned sub-agent should act as a specific bot
 

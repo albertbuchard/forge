@@ -40,6 +40,22 @@ The MCP bridge now reports the live plugin version from the Codex plugin
 manifest instead of a stale hard-coded server version, so Codex and Forge stay
 aligned across local installs and releases.
 
+## Install
+
+From a Forge checkout, register the MCP bridge with Codex:
+
+```bash
+codex mcp add forge \
+  --env FORGE_ORIGIN=http://127.0.0.1 \
+  --env FORGE_PORT=4317 \
+  --env FORGE_ACTOR_LABEL=codex \
+  --env FORGE_TIMEOUT_MS=15000 \
+  -- /bin/zsh /absolute/path/to/forge/plugins/forge-codex/scripts/run-mcp.sh
+codex mcp list
+```
+
+Replace `/absolute/path/to/forge` with the path to this Forge repo. The MCP bridge will use the configured Forge runtime, and it can start the bundled local runtime if nothing is already listening on the configured local port.
+
 Environment variables:
 
 - `FORGE_ORIGIN`

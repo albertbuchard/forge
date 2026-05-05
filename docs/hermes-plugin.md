@@ -63,7 +63,24 @@ Its job is to expose the same curated Forge operating surface as the OpenClaw pl
 
 ## Install
 
-From the Forge repo:
+Use the published PyPI package for a normal Hermes install:
+
+```bash
+~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
+~/.hermes/hermes-agent/venv/bin/python -m pip uninstall -y forge-hermes-plugin
+~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade forge-hermes-plugin
+```
+
+That does three things:
+
+- installs the plugin into Hermes' own Python environment through `pip`
+- creates `~/.hermes/forge/config.json` automatically on first plugin load if it is missing
+- loads Forge through the standard `hermes_agent.plugins` entry point on the next Hermes startup
+
+Use Hermes' own runtime Python at `~/.hermes/hermes-agent/venv/bin/python` so the
+plugin lives in the same environment Hermes actually runs.
+
+If you are developing Forge from this repo and want Hermes to follow source edits, use:
 
 ```bash
 ~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
@@ -71,28 +88,11 @@ From the Forge repo:
 ~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade --editable ./plugins/forge-hermes
 ```
 
-That does three things:
-
-- installs the plugin into Hermes' own Python environment through `pip`
-- keeps Hermes pointed at the local Forge dev folder in editable mode
-- creates `~/.hermes/forge/config.json` automatically on first plugin load if it is missing
-- loads Forge through the standard `hermes_agent.plugins` entry point on the next Hermes startup
-
-Use Hermes' own runtime Python at `~/.hermes/hermes-agent/venv/bin/python` so the
-plugin lives in the same environment Hermes actually runs.
-
-If you want a non-editable install instead, use:
-
-```bash
-~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
-~/.hermes/hermes-agent/venv/bin/python -m pip uninstall -y forge-hermes-plugin
-~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade ./plugins/forge-hermes
-```
-
 The generated config file is also the durable user-editable settings surface for the
-Hermes plugin. By default it points at the shared local Forge home at
-`~/.forge`, so Hermes can collaborate with OpenClaw, Codex, and the browser
-without extra per-adapter storage setup.
+Hermes plugin. If `dataRoot` is set there, Hermes uses that Forge data root and
+the database is `<dataRoot>/forge.sqlite`. Use the same explicit `dataRoot` as
+OpenClaw, Codex, and the browser runtime when they should collaborate in one
+Forge system, or leave them all on the default `~/.forge` local root.
 
 ## Configuration
 
@@ -112,7 +112,7 @@ Defaults:
 - port: `4317` unless a preferred relocated localhost port was learned by the shared runtime helper
 - actor label: blank, which means "inherit the trusted local operator label when available"
 - timeout: `15000`
-- data root: `~/.forge`
+- data root: `~/.forge` by default, or the configured `dataRoot` when set
 
 If you want to move the data elsewhere, edit `~/.hermes/forge/config.json`:
 
@@ -121,6 +121,11 @@ If you want to move the data elsewhere, edit `~/.hermes/forge/config.json`:
   "dataRoot": "/absolute/path/to/forge-data"
 }
 ```
+
+Users can also manage storage from the Forge web app in `Settings -> Data`.
+The page shows the live data folder, can move current data or adopt an existing
+Forge data folder, creates manual backups, enables recurring automatic backups,
+and lets the user choose how many days of automatic backups Forge should keep.
 
 For a real release, the recommended prep flow from a clean checkout on `main` is:
 
@@ -185,7 +190,8 @@ notes:
 
 - point both at the same `origin`
 - point both at the same `port`
-- point both at the same `dataRoot` when using a local runtime, or simply leave the default `~/.forge`
+- point both at the same `dataRoot` when using a local runtime, or leave both on the default `~/.forge`
+- before changing or merging data roots, back up every candidate Forge database and verify which database the live runtime has opened
 - leave `actorLabel` blank when Hermes should inherit the local operator
 - set `actorLabel` only when Hermes or a spawned sub-agent should act as a specific bot
 

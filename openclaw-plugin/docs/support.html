@@ -104,12 +104,12 @@ userId:   explicit on writes</code></pre>
             <article class="card">
               <h3>OpenClaw plugin does not load</h3>
               <p>
-                Check whether <code>forge-openclaw-plugin</code> is present in
-                <code>plugins.allow</code> inside
-                <code>~/.openclaw/openclaw.json</code>. Re-verified on April 21,
-                2026: OpenClaw <code>2026.4.15</code> still requires the
-                temporary npm-based bypass documented in the integrations guide
-                when the installer scanner blocks Forge.
+                Re-run the install with
+                <code>--dangerously-force-unsafe-install</code>, then restart
+                the gateway and run
+                <code>openclaw plugins inspect forge-openclaw-plugin</code>.
+                Forge can start a local runtime, so OpenClaw may require that
+                explicit approval during install.
               </p>
             </article>
             <article class="card">

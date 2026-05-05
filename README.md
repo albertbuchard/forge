@@ -8,78 +8,133 @@
 [![OpenAPI 3.1](https://img.shields.io/badge/OpenAPI-3.1-6ba539?logo=openapiinitiative&logoColor=white)](https://www.openapis.org/)
 [![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-8ab4ff)](https://albertbuchard.github.io/forge/)
 
-Forge is a local-first operating system for planning, execution, memory, health, and agent collaboration.
+Forge is a local-first workspace for planning, execution, memory, health context, and agent collaboration.
 
-It brings the web app, API, SQLite-backed wiki memory, OpenClaw adapter, Hermes adapter, Codex adapter, and iPhone companion into one shared system instead of splitting your work and context across disconnected tools.
+![Forge overview dashboard](./openclaw-plugin/docs/assets/forge-overview-dashboard.png)
 
-Built with React 19, TypeScript 5.8, Vite 6, Fastify 5, SQLite, OpenAPI 3.1, Tauri 2, and a native iPhone companion.
+It gives you one place to:
 
-## Getting Started
+- turn goals into strategies, projects, issues, tasks, and subtasks
+- run a mixed Kanban board and a compact hierarchy view
+- keep notes, wiki pages, preferences, Psyche records, sleep, workouts, and movement context beside the work they explain
+- let OpenClaw, Hermes, Codex, the browser app, and the iPhone companion use the same local Forge runtime
+- keep the database local by default, with optional explicit data folders and backups in `Settings -> Data`
 
-### OpenClaw
+Forge is built with React 19, TypeScript 5.x, Vite 6, Tailwind CSS 4, Fastify 5, SQLite, generated OpenAPI, Tauri 2, OpenClaw, Hermes, Codex MCP, and a Swift iPhone companion.
+
+## Start Here
+
+### Use Forge From OpenClaw
+
+This is the normal install for most users. The OpenClaw plugin installs Forge's agent tools and can start the bundled local Forge web app for you.
 
 ```bash
-openclaw plugins install forge-openclaw-plugin
+openclaw plugins install --dangerously-force-unsafe-install forge-openclaw-plugin
 openclaw plugins enable forge-openclaw-plugin
-node -e 'const fs=require("fs"); const p=process.env.HOME+"/.openclaw/openclaw.json"; const j=JSON.parse(fs.readFileSync(p,"utf8")); j.plugins ??= {}; j.plugins.allow = Array.from(new Set([...(j.plugins.allow || []), "forge-openclaw-plugin"])); fs.writeFileSync(p, JSON.stringify(j, null, 2)+"\n");'
 openclaw gateway restart
 openclaw forge health
+openclaw forge ui
 ```
 
-If the plugin installs but does not load, the usual missing step is `plugins.allow`. I re-verified on April 21, 2026 that OpenClaw `2026.4.15` still blocks the normal install path, so keep using the fallback flow in the [Integrations guide](https://albertbuchard.github.io/forge/integrations.html#openclaw) when `plugins install` is rejected by the scanner.
+Why the install flag exists: Forge is a local app plugin. It can start a local Forge runtime on your machine, so current OpenClaw installers may require explicit approval for that behavior. The source is public in this repository, and the package is `forge-openclaw-plugin` on npm.
 
-### Run Forge Locally
+After install, the usual local addresses are:
+
+- Web app: `http://127.0.0.1:4317/forge/`
+- API: `http://127.0.0.1:4317/api/v1/`
+- OpenAPI: `http://127.0.0.1:4317/api/v1/openapi.json`
+
+If the installer on an older OpenClaw build does not support the flag, use the manual npm fallback in [`openclaw-plugin/README.md`](./openclaw-plugin/README.md#manual-fallback-for-older-openclaw-builds).
+
+### Run The Source App Locally
+
+Use this when you are developing Forge itself.
 
 ```bash
 npm install
 npm run dev
 ```
 
-Primary local addresses:
+Open Forge through the backend URL:
 
-- Web app: `http://127.0.0.1:4317/forge/`
-- API: `http://127.0.0.1:4317/api/v1/`
-- OpenAPI: `http://127.0.0.1:4317/api/v1/openapi.json`
+```text
+http://127.0.0.1:4317/forge/
+```
 
-In development, Vite may run on `3027`, but Forge should still be accessed through the backend mount on `4317`.
+Vite may also run on `3027` during development, but the stable app entrypoint is still the backend mount on `4317`.
 
-### Hermes And Codex
+### Install The Local OpenClaw Plugin While Developing
 
-- Hermes install: `~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade ./plugins/forge-hermes`
-- Codex install and MCP setup: [Integrations guide](https://albertbuchard.github.io/forge/integrations.html#codex)
+From the Forge repo root:
 
-## Documentation
+```bash
+openclaw plugins install --link --dangerously-force-unsafe-install ./openclaw-plugin
+openclaw plugins enable forge-openclaw-plugin
+openclaw gateway restart
+openclaw plugins inspect forge-openclaw-plugin
+openclaw forge health
+```
 
-- Docs home: [albertbuchard.github.io/forge](https://albertbuchard.github.io/forge/)
-- Features: [albertbuchard.github.io/forge/features.html](https://albertbuchard.github.io/forge/features.html)
-- Engineering: [albertbuchard.github.io/forge/engineering.html](https://albertbuchard.github.io/forge/engineering.html)
-- Development: [albertbuchard.github.io/forge/development.html](https://albertbuchard.github.io/forge/development.html)
-- Integrations: [albertbuchard.github.io/forge/integrations.html](https://albertbuchard.github.io/forge/integrations.html)
-- API reference: [albertbuchard.github.io/forge/api/](https://albertbuchard.github.io/forge/api/)
-- Support: [albertbuchard.github.io/forge/support.html](https://albertbuchard.github.io/forge/support.html)
-- Repo docs: [`docs/`](./docs)
+Use `--link` when you want OpenClaw to use this checkout directly. Omit `--link` when you want to test a copied package install.
+
+### Hermes
+
+Use the published PyPI package when you want Hermes to load the released plugin:
+
+```bash
+~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
+~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade forge-hermes-plugin
+```
+
+Use `--editable ./plugins/forge-hermes` from this repo instead when you want Hermes to follow local source edits.
+
+### Codex
+
+Codex uses the Forge MCP bridge from this repo:
+
+```bash
+codex mcp add forge \
+  --env FORGE_ORIGIN=http://127.0.0.1 \
+  --env FORGE_PORT=4317 \
+  --env FORGE_ACTOR_LABEL=codex \
+  --env FORGE_TIMEOUT_MS=15000 \
+  -- /bin/zsh /absolute/path/to/forge/plugins/forge-codex/scripts/run-mcp.sh
+codex mcp list
+```
 
 ## What Forge Covers
 
-- planning and execution with projects, issues, tasks, task runs, and habits
-- notes, wiki memory, search, ingest, and long-form linked context
-- preferences, reflective models, and structured Psyche records
-- sleep, workouts, movement history, and iPhone HealthKit import
-- multi-user collaboration across humans and bots
-- OpenClaw, Hermes, Codex, browser, and mobile surfaces on one runtime
+- planning and execution: goals, strategies, projects, issues, tasks, subtasks, task runs, and habits
+- memory: notes, wiki pages, search, ingest, backlinks, and linked Forge context
+- reflection: preferences, Psyche values, behavior patterns, beliefs, modes, and trigger reports
+- health: sleep nights, workouts, movement history, and iPhone HealthKit import
+- collaboration: explicit human and bot users, owner/assignee filters, agent sessions, and audited actions
+- progress: XP, levels, streaks, trophies, optional downloadable art packs, and local reward history
+
+## Data Location And Backups
+
+By default, local plugin installs store Forge data under `~/.forge`. You can choose another folder by setting `dataRoot` in the plugin config or by using `Settings -> Data` in the web app.
+
+If OpenClaw, Hermes, Codex, and the browser should share one Forge system, point them at the same origin, port, and data root. Before moving or merging data folders, back up every candidate `forge.sqlite` and verify which database the live runtime has opened.
 
 ## Screenshots
 
 | Surface | Screenshot |
 | --- | --- |
-| Overview | ![Forge overview dashboard](./openclaw-plugin/docs/assets/forge-overview-dashboard.png) |
+| Projects | ![Forge projects board](./openclaw-plugin/docs/assets/forge-projects-board.png) |
 | Execution board | ![Forge Kanban board](./openclaw-plugin/docs/assets/forge-kanban-board.png) |
 | Knowledge and memory | ![Forge wiki memory](./openclaw-plugin/docs/assets/forge-wiki-memory.png) |
 | Sleep and health | ![Forge sleep overview](./openclaw-plugin/docs/assets/forge-sleep-overview.png) |
 
-More product screenshots live in the [Features guide](https://albertbuchard.github.io/forge/features.html) and the [Docs home](https://albertbuchard.github.io/forge/).
+## Documentation
 
-## For Contributors
+- Docs home: [albertbuchard.github.io/forge](https://albertbuchard.github.io/forge/)
+- Features: [albertbuchard.github.io/forge/features.html](https://albertbuchard.github.io/forge/features.html)
+- Integrations: [albertbuchard.github.io/forge/integrations.html](https://albertbuchard.github.io/forge/integrations.html)
+- API reference: [albertbuchard.github.io/forge/api/](https://albertbuchard.github.io/forge/api/)
+- Repo docs: [`docs/`](./docs)
+
+## Contributor Checks
 
 ```bash
 npx tsc --noEmit

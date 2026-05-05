@@ -307,21 +307,21 @@ userIds:  explicit on cross-owner reads</code></pre>
           <div class="card-grid two">
             <article class="card">
               <h3>Install</h3>
-              <pre><code>openclaw plugins install forge-openclaw-plugin
+              <pre><code>openclaw plugins install --dangerously-force-unsafe-install forge-openclaw-plugin
 openclaw plugins enable forge-openclaw-plugin
 openclaw gateway restart
-openclaw forge health</code></pre>
+openclaw forge health
+openclaw forge ui</code></pre>
             </article>
             <article class="card">
-              <h3>Temporary bypass (`2026.4.15` still blocked)</h3>
+              <h3>Local development</h3>
               <p>
-                Re-verified on April 21, 2026 for OpenClaw
-                <code>2026.4.15</code>.
+                Link the repo-local plugin when you are editing Forge itself.
               </p>
-              <pre><code>npm install -g forge-openclaw-plugin
-node -e 'const cp=require("child_process"); const fs=require("fs"); const path=require("path"); const p=process.env.HOME+"/.openclaw/openclaw.json"; const j=JSON.parse(fs.readFileSync(p,"utf8")); const pluginPath=path.join(cp.execSync("npm root -g",{encoding:"utf8"}).trim(),"forge-openclaw-plugin"); j.plugins ??= {}; j.plugins.allow = Array.from(new Set([...(j.plugins.allow || []), "forge-openclaw-plugin"])); j.plugins.load ??= {}; j.plugins.load.paths = Array.from(new Set([...(j.plugins.load.paths || []), pluginPath])); j.plugins.entries ??= {}; j.plugins.entries["forge-openclaw-plugin"] = { enabled: true, config: { origin: "http://127.0.0.1", port: 4317, actorLabel: "aurel", timeoutMs: 15000 } }; fs.writeFileSync(p, JSON.stringify(j, null, 2)+"\n"); console.log("Configured", pluginPath);'
+              <pre><code>openclaw plugins install --link --dangerously-force-unsafe-install ./openclaw-plugin
+openclaw plugins enable forge-openclaw-plugin
 openclaw gateway restart
-openclaw plugins info forge-openclaw-plugin
+openclaw plugins inspect forge-openclaw-plugin
 openclaw forge health</code></pre>
             </article>
             <article class="card">
@@ -344,7 +344,7 @@ openclaw forge health</code></pre>
             <article class="card">
               <h3>Install</h3>
               <pre><code>~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
-~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade ./plugins/forge-hermes</code></pre>
+~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade forge-hermes-plugin</code></pre>
             </article>
             <article class="card">
               <h3>Config location</h3>
