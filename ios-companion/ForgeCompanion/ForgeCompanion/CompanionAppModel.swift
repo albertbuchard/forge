@@ -95,6 +95,24 @@ enum CompanionPairingURLResolver {
             capabilities: payload.capabilities
         )
     }
+
+    static func payload(
+        _ payload: PairingPayload,
+        refreshedBy session: CompanionPairingSessionState
+    ) -> PairingPayload {
+        guard session.id == payload.sessionId else {
+            return payload
+        }
+        return PairingPayload(
+            kind: payload.kind,
+            apiBaseUrl: payload.apiBaseUrl,
+            uiBaseUrl: payload.uiBaseUrl,
+            sessionId: payload.sessionId,
+            pairingToken: payload.pairingToken,
+            expiresAt: session.expiresAt,
+            capabilities: session.capabilities.isEmpty ? payload.capabilities : session.capabilities
+        )
+    }
 }
 
 enum CompanionOperationalStatus: String {
@@ -238,6 +256,8 @@ final class CompanionAppModel: ObservableObject {
         static let movementDebounceNanoseconds: UInt64 = 12_000_000_000
         static let immediateDebounceNanoseconds: UInt64 = 1_500_000_000
         static let foregroundMinimumInterval: TimeInterval = 5 * 60
+        static let maintenanceHeartbeatInterval: TimeInterval = 5 * 60
+        static let maintenanceSyncMinimumInterval: TimeInterval = 15 * 60
         static let movementMinimumInterval: TimeInterval = 3 * 60
         static let pairingMinimumInterval: TimeInterval = 15
     }
@@ -367,8 +387,11 @@ final class CompanionAppModel: ObservableObject {
     private var deferredStartupRefreshTask: Task<Void, Never>?
     private var remoteSourceReconciliationTask: Task<Void, Never>?
     private var activeSyncTask: Task<Bool, Never>?
+    private var maintenanceTask: Task<Void, Never>?
+    private var backgroundRefreshTask: UIBackgroundTaskIdentifier = .invalid
     private var pendingRemoteSourceReconciliation: Set<CompanionSourceKey> = []
     private var lastAutoSyncAttemptAt: Date?
+    private var lastHeartbeatAt: Date?
 
     init() {
         let screenshotScenario = CompanionScreenshotScenario.current
@@ -444,6 +467,7 @@ final class CompanionAppModel: ObservableObject {
         if pairing != nil {
             companionDebugLog("CompanionAppModel", "init scheduling background refresh because pairing exists")
             backgroundScheduler.schedule()
+            startMaintenanceLoop(reason: "restore")
         }
         Task {
             companionDebugLog("CompanionAppModel", "startup task begin")
@@ -487,15 +511,20 @@ final class CompanionAppModel: ObservableObject {
             preferredUiBaseUrl: preferredUiBaseUrl,
             preferredApiBaseUrl: preferredApiBaseUrl
         )
-        try await syncClient.verifyPairing(
+        let verifiedSession = try await syncClient.verifyPairing(
             payload: normalizedPayload,
             apiBaseUrl: normalizedPayload.apiBaseUrl
         )
+        let verifiedPayload = CompanionPairingURLResolver.payload(
+            normalizedPayload,
+            refreshedBy: verifiedSession
+        )
         companionDebugLog(
             "CompanionAppModel",
-            "verifyAndConnect verifyPairing success session=\(normalizedPayload.sessionId)"
+            "verifyAndConnect verifyPairing success session=\(verifiedPayload.sessionId)"
         )
-        completeConnection(with: normalizedPayload, message: "Connected to Forge")
+        completeConnection(with: verifiedPayload, message: "Connected to Forge")
+        applyPairingSessionState(verifiedSession, reason: "verify")
         await refreshMovementBootstrap()
         await refreshHealthAccessStatus()
         await refreshWatchBootstrap(reason: "pairing")
@@ -519,7 +548,13 @@ final class CompanionAppModel: ObservableObject {
         lastSyncMessage = "Not paired"
         latestError = nil
         healthPermissionPromptDeferred = false
+        maintenanceTask?.cancel()
+        maintenanceTask = nil
+        autoSyncDebounceTask?.cancel()
+        deferredStartupRefreshTask?.cancel()
+        remoteSourceReconciliationTask?.cancel()
         keychain.delete(forKey: StorageKeys.pairingPayload)
+        UserDefaults.standard.removeObject(forKey: StorageKeys.pairingPayload)
         UserDefaults.standard.removeObject(forKey: StorageKeys.deferredHealthPrompt)
         Task {
             await refreshWatchBootstrap(reason: "disconnect")
@@ -669,12 +704,25 @@ final class CompanionAppModel: ObservableObject {
     func handleAppDidBecomeActive() {
         companionDebugLog("CompanionAppModel", "handleAppDidBecomeActive")
         screenTimeStore.handleAppDidBecomeActive()
+        startMaintenanceLoop(reason: "app became active")
+        Task {
+            await performMaintenanceHeartbeat(reason: "app became active", force: true)
+        }
         scheduleRemoteSourceReconciliation(reason: "app became active")
         scheduleAutomaticSync(
             reason: "app became active",
             debounceNanoseconds: AutoSyncPolicy.immediateDebounceNanoseconds,
             minimumInterval: AutoSyncPolicy.foregroundMinimumInterval
         )
+    }
+
+    func handleAppWillLeaveForeground() {
+        companionDebugLog("CompanionAppModel", "handleAppWillLeaveForeground")
+        guard pairing != nil else {
+            return
+        }
+        backgroundScheduler.schedule()
+        beginBackgroundRefreshWindow(reason: "scene background")
     }
 
     func discoverForgeServers() async {
@@ -765,6 +813,31 @@ final class CompanionAppModel: ObservableObject {
             "CompanionAppModel",
             "ensureActivePairingIfPossible renewing reason=\(reason) session=\(normalized.sessionId)"
         )
+        if forceRenewal == false {
+            do {
+                let session = try await syncClient.heartbeatPairing(
+                    payload: normalized,
+                    apiBaseUrl: normalized.apiBaseUrl
+                )
+                let refreshed = CompanionPairingURLResolver.payload(
+                    normalized,
+                    refreshedBy: session
+                )
+                self.pairing = refreshed
+                persistPairing()
+                applyPairingSessionState(session, reason: "renewal-heartbeat-\(reason)")
+                companionDebugLog(
+                    "CompanionAppModel",
+                    "ensureActivePairingIfPossible refreshed existing session reason=\(reason)"
+                )
+                return refreshed
+            } catch {
+                companionDebugLog(
+                    "CompanionAppModel",
+                    "ensureActivePairingIfPossible heartbeat refresh failed reason=\(reason) error=\(error.localizedDescription)"
+                )
+            }
+        }
         do {
             let renewed = try await renewPairingSession(from: normalized, reason: reason)
             return renewed
@@ -782,8 +855,16 @@ final class CompanionAppModel: ObservableObject {
             companionDebugLog("CompanionAppModel", "persistPairing skipped")
             return
         }
-        keychain.save(data, forKey: StorageKeys.pairingPayload)
-        companionDebugLog("CompanionAppModel", "persistPairing saved session=\(pairing.sessionId)")
+        if keychain.save(data, forKey: StorageKeys.pairingPayload) {
+            UserDefaults.standard.removeObject(forKey: StorageKeys.pairingPayload)
+            companionDebugLog("CompanionAppModel", "persistPairing saved session=\(pairing.sessionId)")
+        } else {
+            UserDefaults.standard.set(data, forKey: StorageKeys.pairingPayload)
+            companionDebugLog(
+                "CompanionAppModel",
+                "persistPairing keychain failed; saved temporary fallback session=\(pairing.sessionId)"
+            )
+        }
     }
 
     private func restorePairing() {
@@ -800,7 +881,7 @@ final class CompanionAppModel: ObservableObject {
         pairing = normalizedPairingPayload(payload)
         lastSyncMessage = "Pairing restored"
         persistPairing()
-        UserDefaults.standard.removeObject(forKey: StorageKeys.pairingPayload)
+        startMaintenanceLoop(reason: "restorePairing")
         companionDebugLog("CompanionAppModel", "restorePairing restored session=\(payload.sessionId)")
     }
 
@@ -960,7 +1041,17 @@ final class CompanionAppModel: ObservableObject {
 
     private func performBackgroundRefresh() async -> Bool {
         companionDebugLog("CompanionAppModel", "performBackgroundRefresh start")
-        return await performSync(trigger: "background")
+        let heartbeatSucceeded = await performMaintenanceHeartbeat(
+            reason: "background refresh",
+            force: true
+        )
+        let syncSucceeded = await performAutomaticSyncIfNeededReturningResult(
+            reason: "background refresh",
+            minimumInterval: AutoSyncPolicy.maintenanceSyncMinimumInterval,
+            force: false
+        )
+        backgroundScheduler.schedule()
+        return heartbeatSucceeded || syncSucceeded
     }
 
     private func completeConnection(
@@ -984,6 +1075,7 @@ final class CompanionAppModel: ObservableObject {
         latestError = nil
         persistPairing()
         backgroundScheduler.schedule()
+        startMaintenanceLoop(reason: "connection")
         Task {
             await refreshHealthAccessStatus()
             refreshSyncState()
@@ -1036,35 +1128,134 @@ final class CompanionAppModel: ObservableObject {
         }
     }
 
+    private func startMaintenanceLoop(reason: String) {
+        guard pairing != nil else {
+            return
+        }
+        guard maintenanceTask == nil || maintenanceTask?.isCancelled == true else {
+            return
+        }
+        companionDebugLog("CompanionAppModel", "startMaintenanceLoop reason=\(reason)")
+        maintenanceTask = Task { [weak self] in
+            while Task.isCancelled == false {
+                try? await Task.sleep(
+                    for: .seconds(AutoSyncPolicy.maintenanceHeartbeatInterval)
+                )
+                guard let self, Task.isCancelled == false else {
+                    return
+                }
+                await self.performMaintenanceHeartbeat(reason: "periodic", force: false)
+                await self.performAutomaticSyncIfNeeded(
+                    reason: "periodic maintenance",
+                    minimumInterval: AutoSyncPolicy.maintenanceSyncMinimumInterval,
+                    force: false
+                )
+            }
+        }
+    }
+
+    @discardableResult
+    private func performMaintenanceHeartbeat(reason: String, force: Bool) async -> Bool {
+        guard pairing != nil else {
+            return false
+        }
+        if force == false,
+           let lastHeartbeatAt,
+           Date().timeIntervalSince(lastHeartbeatAt) < AutoSyncPolicy.maintenanceHeartbeatInterval
+        {
+            return true
+        }
+        guard let resolvedPairing = await ensureActivePairingIfPossible(reason: "heartbeat-\(reason)") ?? pairing else {
+            return false
+        }
+        do {
+            let session = try await syncClient.heartbeatPairing(
+                payload: resolvedPairing,
+                apiBaseUrl: resolvedPairing.apiBaseUrl
+            )
+            applyPairingSessionState(session, reason: "heartbeat-\(reason)")
+            lastHeartbeatAt = Date()
+            backgroundScheduler.schedule()
+            companionDebugLog(
+                "CompanionAppModel",
+                "performMaintenanceHeartbeat success reason=\(reason)"
+            )
+            return true
+        } catch {
+            companionDebugLog(
+                "CompanionAppModel",
+                "performMaintenanceHeartbeat failed reason=\(reason) error=\(error.localizedDescription)"
+            )
+            return false
+        }
+    }
+
+    private func beginBackgroundRefreshWindow(reason: String) {
+        if backgroundRefreshTask != .invalid {
+            UIApplication.shared.endBackgroundTask(backgroundRefreshTask)
+            backgroundRefreshTask = .invalid
+        }
+        backgroundRefreshTask = UIApplication.shared.beginBackgroundTask(
+            withName: "ForgeCompanionRefresh"
+        ) { [weak self] in
+            guard let self else { return }
+            companionDebugLog("CompanionAppModel", "background task expired reason=\(reason)")
+            if self.backgroundRefreshTask != .invalid {
+                UIApplication.shared.endBackgroundTask(self.backgroundRefreshTask)
+                self.backgroundRefreshTask = .invalid
+            }
+        }
+        Task { [weak self] in
+            guard let self else { return }
+            _ = await self.performBackgroundRefresh()
+            if self.backgroundRefreshTask != .invalid {
+                UIApplication.shared.endBackgroundTask(self.backgroundRefreshTask)
+                self.backgroundRefreshTask = .invalid
+            }
+        }
+    }
+
     private func performAutomaticSyncIfNeeded(
         reason: String,
         minimumInterval: TimeInterval,
         force: Bool
     ) async {
+        _ = await performAutomaticSyncIfNeededReturningResult(
+            reason: reason,
+            minimumInterval: minimumInterval,
+            force: force
+        )
+    }
+
+    private func performAutomaticSyncIfNeededReturningResult(
+        reason: String,
+        minimumInterval: TimeInterval,
+        force: Bool
+    ) async -> Bool {
         guard pairing != nil else {
-            return
+            return false
         }
         guard syncState != .syncing else {
-            return
+            return false
         }
         guard hasAnyEnabledSource else {
             companionDebugLog(
                 "CompanionAppModel",
                 "performAutomaticSyncIfNeeded skipped reason=\(reason) all sources disabled"
             )
-            return
+            return false
         }
         let referenceDate = Date()
         if force == false {
             if let lastAutoSyncAttemptAt,
                referenceDate.timeIntervalSince(lastAutoSyncAttemptAt) < minimumInterval
             {
-                return
+                return false
             }
             if let lastSuccessfulSyncAt,
                referenceDate.timeIntervalSince(lastSuccessfulSyncAt) < minimumInterval
             {
-                return
+                return false
             }
         }
         lastAutoSyncAttemptAt = referenceDate
@@ -1072,7 +1263,7 @@ final class CompanionAppModel: ObservableObject {
             "CompanionAppModel",
             "performAutomaticSyncIfNeeded triggering reason=\(reason)"
         )
-        _ = await performSync(trigger: "auto \(reason)")
+        return await performSync(trigger: "auto \(reason)")
     }
 
     private func normalizedPairingPayload(
@@ -1228,7 +1419,7 @@ final class CompanionAppModel: ObservableObject {
                 apiBaseUrl: pairing.apiBaseUrl
             )
             if let pairingSession = receipt.pairingSession {
-                applyRemoteSourceStates(pairingSession.sourceStates)
+                applyPairingSessionState(pairingSession, reason: "sync-\(trigger)")
             }
             movementStore.mergeBootstrap(receipt.movement)
             _ = movementStore.runCoverageRepair(
@@ -1317,7 +1508,7 @@ final class CompanionAppModel: ObservableObject {
         do {
             let bootstrap = try await syncClient.fetchMovementBootstrap(payload: pairing)
             if let pairingSession = bootstrap.pairingSession {
-                applyRemoteSourceStates(pairingSession.sourceStates)
+                applyPairingSessionState(pairingSession, reason: "movement-bootstrap")
             }
             movementStore.mergeBootstrap(bootstrap.movement)
             _ = movementStore.runCoverageRepair(
@@ -1716,22 +1907,27 @@ final class CompanionAppModel: ObservableObject {
             preferredUiBaseUrl: server.uiBaseUrl,
             preferredApiBaseUrl: server.apiBaseUrl
         )
-        try await syncClient.verifyPairing(
+        let verifiedSession = try await syncClient.verifyPairing(
             payload: normalizedRenewedPayload,
             apiBaseUrl: normalizedRenewedPayload.apiBaseUrl
         )
+        let verifiedRenewedPayload = CompanionPairingURLResolver.payload(
+            normalizedRenewedPayload,
+            refreshedBy: verifiedSession
+        )
         completeConnection(
-            with: normalizedRenewedPayload,
+            with: verifiedRenewedPayload,
             preferredUiBaseUrl: server.uiBaseUrl,
             message: "Reconnected to Forge"
         )
+        applyPairingSessionState(verifiedSession, reason: "renewal-\(reason)")
         lastSyncMessage = "Reconnected to \(server.name)"
         latestError = nil
         companionDebugLog(
             "CompanionAppModel",
-            "renewPairingSession success reason=\(reason) session=\(normalizedRenewedPayload.sessionId)"
+            "renewPairingSession success reason=\(reason) session=\(verifiedRenewedPayload.sessionId)"
         )
-        return normalizedRenewedPayload
+        return verifiedRenewedPayload
     }
 
     private func preferredAutomaticPairingServer(
@@ -1977,6 +2173,29 @@ final class CompanionAppModel: ObservableObject {
         scheduleRemoteSourceReconciliation(reason: "remote source state update")
     }
 
+    private func applyPairingSessionState(
+        _ session: CompanionPairingSessionState,
+        reason: String
+    ) {
+        if let currentPairing = pairing, currentPairing.sessionId == session.id {
+            let refreshedPairing = CompanionPairingURLResolver.payload(
+                currentPairing,
+                refreshedBy: session
+            )
+            if refreshedPairing.expiresAt != currentPairing.expiresAt
+                || refreshedPairing.capabilities != currentPairing.capabilities
+            {
+                pairing = refreshedPairing
+                persistPairing()
+                companionDebugLog(
+                    "CompanionAppModel",
+                    "applyPairingSessionState refreshed local pairing reason=\(reason) expiresAt=\(session.expiresAt)"
+                )
+            }
+        }
+        applyRemoteSourceStates(session.sourceStates)
+    }
+
     private func sourceNeedsInteractiveReconciliation(_ source: CompanionSourceKey) -> Bool {
         switch source {
         case .health:
@@ -2079,7 +2298,7 @@ final class CompanionAppModel: ObservableObject {
                 lastObservedAt: state.lastObservedAt,
                 metadata: state.metadata.values
             )
-            applyRemoteSourceStates(session.sourceStates)
+            applyPairingSessionState(session, reason: "source-state-\(source.rawValue)")
         } catch {
             companionDebugLog(
                 "CompanionAppModel",

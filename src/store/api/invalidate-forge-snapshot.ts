@@ -6,7 +6,7 @@ export async function invalidateForgeSnapshot(
   queryClient: QueryClient,
   extraQueryKeys: QueryKey[] = []
 ) {
-  appStore.dispatch(forgeApi.util.invalidateTags(["Snapshot"]));
+  appStore.dispatch(forgeApi.util.invalidateTags(["Snapshot", "Gamification"]));
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: ["forge-snapshot"] }),
     ...extraQueryKeys.map((queryKey) =>

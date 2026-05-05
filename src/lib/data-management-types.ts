@@ -78,6 +78,7 @@ export interface DataManagementSettings {
   preferredDataRoot: string;
   backupDirectory: string;
   backupFrequencyHours: number | null;
+  backupRetentionDays: number | null;
   autoRepairEnabled: boolean;
   lastAutoBackupAt: string | null;
   lastManualBackupAt: string | null;

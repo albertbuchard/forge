@@ -119,6 +119,10 @@ describe("forge skill playbook parity", () => {
       expect(skill).toMatch(/forge_call_movement_route/);
       expect(skill).toMatch(/forge_call_life_force_route/);
       expect(skill).toMatch(/forge_call_workbench_route/);
+      expect(skill).toMatch(/route-key tool schemas include the exact route-key to method\/path/i);
+      expect(skill).toMatch(/place IDs inside `routeKey`[\s\S]*invent a raw route\s+string/i);
+      expect(skill).toMatch(/pathParams[\s\S]*placeholder names exactly/i);
+      expect(skill).toMatch(/live onboarding disagree[\s\S]*contract bug/i);
     }
     expect(openclawSkill).toMatch(/conversation is clearly about a Forge entity or domain surface/i);
     expect(openclawSkill).toMatch(/movement, life_force, workbench/i);
@@ -126,6 +130,10 @@ describe("forge skill playbook parity", () => {
     expect(openclawSkill).toMatch(/calendar_connection/i);
     expect(openclawSkill).toMatch(/preference judgment/i);
     expect(openclawSkill).toMatch(/work_adjustment/i);
+    expect(openclawSkill).toMatch(/Minimum-field checkpoint, not a question script/i);
+    expect(openclawSkill).toMatch(/Only ask if missing or unclear/i);
+    expect(openclawSkill).not.toMatch(/Use this intake map when the user agrees/i);
+    expect(openclawSkill).not.toMatch(/\n\s*Ask:\n/);
 
     expect(hermesSkill).toMatch(/high-level batch routes for basic Preferences CRUD/i);
     expect(hermesSkill).toMatch(/high-level batch routes for basic questionnaire CRUD/i);
@@ -191,15 +199,18 @@ describe("forge skill playbook parity", () => {
     expect(listedTools).toEqual(extractRegisteredOpenClawTools(toolSource));
   });
 
-  it("keeps OpenClaw data-root guidance on the shared local Forge home", () => {
+  it("keeps OpenClaw data-root guidance focused on effective runtime config", () => {
     const openclawSkill = readRepoFile("skills/forge-openclaw/SKILL.md");
     const dataLocationSlice = openclawSkill.slice(
       openclawSkill.indexOf("Forge data location rule:"),
       openclawSkill.indexOf("Psyche interview rule:")
     );
 
-    expect(dataLocationSlice).toMatch(/shared local Forge home at `~\/\.forge\/forge\.sqlite`/);
-    expect(dataLocationSlice).toMatch(/active runtime `dataRoot`/);
+    expect(dataLocationSlice).toMatch(/never answer from a generic default/i);
+    expect(dataLocationSlice).toMatch(/configured `dataRoot`/);
+    expect(dataLocationSlice).toMatch(/`FORGE_DATA_ROOT`/);
+    expect(dataLocationSlice).toMatch(/live runtime file handle/);
+    expect(dataLocationSlice).toMatch(/Do not merge side databases unless an ID\/content-level audit proves/i);
     expect(dataLocationSlice).not.toMatch(/~\/\.openclaw\/extensions\/forge-openclaw-plugin\/forge\.sqlite/);
     expect(dataLocationSlice).not.toMatch(/<repo>\/openclaw-plugin\/forge\.sqlite/);
   });
@@ -247,6 +258,9 @@ describe("forge skill playbook parity", () => {
     expect(entityPlaybook).toMatch(/Turn shapes/i);
     expect(entityPlaybook).toMatch(/Name, Define, Connect/i);
     expect(entityPlaybook).toMatch(/One focused question is the default/i);
+    expect(entityPlaybook).toMatch(/Before asking, decide the API posture internally/i);
+    expect(entityPlaybook).toMatch(/Do not let API uncertainty leak out as vague wording/i);
+    expect(entityPlaybook).toMatch(/Avoid generic reflections such as "that sounds important"/i);
     expect(entityPlaybook).toMatch(/Operation lane checkpoint/i);
     expect(entityPlaybook).toMatch(/add, update, review, compare, navigate, link, or run/i);
     expect(entityPlaybook).toMatch(/what is becoming clearer/i);
@@ -280,6 +294,14 @@ describe("forge skill playbook parity", () => {
     expect(entityPlaybook).toMatch(/## Life Force/);
     expect(entityPlaybook).toMatch(/## Workbench/);
     expect(entityPlaybook).toMatch(/Lane-to-route map:/);
+    expect(entityPlaybook).toMatch(/Every normal entity section below inherits that batch-route default/i);
+    expect(entityPlaybook).toMatch(/If the tool schema and live onboarding disagree[\s\S]*contract mismatch/i);
+    expect(entityPlaybook).toMatch(/`work_adjustment` is an action workflow/i);
+    expect(entityPlaybook).toMatch(/\/api\/v1\/wiki\/pages[\s\S]*family/i);
+    expect(entityPlaybook).toMatch(/\/api\/v1\/tasks\/:id\/runs/);
+    expect(entityPlaybook).toMatch(/\/api\/v1\/psyche\/self-observation\/calendar/);
+    expect(entityPlaybook).toMatch(/\/api\/v1\/psyche\/questionnaires\/:id\/runs/);
+    expect(entityPlaybook).toMatch(/\/api\/v1\/psyche\/questionnaire-runs\/:id\/complete/);
     expect(entityPlaybook).toMatch(/\/api\/v1\/movement\/day/);
     expect(entityPlaybook).toMatch(/\/api\/v1\/movement\/automatic-boxes\/:id\/invalidate/);
     expect(entityPlaybook).toMatch(/\/api\/v1\/life-force\/profile/);
@@ -311,6 +333,9 @@ describe("forge skill playbook parity", () => {
     expect(psychePlaybook).toMatch(/accuracy and steadiness/i);
     expect(psychePlaybook).toMatch(/Therapist micro-skills/i);
     expect(psychePlaybook).toMatch(/## Schema Theme Routing/i);
+    expect(psychePlaybook).toMatch(/## Psyche API Posture/i);
+    expect(psychePlaybook).toMatch(/shared batch entity routes[\s\S]*psyche_value[\s\S]*emotion_definition/i);
+    expect(psychePlaybook).toMatch(/Keep the route decision internal/i);
     expect(psychePlaybook).toMatch(
       /schema theme[\s\S]*belief_entry[\s\S]*behavior_pattern[\s\S]*mode_profile/i
     );
@@ -466,6 +491,8 @@ describe("forge skill playbook parity", () => {
     expect(appSource).toMatch(/action:\s*"\/api\/v1\/preferences\/judgments"/);
     expect(appSource).toMatch(/action:\s*"\/api\/v1\/preferences\/signals"/);
     expect(appSource).toMatch(/specializedDomainSurfaces:/);
+    expect(appSource).toMatch(/life_force:\s*\{/);
+    expect(appSource).toMatch(/aliases:\s*\[\s*"life_force"/);
     expect(appSource).toMatch(/movementAllTime:/);
     expect(appSource).toMatch(/movementAutomaticBoxInvalidate:/);
     expect(appSource).toMatch(/movementTripPointUpdate:/);
@@ -479,6 +506,7 @@ describe("forge skill playbook parity", () => {
     expect(openApiSource).toMatch(/"workAdjustment"/);
     expect(openApiSource).toMatch(/"movement"/);
     expect(openApiSource).toMatch(/"lifeForce"/);
+    expect(openApiSource).toMatch(/aliases/);
     expect(openApiSource).toMatch(/"workbench"/);
     expect(openApiSource).toMatch(/"specializedDomainSurfaces"/);
     expect(openApiSource).toMatch(/"specialized_domain_surface"/);

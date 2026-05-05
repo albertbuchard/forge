@@ -13,6 +13,10 @@ Do not create, switch to, or keep working on feature branches by default.
 
 When Forge work involves the OpenClaw plugin, treat the repo-local plugin folder as the default install source.
 
+- Before changing, reinstalling, restarting, or debugging Forge, OpenClaw, Hermes, or the Forge Codex adapter, verify the effective data root from explicit config and live runtime evidence. Do not infer the database from generic defaults.
+- Check both config and runtime evidence when storage is in question: OpenClaw plugin config, Hermes Forge config, `FORGE_DATA_ROOT`, and a live process/file-handle check such as `lsof -p <forge-pid> | rg 'forge.sqlite|forge.json'`.
+- Treat fallback locations such as `~/.forge`, plugin extension folders, package-local `data/`, and adapter-local data folders as candidates only until config or runtime evidence proves they are active.
+- Before any data-root repair, migration, restore, or merge, create a timestamped backup of every candidate Forge database and config file. Do not merge side databases into the selected canonical database unless an ID/content-level audit proves the side database contains relevant user data that is missing from that canonical database.
 - Use the documented local-dev flow from `/Users/omarclaw/Documents/aurel-monorepo/projects/forge/openclaw-plugin/README.md`.
 - Prefer `openclaw plugins install ./projects/forge/openclaw-plugin`, then `openclaw plugins enable forge-openclaw-plugin`, then repair `plugins.allow` if needed, then `openclaw gateway restart`, then `openclaw forge health`.
 - Do not switch to the published npm package or another global install path unless Albert explicitly asks for that.

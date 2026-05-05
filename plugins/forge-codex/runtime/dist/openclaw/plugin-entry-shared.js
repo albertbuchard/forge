@@ -128,7 +128,7 @@ export const forgePluginConfigSchema = {
             dataRoot: {
                 type: "string",
                 default: "~/.forge",
-                description: "Absolute path for the shared Forge data root. Defaults to ~/.forge so local OpenClaw, Hermes, and Codex installs converge on one runtime."
+                description: "Absolute path for the shared Forge data root. Defaults to ~/.forge. Explicit values override that default; use the same value across local adapters that should share one database."
             },
             apiToken: {
                 type: "string",
@@ -167,7 +167,7 @@ export const forgePluginConfigSchema = {
         },
         dataRoot: {
             label: "Forge Data Root",
-            help: "Absolute folder path for the shared Forge home. Local installs default to ~/.forge so OpenClaw, Hermes, and Codex automatically meet in one runtime.",
+            help: "Optional absolute folder path for Forge data. Defaults to ~/.forge. When set, Forge stores forge.sqlite directly in this folder; use the same value across adapters that should share one database.",
             placeholder: "~/.forge",
             advanced: true
         },

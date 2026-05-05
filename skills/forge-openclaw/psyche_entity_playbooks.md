@@ -320,6 +320,29 @@ Do not ask the user to pick the container first. Reflect the active meaning in p
 language, ask for one recent moment or one belief sentence, then choose the record that
 will preserve the structure best.
 
+## Psyche API Posture
+
+Psyche records are psychologically meaningful, but they are still normal stored Forge
+entities for API purposes. Once the formulation is clear and the user has consented to
+save or update it, use the shared batch entity routes for `psyche_value`,
+`behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`,
+`mode_guide_session`, `trigger_report`, `event_type`, and `emotion_definition`.
+
+Keep the route decision internal. With the user, keep talking about the lived moment,
+belief sentence, pattern, mode, value, report, event kind, or feeling signature.
+Do not ask them about batch CRUD, payloads, or route families.
+
+Use `forge_search_entities` before creating when a duplicate is plausible. Use
+`forge_create_entities` or `forge_update_entities` after the wording, record type,
+and useful links are clear enough. Preserve nuance in a linked `note` when the
+experience is richer than the normalized fields.
+
+Do not divert Psyche material into `self_observation` just because it started as an
+episode. Use `trigger_report` for one emotionally meaningful incident, use
+`behavior_pattern` for a recurring functional loop, use `belief_entry` for one
+explicit sentence, and use `mode_guide_session` or `mode_profile` when a part-state is
+central.
+
 ## Lane chooser
 
 After each real answer, choose the next best lane. Do not mix several lanes at once.

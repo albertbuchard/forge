@@ -28,6 +28,14 @@ const DEFAULT_RULES = [
         config: { fixedXp: 4, intervalMinutes: 10 }
     },
     {
+        id: "reward_rule_entity_created",
+        family: "consistency",
+        code: "entity_created",
+        title: "Forge entity created",
+        description: "Award a small activity bounty when the user creates a real Forge entity.",
+        config: { fixedXp: 2 }
+    },
+    {
         id: "reward_rule_task_run_completion",
         family: "completion",
         code: "task_run_completion",
@@ -672,6 +680,58 @@ export function recordTaskRunProgressRewards(taskRunId, taskId, actor, source, c
         }));
     }
     return rewards;
+}
+export function recordEntityCreationReward(input) {
+    ensureDefaultRewardRules();
+    const reversibleGroup = `entity_created:${input.entityType}:${input.entityId}`;
+    const existing = getDatabase()
+        .prepare(`SELECT
+         id, rule_id, event_log_id, entity_type, entity_id, actor, source,
+         delta_xp, reason_title, reason_summary, reversible_group,
+         reversed_by_reward_id, metadata_json, created_at
+       FROM reward_ledger
+       WHERE reversible_group = ?
+       ORDER BY created_at ASC
+       LIMIT 1`)
+        .get(reversibleGroup);
+    if (existing) {
+        return mapLedger(existing);
+    }
+    const createdAtDate = Number.isNaN(Date.parse(input.createdAt))
+        ? new Date()
+        : new Date(input.createdAt);
+    const rule = getRuleByCode("entity_created");
+    const readableType = input.entityType.replaceAll("_", " ");
+    const title = input.title?.trim() || readableType;
+    const eventLog = recordEventLog({
+        eventKind: "reward.entity_created",
+        entityType: input.entityType,
+        entityId: input.entityId,
+        actor: input.actor ?? null,
+        source: input.source ?? "system",
+        metadata: {
+            entityType: input.entityType,
+            entityId: input.entityId,
+            title,
+            createdAt: input.createdAt
+        }
+    }, createdAtDate);
+    return insertLedgerEvent({
+        ruleId: rule?.id ?? null,
+        eventLogId: eventLog.id,
+        entityType: input.entityType,
+        entityId: input.entityId,
+        actor: input.actor ?? null,
+        source: input.source ?? "system",
+        deltaXp: Number(rule?.config.fixedXp ?? 2),
+        reasonTitle: `Created ${readableType}: ${title}`,
+        reasonSummary: "Small Forge activity XP for creating something concrete.",
+        reversibleGroup,
+        metadata: {
+            entityType: input.entityType,
+            title
+        }
+    }, createdAtDate);
 }
 export function recordWorkAdjustmentReward(input) {
     const { rule, intervalMinutes, intervalSeconds, fixedXp } = getTaskRunProgressRewardCadence();

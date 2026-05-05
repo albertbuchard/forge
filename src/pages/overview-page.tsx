@@ -23,11 +23,11 @@ import { EntityBadge } from "@/components/ui/entity-badge";
 import { EntityName } from "@/components/ui/entity-name";
 import {
   getFitnessView,
-  getXpMetrics,
   getMovementDay,
   getSleepView,
   getVitalsView
 } from "@/lib/api";
+import { useGetXpMetricsQuery } from "@/store/api/forge-api";
 import {
   getReadableActivityDescription,
   getReadableActivityTitle
@@ -223,11 +223,7 @@ export function OverviewPage() {
       queryKey: ["forge-overview-vitals", ...selectedUserIds],
       queryFn: async () => (await getVitalsView(selectedUserIds)).vitals
     }) ?? {};
-  const xpMetricsQuery =
-    useQuery({
-      queryKey: ["forge-xp-metrics", ...selectedUserIds],
-      queryFn: async () => getXpMetrics(selectedUserIds)
-    }) ?? {};
+  const xpMetricsQuery = useGetXpMetricsQuery(selectedUserIds);
   const nextMilestone =
     snapshot.dashboard.milestoneRewards.find((reward) => !reward.completed) ??
     snapshot.dashboard.milestoneRewards[0] ??

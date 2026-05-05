@@ -59,5 +59,9 @@ export declare function runDoctor(config: ForgePluginConfig): Promise<{
         unexpectedMirrors: `${Uppercase<string>} ${string}`[];
     };
 }>;
+export declare function applyDoctorFixes(config: ForgePluginConfig, input: {
+    fixIds?: string[];
+    applyAllSafe?: boolean;
+}): Promise<unknown>;
 export declare function registerForgePluginCli(api: ForgePluginCliApi, config: ForgePluginConfig): void;
 export {};

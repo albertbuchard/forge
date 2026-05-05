@@ -87,6 +87,15 @@ describe("question flow quality coverage", () => {
       /The first question should usually clarify lived meaning, use, stake, or timing/i
     );
     expect(entityPlaybook).toMatch(
+      /Before asking, decide the API posture internally/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Do not let API uncertainty leak out as vague wording/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Avoid generic reflections such as "that sounds important"/i
+    );
+    expect(entityPlaybook).toMatch(
       /For updates,[\s\S]*smallest thing[\s\S]*newly visible/i
     );
     expect(entityPlaybook).toMatch(
@@ -175,6 +184,9 @@ describe("question flow quality coverage", () => {
       /Use `wiki_page` when the user wants durable memory, a book\/article\/source summary/i
     );
     expect(entityPlaybook).toMatch(
+      /Use the wiki tools and[\s\S]*\/api\/v1\/wiki\/pages[\s\S]*family/i
+    );
+    expect(entityPlaybook).toMatch(
       /what sentence future-you would need to recover from this note later/i
     );
     expect(entityPlaybook).toMatch(
@@ -193,6 +205,16 @@ describe("question flow quality coverage", () => {
       /book, article, source, concept, person, conversation, project\s+reference, or personal manual/i
     );
     expect(psychePlaybook).toMatch(/## Schema Theme Routing/i);
+    expect(psychePlaybook).toMatch(/## Psyche API Posture/i);
+    expect(psychePlaybook).toMatch(
+      /Psyche records[\s\S]*normal stored Forge\s+entities for API purposes/i
+    );
+    expect(psychePlaybook).toMatch(
+      /shared batch entity routes[\s\S]*psyche_value[\s\S]*emotion_definition/i
+    );
+    expect(psychePlaybook).toMatch(
+      /Keep the route decision internal[\s\S]*lived moment/i
+    );
     expect(psychePlaybook).toMatch(
       /schema theme[\s\S]*belief_entry[\s\S]*behavior_pattern[\s\S]*mode_profile/i
     );
@@ -213,10 +235,34 @@ describe("question flow quality coverage", () => {
       /Normal stored Forge entities use the shared batch entity routes by default/i
     );
     expect(entityPlaybook).toMatch(
+      /Every normal entity section below inherits that batch-route default/i
+    );
+    expect(entityPlaybook).toMatch(
+      /If the tool schema and live onboarding disagree[\s\S]*contract mismatch/i
+    );
+    expect(entityPlaybook).toMatch(
       /wiki_page[\s\S]*calendar_connection[\s\S]*specialized CRUD areas/i
     );
     expect(entityPlaybook).toMatch(
+      /calendar_connection[\s\S]*specialized CRUD surface[\s\S]*POST \/api\/v1\/calendar\/discovery[\s\S]*GET \/api\/v1\/calendar\/macos-local\/discovery/i
+    );
+    expect(entityPlaybook).toMatch(
+      /PATCH \/api\/v1\/calendar\/connections\/:id[\s\S]*DELETE \/api\/v1\/calendar\/connections\/:id/i
+    );
+    expect(entityPlaybook).toMatch(
       /task_run[\s\S]*work_adjustment[\s\S]*questionnaire_run[\s\S]*preference_judgment[\s\S]*preference_signal[\s\S]*self_observation[\s\S]*action workflows/i
+    );
+    expect(entityPlaybook).toMatch(
+      /task_run[\s\S]*\/api\/v1\/tasks\/:id\/runs[\s\S]*\/api\/v1\/task-runs\/:id\/heartbeat/i
+    );
+    expect(entityPlaybook).toMatch(
+      /self_observation[\s\S]*\/api\/v1\/psyche\/self-observation\/calendar/i
+    );
+    expect(entityPlaybook).toMatch(
+      /questionnaire_instrument[\s\S]*\/api\/v1\/psyche\/questionnaires[\s\S]*\/:id\/draft[\s\S]*\/:id\/publish/i
+    );
+    expect(entityPlaybook).toMatch(
+      /questionnaire_run[\s\S]*\/api\/v1\/psyche\/questionnaires\/:id\/runs[\s\S]*\/api\/v1\/psyche\/questionnaire-runs\/:id\/complete/i
     );
     expect(entityPlaybook).toMatch(
       /Do not ask route-neutral reflective questions[\s\S]*action path is already obvious/i

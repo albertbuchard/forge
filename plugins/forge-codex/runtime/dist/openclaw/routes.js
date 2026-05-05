@@ -124,6 +124,18 @@ export const FORGE_PLUGIN_ROUTE_GROUPS = [
         upstreamPath: "/api/v1/agents/onboarding",
         target: (_match, url) => passthroughSearch("/api/v1/agents/onboarding", url)
     }),
+    exact("/forge/v1/doctor", {
+        method: "GET",
+        upstreamPath: "/api/v1/doctor",
+        target: (_match, url) => passthroughSearch("/api/v1/doctor", url)
+    }),
+    exact("/forge/v1/doctor/fixes", {
+        method: "POST",
+        upstreamPath: "/api/v1/doctor/fixes",
+        requestBody: "json",
+        requiresToken: true,
+        target: (_match, url) => passthroughSearch("/api/v1/doctor/fixes", url)
+    }),
     exact("/forge/v1/users/directory", {
         method: "GET",
         upstreamPath: "/api/v1/users/directory",
@@ -494,6 +506,20 @@ export const FORGE_PLUGIN_ROUTE_GROUPS = [
             },
             {
                 method: "GET",
+                pattern: /^\/forge\/v1\/calendar\/macos-local\/discovery$/,
+                upstreamPath: "/api/v1/calendar/macos-local/discovery",
+                target: (_match, url) => passthroughSearch("/api/v1/calendar/macos-local/discovery", url)
+            },
+            {
+                method: "POST",
+                pattern: /^\/forge\/v1\/calendar\/discovery$/,
+                upstreamPath: "/api/v1/calendar/discovery",
+                requestBody: "json",
+                requiresToken: true,
+                target: (_match, url) => passthroughSearch("/api/v1/calendar/discovery", url)
+            },
+            {
+                method: "GET",
                 pattern: /^\/forge\/v1\/calendar\/connections$/,
                 upstreamPath: "/api/v1/calendar/connections",
                 target: (_match, url) => passthroughSearch("/api/v1/calendar/connections", url)
@@ -505,6 +531,28 @@ export const FORGE_PLUGIN_ROUTE_GROUPS = [
                 requestBody: "json",
                 requiresToken: true,
                 target: (_match, url) => passthroughSearch("/api/v1/calendar/connections", url)
+            },
+            {
+                method: "PATCH",
+                pattern: /^\/forge\/v1\/calendar\/connections\/([^/]+)$/,
+                upstreamPath: "/api/v1/calendar/connections/:id",
+                requestBody: "json",
+                requiresToken: true,
+                target: (match, url) => passthroughSearch(`/api/v1/calendar/connections/${match[1]}`, url)
+            },
+            {
+                method: "DELETE",
+                pattern: /^\/forge\/v1\/calendar\/connections\/([^/]+)$/,
+                upstreamPath: "/api/v1/calendar/connections/:id",
+                requiresToken: true,
+                target: (match, url) => passthroughSearch(`/api/v1/calendar/connections/${match[1]}`, url)
+            },
+            {
+                method: "GET",
+                pattern: /^\/forge\/v1\/calendar\/connections\/([^/]+)\/discovery$/,
+                upstreamPath: "/api/v1/calendar/connections/:id/discovery",
+                requiresToken: true,
+                target: (match, url) => passthroughSearch(`/api/v1/calendar/connections/${match[1]}/discovery`, url)
             },
             {
                 method: "POST",
@@ -1058,6 +1106,13 @@ async function runReadOnly(config, path) {
         path
     }));
 }
+async function runPost(config, path, body) {
+    return expectForgeSuccess(await callConfiguredForgeApi(config, {
+        method: "POST",
+        path,
+        body
+    }));
+}
 export async function runRouteCheck(config) {
     const openapi = await runReadOnly(config, "/api/v1/openapi.json");
     const pathMap = typeof openapi === "object" &&
@@ -1138,6 +1193,39 @@ export async function runDoctor(config) {
         routeParity
     };
 }
+export async function applyDoctorFixes(config, input) {
+    return runPost(config, "/api/v1/doctor/fixes", input);
+}
+function getSafeDoctorFixIds(doctor) {
+    const issues = Array.isArray(doctor.issues) ? doctor.issues : [];
+    return issues
+        .map((issue) => typeof issue === "object" &&
+        issue !== null &&
+        "fix" in issue &&
+        typeof issue.fix === "object" &&
+        issue.fix !== null &&
+        issue.fix.kind === "safe_auto_fix" &&
+        typeof issue.fix.id === "string"
+        ? issue.fix.id
+        : null)
+        .filter((fixId) => Boolean(fixId));
+}
+function formatDoctorSummary(doctor) {
+    const integrity = typeof doctor.integrity === "object" && doctor.integrity !== null
+        ? doctor.integrity
+        : {};
+    const issues = Array.isArray(doctor.issues) ? doctor.issues : [];
+    const warnings = Array.isArray(doctor.warnings) ? doctor.warnings : [];
+    const lines = [
+        `Forge Doctor: ${doctor.ok === true ? "ok" : "attention needed"}`,
+        `Integrity: ${typeof integrity.score === "number" ? integrity.score : "unknown"}%`,
+        typeof integrity.headline === "string" ? integrity.headline : null,
+        `Issues: ${issues.length}`,
+        warnings.length > 0 ? "" : null,
+        ...warnings.slice(0, 8).map((warning) => `- ${String(warning)}`)
+    ].filter((line) => line !== null);
+    return lines.join("\n");
+}
 export function registerForgePluginCli(api, config) {
     api.registerCli?.(({ program }) => {
         const command = program
@@ -1190,9 +1278,30 @@ export function registerForgePluginCli(api, config) {
         });
         command
             .command("doctor")
-            .description("Run plugin connectivity and curated route diagnostics")
-            .action(async () => {
-            console.log(JSON.stringify(await runDoctor(config), null, 2));
+            .description("Run Forge Doctor diagnostics")
+            .option("--json", "Print the full machine-readable Doctor payload")
+            .option("--fix", "Apply safe Doctor fixes after diagnostics")
+            .action(async (rawOptions) => {
+            const options = (rawOptions ?? {});
+            const doctor = (await runDoctor(config));
+            if (options.fix) {
+                const fixIds = getSafeDoctorFixIds(doctor);
+                if (fixIds.length > 0) {
+                    const fixResult = await applyDoctorFixes(config, { fixIds });
+                    const refreshedDoctor = (await runDoctor(config));
+                    const payload = {
+                        doctor: refreshedDoctor,
+                        fixResult
+                    };
+                    console.log(options.json
+                        ? JSON.stringify(payload, null, 2)
+                        : `${formatDoctorSummary(refreshedDoctor)}\n\nApplied fixes: ${fixIds.join(", ")}`);
+                    return;
+                }
+            }
+            console.log(options.json
+                ? JSON.stringify(doctor, null, 2)
+                : formatDoctorSummary(doctor));
         });
         command
             .command("route-check")

@@ -56,6 +56,48 @@ final class ForgeCompanionTests: XCTestCase {
         return scenario
     }
 
+    private func makeReadySourceState() -> CompanionSourceState {
+        CompanionSourceState(
+            desiredEnabled: true,
+            appliedEnabled: true,
+            authorizationStatus: "approved",
+            syncEligible: true,
+            lastObservedAt: "2026-04-07T10:00:00Z",
+            metadata: LooseJSONObject(values: [:])
+        )
+    }
+
+    private func makePairingSessionState(
+        id: String,
+        expiresAt: String,
+        capabilities: [String]
+    ) -> CompanionPairingSessionState {
+        let state = makeReadySourceState()
+        return CompanionPairingSessionState(
+            id: id,
+            userId: "user_1",
+            label: "iPhone",
+            status: "paired",
+            capabilities: capabilities,
+            deviceName: "iPhone",
+            platform: "ios",
+            appVersion: "1.0",
+            apiBaseUrl: "https://forge.example/api/v1",
+            lastSeenAt: "2026-04-07T10:00:00Z",
+            lastSyncAt: nil,
+            lastSyncError: nil,
+            pairedAt: "2026-04-07T09:00:00Z",
+            sourceStates: CompanionSourceStates(
+                health: state,
+                movement: state,
+                screenTime: state
+            ),
+            expiresAt: expiresAt,
+            createdAt: "2026-04-07T09:00:00Z",
+            updatedAt: "2026-04-07T10:00:00Z"
+        )
+    }
+
     func testNormalizedPayloadPreservesPreferredUiBaseUrl() {
         let payload = PairingPayload(
             kind: "pairing",
@@ -83,6 +125,32 @@ final class ForgeCompanionTests: XCTestCase {
             ),
             "http://127.0.0.1:3027/forge/"
         )
+    }
+
+    func testPairingPayloadRefreshesServerExtendedExpiry() {
+        let payload = PairingPayload(
+            kind: "pairing",
+            apiBaseUrl: "https://forge.example/api/v1",
+            uiBaseUrl: "https://forge.example/forge/",
+            sessionId: "pair_test",
+            pairingToken: "token",
+            expiresAt: "2026-04-07T10:05:00Z",
+            capabilities: ["healthkit.sleep"]
+        )
+        let session = makePairingSessionState(
+            id: "pair_test",
+            expiresAt: "2026-05-07T10:00:00Z",
+            capabilities: ["healthkit.sleep", "healthkit.fitness", "watch-ready"]
+        )
+
+        let refreshed = CompanionPairingURLResolver.payload(payload, refreshedBy: session)
+
+        XCTAssertEqual(refreshed.sessionId, payload.sessionId)
+        XCTAssertEqual(refreshed.pairingToken, payload.pairingToken)
+        XCTAssertEqual(refreshed.apiBaseUrl, payload.apiBaseUrl)
+        XCTAssertEqual(refreshed.uiBaseUrl, payload.uiBaseUrl)
+        XCTAssertEqual(refreshed.expiresAt, "2026-05-07T10:00:00Z")
+        XCTAssertEqual(refreshed.capabilities, ["healthkit.sleep", "healthkit.fitness", "watch-ready"])
     }
 
     func testWatchBootstrapDecodesCompactHabitPayload() throws {

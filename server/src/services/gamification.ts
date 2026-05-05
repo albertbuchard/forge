@@ -9,7 +9,11 @@ import {
   replaceGamificationDailyActivity,
   upsertGamificationEquipment
 } from "../repositories/gamification.js";
-import { getDailyAmbientXp, listRewardRules } from "../repositories/rewards.js";
+import {
+  getDailyAmbientXp,
+  listRewardRules,
+  recordEntityCreationReward
+} from "../repositories/rewards.js";
 import {
   getDefaultUser,
   listUsers,
@@ -46,6 +50,44 @@ import {
 } from "../types.js";
 
 const XP_CURVE_VERSION = "smith-forge";
+
+type EntityCreationRewardSource = {
+  entityType: string;
+  tableName: string;
+  titleColumn: string;
+};
+
+const ENTITY_CREATION_REWARD_SOURCES: EntityCreationRewardSource[] = [
+  { entityType: "goal", tableName: "goals", titleColumn: "title" },
+  { entityType: "project", tableName: "projects", titleColumn: "title" },
+  { entityType: "strategy", tableName: "strategies", titleColumn: "title" },
+  { entityType: "task", tableName: "tasks", titleColumn: "title" },
+  { entityType: "habit", tableName: "habits", titleColumn: "title" },
+  { entityType: "note", tableName: "notes", titleColumn: "content_plain" },
+  { entityType: "tag", tableName: "tags", titleColumn: "name" },
+  { entityType: "calendar_event", tableName: "calendar_events", titleColumn: "title" },
+  {
+    entityType: "work_block_template",
+    tableName: "work_block_templates",
+    titleColumn: "title"
+  },
+  { entityType: "task_timebox", tableName: "task_timeboxes", titleColumn: "title" },
+  {
+    entityType: "questionnaire_instrument",
+    tableName: "questionnaire_instruments",
+    titleColumn: "title"
+  },
+  { entityType: "psyche_value", tableName: "psyche_values", titleColumn: "title" },
+  {
+    entityType: "behavior_pattern",
+    tableName: "behavior_patterns",
+    titleColumn: "title"
+  },
+  { entityType: "behavior", tableName: "psyche_behaviors", titleColumn: "title" },
+  { entityType: "belief_entry", tableName: "belief_entries", titleColumn: "statement" },
+  { entityType: "mode_profile", tableName: "mode_profiles", titleColumn: "title" },
+  { entityType: "trigger_report", tableName: "trigger_reports", titleColumn: "title" }
+];
 
 type MetadataValue = string | number | boolean | null;
 
@@ -342,6 +384,53 @@ function loadScopedRewardEvents(scope: GamificationScope): RewardMetricRow[] {
     );
 }
 
+function syncEntityCreationRewards(scope: GamificationScope): void {
+  const database = getDatabase();
+  const scopeUserIds = [...new Set(scope.userIds)];
+  const scopePlaceholders = scopeUserIds.map(() => "?").join(", ");
+
+  for (const source of ENTITY_CREATION_REWARD_SOURCES) {
+    const scopedWhere =
+      scopeUserIds.length > 0
+        ? `WHERE (
+             entity_owners.user_id IN (${scopePlaceholders})
+             OR (entity_owners.user_id IS NULL AND ? IS NOT NULL)
+           )`
+        : "";
+    const params =
+      scopeUserIds.length > 0
+        ? [source.entityType, ...scopeUserIds, scopeUserIds[0] ?? null]
+        : [source.entityType];
+    const rows = database
+      .prepare(
+        `SELECT
+           ${source.tableName}.id AS id,
+           ${source.tableName}.${source.titleColumn} AS title,
+           ${source.tableName}.created_at AS created_at
+         FROM ${source.tableName}
+         LEFT JOIN entity_owners
+           ON entity_owners.entity_type = ?
+          AND entity_owners.entity_id = ${source.tableName}.id
+         ${scopedWhere}`
+      )
+      .all(...params) as Array<{
+      id: string;
+      title: string | null;
+      created_at: string;
+    }>;
+
+    for (const row of rows) {
+      recordEntityCreationReward({
+        entityType: source.entityType,
+        entityId: row.id,
+        title: row.title,
+        source: "system",
+        createdAt: row.created_at
+      });
+    }
+  }
+}
+
 function isQualifyingStreakReward(event: RewardMetricRow): boolean {
   return (
     event.deltaXp > 0 &&
@@ -403,8 +492,9 @@ function calculateStreakFromActivity(
   timezone: string
 ): number {
   const today = dateKeyInTimezone(now, timezone);
+  const yesterday = subtractDaysFromDateKey(today, 1);
   let streak = 0;
-  let cursor = today;
+  let cursor = activeDateKeys.has(today) ? today : yesterday;
   while (activeDateKeys.has(cursor)) {
     streak += 1;
     cursor = subtractDaysFromDateKey(cursor, 1);
@@ -461,8 +551,11 @@ function calculateMissedDays(
   if (!latest || latest === today) {
     return { missedDays: 0, lastActiveDateKey: latest };
   }
+  if (latest === subtractDaysFromDateKey(today, 1)) {
+    return { missedDays: 0, lastActiveDateKey: latest };
+  }
   return {
-    missedDays: Math.max(0, daysBetweenDateKeys(latest, today)),
+    missedDays: Math.max(0, daysBetweenDateKeys(latest, today) - 1),
     lastActiveDateKey: latest
   };
 }
@@ -1175,6 +1268,7 @@ function buildGamificationState(
 ) {
   const now = options.now ?? new Date();
   const scope = resolveGamificationScope(options.userIds);
+  syncEntityCreationRewards(scope);
   const scopedRewards = loadScopedRewardEvents(scope);
   const timezone = resolveTimezone();
   const primaryUserId = scope.userIds[0] ?? "aggregate";

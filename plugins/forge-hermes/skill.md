@@ -103,7 +103,17 @@ without guessing.
   the dedicated route families for timeline/overlay repair, energy templates/signals,
   and flow execution/results. When Hermes exposes `forge_call_movement_route`,
   `forge_call_life_force_route`, or `forge_call_workbench_route`, use those
-  route-key tools after the conversation has selected the lane.
+  route-key tools after the conversation has selected the lane. Life Force may be
+  keyed as `lifeForce` and as the entity-style alias `life_force`; both names point
+  to the same `/api/v1/life-force/*` route family.
+- The specialized route-key tool schemas include the exact route-key to method/path
+  map. When a route key's exact path contains placeholders such as `:id`,
+  `:weekday`, `:runId`, or `:nodeId`, pass those values in `pathParams` using the
+  placeholder names exactly. Do not place IDs inside `routeKey`, invent a raw route
+  string, or ask the user to choose an endpoint when the lane already selects one. If
+  that schema and live onboarding disagree, trust the live onboarding for the current
+  call and treat the disagreement as a Forge contract bug to fix, not as a reason to
+  guess a nearby route.
 
 Treat `note` as a first-class Markdown entity. Notes can link to one or many Forge
 entities, carry note-owned `tags`, and optionally self-delete when `destroyAt` is set.
@@ -133,6 +143,9 @@ job before choosing a route family.
 When the operation is not already explicit, identify the job first:
 add, update, review, compare, navigate, link, or run. Skip that meta question when
 the action is already obvious from the user's wording.
+If the user already named the exact correction in usable language, keep the next
+question to the one missing disambiguator that affects the write, such as the target
+record, interval, owner, or reason. If those are clear enough, stop asking and write.
 When the user wants to review, compare, inspect, or navigate an existing Forge
 record, ask what they are trying to understand first and look up the existing record
 before you reopen create or update intake.
@@ -215,7 +228,12 @@ For wiki-specific recall:
 - Use the high-level batch routes for basic questionnaire CRUD too. `questionnaire_instrument` should normally flow through `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`.
 - Use the high-level batch routes for ordinary health-session CRUD too. `sleep_session` and `workout_session` should normally flow through `forge_search_entities`, `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`. Keep `forge_get_sleep_overview` and `forge_get_sports_overview` for read models, and keep `forge_update_sleep_session` and `forge_update_workout_session` for reflective enrichment on one already-existing record.
 - Use the dedicated API families for Movement, Life Force, and Workbench. Those routes are published in `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces` and are the preferred contract for movement stays, trips, time-in-place and travel-behavior queries, life-force state, and workbench execution/result work. Prefer `forge_call_movement_route`, `forge_call_life_force_route`, or `forge_call_workbench_route` when those route-key tools are present.
+- When that onboarding payload includes `routeSelectionQuestions`, use them before improvising follow-up questions for Movement, Life Force, or Workbench.
+- After the lane is clear, talk in product nouns such as timeline, overlay, weekday
+  template, published output, run detail, or node result rather than generic record
+  language.
 - If the truth of the current Movement, Life Force, or Workbench state is still unclear, prefer the dedicated read before the mutation so the correction stays truthful.
+- After a concrete Movement, Life Force, or Workbench correction, read the relevant specialized view back when the user is trying to understand the result rather than only store it.
 - In the live onboarding catalog, those domains should appear as `specialized_domain_surface`. If the route family and the catalog classification disagree, trust the specialized route family and fix the contract mismatch before guessing a CRUD path.
 - Movement lane hints: review spans through `/api/v1/movement/day`,
   `/api/v1/movement/month`, `/api/v1/movement/all-time`, `/api/v1/movement/timeline`,
@@ -286,4 +304,4 @@ For wiki-specific recall:
 - If the user shows imminent risk of self-harm, suicide, violence, inability to stay safe, or severe disorientation, stop normal intake and prioritize urgent human support or emergency help instead.
 - Use the Forge UI handoff sparingly and intentionally.
 - When Forge is local on `127.0.0.1` or `localhost`, the Hermes plugin can reuse Forge's tested local-runtime bootstrap path to start the runtime before the request.
-- The Hermes install keeps its durable plugin config at `~/.hermes/forge/config.json`; the default local data root is `~/.hermes/forge`, and that file is the right place to move the data folder or pin a different local port.
+- The Hermes install keeps its durable plugin config at `~/.hermes/forge/config.json`. The default local data root is `~/.forge`; if `dataRoot` is set in the config or `FORGE_DATA_ROOT` is set in the environment, that explicit value decides where Forge stores `forge.sqlite`. Verify the configured root and live runtime database path before moving, restoring, or merging any Forge data. If the user wants to choose the data folder or configure backups from the UI, point them to Forge `Settings -> Data`; it shows the live folder, can move or adopt data folders, creates manual backups, enables recurring automatic backups, and lets the user choose how many days of automatic backups to keep.

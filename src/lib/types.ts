@@ -3551,6 +3551,91 @@ export type MicrosoftCalendarAuthSettings =
 export type GoogleCalendarAuthSettings =
   SettingsPayload["calendarProviders"]["google"];
 
+export type DoctorSeverity = "info" | "warning" | "error";
+export type DoctorCheckStatus = "pass" | "warn" | "fail" | "skipped";
+export type DoctorFixKind = "manual" | "safe_auto_fix";
+
+export interface DoctorFixProposal {
+  id: string;
+  kind: DoctorFixKind;
+  title: string;
+  description: string;
+  requiresConfirmation: boolean;
+}
+
+export interface DoctorCheck {
+  id: string;
+  group: string;
+  title: string;
+  status: DoctorCheckStatus;
+  severity: DoctorSeverity;
+  summary: string;
+  evidence: string[];
+  affectedCount: number;
+  fix?: DoctorFixProposal;
+}
+
+export interface DoctorIssue extends DoctorCheck {
+  status: "warn" | "fail";
+}
+
+export interface ForgeDoctorIntegrity {
+  score: number;
+  status: "healthy" | "warning" | "critical";
+  headline: string;
+  lastCheckedAt: string;
+  issueCount: number;
+  warningCount: number;
+  errorCount: number;
+  topIssues: Array<{
+    id: string;
+    severity: DoctorSeverity;
+    summary: string;
+    affectedCount: number;
+  }>;
+}
+
+export interface ForgeDoctorReport {
+  ok: boolean;
+  now: string;
+  integrity: ForgeDoctorIntegrity;
+  runtime: Record<string, unknown>;
+  health: Record<string, unknown>;
+  settingsFile: {
+    path: string;
+    exists: boolean;
+    valid: boolean;
+    syncState:
+      | "uninitialized"
+      | "created_from_database"
+      | "mirrored_from_database"
+      | "applied_file_overrides"
+      | "invalid"
+      | "up_to_date";
+    parseError: string | null;
+    overrideKeys: string[];
+  };
+  settingsSummary: {
+    themePreference: ForgeThemePreference;
+    localePreference: AppLocale;
+    operatorName: string;
+    maxActiveTasks: number;
+    timeAccountingMode: TimeAccountingMode;
+    psycheAuthRequired: boolean;
+    webAppUrl: string;
+  };
+  checks: DoctorCheck[];
+  issues: DoctorIssue[];
+  fixProposals: DoctorFixProposal[];
+  warnings: string[];
+}
+
+export interface DoctorFixResult {
+  fixId: string;
+  status: "applied" | "skipped" | "failed";
+  summary: string;
+}
+
 export interface DeletedEntityRecord {
   entityType: CrudEntityType;
   entityId: string;

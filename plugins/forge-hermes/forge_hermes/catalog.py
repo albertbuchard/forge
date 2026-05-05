@@ -87,6 +87,18 @@ def with_any_query(path: str, query: Any) -> str:
     return f"{path}?{urlencode(query_parts, doseq=True)}"
 
 
+def route_key_description(route_specs: Dict[str, Dict[str, Any]]) -> str:
+    route_guide = "; ".join(
+        f"{route_key}: {spec.get('method', 'GET')} {spec.get('path')}"
+        for route_key, spec in sorted(route_specs.items())
+    )
+    return (
+        f"Dedicated route key. Exact routes: {route_guide}. "
+        "For any :placeholder shown in a route, fill pathParams with that exact "
+        "placeholder name; do not put raw paths or ids into routeKey."
+    )
+
+
 MOVEMENT_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
     "day": {"method": "GET", "path": "/api/v1/movement/day"},
     "month": {"method": "GET", "path": "/api/v1/movement/month"},
@@ -143,20 +155,23 @@ WORKBENCH_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
 def specialized_route_parameters(route_specs: Dict[str, Dict[str, Any]]) -> JsonSchema:
     return object_schema(
         {
-            "routeKey": {"enum": sorted(route_specs.keys())},
+            "routeKey": {
+                "enum": sorted(route_specs.keys()),
+                "description": route_key_description(route_specs),
+            },
             "pathParams": {
                 "type": "object",
                 "additionalProperties": {"type": "string"},
-                "description": "Path parameters such as id, weekday, runId, nodeId, or slug.",
+                "description": "Path parameters required by the selected route key. Use the exact :placeholder names shown in the routeKey description, such as id, weekday, slug, runId, nodeId, or pointId.",
             },
             "query": {
                 "type": "object",
                 "additionalProperties": True,
-                "description": "Optional query parameters for the selected route.",
+                "description": "Optional query parameters for the selected dedicated route.",
             },
             "body": {
                 "type": "object",
-                "description": "JSON body for POST, PATCH, and PUT route keys.",
+                "description": "JSON body for POST, PATCH, and PUT route keys. Omit for GET and DELETE route keys.",
             },
         },
         required=["routeKey"],

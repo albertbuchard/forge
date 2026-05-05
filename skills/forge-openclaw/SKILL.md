@@ -87,6 +87,16 @@ guessing.
   `forge_call_life_force_route`, or `forge_call_workbench_route`, use those
   route-key tools after the conversation has selected the lane; otherwise use the
   exact `/api/v1/*` route or OpenClaw `/forge/v1/*` mirror published in onboarding.
+  Life Force may be keyed as `lifeForce` and as the entity-style alias `life_force`;
+  both point to the same `/api/v1/life-force/*` route family.
+- The specialized route-key tool schemas include the exact route-key to method/path
+  map. When a route key's exact path contains placeholders such as `:id`,
+  `:weekday`, `:runId`, or `:nodeId`, pass those values in `pathParams` using the
+  placeholder names exactly. Do not place IDs inside `routeKey`, invent a raw route
+  string, or ask the user to choose an endpoint when the lane already selects one. If
+  that schema and live onboarding disagree, trust the live onboarding for the current
+  call and treat the disagreement as a Forge contract bug to fix, not as a reason to
+  guess a nearby route.
 
 Preferences rule:
 
@@ -156,11 +166,15 @@ Entity conversation rule:
 
 Forge data location rule:
 
-- by default, current Forge plugins converge on the shared local Forge home at `~/.forge/forge.sqlite`
-- the exact storage root is the active runtime `dataRoot`; when `dataRoot` is set in plugin config, Forge stores `forge.sqlite` directly inside that folder
-- on repo-local development installs, keep using the configured shared `dataRoot` unless the user explicitly asks to move data
-- if the user wants the data somewhere else for persistence, backup, or manual control, tell them to set `plugins.entries["forge-openclaw-plugin"].config.dataRoot` and restart the OpenClaw gateway
-- if the user asks where the data is stored or how to move it, explain the current default plainly and show the exact config field
+- never answer from a generic default. First check the actual configured `dataRoot` and, when possible, the live runtime file handle.
+- the default local Forge data root is `~/.forge`, so the default database is `~/.forge/forge.sqlite`.
+- the user can override that default. Determine the effective storage root from the active adapter config or runtime environment first: OpenClaw `plugins.entries["forge-openclaw-plugin"].config.dataRoot`, Hermes `~/.hermes/forge/config.json.dataRoot`, `FORGE_DATA_ROOT`, or the runtime's reported storage path.
+- when `dataRoot` is set, Forge stores `forge.sqlite` directly inside that folder. That explicit setting overrides generic defaults.
+- when a Forge server is running locally, verify the actual open database with a process/file-handle check such as `lsof -p <forge-pid> | rg 'forge.sqlite|forge.json'`.
+- treat plugin extension folders, package-local `data/`, or adapter-local data folders as only possible candidates until config or live process evidence proves they are active.
+- if the user wants to choose the data folder or configure backups from the UI, point them to Forge `Settings -> Data`. That page shows the live data folder, can move current data or adopt an existing Forge data folder, creates manual backups, enables recurring automatic backups, and lets the user choose how many days of automatic backups to keep.
+- before changing data roots, restoring, or merging data, create backups of every candidate Forge database plus OpenClaw/Hermes config files. Do not merge side databases unless an ID/content-level audit proves relevant user data is missing from the selected active database.
+- if the user asks where Forge data is stored, state both the configured path and the live verified database path, or say that the live path has not yet been verified.
 
 Psyche interview rule:
 
@@ -251,13 +265,16 @@ Use these exact entity meanings when deciding what the user is describing.
 
 `emotion_definition` is a reusable emotion entry, such as fear, shame, anger, grief, relief, or disgust.
 
-Use this intake map when the user agrees to save or update something.
+Minimum-field checkpoint, not a question script: use this only after the
+conversation has enough shape to save or update something. Do not ask every listed
+item. Choose the single missing lane that affects the write, and stop when the
+record is clear enough to persist.
 
 `goal`
 Use for a meaningful direction over time.
 Minimum field: `title`
 Usually useful: `description`, `horizon`, `status`
-Ask:
+Only ask if missing or unclear:
 
 1. What should this goal be called?
 2. Why does it matter to you?
@@ -267,7 +284,7 @@ Ask:
 Use for a bounded workstream under a goal.
 Minimum field: `title`
 Usually useful: `goalId`, `description`, `status`
-Ask:
+Only ask if missing or unclear:
 
 1. What should this project be called?
 2. Which goal does it support?
@@ -277,7 +294,7 @@ Ask:
 Use for one concrete action or deliverable.
 Minimum field: `title`
 Usually useful: `projectId`, `goalId`, `priority`, `dueDate`, `status`, `owner`
-Ask:
+Only ask if missing or unclear:
 
 1. What is the task in one concrete sentence?
 2. Should it live under an existing goal or project?
@@ -294,7 +311,7 @@ CRITICAL NEGATIVE-HABIT CHECK-IN RULE:
 - Do not treat `missed` on a `negative` habit as failure. In this case, `missed` is the successful outcome.
 - In OpenClaw, official habit outcome logging should go through `forge_update_entities` on `entityType: "habit"` with `patch: { checkIn: { status, dateKey?, note?, description? } }`.
 - Do not bypass the shared tool model with raw habit routes when the batch entity update already covers the write cleanly.
-  Ask:
+  Only ask if missing or unclear:
 
 1. What is the recurring behavior in one concrete sentence?
 2. Is doing it good (`positive`) or a slip (`negative`)?
@@ -309,7 +326,7 @@ Ask only what is needed to start the run, such as the task, the actor, and wheth
 Use for a value or committed direction.
 Minimum field: `title`
 Usually useful: `description`, `valuedDirection`, `whyItMatters`, links to goals, projects, or tasks
-Ask:
+Only ask if missing or unclear:
 
 1. What feels deeply important here, and what would you call that value or direction?
 2. If you were living it a little more this week, what would someone actually see?
@@ -319,7 +336,7 @@ Ask:
 Use for a recurring loop across situations.
 Minimum field: `title`
 Usually useful: `description`, `targetBehavior`, `cueContexts`, `shortTermPayoff`, `longTermCost`, `preferredResponse`
-Ask:
+Only ask if missing or unclear:
 
 1. Can we slow this down using one recent example first?
 2. What usually sets the loop off, and what tends to happen in thoughts, feelings, body, and actions next?
@@ -329,7 +346,7 @@ Ask:
 Use for one recurring move or action tendency.
 Minimum fields: `kind`, `title`
 Usually useful: `commonCues`, `urgeStory`, `shortTermPayoff`, `longTermCost`, `replacementMove`, `repairPlan`
-Ask:
+Only ask if missing or unclear:
 
 1. What does this behavior actually look like in plain language?
 2. What cues or urges usually pull you toward it, and what does it do for you in the moment?
@@ -339,7 +356,7 @@ Ask:
 Use for one explicit belief sentence.
 Minimum fields: `statement`, `beliefType`
 Usually useful: `confidence`, `evidenceFor`, `evidenceAgainst`, `flexibleAlternative`, `originNote`
-Ask:
+Only ask if missing or unclear:
 
 1. If we turn that reaction into one sentence, what does the belief sound like in your own words?
 2. Is it `absolute` or `conditional`, and how true does it feel from 0 to 100?
@@ -349,7 +366,7 @@ Ask:
 Use for a recurring part-state or inner role.
 Minimum fields: `family`, `title`
 Usually useful: `fear`, `burden`, `protectiveJob`, `originContext`, links to patterns, behaviors, and values
-Ask:
+Only ask if missing or unclear:
 
 1. When this part shows up, what is it like from the inside and what should it be called?
 2. What kind of mode is this: `coping`, `child`, `critic_parent`, `healthy_adult`, or `happy_child`?
@@ -358,7 +375,7 @@ Ask:
 `mode_guide_session`
 Use for guided exploration before or alongside a durable mode profile.
 Minimum fields: `summary`, `answers`
-Ask:
+Only ask if missing or unclear:
 
 1. What just happened that brought this part online right now?
 2. If it had a voice, what would it say, fear, or need?
@@ -368,7 +385,7 @@ Ask:
 Use for one specific emotionally important episode.
 Minimum field: `title`
 Usually useful: `eventSituation`, `occurredAt`, `emotions`, `thoughts`, `behaviors`, `consequences`, `nextMoves`, links to values, beliefs, patterns, modes, goals, projects, or tasks
-Ask:
+Only ask if missing or unclear:
 
 1. What happened, as concretely as you can say it?
 2. What emotions were present, how intense were they, and what thoughts or meanings showed up?
@@ -378,7 +395,7 @@ Ask:
 Use for a reusable trigger category.
 Minimum field: `label`
 Usually useful: `description`
-Ask:
+Only ask if missing or unclear:
 
 1. What kind of repeated moment or incident do you want future reports to name the same way?
 2. What would count as inside this category, and what should stay outside it?
@@ -388,7 +405,7 @@ Ask:
 Use for a reusable emotion vocabulary entry.
 Minimum field: `label`
 Usually useful: `description`, `category`
-Ask:
+Only ask if missing or unclear:
 
 1. When this feeling is present, what tells you it is this feeling and not a nearby one?
 2. What would you want a later trigger report to mean when it uses this label?
@@ -628,6 +645,8 @@ When the user asks which Forge tools are available, list exactly these tools:
 `forge_get_operator_overview`
 `forge_get_operator_context`
 `forge_get_agent_onboarding`
+`forge_get_doctor`
+`forge_apply_doctor_fix`
 `forge_call_movement_route`
 `forge_call_life_force_route`
 `forge_call_workbench_route`

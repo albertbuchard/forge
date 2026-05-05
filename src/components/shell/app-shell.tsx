@@ -108,8 +108,6 @@ import {
   createGoal,
   createProject,
   createTask,
-  getXpMetrics,
-  markGamificationCelebrationSeen,
   patchGoal,
   patchProject,
   patchTask,
@@ -160,6 +158,8 @@ import {
   useGetOperatorSessionQuery,
   useGetSettingsQuery,
   useGetSnapshotQuery,
+  useGetXpMetricsQuery,
+  useMarkGamificationCelebrationSeenMutation,
   usePatchGoalMutation,
   usePatchProjectMutation,
   usePatchTaskMutation,
@@ -2564,25 +2564,29 @@ export function AppShell() {
     deltaXp: number;
     totalXp: number;
   } | null>(null);
+  const [locallySeenCelebrationIds, setLocallySeenCelebrationIds] = useState<
+    Set<string>
+  >(() => new Set());
   const routePathKey = `${routerLocation.pathname}${routerLocation.search}${routerLocation.hash}`;
   const operatorSessionQuery = useGetOperatorSessionQuery();
   const snapshotQuery = useGetSnapshotQuery(selectedUserIds, {
     skip: !operatorSessionQuery.isSuccess
   });
-  const xpMetricsQuery = useQuery({
-    queryKey: ["forge-xp-metrics", ...selectedUserIds],
-    queryFn: () => getXpMetrics(selectedUserIds),
-    enabled: operatorSessionQuery.isSuccess
+  const xpMetricsQuery = useGetXpMetricsQuery(selectedUserIds, {
+    skip: !operatorSessionQuery.isSuccess
   });
   const settingsQuery = useGetSettingsQuery(undefined, {
     skip: !operatorSessionQuery.isSuccess
   });
-  const celebrationSeenMutation = useMutation({
-    mutationFn: markGamificationCelebrationSeen,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["forge-xp-metrics"] });
-    }
-  });
+  const [markCelebrationSeen, celebrationSeenMutation] =
+    useMarkGamificationCelebrationSeenMutation();
+  const visibleCelebrations = useMemo(
+    () =>
+      (xpMetricsQuery.data?.metrics.celebrations ?? []).filter(
+        (celebration) => !locallySeenCelebrationIds.has(celebration.id)
+      ),
+    [locallySeenCelebrationIds, xpMetricsQuery.data?.metrics.celebrations]
+  );
   const routeReady = isShellRouteReady(routerLocation.pathname, {
     bootstrapReady:
       operatorSessionQuery.isSuccess &&
@@ -2670,6 +2674,11 @@ export function AppShell() {
     settings: settingsQuery.data?.settings
   });
   useShellThemeController(settingsQuery.data?.settings);
+
+  useEffect(() => {
+    previousXpRef.current = null;
+    setXpNotice(null);
+  }, [operatorSessionQuery.isSuccess, selectedUserIds]);
 
   useEffect(() => {
     const totalXp = snapshotQuery.data?.metrics.totalXp;
@@ -3283,11 +3292,28 @@ export function AppShell() {
           ) : null}
           <GamificationCelebrationLayer
             xpNotice={xpNotice}
-            celebrations={xpMetricsQuery.data?.metrics.celebrations ?? []}
+            celebrations={visibleCelebrations}
             onSeen={(celebrationId) => {
-              if (!celebrationSeenMutation.isPending) {
-                celebrationSeenMutation.mutate(celebrationId);
+              if (
+                celebrationSeenMutation.isLoading ||
+                locallySeenCelebrationIds.has(celebrationId)
+              ) {
+                return;
               }
+              setLocallySeenCelebrationIds((current) => {
+                const next = new Set(current);
+                next.add(celebrationId);
+                return next;
+              });
+              void markCelebrationSeen(celebrationId)
+                .unwrap()
+                .catch(() => {
+                  setLocallySeenCelebrationIds((current) => {
+                    const next = new Set(current);
+                    next.delete(celebrationId);
+                    return next;
+                  });
+                });
             }}
           />
         </>

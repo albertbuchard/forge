@@ -113,9 +113,11 @@ type MockCommand = {
   name: string;
   children: MockCommand[];
   descriptions: string[];
+  options: string[];
   actions: Array<() => Promise<void> | void>;
   command(name: string): MockCommand;
   description(text: string): MockCommand;
+  option(flags: string, description: string): MockCommand;
   action(handler: () => Promise<void> | void): MockCommand;
 };
 
@@ -124,6 +126,7 @@ function createCommand(name: string): MockCommand {
     name,
     children: [],
     descriptions: [] as string[],
+    options: [] as string[],
     actions: [] as Array<() => Promise<void> | void>,
     command(childName: string) {
       const child = createCommand(childName);
@@ -132,6 +135,10 @@ function createCommand(name: string): MockCommand {
     },
     description(text: string) {
       this.descriptions.push(text);
+      return this;
+    },
+    option(flags: string) {
+      this.options.push(flags);
       return this;
     },
     action(handler: () => Promise<void> | void) {
@@ -362,6 +369,8 @@ describe("forge openclaw plugin", () => {
       "/forge/v1/operator/overview",
       "/forge/v1/operator/context",
       "/forge/v1/agents/onboarding",
+      "/forge/v1/doctor",
+      "/forge/v1/doctor/fixes",
       "/forge/v1/users/directory",
       "/forge/v1/psyche/overview",
       "/forge/v1/metrics/xp",
@@ -403,6 +412,7 @@ describe("forge openclaw plugin", () => {
     const toolNames = tools.map((tool) => tool.name).sort();
     expect(toolNames).toEqual([
       "forge_adjust_work_minutes",
+      "forge_apply_doctor_fix",
       "forge_call_life_force_route",
       "forge_call_movement_route",
       "forge_call_workbench_route",
@@ -420,6 +430,7 @@ describe("forge openclaw plugin", () => {
       "forge_get_agent_onboarding",
       "forge_get_calendar_overview",
       "forge_get_current_work",
+      "forge_get_doctor",
       "forge_get_operator_context",
       "forge_get_operator_overview",
       "forge_get_preferences_workspace",

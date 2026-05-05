@@ -171,15 +171,29 @@ def test_specialized_domain_tools_are_explicit_route_key_tools():
     assert set(
         specs["forge_call_movement_route"]["parameters"]["properties"]["routeKey"]["enum"]
     ) >= {
+        "day",
+        "month",
+        "allTime",
         "timeline",
         "places",
+        "boxDetail",
         "tripDetail",
         "selection",
+        "settings",
+        "settingsUpdate",
+        "placeCreate",
+        "placeUpdate",
         "userBoxPreflight",
         "userBoxCreate",
+        "userBoxUpdate",
+        "userBoxDelete",
         "automaticBoxInvalidate",
         "stayUpdate",
+        "stayDelete",
+        "tripUpdate",
+        "tripDelete",
         "tripPointUpdate",
+        "tripPointDelete",
     }
     assert specs["forge_call_life_force_route"]["parameters"]["properties"]["routeKey"][
         "enum"
@@ -189,13 +203,66 @@ def test_specialized_domain_tools_are_explicit_route_key_tools():
     ) >= {
         "boxCatalog",
         "listFlows",
+        "flowById",
+        "flowBySlug",
         "createFlow",
+        "updateFlow",
+        "deleteFlow",
         "runFlow",
+        "runByPayload",
+        "chatFlow",
         "publishedOutput",
+        "runs",
         "runDetail",
+        "runNodes",
         "nodeResult",
         "latestNodeOutput",
     }
+
+    movement_route_description = specs["forge_call_movement_route"]["parameters"][
+        "properties"
+    ]["routeKey"]["description"]
+    life_force_route_description = specs["forge_call_life_force_route"]["parameters"][
+        "properties"
+    ]["routeKey"]["description"]
+    workbench_route_description = specs["forge_call_workbench_route"]["parameters"][
+        "properties"
+    ]["routeKey"]["description"]
+    assert "day: GET /api/v1/movement/day" in movement_route_description
+    assert "userBoxCreate: POST /api/v1/movement/user-boxes" in movement_route_description
+    assert (
+        "tripPointDelete: DELETE /api/v1/movement/trips/:id/points/:pointId"
+        in movement_route_description
+    )
+    assert "overview: GET /api/v1/life-force" in life_force_route_description
+    assert (
+        "weekdayTemplate: PUT /api/v1/life-force/templates/:weekday"
+        in life_force_route_description
+    )
+    assert "listFlows: GET /api/v1/workbench/flows" in workbench_route_description
+    assert "runFlow: POST /api/v1/workbench/flows/:id/run" in workbench_route_description
+    assert (
+        "latestNodeOutput: GET /api/v1/workbench/flows/:id/nodes/:nodeId/output"
+        in workbench_route_description
+    )
+    for tool_name in [
+        "forge_call_movement_route",
+        "forge_call_life_force_route",
+        "forge_call_workbench_route",
+    ]:
+        properties = specs[tool_name]["parameters"]["properties"]
+        assert (
+            "fill pathParams with that exact placeholder name"
+            in properties["routeKey"]["description"]
+        )
+        assert (
+            "do not put raw paths or ids into routeKey"
+            in properties["routeKey"]["description"]
+        )
+        assert (
+            "Use the exact :placeholder names shown in the routeKey description"
+            in properties["pathParams"]["description"]
+        )
 
     assert specialized_route_path(
         LIFE_FORCE_ROUTE_SPECS,

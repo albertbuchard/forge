@@ -46,6 +46,8 @@ struct CompanionAppRoot: View {
             companionDebugLog("CompanionAppRoot", "scenePhase -> \(String(describing: nextPhase))")
             if nextPhase == .active {
                 appModel.handleAppDidBecomeActive()
+            } else if nextPhase == .inactive || nextPhase == .background {
+                appModel.handleAppWillLeaveForeground()
             }
         }
     }

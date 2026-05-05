@@ -39,6 +39,8 @@ export const FORGE_SUPPORTED_PLUGIN_API_ROUTES: ForgeSupportedPluginApiRoute[] =
       purpose: "operator_context"
     },
     { method: "GET", path: "/api/v1/agents/onboarding", purpose: "onboarding" },
+    { method: "GET", path: "/api/v1/doctor", purpose: "diagnostics" },
+    { method: "POST", path: "/api/v1/doctor/fixes", purpose: "diagnostics" },
     { method: "GET", path: "/api/v1/psyche/overview", purpose: "psyche" },
     { method: "GET", path: "/api/v1/metrics/xp", purpose: "xp" },
     { method: "GET", path: "/api/v1/reviews/weekly", purpose: "weekly_review" },
@@ -170,12 +172,37 @@ export const FORGE_SUPPORTED_PLUGIN_API_ROUTES: ForgeSupportedPluginApiRoute[] =
     { method: "GET", path: "/api/v1/calendar/overview", purpose: "calendar" },
     {
       method: "GET",
+      path: "/api/v1/calendar/macos-local/discovery",
+      purpose: "calendar"
+    },
+    {
+      method: "POST",
+      path: "/api/v1/calendar/discovery",
+      purpose: "calendar"
+    },
+    {
+      method: "GET",
       path: "/api/v1/calendar/connections",
       purpose: "calendar"
     },
     {
       method: "POST",
       path: "/api/v1/calendar/connections",
+      purpose: "calendar"
+    },
+    {
+      method: "PATCH",
+      path: "/api/v1/calendar/connections/:id",
+      purpose: "calendar"
+    },
+    {
+      method: "DELETE",
+      path: "/api/v1/calendar/connections/:id",
+      purpose: "calendar"
+    },
+    {
+      method: "GET",
+      path: "/api/v1/calendar/connections/:id/discovery",
       purpose: "calendar"
     },
     {

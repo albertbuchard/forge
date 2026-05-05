@@ -222,7 +222,7 @@ const PSYCHE_TROPHIES = [
     trophy("psyche", "Value Blade", allOf(metric("psycheValueCount", 10), metric("goalLinkedTaskCompletionCount", 100)), "Create 10 values and complete 100 goal-linked tasks.", "Values and work started cutting in the same direction."),
     trophy("psyche", "Shadow Temper", allOf(metric("modeProfileCount", 12), metric("triggerReportRichCount", 50)), "Create 12 modes and 50 rich trigger reports.", "Shadow material became usable steel."),
     trophy("psyche", "Inner Forge", allOf(metric("psycheValueCount", 12), metric("behaviorPatternCount", 25), metric("beliefFlexibleAlternativeCount", 30)), "Create 12 values, 25 patterns, and 30 flexible beliefs.", "A full inner forge takes shape."),
-    trophy("psyche", "Schema Bell", metric("questionnaireRunCount", 10), "Complete 10 questionnaire runs.", "Structured self-observation rang the bell repeatedly."),
+    trophy("psyche", "Schema Bell", metric("questionnaireRunCount", 40), "Complete 40 questionnaire runs.", "Structured self-observation rang the bell repeatedly."),
     trophy("psyche", "Mode Guide", metric("modeGuideSessionCount", 5), "Complete 5 mode guide sessions.", "Guided mode work became an actual practice."),
     trophy("psyche", "Repair Script", metric("behaviorCount", 10), "Create 10 Psyche behaviors.", "Behaviors now carry repair plans, not just names."),
     trophy("psyche", "Flexible Self", metric("beliefFlexibleAlternativeCount", 50), "Create 50 beliefs with flexible alternatives.", "A trophy for not letting old beliefs remain iron cages."),

@@ -32,6 +32,14 @@ const HTTP_METHODS = new Set([
   "head"
 ]);
 
+const CALENDAR_PROVIDER_VALUES = [
+  "google",
+  "apple",
+  "microsoft",
+  "caldav",
+  "macos_local"
+];
+
 const API_TAGS = [
   {
     name: "Meta",
@@ -763,7 +771,7 @@ export function buildOpenApiDocument() {
     ],
     properties: {
       id: { type: "string" },
-      provider: { type: "string", enum: ["google", "apple", "caldav"] },
+      provider: { type: "string", enum: CALENDAR_PROVIDER_VALUES },
       label: { type: "string" },
       accountLabel: { type: "string" },
       status: {
@@ -776,6 +784,140 @@ export function buildOpenApiDocument() {
       lastSyncError: nullable({ type: "string" }),
       createdAt: { type: "string", format: "date-time" },
       updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const calendarConnectionMutationInput = {
+    type: "object",
+    additionalProperties: true,
+    required: ["provider", "label"],
+    properties: {
+      provider: { type: "string", enum: CALENDAR_PROVIDER_VALUES },
+      label: { type: "string" },
+      username: { type: "string" },
+      password: { type: "string" },
+      serverUrl: { type: "string" },
+      authSessionId: { type: "string" },
+      sourceId: { type: "string" },
+      selectedCalendarUrls: arrayOf({ type: "string" }),
+      forgeCalendarUrl: nullable({ type: "string" }),
+      createForgeCalendar: { type: "boolean" },
+      replaceConnectionIds: arrayOf({ type: "string" })
+    }
+  };
+
+  const calendarConnectionPatchInput = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      label: { type: "string" },
+      selectedCalendarUrls: arrayOf({ type: "string" })
+    }
+  };
+
+  const calendarDiscoveryInput = {
+    type: "object",
+    additionalProperties: true,
+    required: ["provider"],
+    properties: {
+      provider: { type: "string", enum: ["apple", "caldav"] },
+      serverUrl: { type: "string" },
+      username: { type: "string" },
+      password: { type: "string" }
+    }
+  };
+
+  const calendarDiscoveryCalendar = {
+    type: "object",
+    additionalProperties: true,
+    required: [
+      "url",
+      "displayName",
+      "description",
+      "color",
+      "timezone",
+      "isPrimary",
+      "canWrite",
+      "selectedByDefault",
+      "isForgeCandidate"
+    ],
+    properties: {
+      url: { type: "string" },
+      displayName: { type: "string" },
+      dedupedName: { type: "string" },
+      description: { type: "string" },
+      color: { type: "string" },
+      timezone: { type: "string" },
+      isPrimary: { type: "boolean" },
+      canWrite: { type: "boolean" },
+      selectedByDefault: { type: "boolean" },
+      isForgeCandidate: { type: "boolean" },
+      sourceId: nullable({ type: "string" }),
+      sourceTitle: nullable({ type: "string" }),
+      sourceType: nullable({ type: "string" }),
+      calendarType: nullable({ type: "string" }),
+      hostCalendarId: nullable({ type: "string" }),
+      canonicalKey: nullable({ type: "string" })
+    }
+  };
+
+  const calendarDiscoveryPayload = {
+    type: "object",
+    additionalProperties: true,
+    required: [
+      "provider",
+      "accountLabel",
+      "serverUrl",
+      "principalUrl",
+      "homeUrl",
+      "calendars"
+    ],
+    properties: {
+      provider: { type: "string", enum: CALENDAR_PROVIDER_VALUES },
+      accountLabel: { type: "string" },
+      serverUrl: { type: "string" },
+      principalUrl: nullable({ type: "string" }),
+      homeUrl: nullable({ type: "string" }),
+      calendars: arrayOf(calendarDiscoveryCalendar)
+    }
+  };
+
+  const macOSLocalCalendarDiscoveryPayload = {
+    type: "object",
+    additionalProperties: true,
+    required: ["status", "requestedAt", "sources"],
+    properties: {
+      status: {
+        type: "string",
+        enum: [
+          "not_determined",
+          "denied",
+          "restricted",
+          "full_access",
+          "unavailable"
+        ]
+      },
+      requestedAt: { type: "string", format: "date-time" },
+      sources: arrayOf({
+        type: "object",
+        additionalProperties: true,
+        required: [
+          "sourceId",
+          "sourceTitle",
+          "sourceType",
+          "accountLabel",
+          "accountIdentityKey",
+          "calendars"
+        ],
+        properties: {
+          sourceId: { type: "string" },
+          sourceTitle: { type: "string" },
+          sourceType: { type: "string" },
+          accountLabel: { type: "string" },
+          accountIdentityKey: { type: "string" },
+          calendars: arrayOf(calendarDiscoveryCalendar)
+        }
+      })
     }
   };
 
@@ -836,7 +978,7 @@ export function buildOpenApiDocument() {
     ],
     properties: {
       id: { type: "string" },
-      provider: { type: "string", enum: ["google", "apple", "caldav"] },
+      provider: { type: "string", enum: CALENDAR_PROVIDER_VALUES },
       connectionId: nullable({ type: "string" }),
       calendarId: nullable({ type: "string" }),
       remoteCalendarId: nullable({ type: "string" }),
@@ -3350,6 +3492,99 @@ export function buildOpenApiDocument() {
     }
   };
 
+  const doctorFixProposal = {
+    type: "object",
+    additionalProperties: false,
+    required: ["id", "kind", "title", "description", "requiresConfirmation"],
+    properties: {
+      id: { type: "string" },
+      kind: { type: "string", enum: ["manual", "safe_auto_fix"] },
+      title: { type: "string" },
+      description: { type: "string" },
+      requiresConfirmation: { type: "boolean" }
+    }
+  };
+
+  const doctorCheck = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "group",
+      "title",
+      "status",
+      "severity",
+      "summary",
+      "evidence",
+      "affectedCount"
+    ],
+    properties: {
+      id: { type: "string" },
+      group: { type: "string" },
+      title: { type: "string" },
+      status: { type: "string", enum: ["pass", "warn", "fail", "skipped"] },
+      severity: { type: "string", enum: ["info", "warning", "error"] },
+      summary: { type: "string" },
+      evidence: arrayOf({ type: "string" }),
+      affectedCount: { type: "integer" },
+      fix: { $ref: "#/components/schemas/DoctorFixProposal" }
+    }
+  };
+
+  const forgeDoctorReport = {
+    type: "object",
+    additionalProperties: true,
+    required: [
+      "ok",
+      "now",
+      "integrity",
+      "runtime",
+      "health",
+      "settingsFile",
+      "settingsSummary",
+      "checks",
+      "issues",
+      "fixProposals",
+      "warnings"
+    ],
+    properties: {
+      ok: { type: "boolean" },
+      now: { type: "string", format: "date-time" },
+      integrity: {
+        type: "object",
+        additionalProperties: true,
+        required: ["score", "status", "headline", "lastCheckedAt"],
+        properties: {
+          score: { type: "integer" },
+          status: { type: "string", enum: ["healthy", "warning", "critical"] },
+          headline: { type: "string" },
+          lastCheckedAt: { type: "string", format: "date-time" }
+        }
+      },
+      runtime: { type: "object", additionalProperties: true },
+      health: { type: "object", additionalProperties: true },
+      settingsFile: { type: "object", additionalProperties: true },
+      settingsSummary: { type: "object", additionalProperties: true },
+      checks: arrayOf({ $ref: "#/components/schemas/DoctorCheck" }),
+      issues: arrayOf({ $ref: "#/components/schemas/DoctorCheck" }),
+      fixProposals: arrayOf({
+        $ref: "#/components/schemas/DoctorFixProposal"
+      }),
+      warnings: arrayOf({ type: "string" })
+    }
+  };
+
+  const doctorFixResult = {
+    type: "object",
+    additionalProperties: false,
+    required: ["fixId", "status", "summary"],
+    properties: {
+      fixId: { type: "string" },
+      status: { type: "string", enum: ["applied", "skipped", "failed"] },
+      summary: { type: "string" }
+    }
+  };
+
   const agentOnboardingPayload = {
     type: "object",
     additionalProperties: false,
@@ -3659,6 +3894,7 @@ export function buildOpenApiDocument() {
               additionalProperties: false,
               required: [
                 "classification",
+                "aliases",
                 "summary",
                 "readRoutes",
                 "writeRoutes",
@@ -3670,6 +3906,7 @@ export function buildOpenApiDocument() {
                   type: "string",
                   enum: ["specialized_domain_surface"]
                 },
+                aliases: arrayOf({ type: "string" }),
                 summary: { type: "string" },
                 readRoutes: {
                   type: "object",
@@ -4829,6 +5066,11 @@ export function buildOpenApiDocument() {
         Project: project,
         CalendarSchedulingRules: calendarSchedulingRules,
         CalendarConnection: calendarConnection,
+        CalendarConnectionMutationInput: calendarConnectionMutationInput,
+        CalendarConnectionPatchInput: calendarConnectionPatchInput,
+        CalendarDiscoveryInput: calendarDiscoveryInput,
+        CalendarDiscoveryPayload: calendarDiscoveryPayload,
+        MacOSLocalCalendarDiscoveryPayload: macOSLocalCalendarDiscoveryPayload,
         CalendarResource: calendarResource,
         CalendarEventSource: calendarEventSource,
         CalendarEventLink: calendarEventLink,
@@ -4858,6 +5100,10 @@ export function buildOpenApiDocument() {
         InsightsPayload: insightsPayload,
         WeeklyReviewPayload: weeklyReviewPayload,
         SettingsPayload: settingsPayload,
+        DoctorFixProposal: doctorFixProposal,
+        DoctorCheck: doctorCheck,
+        ForgeDoctorReport: forgeDoctorReport,
+        DoctorFixResult: doctorFixResult,
         ExecutionSettings: executionSettings,
         TaskRunClaimInput: taskRunClaimInput,
         TaskRunHeartbeatInput: taskRunHeartbeatInput,
@@ -4969,6 +5215,59 @@ export function buildOpenApiDocument() {
                 }
               },
               "Forge health payload"
+            )
+          }
+        }
+      },
+      "/api/v1/doctor": {
+        get: {
+          summary:
+            "Run Forge Doctor diagnostics for runtime, settings, storage, entities, hierarchy, rewards, and fix proposals",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["doctor"],
+                properties: {
+                  doctor: { $ref: "#/components/schemas/ForgeDoctorReport" }
+                }
+              },
+              "Forge Doctor report"
+            )
+          }
+        }
+      },
+      "/api/v1/doctor/fixes": {
+        post: {
+          summary: "Apply explicitly requested safe Forge Doctor fixes",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    fixIds: arrayOf({ type: "string" }),
+                    applyAllSafe: { type: "boolean" }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["results", "doctor"],
+                properties: {
+                  results: arrayOf({
+                    $ref: "#/components/schemas/DoctorFixResult"
+                  }),
+                  doctor: { $ref: "#/components/schemas/ForgeDoctorReport" }
+                }
+              },
+              "Forge Doctor fix result"
             )
           }
         }
@@ -8237,6 +8536,58 @@ export function buildOpenApiDocument() {
           }
         }
       },
+      "/api/v1/calendar/macos-local/discovery": {
+        get: {
+          summary:
+            "Discover calendars already configured on this Mac through EventKit",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["discovery"],
+                properties: {
+                  discovery: {
+                    $ref: "#/components/schemas/MacOSLocalCalendarDiscoveryPayload"
+                  }
+                }
+              },
+              "macOS local calendar discovery"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/calendar/discovery": {
+        post: {
+          summary:
+            "Discover Apple or custom CalDAV calendars before creating a connection",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/CalendarDiscoveryInput"
+                }
+              }
+            }
+          },
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["discovery"],
+                properties: {
+                  discovery: {
+                    $ref: "#/components/schemas/CalendarDiscoveryPayload"
+                  }
+                }
+              },
+              "Calendar discovery"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
       "/api/v1/calendar/connections": {
         get: {
           summary: "List connected calendar providers",
@@ -8256,10 +8607,7 @@ export function buildOpenApiDocument() {
                       "connectionHelp"
                     ],
                     properties: {
-                      provider: {
-                        type: "string",
-                        enum: ["google", "apple", "caldav"]
-                      },
+                      provider: { type: "string", enum: CALENDAR_PROVIDER_VALUES },
                       label: { type: "string" },
                       supportsDedicatedForgeCalendar: { type: "boolean" },
                       connectionHelp: { type: "string" }
@@ -8277,9 +8625,19 @@ export function buildOpenApiDocument() {
         },
         post: {
           summary:
-            "Create a Google, Apple, or custom CalDAV calendar connection",
+            "Create a Google, Apple, Exchange Online, local Mac, or custom CalDAV calendar connection",
           description:
             "Forge first discovers the writable calendars for the account, then stores the chosen mirrored calendars and either reuses the existing shared Forge write target or saves a new one when needed.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/CalendarConnectionMutationInput"
+                }
+              }
+            }
+          },
           responses: {
             "201": jsonResponse(
               {
@@ -8292,6 +8650,76 @@ export function buildOpenApiDocument() {
                 }
               },
               "Created calendar connection"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/calendar/connections/{id}": {
+        patch: {
+          summary:
+            "Update one calendar connection label or selected mirrored calendars",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/CalendarConnectionPatchInput"
+                }
+              }
+            }
+          },
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["connection"],
+                properties: {
+                  connection: {
+                    $ref: "#/components/schemas/CalendarConnection"
+                  }
+                }
+              },
+              "Updated calendar connection"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        },
+        delete: {
+          summary: "Delete one calendar connection and stop mirroring it",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["connection"],
+                properties: {
+                  connection: {
+                    $ref: "#/components/schemas/CalendarConnection"
+                  }
+                }
+              },
+              "Deleted calendar connection"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/calendar/connections/{id}/discovery": {
+        get: {
+          summary:
+            "Rediscover available calendars for an existing calendar connection",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["discovery"],
+                properties: {
+                  discovery: {
+                    $ref: "#/components/schemas/CalendarDiscoveryPayload"
+                  }
+                }
+              },
+              "Calendar connection discovery"
             ),
             default: { $ref: "#/components/responses/Error" }
           }

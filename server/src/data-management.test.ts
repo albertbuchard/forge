@@ -180,6 +180,48 @@ test("maybeRunAutomaticBackup respects the backup cadence", async () => {
   }
 });
 
+test("maybeRunAutomaticBackup prunes expired automatic backups without deleting manual backups", async () => {
+  const dataRoot = await createRuntimeRoot("forge-data-auto-retention-");
+
+  try {
+    insertTag("tag_auto_retention", "Auto retention");
+    await updateDataManagementSettings({
+      backupDirectory: path.join(dataRoot, "backups"),
+      backupFrequencyHours: 1,
+      backupRetentionDays: 1,
+      autoRepairEnabled: true
+    });
+
+    const automatic = await createDataBackup(
+      { note: "Old automatic" },
+      { mode: "automatic" }
+    );
+    const manual = await createDataBackup({ note: "Manual should stay" });
+    const oldCreatedAt = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+
+    for (const backup of [automatic, manual]) {
+      const manifest = JSON.parse(await readFile(backup.manifestPath, "utf8"));
+      manifest.createdAt = oldCreatedAt;
+      await writeFile(backup.manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+    }
+    getDatabase()
+      .prepare(
+        "UPDATE data_management_settings SET last_auto_backup_at = ? WHERE id = 1"
+      )
+      .run(new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString());
+
+    const next = await maybeRunAutomaticBackup();
+
+    assert.ok(next);
+    assert.equal(existsSync(automatic.archivePath), false);
+    assert.equal(existsSync(automatic.manifestPath), false);
+    assert.equal(existsSync(manual.archivePath), true);
+    assert.equal(existsSync(manual.manifestPath), true);
+  } finally {
+    await rm(dataRoot, { recursive: true, force: true });
+  }
+});
+
 test("exportData returns the expected snapshot and structure formats", async () => {
   const dataRoot = await createRuntimeRoot("forge-data-export-");
 

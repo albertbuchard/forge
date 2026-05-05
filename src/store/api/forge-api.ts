@@ -21,10 +21,13 @@ import {
   createTask,
   deleteWorkbenchFlow,
   ensureOperatorSession,
+  applyForgeDoctorFixes,
   focusTaskRun,
   getForgeSnapshot,
+  getForgeDoctor,
   getSettings,
   getSleepView,
+  getXpMetrics,
   getWorkbenchFlow,
   getWorkbenchFlowNodeOutput,
   getWorkbenchFlowRun,
@@ -38,10 +41,12 @@ import {
   listPsycheValues,
   listTriggerReports,
   listWikiIngestJobs,
+  markGamificationCelebrationSeen,
   patchGoal,
   patchProject,
   patchSleepSession,
   patchTask,
+  revokeOperatorSession,
   runWorkbenchFlow,
   releaseTaskRun,
   updateWorkbenchFlow
@@ -74,6 +79,8 @@ export const forgeApi = createApi({
     "OperatorSession",
     "Settings",
     "Snapshot",
+    "Gamification",
+    "Doctor",
     "Sleep",
     "Psyche",
     "WikiIngestJobs",
@@ -88,6 +95,17 @@ export const forgeApi = createApi({
     getSettings: builder.query<{ settings: SettingsPayload }, void>({
       queryFn: () => resolveResult(getSettings),
       providesTags: ["Settings"]
+    }),
+    getForgeDoctor: builder.query<AsyncResult<typeof getForgeDoctor>, void>({
+      queryFn: () => resolveResult(getForgeDoctor),
+      providesTags: ["Doctor"]
+    }),
+    applyForgeDoctorFixes: builder.mutation<
+      AsyncResult<typeof applyForgeDoctorFixes>,
+      { fixIds?: string[]; applyAllSafe?: boolean }
+    >({
+      queryFn: (input) => resolveResult(() => applyForgeDoctorFixes(input)),
+      invalidatesTags: ["Doctor", "Settings"]
     }),
     listWorkbenchFlows: builder.query<AsyncResult<typeof listWorkbenchFlows>, void>({
       queryFn: () => resolveResult(() => listWorkbenchFlows()),
@@ -142,6 +160,30 @@ export const forgeApi = createApi({
     getSnapshot: builder.query<ForgeSnapshot, string[] | void>({
       queryFn: (userIds) => resolveResult(() => getForgeSnapshot(userIds)),
       providesTags: ["Snapshot"]
+    }),
+    getXpMetrics: builder.query<AsyncResult<typeof getXpMetrics>, string[] | void>({
+      queryFn: (userIds) => resolveResult(() => getXpMetrics(userIds)),
+      providesTags: ["Gamification"]
+    }),
+    markGamificationCelebrationSeen: builder.mutation<
+      AsyncResult<typeof markGamificationCelebrationSeen>,
+      string
+    >({
+      queryFn: (celebrationId) =>
+        resolveResult(() => markGamificationCelebrationSeen(celebrationId)),
+      invalidatesTags: ["Gamification"]
+    }),
+    revokeOperatorSession: builder.mutation<
+      AsyncResult<typeof revokeOperatorSession>,
+      void
+    >({
+      queryFn: () => resolveResult(revokeOperatorSession),
+      invalidatesTags: [
+        "OperatorSession",
+        "Settings",
+        "Snapshot",
+        "Gamification"
+      ]
     }),
     listWikiIngestJobs: builder.query<{ jobs: WikiIngestJobPayload[] }, void>({
       queryFn: () => resolveResult(() => listWikiIngestJobs()),
@@ -359,7 +401,9 @@ export const {
   useGetBehaviorPatternsQuery,
   useGetBehaviorsQuery,
   useGetBeliefsQuery,
+  useGetForgeDoctorQuery,
   useGetOperatorSessionQuery,
+  useGetXpMetricsQuery,
   useGetPsycheValuesQuery,
   useGetSettingsQuery,
   useGetSleepViewQuery,
@@ -381,6 +425,9 @@ export const {
   usePatchTaskMutation,
   usePatchTaskStatusMutation,
   useReleaseTaskRunMutation,
+  useMarkGamificationCelebrationSeenMutation,
+  useApplyForgeDoctorFixesMutation,
+  useRevokeOperatorSessionMutation,
   useRunWorkbenchFlowMutation,
   useUpdateWorkbenchFlowMutation
 } = forgeApi;

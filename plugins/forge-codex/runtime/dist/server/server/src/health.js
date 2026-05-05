@@ -260,6 +260,16 @@ export const verifyCompanionPairingSchema = z.object({
         sourceDevice: z.string().trim().default("iPhone")
     })
 });
+export const heartbeatCompanionPairingSchema = z.object({
+    sessionId: z.string().trim().min(1),
+    pairingToken: z.string().trim().min(1),
+    device: z.object({
+        name: z.string().trim().default("iPhone"),
+        platform: z.string().trim().default("ios"),
+        appVersion: z.string().trim().default(""),
+        sourceDevice: z.string().trim().default("iPhone")
+    })
+});
 export const updateWorkoutMetadataSchema = z.object({
     subjectiveEffort: z.number().int().min(1).max(10).nullable().optional(),
     moodBefore: z.string().trim().optional(),
@@ -1546,6 +1556,36 @@ export function verifyCompanionPairing(payload) {
             });
         }
     }
+    ensurePairingSourceStates(getDatabase()
+        .prepare(`SELECT * FROM companion_pairing_sessions WHERE id = ?`)
+        .get(pairing.id));
+    return {
+        pairingSession: mapPairingSession(getDatabase()
+            .prepare(`SELECT * FROM companion_pairing_sessions WHERE id = ?`)
+            .get(pairing.id))
+    };
+}
+export function heartbeatCompanionPairing(payload) {
+    const parsed = heartbeatCompanionPairingSchema.parse(payload);
+    const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+    const now = nowIso();
+    const renewedExpiry = nextVerifiedCompanionPairingExpiry(new Date());
+    const nextStatus = pairing.status === "revoked"
+        ? pairing.status
+        : pairing.status === "permission_denied"
+            ? pairing.status
+            : pairing.status === "stale"
+                ? "paired"
+                : pairing.status === "pending"
+                    ? "paired"
+                    : pairing.status;
+    getDatabase()
+        .prepare(`UPDATE companion_pairing_sessions
+       SET status = ?, device_name = ?, platform = ?, app_version = ?,
+           last_seen_at = ?, paired_at = COALESCE(paired_at, ?),
+           expires_at = ?, updated_at = ?
+       WHERE id = ?`)
+        .run(nextStatus, parsed.device.name, parsed.device.platform, parsed.device.appVersion, now, now, renewedExpiry, now, pairing.id);
     ensurePairingSourceStates(getDatabase()
         .prepare(`SELECT * FROM companion_pairing_sessions WHERE id = ?`)
         .get(pairing.id));

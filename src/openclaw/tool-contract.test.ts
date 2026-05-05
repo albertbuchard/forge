@@ -62,6 +62,13 @@ function readTypeBoxUnionValues(schema: Record<string, unknown>, key: string) {
     .sort();
 }
 
+function readPropertyDescription(schema: Record<string, unknown>, key: string) {
+  const property = (schema.properties as Record<string, unknown> | undefined)?.[
+    key
+  ] as { description?: string } | undefined;
+  return property?.description ?? "";
+}
+
 describe("openclaw tool contracts", () => {
   it("keeps current-work and calendar tools backed by mirrored curated routes", () => {
     const supportedRoutes = collectSupportedPluginApiRouteKeys();
@@ -121,15 +128,29 @@ describe("openclaw tool contracts", () => {
 
     expect(readTypeBoxUnionValues(movement.parameters ?? {}, "routeKey")).toEqual(
       expect.arrayContaining([
+        "day",
+        "month",
+        "allTime",
         "timeline",
         "places",
+        "boxDetail",
         "tripDetail",
         "selection",
+        "settings",
+        "settingsUpdate",
+        "placeCreate",
+        "placeUpdate",
         "userBoxPreflight",
         "userBoxCreate",
+        "userBoxUpdate",
+        "userBoxDelete",
         "automaticBoxInvalidate",
         "stayUpdate",
-        "tripPointUpdate"
+        "stayDelete",
+        "tripUpdate",
+        "tripDelete",
+        "tripPointUpdate",
+        "tripPointDelete"
       ])
     );
     expect(readTypeBoxUnionValues(lifeForce.parameters ?? {}, "routeKey")).toEqual(
@@ -139,10 +160,18 @@ describe("openclaw tool contracts", () => {
       expect.arrayContaining([
         "boxCatalog",
         "listFlows",
+        "flowById",
+        "flowBySlug",
         "createFlow",
+        "updateFlow",
+        "deleteFlow",
         "runFlow",
+        "runByPayload",
+        "chatFlow",
         "publishedOutput",
+        "runs",
         "runDetail",
+        "runNodes",
         "nodeResult",
         "latestNodeOutput"
       ])
@@ -153,6 +182,25 @@ describe("openclaw tool contracts", () => {
       expect(tool.description ?? "").toMatch(/dedicated/i);
       expect(tool.description ?? "").toMatch(
         /Do not use.*batch CRUD|normal stored entities.*batch CRUD/i
+      );
+    }
+
+    expect(readPropertyDescription(movement.parameters ?? {}, "routeKey")).toMatch(
+      /day: GET \/api\/v1\/movement\/day[\s\S]*userBoxCreate: POST \/api\/v1\/movement\/user-boxes[\s\S]*tripPointDelete: DELETE \/api\/v1\/movement\/trips\/:id\/points\/:pointId/
+    );
+    expect(readPropertyDescription(lifeForce.parameters ?? {}, "routeKey")).toMatch(
+      /overview: GET \/api\/v1\/life-force[\s\S]*weekdayTemplate: PUT \/api\/v1\/life-force\/templates\/:weekday/
+    );
+    expect(readPropertyDescription(workbench.parameters ?? {}, "routeKey")).toMatch(
+      /listFlows: GET \/api\/v1\/workbench\/flows[\s\S]*runFlow: POST \/api\/v1\/workbench\/flows\/:id\/run[\s\S]*latestNodeOutput: GET \/api\/v1\/workbench\/flows\/:id\/nodes\/:nodeId\/output/
+    );
+
+    for (const tool of [movement, lifeForce, workbench]) {
+      expect(readPropertyDescription(tool.parameters ?? {}, "routeKey")).toMatch(
+        /fill pathParams with that exact placeholder name[\s\S]*do not put raw paths or ids into routeKey/i
+      );
+      expect(readPropertyDescription(tool.parameters ?? {}, "pathParams")).toMatch(
+        /Use the exact :placeholder names shown in the routeKey description/i
       );
     }
   });

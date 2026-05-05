@@ -222,6 +222,7 @@ function makeDataState(overrides: Partial<DataManagementState> = {}): DataManage
       preferredDataRoot: "/Users/omarclaw/Documents/aurel-monorepo/data/forge",
       backupDirectory: "/Users/omarclaw/Documents/aurel-monorepo/data/forge/backups",
       backupFrequencyHours: 24,
+      backupRetentionDays: 30,
       autoRepairEnabled: true,
       lastAutoBackupAt: "2026-04-11T08:00:00.000Z",
       lastManualBackupAt: "2026-04-11T11:00:00.000Z"
@@ -356,6 +357,9 @@ describe("SettingsDataPage", () => {
     fireEvent.change(screen.getAllByRole("combobox")[0], {
       target: { value: "168" }
     });
+    fireEvent.change(screen.getAllByRole("combobox")[1], {
+      target: { value: "90" }
+    });
 
     const checkboxes = await screen.findAllByRole("checkbox");
     fireEvent.click(checkboxes[0]);
@@ -366,6 +370,7 @@ describe("SettingsDataPage", () => {
         backupDirectory:
           "/Users/omarclaw/Documents/aurel-monorepo/data/forge/custom-backups",
         backupFrequencyHours: 168,
+        backupRetentionDays: 90,
         autoRepairEnabled: false
       })
     );

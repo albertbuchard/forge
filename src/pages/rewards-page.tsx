@@ -20,9 +20,10 @@ import { ProgressMeter } from "@/components/ui/progress-meter";
 import { ErrorState } from "@/components/ui/page-state";
 import {
   getGamificationCatalog,
-  getXpMetrics,
   updateGamificationEquipment
 } from "@/lib/api";
+import { forgeApi, useGetXpMetricsQuery } from "@/store/api/forge-api";
+import { useAppDispatch } from "@/store/typed-hooks";
 import {
   getGamificationSpriteUrl
 } from "@/lib/gamification-assets";
@@ -179,6 +180,7 @@ export function RewardsPage() {
   const shell = useForgeShell();
   const gamificationTheme = useGamificationTheme();
   const queryClient = useQueryClient();
+  const dispatch = useAppDispatch();
   const selectedUserIds = Array.isArray(shell.selectedUserIds)
     ? shell.selectedUserIds
     : [];
@@ -192,10 +194,7 @@ export function RewardsPage() {
     queryKey: ["forge-gamification-catalog", ...selectedUserIds],
     queryFn: () => getGamificationCatalog(selectedUserIds)
   });
-  const xpQuery = useQuery({
-    queryKey: ["forge-xp-metrics", ...selectedUserIds],
-    queryFn: () => getXpMetrics(selectedUserIds)
-  });
+  const xpQuery = useGetXpMetricsQuery(selectedUserIds);
   const equipMutation = useMutation({
     mutationFn: (input: Partial<Omit<GamificationEquipment, "updatedAt">>) =>
       updateGamificationEquipment(input, selectedUserIds),
@@ -204,6 +203,7 @@ export function RewardsPage() {
         queryClient.invalidateQueries({ queryKey: ["forge-gamification-catalog"] }),
         queryClient.invalidateQueries({ queryKey: ["forge-xp-metrics"] })
       ]);
+      dispatch(forgeApi.util.invalidateTags(["Gamification"]));
     }
   });
   const catalog = catalogQuery.data?.catalog;

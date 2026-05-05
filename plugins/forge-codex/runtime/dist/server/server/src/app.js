@@ -26,6 +26,7 @@ import { createProject, updateProject } from "./repositories/projects.js";
 import { createPreferenceCatalog, createPreferenceCatalogItem, createPreferenceContext, createPreferenceItem, createPreferenceItemFromEntity, deletePreferenceCatalog, deletePreferenceCatalogItem, deletePreferenceContext, deletePreferenceItem, getPreferenceCatalogById, getPreferenceCatalogItemById, getPreferenceContextById, getPreferenceItemById, getPreferenceWorkspace, listPreferenceCatalogItems, listPreferenceCatalogs, listPreferenceContexts, listPreferenceItems, mergePreferenceContexts, startPreferenceGame, submitAbsoluteSignal, submitPairwiseJudgment, updatePreferenceCatalog, updatePreferenceCatalogItem, updatePreferenceContext, updatePreferenceItem, updatePreferenceScore } from "./repositories/preferences.js";
 import { createStrategy, getStrategyById, listStrategies, updateStrategy } from "./repositories/strategies.js";
 import { buildKnowledgeGraph, buildKnowledgeGraphFocus } from "./services/knowledge-graph.js";
+import { applyForgeDoctorFixes, buildForgeDoctorReport } from "./services/doctor.js";
 import { createManualRewardGrant, getRewardRuleById, listRewardLedger, listRewardRules, recordWorkAdjustmentReward, recordSessionEvent, updateRewardRule } from "./repositories/rewards.js";
 import { markGamificationCelebrationSeen } from "./repositories/gamification.js";
 import { getSettingsFileStatus, listAgentIdentities, getSettings, isPsycheAuthRequired, mirrorSettingsFileFromCurrentState, updateSettings, verifyAgentToken } from "./repositories/settings.js";
@@ -63,7 +64,7 @@ import { buildOpenApiDocument } from "./openapi.js";
 import { registerWebRoutes } from "./web.js";
 import { createManagerRuntime } from "./managers/runtime.js";
 import { isManagerError } from "./managers/type-guards.js";
-import { createCompanionPairingSession, createCompanionPairingSessionSchema, createSleepSession, createSleepSessionSchema, createWorkoutSession, createWorkoutSessionSchema, deleteSleepSession, deleteWorkoutSession, getCompanionPairingSessionById, getCompanionOverview, getFitnessViewData, getSleepSessionById, getSleepSessionDetailById, getSleepTimelineOverlaysForRange, getSleepViewData, getVitalsViewData, getWorkoutSessionById, ingestMobileHealthSync, mobileHealthSyncSchema, patchCompanionPairingSourceState, patchCompanionPairingSourceStateSchema, companionSourceKeySchema, requireValidPairing, revokeAllCompanionPairingSessions, revokeAllCompanionPairingSessionsSchema, revokeCompanionPairingSession, updateMobileCompanionSourceState, updateMobileCompanionSourceStateSchema, verifyCompanionPairing, verifyCompanionPairingSchema, updateSleepMetadata, updateSleepMetadataSchema, updateWorkoutMetadata, updateWorkoutMetadataSchema } from "./health.js";
+import { createCompanionPairingSession, createCompanionPairingSessionSchema, createSleepSession, createSleepSessionSchema, createWorkoutSession, createWorkoutSessionSchema, deleteSleepSession, deleteWorkoutSession, getCompanionPairingSessionById, getCompanionOverview, getFitnessViewData, getSleepSessionById, getSleepSessionDetailById, getSleepTimelineOverlaysForRange, getSleepViewData, getVitalsViewData, getWorkoutSessionById, heartbeatCompanionPairing, heartbeatCompanionPairingSchema, ingestMobileHealthSync, mobileHealthSyncSchema, patchCompanionPairingSourceState, patchCompanionPairingSourceStateSchema, companionSourceKeySchema, requireValidPairing, revokeAllCompanionPairingSessions, revokeAllCompanionPairingSessionsSchema, revokeCompanionPairingSession, updateMobileCompanionSourceState, updateMobileCompanionSourceStateSchema, verifyCompanionPairing, verifyCompanionPairingSchema, updateSleepMetadata, updateSleepMetadataSchema, updateWorkoutMetadata, updateWorkoutMetadataSchema } from "./health.js";
 import { analyzeMovementUserBoxPreflight, createMovementUserBox, createMovementPlace, deleteMovementUserBox, getMovementAllTimeSummary, getMovementBoxDetail, getMovementDayDetail, getMovementMobileBootstrap, getMovementTimeline, getMovementSelectionAggregate, getMovementSettings, getMovementTripDetail, getMovementMonthSummary, invalidateAutomaticMovementBox, listMovementPlaces, movementAutomaticBoxInvalidateSchema, movementMobileBootstrapSchema, movementMobilePlaceMutationSchema, movementMobileStayPatchSchema, movementMobileUserBoxCreateSchema, movementMobileUserBoxPreflightSchema, movementMobileUserBoxPatchSchema, movementMobileAutomaticBoxInvalidateSchema, movementMobileTimelineSchema, movementPlaceMutationSchema, movementPlacePatchSchema, movementSelectionAggregateSchema, movementStayPatchSchema, movementTripPatchSchema, movementUserBoxCreateSchema, movementUserBoxPreflightSchema, movementUserBoxPatchSchema, movementSettingsPatchSchema, movementTimelineQuerySchema, movementTripPointPatchSchema, deleteMovementStay, deleteMovementTrip, deleteMovementTripPoint, updateMovementPlace, updateMovementSettings, updateMovementStay, updateMovementTrip, updateMovementUserBox, updateMovementTripPoint, resolveMovementTimelineSegmentForBox } from "./movement.js";
 import { getScreenTimeAllTimeSummary, getScreenTimeDayDetail, getScreenTimeMonthSummary, getScreenTimeSettings, screenTimeSettingsPatchSchema, updateScreenTimeSettings } from "./screen-time.js";
 import { assertWatchReady, buildWatchBootstrap, ingestWatchCaptureBatch, mobileWatchBootstrapSchema, mobileWatchCaptureBatchSchema, mobileWatchHabitCheckInSchema } from "./watch-mobile.js";
@@ -1956,7 +1957,7 @@ function buildPreferredMutationPath(entityType) {
         case "wiki_page":
             return "Use /api/v1/wiki/pages with POST or PATCH for page CRUD.";
         case "calendar_connection":
-            return "Use /api/v1/calendar/connections plus provider-specific setup flows.";
+            return "Use /api/v1/calendar/discovery or /api/v1/calendar/macos-local/discovery before setup when needed; use /api/v1/calendar/connections with POST, PATCH, DELETE, rediscovery, and sync for connection lifecycle work.";
         case "task_run":
             return "Use the task-run action routes to start, heartbeat, focus, complete, or release live work.";
         case "questionnaire_run":
@@ -1991,7 +1992,7 @@ function buildPreferredMutationTool(entityType) {
         case "wiki_page":
             return "forge_upsert_wiki_page";
         case "calendar_connection":
-            return "forge_connect_calendar_provider | forge_sync_calendar_connection";
+            return "forge_connect_calendar_provider | forge_sync_calendar_connection | mirrored calendar connection routes";
         case "task_run":
             return "forge_start_task_run | forge_heartbeat_task_run | forge_focus_task_run | forge_complete_task_run | forge_release_task_run";
         case "questionnaire_run":
@@ -3201,9 +3202,10 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
         useWhen: "Use for a lived direction, quality of being, or way of showing up that matters to the user and should guide actions rather than just describe an outcome.",
         coachingGoal: "Clarify the value as a chosen direction, distinguish it from a goal, and gather one concrete way the user wants to embody it now.",
         askSequence: [
-            "Start with what matters and why it matters now.",
-            "Ask for one concrete example of what living this value would look like in ordinary life.",
-            "Separate the value direction from any specific outcome or achievement goal.",
+            "Start with one ordinary recent moment where the value felt alive, absent, or painfully important.",
+            "Ask what mattered in that moment and why it matters now.",
+            "Reflect the direction in the user's own language before separating it from any specific outcome or achievement goal.",
+            "Ask what someone would see this week if the user lived this value a little more.",
             "Notice tensions, barriers, or situations where the value gets lost.",
             "Name one small committed action that would move toward the value."
         ],
@@ -3218,6 +3220,7 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
             "linkedTaskIds"
         ],
         exampleQuestions: [
+            "Where did this value show up recently, even faintly?",
             "What feels deeply important about this to you?",
             "If you were living this value a little more this week, what would someone be able to see?",
             "What goal or area of life does this value belong to most clearly?",
@@ -3322,12 +3325,12 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
         useWhen: "Use for a belief, rule, or self-statement that keeps showing up in reactions, especially when the user can phrase it as a sentence.",
         coachingGoal: "Turn implicit self-talk or a likely schema theme into one explicit belief statement that can be tested and linked to patterns, reports, and modes without forcing the user into a debate too early.",
         askSequence: [
-            "Reflect the likely belief in the user's own words and ask for confirmation or correction.",
-            "Decide whether it is absolute or conditional.",
-            "Estimate how true it feels from 0 to 100.",
-            "Collect evidence for and evidence against.",
-            "Notice where the belief may have been learned or reinforced.",
-            "Offer a more flexible alternative belief.",
+            "Anchor the belief in one recent moment or reaction before abstracting it.",
+            "Reflect the likely belief sentence in the user's own words and ask for confirmation or correction.",
+            "Condense it into one saveable statement only after the wording feels accurate.",
+            "Decide whether it is absolute or conditional after the sentence lands.",
+            "Estimate how true it feels from 0 to 100 only if that helps the user understand its grip or guide later review.",
+            "Explore evidence, origin, and a flexible alternative only if the user wants to examine or soften the belief now.",
             "Link a schemaId only when a real schema catalog match is known."
         ],
         requiredForCreate: ["statement", "beliefType"],
@@ -3343,6 +3346,7 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
             "linkedModeIds"
         ],
         exampleQuestions: [
+            "When did this belief show up most recently?",
             "If we turned that reaction into one sentence, what would it sound like?",
             "When that reaction hits, what does it start telling you?",
             "Is it more of an always/never belief, or an if-then rule?",
@@ -3355,6 +3359,7 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
             "Schema catalog entries are reference concepts; belief_entry is the user-owned record.",
             "If no schema catalog match is known, omit schemaId rather than inventing one.",
             "Do not argue the user out of the belief. Reflect it, understand its function, and then collaboratively test for flexibility.",
+            "Do not rush to confidence, evidence, or flexible alternatives before the user feels the belief has been captured.",
             "When the wording is nearly there, ask whether it feels true enough before you move into confidence, evidence, or alternative-belief details.",
             "A useful hypothesis should name the rule or prediction the moment seems to activate and then invite correction before saving it as the belief sentence."
         ]
@@ -3400,6 +3405,7 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
             "Mode profiles are durable parts descriptions.",
             "Mode guide sessions are the guided reasoning process that can lead toward a mode profile.",
             "Do not overpathologize. The point is to understand the part's job and cost, then increase choice.",
+            "Do not start by asking for the mode family; choose the family after the lived description, protective job, fear, or burden is visible enough.",
             "If the user asks to understand the mode first, start from a recent moment and ask what the part is trying to do before you name it.",
             "When enough evidence is present, offer one tentative hypothesis about the mode's protective job, fear, or burden before choosing the family label."
         ]
@@ -3436,12 +3442,13 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
         useWhen: "Use for one specific emotionally meaningful incident that should be mapped from situation through emotions, thoughts, behaviors, consequences, and next moves.",
         coachingGoal: "Help the user build a clear incident chain with enough structure to learn from one episode while staying grounded and not rushing past the user's felt experience.",
         askSequence: [
-            "Name the incident briefly and anchor it in one concrete sequence.",
-            "Describe what happened in the situation.",
-            "Capture emotions and intensity.",
+            "Start with the situation and felt stake: what happened, and why did it hit enough to save.",
+            "Name the incident briefly only after the concrete sequence is clear.",
+            "Capture emotions, body state, and intensity before moving into interpretation.",
             "Capture thoughts, meanings, or belief-linked interpretations.",
-            "Capture behaviors and immediate coping moves.",
-            "Capture short-term and long-term consequences.",
+            "Capture behaviors, urges, and immediate coping moves.",
+            "Capture what the move did short term and what it cost or changed later.",
+            "Offer one careful hypothesis about the sequence only after situation, emotion, meaning, behavior, and consequence are partly visible.",
             "Identify next moves and linked patterns, beliefs, modes, values, or tasks."
         ],
         requiredForCreate: ["title"],
@@ -3473,6 +3480,7 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
         notes: [
             "Use eventTypeId only when a known event taxonomy item fits; otherwise use customEventType.",
             "Use emotionDefinitionId only when a known emotion definition fits; otherwise keep the raw label.",
+            "Do not turn the report into a worksheet dump before the felt stake is clear; reflect what made the episode matter before asking for the full chain.",
             "If the user becomes overwhelmed, slow down, summarize, and return to one segment of the chain at a time instead of pushing for the full report in one turn.",
             "Only hypothesize about the incident sequence after the situation, emotion, meaning, behavior, and consequence are at least partly visible."
         ]
@@ -4230,8 +4238,12 @@ function buildAgentOnboardingPayload(request) {
                 },
                 calendar_connection: {
                     list: "/api/v1/calendar/connections",
+                    discover: "/api/v1/calendar/discovery",
+                    discoverMacOSLocal: "/api/v1/calendar/macos-local/discovery",
+                    rediscover: "/api/v1/calendar/connections/:id/discovery",
                     create: "/api/v1/calendar/connections",
                     update: "/api/v1/calendar/connections/:id",
+                    sync: "/api/v1/calendar/connections/:id/sync",
                     delete: "/api/v1/calendar/connections/:id"
                 }
             },
@@ -4305,6 +4317,7 @@ function buildAgentOnboardingPayload(request) {
             specializedDomainSurfaces: {
                 movement: {
                     classification: "specialized_domain_surface",
+                    aliases: ["movement", "Movement"],
                     summary: "Dedicated movement workspace API. Use these routes for stays, trips, time-in-place questions, visited places, trip detail, selection aggregates, user-defined overlays, and repair actions on already-recorded movement data.",
                     routeSelectionQuestions: [
                         "Is the user asking for a day, month, all-time, timeline, place, trip detail, or selected-span answer?",
@@ -4348,6 +4361,7 @@ function buildAgentOnboardingPayload(request) {
                 },
                 lifeForce: {
                     classification: "specialized_domain_surface",
+                    aliases: ["life_force", "life-force", "Life Force"],
                     summary: "Dedicated life-force API. Use it to read the current energy budget, drains, recommendations, and warnings, then patch only the parts that are meant to be user-controlled.",
                     routeSelectionQuestions: [
                         "Is the user trying to understand the overview, change durable profile assumptions, change a weekday curve, or log a right-now fatigue signal?",
@@ -4371,11 +4385,39 @@ function buildAgentOnboardingPayload(request) {
                         "If the user already knows they want a profile change, weekday-template edit, or right-now fatigue signal, skip the broad lane question and ask only for the missing weekday, profile field, or signal detail."
                     ]
                 },
+                life_force: {
+                    classification: "specialized_domain_surface",
+                    aliases: ["lifeForce", "life-force", "Life Force"],
+                    summary: "Alias for the dedicated Life Force API keyed to the entity-style name `life_force`. Use the same overview, profile, weekday-template, and fatigue-signal routes as `lifeForce`.",
+                    routeSelectionQuestions: [
+                        "Is the user trying to understand the overview, change durable profile assumptions, change a weekday curve, or log a right-now fatigue signal?",
+                        "Are they describing a repeatable weekly shape or a one-off current state?",
+                        "If the lane is already clear, what one weekday, profile field, or signal detail is still missing?"
+                    ],
+                    readRoutes: {
+                        overview: "/api/v1/life-force"
+                    },
+                    writeRoutes: {
+                        profile: "/api/v1/life-force/profile",
+                        weekdayTemplate: "/api/v1/life-force/templates/:weekday",
+                        fatigueSignal: "/api/v1/life-force/fatigue-signals"
+                    },
+                    notes: [
+                        "This `life_force` key exists so agents can look up the specialized route family by the entity catalog name without guessing that the canonical surface key is `lifeForce`.",
+                        "Life Force is a focused domain surface, not a batch CRUD entity type.",
+                        "Use GET /api/v1/life-force for the current overview payload with stats, drains, recommendations, and current-curve state.",
+                        "Patch the profile only for durable personal settings, update weekday templates only for the curve itself, and post fatigue signals for real-time tired or recovered observations.",
+                        "If the user says something like 'I always dip on Tuesdays after lunch', treat that as a weekday-template change rather than a one-off fatigue signal.",
+                        "If the user is asking what changed after a profile, template, or fatigue write, read the overview back so the effect stays visible.",
+                        "If the user already knows they want a profile change, weekday-template edit, or right-now fatigue signal, skip the broad lane question and ask only for the missing weekday, profile field, or signal detail."
+                    ]
+                },
                 workbench: {
                     classification: "specialized_domain_surface",
+                    aliases: ["workbench", "Workbench"],
                     summary: "Dedicated graph-flow API. Use it for flow catalog reads, flow CRUD, execution, run history, published outputs, node results, and latest successful node outputs.",
                     routeSelectionQuestions: [
-                        "Is the job flow discovery, flow editing, execution, published output, run detail, node result, latest node output, or flow chat follow-up?",
+                        "Is the job flow discovery, flow editing, execution, run history, published output, run detail, node result, latest node output, or flow chat follow-up?",
                         "Does the user need a stable public contract or one execution artifact?",
                         "If the flow is already known, what one run, node, or output scope detail is still missing before acting?"
                     ],
@@ -6377,6 +6419,7 @@ export async function buildServer(options = {}) {
             storageRoot: getEffectiveDataRoot(),
             dataDir: resolveDataDir(),
             databasePath: resolveDatabasePathForDataRoot(),
+            port: runtimeConfig.port,
             basePath: runtimeConfig.basePath,
             devWebOrigin: process.env.FORGE_DEV_WEB_ORIGIN?.trim() || null
         };
@@ -6385,34 +6428,72 @@ export async function buildServer(options = {}) {
             backend: "forge-node-runtime",
             runtime
         });
-        const warnings = [];
-        if (!settingsFile.valid) {
-            warnings.push(`forge.json is invalid at ${settingsFile.path}. Forge ignored file precedence until the JSON is repaired or rewritten.`);
-        }
-        if (settingsFile.syncState === "applied_file_overrides") {
-            warnings.push("forge.json overrode one or more persisted database settings on this run.");
-        }
-        if (health.ok === false) {
-            warnings.push("The task-run watchdog reported degraded health.");
-        }
         return {
-            doctor: {
-                ok: health.ok && settingsFile.valid,
-                now: new Date().toISOString(),
-                runtime,
-                health,
+            doctor: await buildForgeDoctorReport({
+                settings,
                 settingsFile,
-                settingsSummary: {
-                    themePreference: settings.themePreference,
-                    localePreference: settings.localePreference,
-                    operatorName: settings.profile.operatorName,
-                    maxActiveTasks: settings.execution.maxActiveTasks,
-                    timeAccountingMode: settings.execution.timeAccountingMode,
-                    psycheAuthRequired: settings.security.psycheAuthRequired,
-                    webAppUrl: `http://127.0.0.1:${runtimeConfig.port}${runtimeConfig.basePath}`
-                },
-                warnings
-            }
+                runtime,
+                health
+            })
+        };
+    });
+    app.post("/api/v1/doctor/fixes", async (request) => {
+        requireScopedAccess(request.headers, ["write"], { route: "/api/v1/doctor/fixes" });
+        const parsed = z
+            .object({
+            fixIds: z.array(z.string().min(1)).optional(),
+            applyAllSafe: z.boolean().optional()
+        })
+            .parse(request.body ?? {});
+        const initialSettings = getSettings();
+        const initialSettingsFile = getSettingsFileStatus();
+        const initialRuntime = {
+            pid: process.pid,
+            storageRoot: getEffectiveDataRoot(),
+            dataDir: resolveDataDir(),
+            databasePath: resolveDatabasePathForDataRoot(),
+            port: runtimeConfig.port,
+            basePath: runtimeConfig.basePath,
+            devWebOrigin: process.env.FORGE_DEV_WEB_ORIGIN?.trim() || null
+        };
+        const initialHealth = buildHealthPayload(taskRunWatchdog, {
+            apiVersion: "v1",
+            backend: "forge-node-runtime",
+            runtime: initialRuntime
+        });
+        const initialDoctor = await buildForgeDoctorReport({
+            settings: initialSettings,
+            settingsFile: initialSettingsFile,
+            runtime: initialRuntime,
+            health: initialHealth
+        });
+        const fixResult = applyForgeDoctorFixes(parsed, {
+            integrityScore: initialDoctor.integrity.score
+        });
+        const settings = getSettings();
+        const settingsFile = getSettingsFileStatus();
+        const runtime = {
+            pid: process.pid,
+            storageRoot: getEffectiveDataRoot(),
+            dataDir: resolveDataDir(),
+            databasePath: resolveDatabasePathForDataRoot(),
+            port: runtimeConfig.port,
+            basePath: runtimeConfig.basePath,
+            devWebOrigin: process.env.FORGE_DEV_WEB_ORIGIN?.trim() || null
+        };
+        const health = buildHealthPayload(taskRunWatchdog, {
+            apiVersion: "v1",
+            backend: "forge-node-runtime",
+            runtime
+        });
+        return {
+            ...fixResult,
+            doctor: await buildForgeDoctorReport({
+                settings,
+                settingsFile,
+                runtime,
+                health
+            })
         };
     });
     app.get("/api/v1/auth/operator-session", async (request, reply) => ({
@@ -6853,6 +6934,7 @@ export async function buildServer(options = {}) {
     app.post("/api/v1/mobile/pairing/verify", async (request) => ({
         pairing: verifyCompanionPairing(verifyCompanionPairingSchema.parse(request.body ?? {}))
     }));
+    app.post("/api/v1/mobile/pairing/heartbeat", async (request) => heartbeatCompanionPairing(heartbeatCompanionPairingSchema.parse(request.body ?? {})));
     app.post("/api/v1/mobile/movement/bootstrap", async (request) => {
         const parsed = movementMobileBootstrapSchema.parse(request.body ?? {});
         const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);

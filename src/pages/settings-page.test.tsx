@@ -6,16 +6,20 @@ import {
   waitFor
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Provider } from "react-redux";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { SettingsPage } from "@/pages/settings-page";
 import type { ForgeCustomTheme } from "@/lib/theme-system";
+import { createAppStore } from "@/store/store";
 
 const {
   ensureOperatorSessionMock,
   getCompanionOverviewMock,
   getGamificationAssetStatusMock,
+  getForgeDoctorMock,
   getSettingsMock,
+  applyForgeDoctorFixesMock,
   installGamificationAssetStyleMock,
   patchSettingsMock,
   revokeOperatorSessionMock
@@ -23,7 +27,9 @@ const {
   ensureOperatorSessionMock: vi.fn(),
   getCompanionOverviewMock: vi.fn(),
   getGamificationAssetStatusMock: vi.fn(),
+  getForgeDoctorMock: vi.fn(),
   getSettingsMock: vi.fn(),
+  applyForgeDoctorFixesMock: vi.fn(),
   installGamificationAssetStyleMock: vi.fn(),
   patchSettingsMock: vi.fn(),
   revokeOperatorSessionMock: vi.fn()
@@ -71,7 +77,9 @@ vi.mock("@/lib/api", () => ({
   ensureOperatorSession: ensureOperatorSessionMock,
   getCompanionOverview: getCompanionOverviewMock,
   getGamificationAssetStatus: getGamificationAssetStatusMock,
+  getForgeDoctor: getForgeDoctorMock,
   getSettings: getSettingsMock,
+  applyForgeDoctorFixes: applyForgeDoctorFixesMock,
   installGamificationAssetStyle: installGamificationAssetStyleMock,
   patchSettings: patchSettingsMock,
   revokeOperatorSession: revokeOperatorSessionMock
@@ -84,19 +92,25 @@ function renderSettingsPage() {
       mutations: { retry: false }
     }
   });
+  const store = createAppStore();
 
   render(
-    <QueryClientProvider client={queryClient}>
-      <MemoryRouter>
-        <SettingsPage />
-      </MemoryRouter>
-    </QueryClientProvider>
+    <Provider store={store}>
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <SettingsPage />
+        </MemoryRouter>
+      </QueryClientProvider>
+    </Provider>
   );
+
+  return { store };
 }
 
 describe("SettingsPage theme persistence", () => {
   afterEach(() => {
     cleanup();
+    window.localStorage.clear();
   });
 
   beforeEach(() => {
@@ -205,6 +219,46 @@ describe("SettingsPage theme persistence", () => {
         ]
       }
     });
+    getForgeDoctorMock.mockResolvedValue({
+      doctor: {
+        ok: true,
+        now: "2026-04-09T18:00:00.000Z",
+        integrity: {
+          score: 100,
+          status: "healthy",
+          headline: "All active Doctor consistency checks passed.",
+          lastCheckedAt: "2026-04-09T18:00:00.000Z",
+          issueCount: 0,
+          warningCount: 0,
+          errorCount: 0,
+          topIssues: []
+        },
+        runtime: {},
+        health: {},
+        settingsFile: {
+          path: "/tmp/forge.json",
+          exists: true,
+          valid: true,
+          syncState: "up_to_date",
+          parseError: null,
+          overrideKeys: []
+        },
+        settingsSummary: {
+          themePreference: "obsidian",
+          localePreference: "en",
+          operatorName: "Albert",
+          maxActiveTasks: 2,
+          timeAccountingMode: "split",
+          psycheAuthRequired: false,
+          webAppUrl: "http://127.0.0.1:4317/forge/"
+        },
+        checks: [],
+        issues: [],
+        fixProposals: [],
+        warnings: []
+      }
+    });
+    applyForgeDoctorFixesMock.mockResolvedValue({ results: [] });
     installGamificationAssetStyleMock.mockResolvedValue({
       style: {
         id: "mind-locksmith",
@@ -299,6 +353,15 @@ describe("SettingsPage theme persistence", () => {
     );
   });
 
+  it("shows static mascot and reward art thumbnails for every gamification style", async () => {
+    renderSettingsPage();
+
+    await screen.findByText("Gamification style");
+
+    expect(screen.getAllByAltText(/neutral Forge Smith mascot preview/i)).toHaveLength(3);
+    expect(screen.getAllByAltText(/reward thumbnail/i)).toHaveLength(9);
+  });
+
   it("downloads the selected gamification asset style from settings", async () => {
     renderSettingsPage();
 
@@ -320,6 +383,26 @@ describe("SettingsPage theme persistence", () => {
     );
   });
 
+  it("clears the selected user scope when the operator session is reset", async () => {
+    window.localStorage.setItem(
+      "forge.selected-user-ids",
+      JSON.stringify(["user_previous"])
+    );
+    const { store } = renderSettingsPage();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Reset operator session" })
+    );
+
+    await waitFor(() => expect(revokeOperatorSessionMock).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(store.getState().shell.selectedUserIds).toEqual([])
+    );
+    expect(
+      JSON.parse(window.localStorage.getItem("forge.selected-user-ids") ?? "[]")
+    ).toEqual([]);
+  });
+
   it("promotes the mobile companion card while the bridge is not healthy", async () => {
     renderSettingsPage();
 
@@ -331,28 +414,24 @@ describe("SettingsPage theme persistence", () => {
     );
   });
 
-  it("explains why integrity is below 100", async () => {
+  it("explains Doctor-backed integrity details", async () => {
     renderSettingsPage();
 
     await screen.findByText("Security posture");
     expect(
-      screen.getAllByText(
-        /Forge is holding back 2% because the latest settings and storage audit reported a consistency warning/i
-      ).length
+      screen.getAllByText(/All active Doctor consistency checks passed/i).length
     ).toBeGreaterThan(0);
 
-    const integritySummary = await screen.findByText(/98% integrity/i);
+    const integritySummary = (await screen.findAllByText(/100% integrity/i))[0];
     const integrityDetails = integritySummary.closest("details");
     expect(integrityDetails).not.toHaveAttribute("open");
 
     fireEvent.click(integritySummary);
 
     expect(integrityDetails).toHaveAttribute("open");
-    expect(await screen.findByText("Why this is 98%")).toBeInTheDocument();
+    expect(await screen.findByText("Integrity is complete")).toBeInTheDocument();
     expect(
-      screen.getByText(
-        /The current audit only exposes the aggregate score, so per-check details are not available yet/i
-      )
+      screen.getByText(/No active Doctor warnings are holding back integrity/i)
     ).toBeInTheDocument();
   });
 });

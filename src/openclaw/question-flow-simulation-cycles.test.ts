@@ -137,6 +137,50 @@ describe("question flow simulation cycles", () => {
       "Define the lived signature of dread versus ordinary anxiety."
   };
 
+  const expectedApiPosture: Record<
+    (typeof nonPsycheSections)[number] | (typeof psycheSections)[number],
+    "batch" | "specializedCrud" | "action" | "specializedDomain"
+  > = {
+    Goal: "batch",
+    Project: "batch",
+    Strategy: "batch",
+    Task: "batch",
+    Habit: "batch",
+    Tag: "batch",
+    Note: "batch",
+    "Wiki Page": "specializedCrud",
+    Insight: "batch",
+    "Calendar Event": "batch",
+    "Work Block Template": "batch",
+    "Task Timebox": "batch",
+    "Task Run": "action",
+    "Work Adjustment": "action",
+    "Self Observation": "action",
+    "Sleep Session": "batch",
+    "Workout Session": "batch",
+    "Calendar Connection": "specializedCrud",
+    "Preference Judgment": "action",
+    "Preference Signal": "action",
+    Movement: "specializedDomain",
+    "Life Force": "specializedDomain",
+    Workbench: "specializedDomain",
+    "Preference Catalog": "batch",
+    "Preference Catalog Item": "batch",
+    "Preference Context": "batch",
+    "Preference Item": "batch",
+    "Questionnaire Instrument": "batch",
+    "Questionnaire Run": "action",
+    Value: "batch",
+    "Behavior Pattern": "batch",
+    Behavior: "batch",
+    Belief: "batch",
+    "Mode Profile": "batch",
+    "Mode Guide Session": "batch",
+    "Trigger Report": "batch",
+    "Event Type": "batch",
+    "Emotion Definition": "batch"
+  };
+
   it("cycle 1: every entity flow starts with visible direction instead of field collection", () => {
     expect(entityPlaybook).toMatch(/direction of the intake visible/i);
     expect(entityPlaybook).toMatch(/Opening move recipes/i);
@@ -173,6 +217,9 @@ describe("question flow simulation cycles", () => {
     expect(Object.keys(simulatedUserScenarios).sort()).toEqual(
       [...nonPsycheSections, ...psycheSections].sort()
     );
+    expect(Object.keys(expectedApiPosture).sort()).toEqual(
+      Object.keys(simulatedUserScenarios).sort()
+    );
 
     for (const section of nonPsycheSections) {
       expect(simulatedUserScenarios[section], `${section} scenario`).toMatch(
@@ -194,6 +241,42 @@ describe("question flow simulation cycles", () => {
         sectionSlice,
         `${section} should have therapeutic guidance`
       ).toMatch(/Aim:|Arc:/);
+    }
+  });
+
+  it("cycle 1: every simulated flow has a clear API posture before questioning deepens", () => {
+    expect(entityPlaybook).toMatch(/## Route posture checkpoint/i);
+    expect(entityPlaybook).toMatch(/Every normal entity section below inherits that batch-route default/i);
+    expect(entityPlaybook).toMatch(/specialized CRUD areas/i);
+    expect(entityPlaybook).toMatch(/action workflows/i);
+    expect(entityPlaybook).toMatch(/specialized domain areas/i);
+    expect(psychePlaybook).toMatch(/## Psyche API Posture/i);
+
+    for (const [section, posture] of Object.entries(expectedApiPosture)) {
+      if ((psycheSections as readonly string[]).includes(section)) {
+        const sectionSlice = getSectionSlice(psychePlaybook, section);
+        expect(sectionSlice).toMatch(/Ready to save/i);
+        expect(psychePlaybook).toMatch(/shared batch entity routes[\s\S]*psyche_value[\s\S]*emotion_definition/i);
+        expect(posture, `${section} posture`).toBe("batch");
+        continue;
+      }
+
+      const sectionSlice = getSectionSlice(entityPlaybook, section);
+      if (posture === "specializedDomain") {
+        expect(sectionSlice).toMatch(/Lane-to-route map:/);
+        expect(sectionSlice).toMatch(/dedicated/i);
+        continue;
+      }
+      if (posture === "action") {
+        expect(sectionSlice).toMatch(/action workflow|dedicated|note-backed|task-run tool/i);
+        continue;
+      }
+      if (posture === "specializedCrud") {
+        expect(sectionSlice).toMatch(/specialized CRUD|wiki page|calendar connection/i);
+        continue;
+      }
+      expect(posture, `${section} posture`).toBe("batch");
+      expect(entityPlaybook).toMatch(/shared batch entity routes by default/i);
     }
   });
 

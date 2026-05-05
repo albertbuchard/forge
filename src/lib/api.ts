@@ -83,6 +83,8 @@ import type {
   GamificationCelebration,
   GamificationAssetStatusPayload,
   GamificationEquipment,
+  ForgeDoctorReport,
+  DoctorFixResult,
   SettingsPayload,
   SettingsBinPayload,
   MovementAllTimeData,
@@ -2827,6 +2829,23 @@ export function getSettings() {
   return request<{ settings: SettingsPayload }>("/api/v1/settings");
 }
 
+export function getForgeDoctor() {
+  return request<{ doctor: ForgeDoctorReport }>("/api/v1/doctor");
+}
+
+export function applyForgeDoctorFixes(input: {
+  fixIds?: string[];
+  applyAllSafe?: boolean;
+}) {
+  return request<{
+    results: DoctorFixResult[];
+    doctor: ForgeDoctorReport;
+  }>("/api/v1/doctor/fixes", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
 export function saveAiModelConnection(input: {
   id?: string;
   label: string;
@@ -3805,6 +3824,7 @@ export function patchDataManagementSettings(
   input: Partial<{
     backupDirectory: string;
     backupFrequencyHours: number | null;
+    backupRetentionDays: number | null;
     autoRepairEnabled: boolean;
   }>
 ) {

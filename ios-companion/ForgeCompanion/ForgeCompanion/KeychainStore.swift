@@ -8,7 +8,8 @@ final class KeychainStore {
         self.service = service
     }
 
-    func save(_ data: Data, forKey key: String) {
+    @discardableResult
+    func save(_ data: Data, forKey key: String) -> Bool {
         let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
@@ -21,10 +22,18 @@ final class KeychainStore {
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
             kSecAttrAccount: key,
+            kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
             kSecValueData: data
         ]
 
-        SecItemAdd(attributes as CFDictionary, nil)
+        let status = SecItemAdd(attributes as CFDictionary, nil)
+        if status != errSecSuccess {
+            companionDebugLog(
+                "KeychainStore",
+                "save failed service=\(service) key=\(key) status=\(status)"
+            )
+        }
+        return status == errSecSuccess
     }
 
     func load(forKey key: String) -> Data? {
@@ -39,6 +48,10 @@ final class KeychainStore {
         var item: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         guard status == errSecSuccess else {
+            companionDebugLog(
+                "KeychainStore",
+                "load miss service=\(service) key=\(key) status=\(status)"
+            )
             return nil
         }
         return item as? Data

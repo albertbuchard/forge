@@ -18,6 +18,12 @@ Forge correctly, and gather only the structure that still matters.
 - The first question should usually clarify whether the user is trying to understand,
   preserve, decide, schedule, or change something, not just which field or provider
   they want.
+- Before asking, decide the API posture internally: shared batch entity route,
+  specialized CRUD surface, action workflow, or specialized domain route. If that
+  posture is unclear, ask the one user-facing question that will choose it.
+- Do not let API uncertainty leak out as vague wording. With the user, ask about the
+  real thing: the time window, flow, run, feeling, boundary, owner, or decision that
+  would change the action.
 - First identify the user's job when the lane is not already explicit:
   are they trying to add, update, review, compare, navigate, link, or run something?
 - Before every question, decide the one missing thing you are trying to clarify.
@@ -27,6 +33,9 @@ Forge correctly, and gather only the structure that still matters.
 - Prefer one clean question to a stacked sentence with several asks.
 - Reflect briefly when the user gives meaning, ambivalence, or emotionally loaded
   context that matters to the record.
+- Avoid generic reflections such as "that sounds important" unless you name what is
+  important in plain language. A useful reflection should make the next question feel
+  earned.
 - Especially for goals, habits, notes, and updates, reflect what the user is trying to
   preserve, change, or make true before you ask for structure.
 - For emotionally meaningful non-Psyche records such as goals, habits, notes, and many
@@ -200,6 +209,9 @@ Use this quick split before the conversation gets too detailed.
   `/api/v1/entities/search`, `/api/v1/entities/create`,
   `/api/v1/entities/update`, `/api/v1/entities/delete`, and
   `/api/v1/entities/restore`.
+- Every normal entity section below inherits that batch-route default unless its own
+  route note says otherwise. Do not invent one-off entity endpoints for ordinary
+  stored records.
 - `wiki_page` and `calendar_connection` are specialized CRUD areas. Use the wiki
   page routes and calendar connection setup or sync routes instead of pretending they
   are simple batch records.
@@ -216,6 +228,8 @@ Use this quick split before the conversation gets too detailed.
 - Once the route posture is clear, keep the questioning focused on the missing detail
   that selects the route or payload. Do not ask route-neutral reflective questions
   after the action path is already obvious.
+- If the tool schema and live onboarding disagree about a specialized route key or
+  path, treat that as a contract mismatch to fix. Do not guess a nearby route.
 
 ## Active-listening patterns
 
@@ -314,8 +328,8 @@ exists.
 - If the next answer would not change the route, wording, timing, links, or useful
   interpretation, stop asking and act.
 - Close cleanly:
-  once the user says the wording or route lands, summarize once and move to the read
-  or write.
+  once the user says the wording or next action lands, summarize once and move to the
+  read or write.
 
 When an adjacent record becomes visible:
 
@@ -344,8 +358,10 @@ Use this quick internal check before every follow-up question.
 1. What is the one thing still unknown?
 2. Does that unknown affect the entity shape, the wording, the placement, or the
    operational detail?
-3. What is the smallest question that would answer that unknown?
-4. If the user already gave enough to act, stop asking and move to a short summary or
+3. Does it affect the API posture: batch CRUD, specialized CRUD, action workflow, or
+   specialized domain route?
+4. What is the smallest question that would answer that unknown?
+5. If the user already gave enough to act, stop asking and move to a short summary or
    the write.
 
 Useful calibration heuristics:
@@ -360,6 +376,8 @@ Useful calibration heuristics:
   once and then return to the one missing structural detail.
 - If the next question would only decorate the record and not change its usefulness,
   skip it.
+- If the next question would not change the API path, payload, wording, timing, or
+  useful links, skip it.
 
 ## Abstract And Reusable Record Moves
 
@@ -777,6 +795,8 @@ Routing rule:
   book or article, keep a concept, or build a reusable explanation, consider
   `wiki_page` before `note`. Use `note` for temporary evidence, work logs, or linked
   detail; use `wiki_page` for durable memory.
+- Use the wiki tools and `/api/v1/wiki/pages` family for page reads and writes. Do
+  not route `wiki_page` through batch entity CRUD.
 
 Ready to save when:
 
@@ -922,6 +942,13 @@ Preferred opening question:
 
 - "Which task should I start?"
 
+Route note:
+
+- `task_run` is an action workflow. Start live work with `/api/v1/tasks/:id/runs`.
+  Use `/api/v1/task-runs/:id/heartbeat`, `/focus`, `/complete`, and `/release` for
+  the rest of the run lifecycle. Do not represent live work by only changing task
+  status.
+
 ## Work Adjustment
 
 Aim: correct tracked minutes truthfully without pretending a live run happened.
@@ -938,6 +965,12 @@ Helpful follow-up lanes:
 - what record the correction belongs to
 - whether the adjustment is positive or negative
 - what truthful reason should stay attached to the correction
+
+Route note:
+
+- `work_adjustment` is an action workflow. Use the dedicated work-adjustment tool or
+  `/api/v1/work-adjustments` path after the target and signed minute correction are
+  clear. Do not create a fake task run or invent a standalone batch CRUD entity.
 
 Ready to act when:
 
@@ -987,7 +1020,8 @@ Route note:
 
 - `self_observation` is note-backed. Read the calendar first, then create or update an
   observed `note` with `frontmatter.observedAt` instead of inventing a standalone CRUD
-  write.
+  write. The read path is `/api/v1/psyche/self-observation/calendar`; the stored
+  write is a linked `note` through the shared batch entity route.
 - Do not promote self-observation over functional analysis. If the user is describing
   a loop, use `behavior_pattern`; if they are describing one emotionally meaningful
   episode, use `trigger_report`; if a part-state is central, use `mode_guide_session`
@@ -1076,13 +1110,29 @@ Arc:
    real use case.
 4. Ask only for the next provider-specific step that still matters, such as auth flow,
    label, or calendar selection.
-5. Move into the actual connection flow once the setup goal is clear.
+5. If the user is updating or removing an existing connection, ask which connection
+   and what exact lifecycle action they want before touching credentials or sync.
+6. Move into the actual connection flow once the setup goal is clear.
 
 Helpful follow-up lanes:
 
 - what calendar workflow the user wants to unlock
 - whether writable projection matters
 - whether the provider requires a local sign-in step instead of manual fields
+- whether this is new setup, rediscovery, selected-calendar update, sync, or removal
+
+Route note:
+
+- `calendar_connection` is a specialized CRUD surface, not a batch CRUD entity.
+- Use `GET /api/v1/calendar/connections` to read existing connections.
+- Use `POST /api/v1/calendar/discovery` for Apple or custom CalDAV discovery and
+  `GET /api/v1/calendar/macos-local/discovery` for calendars already configured on
+  this Mac.
+- Use `GET /api/v1/calendar/connections/:id/discovery` before changing selected
+  calendars on an existing connection.
+- Use `POST /api/v1/calendar/connections`, `PATCH /api/v1/calendar/connections/:id`,
+  `POST /api/v1/calendar/connections/:id/sync`, or
+  `DELETE /api/v1/calendar/connections/:id` for the connection lifecycle.
 
 Ready to act when:
 
@@ -1301,6 +1351,9 @@ Lane-to-route map:
 
 Direct action rules:
 
+- In onboarding, this surface may be keyed as `lifeForce` and also as the entity-style
+  alias `life_force`. Treat both names as the same dedicated Life Force route family,
+  not as batch CRUD.
 - If the user is describing a durable baseline such as work capacity, recovery style,
   or action-point assumptions, patch the profile instead of logging a fatigue signal.
 - If the user is describing a repeatable weekday rhythm, update that weekday template
@@ -1566,7 +1619,9 @@ Route note:
 
 - `questionnaire_instrument` is normal stored CRUD for ordinary create, update,
   delete, and search work. Use clone, draft, and publish action routes only when the
-  user is working with instrument version state.
+  user is working with instrument version state. Questionnaire action paths live under
+  `/api/v1/psyche/questionnaires`, including `/:id/clone`, `/:id/draft`, and
+  `/:id/publish`.
 
 Ready to act when:
 
@@ -1599,7 +1654,10 @@ Helpful follow-up lanes:
 Route note:
 
 - `questionnaire_run` is an action workflow. Use the questionnaire run start, read,
-  update, and complete routes instead of treating answers as generic batch CRUD.
+  update, and complete routes instead of treating answers as generic batch CRUD:
+  `/api/v1/psyche/questionnaires/:id/runs`,
+  `/api/v1/psyche/questionnaire-runs/:id`, and
+  `/api/v1/psyche/questionnaire-runs/:id/complete`.
 
 Ready to act when:
 

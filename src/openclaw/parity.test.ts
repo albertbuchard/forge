@@ -59,8 +59,17 @@ describe("forge plugin route parity", () => {
       "GET /api/v1/workbench/flows/:id/nodes/:nodeId/output"
     );
     expect(report.mirrored).toContain("GET /api/v1/calendar/overview");
+    expect(report.mirrored).toContain(
+      "GET /api/v1/calendar/macos-local/discovery"
+    );
+    expect(report.mirrored).toContain("POST /api/v1/calendar/discovery");
     expect(report.mirrored).toContain("GET /api/v1/calendar/connections");
     expect(report.mirrored).toContain("POST /api/v1/calendar/connections");
+    expect(report.mirrored).toContain("PATCH /api/v1/calendar/connections/:id");
+    expect(report.mirrored).toContain("DELETE /api/v1/calendar/connections/:id");
+    expect(report.mirrored).toContain(
+      "GET /api/v1/calendar/connections/:id/discovery"
+    );
     expect(report.mirrored).toContain(
       "POST /api/v1/calendar/connections/:id/sync"
     );
@@ -116,7 +125,13 @@ describe("forge plugin route parity", () => {
       true
     );
     expect(supported.has("GET /api/v1/calendar/overview")).toBe(true);
+    expect(supported.has("GET /api/v1/calendar/macos-local/discovery")).toBe(
+      true
+    );
+    expect(supported.has("POST /api/v1/calendar/discovery")).toBe(true);
     expect(supported.has("POST /api/v1/calendar/connections")).toBe(true);
+    expect(supported.has("PATCH /api/v1/calendar/connections/:id")).toBe(true);
+    expect(supported.has("DELETE /api/v1/calendar/connections/:id")).toBe(true);
     expect(supported.has("POST /api/v1/calendar/timeboxes")).toBe(true);
     expect(supported.has("GET /api/v1/preferences/workspace")).toBe(true);
     expect(supported.has("GET /api/v1/psyche/questionnaires")).toBe(true);

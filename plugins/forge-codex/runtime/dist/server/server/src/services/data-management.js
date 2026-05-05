@@ -84,12 +84,13 @@ function ensureDataManagementSettingsRow() {
         preferred_data_root,
         backup_directory,
         backup_frequency_hours,
+        backup_retention_days,
         auto_repair_enabled,
         last_auto_backup_at,
         last_manual_backup_at,
         created_at,
         updated_at
-      ) VALUES (1, ?, ?, NULL, 1, NULL, NULL, ?, ?)`)
+      ) VALUES (1, ?, ?, NULL, 30, 1, NULL, NULL, ?, ?)`)
         .run(dataRoot, backupDirectory, now, now);
 }
 function readDataManagementSettingsRow() {
@@ -99,6 +100,7 @@ function readDataManagementSettingsRow() {
         preferred_data_root,
         backup_directory,
         backup_frequency_hours,
+        backup_retention_days,
         auto_repair_enabled,
         last_auto_backup_at,
         last_manual_backup_at,
@@ -124,12 +126,13 @@ function writeDataManagementSettingsRow(patch) {
        SET preferred_data_root = ?,
            backup_directory = ?,
            backup_frequency_hours = ?,
+           backup_retention_days = ?,
            auto_repair_enabled = ?,
            last_auto_backup_at = ?,
            last_manual_backup_at = ?,
            updated_at = ?
        WHERE id = 1`)
-        .run(next.preferred_data_root, next.backup_directory, next.backup_frequency_hours, next.auto_repair_enabled, next.last_auto_backup_at, next.last_manual_backup_at, next.updated_at);
+        .run(next.preferred_data_root, next.backup_directory, next.backup_frequency_hours, next.backup_retention_days, next.auto_repair_enabled, next.last_auto_backup_at, next.last_manual_backup_at, next.updated_at);
 }
 function resolveCurrentDataManagementSettings() {
     const row = readDataManagementSettingsRow();
@@ -139,6 +142,7 @@ function resolveCurrentDataManagementSettings() {
         preferredDataRoot,
         backupDirectory,
         backupFrequencyHours: row.backup_frequency_hours,
+        backupRetentionDays: row.backup_retention_days,
         autoRepairEnabled: row.auto_repair_enabled === 1,
         lastAutoBackupAt: row.last_auto_backup_at,
         lastManualBackupAt: row.last_manual_backup_at
@@ -461,11 +465,33 @@ export async function createDataBackup(input = { note: "" }, options = {}) {
         }
         if (mode === "automatic") {
             writeDataManagementSettingsRow({ last_auto_backup_at: createdAt });
+            await pruneExpiredAutomaticBackups(settings.backupDirectory, settings.backupRetentionDays);
         }
         return backup;
     }
     finally {
         await rm(sqliteSnapshot.tempDir, { recursive: true, force: true });
+    }
+}
+async function pruneExpiredAutomaticBackups(backupDirectory, retentionDays) {
+    if (!retentionDays) {
+        return;
+    }
+    const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+    const backups = await listDataBackups();
+    for (const backup of backups) {
+        if (backup.mode !== "automatic") {
+            continue;
+        }
+        if (path.resolve(backup.backupDirectory) !== path.resolve(backupDirectory)) {
+            continue;
+        }
+        const createdAtMs = new Date(backup.createdAt).getTime();
+        if (!Number.isFinite(createdAtMs) || createdAtMs >= cutoff) {
+            continue;
+        }
+        await rm(backup.archivePath, { force: true });
+        await rm(backup.manifestPath, { force: true });
     }
 }
 async function openDatabaseSnapshot(databasePath) {
@@ -643,6 +669,7 @@ export async function switchDataRoot(input, options = {}) {
         preferred_data_root: targetDataRoot,
         backup_directory: nextBackupDirectory,
         backup_frequency_hours: previousSettings.backupFrequencyHours,
+        backup_retention_days: previousSettings.backupRetentionDays,
         auto_repair_enabled: previousSettings.autoRepairEnabled ? 1 : 0
     });
     await (options.persistPreferredDataRoot ?? writeMonorepoPreferredDataRoot)(targetDataRoot);
@@ -697,6 +724,9 @@ export async function updateDataManagementSettings(input) {
             : undefined,
         backup_frequency_hours: parsed.backupFrequencyHours !== undefined
             ? parsed.backupFrequencyHours
+            : undefined,
+        backup_retention_days: parsed.backupRetentionDays !== undefined
+            ? parsed.backupRetentionDays
             : undefined,
         auto_repair_enabled: parsed.autoRepairEnabled !== undefined
             ? parsed.autoRepairEnabled

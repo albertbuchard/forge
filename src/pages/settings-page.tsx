@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { Link } from "react-router-dom";
-import { Check, Download, Info, Sparkles, Trophy } from "lucide-react";
+import { Check, Download, Info, RefreshCw, Sparkles, Stethoscope } from "lucide-react";
 import { ThemeCustomizerDialog } from "@/components/settings/theme-customizer-dialog";
 import { SettingsSectionNav } from "@/components/settings/settings-section-nav";
 import { PageHero } from "@/components/shell/page-hero";
@@ -18,8 +18,7 @@ import {
   getGamificationAssetStatus,
   getSettings,
   installGamificationAssetStyle,
-  patchSettings,
-  revokeOperatorSession
+  patchSettings
 } from "@/lib/api";
 import {
   settingsMutationSchema,
@@ -27,6 +26,8 @@ import {
 } from "@/lib/schemas";
 import {
   gamificationThemeOptions,
+  gamificationPreviewItemKeys,
+  getGamificationThemePreviewItemUrl,
   getGamificationThemePreviewUrl,
   type GamificationThemePreference
 } from "@/lib/gamification-assets";
@@ -37,6 +38,15 @@ import {
   getForgeThemePreview,
   type ForgeThemePreference
 } from "@/lib/theme-system";
+import {
+  forgeApi,
+  useApplyForgeDoctorFixesMutation,
+  useGetForgeDoctorQuery,
+  useRevokeOperatorSessionMutation
+} from "@/store/api/forge-api";
+import { setSelectedUserIds as setSelectedUserIdsAction } from "@/store/slices/shell-slice";
+import { useAppDispatch } from "@/store/typed-hooks";
+import type { DoctorIssue, ForgeDoctorReport } from "@/lib/types";
 
 function ThemePreviewSwatches({
   theme
@@ -70,24 +80,24 @@ function GamificationStylePreview({
       <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/42 to-transparent" />
       <img
         src={getGamificationThemePreviewUrl(theme)}
-        alt=""
-        className="absolute bottom-1 left-1/2 h-[128px] w-[128px] -translate-x-1/2 object-contain drop-shadow-[0_18px_30px_rgba(0,0,0,0.34)]"
+        alt={`${theme} neutral Forge Smith mascot preview`}
+        className="absolute bottom-1 left-1/2 h-[124px] w-[124px] -translate-x-1/2 object-contain drop-shadow-[0_18px_30px_rgba(0,0,0,0.34)]"
       />
       <div className="absolute left-3 top-3 flex items-center gap-2 rounded-full border border-white/10 bg-black/28 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-white/78 backdrop-blur-md">
         <Sparkles className="size-3 text-amber-200" />
         Live rewards
       </div>
       <div className="absolute bottom-3 left-3 flex items-center gap-1.5">
-        {[
-          "item-trophy-xp-levels-the-first-heat",
-          "item-trophy-tasks-anvil-marathon",
-          "item-unlock-streaks-molten-crown-fire"
-        ].map((assetKey) => (
+        {gamificationPreviewItemKeys.map((assetKey) => (
           <span
             key={assetKey}
-            className="grid size-10 place-items-center rounded-[12px] border border-white/12 bg-black/26 shadow-[0_12px_22px_rgba(0,0,0,0.22)] backdrop-blur-md"
+            className="grid size-11 place-items-center overflow-hidden rounded-[12px] border border-white/12 bg-black/26 p-1 shadow-[0_12px_22px_rgba(0,0,0,0.22)] backdrop-blur-md"
           >
-            <Trophy className="size-5 text-amber-100" />
+            <img
+              src={getGamificationThemePreviewItemUrl(theme, assetKey)}
+              alt={`${theme} reward thumbnail`}
+              className="size-full object-contain"
+            />
           </span>
         ))}
       </div>
@@ -139,12 +149,24 @@ function formatAuditDate(value: string) {
 function getIntegrityExplanation({
   integrityScore,
   storageMode,
-  lastAuditAt
+  lastAuditAt,
+  doctor
 }: {
   integrityScore: number;
   storageMode: string;
   lastAuditAt: string;
+  doctor?: ForgeDoctorReport;
 }) {
+  if (doctor) {
+    return [
+      doctor.integrity.headline,
+      doctor.integrity.topIssues.length > 0
+        ? doctor.integrity.topIssues[0].summary
+        : "No active Doctor warnings are holding back integrity.",
+      `Storage mode: ${storageMode}. Latest Doctor run: ${formatAuditDate(doctor.integrity.lastCheckedAt)}.`
+    ];
+  }
+
   if (integrityScore >= 100) {
     return [
       "All currently reported settings and storage checks passed.",
@@ -163,16 +185,20 @@ function getIntegrityExplanation({
 function IntegrityHelpPill({
   integrityScore,
   storageMode,
-  lastAuditAt
+  lastAuditAt,
+  doctor
 }: {
   integrityScore: number;
   storageMode: string;
   lastAuditAt: string;
+  doctor?: ForgeDoctorReport;
 }) {
+  const score = doctor?.integrity.score ?? integrityScore;
   const explanation = getIntegrityExplanation({
     integrityScore,
     storageMode,
-    lastAuditAt
+    lastAuditAt,
+    doctor
   });
 
   return (
@@ -186,16 +212,16 @@ function IntegrityHelpPill({
         }}
       >
         <Info className="size-3.5" aria-hidden="true" />
-        {integrityScore}% integrity
+        {score}% integrity
       </summary>
       <span
         role="tooltip"
         className="absolute right-0 top-[calc(100%+0.55rem)] z-50 hidden w-[min(19rem,calc(100vw-2rem))] rounded-[16px] border border-white/10 bg-[rgba(10,15,27,0.98)] px-3 py-2.5 text-left text-xs leading-5 tracking-normal text-white/70 normal-case shadow-[0_18px_48px_rgba(3,8,18,0.46)] group-open:block"
       >
         <span className="block font-medium text-white/88">
-          {integrityScore >= 100
+          {score >= 100
             ? "Integrity is complete"
-            : `Why this is ${integrityScore}%`}
+            : `Why this is ${score}%`}
         </span>
         {explanation.map((line) => (
           <span key={line} className="mt-1 block">
@@ -210,16 +236,30 @@ function IntegrityHelpPill({
 function SecurityPostureCard({
   integrityScore,
   storageMode,
-  lastAuditAt
+  lastAuditAt,
+  doctor,
+  doctorLoading,
+  onRefreshDoctor,
+  onApplyFix,
+  applyingFixId
 }: {
   integrityScore: number;
   storageMode: string;
   lastAuditAt: string;
+  doctor?: ForgeDoctorReport;
+  doctorLoading: boolean;
+  onRefreshDoctor: () => void;
+  onApplyFix: (fixId: string) => void;
+  applyingFixId?: string;
 }) {
+  const score = doctor?.integrity.score ?? integrityScore;
+  const checkedAt = doctor?.integrity.lastCheckedAt ?? lastAuditAt;
+  const topIssues = doctor?.issues.filter((issue) => issue.severity !== "info").slice(0, 4) ?? [];
   const [primaryExplanation] = getIntegrityExplanation({
     integrityScore,
     storageMode,
-    lastAuditAt
+    lastAuditAt,
+    doctor
   });
 
   return (
@@ -242,6 +282,7 @@ function SecurityPostureCard({
           integrityScore={integrityScore}
           storageMode={storageMode}
           lastAuditAt={lastAuditAt}
+          doctor={doctor}
         />
       </div>
       <div className="mt-3 grid gap-2 md:grid-cols-2">
@@ -252,18 +293,90 @@ function SecurityPostureCard({
           </div>
         </div>
         <div className="rounded-[14px] bg-white/[0.04] px-3 py-3">
-          <div className="text-xs text-white/54">Last audit</div>
+          <div className="text-xs text-white/54">Last Doctor run</div>
           <div className="mt-1 text-base font-medium text-white">
-            {formatAuditDate(lastAuditAt)}
+            {formatAuditDate(checkedAt)}
           </div>
         </div>
+      </div>
+      <div className="mt-3 rounded-[14px] border border-white/8 bg-white/[0.035] p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-sm font-medium text-white">
+            <Stethoscope className="size-4 text-cyan-200" />
+            Forge Doctor
+          </div>
+          <Button
+            type="button"
+            variant="secondary"
+            pending={doctorLoading}
+            onClick={onRefreshDoctor}
+          >
+            <RefreshCw className="size-4" />
+            Run
+          </Button>
+        </div>
+        <div className="mt-2 text-sm leading-6 text-white/58">
+          {doctor
+            ? `${score}% integrity. ${doctor.integrity.headline}`
+            : "Run Doctor to check settings, storage, entities, rewards, and runtime consistency."}
+        </div>
+        {topIssues.length > 0 ? (
+          <div className="mt-3 grid gap-2">
+            {topIssues.map((issue) => (
+              <DoctorIssueRow
+                key={issue.id}
+                issue={issue}
+                applying={applyingFixId === issue.fix?.id}
+                onApplyFix={onApplyFix}
+              />
+            ))}
+          </div>
+        ) : doctor ? (
+          <div className="mt-3 rounded-[12px] border border-emerald-200/12 bg-emerald-300/8 px-3 py-2 text-sm text-emerald-100">
+            No active consistency warnings.
+          </div>
+        ) : null}
       </div>
     </Card>
   );
 }
 
+function DoctorIssueRow({
+  issue,
+  applying,
+  onApplyFix
+}: {
+  issue: DoctorIssue;
+  applying: boolean;
+  onApplyFix: (fixId: string) => void;
+}) {
+  return (
+    <div className="rounded-[12px] border border-white/8 bg-black/12 px-3 py-2">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <div className="text-xs uppercase tracking-[0.14em] text-white/42">
+            {issue.group} / {issue.severity}
+          </div>
+          <div className="mt-1 text-sm text-white/78">{issue.summary}</div>
+        </div>
+        {issue.fix?.kind === "safe_auto_fix" ? (
+          <Button
+            type="button"
+            variant="secondary"
+            pending={applying}
+            onClick={() => onApplyFix(issue.fix!.id)}
+          >
+            Apply fix
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export function SettingsPage() {
   const { t } = useI18n();
+  const dispatch = useAppDispatch();
   const queryClient = useQueryClient();
   const [themeEditorOpen, setThemeEditorOpen] = useState(false);
 
@@ -277,6 +390,9 @@ export function SettingsPage() {
     queryKey: ["forge-settings"],
     queryFn: getSettings,
     enabled: operatorReady
+  });
+  const doctorQuery = useGetForgeDoctorQuery(undefined, {
+    skip: !operatorReady
   });
   const companionOverviewQuery = useQuery({
     queryKey: ["forge-companion-overview"],
@@ -358,13 +474,23 @@ export function SettingsPage() {
     }
   });
 
-  const revokeSessionMutation = useMutation({
-    mutationFn: revokeOperatorSession,
-    onSuccess: async () => {
-      await invalidateSettings();
-      await operatorSessionQuery.refetch();
-    }
-  });
+  const [revokeOperatorSessionMutation, revokeSessionMutation] =
+    useRevokeOperatorSessionMutation();
+  const [applyDoctorFixMutation, applyDoctorFixState] =
+    useApplyForgeDoctorFixesMutation();
+  const [applyingDoctorFixId, setApplyingDoctorFixId] = useState<string>();
+  const resetOperatorSession = async () => {
+    await revokeOperatorSessionMutation().unwrap();
+    dispatch(setSelectedUserIdsAction([]));
+    dispatch(forgeApi.util.resetApiState());
+    queryClient.removeQueries({
+      predicate: (query) => {
+        const [root] = query.queryKey;
+        return typeof root === "string" && root.startsWith("forge-");
+      }
+    });
+    await Promise.all([invalidateSettings(), operatorSessionQuery.refetch()]);
+  };
 
   useEffect(() => {
     if (!settingsQuery.data?.settings) return;
@@ -374,6 +500,7 @@ export function SettingsPage() {
   }, [settingsQuery.data, settingsForm]);
 
   const settings = settingsQuery.data?.settings;
+  const doctor = doctorQuery.data?.doctor;
   const selectedTheme = settingsForm.watch("themePreference");
   const selectedGamificationTheme = settingsForm.watch("gamificationTheme");
   const gamificationAssetStyles =
@@ -384,6 +511,26 @@ export function SettingsPage() {
   const customTheme = settingsForm.watch("customTheme") ?? defaultCustomTheme;
   const hasHealthyMobileCompanion =
     companionOverviewQuery.data?.healthState === "healthy_sync";
+
+  const applyDoctorFix = async (fixId: string) => {
+    if (
+      !window.confirm(
+        "Apply this Forge Doctor fix? Forge will only run the selected safe repair."
+      )
+    ) {
+      return;
+    }
+    setApplyingDoctorFixId(fixId);
+    try {
+      await applyDoctorFixMutation({ fixIds: [fixId] }).unwrap();
+      await Promise.all([
+        settingsQuery.refetch(),
+        doctorQuery.refetch()
+      ]);
+    } finally {
+      setApplyingDoctorFixId(undefined);
+    }
+  };
 
   const saveThemeSelection = async (
     themePreference: ForgeThemePreference,
@@ -509,9 +656,9 @@ export function SettingsPage() {
           <Button
             variant="secondary"
             size="sm"
-            pending={revokeSessionMutation.isPending}
+            pending={revokeSessionMutation.isLoading}
             pendingLabel="Resetting session"
-            onClick={() => void revokeSessionMutation.mutateAsync()}
+            onClick={() => void resetOperatorSession()}
           >
             Reset operator session
           </Button>
@@ -865,6 +1012,11 @@ export function SettingsPage() {
           integrityScore={settings.security.integrityScore}
           storageMode={settings.security.storageMode}
           lastAuditAt={settings.security.lastAuditAt}
+          doctor={doctor}
+          doctorLoading={doctorQuery.isFetching || applyDoctorFixState.isLoading}
+          onRefreshDoctor={() => void doctorQuery.refetch()}
+          onApplyFix={(fixId) => void applyDoctorFix(fixId)}
+          applyingFixId={applyingDoctorFixId}
         />
       </div>
 

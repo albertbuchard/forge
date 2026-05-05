@@ -232,6 +232,20 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
     target: (_match: RegExpMatchArray, url: URL) =>
       passthroughSearch("/api/v1/agents/onboarding", url)
   }),
+  exact("/forge/v1/doctor", {
+    method: "GET",
+    upstreamPath: "/api/v1/doctor",
+    target: (_match: RegExpMatchArray, url: URL) =>
+      passthroughSearch("/api/v1/doctor", url)
+  }),
+  exact("/forge/v1/doctor/fixes", {
+    method: "POST",
+    upstreamPath: "/api/v1/doctor/fixes",
+    requestBody: "json",
+    requiresToken: true,
+    target: (_match: RegExpMatchArray, url: URL) =>
+      passthroughSearch("/api/v1/doctor/fixes", url)
+  }),
   exact("/forge/v1/users/directory", {
     method: "GET",
     upstreamPath: "/api/v1/users/directory",
@@ -678,6 +692,22 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
       },
       {
         method: "GET",
+        pattern: /^\/forge\/v1\/calendar\/macos-local\/discovery$/,
+        upstreamPath: "/api/v1/calendar/macos-local/discovery",
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/calendar/macos-local/discovery", url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/calendar\/discovery$/,
+        upstreamPath: "/api/v1/calendar/discovery",
+        requestBody: "json",
+        requiresToken: true,
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/calendar/discovery", url)
+      },
+      {
+        method: "GET",
         pattern: /^\/forge\/v1\/calendar\/connections$/,
         upstreamPath: "/api/v1/calendar/connections",
         target: (_match: RegExpMatchArray, url: URL) =>
@@ -691,6 +721,34 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
         requiresToken: true,
         target: (_match: RegExpMatchArray, url: URL) =>
           passthroughSearch("/api/v1/calendar/connections", url)
+      },
+      {
+        method: "PATCH",
+        pattern: /^\/forge\/v1\/calendar\/connections\/([^/]+)$/,
+        upstreamPath: "/api/v1/calendar/connections/:id",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/calendar/connections/${match[1]}`, url)
+      },
+      {
+        method: "DELETE",
+        pattern: /^\/forge\/v1\/calendar\/connections\/([^/]+)$/,
+        upstreamPath: "/api/v1/calendar/connections/:id",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/calendar/connections/${match[1]}`, url)
+      },
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/calendar\/connections\/([^/]+)\/discovery$/,
+        upstreamPath: "/api/v1/calendar/connections/:id/discovery",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(
+            `/api/v1/calendar/connections/${match[1]}/discovery`,
+            url
+          )
       },
       {
         method: "POST",
@@ -1363,6 +1421,16 @@ async function runReadOnly(config: ForgePluginConfig, path: string) {
   );
 }
 
+async function runPost(config: ForgePluginConfig, path: string, body: unknown) {
+  return expectForgeSuccess(
+    await callConfiguredForgeApi(config, {
+      method: "POST",
+      path,
+      body
+    })
+  );
+}
+
 export async function runRouteCheck(config: ForgePluginConfig) {
   const openapi = await runReadOnly(config, "/api/v1/openapi.json");
   const pathMap =
@@ -1467,6 +1535,48 @@ export async function runDoctor(config: ForgePluginConfig) {
   };
 }
 
+export async function applyDoctorFixes(
+  config: ForgePluginConfig,
+  input: { fixIds?: string[]; applyAllSafe?: boolean }
+) {
+  return runPost(config, "/api/v1/doctor/fixes", input);
+}
+
+function getSafeDoctorFixIds(doctor: Record<string, unknown>) {
+  const issues = Array.isArray(doctor.issues) ? doctor.issues : [];
+  return issues
+    .map((issue) =>
+      typeof issue === "object" &&
+      issue !== null &&
+      "fix" in issue &&
+      typeof issue.fix === "object" &&
+      issue.fix !== null &&
+      (issue.fix as Record<string, unknown>).kind === "safe_auto_fix" &&
+      typeof (issue.fix as Record<string, unknown>).id === "string"
+        ? ((issue.fix as Record<string, unknown>).id as string)
+        : null
+    )
+    .filter((fixId): fixId is string => Boolean(fixId));
+}
+
+function formatDoctorSummary(doctor: Record<string, unknown>) {
+  const integrity =
+    typeof doctor.integrity === "object" && doctor.integrity !== null
+      ? (doctor.integrity as Record<string, unknown>)
+      : {};
+  const issues = Array.isArray(doctor.issues) ? doctor.issues : [];
+  const warnings = Array.isArray(doctor.warnings) ? doctor.warnings : [];
+  const lines = [
+    `Forge Doctor: ${doctor.ok === true ? "ok" : "attention needed"}`,
+    `Integrity: ${typeof integrity.score === "number" ? integrity.score : "unknown"}%`,
+    typeof integrity.headline === "string" ? integrity.headline : null,
+    `Issues: ${issues.length}`,
+    warnings.length > 0 ? "" : null,
+    ...warnings.slice(0, 8).map((warning) => `- ${String(warning)}`)
+  ].filter((line): line is string => line !== null);
+  return lines.join("\n");
+}
+
 export function registerForgePluginCli(
   api: ForgePluginCliApi,
   config: ForgePluginConfig
@@ -1541,9 +1651,40 @@ export function registerForgePluginCli(
         });
       command
         .command("doctor")
-        .description("Run plugin connectivity and curated route diagnostics")
-        .action(async () => {
-          console.log(JSON.stringify(await runDoctor(config), null, 2));
+        .description("Run Forge Doctor diagnostics")
+        .option("--json", "Print the full machine-readable Doctor payload")
+        .option("--fix", "Apply safe Doctor fixes after diagnostics")
+        .action(async (rawOptions?: unknown) => {
+          const options = (rawOptions ?? {}) as {
+            json?: boolean;
+            fix?: boolean;
+          };
+          const doctor = (await runDoctor(config)) as Record<string, unknown>;
+          if (options.fix) {
+            const fixIds = getSafeDoctorFixIds(doctor);
+            if (fixIds.length > 0) {
+              const fixResult = await applyDoctorFixes(config, { fixIds });
+              const refreshedDoctor = (await runDoctor(config)) as Record<
+                string,
+                unknown
+              >;
+              const payload = {
+                doctor: refreshedDoctor,
+                fixResult
+              };
+              console.log(
+                options.json
+                  ? JSON.stringify(payload, null, 2)
+                  : `${formatDoctorSummary(refreshedDoctor)}\n\nApplied fixes: ${fixIds.join(", ")}`
+              );
+              return;
+            }
+          }
+          console.log(
+            options.json
+              ? JSON.stringify(doctor, null, 2)
+              : formatDoctorSummary(doctor)
+          );
         });
       command
         .command("route-check")

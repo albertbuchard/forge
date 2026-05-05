@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { buildServer } from "./app.js";
-import { closeDatabase } from "./db.js";
+import { closeDatabase, getDatabase } from "./db.js";
 
 async function issueOperatorSessionCookie(
   app: Awaited<ReturnType<typeof buildServer>>
@@ -261,6 +261,77 @@ test("doctor reports invalid forge.json files and keeps the database-backed sett
         warning.includes("forge.json is invalid")
       )
     );
+    assert.ok(
+      (doctorBody.doctor as { issues: Array<{ id: string; summary: string }> })
+        .issues.some((issue) => issue.id === "settings.file.valid")
+    );
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("doctor exposes explicit integrity details and safe fix application", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-doctor-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const doctorResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/doctor",
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(doctorResponse.statusCode, 200);
+    const doctorBody = doctorResponse.json() as {
+      doctor: {
+        integrity: { score: number; headline: string };
+        checks: Array<{ id: string; status: string }>;
+        fixProposals: Array<{ id: string; kind: string }>;
+      };
+    };
+    assert.equal(typeof doctorBody.doctor.integrity.score, "number");
+    assert.match(doctorBody.doctor.integrity.headline, /Doctor|consistency/i);
+    assert.ok(
+      doctorBody.doctor.checks.some(
+        (check) => check.id === "storage.sqlite.integrity"
+      )
+    );
+    assert.ok(
+      doctorBody.doctor.fixProposals.some(
+        (fix) => fix.id === "settings.integrity.refresh"
+      )
+    );
+
+    getDatabase()
+      .prepare("UPDATE app_settings SET integrity_score = 98 WHERE id = 1")
+      .run();
+    const fixResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/doctor/fixes",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        fixIds: ["settings.integrity.refresh"]
+      }
+    });
+    assert.equal(fixResponse.statusCode, 200);
+    const fixBody = fixResponse.json() as {
+      results: Array<{ fixId: string; status: string }>;
+    };
+    assert.deepEqual(fixBody.results[0], {
+      fixId: "settings.integrity.refresh",
+      status: "applied",
+      summary: "Stored Settings integrity audit timestamp was refreshed."
+    });
+    const settingsRow = getDatabase()
+      .prepare("SELECT integrity_score AS score FROM app_settings WHERE id = 1")
+      .get() as { score: number };
+    assert.equal(settingsRow.score, 100);
   } finally {
     await app.close();
     closeDatabase();

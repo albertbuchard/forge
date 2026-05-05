@@ -277,6 +277,99 @@ test("verified companion pairings are promoted to a long-lived device session", 
   }
 });
 
+test("companion pairing heartbeat refreshes last seen and preserves the stored device session", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-companion-heartbeat-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: {
+        userId: "user_operator"
+      }
+    });
+    assert.equal(createResponse.statusCode, 201);
+    const created = createResponse.json() as {
+      qrPayload: {
+        sessionId: string;
+        pairingToken: string;
+        expiresAt: string;
+      };
+    };
+
+    const verifyResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/pairing/verify",
+      payload: {
+        sessionId: created.qrPayload.sessionId,
+        pairingToken: created.qrPayload.pairingToken,
+        device: {
+          name: "Omar iPhone",
+          platform: "ios",
+          appVersion: "1.0",
+          sourceDevice: "iPhone"
+        }
+      }
+    });
+    assert.equal(verifyResponse.statusCode, 200);
+
+    getDatabase()
+      .prepare(
+        `UPDATE companion_pairing_sessions
+         SET last_seen_at = NULL,
+             expires_at = ?
+         WHERE id = ?`
+      )
+      .run(
+        new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+        created.qrPayload.sessionId
+      );
+
+    const heartbeatResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/pairing/heartbeat",
+      payload: {
+        sessionId: created.qrPayload.sessionId,
+        pairingToken: created.qrPayload.pairingToken,
+        device: {
+          name: "Omar iPhone",
+          platform: "ios",
+          appVersion: "1.1",
+          sourceDevice: "iPhone"
+        }
+      }
+    });
+    assert.equal(heartbeatResponse.statusCode, 200);
+    const heartbeatBody = heartbeatResponse.json() as {
+      pairingSession: {
+        id: string;
+        status: string;
+        lastSeenAt: string | null;
+        expiresAt: string;
+        appVersion: string | null;
+      };
+    };
+
+    assert.equal(heartbeatBody.pairingSession.id, created.qrPayload.sessionId);
+    assert.equal(heartbeatBody.pairingSession.status, "paired");
+    assert.ok(heartbeatBody.pairingSession.lastSeenAt);
+    assert.equal(heartbeatBody.pairingSession.appVersion, "1.1");
+    assert.ok(
+      Date.parse(heartbeatBody.pairingSession.expiresAt) >
+        Date.now() + 365 * 24 * 60 * 60 * 1000
+    );
+  } finally {
+    await app.close();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("companion source routes reconcile desired and applied state and reject invalid source params", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-companion-source-state-")
@@ -8444,6 +8537,87 @@ test("command-center context exposes derived achievements and milestone rewards"
   }
 });
 
+test("gamification streak counts created Forge entities as XP activity with a next-day grace window", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-entity-streak-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const database = getDatabase();
+    const staleIso = "2000-01-01T12:00:00.000Z";
+    for (const table of [
+      "goals",
+      "projects",
+      "strategies",
+      "tasks",
+      "habits",
+      "notes",
+      "tags",
+      "calendar_events",
+      "work_block_templates",
+      "task_timeboxes",
+      "questionnaire_instruments",
+      "psyche_values",
+      "behavior_patterns",
+      "psyche_behaviors",
+      "belief_entries",
+      "mode_profiles",
+      "trigger_reports"
+    ]) {
+      database.prepare(`UPDATE ${table} SET created_at = ?`).run(staleIso);
+    }
+    database.prepare(`UPDATE reward_ledger SET created_at = ?`).run(staleIso);
+    database.prepare(`DELETE FROM gamification_daily_activity`).run();
+
+    const taskRows = database
+      .prepare(`SELECT id FROM tasks ORDER BY id ASC LIMIT 3`)
+      .all() as Array<{ id: string }>;
+    assert.equal(taskRows.length, 3);
+    const taskRewardGroups = taskRows.map(
+      (row) => `entity_created:task:${row.id}`
+    );
+    for (const [index, row] of taskRows.entries()) {
+      const createdAt = new Date();
+      createdAt.setDate(createdAt.getDate() - (index + 1));
+      createdAt.setHours(12, 0, 0, 0);
+      database
+        .prepare(`UPDATE tasks SET created_at = ?, updated_at = ? WHERE id = ?`)
+        .run(createdAt.toISOString(), createdAt.toISOString(), row.id);
+    }
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/context"
+    });
+    assert.equal(response.statusCode, 200);
+    const body = response.json() as {
+      metrics: { streakDays: number; totalXp: number };
+    };
+    assert.equal(body.metrics.streakDays, 3);
+
+    const rewardRows = database
+      .prepare(
+        `SELECT reversible_group, delta_xp
+         FROM reward_ledger
+         WHERE reversible_group IN (${taskRewardGroups.map(() => "?").join(", ")})`
+      )
+      .all(...taskRewardGroups) as Array<{
+      reversible_group: string;
+      delta_xp: number;
+    }>;
+    assert.equal(rewardRows.length, 3);
+    assert.equal(
+      rewardRows.reduce((sum, row) => sum + row.delta_xp, 0),
+      6
+    );
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("command-center context exposes first-class projects across dashboard and overview", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-project-snapshot-")
@@ -9754,8 +9928,8 @@ test("misaligned habit penalties do not break the context payload", async () => 
       };
     };
     assert.equal(checkInBody.habit.checkIns[0]?.deltaXp, -11);
-    assert.equal(checkInBody.metrics.profile.totalXp, 0);
-    assert.equal(checkInBody.metrics.profile.weeklyXp, 0);
+    assert.equal(checkInBody.metrics.profile.totalXp, 11);
+    assert.equal(checkInBody.metrics.profile.weeklyXp, 11);
     assert.ok(
       checkInBody.metrics.recentLedger.some(
         (entry) =>
@@ -9778,8 +9952,8 @@ test("misaligned habit penalties do not break the context payload", async () => 
         weeklyXp: number;
       };
     };
-    assert.equal(contextBody.metrics.totalXp, 0);
-    assert.equal(contextBody.metrics.weeklyXp, 0);
+    assert.equal(contextBody.metrics.totalXp, 11);
+    assert.equal(contextBody.metrics.weeklyXp, 11);
   } finally {
     await app.close();
     closeDatabase();

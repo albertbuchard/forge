@@ -11,7 +11,7 @@ struct ForgeSyncClient {
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.timeoutIntervalForRequest = 12
         configuration.timeoutIntervalForResource = 20
-        configuration.waitsForConnectivity = false
+        configuration.waitsForConnectivity = true
         return URLSession(configuration: configuration)
     }()
 
@@ -38,6 +38,24 @@ struct ForgeSyncClient {
         let sessionId: String
         let pairingToken: String
         let device: CompanionSyncPayload.Device
+    }
+
+    private struct PairingVerificationEnvelope: Decodable {
+        let pairing: PairingVerificationResult
+    }
+
+    private struct PairingVerificationResult: Decodable {
+        let pairingSession: CompanionPairingSessionState
+    }
+
+    private struct PairingHeartbeatRequest: Encodable {
+        let sessionId: String
+        let pairingToken: String
+        let device: CompanionSyncPayload.Device
+    }
+
+    private struct PairingHeartbeatEnvelope: Decodable {
+        let pairingSession: CompanionPairingSessionState
     }
 
     private struct MovementBootstrapRequest: Encodable {
@@ -223,32 +241,45 @@ struct ForgeSyncClient {
         let details: [ValidationIssue]?
     }
 
-    func verifyPairing(payload: PairingPayload, apiBaseUrl: String) async throws {
+    func verifyPairing(payload: PairingPayload, apiBaseUrl: String) async throws -> CompanionPairingSessionState {
         companionDebugLog(
             "ForgeSyncClient",
             "verifyPairing start session=\(payload.sessionId) apiBaseUrl=\(apiBaseUrl)"
         )
-        let currentDevice = await MainActor.run {
-            CompanionSyncPayload.Device(
-                name: UIDevice.current.name,
-                platform: "ios",
-                appVersion: Bundle.main.object(
-                    forInfoDictionaryKey: "CFBundleShortVersionString"
-                ) as? String ?? "1.0",
-                sourceDevice: UIDevice.current.model
-            )
-        }
+        let currentDevice = await currentDeviceDescriptor()
         let requestBody = PairingVerificationRequest(
             sessionId: payload.sessionId,
             pairingToken: payload.pairingToken,
             device: currentDevice
         )
-        _ = try await sendRequest(
+        let envelope: PairingVerificationEnvelope = try await sendRequest(
             path: "/mobile/pairing/verify",
             apiBaseUrl: apiBaseUrl,
             body: requestBody
-        ) as EmptyEnvelope
+        )
         companionDebugLog("ForgeSyncClient", "verifyPairing success session=\(payload.sessionId)")
+        return envelope.pairing.pairingSession
+    }
+
+    func heartbeatPairing(payload: PairingPayload, apiBaseUrl: String) async throws -> CompanionPairingSessionState {
+        companionDebugLog(
+            "ForgeSyncClient",
+            "heartbeatPairing start session=\(payload.sessionId) apiBaseUrl=\(apiBaseUrl)"
+        )
+        let envelope: PairingHeartbeatEnvelope = try await sendRequest(
+            path: "/mobile/pairing/heartbeat",
+            apiBaseUrl: apiBaseUrl,
+            body: PairingHeartbeatRequest(
+                sessionId: payload.sessionId,
+                pairingToken: payload.pairingToken,
+                device: await currentDeviceDescriptor()
+            )
+        )
+        companionDebugLog(
+            "ForgeSyncClient",
+            "heartbeatPairing success session=\(payload.sessionId) status=\(envelope.pairingSession.status)"
+        )
+        return envelope.pairingSession
     }
 
     func bootstrapPairingSession(
@@ -679,7 +710,7 @@ struct ForgeSyncClient {
         apiBaseUrl: String,
         method: String = "POST",
         body: Body,
-        session: URLSession = .shared
+        session: URLSession? = nil
     ) async throws -> Response {
         guard let url = URL(string: "\(apiBaseUrl)\(path)") else {
             companionDebugLog(
@@ -700,7 +731,7 @@ struct ForgeSyncClient {
             "ForgeSyncClient",
             "sendRequest start method=\(method) url=\(url.absoluteString) bodyBytes=\(request.httpBody?.count ?? 0)"
         )
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await (session ?? Self.bootstrapSession).data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             companionDebugLog("ForgeSyncClient", "sendRequest badServerResponse url=\(url.absoluteString)")
             throw URLError(.badServerResponse)
@@ -746,6 +777,19 @@ struct ForgeSyncClient {
         return Self.bootstrapSession
     }
 
+    private func currentDeviceDescriptor() async -> CompanionSyncPayload.Device {
+        await MainActor.run {
+            CompanionSyncPayload.Device(
+                name: UIDevice.current.name,
+                platform: "ios",
+                appVersion: Bundle.main.object(
+                    forInfoDictionaryKey: "CFBundleShortVersionString"
+                ) as? String ?? "1.0",
+                sourceDevice: UIDevice.current.model
+            )
+        }
+    }
+
     private func normalizedApiBaseUrl(from rawValue: String) -> String {
         guard let url = URL(string: rawValue) else {
             companionDebugLog("ForgeSyncClient", "normalizedApiBaseUrl passthrough raw=\(rawValue)")
@@ -779,5 +823,3 @@ struct ForgeSyncClient {
         return normalized
     }
 }
-
-private struct EmptyEnvelope: Decodable {}

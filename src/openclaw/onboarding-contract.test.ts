@@ -72,12 +72,14 @@ async function loadOnboardingPayload() {
     }>;
     entityRouteModel: {
       batchCrudEntities: string[];
+      batchRoutes: Record<string, string>;
       specializedCrudEntities: Record<string, Record<string, string>>;
       actionEntities: Record<string, Record<string, unknown>>;
       specializedDomainSurfaces: Record<
         string,
         {
           classification?: string;
+          aliases?: string[];
           readRoutes: Record<string, string>;
           writeRoutes: Record<string, string>;
           routeSelectionQuestions?: string[];
@@ -284,7 +286,12 @@ describe("forge onboarding contract", () => {
     expect(routeModel.specializedCrudEntities.calendar_connection).toEqual(
       expect.objectContaining({
         create: "/api/v1/calendar/connections",
-        update: "/api/v1/calendar/connections/:id"
+        discover: "/api/v1/calendar/discovery",
+        discoverMacOSLocal: "/api/v1/calendar/macos-local/discovery",
+        rediscover: "/api/v1/calendar/connections/:id/discovery",
+        update: "/api/v1/calendar/connections/:id",
+        sync: "/api/v1/calendar/connections/:id/sync",
+        delete: "/api/v1/calendar/connections/:id"
       })
     );
 
@@ -371,6 +378,9 @@ describe("forge onboarding contract", () => {
         overview: "/api/v1/life-force"
       })
     );
+    expect(routeModel.specializedDomainSurfaces.lifeForce.aliases).toEqual(
+      expect.arrayContaining(["life_force", "life-force", "Life Force"])
+    );
     expect(routeModel.specializedDomainSurfaces.lifeForce.classification).toBe(
       "specialized_domain_surface"
     );
@@ -389,6 +399,20 @@ describe("forge onboarding contract", () => {
           /overview, change durable profile assumptions, change a weekday curve, or log a right-now fatigue signal/i
         )
       ])
+    );
+    expect(routeModel.specializedDomainSurfaces.life_force).toEqual(
+      expect.objectContaining({
+        classification: "specialized_domain_surface",
+        aliases: expect.arrayContaining(["lifeForce", "life-force", "Life Force"]),
+        readRoutes: expect.objectContaining({
+          overview: "/api/v1/life-force"
+        }),
+        writeRoutes: expect.objectContaining({
+          profile: "/api/v1/life-force/profile",
+          weekdayTemplate: "/api/v1/life-force/templates/:weekday",
+          fatigueSignal: "/api/v1/life-force/fatigue-signals"
+        })
+      })
     );
 
     expect(routeModel.specializedDomainSurfaces.workbench.readRoutes).toEqual(
@@ -410,7 +434,8 @@ describe("forge onboarding contract", () => {
         updateFlow: "/api/v1/workbench/flows/:id",
         deleteFlow: "/api/v1/workbench/flows/:id",
         runFlow: "/api/v1/workbench/flows/:id/run",
-        runByPayload: "/api/v1/workbench/run"
+        runByPayload: "/api/v1/workbench/run",
+        chatFlow: "/api/v1/workbench/flows/:id/chat"
       })
     );
     expect(
@@ -418,7 +443,7 @@ describe("forge onboarding contract", () => {
     ).toEqual(
       expect.arrayContaining([
         expect.stringMatching(
-          /flow discovery, flow editing, execution, published output, run detail, node result, latest node output/i
+          /flow discovery, flow editing, execution, run history, published output, run detail, node result, latest node output/i
         )
       ])
     );
@@ -491,10 +516,10 @@ describe("forge onboarding contract", () => {
       expect.objectContaining({
         classification: "specialized_crud_entity",
         preferredMutationPath:
-          "Use /api/v1/calendar/connections plus provider-specific setup flows.",
+          "Use /api/v1/calendar/discovery or /api/v1/calendar/macos-local/discovery before setup when needed; use /api/v1/calendar/connections with POST, PATCH, DELETE, rediscovery, and sync for connection lifecycle work.",
         preferredReadPath: "/api/v1/calendar/connections",
         preferredMutationTool:
-          "forge_connect_calendar_provider | forge_sync_calendar_connection"
+          "forge_connect_calendar_provider | forge_sync_calendar_connection | mirrored calendar connection routes"
       })
     );
 
@@ -779,8 +804,14 @@ describe("forge onboarding contract", () => {
       /run summary, one node result, the latest node output, or the published output/i
     );
 
+    expect(psycheByFocus.get("psyche_value")?.askSequence.join(" ")).toMatch(
+      /ordinary recent moment[\s\S]*Reflect the direction/i
+    );
     expect(psycheByFocus.get("belief_entry")?.askSequence.join(" ")).toMatch(
-      /own words|belief sentence/i
+      /recent moment[\s\S]*own words[\s\S]*after the sentence lands/i
+    );
+    expect(psycheByFocus.get("belief_entry")?.askSequence.join(" ")).toMatch(
+      /Explore evidence, origin, and a flexible alternative only if/i
     );
     expect(psycheByFocus.get("behavior_pattern")?.notes.join(" ")).toMatch(
       /Before you ask how to change the loop, ask what it is protecting/i
@@ -791,11 +822,23 @@ describe("forge onboarding contract", () => {
     expect(psycheByFocus.get("belief_entry")?.notes.join(" ")).toMatch(
       /rule or prediction[\s\S]*invite correction/i
     );
+    expect(psycheByFocus.get("belief_entry")?.notes.join(" ")).toMatch(
+      /Do not rush to confidence, evidence, or flexible alternatives/i
+    );
     expect(psycheByFocus.get("mode_profile")?.notes.join(" ")).toMatch(
       /protective job, fear, or burden/i
     );
+    expect(psycheByFocus.get("mode_profile")?.notes.join(" ")).toMatch(
+      /Do not start by asking for the mode family/i
+    );
     expect(psycheByFocus.get("mode_guide_session")?.notes.join(" ")).toMatch(
       /exploration worksheet|interpretations tentative/i
+    );
+    expect(psycheByFocus.get("trigger_report")?.askSequence.join(" ")).toMatch(
+      /felt stake[\s\S]*situation, emotion, meaning, behavior, and consequence/i
+    );
+    expect(psycheByFocus.get("trigger_report")?.notes.join(" ")).toMatch(
+      /worksheet dump[\s\S]*felt stake/i
     );
     expect(psycheByFocus.get("event_type")?.askSequence.join(" ")).toMatch(
       /repeated emotional or relational stake/i
@@ -827,6 +870,19 @@ describe("forge onboarding contract", () => {
     const specializedSurfaceSchema =
       routeModelSchema?.properties?.specializedDomainSurfaces
         ?.additionalProperties;
+    expect(openapiSchemas?.CalendarConnection?.properties?.provider).toEqual(
+      expect.objectContaining({
+        enum: expect.arrayContaining(["microsoft", "macos_local"])
+      })
+    );
+    expect(openApiPaths.has("/api/v1/calendar/discovery")).toBe(true);
+    expect(openApiPaths.has("/api/v1/calendar/macos-local/discovery")).toBe(
+      true
+    );
+    expect(openApiPaths.has("/api/v1/calendar/connections/{id}")).toBe(true);
+    expect(
+      openApiPaths.has("/api/v1/calendar/connections/{id}/discovery")
+    ).toBe(true);
 
     for (const schema of [psychePlaybookSchema, entityPlaybookSchema]) {
       expect(schema).toEqual(
@@ -846,6 +902,7 @@ describe("forge onboarding contract", () => {
         additionalProperties: false,
         required: expect.arrayContaining([
           "classification",
+          "aliases",
           "summary",
           "readRoutes",
           "writeRoutes",
@@ -855,6 +912,9 @@ describe("forge onboarding contract", () => {
         properties: expect.objectContaining({
           classification: expect.objectContaining({
             enum: ["specialized_domain_surface"]
+          }),
+          aliases: expect.objectContaining({
+            type: "array"
           }),
           readRoutes: expect.objectContaining({
             additionalProperties: { type: "string" }
@@ -879,6 +939,15 @@ describe("forge onboarding contract", () => {
       })
     );
 
+    for (const [routeName, route] of Object.entries(
+      onboarding.entityRouteModel.batchRoutes
+    )) {
+      expect(
+        openApiPaths.has(normalizeRouteTemplate(route)),
+        `batch ${routeName} route ${route} should exist in OpenAPI`
+      ).toBe(true);
+    }
+
     for (const [surfaceName, surface] of Object.entries(
       onboarding.entityRouteModel.specializedDomainSurfaces
     )) {
@@ -891,6 +960,17 @@ describe("forge onboarding contract", () => {
         expect(
           openApiPaths.has(normalizeRouteTemplate(route)),
           `${surfaceName}.${routeName} should exist in OpenAPI`
+        ).toBe(true);
+      }
+    }
+
+    for (const [entityName, routeMap] of Object.entries(
+      onboarding.entityRouteModel.specializedCrudEntities
+    )) {
+      for (const route of collectRouteStrings(routeMap)) {
+        expect(
+          openApiPaths.has(normalizeRouteTemplate(route)),
+          `${entityName} specialized CRUD route ${route} should exist in OpenAPI`
         ).toBe(true);
       }
     }

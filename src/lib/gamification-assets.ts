@@ -25,6 +25,12 @@ export type GamificationThemePreference =
 export const defaultGamificationTheme: GamificationThemePreference =
   "dramatic-smithie";
 
+export const gamificationPreviewItemKeys = [
+  "item-trophy-xp-levels-the-first-heat",
+  "item-trophy-tasks-anvil-marathon",
+  "item-unlock-streaks-molten-crown-fire"
+] as const;
+
 export function normalizeGamificationTheme(
   value: string | null | undefined
 ): GamificationThemePreference {
@@ -57,6 +63,16 @@ export function getGamificationThemePreviewUrl(
   const normalizedBase = base.endsWith("/") ? base : `${base}/`;
   const normalizedTheme = normalizeGamificationTheme(theme);
   return `${normalizedBase}gamification-previews/${normalizedTheme}-mascot.webp`;
+}
+
+export function getGamificationThemePreviewItemUrl(
+  theme: GamificationThemePreference,
+  assetKey: (typeof gamificationPreviewItemKeys)[number]
+) {
+  const base = import.meta.env.BASE_URL || "/";
+  const normalizedBase = base.endsWith("/") ? base : `${base}/`;
+  const normalizedTheme = normalizeGamificationTheme(theme);
+  return `${normalizedBase}gamification-previews/${normalizedTheme}-${assetKey}.webp`;
 }
 
 export function getGamificationPngUrl(

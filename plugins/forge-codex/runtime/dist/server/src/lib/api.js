@@ -1515,6 +1515,15 @@ export function getOperatorOverview() {
 export function getSettings() {
     return request("/api/v1/settings");
 }
+export function getForgeDoctor() {
+    return request("/api/v1/doctor");
+}
+export function applyForgeDoctorFixes(input) {
+    return request("/api/v1/doctor/fixes", {
+        method: "POST",
+        body: JSON.stringify(input)
+    });
+}
 export function saveAiModelConnection(input) {
     return request("/api/v1/settings/models/connections", {
         method: "POST",

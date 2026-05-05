@@ -19,4 +19,18 @@ describe("gamification catalog", () => {
       assetKeys.add(item.assetKey);
     }
   });
+
+  it("keeps Schema Bell gated behind 40 completed questionnaire runs", () => {
+    const schemaBell = GAMIFICATION_CATALOG.find(
+      (item) => item.title === "Schema Bell"
+    );
+
+    expect(schemaBell).toMatchObject({
+      requirement: {
+        metric: "questionnaireRunCount",
+        threshold: 40
+      },
+      requirementText: "Complete 40 questionnaire runs."
+    });
+  });
 });

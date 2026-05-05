@@ -75,6 +75,7 @@ export const dataManagementSettingsSchema = z.object({
     preferredDataRoot: z.string(),
     backupDirectory: z.string(),
     backupFrequencyHours: z.number().int().positive().nullable(),
+    backupRetentionDays: z.number().int().positive().nullable(),
     autoRepairEnabled: z.boolean(),
     lastAutoBackupAt: z.string().nullable(),
     lastManualBackupAt: z.string().nullable()
@@ -89,6 +90,7 @@ export const dataManagementStateSchema = z.object({
 export const updateDataManagementSettingsSchema = z.object({
     backupDirectory: z.string().trim().optional(),
     backupFrequencyHours: z.number().int().positive().nullable().optional(),
+    backupRetentionDays: z.number().int().positive().nullable().optional(),
     autoRepairEnabled: z.boolean().optional()
 });
 export const createDataBackupSchema = z.object({

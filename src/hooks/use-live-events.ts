@@ -15,6 +15,7 @@ export function useLiveEvents() {
           "OperatorSession",
           "Settings",
           "Snapshot",
+          "Gamification",
           "Sleep",
           "Psyche",
           "WikiIngestJobs"

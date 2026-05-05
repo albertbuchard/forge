@@ -428,12 +428,18 @@ function withQueryParams(
 }
 
 function buildRouteKeySchema(routeSpecs: Record<string, SpecializedRouteSpec>) {
+  const routeGuide = Object.entries(routeSpecs)
+    .map(([routeKey, spec]) => `${routeKey}: ${spec.method} ${spec.path}`)
+    .join("; ");
   return Type.Union(
     Object.keys(routeSpecs).map((routeKey) => Type.Literal(routeKey)) as [
       ReturnType<typeof Type.Literal>,
       ReturnType<typeof Type.Literal>,
       ...Array<ReturnType<typeof Type.Literal>>
-    ]
+    ],
+    {
+      description: `Dedicated route key. Exact routes: ${routeGuide}. For any :placeholder shown in a route, fill pathParams with that exact placeholder name; do not put raw paths or ids into routeKey.`
+    }
   );
 }
 
@@ -442,9 +448,24 @@ function specializedRouteParametersSchema(
 ) {
   return Type.Object({
     routeKey: buildRouteKeySchema(routeSpecs),
-    pathParams: Type.Optional(Type.Record(Type.String(), Type.String())),
-    query: Type.Optional(Type.Record(Type.String(), Type.Any())),
-    body: Type.Optional(Type.Any())
+    pathParams: Type.Optional(
+      Type.Record(Type.String(), Type.String(), {
+        description:
+          "Path parameters required by the selected route key. Use the exact :placeholder names shown in the routeKey description, such as id, weekday, slug, runId, nodeId, or pointId."
+      })
+    ),
+    query: Type.Optional(
+      Type.Record(Type.String(), Type.Any(), {
+        description:
+          "Optional query parameters for the selected dedicated route."
+      })
+    ),
+    body: Type.Optional(
+      Type.Any({
+        description:
+          "JSON body for POST, PATCH, and PUT route keys. Omit for GET and DELETE route keys."
+      })
+    )
   });
 }
 
@@ -632,6 +653,27 @@ export function registerForgePluginTools(
     description:
       "Fetch the live Forge onboarding contract with the exact Forge tool list, batch payload rules, UI handoff rules, and verification guidance.",
     path: () => "/api/v1/agents/onboarding"
+  });
+
+  registerReadTool(api, config, {
+    name: "forge_get_doctor",
+    label: "Forge Doctor",
+    description:
+      "Run Forge Doctor diagnostics for runtime health, settings, SQLite storage, entity links, hierarchy consistency, rewards, gamification state, and proposed fixes.",
+    path: () => "/api/v1/doctor"
+  });
+
+  registerWriteTool(api, config, {
+    name: "forge_apply_doctor_fix",
+    label: "Apply Forge Doctor Fix",
+    description:
+      "Apply explicitly approved Forge Doctor safe fixes. Do not call this unless the user has approved the specific fix id or asked for Doctor autofix.",
+    parameters: Type.Object({
+      fixIds: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
+      applyAllSafe: Type.Optional(Type.Boolean())
+    }),
+    method: "POST",
+    path: "/api/v1/doctor/fixes"
   });
 
   registerSpecializedRouteTool(api, config, {

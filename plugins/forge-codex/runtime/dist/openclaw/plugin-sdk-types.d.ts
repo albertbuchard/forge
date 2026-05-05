@@ -30,7 +30,8 @@ export type ForgeRegisteredTool = {
 export type ForgeCliProgram = {
     command(name: string): ForgeCliProgram;
     description(text: string): ForgeCliProgram;
-    action(handler: () => Promise<void> | void): ForgeCliProgram;
+    option(flags: string, description: string): ForgeCliProgram;
+    action(handler: (options?: unknown) => Promise<void> | void): ForgeCliProgram;
 };
 export type ForgeCliRegistrarContext = {
     program: ForgeCliProgram;

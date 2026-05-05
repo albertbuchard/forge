@@ -1,10 +1,9 @@
-Forge Companion 1.0.34 fixes movement timeline loading against Forge servers that
-still enforce the 120-item mobile page limit. The app now pages deeper history in
-compatible chunks instead of sending one oversized request, so early April boxes
-can load without a status 400 error.
+Forge Companion 1.0.35 keeps pairing alive more reliably.
 
-Normal WebView loading state messages are no longer mislabeled as errors when the
-loading error is nil.
+The app now saves Forge's refreshed pairing expiry after verification, heartbeat,
+sync, movement bootstrap, and source-state updates, so a healthy paired phone should
+not fall back into repeated re-pairing just because the original QR code expired.
 
-The movement timeline now keeps row rendering virtualized on iPhone and web while
-preserving the existing background hour alignment.
+It also keeps a lightweight heartbeat and periodic sync cadence active while the app
+is open, schedules background refresh when iOS allows it, and starts a short refresh
+window when the app leaves the foreground.

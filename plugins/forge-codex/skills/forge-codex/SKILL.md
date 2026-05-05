@@ -45,7 +45,17 @@ without guessing.
   the dedicated route families for timeline/overlay repair, energy templates/signals,
   and flow execution/results. When an adapter exposes `forge_call_movement_route`,
   `forge_call_life_force_route`, or `forge_call_workbench_route`, use those
-  route-key tools after the conversation has selected the lane.
+  route-key tools after the conversation has selected the lane. Life Force may be
+  keyed as `lifeForce` and as the entity-style alias `life_force`; both names point
+  to the same `/api/v1/life-force/*` route family.
+- The specialized route-key tool schemas include the exact route-key to method/path
+  map. When a route key's exact path contains placeholders such as `:id`,
+  `:weekday`, `:runId`, or `:nodeId`, pass those values in `pathParams` using the
+  placeholder names exactly. Do not place IDs inside `routeKey`, invent a raw route
+  string, or ask the user to choose an endpoint when the lane already selects one. If
+  that schema and live onboarding disagree, trust the live onboarding for the current
+  call and treat the disagreement as a Forge contract bug to fix, not as a reason to
+  guess a nearby route.
 
 ## Project Management Hierarchy Rule
 

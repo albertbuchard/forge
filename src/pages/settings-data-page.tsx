@@ -109,6 +109,17 @@ function formatBackupMode(mode: DataBackupEntry["mode"]) {
   }
 }
 
+function safeFormatDateTime(value: string | null | undefined, fallback = "Unknown time") {
+  if (!value) {
+    return fallback;
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return fallback;
+  }
+  return formatDateTime(value);
+}
+
 function FeedbackBanner({
   tone,
   message
@@ -157,7 +168,8 @@ function DataFact({
 export function SettingsDataPage() {
   const queryClient = useQueryClient();
   const [backupDirectory, setBackupDirectory] = useState("");
-  const [backupFrequency, setBackupFrequency] = useState<string>("24");
+  const [backupFrequency, setBackupFrequency] = useState<string>("");
+  const [backupRetention, setBackupRetention] = useState<string>("");
   const [autoRepairEnabled, setAutoRepairEnabled] = useState(true);
   const [scanResults, setScanResults] = useState<DataRecoveryCandidate[]>([]);
   const [feedback, setFeedback] = useState<{
@@ -205,7 +217,9 @@ export function SettingsDataPage() {
       patchDataManagementSettings({
         backupDirectory,
         backupFrequencyHours:
-          backupFrequency === "off" ? null : Number(backupFrequency),
+          backupFrequency === "off" ? null : Number(backupFrequency || "24"),
+        backupRetentionDays:
+          backupRetention === "forever" ? null : Number(backupRetention || "30"),
         autoRepairEnabled
       }),
     onSuccess: async () => {
@@ -310,6 +324,13 @@ export function SettingsDataPage() {
           : "off")
     );
     setAutoRepairEnabled(data.settings.autoRepairEnabled);
+    setBackupRetention(
+      (current) =>
+        current ||
+        (data.settings.backupRetentionDays
+          ? String(data.settings.backupRetentionDays)
+          : "forever")
+    );
     setRootFlowValue((current) => ({
       ...current,
       targetDataRoot: current.targetDataRoot || data.current.dataRoot
@@ -444,7 +465,7 @@ export function SettingsDataPage() {
           <div className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 text-sm leading-6 text-[var(--ui-ink-soft)]">
             <div className="font-medium text-[var(--ui-ink-strong)]">
               {restoreTarget
-                ? formatDateTime(restoreTarget.createdAt)
+                ? safeFormatDateTime(restoreTarget.createdAt)
                 : "Selected backup"}
             </div>
             <div className="mt-2">
@@ -620,7 +641,7 @@ export function SettingsDataPage() {
                 label="Last database change"
                 value={
                   current.databaseLastModifiedAt
-                    ? formatDateTime(current.databaseLastModifiedAt)
+                    ? safeFormatDateTime(current.databaseLastModifiedAt)
                     : "Unknown"
                 }
                 icon={RefreshCw}
@@ -654,7 +675,7 @@ export function SettingsDataPage() {
               </div>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid gap-3 md:grid-cols-3">
               <MetricTile
                 label="Automatic backup"
                 value={formatBackupFrequency(
@@ -662,7 +683,7 @@ export function SettingsDataPage() {
                 )}
                 detail={
                   data.settings.lastAutoBackupAt
-                    ? `Last run ${formatDateTime(data.settings.lastAutoBackupAt)}`
+                    ? `Last run ${safeFormatDateTime(data.settings.lastAutoBackupAt)}`
                     : "No automatic backup recorded yet"
                 }
               />
@@ -670,14 +691,23 @@ export function SettingsDataPage() {
                 label="Manual backup"
                 value={
                   data.settings.lastManualBackupAt
-                    ? formatDateTime(data.settings.lastManualBackupAt)
+                    ? safeFormatDateTime(data.settings.lastManualBackupAt)
                     : "None yet"
                 }
                 detail={`${data.backups.length} backup${data.backups.length === 1 ? "" : "s"} saved`}
               />
+              <MetricTile
+                label="Retention"
+                value={
+                  data.settings.backupRetentionDays
+                    ? `${data.settings.backupRetentionDays} days`
+                    : "Keep forever"
+                }
+                detail="Automatic backups only"
+              />
             </div>
 
-            <div className="grid gap-4">
+            <div className="grid gap-4 md:grid-cols-2">
               <label className="grid gap-2">
                 <span className="text-sm text-[var(--ui-ink-soft)]">
                   Backup folder
@@ -694,7 +724,7 @@ export function SettingsDataPage() {
                 </span>
                 <select
                   className="h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 text-sm text-[var(--ui-ink-strong)] outline-none transition focus:border-[var(--primary)]"
-                  value={backupFrequency}
+                  value={backupFrequency || "24"}
                   onChange={(event) => setBackupFrequency(event.target.value)}
                 >
                   <option value="off">Off</option>
@@ -702,6 +732,24 @@ export function SettingsDataPage() {
                   <option value="6">Every 6 hours</option>
                   <option value="24">Every day</option>
                   <option value="168">Every week</option>
+                </select>
+              </label>
+
+              <label className="grid gap-2">
+                <span className="text-sm text-[var(--ui-ink-soft)]">
+                  Keep automatic backups
+                </span>
+                <select
+                  className="h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 text-sm text-[var(--ui-ink-strong)] outline-none transition focus:border-[var(--primary)]"
+                  value={backupRetention || "30"}
+                  onChange={(event) => setBackupRetention(event.target.value)}
+                >
+                  <option value="7">7 days</option>
+                  <option value="14">14 days</option>
+                  <option value="30">30 days</option>
+                  <option value="90">90 days</option>
+                  <option value="365">1 year</option>
+                  <option value="forever">Keep forever</option>
                 </select>
               </label>
 
@@ -874,7 +922,7 @@ export function SettingsDataPage() {
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <div className="text-sm font-semibold text-[var(--ui-ink-strong)]">
-                            {formatDateTime(backup.createdAt)}
+                            {safeFormatDateTime(backup.createdAt)}
                           </div>
                           <Badge className="bg-white/[0.08] text-white/78">
                             {formatBackupMode(backup.mode)}
@@ -991,7 +1039,7 @@ export function SettingsDataPage() {
                     <div className="mt-4 grid gap-2 text-xs text-[var(--ui-ink-faint)] md:grid-cols-5">
                       <div>{candidate.integrityMessage}</div>
                       <div>
-                        {formatDateTime(
+                        {safeFormatDateTime(
                           candidate.databaseLastModifiedAt ??
                             new Date().toISOString()
                         )}

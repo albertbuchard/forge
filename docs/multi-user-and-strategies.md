@@ -121,7 +121,7 @@ Recommended OpenClaw config shape:
         config: {
           origin: "http://127.0.0.1",
           port: 4317,
-          dataRoot: "~/.forge",
+          dataRoot: "/absolute/path/to/forge-data",
           actorLabel: "",
           apiToken: "",
           timeoutMs: 15000
@@ -136,8 +136,9 @@ Important points:
 
 - `origin` is the protocol + host
 - `port` is stored separately
-- local adapters now share `~/.forge` by default, so you only need `dataRoot`
-  when you intentionally want a different shared database
+- local installs default to `~/.forge`
+- set one explicit `dataRoot` when local adapters should share a custom database
+- do not infer the active database from generic defaults; verify the config and live runtime path before moving or merging data
 - leave `actorLabel` blank when the adapter should inherit the parent/operator
   identity automatically
 - set `actorLabel` only when the adapter or sub-agent should act as a distinct
@@ -154,7 +155,7 @@ Recommended Hermes config at `~/.hermes/forge/config.json`:
 {
   "origin": "http://127.0.0.1",
   "port": 4317,
-  "dataRoot": "~/.forge",
+  "dataRoot": "/absolute/path/to/forge-data",
   "actorLabel": "",
   "timeoutMs": 15000
 }
