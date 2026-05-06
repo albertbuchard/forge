@@ -297,8 +297,8 @@ Important examples:
 
 There are three files involved on purpose:
 
-- [`openclaw.plugin.json`](../openclaw.plugin.json): source-of-truth plugin manifest in the main Forge repo
-- [`openclaw-plugin/openclaw.plugin.json`](../openclaw-plugin/openclaw.plugin.json): packaged copy that ships in the npm artifact
+- [`openclaw.plugin.json`](../openclaw.plugin.json): source-of-truth plugin manifest in the main Forge repo. It declares OpenClaw startup activation, command aliases, and the `contracts.tools` ownership list required before Forge can register agent tools.
+- [`openclaw-plugin/openclaw.plugin.json`](../openclaw-plugin/openclaw.plugin.json): packaged copy that ships in the npm artifact. Keep its activation, command aliases, and tool contracts aligned with the root manifest.
 - [`openclaw-plugin/package.json`](../openclaw-plugin/package.json): npm package metadata and `openclaw.extensions` entry wiring
 
 ## Install
@@ -318,7 +318,7 @@ Tested on OpenClaw `2026.5.4`: plain `openclaw plugins install forge-openclaw-pl
 Verify what OpenClaw loaded:
 
 ```bash
-openclaw plugins inspect forge-openclaw-plugin
+openclaw plugins inspect forge-openclaw-plugin --runtime
 openclaw forge health
 ```
 
@@ -330,7 +330,7 @@ From the Forge repo root:
 openclaw plugins install --link --dangerously-force-unsafe-install ./openclaw-plugin
 openclaw plugins enable forge-openclaw-plugin
 openclaw gateway restart
-openclaw plugins inspect forge-openclaw-plugin
+openclaw plugins inspect forge-openclaw-plugin --runtime
 openclaw forge health
 ```
 
@@ -377,7 +377,7 @@ fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
 console.log(`Configured ${pluginPath}`);
 NODE
 openclaw gateway restart
-openclaw plugins inspect forge-openclaw-plugin
+openclaw plugins inspect forge-openclaw-plugin --runtime
 openclaw forge health
 ```
 
@@ -725,7 +725,7 @@ curl -X POST http://127.0.0.1:4317/api/v1/settings/tokens \
 ## Diagnose
 
 ```bash
-openclaw plugins inspect forge-openclaw-plugin
+openclaw plugins inspect forge-openclaw-plugin --runtime
 openclaw forge health
 openclaw forge overview
 openclaw forge onboarding

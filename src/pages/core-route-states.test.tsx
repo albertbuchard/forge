@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { Provider } from "react-redux";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { GoalDetailPage } from "@/pages/goal-detail-page";
 import { GoalsPage } from "@/pages/goals-page";
@@ -10,6 +11,7 @@ import { ProjectDetailPage } from "@/pages/project-detail-page";
 import { ProjectsPage } from "@/pages/projects-page";
 import { TodayPage } from "@/pages/today-page";
 import type { CalendarSchedulingRules, ForgeSnapshot } from "@/lib/types";
+import { createAppStore } from "@/store/store";
 
 const { useForgeShellMock, useCommandCenterStoreMock, useQueryMock } = vi.hoisted(() => ({
   useForgeShellMock: vi.fn(),
@@ -227,15 +229,48 @@ function renderWithProviders(element: React.ReactNode, initialEntry = "/") {
   });
 
   return render(
-    <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[initialEntry]}>{element}</MemoryRouter>
-    </QueryClientProvider>
+    <Provider store={createAppStore()}>
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[initialEntry]}>{element}</MemoryRouter>
+      </QueryClientProvider>
+    </Provider>
   );
 }
 
 describe("core route states", () => {
   it("shows the overview shell when only gamification metrics exist", async () => {
     useForgeShellMock.mockReturnValue({ snapshot: createSnapshot() });
+    useQueryMock.mockImplementation(({ queryKey }: { queryKey?: unknown[] }) => ({
+      data:
+        queryKey?.[0] === "forge-gamification-assets"
+          ? {
+              assets: {
+                version: "test",
+                defaultStyle: "dark-fantasy",
+                styles: [
+                  {
+                    id: "dark-fantasy",
+                    label: "Dark Fantasy",
+                    description: "Obsidian iron and ember gold.",
+                    previewUrl:
+                      "/gamification-previews/dark-fantasy-mascot.webp",
+                    fileName: "forge-gamification-dark-fantasy-test.zip",
+                    downloadUrl: "https://example.test/dark-fantasy.zip",
+                    sha256: "test",
+                    installed: true,
+                    spriteCount: 348,
+                    expectedSpriteCount: 348,
+                    installedAt: "2026-03-24T08:00:00.000Z"
+                  }
+                ]
+              }
+            }
+          : undefined,
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn()
+    }));
 
     renderWithProviders(<OverviewPage />);
 

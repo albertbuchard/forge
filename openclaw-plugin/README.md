@@ -237,7 +237,7 @@ Tested on OpenClaw `2026.5.4`: plain `openclaw plugins install forge-openclaw-pl
 Check what OpenClaw loaded:
 
 ```bash
-openclaw plugins inspect forge-openclaw-plugin
+openclaw plugins inspect forge-openclaw-plugin --runtime
 openclaw forge health
 ```
 
@@ -249,7 +249,7 @@ Use this path when you are editing Forge and want OpenClaw to load this checkout
 openclaw plugins install --link --dangerously-force-unsafe-install ./openclaw-plugin
 openclaw plugins enable forge-openclaw-plugin
 openclaw gateway restart
-openclaw plugins inspect forge-openclaw-plugin
+openclaw plugins inspect forge-openclaw-plugin --runtime
 openclaw forge health
 ```
 
@@ -302,7 +302,7 @@ fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
 console.log(`Configured ${pluginPath}`);
 NODE
 openclaw gateway restart
-openclaw plugins inspect forge-openclaw-plugin
+openclaw plugins inspect forge-openclaw-plugin --runtime
 openclaw forge health
 ```
 

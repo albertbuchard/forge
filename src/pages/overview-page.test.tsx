@@ -1,11 +1,13 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
+import { Provider } from "react-redux";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { OverviewPage } from "@/pages/overview-page";
 import type { ForgeSnapshot } from "@/lib/types";
+import { createAppStore } from "@/store/store";
 
 const { useForgeShellMock } = vi.hoisted(() => ({
   useForgeShellMock: vi.fn()
@@ -19,14 +21,18 @@ const {
   getMovementDayMock,
   getVitalsViewMock,
   getXpMetricsMock,
-  getSettingsMock
+  getSettingsMock,
+  getGamificationAssetStatusMock,
+  installGamificationAssetStyleMock
 } = vi.hoisted(() => ({
   getSleepViewMock: vi.fn(),
   getFitnessViewMock: vi.fn(),
   getMovementDayMock: vi.fn(),
   getVitalsViewMock: vi.fn(),
   getXpMetricsMock: vi.fn(),
-  getSettingsMock: vi.fn()
+  getSettingsMock: vi.fn(),
+  getGamificationAssetStatusMock: vi.fn(),
+  installGamificationAssetStyleMock: vi.fn()
 }));
 
 vi.mock("@/components/shell/app-shell", () => ({
@@ -39,7 +45,11 @@ vi.mock("@/lib/api", () => ({
   getMovementDay: (...args: unknown[]) => getMovementDayMock(...args),
   getVitalsView: (...args: unknown[]) => getVitalsViewMock(...args),
   getXpMetrics: (...args: unknown[]) => getXpMetricsMock(...args),
-  getSettings: (...args: unknown[]) => getSettingsMock(...args)
+  getSettings: (...args: unknown[]) => getSettingsMock(...args),
+  getGamificationAssetStatus: (...args: unknown[]) =>
+    getGamificationAssetStatusMock(...args),
+  installGamificationAssetStyle: (...args: unknown[]) =>
+    installGamificationAssetStyleMock(...args)
 }));
 
 vi.mock("@/components/customization/ai-surface-workspace", () => ({
@@ -272,6 +282,28 @@ describe("OverviewPage", () => {
         gamificationTheme: "dark-fantasy"
       }
     });
+    getGamificationAssetStatusMock.mockResolvedValue({
+      assets: {
+        version: "test",
+        defaultStyle: "dark-fantasy",
+        styles: [
+          {
+            id: "dark-fantasy",
+            label: "Dark Fantasy",
+            description: "Obsidian iron and ember gold.",
+            previewUrl: "/gamification-previews/dark-fantasy-mascot.webp",
+            fileName: "forge-gamification-dark-fantasy-test.zip",
+            downloadUrl: "https://example.test/dark-fantasy.zip",
+            sha256: "test",
+            installed: true,
+            spriteCount: 348,
+            expectedSpriteCount: 348,
+            installedAt: "2026-04-12T10:00:00.000Z"
+          }
+        ]
+      }
+    });
+    installGamificationAssetStyleMock.mockResolvedValue({ installed: true });
     getSleepViewMock.mockResolvedValue({
       sleep: {
         summary: {
@@ -536,6 +568,24 @@ describe("OverviewPage", () => {
     vi.clearAllMocks();
   });
 
+  function renderOverviewPage() {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false }
+      }
+    });
+
+    return render(
+      <Provider store={createAppStore()}>
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter>
+            <OverviewPage />
+          </MemoryRouter>
+        </QueryClientProvider>
+      </Provider>
+    );
+  }
+
   it("puts Life Force next to XP and momentum in the top hero surface", () => {
     useForgeShellMock.mockReturnValue({
       snapshot: createSnapshot(),
@@ -543,19 +593,7 @@ describe("OverviewPage", () => {
       refresh: vi.fn()
     });
 
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false }
-      }
-    });
-
-    render(
-      <QueryClientProvider client={queryClient}>
-        <MemoryRouter>
-          <OverviewPage />
-        </MemoryRouter>
-      </QueryClientProvider>
-    );
+    renderOverviewPage();
 
     expect(screen.getByText("Momentum 82")).toBeInTheDocument();
     expect(screen.getAllByText("Life Force").length).toBeGreaterThan(0);
@@ -573,19 +611,7 @@ describe("OverviewPage", () => {
       refresh: vi.fn()
     });
 
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false }
-      }
-    });
-
-    render(
-      <QueryClientProvider client={queryClient}>
-        <MemoryRouter>
-          <OverviewPage />
-        </MemoryRouter>
-      </QueryClientProvider>
-    );
+    renderOverviewPage();
 
     const summaryHeading = screen.getAllByText("Core live metrics")[0]!;
     const signalsHeading = screen.getByText("Signals");
@@ -651,19 +677,7 @@ describe("OverviewPage", () => {
       refresh: vi.fn()
     });
 
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false }
-      }
-    });
-
-    render(
-      <QueryClientProvider client={queryClient}>
-        <MemoryRouter>
-          <OverviewPage />
-        </MemoryRouter>
-      </QueryClientProvider>
-    );
+    renderOverviewPage();
 
     expect(
       screen.getByRole("link", {
@@ -695,19 +709,7 @@ describe("OverviewPage", () => {
       refresh: vi.fn()
     });
 
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false }
-      }
-    });
-
-    render(
-      <QueryClientProvider client={queryClient}>
-        <MemoryRouter>
-          <OverviewPage />
-        </MemoryRouter>
-      </QueryClientProvider>
-    );
+    renderOverviewPage();
 
     expect(LifeForceOverviewWorkspaceMock).toHaveBeenCalledWith(
       expect.objectContaining({ showEditor: false }),
@@ -722,19 +724,7 @@ describe("OverviewPage", () => {
       refresh: vi.fn()
     });
 
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false }
-      }
-    });
-
-    render(
-      <QueryClientProvider client={queryClient}>
-        <MemoryRouter>
-          <OverviewPage />
-        </MemoryRouter>
-      </QueryClientProvider>
-    );
+    renderOverviewPage();
 
     expect(
       await screen.findByText("Recovery, training, and vitals")

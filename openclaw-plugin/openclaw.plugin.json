@@ -3,9 +3,91 @@
   "name": "Forge",
   "description": "Curated OpenClaw adapter for the Forge collaboration API, UI entrypoint, and localhost auto-start runtime.",
   "version": "0.2.60",
+  "activation": {
+    "onStartup": true,
+    "onCapabilities": [
+      "tool"
+    ],
+    "onCommands": [
+      "forge"
+    ]
+  },
   "skills": [
     "./skills"
   ],
+  "commandAliases": [
+    {
+      "name": "forge"
+    }
+  ],
+  "contracts": {
+    "tools": [
+      "forge_adjust_work_minutes",
+      "forge_apply_doctor_fix",
+      "forge_call_life_force_route",
+      "forge_call_movement_route",
+      "forge_call_workbench_route",
+      "forge_clone_questionnaire",
+      "forge_complete_questionnaire_run",
+      "forge_complete_task_run",
+      "forge_connect_calendar_provider",
+      "forge_create_entities",
+      "forge_create_task_timebox",
+      "forge_create_work_block_template",
+      "forge_delete_entities",
+      "forge_enqueue_preferences_item_from_entity",
+      "forge_ensure_questionnaire_draft",
+      "forge_focus_task_run",
+      "forge_get_agent_onboarding",
+      "forge_get_calendar_overview",
+      "forge_get_current_work",
+      "forge_get_doctor",
+      "forge_get_operator_context",
+      "forge_get_operator_overview",
+      "forge_get_preferences_workspace",
+      "forge_get_psyche_overview",
+      "forge_get_questionnaire",
+      "forge_get_questionnaire_run",
+      "forge_get_self_observation_calendar",
+      "forge_get_sleep_overview",
+      "forge_get_sports_overview",
+      "forge_get_ui_entrypoint",
+      "forge_get_user_directory",
+      "forge_get_weekly_review",
+      "forge_get_wiki_health",
+      "forge_get_wiki_page",
+      "forge_get_wiki_settings",
+      "forge_get_xp_metrics",
+      "forge_grant_reward_bonus",
+      "forge_heartbeat_task_run",
+      "forge_ingest_wiki_source",
+      "forge_list_questionnaires",
+      "forge_list_wiki_pages",
+      "forge_log_work",
+      "forge_merge_preferences_contexts",
+      "forge_post_insight",
+      "forge_publish_questionnaire_draft",
+      "forge_recommend_task_timeboxes",
+      "forge_reindex_wiki_embeddings",
+      "forge_release_task_run",
+      "forge_restore_entities",
+      "forge_search_entities",
+      "forge_search_wiki",
+      "forge_start_preferences_game",
+      "forge_start_questionnaire_run",
+      "forge_start_task_run",
+      "forge_submit_preferences_judgment",
+      "forge_submit_preferences_signal",
+      "forge_sync_calendar_connection",
+      "forge_sync_wiki_vault",
+      "forge_update_entities",
+      "forge_update_preferences_score",
+      "forge_update_questionnaire_run",
+      "forge_update_sleep_session",
+      "forge_update_workout_session",
+      "forge_upsert_wiki_page"
+    ]
+  },
   "uiHints": {
     "origin": {
       "label": "Forge Origin",

@@ -10,7 +10,7 @@ Use this checklist before publishing `forge-openclaw-plugin`.
 3. Run:
    - `npm exec -- tsc --noEmit`
    - `npm exec -- tsc -p server/tsconfig.json --noEmit`
-   - `npm exec -- vitest run src/openclaw/parity.test.ts src/openclaw/index.test.ts src/openclaw/api-client.test.ts src/openclaw/manifest.test.ts`
+   - `npm exec -- vitest run src/openclaw/parity.test.ts src/openclaw/index.test.ts src/openclaw/api-client.test.ts src/openclaw/manifest.test.ts src/openclaw/tool-contract.test.ts`
    - `node --import tsx --test --test-concurrency=1 server/src/app.test.ts`
    - `npm run build:openclaw-plugin`
 4. Confirm the notes rollout is reflected in the public plugin/docs surface:
@@ -28,6 +28,7 @@ Use this checklist before publishing `forge-openclaw-plugin`.
 6. Smoke install the package in a clean OpenClaw workspace:
    - `openclaw plugins install --dangerously-force-unsafe-install ./openclaw-plugin`
    - `openclaw gateway restart`
+   - `openclaw plugins inspect forge-openclaw-plugin --runtime`
    - `openclaw forge doctor`
 7. Verify the skill still foregrounds:
    - `forge_get_operator_overview`

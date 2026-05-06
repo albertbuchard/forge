@@ -71,7 +71,7 @@ From the Forge repo root:
 openclaw plugins install --link --dangerously-force-unsafe-install ./openclaw-plugin
 openclaw plugins enable forge-openclaw-plugin
 openclaw gateway restart
-openclaw plugins inspect forge-openclaw-plugin
+openclaw plugins inspect forge-openclaw-plugin --runtime
 openclaw forge health
 ```
 

@@ -248,6 +248,7 @@ test("doctor reports invalid forge.json files and keeps the database-backed sett
           parseError: string | null;
         };
         warnings: string[];
+        issues: Array<{ id: string; summary: string }>;
       };
     };
     assert.equal(doctorBody.doctor.ok, false);
@@ -262,8 +263,9 @@ test("doctor reports invalid forge.json files and keeps the database-backed sett
       )
     );
     assert.ok(
-      (doctorBody.doctor as { issues: Array<{ id: string; summary: string }> })
-        .issues.some((issue) => issue.id === "settings.file.valid")
+      doctorBody.doctor.issues.some(
+        (issue) => issue.id === "settings.file.valid"
+      )
     );
   } finally {
     await app.close();
