@@ -36,6 +36,8 @@
     "test:e2e": "playwright test",
     "test:server": "node --import tsx --test --test-concurrency=1 server/src/*.test.ts",
     "build:openclaw-plugin": "npm --prefix openclaw-plugin run build",
+    "test:forge-memory": "npm --prefix packages/forge-memory test",
+    "pack:forge-memory": "cd packages/forge-memory && npm pack",
     "release:ios-companion:validate": "bash ./ios-companion/scripts/publish-forge-companion.sh validate",
     "release:ios-companion:testflight": "bash ./ios-companion/scripts/publish-forge-companion.sh testflight",
     "release:ios-companion:app-store": "bash ./ios-companion/scripts/publish-forge-companion.sh app-store",

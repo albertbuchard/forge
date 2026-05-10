@@ -63,6 +63,16 @@ Its job is to expose the same curated Forge operating surface as the OpenClaw pl
 
 ## Install
 
+For normal user installs, start with the guided Forge installer:
+
+```bash
+npx forge-memory
+```
+
+Use `npx forge-memory --dev` when Hermes should link to this source checkout.
+The direct PyPI and editable commands below are advanced adapter-only paths for
+debugging or manual recovery.
+
 Use the published PyPI package for a normal Hermes install:
 
 ```bash
