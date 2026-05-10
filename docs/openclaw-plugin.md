@@ -2,6 +2,17 @@
 
 Forge ships a native OpenClaw plugin add-on with a deliberately small public surface.
 
+For normal user installs, start with:
+
+```bash
+npx forge-memory
+```
+
+The guided installer always installs the Forge UI/runtime, then shows OpenClaw,
+Hermes, and Codex as host adapter choices. Direct OpenClaw plugin commands below
+are advanced adapter-only commands for debugging, source-linking, or older host
+workflows.
+
 ## Project Management Workflow
 
 Forge's planning hierarchy is explicit:

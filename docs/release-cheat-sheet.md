@@ -13,17 +13,29 @@ normal releases.
 
 ## Release Types
 
-Forge currently has three automated release tracks:
+Forge currently has four release tracks:
 
+- `forge-memory` guided installer to npm
 - OpenClaw plugin to npm
 - Hermes plugin to PyPI
 - Forge Companion iOS release to TestFlight or the App Store
 
 The GitHub Actions workflows live in:
 
+- `.github/workflows/release-forge-memory.yml`
 - `.github/workflows/release-openclaw-plugin.yml`
 - `.github/workflows/release-hermes-plugin.yml`
 - `.github/workflows/release-ios-companion.yml`
+
+`forge-memory` is implemented under `packages/forge-memory/`. Once the npm
+package exists and Trusted Publishing points at `release-forge-memory.yml`, publish
+it through a tag such as `forge-memory-v0.1.0`. Local verification should use:
+
+```bash
+npm --prefix packages/forge-memory test
+npm --prefix packages/forge-memory pack
+npm exec --yes --package ./packages/forge-memory/forge-memory-0.1.0.tgz -- forge-memory --help
+```
 
 All release tags must point at commits already on `main`. The workflows verify that.
 
@@ -34,6 +46,35 @@ All release tags must point at commits already on `main`. The workflows verify t
 - the `projects/forge` nested repo must be connected to GitHub with Actions enabled
 - you need permission to push `main` and push tags
 - the workflows must stay in the Forge repo, not only in the parent monorepo
+
+### OpenClaw npm release
+
+### Forge Memory npm release
+
+- package: `forge-memory`
+- registry: npm
+- workflow trigger tag: `forge-memory-v<version>`
+- example tag: `forge-memory-v0.1.0`
+
+One-time registry setup:
+
+1. Create the `forge-memory` npm package.
+2. Open npm package settings for `forge-memory`.
+3. Configure Trusted Publishing for this GitHub repository.
+4. Point it at the `release-forge-memory.yml` workflow.
+5. Keep the workflow on GitHub-hosted runners.
+
+Release flow:
+
+```bash
+git tag forge-memory-v0.1.0
+git push origin forge-memory-v0.1.0
+```
+
+The workflow verifies the tag is on `main`, checks that
+`packages/forge-memory/package.json` matches the tag version, runs the package
+smoke tests, packs the tarball, smoke-runs the packed CLI, then publishes with
+npm Trusted Publishing.
 
 ### OpenClaw npm release
 

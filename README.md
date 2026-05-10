@@ -24,19 +24,37 @@ Forge is built with React 19, TypeScript 5.x, Vite 6, Tailwind CSS 4, Fastify 5,
 
 ## Start Here
 
-### Use Forge From OpenClaw
+### Install Forge
 
-This is the normal install for most users. The OpenClaw plugin installs Forge's agent tools and can start the bundled local Forge web app for you.
+The preferred install for everyone is the guided CLI:
 
 ```bash
-openclaw plugins install --dangerously-force-unsafe-install forge-openclaw-plugin
-openclaw plugins enable forge-openclaw-plugin
-openclaw gateway restart
-openclaw forge health
-openclaw forge ui
+npx forge-memory
 ```
 
-Why the install flag exists: tested on OpenClaw `2026.5.4`, plain `openclaw plugins install forge-openclaw-plugin` is blocked by the plugin scanner because Forge contains local runtime startup helpers. The documented command uses OpenClaw's explicit approval flag and installs without the old config-edit workaround. The source is public in this repository, and the package is `forge-openclaw-plugin` on npm.
+`forge-memory` always installs the local Forge UI/runtime first. In the same guided flow it discovers OpenClaw, Hermes, and Codex in the background, shows those host adapters in a checkbox menu, selects detected adapters by default, leaves missing adapters as disabled `not found` rows, lets Space toggle adapter rows, and can pair the iOS companion at the end.
+
+Development installs use the same flow, but link adapters to this source checkout and default to the real shared Forge data folder:
+
+```bash
+npx forge-memory --dev
+```
+
+After install, reopen the full configuration flow with current settings as defaults:
+
+```bash
+npx forge-memory configure
+```
+
+Useful runtime commands:
+
+```bash
+npx forge-memory status
+npx forge-memory doctor
+npx forge-memory ui
+npx forge-memory restart
+npx forge-memory pair-ios
+```
 
 After install, the usual local addresses are:
 
@@ -44,7 +62,7 @@ After install, the usual local addresses are:
 - API: `http://127.0.0.1:4317/api/v1/`
 - OpenAPI: `http://127.0.0.1:4317/api/v1/openapi.json`
 
-If the installer on an older OpenClaw build does not support the flag, use the manual npm fallback in [`openclaw-plugin/README.md`](./openclaw-plugin/README.md#manual-fallback-for-older-openclaw-builds).
+Manual OpenClaw, Hermes, and Codex setup still exists for advanced cases in [`docs/openclaw-plugin.md`](./docs/openclaw-plugin.md), [`docs/hermes-plugin.md`](./docs/hermes-plugin.md), and [`plugins/forge-codex/README.md`](./plugins/forge-codex/README.md).
 
 ### Run The Source App Locally
 
@@ -65,6 +83,8 @@ Vite may also run on `3027` during development, but the stable app entrypoint is
 
 ### Install The Local OpenClaw Plugin While Developing
 
+This is an advanced adapter-only path. Prefer `npx forge-memory --dev` unless you are specifically debugging OpenClaw's plugin installer.
+
 From the Forge repo root:
 
 ```bash
@@ -78,6 +98,8 @@ openclaw forge health
 Use `--link` when you want OpenClaw to use this checkout directly. Omit `--link` when you want to test a copied package install.
 
 ### Hermes
+
+This is an advanced adapter-only path. Prefer `npx forge-memory` for released installs and `npx forge-memory --dev` for source-backed installs.
 
 Use the published PyPI package when you want Hermes to load the released plugin:
 
@@ -96,6 +118,8 @@ Use this from the Forge repo instead when you want Hermes to follow local source
 ```
 
 ### Codex
+
+This is an advanced MCP-only path. Prefer `npx forge-memory`, which writes the Forge MCP entry through its guided configuration flow.
 
 Codex uses the Forge MCP bridge from this repo:
 
