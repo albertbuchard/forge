@@ -27,14 +27,17 @@ The GitHub Actions workflows live in:
 - `.github/workflows/release-hermes-plugin.yml`
 - `.github/workflows/release-ios-companion.yml`
 
-`forge-memory` is implemented under `packages/forge-memory/`. Once the npm
-package exists and Trusted Publishing points at `release-forge-memory.yml`, publish
-it through a tag such as `forge-memory-v0.1.0`. Local verification should use:
+`forge-memory` is implemented under `packages/forge-memory/`. It uses the same
+Forge plugin version as OpenClaw, Hermes, and the Codex runtime package. The
+normal release script bumps all of those version surfaces together, then the
+same `v<version>` tag triggers both the OpenClaw package workflow and the Forge
+Memory workflow. Local verification should use:
 
 ```bash
 npm --prefix packages/forge-memory test
 npm --prefix packages/forge-memory pack
-npm exec --yes --package ./packages/forge-memory/forge-memory-0.1.0.tgz -- forge-memory --help
+version=$(node -p "require('./packages/forge-memory/package.json').version")
+npm exec --yes --package ./packages/forge-memory/forge-memory-${version}.tgz -- forge-memory --help
 ```
 
 All release tags must point at commits already on `main`. The workflows verify that.
@@ -53,8 +56,8 @@ All release tags must point at commits already on `main`. The workflows verify t
 
 - package: `forge-memory`
 - registry: npm
-- workflow trigger tag: `forge-memory-v<version>`
-- example tag: `forge-memory-v0.1.0`
+- workflow trigger tag: `v<version>`
+- version source: the shared Forge plugin version
 
 One-time registry setup:
 
@@ -67,14 +70,13 @@ One-time registry setup:
 Release flow:
 
 ```bash
-git tag forge-memory-v0.1.0
-git push origin forge-memory-v0.1.0
+FORGE_RELEASE_MODE=prepare ./scripts/release-forge-openclaw-plugin.sh patch
 ```
 
 The workflow verifies the tag is on `main`, checks that
-`packages/forge-memory/package.json` matches the tag version, runs the package
-smoke tests, packs the tarball, smoke-runs the packed CLI, then publishes with
-npm Trusted Publishing.
+`packages/forge-memory/package.json` matches the shared tag version, runs the
+package smoke tests, packs the tarball, smoke-runs the packed CLI, then
+publishes with npm Trusted Publishing.
 
 ### OpenClaw npm release
 

@@ -2,7 +2,7 @@
 
 Forge ships a native OpenClaw plugin add-on with a deliberately small public surface.
 
-For normal user installs, start with:
+For normal user installs, start with the single-command Forge installer:
 
 ```bash
 npx forge-memory
@@ -12,6 +12,17 @@ The guided installer always installs the Forge UI/runtime, then shows OpenClaw,
 Hermes, and Codex as host adapter choices. Direct OpenClaw plugin commands below
 are advanced adapter-only commands for debugging, source-linking, or older host
 workflows.
+
+Useful lifecycle commands:
+
+```bash
+npx forge-memory configure
+npx forge-memory status
+npx forge-memory doctor
+npx forge-memory export
+npx forge-memory stop
+npx forge-memory uninstall
+```
 
 ## Project Management Workflow
 
@@ -312,7 +323,10 @@ There are three files involved on purpose:
 - [`openclaw-plugin/openclaw.plugin.json`](../openclaw-plugin/openclaw.plugin.json): packaged copy that ships in the npm artifact. Keep its activation, command aliases, and tool contracts aligned with the root manifest.
 - [`openclaw-plugin/package.json`](../openclaw-plugin/package.json): npm package metadata and `openclaw.extensions` entry wiring
 
-## Install
+## Advanced Install
+
+Prefer `npx forge-memory` for normal installs. The direct commands in this
+section are for OpenClaw-specific debugging, source-linking, and recovery.
 
 ### Published package
 

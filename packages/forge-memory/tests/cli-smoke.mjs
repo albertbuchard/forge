@@ -59,6 +59,16 @@ run([
 run(["configure", "--yes", "--no-start", "--skip-pair-ios", "--adapters", "none", "--json"]);
 run(["status", "--json"]);
 run(["doctor", "--json"]);
+run(["stop"]);
+
+fs.mkdirSync(dataRoot, { recursive: true });
+fs.writeFileSync(path.join(dataRoot, "forge.sqlite"), "");
+
+const exportPath = path.join(tempHome, "forge-export.tar.gz");
+run(["export", "--output", exportPath, "--json"]);
+if (!fs.existsSync(exportPath)) {
+  throw new Error("Expected forge-memory export to create an archive");
+}
 
 const configPath = path.join(tempHome, ".forge", "config.json");
 const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
@@ -67,6 +77,14 @@ if (config.dataRoot !== dataRoot) {
 }
 if (!Array.isArray(config.adapters) || config.adapters.length !== 0) {
   throw new Error("Expected no adapters in smoke config");
+}
+
+run(["uninstall", "--yes", "--json"]);
+if (fs.existsSync(configPath)) {
+  throw new Error("Expected forge-memory uninstall to remove the manager config");
+}
+if (!fs.existsSync(dataRoot)) {
+  throw new Error("Expected forge-memory uninstall to keep the data folder by default");
 }
 
 console.log("forge-memory smoke tests passed");

@@ -39,7 +39,20 @@ Forge PM behavior Hermes should understand is:
 
 ## Install
 
-Use the published package when you want Hermes to load the released Forge plugin:
+For normal installs, start with the single-command Forge installer:
+
+```bash
+npx forge-memory
+```
+
+Use `npx forge-memory --dev` when Hermes should link to this source checkout.
+The installer keeps the real Forge data folder explicit and can later re-open
+the full flow with `npx forge-memory configure`. Use `npx forge-memory export`,
+`npx forge-memory stop`, and `npx forge-memory uninstall` for backup, shutdown,
+and conservative removal.
+
+Use the direct PyPI command only when you are debugging Hermes package discovery
+or recovering a host-specific install:
 
 ```bash
 ~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
@@ -48,7 +61,8 @@ Use the published package when you want Hermes to load the released Forge plugin
 ~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade forge-hermes-plugin
 ```
 
-Use the local editable install when you are developing Forge from this repo:
+Use the local editable install only when you are developing the Hermes adapter
+itself and need to bypass `npx forge-memory --dev`:
 
 ```bash
 ~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade

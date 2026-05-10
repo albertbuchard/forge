@@ -61,6 +61,7 @@
           <aside class="hero-card">
             <p class="eyebrow">Jump To</p>
             <ul class="guide-list">
+              <li><a href="#dev-installer">Forge Memory dev mode</a></li>
               <li><a href="#local-development">Local development</a></li>
               <li><a href="#workflow-model">Workflow model</a></li>
               <li><a href="#verification">Verification</a></li>
@@ -68,6 +69,36 @@
               <li><a href="#release-adjacent">Release-adjacent commands</a></li>
             </ul>
           </aside>
+        </section>
+
+        <section class="section" id="dev-installer">
+          <div class="section-heading">
+            <p class="eyebrow">Preferred Dev Setup</p>
+            <h2>Use the same installer for source-backed Forge work.</h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>Guided dev install</h3>
+              <p>
+                Dev mode keeps the same guided flow as the public install, but
+                links host adapters to this checkout and defaults to the real
+                shared Forge data folder.
+              </p>
+              <pre><code>npx forge-memory --dev</code></pre>
+            </article>
+            <article class="card">
+              <h3>Dev runtime commands</h3>
+              <p>
+                Use these commands to check the source-backed runtime, open the
+                UI, export data before risky work, or stop the local processes.
+              </p>
+              <pre><code>npx forge-memory status
+npx forge-memory doctor
+npx forge-memory ui
+npx forge-memory export
+npx forge-memory stop</code></pre>
+            </article>
+          </div>
         </section>
 
         <section class="section" id="local-development">

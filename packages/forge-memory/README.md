@@ -1,10 +1,12 @@
 # forge-memory
 
-Preferred Forge installer:
+Single-command Forge install:
 
 ```bash
 npx forge-memory
 ```
+
+This is the preferred setup path for Forge. The command launches a guided CLI that installs the local Forge UI/runtime first, then discovers OpenClaw, Hermes, and Codex and offers to configure the detected adapters against the same Forge data folder.
 
 Development install from a Forge checkout:
 
@@ -12,7 +14,7 @@ Development install from a Forge checkout:
 npx forge-memory --dev
 ```
 
-This package installs and manages the local Forge UI/runtime, then configures detected host adapters for OpenClaw, Hermes, and Codex. The Forge UI/runtime is always the base install; the adapter checkbox list only contains host integrations.
+The Forge UI/runtime is always installed. The adapter checkbox list only contains host integrations, with detected adapters selected by default and missing adapters shown as disabled rows. You can skip adapter setup during install and return later with `configure`.
 
 Useful commands:
 
@@ -22,7 +24,20 @@ npx forge-memory status
 npx forge-memory doctor
 npx forge-memory ui
 npx forge-memory restart
+npx forge-memory stop
+npx forge-memory export
+npx forge-memory uninstall
 npx forge-memory pair-ios
 ```
 
 `configure` reruns the full guided flow using the current config as defaults.
+`export` writes a portable backup of the real Forge data folder. `uninstall` removes the Forge Memory runtime manager and cache while keeping the data folder by default; pass `--remove-data` only when you intentionally want the data deleted too.
+
+Typical first run:
+
+1. Run `npx forge-memory`.
+2. Keep or change the real Forge data folder.
+3. Select OpenClaw, Hermes, and Codex adapters with Space.
+4. Pair the iOS companion when prompted, or skip and run `npx forge-memory pair-ios` later.
+
+Manual OpenClaw, Hermes, and Codex commands still exist in the Forge repository for advanced recovery, source-linking, and adapter debugging. The normal user path should start here.
