@@ -42,7 +42,22 @@ aligned across local installs and releases.
 
 ## Install
 
-From a Forge checkout, register the MCP bridge with Codex:
+For normal installs, start with the single-command Forge installer:
+
+```bash
+npx forge-memory
+```
+
+It installs the Forge UI/runtime, discovers Codex in the background, and writes
+the Forge MCP entry against the same real data folder used by the browser,
+OpenClaw, Hermes, and the iPhone companion. Use `npx forge-memory configure` to
+reopen the full flow, `npx forge-memory export` to back up data,
+`npx forge-memory stop` to shut down the local runtime, and
+`npx forge-memory uninstall` to remove the runtime manager while keeping data by
+default.
+
+From a Forge checkout, register the MCP bridge with Codex manually only when you
+are developing or debugging the adapter directly:
 
 ```bash
 codex mcp add forge \

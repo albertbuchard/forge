@@ -73,12 +73,12 @@
           <div class="card-grid two">
             <article class="card">
               <h3>Core runtime</h3>
-              <pre><code>openclaw forge health
-curl -I http://127.0.0.1:4317/api/v1/health
-curl -I http://127.0.0.1:4317/forge/</code></pre>
+              <pre><code>npx forge-memory status
+npx forge-memory doctor
+npx forge-memory ui</code></pre>
               <p>
-                Confirm the Forge backend and mounted web app are reachable before
-                debugging agent or companion behavior.
+                Confirm the Forge backend, mounted web app, data folder, and
+                configured adapters before debugging agent or companion behavior.
               </p>
             </article>
             <article class="card">
@@ -104,13 +104,10 @@ userId:   explicit on writes</code></pre>
             <article class="card">
               <h3>OpenClaw plugin does not load</h3>
               <p>
-                Re-run the install with
-                <code>--dangerously-force-unsafe-install</code>, then restart
-                the gateway and run
-                <code>openclaw plugins inspect forge-openclaw-plugin --runtime</code>.
-                On OpenClaw <code>2026.5.4</code>, the plain install is
-                blocked by the scanner because Forge contains local runtime
-                startup helpers; the explicit approval flag is required.
+                Re-run <code>npx forge-memory configure</code> first and keep
+                OpenClaw selected. Use the direct OpenClaw install command only
+                for adapter-specific recovery after the guided installer reports
+                what failed.
               </p>
             </article>
             <article class="card">
@@ -133,9 +130,18 @@ userId:   explicit on writes</code></pre>
             <article class="card">
               <h3>Agent surfaces disagree with the browser</h3>
               <p>
-                Check origin, port, and especially <code>dataRoot</code> for
-                OpenClaw, Hermes, Codex, and the browser. If those differ, you are
-                looking at different Forge systems.
+                Run <code>npx forge-memory configure</code> and choose one real
+                Forge data folder for every selected adapter. If origin, port,
+                or <code>dataRoot</code> differ between OpenClaw, Hermes, Codex,
+                and the browser, you are looking at different Forge systems.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Need a safe backup or clean removal</h3>
+              <p>
+                Run <code>npx forge-memory export</code> before storage changes.
+                Run <code>npx forge-memory uninstall</code> to remove the runtime
+                manager and cache while keeping data by default.
               </p>
             </article>
           </div>

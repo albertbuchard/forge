@@ -76,6 +76,8 @@ npx forge-memory ui
 npx forge-memory doctor
 npx forge-memory restart
 npx forge-memory stop
+npx forge-memory export
+npx forge-memory uninstall
 npx forge-memory start
 npx forge-memory data
 npx forge-memory pair-ios
@@ -94,6 +96,8 @@ Command behavior:
 - `doctor`: check Node, npm, package integrity, host runtimes, plugin configs, ports, database accessibility, migrations, and API health.
 - `restart`: restart only the Forge-managed runtime, never an unrelated process on the same port.
 - `start` / `stop`: manage the Forge runtime with PID ownership checks.
+- `export`: write a portable backup of the resolved Forge data folder plus Forge Memory metadata.
+- `uninstall`: stop Forge, remove the Forge Memory runtime manager/cache, optionally remove adapter mappings, and keep the Forge data folder unless `--remove-data` is passed.
 - `data`: show or change the data root with backup prompts and config propagation.
 - `pair-ios`: generate a pairing session and render the QR flow.
 - `update`: update `forge-memory` and selected adapters to compatible versions.
@@ -382,7 +386,7 @@ Do not delete detailed docs. Reframe them as advanced/reference material.
 ## Release Plan
 
 1. Locally implement and verify `packages/forge-memory` without publishing.
-2. When npm auth or Trusted Publishing is available, reserve `forge-memory` on npm with a minimal `0.0.0` or `0.1.0` placeholder.
+2. `forge-memory` has been reserved on npm; future releases should move through Trusted Publishing from versioned tags.
 3. Add GitHub Actions npm Trusted Publishing for `packages/forge-memory`.
 4. Add package smoke tests:
 
@@ -392,10 +396,11 @@ npx --package ./forge-memory-*.tgz forge-memory --help
 npx --package ./forge-memory-*.tgz forge-memory doctor --json
 ```
 
-5. Decide tag format before release. Recommended:
+5. Use the shared Forge plugin release tag. `forge-memory` must stay on the
+   same version as the OpenClaw plugin, Hermes plugin, and Codex runtime package:
 
 ```text
-forge-memory-v0.1.0
+v0.2.62
 ```
 
 6. Keep adapter versions compatible with the runtime artifact version.

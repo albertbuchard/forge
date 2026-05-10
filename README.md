@@ -24,15 +24,17 @@ Forge is built with React 19, TypeScript 5.x, Vite 6, Tailwind CSS 4, Fastify 5,
 
 ## Start Here
 
-### Install Forge
+### Single-command Install
 
-The preferred install for everyone is the guided CLI:
+The preferred install for everyone is one guided command:
 
 ```bash
 npx forge-memory
 ```
 
-`forge-memory` always installs the local Forge UI/runtime first. In the same guided flow it discovers OpenClaw, Hermes, and Codex in the background, shows those host adapters in a checkbox menu, selects detected adapters by default, leaves missing adapters as disabled `not found` rows, lets Space toggle adapter rows, and can pair the iOS companion at the end.
+`forge-memory` is the front door for Forge. It installs the local Forge UI/runtime, discovers OpenClaw, Hermes, and Codex in the background, shows detected host adapters in a checkbox menu, selects every detected adapter by default, leaves missing adapters visible as disabled `not found` rows, lets Space toggle adapter choices, and can pair the iOS companion at the end.
+
+Use the same command whether you want the browser UI, OpenClaw, Hermes, Codex, or all of them sharing one local Forge memory system.
 
 Development installs use the same flow, but link adapters to this source checkout and default to the real shared Forge data folder:
 
@@ -53,8 +55,13 @@ npx forge-memory status
 npx forge-memory doctor
 npx forge-memory ui
 npx forge-memory restart
+npx forge-memory stop
+npx forge-memory export
+npx forge-memory uninstall
 npx forge-memory pair-ios
 ```
+
+`export` creates a portable backup of the real Forge data folder. `uninstall` removes the Forge Memory runtime manager and cache but keeps the Forge data folder by default; use `--remove-data` only when you explicitly want to delete the data too.
 
 After install, the usual local addresses are:
 
@@ -81,7 +88,7 @@ http://127.0.0.1:4317/forge/
 
 Vite may also run on `3027` during development, but the stable app entrypoint is still the backend mount on `4317`.
 
-### Install The Local OpenClaw Plugin While Developing
+### Advanced: Install The Local OpenClaw Plugin While Developing
 
 This is an advanced adapter-only path. Prefer `npx forge-memory --dev` unless you are specifically debugging OpenClaw's plugin installer.
 
@@ -97,7 +104,7 @@ openclaw forge health
 
 Use `--link` when you want OpenClaw to use this checkout directly. Omit `--link` when you want to test a copied package install.
 
-### Hermes
+### Advanced: Hermes Adapter Commands
 
 This is an advanced adapter-only path. Prefer `npx forge-memory` for released installs and `npx forge-memory --dev` for source-backed installs.
 
@@ -117,7 +124,7 @@ Use this from the Forge repo instead when you want Hermes to follow local source
 ~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade --editable ./plugins/forge-hermes
 ```
 
-### Codex
+### Advanced: Codex MCP Commands
 
 This is an advanced MCP-only path. Prefer `npx forge-memory`, which writes the Forge MCP entry through its guided configuration flow.
 

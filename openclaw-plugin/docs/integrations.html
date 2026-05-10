@@ -61,6 +61,7 @@
           <aside class="hero-card">
             <p class="eyebrow">Jump To</p>
             <ul class="guide-list">
+              <li><a href="#install">Single-command install</a></li>
               <li><a href="#shared-runtime">Shared runtime</a></li>
               <li><a href="#agent-identity">Agent identity and users</a></li>
               <li><a href="#openclaw">OpenClaw</a></li>
@@ -69,6 +70,38 @@
               <li><a href="#ios">iPhone companion</a></li>
             </ul>
           </aside>
+        </section>
+
+        <section class="section" id="install">
+          <div class="section-heading">
+            <p class="eyebrow">Install</p>
+            <h2>Every Forge integration starts from the same guided command.</h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>One front door</h3>
+              <p>
+                Use one command whether you want only the browser UI or the full
+                OpenClaw, Hermes, Codex, and iPhone companion setup. Forge
+                installs the local runtime first, then discovers host adapters
+                in the background and asks only for the choices that matter.
+              </p>
+              <pre><code>npx forge-memory</code></pre>
+            </article>
+            <article class="card">
+              <h3>Configuration stays reusable</h3>
+              <p>
+                The installer keeps the real Forge data folder explicit. You can
+                reopen the same flow later with current settings already
+                selected, export the data folder, stop the runtime, or uninstall
+                the runtime manager without deleting your data by default.
+              </p>
+              <pre><code>npx forge-memory configure
+npx forge-memory export
+npx forge-memory stop
+npx forge-memory uninstall</code></pre>
+            </article>
+          </div>
         </section>
 
         <section class="section" id="shared-runtime">
@@ -306,7 +339,20 @@ userIds:  explicit on cross-owner reads</code></pre>
           </div>
           <div class="card-grid two">
             <article class="card">
-              <h3>Install</h3>
+              <h3>Recommended install</h3>
+              <p>
+                Let <code>npx forge-memory</code> detect OpenClaw and configure
+                the adapter against the same local runtime and data folder as
+                the browser, Hermes, Codex, and iPhone companion.
+              </p>
+              <pre><code>npx forge-memory</code></pre>
+            </article>
+            <article class="card" id="advanced-adapters">
+              <h3>Advanced manual install</h3>
+              <p>
+                Use this only for adapter debugging, manual recovery, or when
+                testing OpenClaw installer behavior directly.
+              </p>
               <pre><code>openclaw plugins install --dangerously-force-unsafe-install forge-openclaw-plugin
 openclaw plugins enable forge-openclaw-plugin
 openclaw gateway restart
@@ -319,9 +365,15 @@ openclaw forge ui</code></pre>
               </p>
             </article>
             <article class="card">
-              <h3>Local development</h3>
+              <h3>Development install</h3>
               <p>
-                Link the repo-local plugin when you are editing Forge itself.
+                Prefer dev mode for normal source-backed work. It keeps the same
+                guided setup while linking adapters to the local checkout.
+              </p>
+              <pre><code>npx forge-memory --dev</code></pre>
+              <p>
+                Link the repo-local plugin manually only when you are debugging
+                OpenClaw plugin installation itself.
               </p>
               <pre><code>openclaw plugins install --link --dangerously-force-unsafe-install ./openclaw-plugin
 openclaw plugins enable forge-openclaw-plugin
@@ -347,7 +399,19 @@ openclaw forge health</code></pre>
           </div>
           <div class="card-grid two">
             <article class="card">
-              <h3>Install</h3>
+              <h3>Recommended install</h3>
+              <p>
+                Let the Forge installer configure Hermes so it points at the
+                same local runtime and data folder as every other surface.
+              </p>
+              <pre><code>npx forge-memory</code></pre>
+            </article>
+            <article class="card">
+              <h3>Advanced manual install</h3>
+              <p>
+                Use this when debugging Hermes package discovery or recovering a
+                host-specific install.
+              </p>
               <pre><code>~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
 ~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade pip
 ~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade forge-hermes-plugin</code></pre>
@@ -370,11 +434,20 @@ openclaw forge health</code></pre>
           </div>
           <div class="card-grid two">
             <article class="card">
-              <h3>Install from a local Forge checkout</h3>
+              <h3>Recommended install</h3>
+              <p>
+                Let <code>npx forge-memory</code> write the local MCP entry for
+                Codex. The adapter then points at the same Forge runtime used by
+                the browser, OpenClaw, Hermes, and iPhone companion.
+              </p>
+              <pre><code>npx forge-memory</code></pre>
+            </article>
+            <article class="card">
+              <h3>Advanced local MCP install</h3>
               <p>
                 Codex uses MCP, and the MCP configuration is shared across the
-                Codex CLI and IDE extension. The most reliable local setup is to
-                point Codex at Forge's repo-local MCP launcher script.
+                Codex CLI and IDE extension. Use the repo-local launcher when
+                you are developing or debugging the adapter directly.
               </p>
               <pre><code>codex mcp add forge \
   --env FORGE_ORIGIN=http://127.0.0.1 \

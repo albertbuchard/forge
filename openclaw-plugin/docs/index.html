@@ -57,9 +57,9 @@
             </p>
             <p class="lede" style="margin-top: 14px">
               Forge keeps planning, execution, memory, health, and agent access
-              inside one shared runtime. Start with the setup that matches your
-              environment, then use the guide map below to go deeper into
-              features, engineering, integrations, or the API.
+              inside one shared runtime. Start with the single-command install,
+              then use the guide map below to go deeper into features,
+              engineering, integrations, or the API.
             </p>
             <div class="pill-row">
               <span class="pill">React 19 + Vite 6</span>
@@ -101,71 +101,75 @@
         <section class="section" id="quick-start">
           <div class="section-heading">
             <p class="eyebrow">Getting Started</p>
-            <h2>Pick the setup that matches how you want to start using Forge.</h2>
+            <h2>One command installs Forge and guides the rest.</h2>
           </div>
-          <div class="card-grid three">
+          <div class="card-grid two">
             <article class="card">
-              <h3>OpenClaw plugin</h3>
+              <h3>Single-command install</h3>
               <p>
-                Use this when OpenClaw is your main control surface and you want
-                Forge available as an integrated operating environment inside it.
+                Start here for the browser UI, OpenClaw, Hermes, Codex, or all
+                of them together. The guided installer sets up the local Forge
+                runtime, discovers agent hosts in the background, and lets you
+                keep or change the real data folder before optional iPhone
+                pairing.
               </p>
-              <pre><code>openclaw plugins install --dangerously-force-unsafe-install forge-openclaw-plugin
-openclaw plugins enable forge-openclaw-plugin
-openclaw gateway restart
-openclaw forge health
-openclaw forge ui</code></pre>
+              <pre><code>npx forge-memory</code></pre>
               <p>
-                Tested on OpenClaw <code>2026.5.4</code>: plain install is
-                blocked by the scanner, and the explicit approval flag succeeds
-                without manual config editing.
+                The adapter menu selects every detected host by default, shows
+                missing hosts as disabled rows, and supports Space to toggle
+                OpenClaw, Hermes, and Codex.
               </p>
             </article>
             <article class="card">
-              <h3>Local source checkout</h3>
+              <h3>Development install</h3>
               <p>
-                Use this when you are editing Forge and want OpenClaw to load
-                this repo directly.
+                Use the same polished flow when you are working from a Forge
+                checkout. Dev mode links adapters to this source tree and
+                defaults to the real shared Forge data folder.
               </p>
-              <pre><code>openclaw plugins install --link --dangerously-force-unsafe-install ./openclaw-plugin
-openclaw plugins enable forge-openclaw-plugin
-openclaw gateway restart
-openclaw plugins inspect forge-openclaw-plugin --runtime
-openclaw forge health</code></pre>
+              <pre><code>npx forge-memory --dev</code></pre>
             </article>
             <article class="card">
-              <h3>Hermes plugin</h3>
+              <h3>Reconfigure any time</h3>
               <p>
-                Use this when Hermes is the agent environment you want Forge to
-                power.
+                Reopen the full setup flow after install. Forge uses the current
+                config as defaults, so changing adapters, data folders, or iOS
+                pairing does not require starting over.
               </p>
-              <pre><code>~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
-~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade pip
-~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade forge-hermes-plugin</code></pre>
+              <pre><code>npx forge-memory configure</code></pre>
             </article>
             <article class="card">
-              <h3>Codex MCP</h3>
+              <h3>Operate the local runtime</h3>
               <p>
-                Use this when you want Forge tools inside Codex. Codex connects
-                to Forge through MCP, and the same MCP setup is shared by the
-                Codex CLI and IDE extension.
+                Check health, open the UI, restart the runtime, or pair the
+                iPhone companion from the same CLI instead of hunting through
+                adapter-specific commands.
               </p>
-              <pre><code>codex mcp add forge \
-  --env FORGE_ORIGIN=http://127.0.0.1 \
-  --env FORGE_PORT=4317 \
-  --env FORGE_ACTOR_LABEL=codex \
-  --env FORGE_TIMEOUT_MS=15000 \
-  -- /bin/zsh /absolute/path/to/forge/plugins/forge-codex/scripts/run-mcp.sh
-codex mcp list</code></pre>
+              <pre><code>npx forge-memory status
+npx forge-memory doctor
+npx forge-memory ui
+npx forge-memory restart
+npx forge-memory stop
+npx forge-memory export
+npx forge-memory uninstall
+npx forge-memory pair-ios</code></pre>
+              <p>
+                Export keeps a portable backup path close at hand. Uninstall
+                removes the runtime manager and cache while keeping your Forge
+                data folder unless you explicitly ask to delete it.
+              </p>
             </article>
             <article class="card">
-              <h3>Standalone repo runtime</h3>
+              <h3>Advanced adapter docs</h3>
               <p>
-                Use this when you want the full Forge app and API running
-                locally in the browser.
+                The manual OpenClaw, Hermes, and Codex commands are still
+                documented for recovery, source-linking, and host-specific
+                debugging. They are reference paths, not the normal quickstart.
               </p>
-              <pre><code>npm install
-npm run dev</code></pre>
+              <div class="link-row">
+                <a class="button" href="./integrations.html#advanced-adapters">Advanced adapters</a>
+                <a class="button" href="./development.html#local-development">Source app</a>
+              </div>
             </article>
           </div>
         </section>

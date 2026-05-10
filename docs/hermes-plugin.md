@@ -70,6 +70,9 @@ npx forge-memory
 ```
 
 Use `npx forge-memory --dev` when Hermes should link to this source checkout.
+Use `npx forge-memory export`, `npx forge-memory stop`, and
+`npx forge-memory uninstall` for backup, runtime shutdown, and conservative
+removal. Uninstall keeps the Forge data folder unless `--remove-data` is passed.
 The direct PyPI and editable commands below are advanced adapter-only paths for
 debugging or manual recovery.
 

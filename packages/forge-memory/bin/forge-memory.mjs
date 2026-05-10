@@ -17,9 +17,9 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 
 const require = createRequire(import.meta.url);
-const VERSION = "0.1.0";
+const VERSION = require("../package.json").version;
 const RUNTIME_PACKAGE = "forge-openclaw-plugin";
-const RUNTIME_PACKAGE_VERSION = "0.2.61";
+const RUNTIME_PACKAGE_VERSION = VERSION;
 const DEFAULT_ORIGIN = "http://127.0.0.1";
 const DEFAULT_PORT = 4317;
 const DEFAULT_WEB_PORT = 3027;
@@ -45,7 +45,9 @@ function parseArgs(argv) {
     skipPairIos: false,
     pairIos: false,
     skipAdapters: false,
-    printUrl: false
+    printUrl: false,
+    removeData: false,
+    removeAdapters: false
   };
   const values = {};
   const positionals = [];
@@ -65,6 +67,10 @@ function parseArgs(argv) {
     else if (arg === "--pair-ios") flags.pairIos = true;
     else if (arg === "--skip-adapters") flags.skipAdapters = true;
     else if (arg === "--print-url") flags.printUrl = true;
+    else if (arg === "--remove-data") flags.removeData = true;
+    else if (arg === "--remove-adapters") flags.removeAdapters = true;
+    else if (arg.startsWith("--output=")) values.output = arg.slice("--output=".length);
+    else if (arg === "--output") values.output = argv[++index];
     else if (arg.startsWith("--data-root=")) values.dataRoot = arg.slice("--data-root=".length);
     else if (arg === "--data-root") values.dataRoot = argv[++index];
     else if (arg.startsWith("--adapters=")) values.adapters = arg.slice("--adapters=".length);
@@ -786,6 +792,151 @@ async function stopRuntime() {
   return { ok: true, stopped: stopped.length > 0, pids: stopped };
 }
 
+async function exportForgeData(parsed) {
+  const config = await readConfig();
+  if (!fs.existsSync(config.dataRoot)) {
+    throw new Error(`Forge data folder does not exist: ${config.dataRoot}`);
+  }
+
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const requestedOutput = parsed.values.output ?? parsed.positionals[1];
+  const outputPath = path.resolve(
+    requestedOutput ?? path.join(forgeHome(), "exports", `forge-memory-export-${stamp}.tar.gz`)
+  );
+  const stagingRoot = await fsp.mkdtemp(path.join(os.tmpdir(), "forge-memory-export-"));
+  const stagingData = path.join(stagingRoot, "data");
+  const manifest = {
+    exportedAt: new Date().toISOString(),
+    forgeMemoryVersion: VERSION,
+    sourceDataRoot: config.dataRoot,
+    config: {
+      mode: config.mode,
+      origin: config.origin,
+      port: config.port,
+      webPort: config.webPort,
+      adapters: config.adapters
+    }
+  };
+
+  const skipTopLevel = new Set(["exports", "logs", "run", "runtime"]);
+  await fsp.cp(config.dataRoot, stagingData, {
+    recursive: true,
+    force: false,
+    errorOnExist: false,
+    filter: (source) => {
+      const relative = path.relative(config.dataRoot, source);
+      if (!relative) return true;
+      return !skipTopLevel.has(relative.split(path.sep)[0]);
+    }
+  });
+  if (fs.existsSync(configPath())) {
+    await fsp.copyFile(configPath(), path.join(stagingRoot, "forge-memory-config.json"));
+  }
+  await fsp.writeFile(path.join(stagingRoot, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  await fsp.mkdir(path.dirname(outputPath), { recursive: true });
+
+  const wantsArchive = outputPath.endsWith(".tar.gz") || outputPath.endsWith(".tgz");
+  if (wantsArchive && commandExists("tar")) {
+    const result = spawnSync("tar", ["-czf", outputPath, "-C", stagingRoot, "."], {
+      stdio: parsed.flags.json ? "ignore" : "inherit"
+    });
+    await fsp.rm(stagingRoot, { recursive: true, force: true });
+    if (result.status !== 0) throw new Error(`Failed to write export archive: ${outputPath}`);
+    return { ok: true, outputPath, archive: true, sourceDataRoot: config.dataRoot };
+  }
+
+  await fsp.rm(outputPath, { recursive: true, force: true });
+  await fsp.cp(stagingRoot, outputPath, { recursive: true });
+  await fsp.rm(stagingRoot, { recursive: true, force: true });
+  return { ok: true, outputPath, archive: false, sourceDataRoot: config.dataRoot };
+}
+
+async function removeOpenClawAdapterConfig() {
+  const filePath = path.join(homeDir(), ".openclaw", "openclaw.json");
+  const payload = await readJson(filePath, null);
+  if (!payload?.plugins?.entries?.[FORGE_PLUGIN_ID]) return { filePath, changed: false };
+  await backupIfExists(filePath);
+  delete payload.plugins.entries[FORGE_PLUGIN_ID];
+  if (Array.isArray(payload.plugins.allow)) {
+    payload.plugins.allow = payload.plugins.allow.filter((entry) => entry !== FORGE_PLUGIN_ID);
+  }
+  await fsp.writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  return { filePath, changed: true };
+}
+
+async function removeHermesAdapterConfig() {
+  const forgeConfigPath = path.join(homeDir(), ".hermes", "forge", "config.json");
+  const changed = fs.existsSync(forgeConfigPath);
+  if (changed) {
+    await backupIfExists(forgeConfigPath);
+    await fsp.rm(forgeConfigPath, { force: true });
+  }
+  return { filePath: forgeConfigPath, changed };
+}
+
+async function removeCodexAdapterConfig() {
+  const filePath = path.join(homeDir(), ".codex", "config.toml");
+  if (!fs.existsSync(filePath)) return { filePath, changed: false };
+  const source = await fsp.readFile(filePath, "utf8");
+  const pattern = /(?:^|\n)\[mcp_servers\.forge\][\s\S]*?(?=\n\[[^\]]+\]|\s*$)/m;
+  if (!pattern.test(source)) return { filePath, changed: false };
+  await backupIfExists(filePath);
+  const next = source.replace(pattern, "\n").replace(/\n{3,}/g, "\n\n").trimEnd();
+  await fsp.writeFile(filePath, next ? `${next}\n` : "", "utf8");
+  return { filePath, changed: true };
+}
+
+async function uninstallForgeMemory(parsed) {
+  const config = await readConfig();
+  const confirmed = parsed.flags.yes
+    ? true
+    : await promptYesNo(
+        `Uninstall Forge Memory runtime manager and keep data at ${config.dataRoot}?`,
+        true
+      );
+  if (!confirmed) return { ok: false, cancelled: true };
+
+  const stop = await stopRuntime();
+  const removed = [];
+  for (const target of [runtimeInstallRoot(), runtimeStatePath(), logPath(), configPath()]) {
+    if (fs.existsSync(target)) {
+      await fsp.rm(target, { recursive: true, force: true });
+      removed.push(target);
+    }
+  }
+
+  let adapterResults = [];
+  const removeAdapters = parsed.flags.removeAdapters || (!parsed.flags.yes && await promptYesNo("Remove Forge adapter entries from OpenClaw, Hermes, and Codex?", false));
+  if (removeAdapters) {
+    adapterResults = [
+      await removeOpenClawAdapterConfig(),
+      await removeHermesAdapterConfig(),
+      await removeCodexAdapterConfig()
+    ];
+  }
+
+  let removedDataRoot = false;
+  if (parsed.flags.removeData) {
+    const dataConfirmed = parsed.flags.yes
+      ? true
+      : await promptYesNo(`Delete Forge data folder ${config.dataRoot}? This cannot be undone.`, false);
+    if (dataConfirmed) {
+      await fsp.rm(config.dataRoot, { recursive: true, force: true });
+      removedDataRoot = true;
+    }
+  }
+
+  return {
+    ok: true,
+    stop,
+    removed,
+    adapterResults,
+    dataRoot: config.dataRoot,
+    dataKept: !removedDataRoot,
+    removedDataRoot
+  };
+}
+
 async function createPairing(config) {
   const response = await fetch(new URL("/api/v1/health/pairing-sessions", baseUrl(config)), {
     method: "POST",
@@ -959,6 +1110,9 @@ Usage:
   npx forge-memory doctor
   npx forge-memory ui
   npx forge-memory restart
+  npx forge-memory stop
+  npx forge-memory export
+  npx forge-memory uninstall
   npx forge-memory pair-ios
 
 Options:
@@ -969,6 +1123,9 @@ Options:
   --skip-adapters       Configure UI/runtime only
   --skip-pair-ios       Do not prompt or create iOS pairing
   --no-start            Configure without starting runtime
+  --output <path>        Export destination for forge-memory export
+  --remove-adapters      During uninstall, remove host adapter config entries
+  --remove-data          During uninstall, delete the Forge data folder too
   --dry-run             Show actions without writing files or installing adapters
   --json                Print machine-readable output where supported
 `);
@@ -1000,6 +1157,18 @@ async function main() {
       break;
     case "stop":
       console.log(JSON.stringify(await stopRuntime(), null, 2));
+      break;
+    case "export":
+      {
+        const result = await exportForgeData(parsed);
+        console.log(parsed.flags.json ? JSON.stringify(result, null, 2) : `Exported Forge data to ${result.outputPath}`);
+      }
+      break;
+    case "uninstall":
+      {
+        const result = await uninstallForgeMemory(parsed);
+        console.log(parsed.flags.json ? JSON.stringify(result, null, 2) : result.cancelled ? "Uninstall cancelled." : "Forge Memory uninstalled.");
+      }
       break;
     case "restart":
       await stopRuntime();

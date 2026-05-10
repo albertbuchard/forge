@@ -13,6 +13,8 @@ PLUGIN_PACKAGE_LOCK_JSON="${PLUGIN_DIR}/package-lock.json"
 CODEX_PLUGIN_MANIFEST="${FORGE_DIR}/plugins/forge-codex/.codex-plugin/plugin.json"
 CODEX_RUNTIME_PACKAGE_JSON="${FORGE_DIR}/plugins/forge-codex/runtime/package.json"
 HERMES_PLUGIN_MANIFEST="${FORGE_DIR}/plugins/forge-hermes/plugin.yaml"
+FORGE_MEMORY_PACKAGE_JSON="${FORGE_DIR}/packages/forge-memory/package.json"
+FORGE_MEMORY_PACKAGE_LOCK_JSON="${FORGE_DIR}/packages/forge-memory/package-lock.json"
 SAFE_OPENCLAW_HOST_RANGE="2026.5.4"
 DEFAULT_FORGE_PORT=4317
 RELEASE_MODE="${FORGE_RELEASE_MODE:-full}"
@@ -25,9 +27,12 @@ ORIGINAL_PLUGIN_PACKAGE_VERSION=""
 ORIGINAL_PLUGIN_PACKAGE_LOCK_VERSION=""
 ORIGINAL_CODEX_PLUGIN_VERSION=""
 ORIGINAL_CODEX_RUNTIME_VERSION=""
+ORIGINAL_FORGE_MEMORY_PACKAGE_VERSION=""
+ORIGINAL_FORGE_MEMORY_PACKAGE_LOCK_VERSION=""
 RELEASE_TARGET_VERSION=""
 VERIFY_TESTS=(
   "npm --prefix openclaw-plugin audit --omit=dev --omit=peer"
+  "npm run test:forge-memory"
   "npm exec -- vitest run src/openclaw/parity.test.ts src/openclaw/index.test.ts src/openclaw/api-client.test.ts src/openclaw/manifest.test.ts src/openclaw/tool-contract.test.ts"
   "npm run build"
   "node --import tsx --test --test-concurrency=1 server/src/app.test.ts"
@@ -49,11 +54,11 @@ Examples:
 
 This script:
 1. checks Forge repo cleanliness and auth prerequisites
-2. bumps the Forge plugin version across all publish/runtime surfaces
+2. bumps the Forge plugin version across all publish/runtime surfaces, including forge-memory
 3. runs the verification suite
 4. commits and tags the Forge nested repo
 5. pushes main + tag to origin
-6. publishes forge-openclaw-plugin to npm in full mode, or leaves that step to CI in prepare mode
+6. publishes forge-openclaw-plugin to npm in full mode, or leaves that step to CI in prepare mode; forge-memory publishes through its GitHub Actions trusted-publishing workflow on the same v<version> tag
 EOF
 }
 
@@ -76,6 +81,8 @@ cleanup_release_workspace() {
     "${PLUGIN_MANIFEST}" \
     "${CODEX_PLUGIN_MANIFEST}" \
     "${CODEX_RUNTIME_PACKAGE_JSON}" \
+    "${FORGE_MEMORY_PACKAGE_JSON}" \
+    "${FORGE_MEMORY_PACKAGE_LOCK_JSON}" \
     "openclaw-plugin/server/migrations" \
     "plugins/forge-codex/runtime/dist" \
     "plugins/forge-codex/runtime/server/migrations" >/dev/null 2>&1 || true
@@ -95,13 +102,15 @@ rollback_release_state() {
     git -C "${FORGE_DIR}" reset --mixed HEAD~1 >/dev/null 2>&1 || true
   fi
 
-  if [[ -n "${ORIGINAL_ROOT_VERSION}" && -n "${ORIGINAL_PLUGIN_MANIFEST_VERSION}" && -n "${ORIGINAL_PLUGIN_PACKAGE_VERSION}" && -n "${ORIGINAL_PLUGIN_PACKAGE_LOCK_VERSION}" && -n "${ORIGINAL_CODEX_PLUGIN_VERSION}" && -n "${ORIGINAL_CODEX_RUNTIME_VERSION}" ]]; then
+  if [[ -n "${ORIGINAL_ROOT_VERSION}" && -n "${ORIGINAL_PLUGIN_MANIFEST_VERSION}" && -n "${ORIGINAL_PLUGIN_PACKAGE_VERSION}" && -n "${ORIGINAL_PLUGIN_PACKAGE_LOCK_VERSION}" && -n "${ORIGINAL_CODEX_PLUGIN_VERSION}" && -n "${ORIGINAL_CODEX_RUNTIME_VERSION}" && -n "${ORIGINAL_FORGE_MEMORY_PACKAGE_VERSION}" && -n "${ORIGINAL_FORGE_MEMORY_PACKAGE_LOCK_VERSION}" ]]; then
     write_release_versions "${ORIGINAL_ROOT_VERSION}" "${ROOT_MANIFEST}"
     write_release_versions "${ORIGINAL_PLUGIN_PACKAGE_VERSION}" "${PLUGIN_PACKAGE_JSON}"
     write_release_versions "${ORIGINAL_PLUGIN_PACKAGE_LOCK_VERSION}" "${PLUGIN_PACKAGE_LOCK_JSON}"
     write_release_versions "${ORIGINAL_PLUGIN_MANIFEST_VERSION}" "${PLUGIN_MANIFEST}"
     write_release_versions "${ORIGINAL_CODEX_PLUGIN_VERSION}" "${CODEX_PLUGIN_MANIFEST}"
     write_release_versions "${ORIGINAL_CODEX_RUNTIME_VERSION}" "${CODEX_RUNTIME_PACKAGE_JSON}"
+    write_release_versions "${ORIGINAL_FORGE_MEMORY_PACKAGE_VERSION}" "${FORGE_MEMORY_PACKAGE_JSON}"
+    write_release_versions "${ORIGINAL_FORGE_MEMORY_PACKAGE_LOCK_VERSION}" "${FORGE_MEMORY_PACKAGE_LOCK_JSON}"
   fi
 
   cleanup_release_workspace
@@ -316,7 +325,7 @@ verify_version_alignment() {
   local version
   version="$1"
   local actual
-  actual="$(node --input-type=module - "${ROOT_MANIFEST}" "${PLUGIN_PACKAGE_JSON}" "${PLUGIN_PACKAGE_LOCK_JSON}" "${PLUGIN_MANIFEST}" "${CODEX_PLUGIN_MANIFEST}" "${CODEX_RUNTIME_PACKAGE_JSON}" <<'NODE'
+  actual="$(node --input-type=module - "${ROOT_MANIFEST}" "${PLUGIN_PACKAGE_JSON}" "${PLUGIN_PACKAGE_LOCK_JSON}" "${PLUGIN_MANIFEST}" "${CODEX_PLUGIN_MANIFEST}" "${CODEX_RUNTIME_PACKAGE_JSON}" "${FORGE_MEMORY_PACKAGE_JSON}" "${FORGE_MEMORY_PACKAGE_LOCK_JSON}" <<'NODE'
 import fs from "node:fs";
 const files = process.argv.slice(2);
 const versions = files.map((file) => {
@@ -329,7 +338,7 @@ const versions = files.map((file) => {
 process.stdout.write(JSON.stringify(versions));
 NODE
 )"
-  [[ "${actual}" == "[\"${version}\",\"${version}\",\"${version}:${version}\",\"${version}\",\"${version}\",\"${version}\"]" ]] || fail "plugin versions are not aligned: ${actual}"
+  [[ "${actual}" == "[\"${version}\",\"${version}\",\"${version}:${version}\",\"${version}\",\"${version}\",\"${version}\",\"${version}\",\"${version}:${version}\"]" ]] || fail "plugin versions are not aligned: ${actual}"
   local hermes_manifest_version
   hermes_manifest_version="$(read_hermes_manifest_version "${HERMES_PLUGIN_MANIFEST}")"
   [[ "${hermes_manifest_version}" == "${version}" ]] || fail "Hermes plugin manifest version mismatch: ${hermes_manifest_version}"
@@ -378,7 +387,7 @@ run_verification_suite() {
 
 create_release_commit() {
   local version="$1"
-  git -C "${FORGE_DIR}" add "${ROOT_MANIFEST}" "${PLUGIN_PACKAGE_JSON}" "${PLUGIN_PACKAGE_LOCK_JSON}" "${PLUGIN_MANIFEST}" "${CODEX_PLUGIN_MANIFEST}" "${CODEX_RUNTIME_PACKAGE_JSON}"
+  git -C "${FORGE_DIR}" add "${ROOT_MANIFEST}" "${PLUGIN_PACKAGE_JSON}" "${PLUGIN_PACKAGE_LOCK_JSON}" "${PLUGIN_MANIFEST}" "${CODEX_PLUGIN_MANIFEST}" "${CODEX_RUNTIME_PACKAGE_JSON}" "${FORGE_MEMORY_PACKAGE_JSON}" "${FORGE_MEMORY_PACKAGE_LOCK_JSON}"
   git -C "${FORGE_DIR}" add -A \
     "${FORGE_DIR}/plugins/forge-codex/runtime/dist" \
     "${FORGE_DIR}/plugins/forge-codex/runtime/server/migrations"
@@ -460,6 +469,8 @@ main() {
   ORIGINAL_PLUGIN_PACKAGE_LOCK_VERSION="$(read_json_version "${PLUGIN_PACKAGE_LOCK_JSON}")"
   ORIGINAL_CODEX_PLUGIN_VERSION="$(read_json_version "${CODEX_PLUGIN_MANIFEST}")"
   ORIGINAL_CODEX_RUNTIME_VERSION="$(read_json_version "${CODEX_RUNTIME_PACKAGE_JSON}")"
+  ORIGINAL_FORGE_MEMORY_PACKAGE_VERSION="$(read_json_version "${FORGE_MEMORY_PACKAGE_JSON}")"
+  ORIGINAL_FORGE_MEMORY_PACKAGE_LOCK_VERSION="$(read_json_version "${FORGE_MEMORY_PACKAGE_LOCK_JSON}")"
 
   local current_version hermes_version next_version
   current_version="$(read_json_version "${PLUGIN_PACKAGE_JSON}")"
@@ -480,7 +491,7 @@ main() {
       fi
     )
     echo "Releasing forge-openclaw-plugin ${current_version} -> ${next_version}"
-    write_release_versions "${next_version}" "${ROOT_MANIFEST}" "${PLUGIN_PACKAGE_JSON}" "${PLUGIN_PACKAGE_LOCK_JSON}" "${PLUGIN_MANIFEST}" "${CODEX_PLUGIN_MANIFEST}" "${CODEX_RUNTIME_PACKAGE_JSON}"
+    write_release_versions "${next_version}" "${ROOT_MANIFEST}" "${PLUGIN_PACKAGE_JSON}" "${PLUGIN_PACKAGE_LOCK_JSON}" "${PLUGIN_MANIFEST}" "${CODEX_PLUGIN_MANIFEST}" "${CODEX_RUNTIME_PACKAGE_JSON}" "${FORGE_MEMORY_PACKAGE_JSON}" "${FORGE_MEMORY_PACKAGE_LOCK_JSON}"
   fi
 
   RELEASE_TARGET_VERSION="${next_version}"
@@ -496,6 +507,7 @@ Release checks complete.
 
 Skipped npm upload because FORGE_RELEASE_SKIP_UPLOAD=1.
 Target package version: forge-openclaw-plugin@${next_version}
+Aligned package version: forge-memory@${next_version}
 EOF
     return 0
   fi
@@ -505,6 +517,7 @@ Release prepared.
 
 Pushed tag: v${next_version}
 CI should publish forge-openclaw-plugin@${next_version}.
+CI should also publish forge-memory@${next_version} from the same tag.
 EOF
     return 0
   fi

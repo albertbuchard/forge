@@ -2,6 +2,18 @@
 
 `forge-openclaw-plugin` is the OpenClaw bridge for Forge.
 
+For normal installs, start with the single-command Forge installer:
+
+```bash
+npx forge-memory
+```
+
+It installs the Forge UI/runtime first, discovers OpenClaw, Hermes, and Codex in
+the background, lets you choose adapters from a guided checkbox flow, and keeps
+every selected surface pointed at the same real Forge data folder. Use the direct
+OpenClaw commands below only for plugin-specific debugging, source-linking, or
+manual recovery.
+
 It gives OpenClaw a clear way to:
 
 - start or reach the local Forge runtime
@@ -26,10 +38,18 @@ For a normal local install, the Forge UI address is usually:
 http://127.0.0.1:4317/forge/
 ```
 
-That `4317` backend URL is the stable entrypoint. If Forge is running in a local
-development checkout, the backend can proxy and supervise the hot-reloading Vite
-frontend behind that same `/forge/` URL. Shared routes such as Tailscale should
-still target `http://127.0.0.1:4317/forge/`, not `3027` directly.
+That `4317` backend URL is the stable entrypoint for normal local plugin installs.
+
+Albert's MacBook also has a repo-local development mode used for plugin/dashboard work.
+The restored 6-hour Tailscale automation exposes `/forge` through the `4317` backend as
+`http://127.0.0.1:4317/forge/`, while that backend is started locally with
+`FORGE_OPENCLAW_DEV=1` and proxies the Vite dev server at `127.0.0.1:3027`. A correct
+dev-mode response contains `/forge/@vite/client` and `/forge/src/main.tsx`.
+
+That environment flag is only for the repo-local development machine. Normal plugin
+installs on other machines use the packaged runtime by default and should not be forced
+into source-backed dev mode. The restored automation also must not expose `/forge-dev` or
+point `/forge` at bare `http://127.0.0.1:3027`.
 
 You can also ask the agent to call the UI entry tool and return the exact current address.
 
@@ -218,7 +238,10 @@ OpenClaw tool coverage for those areas is explicit:
 The sports UI route is `/forge/sports`, while the backend overview route remains
 `/api/v1/health/fitness`. Sleep lives at `/forge/sleep` and `/api/v1/health/sleep`.
 
-## Install
+## Advanced Install
+
+Prefer `npx forge-memory` for normal installs. The direct commands in this
+section are for OpenClaw-specific debugging, source-linking, and recovery.
 
 ### Published Package
 
