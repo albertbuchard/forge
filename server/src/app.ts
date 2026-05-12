@@ -602,9 +602,9 @@ import { createManagerRuntime } from "./managers/runtime.js";
 import { isManagerError } from "./managers/type-guards.js";
 import {
   buildCompanionPairingTransport,
-  getCompanionTunnelStatus,
-  stopCompanionTunnel
-} from "./services/companion-tunnel.js";
+  getCompanionIrohStatus,
+  stopCompanionIroh
+} from "./services/companion-iroh.js";
 import {
   createCompanionPairingSession,
   createCompanionPairingSessionSchema,
@@ -7705,7 +7705,7 @@ export async function buildServer(
     clearInterval(cronSchedulerTimer);
     clearInterval(dataBackupTimer);
     taskRunWatchdog?.stop();
-    await stopCompanionTunnel();
+    await stopCompanionIroh();
     await managers.backgroundJobs.stop();
   });
 
@@ -8826,12 +8826,12 @@ export async function buildServer(
     reply.code(201);
     return createCompanionPairingSession(pairingTransport, parsed);
   });
-  app.get("/api/v1/health/companion-tunnel", async (request) => {
+  app.get("/api/v1/health/companion-iroh", async (request) => {
     requireOperatorSession(request.headers as Record<string, unknown>, {
-      route: "/api/v1/health/companion-tunnel"
+      route: "/api/v1/health/companion-iroh"
     });
     return {
-      tunnel: getCompanionTunnelStatus()
+      iroh: getCompanionIrohStatus()
     };
   });
   app.delete("/api/v1/health/pairing-sessions/:id", async (request, reply) => {

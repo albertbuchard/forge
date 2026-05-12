@@ -139,7 +139,10 @@ export const createCompanionPairingSessionSchema = z.object({
   label: z.string().trim().default("Forge Companion"),
   userId: z.string().trim().nullable().optional(),
   expiresInMinutes: z.coerce.number().int().min(5).max(24 * 60).default(30),
-  transportMode: z.enum(["tunnel", "manual-http"]).default("tunnel"),
+  transportMode: z
+    .enum(["iroh", "manual-http"])
+    .default("iroh")
+    .transform((mode) => mode),
   capabilities: z
     .array(
       z.enum([
@@ -2145,7 +2148,7 @@ export function createCompanionPairingSession(
     | {
         apiBaseUrl: string;
         uiBaseUrl?: string | null;
-        transportMode?: "tunnel" | "manual-http";
+        transportMode?: "iroh" | "manual-http";
         transport?: Record<string, unknown>;
       },
   input: z.infer<typeof createCompanionPairingSessionSchema>

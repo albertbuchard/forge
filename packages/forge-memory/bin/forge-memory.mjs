@@ -70,7 +70,7 @@ function parseArgs(argv) {
     else if (arg === "--print-url") flags.printUrl = true;
     else if (arg === "--remove-data") flags.removeData = true;
     else if (arg === "--remove-adapters") flags.removeAdapters = true;
-    else if (arg === "--manual-http" || arg === "--no-tunnel") flags.manualHttp = true;
+    else if (arg === "--manual-http" || arg === "--no-iroh") flags.manualHttp = true;
     else if (arg.startsWith("--output=")) values.output = arg.slice("--output=".length);
     else if (arg === "--output") values.output = argv[++index];
     else if (arg.startsWith("--data-root=")) values.dataRoot = arg.slice("--data-root=".length);
@@ -940,7 +940,7 @@ async function uninstallForgeMemory(parsed) {
 }
 
 async function createPairing(config, options = {}) {
-  const transportMode = options.transportMode ?? "tunnel";
+  const transportMode = options.transportMode ?? "iroh";
   const response = await fetch(new URL("/api/v1/health/pairing-sessions", baseUrl(config)), {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json" },
@@ -955,7 +955,11 @@ function printPairing(pairing) {
   qrcode.generate(JSON.stringify(pairing.qrPayload), { small: true });
   const transport = pairing.qrPayload?.transport;
   if (transport?.provider) {
-    const label = pairing.qrPayload.transportMode === "tunnel" ? "Tunnel" : "Manual HTTP";
+    const label = pairing.qrPayload.transport?.protocol === "iroh"
+      ? "Iroh"
+      : pairing.qrPayload.transportMode === "iroh"
+        ? "Iroh"
+        : "Manual HTTP";
     console.log(`${color.cyan(label)}: ${pairing.qrPayload.apiBaseUrl}`);
     if (transport.recreateCommand) {
       console.log(`${color.dim("recreate:")} ${transport.recreateCommand}`);
@@ -986,7 +990,7 @@ async function runInstall(parsed, command) {
   if (shouldPair && !parsed.flags.dryRun) {
     if (!runtimeResult) await startRuntime(config);
     pairing = await createPairing(config, {
-      transportMode: parsed.flags.manualHttp ? "manual-http" : "tunnel"
+      transportMode: parsed.flags.manualHttp ? "manual-http" : "iroh"
     });
     if (pairing?.qrPayload && !parsed.flags.json) {
       printPairing(pairing);
@@ -1062,7 +1066,7 @@ async function runPairIos(parsed) {
   const config = await readConfig();
   await startRuntime(config);
   const pairing = await createPairing(config, {
-    transportMode: parsed.flags.manualHttp ? "manual-http" : "tunnel"
+    transportMode: parsed.flags.manualHttp ? "manual-http" : "iroh"
   });
   if (parsed.flags.json) {
     console.log(JSON.stringify(pairing, null, 2));
@@ -1143,7 +1147,7 @@ Options:
   --adapters <list>     Comma list: openclaw,hermes,codex or none
   --skip-adapters       Configure UI/runtime only
   --skip-pair-ios       Do not prompt or create iOS pairing
-  --manual-http         Use direct HTTP/TCP for iOS pairing instead of the default tunnel
+  --manual-http         Use direct HTTP/TCP for iOS pairing instead of the default Iroh transport
   --no-start            Configure without starting runtime
   --output <path>        Export destination for forge-memory export
   --remove-adapters      During uninstall, remove host adapter config entries

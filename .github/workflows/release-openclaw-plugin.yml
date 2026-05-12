@@ -10,7 +10,61 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  companion-iroh-binaries:
+    name: Build Forge Iroh binary (${{ matrix.platform-key }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            rust-target: x86_64-unknown-linux-gnu
+            platform-key: linux-x64
+            binary-name: forge-companion-iroh
+          - os: macos-15
+            rust-target: aarch64-apple-darwin
+            platform-key: darwin-arm64
+            binary-name: forge-companion-iroh
+          - os: macos-15
+            rust-target: x86_64-apple-darwin
+            platform-key: darwin-x64
+            binary-name: forge-companion-iroh
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-target }}
+
+      - name: Build Forge Iroh host
+        run: |
+          cargo build \
+            --release \
+            --manifest-path companion-iroh/Cargo.toml \
+            --bin forge-companion-iroh \
+            --target "${{ matrix.rust-target }}"
+
+      - name: Stage binary artifact
+        run: |
+          mkdir -p "artifact/companion-iroh/${{ matrix.platform-key }}"
+          cp \
+            "companion-iroh/target/${{ matrix.rust-target }}/release/${{ matrix.binary-name }}" \
+            "artifact/companion-iroh/${{ matrix.platform-key }}/${{ matrix.binary-name }}"
+          chmod 755 "artifact/companion-iroh/${{ matrix.platform-key }}/${{ matrix.binary-name }}"
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-companion-iroh-${{ matrix.platform-key }}
+          path: artifact
+          if-no-files-found: error
+
   publish:
+    needs: companion-iroh-binaries
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -39,15 +93,26 @@ jobs:
           cache: "npm"
           cache-dependency-path: "package-lock.json"
 
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Upgrade npm for trusted publishing
         run: npm install --global npm@^11.5.1
 
       - name: Install dependencies
         run: npm ci
 
+      - name: Download Forge Iroh binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: forge-companion-iroh-*
+          path: openclaw-plugin/prebuilt-companion-iroh
+          merge-multiple: true
+
       - name: Publish release from tag
         env:
           RELEASE_VERSION: ${{ github.ref_name }}
+          FORGE_COMPANION_IROH_PREBUILT_DIR: openclaw-plugin/prebuilt-companion-iroh
         run: |
           FORGE_RELEASE_MODE=publish-from-tag \
             ./scripts/release-forge-openclaw-plugin.sh "${RELEASE_VERSION#v}"

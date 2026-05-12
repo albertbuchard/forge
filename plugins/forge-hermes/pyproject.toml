@@ -7,7 +7,7 @@ name = "forge-hermes-plugin"
 dynamic = ["version"]
 description = "Structured memory plugin for project management and mental health tracking in Hermes"
 readme = "README.md"
-license = "MIT"
+license = "Apache-2.0"
 requires-python = ">=3.9"
 authors = [
   { name = "Forge" }

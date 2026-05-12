@@ -226,8 +226,8 @@ struct SetupDiscoveryScreen: View {
         switch source {
         case .simulator:
             return "Simulator"
-        case .tunnel:
-            return "Tunnel"
+        case .iroh:
+            return "Iroh"
         case .tailscale:
             return "Tailscale"
         case .lan:

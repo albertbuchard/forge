@@ -1218,15 +1218,25 @@ export interface CompanionPairingSession {
   updatedAt: string;
 }
 
-export type CompanionPairingTransportMode = "tunnel" | "manual-http";
+export type CompanionPairingTransportMode = "iroh" | "manual-http";
 
 export interface CompanionPairingTransportPayload {
-  protocol: "https-tunnel" | "http";
-  provider: "cloudflare-quick-tunnel" | "configured-url" | "manual-http";
+  protocol: "iroh" | "http";
+  provider: "forge-companion-iroh" | "manual-http";
   status: "ready" | "starting" | "unavailable" | "error";
   publicBaseUrl?: string;
   localBaseUrl: string;
-  proxyBaseUrl?: string;
+  nodeId?: string;
+  relay?: string;
+  alpn?: "forge-companion/1";
+  agent?: "forge";
+  pairPayload?: {
+    v: number;
+    node_id: string;
+    token: string;
+    host_name?: string;
+    relay?: string;
+  };
   recreateCommand?: string;
   startedAt?: string;
   lastError?: string;

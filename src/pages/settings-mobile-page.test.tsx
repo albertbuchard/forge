@@ -198,22 +198,29 @@ describe("SettingsMobilePage", () => {
     });
   });
 
-  it("requests tunnel pairing by default and keeps manual HTTP explicit", async () => {
+  it("requests Iroh pairing by default and keeps manual HTTP explicit", async () => {
     createCompanionPairingSessionMock.mockResolvedValue({
       qrPayload: {
         kind: "forge-companion-pairing",
-        apiBaseUrl: "https://forge-companion-test.trycloudflare.com/api/v1",
-        uiBaseUrl: "https://forge-companion-test.trycloudflare.com/forge/",
-        transportMode: "tunnel",
+        apiBaseUrl: "forge-iroh://fakednodeid/api/v1",
+        uiBaseUrl: "forge-iroh://fakednodeid/forge/",
+        transportMode: "iroh",
         transport: {
-          protocol: "https-tunnel",
-          provider: "configured-url",
+          protocol: "iroh",
+          provider: "forge-companion-iroh",
           status: "ready",
-          publicBaseUrl: "https://forge-companion-test.trycloudflare.com",
           localBaseUrl: "http://127.0.0.1:4317",
-          notes: ["Using configured tunnel."]
+          nodeId: "fakednodeid",
+          alpn: "forge-companion/1",
+          agent: "forge",
+          pairPayload: {
+            v: 1,
+            node_id: "fakednodeid",
+            token: "hosttoken"
+          },
+          notes: ["Using Iroh."]
         },
-        sessionId: "pairing_tunnel",
+        sessionId: "pairing_iroh",
         pairingToken: "token",
         expiresAt: "2026-04-12T09:30:00.000Z",
         capabilities: ["background-sync"]
@@ -222,16 +229,16 @@ describe("SettingsMobilePage", () => {
 
     renderPage();
 
-    fireEvent.click(await screen.findByRole("button", { name: /Generate tunnel QR/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /Generate Iroh QR/i }));
 
     await waitFor(() => {
       expect(createCompanionPairingSessionMock).toHaveBeenCalledWith({
         userId: "user_operator",
-        transportMode: "tunnel"
+        transportMode: "iroh"
       });
     });
-    expect(await screen.findByText("Managed tunnel")).toBeInTheDocument();
-    expect(screen.getByText(/forge-companion-test/)).toBeInTheDocument();
+    expect(await screen.findByText("Iroh")).toBeInTheDocument();
+    expect(screen.getByText(/fakednodeid/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Manual HTTP/i }));
 

@@ -3,7 +3,7 @@
   "version": "0.2.61",
   "description": "Guided Forge installer and local runtime manager for the Forge UI, OpenClaw, Hermes, Codex, and iOS pairing.",
   "type": "module",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "private": false,
   "bin": {
     "forge-memory": "./bin/forge-memory.mjs"

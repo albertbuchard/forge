@@ -2,6 +2,7 @@
   "name": "forge",
   "version": "0.2.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "description": "Local-first life direction, execution, and reflection system for Forge.",
   "openclaw": {

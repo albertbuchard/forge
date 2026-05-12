@@ -192,7 +192,7 @@ final class ForgeServerDiscovery {
         switch source {
         case .simulator:
             return 0
-        case .tunnel:
+        case .iroh:
             return 1
         case .tailscale:
             return 2
@@ -376,12 +376,12 @@ final class ForgeServerDiscovery {
     }
 
     private static func probeBonjourSeed(_ seed: BonjourSeed) async -> [DiscoveredForgeServer] {
-        if let tunnelServer = await probeTunnelAdvertisement(seed) {
+        if let irohServer = await probeIrohAdvertisement(seed) {
             companionDebugLog(
                 "ForgeServerDiscovery",
-                "probeBonjourSeed using tunnel-preferred service=\(seed.name)"
+                "probeBonjourSeed using iroh-preferred service=\(seed.name)"
             )
-            return [tunnelServer]
+            return [irohServer]
         }
 
         if let tailscaleServer = await probeTailscaleAdvertisement(seed) {
@@ -399,9 +399,9 @@ final class ForgeServerDiscovery {
         return []
     }
 
-    private static func probeTunnelAdvertisement(_ seed: BonjourSeed) async -> DiscoveredForgeServer? {
-        let rawApiBaseUrl = seed.txtRecords["tunnelApiBaseUrl"]?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let rawUiBaseUrl = seed.txtRecords["tunnelUiBaseUrl"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+    private static func probeIrohAdvertisement(_ seed: BonjourSeed) async -> DiscoveredForgeServer? {
+        let rawApiBaseUrl = seed.txtRecords["irohApiBaseUrl"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rawUiBaseUrl = seed.txtRecords["irohUiBaseUrl"]?.trimmingCharacters(in: .whitespacesAndNewlines)
         guard
             let apiBaseUrl = normalizedTailscaleBaseUrl(rawApiBaseUrl)
         else {
@@ -415,14 +415,14 @@ final class ForgeServerDiscovery {
         }
         let host = URL(string: apiBaseUrl)?.host ?? seed.host
         return DiscoveredForgeServer(
-            id: "forge-tunnel-bonjour-\(host)",
+            id: "forge-iroh-bonjour-\(host)",
             name: seed.name,
             host: host,
             apiBaseUrl: apiBaseUrl,
             uiBaseUrl: resolvedUiBaseUrl,
-            source: .tunnel,
+            source: .iroh,
             canBootstrapPairing: true,
-            detail: "HTTPS companion tunnel advertised by Forge"
+            detail: "Iroh companion endpoint advertised by Forge"
         )
     }
 

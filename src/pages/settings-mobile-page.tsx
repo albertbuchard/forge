@@ -92,16 +92,14 @@ function sourceTone(enabled: boolean, syncEligible: boolean) {
 }
 
 function formatTransportLabel(payload: CompanionPairingQrPayload) {
-  if (payload.transportMode === "tunnel") {
-    return payload.transport?.provider === "configured-url"
-      ? "Managed tunnel"
-      : "Quick tunnel";
+  if (payload.transportMode === "iroh") {
+    return "Iroh";
   }
   return "Manual HTTP";
 }
 
 function transportTone(payload: CompanionPairingQrPayload) {
-  return payload.transportMode === "tunnel" ? "signal" : "meta";
+  return payload.transportMode === "iroh" ? "signal" : "meta";
 }
 
 export function SettingsMobilePage() {
@@ -123,7 +121,7 @@ export function SettingsMobilePage() {
   });
 
   const pairingMutation = useMutation({
-    mutationFn: async (transportMode: CompanionPairingTransportMode = "tunnel") =>
+    mutationFn: async (transportMode: CompanionPairingTransportMode = "iroh") =>
       createCompanionPairingSession({
         userId: defaultUserId ?? null,
         transportMode
@@ -225,7 +223,7 @@ export function SettingsMobilePage() {
       setQrPanelOpen(true);
       return;
     }
-    await pairingMutation.mutateAsync("tunnel");
+    await pairingMutation.mutateAsync("iroh");
   };
 
   const handleManualHttpPairing = async () => {
@@ -269,11 +267,11 @@ export function SettingsMobilePage() {
                 Pair iPhone
               </div>
               <div className="mt-2 text-lg text-white">
-                Open a tunnel QR only when you need it
+                Pair through Iroh by default
               </div>
               <div className="mt-2 max-w-3xl text-sm leading-6 text-white/58">
-                Forge now defaults to a recreated companion tunnel, with direct
-                HTTP kept as the advanced local-network path.
+                Forge now uses a Rust Iroh bridge by default, with direct HTTP
+                kept as the advanced local-network path.
               </div>
             </div>
             <div className="flex flex-wrap justify-end gap-2">
@@ -302,7 +300,7 @@ export function SettingsMobilePage() {
                   ? qrPanelOpen
                     ? "Hide QR"
                     : "Show QR"
-                  : "Generate tunnel QR"}
+                  : "Generate Iroh QR"}
                 {latestPairing ? (
                   qrPanelOpen ? (
                     <ChevronUp className="size-4" />
@@ -324,8 +322,8 @@ export function SettingsMobilePage() {
                     className="w-full max-w-[320px]"
                   />
                   <div className="max-w-[320px] text-center text-sm text-slate-600">
-                    Scan this in the iOS companion to pass the recreated
-                    endpoint and one-time pairing token.
+                    Scan this in the iOS companion to pass the Iroh node and
+                    one-time pairing token.
                   </div>
                 </div>
               ) : (
@@ -359,10 +357,10 @@ export function SettingsMobilePage() {
                     variant="secondary"
                     pending={pairingMutation.isPending}
                     pendingLabel="Generating"
-                    onClick={() => void pairingMutation.mutateAsync("tunnel")}
+                    onClick={() => void pairingMutation.mutateAsync("iroh")}
                   >
                     <RefreshCcw className="size-4" />
-                    Regenerate tunnel QR
+                    Regenerate Iroh QR
                   </Button>
                 ) : null}
               </div>
@@ -380,8 +378,10 @@ export function SettingsMobilePage() {
               ) : null}
             </div>
           ) : (
-            <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] px-5 py-6 text-sm text-white/55">
-              Tap the QR button when you actually want to pair a phone.
+            <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] px-5 py-6 pr-36 text-sm text-white/55 sm:pr-5">
+              <span className="block max-w-[13rem] sm:max-w-none">
+                Tap the QR button when you actually want to pair a phone.
+              </span>
             </div>
           )}
         </Card>
@@ -487,8 +487,8 @@ export function SettingsMobilePage() {
               Pairing path
             </div>
             <div className="grid gap-2 text-sm text-white/62">
-              <div>1. Generate the tunnel QR here or with npx forge-memory pair-ios.</div>
-              <div>2. Scan it in Forge Companion to pass the endpoint and pairing token.</div>
+              <div>1. Generate the Iroh QR here or with npx forge-memory pair-ios.</div>
+              <div>2. Scan it in Forge Companion to pass the node id and pairing token.</div>
               <div>3. Approve Health access on iPhone, then run the first sync.</div>
               <div>4. Use Manual HTTP only for a local, Tailscale, or direct TCP route.</div>
             </div>

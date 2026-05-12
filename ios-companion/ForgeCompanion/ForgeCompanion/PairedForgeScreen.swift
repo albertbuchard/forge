@@ -30,6 +30,7 @@ struct PairedForgeScreen: View {
                 } else if let url = appModel.forgeWebURL {
                     ForgeWebView(
                         url: url,
+                        transport: appModel.pairing?.transport,
                         reloadToken: reloadToken,
                         isLoading: $isLoading,
                         errorMessage: $webError

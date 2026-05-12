@@ -449,6 +449,7 @@ main() {
 
   require_valid_release_mode
   require_command git
+  require_command cargo
   require_command node
   require_command npm
   require_command python3
