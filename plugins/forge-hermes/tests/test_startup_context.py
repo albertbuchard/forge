@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+import forge_hermes
 from forge_hermes import tools
 
 
@@ -155,3 +156,29 @@ def test_runtime_agent_identity_key_is_stable_for_same_runtime():
 
     assert first == second
     assert first.startswith("runtime:hermes:machine_")
+
+
+def test_register_skips_hooks_missing_from_current_hermes(monkeypatch: pytest.MonkeyPatch):
+    registered_hooks: list[str] = []
+
+    class FakeContext:
+        def register_tool(self, **_kwargs):
+            return None
+
+        def register_hook(self, hook_name, _handler):
+            registered_hooks.append(hook_name)
+
+        def register_skill(self, _skill_name, _source):
+            return None
+
+    monkeypatch.setattr(forge_hermes, "_hook_is_supported", lambda hook_name: hook_name != "gateway:startup")
+
+    forge_hermes.register(FakeContext())
+
+    assert "gateway:startup" not in registered_hooks
+    assert {
+        "on_session_start",
+        "pre_llm_call",
+        "on_session_finalize",
+        "on_session_reset",
+    }.issubset(set(registered_hooks))

@@ -48,14 +48,51 @@ without guessing.
   route-key tools after the conversation has selected the lane. Life Force may be
   keyed as `lifeForce` and as the entity-style alias `life_force`; both names point
   to the same `/api/v1/life-force/*` route family.
-- The specialized route-key tool schemas include the exact route-key to method/path
-  map. When a route key's exact path contains placeholders such as `:id`,
+- The live onboarding `methodRoutes` map and the specialized route-key tool schemas
+  include the exact route-key to method/path map. Use `methodRoutes` as the
+  route-key-to-`METHOD /api/v1/...` source of truth when checking specialized
+  methods, especially POST aggregate reads such as Movement `selection` and DELETE
+  repair paths. When a route key's exact path contains placeholders such as `:id`,
   `:weekday`, `:runId`, or `:nodeId`, pass those values in `pathParams` using the
   placeholder names exactly. Do not place IDs inside `routeKey`, invent a raw route
   string, or ask the user to choose an endpoint when the lane already selects one. If
   that schema and live onboarding disagree, trust the live onboarding for the current
   call and treat the disagreement as a Forge contract bug to fix, not as a reason to
   guess a nearby route.
+
+Concrete route-key examples for internal use:
+
+- Movement all-time read:
+  `{"routeKey":"allTime","query":{"userIds":["user_operator"]}}`
+- Movement timeline read:
+  `{"routeKey":"timeline","query":{"from":"2026-05-01T00:00:00.000Z","to":"2026-05-06T23:59:59.999Z","userIds":["user_operator"]}}`
+- Movement selection aggregate:
+  `{"routeKey":"selection","query":{"from":"2026-05-01T00:00:00.000Z","to":"2026-05-14T23:59:59.999Z","placeIds":["place_home"],"userIds":["user_operator"]}}`
+- Movement trip detail:
+  `{"routeKey":"tripDetail","pathParams":{"id":"trip_123"}}`
+- Movement missing-stay correction:
+  first `{"routeKey":"userBoxPreflight","body":{"kind":"stay","startedAt":"2026-05-06T13:00:00.000Z","endedAt":"2026-05-06T15:00:00.000Z","placeLabel":"Home","userId":"user_operator"}}`,
+  then `{"routeKey":"userBoxCreate","body":{"kind":"stay","startedAt":"2026-05-06T13:00:00.000Z","endedAt":"2026-05-06T15:00:00.000Z","placeLabel":"Home","userId":"user_operator","note":"Manual correction after reviewing the timeline."}}`
+- Life Force overview:
+  `{"routeKey":"overview"}`
+- Life Force profile edit:
+  `{"routeKey":"profile","body":{"baselineDailyAp":24,"recoveryNotes":"Clinic-admin days need a lower expected afternoon load."}}`
+- Life Force weekday template edit:
+  `{"routeKey":"weekdayTemplate","pathParams":{"weekday":"monday"},"body":{"points":[{"hour":13,"freeAp":-4}]}}`
+- Life Force fatigue signal:
+  `{"routeKey":"fatigueSignal","body":{"signal":"tired","intensity":7,"note":"Sharp post-lunch dip after clinic admin."}}`
+- Workbench flow catalog:
+  `{"routeKey":"listFlows","query":{"includeArchived":false}}`
+- Workbench box catalog:
+  `{"routeKey":"boxCatalog"}`
+- Workbench run detail:
+  `{"routeKey":"runDetail","pathParams":{"id":"flow_research_digest","runId":"run_123"}}`
+- Workbench published output:
+  `{"routeKey":"publishedOutput","pathParams":{"id":"flow_research_digest"}}`
+- Workbench latest node output:
+  `{"routeKey":"latestNodeOutput","pathParams":{"id":"flow_research_digest","nodeId":"node_summary"}}`
+- Workbench run execution:
+  `{"routeKey":"runFlow","pathParams":{"id":"flow_research_digest"},"body":{"input":{"topic":"question flow quality"}}}`
 
 ## Project Management Hierarchy Rule
 

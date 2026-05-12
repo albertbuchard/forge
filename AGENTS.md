@@ -30,11 +30,12 @@ When Forge work involves the OpenClaw plugin, treat the repo-local plugin folder
 After every code change to Forge:
 
 1. **Type-check** — run `npx tsc --noEmit` and fix any errors before considering the task done.
-2. **Runtime contract** — confirm the backend API server is running on `4317`, and if dev mode is enabled it is supervising the Vite frontend behind `/forge/`:
-   - Backend API: `npm run dev:server:openclaw-data`
-   - Optional direct Vite dev: `FORGE_BASE_PATH=/forge/ npm run dev:web -- --host 127.0.0.1 --port 3027`
-   - In development, `/forge` must still be served through `http://127.0.0.1:4317/forge/`; the backend is the stable entrypoint and can proxy/autostart Vite.
-3. **Tailscale serve** — verify `tailscale serve status` shows `/forge` mapped to `http://127.0.0.1:4317/forge/` and that the MagicDNS URL returns a successful response. If a direct dev route exists, it should live on `/forge-dev`, not replace `/forge`.
-4. If any of the above are down, restart them and re-verify before reporting the task as complete.
+2. **Runtime contract** — confirm the backend/plugin runtime on `4317` is healthy when plugin behavior is involved, and confirm dev mode separately when Albert expects the live development checkout:
+   - Stable backend/plugin runtime: `http://127.0.0.1:4317/`
+   - Dev API: `HOST=127.0.0.1 PORT=3017 npm exec -- tsx server/src/index.ts`
+   - Dev Vite UI: `FORGE_BASE_PATH=/forge/ npm run dev:web -- --host 127.0.0.1 --port 3027`
+   - On this Mac, the restored 6-hour Tailscale automation manages `/forge -> http://127.0.0.1:4317/forge/`, but `4317/forge/` must still be source-backed dev mode with `/forge/@vite/client` and `/forge/src/main.tsx`. Do not use `/forge-dev`, and do not map `/forge` to bare `3027`. Normal plugin installs on other machines must keep the packaged runtime default unless explicitly opted into dev mode.
+3. **Tailscale Serve/Funnel** — inspect `tailscale serve status` and `tailscale funnel status` only. Do not create, repair, reset, or refresh Serve/Funnel mappings unless Albert explicitly approves that network exposure step in the current task. If a mapping already exists, verify it; if it is missing or stale, report that instead of repairing it.
+4. If the local Forge runtime is down, restart the local runtime and re-verify before reporting the task as complete. Do not use Tailscale Serve/Funnel repair as part of the default recovery path.
 
 Do **not** skip this verification. Do **not** report a task as done until the live app is confirmed reachable.

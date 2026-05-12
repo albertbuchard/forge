@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { createManagedDevWebRuntime } from "./web.js";
+import fastify from "fastify";
+import { createManagedDevWebRuntime, registerWebRoutes } from "./web.js";
 
 test("managed dev web runtime starts Vite when the dev origin is down", async () => {
   const spawnCalls: string[] = [];
@@ -67,8 +70,13 @@ test("managed dev web runtime does not autostart when disabled", async () => {
 
 test("managed dev web runtime infers a direct Vite launch when no explicit command is set", async () => {
   const tempDir = mkdtempSync(path.join(tmpdir(), "forge-web-runtime-"));
-  mkdirSync(path.join(tempDir, "node_modules", "vite", "bin"), { recursive: true });
-  writeFileSync(path.join(tempDir, "node_modules", "vite", "bin", "vite.js"), "");
+  mkdirSync(path.join(tempDir, "node_modules", "vite", "bin"), {
+    recursive: true
+  });
+  writeFileSync(
+    path.join(tempDir, "node_modules", "vite", "bin", "vite.js"),
+    ""
+  );
 
   const spawnCalls: {
     command: string;
@@ -91,9 +99,15 @@ test("managed dev web runtime infers a direct Vite launch when no explicit comma
         }
         return new Response("ok", { status: 200 });
       }) as typeof fetch,
-      spawnImpl: ((command: string, argsOrOptions?: string[] | object, maybeOptions?: object) => {
+      spawnImpl: ((
+        command: string,
+        argsOrOptions?: string[] | object,
+        maybeOptions?: object
+      ) => {
         const args = Array.isArray(argsOrOptions) ? argsOrOptions : [];
-        const options = (Array.isArray(argsOrOptions) ? maybeOptions : argsOrOptions) as {
+        const options = (
+          Array.isArray(argsOrOptions) ? maybeOptions : argsOrOptions
+        ) as {
           env?: NodeJS.ProcessEnv;
         };
         spawnCalls.push({ command, args, env: options?.env });
@@ -116,11 +130,71 @@ test("managed dev web runtime infers a direct Vite launch when no explicit comma
     assert.equal(origin?.toString(), "http://127.0.0.1:3027/forge/");
     assert.equal(spawnCalls.length, 1);
     assert.equal(spawnCalls[0]?.command, process.execPath);
-    assert.equal(spawnCalls[0]?.args[0], path.join(tempDir, "node_modules", "vite", "bin", "vite.js"));
-    assert.deepEqual(spawnCalls[0]?.args.slice(1), ["--host", "127.0.0.1", "--port", "3027"]);
+    assert.equal(
+      spawnCalls[0]?.args[0],
+      path.join(tempDir, "node_modules", "vite", "bin", "vite.js")
+    );
+    assert.deepEqual(spawnCalls[0]?.args.slice(1), [
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "3027"
+    ]);
     assert.equal(spawnCalls[0]?.env?.FORGE_BASE_PATH, "/forge/");
     await runtime.stop();
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("dev asset proxy reuses an upstream keep-alive socket", async () => {
+  const upstreamSockets = new Set<string>();
+  const upstream = createServer((request, response) => {
+    response.setHeader("Content-Type", "text/plain");
+    response.end(`proxied:${request.url ?? ""}`);
+  });
+  upstream.on("connection", (socket) => {
+    upstreamSockets.add(`${socket.remoteAddress}:${socket.remotePort}`);
+  });
+
+  await new Promise<void>((resolve) => {
+    upstream.listen(0, "127.0.0.1", resolve);
+  });
+  const address = upstream.address() as AddressInfo;
+  const app = fastify();
+  await registerWebRoutes(app, {
+    devWebRuntime: {
+      ensureReady: async () =>
+        new URL(`http://127.0.0.1:${address.port}/forge/`),
+      stop: async () => {}
+    }
+  });
+
+  try {
+    const first = await app.inject({
+      method: "GET",
+      url: "/forge/src/main.tsx"
+    });
+    const second = await app.inject({
+      method: "GET",
+      url: "/forge/@vite/client"
+    });
+
+    assert.equal(first.statusCode, 200);
+    assert.equal(second.statusCode, 200);
+    assert.match(first.body, /proxied:\/forge\/src\/main\.tsx/);
+    assert.match(second.body, /proxied:\/forge\/@vite\/client/);
+    assert.equal(upstreamSockets.size, 1);
+  } finally {
+    await app.close();
+    await new Promise<void>((resolve, reject) => {
+      upstream.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    });
   }
 });

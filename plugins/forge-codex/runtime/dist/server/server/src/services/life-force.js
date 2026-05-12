@@ -23,6 +23,73 @@ const LIFE_FORCE_STAT_LABELS = {
     composure: "Composure",
     flow: "Flow"
 };
+const AGENT_ACTOR_PATTERN = /\b(codex|hermes|openclaw|agent|bot)\b|aurel\s+the\s+bot/i;
+const PASSIVE_CALENDAR_PATTERN = /\b(vacation|vacances?|cong[eé]s?|absence|holiday|out\s+of\s+office|ooo|away|leave|off)\b/i;
+function isAgentAuthoredActivity(input) {
+    if (input.source === "agent") {
+        return true;
+    }
+    return AGENT_ACTOR_PATTERN.test(input.actor ?? "");
+}
+function agentSupervisionMultiplier(input) {
+    if (!isAgentAuthoredActivity(input)) {
+        return 1;
+    }
+    return input.goalLinked ? 0.05 : 0.15;
+}
+function noteApMultiplier(input) {
+    const author = input.author?.trim().toLowerCase() ?? "";
+    if (input.source === "system" && author === "movement sync") {
+        return 0;
+    }
+    return isAgentAuthoredActivity({ actor: input.author, source: input.source })
+        ? 0.15
+        : 1;
+}
+function calendarCategoriesText(raw) {
+    try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed.join(" ") : "";
+    }
+    catch {
+        return "";
+    }
+}
+function isPassiveCalendarContainer(row, profile) {
+    const hasManualOrCustomApProfile = profile?.sourceMethod === "manual" ||
+        (profile?.metadata.customSustainRateApPerHour !== null &&
+            profile?.metadata.customSustainRateApPerHour !== undefined);
+    if (hasManualOrCustomApProfile) {
+        return false;
+    }
+    const durationHours = Math.max(0, (Date.parse(row.end_at) - Date.parse(row.start_at)) / 3_600_000);
+    const searchable = [
+        row.title,
+        row.event_type,
+        calendarCategoriesText(row.categories_json)
+    ].join(" ");
+    if (row.availability === "free") {
+        return true;
+    }
+    if (row.is_all_day === 1) {
+        return true;
+    }
+    return durationHours >= 12 && PASSIVE_CALENDAR_PATTERN.test(searchable);
+}
+function scaleContributionAp(contribution, multiplier, reason) {
+    if (multiplier >= 1) {
+        return contribution;
+    }
+    return {
+        ...contribution,
+        totalAp: Number((contribution.totalAp * Math.max(0, multiplier)).toFixed(4)),
+        why: `${contribution.why} ${reason}`,
+        metadata: {
+            ...(contribution.metadata ?? {}),
+            personalApMultiplier: multiplier
+        }
+    };
+}
 const CALENDAR_ACTIVITY_PRESETS = {
     deep_work: {
         title: "Deep work",
@@ -987,6 +1054,7 @@ function readTaskRunRows(range, userId) {
          task_runs.timed_out_at,
          task_runs.updated_at,
          tasks.title AS task_title,
+         tasks.goal_id AS task_goal_id,
          task_runs.planned_duration_seconds,
          tasks.planned_duration_seconds AS task_expected_duration_seconds
        FROM task_runs
@@ -1103,7 +1171,39 @@ function getOrCreateDaySnapshot(userId, date) {
        WHERE user_id = ? AND date_key = ?`)
         .get(userId, range.dateKey);
     if (existing) {
-        return existing;
+        const profile = ensureLifeForceProfile(userId);
+        const template = readWeekdayTemplate(userId, date.getUTCDay());
+        const sleepRecoveryMultiplier = computeSleepRecoveryMultiplier(userId, date);
+        const fatigueDebtCarry = computeFatigueDebtCarry(userId, date);
+        const readinessMultiplier = profile.readiness_multiplier;
+        const dailyBudgetAp = Math.max(40, Math.round(profile.base_daily_ap *
+            computeLifeForceMultiplier(profile) *
+            sleepRecoveryMultiplier *
+            readinessMultiplier) - fatigueDebtCarry);
+        const derivedChanged = Math.abs(existing.daily_budget_ap - dailyBudgetAp) > 0.01 ||
+            Math.abs(existing.sleep_recovery_multiplier - sleepRecoveryMultiplier) > 0.001 ||
+            Math.abs(existing.readiness_multiplier - readinessMultiplier) > 0.001 ||
+            Math.abs(existing.fatigue_debt_carry - fatigueDebtCarry) > 0.01;
+        if (!derivedChanged) {
+            return existing;
+        }
+        const points = normalizeCurveToBudget(parseCurvePoints(template.points_json), dailyBudgetAp);
+        const updatedAt = nowIso();
+        getDatabase()
+            .prepare(`UPDATE life_force_day_snapshots
+         SET daily_budget_ap = ?,
+             sleep_recovery_multiplier = ?,
+             readiness_multiplier = ?,
+             fatigue_debt_carry = ?,
+             points_json = ?,
+             updated_at = ?
+         WHERE id = ?`)
+            .run(dailyBudgetAp, sleepRecoveryMultiplier, readinessMultiplier, fatigueDebtCarry, JSON.stringify(points), updatedAt, existing.id);
+        return getDatabase()
+            .prepare(`SELECT *
+         FROM life_force_day_snapshots
+         WHERE id = ?`)
+            .get(existing.id);
     }
     const profile = ensureLifeForceProfile(userId);
     const template = readWeekdayTemplate(userId, date.getUTCDay());
@@ -1190,8 +1290,11 @@ function readTodayAdjustmentRows(userId, range) {
          work_adjustments.entity_id,
          work_adjustments.applied_delta_minutes,
          work_adjustments.note,
+         work_adjustments.actor,
+         work_adjustments.source,
          work_adjustments.created_at,
-         tasks.planned_duration_seconds
+         tasks.planned_duration_seconds,
+         tasks.goal_id AS task_goal_id
        FROM work_adjustments
        LEFT JOIN tasks
          ON work_adjustments.entity_type = 'task'
@@ -1216,7 +1319,11 @@ function readTodayAdjustmentApByTaskId(userId, range, lifeForceProfile) {
             id: row.entity_id,
             plannedDurationSeconds: row.planned_duration_seconds
         }, lifeForceProfile);
-        const deltaAp = rateToTotalAp(profile.sustainRateApPerHour, row.applied_delta_minutes * 60);
+        const deltaAp = rateToTotalAp(profile.sustainRateApPerHour, row.applied_delta_minutes * 60) * agentSupervisionMultiplier({
+            actor: row.actor,
+            source: row.source,
+            goalLinked: Boolean(row.task_goal_id)
+        });
         totals.set(row.entity_id, (totals.get(row.entity_id) ?? 0) + deltaAp);
     }
     return totals;
@@ -1301,7 +1408,7 @@ function buildWorkAdjustmentContributions(userId, range, lifeForceProfile) {
             plannedDurationSeconds: row.planned_duration_seconds
         }, lifeForceProfile);
         const totalAp = rateToTotalAp(profile.sustainRateApPerHour, row.applied_delta_minutes * 60);
-        return {
+        return scaleContributionAp({
             entityType: "task",
             entityId: row.entity_id,
             eventKind: "work_adjustment",
@@ -1315,9 +1422,15 @@ function buildWorkAdjustmentContributions(userId, range, lifeForceProfile) {
             role: "background",
             metadata: {
                 adjustmentId: row.id,
-                appliedDeltaMinutes: row.applied_delta_minutes
+                appliedDeltaMinutes: row.applied_delta_minutes,
+                actor: row.actor,
+                source: row.source
             }
-        };
+        }, agentSupervisionMultiplier({
+            actor: row.actor,
+            source: row.source,
+            goalLinked: Boolean(row.task_goal_id)
+        }), "Agent-authored manual work is charged as light supervision AP instead of full human effort.");
     });
 }
 function buildTaskRunContributions(userId, range, now, lifeForceProfile) {
@@ -1336,7 +1449,7 @@ function buildTaskRunContributions(userId, range, now, lifeForceProfile) {
         const totalAp = rateToTotalAp(profile.sustainRateApPerHour, seconds);
         const startsAt = new Date(Math.max(range.startMs, Date.parse(row.claimed_at))).toISOString();
         const endsAt = new Date(Math.min(range.endMs, terminalRunMs(row, now))).toISOString();
-        const contribution = {
+        const contribution = scaleContributionAp({
             entityType: "task",
             entityId: row.task_id,
             eventKind: "task_run",
@@ -1348,8 +1461,11 @@ function buildTaskRunContributions(userId, range, now, lifeForceProfile) {
             startsAt,
             endsAt,
             role: row.is_current === 1 ? "primary" : "secondary",
-            metadata: { taskRunId: row.id }
-        };
+            metadata: { taskRunId: row.id, actor: row.actor }
+        }, agentSupervisionMultiplier({
+            actor: row.actor,
+            goalLinked: Boolean(row.task_goal_id)
+        }), "Agent-authored task runs are charged as supervision AP for the human user.");
         contributions.push(contribution);
         const existing = totalsByTaskId.get(row.task_id) ?? { todayAp: 0, totalAp: 0 };
         existing.todayAp += totalAp;
@@ -1372,6 +1488,8 @@ function buildNoteContributions(userId, range, now, lifeForceProfile) {
             .prepare(`SELECT
            notes.id,
            notes.title,
+           notes.author,
+           notes.source,
            notes.created_at,
            GROUP_CONCAT(
              CASE
@@ -1399,19 +1517,34 @@ function buildNoteContributions(userId, range, now, lifeForceProfile) {
                 .filter(Boolean);
             return !linkedTaskIds.some((taskId) => (taskRunWindowsByTaskId.get(taskId) ?? []).some((window) => createdAtMs >= window.startMs && createdAtMs <= window.endMs));
         })
-            .map((row) => ({
-            entityType: "note",
-            entityId: row.id,
-            eventKind: "note_created",
-            sourceKind: "note",
-            totalAp: noteProfile.totalCostAp,
-            rateApPerHour: null,
-            title: row.title || "Note",
-            why: "Standalone capture takes a small impulse of activation and focus.",
-            startsAt: row.created_at,
-            endsAt: row.created_at,
-            role: "background"
-        }));
+            .flatMap((row) => {
+            const multiplier = noteApMultiplier({
+                author: row.author,
+                source: row.source
+            });
+            if (multiplier <= 0) {
+                return [];
+            }
+            return [
+                scaleContributionAp({
+                    entityType: "note",
+                    entityId: row.id,
+                    eventKind: "note_created",
+                    sourceKind: "note",
+                    totalAp: noteProfile.totalCostAp,
+                    rateApPerHour: null,
+                    title: row.title || "Note",
+                    why: "Standalone capture takes a small impulse of activation and focus.",
+                    startsAt: row.created_at,
+                    endsAt: row.created_at,
+                    role: "background",
+                    metadata: {
+                        author: row.author,
+                        source: row.source
+                    }
+                }, multiplier, "Agent-authored notes are charged as a small monitoring impulse instead of full personal work.")
+            ];
+        });
     }
     catch {
         return [];
@@ -1652,8 +1785,10 @@ function readCalendarEventLifeForceRows(range) {
            forge_events.title,
            forge_events.start_at,
            forge_events.end_at,
+           forge_events.is_all_day,
            forge_events.availability,
            forge_events.event_type,
+           forge_events.categories_json,
            COUNT(forge_event_links.id) AS link_count
          FROM forge_events
          LEFT JOIN forge_event_links
@@ -1666,8 +1801,10 @@ function readCalendarEventLifeForceRows(range) {
            forge_events.title,
            forge_events.start_at,
            forge_events.end_at,
+           forge_events.is_all_day,
            forge_events.availability,
-           forge_events.event_type`)
+           forge_events.event_type,
+           forge_events.categories_json`)
             .all(range.from, range.to);
     }
     catch {
@@ -1973,11 +2110,15 @@ function buildCalendarDrains(rows, now, range, lifeForceProfile, blockingWindows
     const plannedDrains = [];
     try {
         for (const row of rows) {
-            const calendarProfile = buildEffectiveProfile(readEntityActionProfile("calendar_event", row.id, {
+            const storedProfile = readEntityActionProfile("calendar_event", row.id, {
                 profileKey: `calendar_event_${row.id}`,
                 title: row.title,
                 entityType: "calendar_event"
-            }) ??
+            });
+            if (isPassiveCalendarContainer(row, storedProfile)) {
+                continue;
+            }
+            const calendarProfile = buildEffectiveProfile(storedProfile ??
                 buildCalendarEventActionProfile({
                     eventId: row.id,
                     title: row.title,

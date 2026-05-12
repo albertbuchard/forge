@@ -706,3 +706,252 @@ test("life force honors custom calendar AP profiles and keeps rest or holiday bl
     await rm(rootDir, { recursive: true, force: true });
   }
 });
+
+test("life force ignores passive absence calendar containers unless explicitly profiled", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-life-force-absence-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const database = getDatabase();
+    const dateKey = "2026-04-15";
+    const now = new Date(`${dateKey}T12:30:00.000Z`);
+
+    createCalendarEvent({
+      title: "Vacances",
+      description: "",
+      location: "",
+      place: {
+        label: "",
+        address: "",
+        timezone: "",
+        latitude: null,
+        longitude: null,
+        source: "",
+        externalPlaceId: ""
+      },
+      startAt: `${dateKey}T00:00:00.000Z`,
+      endAt: `2026-04-16T00:00:00.000Z`,
+      timezone: "UTC",
+      isAllDay: true,
+      availability: "busy",
+      eventType: "",
+      categories: [],
+      links: [],
+      userId: "user_operator"
+    });
+
+    createCalendarEvent({
+      title: "Vacances [Absence Greco]",
+      description: "",
+      location: "",
+      place: {
+        label: "",
+        address: "",
+        timezone: "",
+        latitude: null,
+        longitude: null,
+        source: "",
+        externalPlaceId: ""
+      },
+      startAt: `${dateKey}T00:00:00.000Z`,
+      endAt: `2026-04-17T00:00:00.000Z`,
+      timezone: "UTC",
+      isAllDay: false,
+      availability: "busy",
+      eventType: "",
+      categories: [],
+      links: [],
+      userId: "user_operator"
+    });
+
+    createCalendarEvent({
+      title: "Clinical meeting",
+      description: "",
+      location: "",
+      place: {
+        label: "",
+        address: "",
+        timezone: "",
+        latitude: null,
+        longitude: null,
+        source: "",
+        externalPlaceId: ""
+      },
+      startAt: `${dateKey}T10:00:00.000Z`,
+      endAt: `${dateKey}T11:00:00.000Z`,
+      timezone: "UTC",
+      isAllDay: false,
+      availability: "busy",
+      eventType: "meeting",
+      categories: [],
+      links: [],
+      userId: "user_operator"
+    });
+
+    const payload = buildLifeForcePayload(now, ["user_operator"]);
+    const rows = (
+      database
+        .prepare(
+          `SELECT json_extract(metadata_json, '$.title') AS title, total_ap
+           FROM ap_ledger_events
+           WHERE date_key = ? AND event_kind = 'calendar_event_actual'
+           ORDER BY title ASC`
+        )
+        .all(dateKey) as Array<{ title: string; total_ap: number }>
+    ).map((row) => ({
+      title: row.title,
+      total_ap: Number(row.total_ap.toFixed(2))
+    }));
+
+    assert.deepEqual(rows, [{ title: "Clinical meeting", total_ap: 13 }]);
+    assert.equal(Number(payload.spentTodayAp.toFixed(2)), 13);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("life force charges agent work as supervision AP instead of full personal AP", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-life-force-agent-ap-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const database = getDatabase();
+    const projectRow = database
+      .prepare(`SELECT id, goal_id FROM projects ORDER BY created_at ASC LIMIT 1`)
+      .get() as { id: string; goal_id: string };
+    const dateKey = "2026-04-16";
+    const runStart = `${dateKey}T09:00:00.000Z`;
+    const runEnd = `${dateKey}T10:00:00.000Z`;
+    const now = new Date(`${dateKey}T11:00:00.000Z`);
+
+    const task = createTask(
+      {
+        title: "Goal-linked Codex task",
+        description: "",
+        status: "focus",
+        priority: "medium",
+        owner: "Albert",
+        userId: "user_operator",
+        goalId: projectRow.goal_id,
+        projectId: projectRow.id,
+        dueDate: null,
+        effort: "deep",
+        energy: "steady",
+        points: 60,
+        plannedDurationSeconds: 86_400,
+        schedulingRules: null,
+        tagIds: [],
+        actionCostBand: "standard",
+        notes: []
+      },
+      { source: "ui", actor: "Albert" }
+    );
+
+    database
+      .prepare(
+        `INSERT INTO task_runs (
+           id, task_id, actor, status, note, lease_ttl_seconds, claimed_at,
+           heartbeat_at, lease_expires_at, completed_at, released_at,
+           timed_out_at, updated_at, timer_mode, planned_duration_seconds,
+           is_current
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        "run_codex_supervised",
+        task.id,
+        "Codex",
+        "completed",
+        "",
+        1800,
+        runStart,
+        runEnd,
+        runEnd,
+        runEnd,
+        null,
+        null,
+        runEnd,
+        "planned",
+        3600,
+        0
+      );
+
+    database
+      .prepare(
+        `INSERT INTO notes (
+           id, title, content_markdown, content_plain, author, source,
+           created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        "note_codex_supervised",
+        "Codex handoff",
+        "Codex handoff",
+        "Codex handoff",
+        "Codex",
+        "openclaw",
+        `${dateKey}T10:05:00.000Z`,
+        `${dateKey}T10:05:00.000Z`
+      );
+    database
+      .prepare(
+        `INSERT INTO notes (
+           id, title, content_markdown, content_plain, author, source,
+           created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        "note_movement_sync",
+        "Stay · Home",
+        "Movement sync note",
+        "Movement sync note",
+        "Movement sync",
+        "system",
+        `${dateKey}T10:10:00.000Z`,
+        `${dateKey}T10:10:00.000Z`
+      );
+    database
+      .prepare(
+        `INSERT INTO entity_owners (entity_type, entity_id, user_id, role, created_at, updated_at)
+         VALUES ('note', ?, 'user_operator', 'owner', ?, ?), ('note', ?, 'user_operator', 'owner', ?, ?)`
+      )
+      .run(
+        "note_codex_supervised",
+        `${dateKey}T10:05:00.000Z`,
+        `${dateKey}T10:05:00.000Z`,
+        "note_movement_sync",
+        `${dateKey}T10:10:00.000Z`,
+        `${dateKey}T10:10:00.000Z`
+      );
+
+    const payload = buildLifeForcePayload(now, ["user_operator"]);
+    const rows = (
+      database
+        .prepare(
+          `SELECT entity_type, event_kind, total_ap
+           FROM ap_ledger_events
+           WHERE date_key = ?
+           ORDER BY entity_type, event_kind`
+        )
+        .all(dateKey) as Array<{
+        entity_type: string;
+        event_kind: string;
+        total_ap: number;
+      }>
+    ).map((row) => ({
+      ...row,
+      total_ap: Number(row.total_ap.toFixed(4))
+    }));
+
+    assert.deepEqual(rows, [
+      { entity_type: "note", event_kind: "note_created", total_ap: 0.15 },
+      { entity_type: "task", event_kind: "task_run", total_ap: 0.2083 }
+    ]);
+    assert.equal(payload.spentTodayAp, 0.36);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});

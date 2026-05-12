@@ -114,6 +114,24 @@ With the user, say the human thing:
 The API path still matters, but it should not leak into the question unless the user
 is explicitly asking about implementation.
 
+## Dedicated surface lane translation
+
+Use this when Movement, Life Force, or Workbench work needs a route choice. The route
+choice is an internal classification step, not a user-facing menu.
+
+- Translate "day, month, all-time, timeline, trip detail, or selection" into "which
+  time window or specific stay/trip should we look at?"
+- Translate "overview, profile, weekdayTemplate, or fatigueSignal" into "is this about
+  your current state, a durable assumption, a repeated weekday rhythm, or how you feel
+  right now?"
+- Translate "listFlows, boxCatalog, runDetail, nodeResult, latestNodeOutput, or
+  publishedOutput" into "do you need the saved flow, its inputs, one run, one node, or
+  the public result?"
+- If the user already gave the concrete object, time window, weekday, flow, run, or
+  node, skip the route menu entirely and ask only for the missing product detail.
+- Once the lane is selected, use the exact route key internally and do not invent a
+  friendlier path.
+
 ## Psyche and memory routing
 
 Self-observation is not the default container for psychological material. Use it only
@@ -230,6 +248,55 @@ Use this quick split before the conversation gets too detailed.
   after the action path is already obvious.
 - If the tool schema and live onboarding disagree about a specialized route key or
   path, treat that as a contract mismatch to fix. Do not guess a nearby route.
+
+## Full Route Posture Matrix
+
+Use this as an internal checklist when simulating or handling an entity flow. Do not
+read this table to the user. It exists so the agent can ask natural questions while
+still knowing the exact write/read family before it acts.
+
+- `goal`, `project`, `strategy`, `task`, `habit`, `tag`, `note`, `insight`,
+  `calendar_event`, `work_block_template`, and `task_timebox`: normal stored Forge
+  entities. Search, create, update, delete, and restore through the shared batch
+  entity routes.
+- `preference_catalog`, `preference_catalog_item`, `preference_context`, and
+  `preference_item`: normal stored Preferences records. Use shared batch entity
+  routes for CRUD; switch to Preferences action routes only for judgments, signals,
+  game starts, merges, entity seeding, or explicit score overrides.
+- `questionnaire_instrument`: normal stored questionnaire CRUD for ordinary authoring
+  and edits. Use questionnaire action routes only for clone, draft, and publish
+  state.
+- `sleep_session` and `workout_session`: normal stored health records for ordinary
+  CRUD. Use health overview/read helpers for review and reflective update helpers only
+  when enriching one already-known record after review.
+- `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`,
+  `mode_guide_session`, `trigger_report`, `event_type`, and `emotion_definition`:
+  psychologically meaningful records, but normal stored entities for API purposes.
+  Search and mutate through shared batch entity routes after the formulation is clear.
+- `wiki_page`: specialized CRUD. Use wiki page/search/upsert routes so page rows,
+  backlinks, spaces, aliases, and metadata stay coherent.
+- `calendar_connection`: specialized CRUD. Use provider discovery, connection CRUD,
+  selected-calendar rediscovery, sync, and delete routes rather than batch entity
+  tools.
+- `task_run`: action workflow. Use task-run start, heartbeat, focus, complete, and
+  release routes; never treat status changes as proof of live work.
+- `work_adjustment`: action workflow. Use the signed work-adjustment route for real
+  minutes that happened outside a live run.
+- `preference_judgment` and `preference_signal`: action workflows. Use the dedicated
+  Preferences judgment and signal routes, not batch CRUD.
+- `questionnaire_run`: action workflow. Use questionnaire run start, read, update, and
+  complete routes.
+- `self_observation`: read-model and note-backed workflow. Read the self-observation
+  calendar, then create or update an observed `note` with `frontmatter.observedAt`
+  only when a lightweight episode observation is the right container.
+- `movement`: specialized domain surface. Use the dedicated movement routes for day,
+  month, all-time, timeline, places, trip detail, selection aggregates, manual
+  overlays, and repair actions.
+- `life_force`: specialized domain surface. Use the dedicated Life Force routes for
+  overview, profile updates, weekday templates, and fatigue signals.
+- `workbench`: specialized domain surface. Use the dedicated Workbench routes for
+  flow catalog/detail, flow CRUD, execution, run history, published output, node
+  result, and latest-node-output work.
 
 ## Active-listening patterns
 
@@ -1240,6 +1307,9 @@ Direct action rules:
 
 - If the user is clearly talking about a missing-data gap that should become a stay or
   trip, use a user-defined movement box.
+- Treat day, month, all-time, timeline, trip detail, and selection as internal read
+  lanes. With the user, ask for the useful time window, place, selected span, stay, or
+  trip instead of listing route choices.
 - Preflight with `/api/v1/movement/user-boxes/preflight` when overlap or exact timing
   is unclear, then create the overlay with `/api/v1/movement/user-boxes`.
 - Use `kind: "stay"` when the user stayed in one place and `kind: "trip"` when they
@@ -1354,6 +1424,12 @@ Direct action rules:
 - In onboarding, this surface may be keyed as `lifeForce` and also as the entity-style
   alias `life_force`. Treat both names as the same dedicated Life Force route family,
   not as batch CRUD.
+- Treat overview, profile, weekday-template, and fatigue-signal lanes as internal
+  route choices. With the user, ask whether this is a current read, a durable
+  assumption, a repeated weekday rhythm, or a right-now state instead of reciting route
+  names.
+- The overview route key is `overview` and the concrete runtime path is
+  `GET /api/v1/life-force`. Do not invent `/api/v1/life-force/overview`.
 - If the user is describing a durable baseline such as work capacity, recovery style,
   or action-point assumptions, patch the profile instead of logging a fatigue signal.
 - If the user is describing a repeatable weekday rhythm, update that weekday template
@@ -1434,6 +1510,13 @@ Direct action rules:
 
 - If the user needs the stable public contract of a flow, prefer the flow detail or
   published-output routes before a run-history read.
+- Treat saved-flow catalog, box catalog, run history, run detail, node result, latest
+  node output, and published output as internal read lanes. With the user, ask whether
+  they need the saved flow, its input contract, one run, one node, or the public
+  result instead of listing route keys.
+- For flow catalog questions, use `GET /api/v1/workbench/flows`; for available box
+  inputs, use `GET /api/v1/workbench/catalog/boxes`. Do not blur those into one vague
+  "catalog" read when the user needs a runnable flow versus an input-box contract.
 - If the user wants to execute a known saved flow, use `/api/v1/workbench/flows/:id/run`.
 - If the user wants payload-first execution without depending on a saved flow id, use
   `/api/v1/workbench/run`.
@@ -1670,26 +1753,38 @@ Preferred opening question:
 
 ## Event Type
 
-Aim: create a reusable incident category that will actually help future reports stay
-consistent.
+Aim: bridge into the Psyche playbook for a reusable incident category without
+flattening the lived episode into cold taxonomy. `event_type` is a Psyche taxonomy
+record: use the deeper Event Type guidance in `psyche_entity_playbooks.md` when the
+user is exploring meaning, and keep this section as the route and handoff reminder.
 
 Arc:
 
-1. Ask what kind of moment or incident this label should capture in lived terms.
-2. Reflect the repeated moment back in plain language before narrowing the wording.
-3. Ask how narrow or broad it should be.
-4. Ask what would count as inside versus outside the category if that boundary is
-   still fuzzy.
-5. Offer a concise label if the lived meaning is clearer than the wording.
-6. Ask for a short description only if the label could be ambiguous later.
+1. Ask what kind of emotionally meaningful moment keeps recurring and why naming it
+   consistently would help future trigger reports.
+2. Reflect the repeated moment back in plain language by naming the emotional or
+   relational stake before narrowing the wording.
+3. Ask for one recent example if the boundary is still abstract.
+4. Clarify what belongs inside this event type and what should stay outside it.
+5. Offer one concise candidate label once the repeated moment is clear.
+6. Link it to trigger reports, beliefs, patterns, modes, or emotion definitions only
+   after the category itself feels accurate.
 
 If the user already offered a candidate label, keep the wording provisional and ask
 what kinds of moments belong inside it before you ask whether the label is right.
 
+Route note:
+
+- `event_type` is psychologically meaningful but still uses shared batch CRUD for
+  storage. Search and mutate it through the shared entity routes after the lived
+  category, boundary, and wording are clear enough. Do not treat it as a generic tag
+  or route it through `self_observation`.
+
 Ready to save when:
 
-- the label is stable
-- the intended category is clear enough that future reports will use it consistently
+- the repeated moment is understandable in plain language
+- the boundary is clear enough for future reports to use consistently
+- the label feels accurate enough or has one candidate wording to confirm
 
 Preferred opening question:
 
@@ -1697,25 +1792,42 @@ Preferred opening question:
 
 ## Emotion Definition
 
-Aim: define one reusable emotion entry clearly enough that future reports stay precise.
+Aim: `emotion_definition` is a Psyche taxonomy record, so bridge into the Psyche
+playbook for a reusable emotion entry by its lived signature, not by a dictionary
+definition. Use the deeper Emotion Definition guidance in
+`psyche_entity_playbooks.md` when the user is exploring the feeling.
 
 Arc:
 
-1. Ask what this feeling is like in lived terms when the user says it.
-2. Reflect the felt signature back in plain language before you settle the label.
+1. Ask when this feeling was present recently and what made it recognizable.
+2. Reflect the felt signature back in plain language before asking for category or
+   label polish.
 3. Ask what distinguishes it from nearby emotions if that matters.
-4. Offer a concise label if the felt meaning is clearer than the wording.
-5. Ask for a short description only if later reports would benefit from it.
+4. Ask what the feeling tends to signal, protect, warn about, long for, or demand.
+5. Offer one concise definition in the user's language and invite correction.
+6. Link it to trigger reports, modes, beliefs, or patterns only after the definition
+   feels steady.
 
 Helpful follow-up lanes:
 
 - what tells the user this is that feeling and not a nearby one
+- body signal, urge, image, thought, or relational meaning that identifies it
 - what kind of moments this emotion name should be used for later
+- what the feeling usually warns about, longs for, protects, or demands
+
+Route note:
+
+- `emotion_definition` is psychologically meaningful but still uses shared batch CRUD
+  for storage. Search and mutate it through the shared entity routes after the felt
+  signature, boundary, and wording are clear enough. Do not treat it as a generic
+  dictionary item.
 
 Ready to save when:
 
 - the label is clear
-- the meaning is clear enough to reuse later
+- the felt signature is clear enough to recognize later
+- the boundary from nearby feelings is clear enough when it matters
+- the definition can be written in language the user recognizes
 
 Preferred opening question:
 

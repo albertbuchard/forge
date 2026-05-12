@@ -233,11 +233,26 @@ export const movementSelectionAggregateSchema = z.object({
 });
 export const movementSettingsPatchSchema = movementSettingsInputSchema.partial();
 const MOVEMENT_TIMELINE_MAX_LIMIT = 360;
+const queryStringArraySchema = z.preprocess((value) => {
+    if (value === undefined || value === null) {
+        return [];
+    }
+    const rawValues = Array.isArray(value) ? value : [value];
+    return rawValues.flatMap((item) => {
+        if (typeof item !== "string") {
+            return [];
+        }
+        return item
+            .split(",")
+            .map((part) => part.trim())
+            .filter(Boolean);
+    });
+}, z.array(z.string().trim().min(1)));
 export const movementTimelineQuerySchema = z.object({
     before: z.string().trim().min(1).optional(),
     limit: z.coerce.number().int().min(1).max(MOVEMENT_TIMELINE_MAX_LIMIT).default(40),
     includeInvalid: z.coerce.boolean().default(false),
-    userIds: z.array(z.string().trim().min(1)).default([])
+    userIds: queryStringArraySchema
 });
 export const movementStayPatchSchema = z.object({
     label: z.string().trim().optional(),

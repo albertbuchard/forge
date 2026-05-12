@@ -92,6 +92,19 @@ describe("question flow quality coverage", () => {
     expect(entityPlaybook).toMatch(
       /Do not let API uncertainty leak out as vague wording/i
     );
+    expect(entityPlaybook).toMatch(/## Dedicated surface lane translation/i);
+    expect(entityPlaybook).toMatch(
+      /route\s+choice is an internal classification step, not a user-facing menu/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Translate "day, month, all-time, timeline, trip detail, or selection"/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Translate "overview, profile, weekdayTemplate, or fatigueSignal"/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Translate "listFlows, boxCatalog, runDetail, nodeResult, latestNodeOutput, or\s+publishedOutput"/i
+    );
     expect(entityPlaybook).toMatch(
       /Avoid generic reflections such as "that sounds important"/i
     );
@@ -159,10 +172,25 @@ describe("question flow quality coverage", () => {
     expect(entityPlaybook).toMatch(
       /repeatable day-shape such as "Mondays crash after lunch"[\s\S]*weekday-template question/i
     );
+    expect(entityPlaybook).toMatch(
+      /overview route key is `overview`[\s\S]*GET \/api\/v1\/life-force[\s\S]*Do not invent `\/api\/v1\/life-force\/overview`/i
+    );
     expect(entityPlaybook).toMatch(/debugging one failed run|debug one failed execution/i);
     expect(entityPlaybook).toMatch(/run[\s\S]*summary/i);
     expect(entityPlaybook).toMatch(/latest node output/i);
     expect(entityPlaybook).toMatch(/published output/i);
+    expect(entityPlaybook).toMatch(
+      /flow catalog questions[\s\S]*GET \/api\/v1\/workbench\/flows[\s\S]*available box\s+inputs[\s\S]*GET \/api\/v1\/workbench\/catalog\/boxes/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Treat day, month, all-time, timeline, trip detail, and selection as internal read\s+lanes/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Treat overview, profile, weekday-template, and fatigue-signal lanes as internal\s+route choices/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Treat saved-flow catalog, box catalog, run history, run detail, node result, latest\s+node output, and published output as internal read lanes/i
+    );
     expect(entityPlaybook).toMatch(/POST \/api\/v1\/workbench\/flows/);
     expect(entityPlaybook).toMatch(/PATCH \/api\/v1\/workbench\/flows\/:id/);
     expect(entityPlaybook).toMatch(/DELETE \/api\/v1\/workbench\/flows\/:id/);
@@ -218,11 +246,28 @@ describe("question flow quality coverage", () => {
     expect(psychePlaybook).toMatch(
       /schema theme[\s\S]*belief_entry[\s\S]*behavior_pattern[\s\S]*mode_profile/i
     );
+    expect(psychePlaybook).toMatch(/Hypotheses are not decorative reassurance/i);
+    expect(psychePlaybook).toMatch(
+      /Do not make the user supply every interpretation alone/i
+    );
+    expect(psychePlaybook).toMatch(/## Hypothesis To Record Bridge/i);
+    expect(psychePlaybook).toMatch(
+      /Once a hypothesis lands or is corrected[\s\S]*saveable Forge shape/i
+    );
+    expect(psychePlaybook).toMatch(
+      /Name what the hypothesis is becoming:[\s\S]*belief sentence[\s\S]*functional loop[\s\S]*mode[\s\S]*trigger report/i
+    );
     expect(psychePlaybook).toMatch(
       /wiki_page[\s\S]*durable explanation of a schema theme/i
     );
     expect(entityPlaybook).toMatch(
       /do not ask a broad review question again[\s\S]*then act/i
+    );
+    expect(getSectionSlice(entityPlaybook, "Event Type")).toMatch(
+      /Psyche taxonomy[\s\S]*emotionally meaningful moment[\s\S]*shared batch CRUD/i
+    );
+    expect(getSectionSlice(entityPlaybook, "Emotion Definition")).toMatch(
+      /Psyche taxonomy[\s\S]*lived signature[\s\S]*shared batch CRUD/i
     );
     expect(entityPlaybook).toMatch(
       /what would make the comparison confusing or unfair if the label stayed as-is/i
@@ -352,6 +397,12 @@ describe("question flow quality coverage", () => {
     );
     expect(psychePlaybook).toMatch(
       /If the user already gives the new sentence in usable language,[\s\S]*revise the wording[\s\S]*once and save/i
+    );
+    expect(psychePlaybook).toMatch(
+      /Ask one confirmation question about accuracy, not another broad exploration\s+question/i
+    );
+    expect(psychePlaybook).toMatch(
+      /Save through shared batch entity routes only after the user accepts the working\s+wording/i
     );
     expect(psychePlaybook).toMatch(/## Therapeutic turn shapes/i);
     expect(psychePlaybook).toMatch(/## Name, Define, Connect/i);

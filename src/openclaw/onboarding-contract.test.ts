@@ -58,6 +58,7 @@ async function loadOnboardingPayload() {
     entityConversationPlaybooks: Array<{
       focus: string;
       openingQuestion: string;
+      coachingGoal: string;
       askSequence: string[];
       routePosture: string;
       apiAccessHint: string;
@@ -80,6 +81,7 @@ async function loadOnboardingPayload() {
         {
           classification?: string;
           aliases?: string[];
+          methodRoutes: Record<string, string>;
           readRoutes: Record<string, string>;
           writeRoutes: Record<string, string>;
           routeSelectionQuestions?: string[];
@@ -89,7 +91,10 @@ async function loadOnboardingPayload() {
       readModelOnlySurfaces: Record<string, string>;
     };
     interactionGuidance: Record<string, string>;
-    mutationGuidance: Record<string, string | Record<string, string> | boolean>;
+    mutationGuidance: Record<
+      string,
+      string | Record<string, string> | boolean
+    >;
     recommendedPluginTools?: Record<string, string[]>;
     connectionGuides?: {
       openclaw?: {
@@ -362,6 +367,16 @@ describe("forge onboarding contract", () => {
         tripPointDelete: "/api/v1/movement/trips/:id/points/:pointId"
       })
     );
+    expect(routeModel.specializedDomainSurfaces.movement.methodRoutes).toEqual(
+      expect.objectContaining({
+        allTime: "GET /api/v1/movement/all-time",
+        selection: "POST /api/v1/movement/selection",
+        userBoxPreflight: "POST /api/v1/movement/user-boxes/preflight",
+        userBoxDelete: "DELETE /api/v1/movement/user-boxes/:id",
+        tripPointDelete:
+          "DELETE /api/v1/movement/trips/:id/points/:pointId"
+      })
+    );
     expect(
       routeModel.specializedDomainSurfaces.movement.routeSelectionQuestions
     ).toEqual(
@@ -391,6 +406,14 @@ describe("forge onboarding contract", () => {
         fatigueSignal: "/api/v1/life-force/fatigue-signals"
       })
     );
+    expect(routeModel.specializedDomainSurfaces.lifeForce.methodRoutes).toEqual(
+      expect.objectContaining({
+        overview: "GET /api/v1/life-force",
+        profile: "PATCH /api/v1/life-force/profile",
+        weekdayTemplate: "PUT /api/v1/life-force/templates/:weekday",
+        fatigueSignal: "POST /api/v1/life-force/fatigue-signals"
+      })
+    );
     expect(
       routeModel.specializedDomainSurfaces.lifeForce.routeSelectionQuestions
     ).toEqual(
@@ -411,6 +434,10 @@ describe("forge onboarding contract", () => {
           profile: "/api/v1/life-force/profile",
           weekdayTemplate: "/api/v1/life-force/templates/:weekday",
           fatigueSignal: "/api/v1/life-force/fatigue-signals"
+        }),
+        methodRoutes: expect.objectContaining({
+          overview: "GET /api/v1/life-force",
+          weekdayTemplate: "PUT /api/v1/life-force/templates/:weekday"
         })
       })
     );
@@ -436,6 +463,18 @@ describe("forge onboarding contract", () => {
         runFlow: "/api/v1/workbench/flows/:id/run",
         runByPayload: "/api/v1/workbench/run",
         chatFlow: "/api/v1/workbench/flows/:id/chat"
+      })
+    );
+    expect(routeModel.specializedDomainSurfaces.workbench.methodRoutes).toEqual(
+      expect.objectContaining({
+        listFlows: "GET /api/v1/workbench/flows",
+        updateFlow: "PATCH /api/v1/workbench/flows/:id",
+        deleteFlow: "DELETE /api/v1/workbench/flows/:id",
+        runFlow: "POST /api/v1/workbench/flows/:id/run",
+        nodeResult:
+          "GET /api/v1/workbench/flows/:id/runs/:runId/nodes/:nodeId",
+        latestNodeOutput:
+          "GET /api/v1/workbench/flows/:id/nodes/:nodeId/output"
       })
     );
     expect(
@@ -627,8 +666,49 @@ describe("forge onboarding contract", () => {
     expect(onboarding.mutationGuidance.specializedRouteToolRule).toMatch(
       /forge_call_movement_route[\s\S]*forge_call_life_force_route[\s\S]*forge_call_workbench_route[\s\S]*routeKey[\s\S]*pathParams[\s\S]*query[\s\S]*body[\s\S]*batch entity tools/i
     );
+    expect(onboarding.mutationGuidance.specializedRouteToolRule).toMatch(
+      /Life Force overview route key maps to GET \/api\/v1\/life-force[\s\S]*do not invent \/api\/v1\/life-force\/overview/i
+    );
     expect(onboarding.mutationGuidance.specializedRouteToolExample).toMatch(
       /weekdayTemplate[\s\S]*monday/i
+    );
+    expect(onboarding.mutationGuidance.specializedRouteToolExamples).toEqual(
+      expect.objectContaining({
+        movementAllTime: expect.stringMatching(/routeKey[\s\S]*allTime/),
+        movementTimeline: expect.stringMatching(/routeKey[\s\S]*timeline/),
+        movementSelection: expect.stringMatching(/routeKey[\s\S]*selection/),
+        movementTripDetail: expect.stringMatching(/routeKey[\s\S]*tripDetail/),
+        movementMissingStayPreflight: expect.stringMatching(
+          /routeKey[\s\S]*userBoxPreflight[\s\S]*startedAt[\s\S]*placeLabel/
+        ),
+        lifeForceOverview: expect.stringMatching(
+          /routeKey[\s\S]*overview/
+        ),
+        lifeForceProfile: expect.stringMatching(
+          /routeKey[\s\S]*profile[\s\S]*baselineDailyAp/
+        ),
+        lifeForceWeekdayTemplate: expect.stringMatching(
+          /routeKey[\s\S]*weekdayTemplate[\s\S]*pathParams[\s\S]*weekday/
+        ),
+        lifeForceFatigueSignal: expect.stringMatching(
+          /routeKey[\s\S]*fatigueSignal[\s\S]*intensity/
+        ),
+        workbenchFlowCatalog: expect.stringMatching(
+          /routeKey[\s\S]*listFlows/
+        ),
+        workbenchBoxCatalog: expect.stringMatching(
+          /routeKey[\s\S]*boxCatalog/
+        ),
+        workbenchRunDetail: expect.stringMatching(
+          /routeKey[\s\S]*runDetail[\s\S]*pathParams[\s\S]*runId/
+        ),
+        workbenchPublishedOutput: expect.stringMatching(
+          /routeKey[\s\S]*publishedOutput/
+        ),
+        workbenchLatestNodeOutput: expect.stringMatching(
+          /routeKey[\s\S]*latestNodeOutput[\s\S]*nodeId/
+        )
+      })
     );
   });
 
@@ -772,6 +852,9 @@ describe("forge onboarding contract", () => {
     expect(playbookByFocus.get("movement")?.askSequence.join(" ")).toMatch(
       /day, month, all-time, timeline, places, trip-detail,[\s\S]*selection route/i
     );
+    expect(playbookByFocus.get("movement")?.askSequence.join(" ")).toMatch(
+      /allTime[\s\S]*whole-history aggregates[\s\S]*selection[\s\S]*bounded selected-span aggregate[\s\S]*tripDetail/i
+    );
     expect(playbookByFocus.get("movement")?.askSequence[0]).toMatch(
       /make clearer, repair, or preserve/i
     );
@@ -785,6 +868,9 @@ describe("forge onboarding contract", () => {
     expect(playbookByFocus.get("life_force")?.askSequence.join(" ")).toMatch(
       /read the overview back/i
     );
+    expect(playbookByFocus.get("life_force")?.askSequence.join(" ")).toMatch(
+      /routeKey overview[\s\S]*GET \/api\/v1\/life-force[\s\S]*not \/api\/v1\/life-force\/overview/i
+    );
     expect(playbookByFocus.get("life_force")?.openingQuestion).toMatch(
       /energy picture right now/i
     );
@@ -796,6 +882,9 @@ describe("forge onboarding contract", () => {
     );
     expect(playbookByFocus.get("workbench")?.askSequence[0]).toMatch(
       /before you narrow to flow discovery/i
+    );
+    expect(playbookByFocus.get("workbench")?.askSequence.join(" ")).toMatch(
+      /listFlows[\s\S]*saved flow catalog[\s\S]*boxCatalog[\s\S]*input-box contracts/i
     );
     expect(playbookByFocus.get("workbench")?.askSequence.join(" ")).toMatch(
       /stable public input contract or published output/i
@@ -846,6 +935,27 @@ describe("forge onboarding contract", () => {
     expect(
       psycheByFocus.get("emotion_definition")?.askSequence.join(" ")
     ).toMatch(/felt signature/i);
+
+    expect(playbookByFocus.get("event_type")?.coachingGoal).toMatch(
+      /Psyche-quality questioning[\s\S]*cold taxonomy/i
+    );
+    expect(playbookByFocus.get("event_type")?.askSequence.join(" ")).toMatch(
+      /Treat event_type as Psyche taxonomy[\s\S]*Psyche coaching playbook[\s\S]*batch CRUD/i
+    );
+    expect(playbookByFocus.get("event_type")?.askSequence.join(" ")).toMatch(
+      /emotionally meaningful moment[\s\S]*emotional or relational stake/i
+    );
+    expect(playbookByFocus.get("emotion_definition")?.coachingGoal).toMatch(
+      /Psyche-quality questioning[\s\S]*lived signature/i
+    );
+    expect(
+      playbookByFocus.get("emotion_definition")?.askSequence.join(" ")
+    ).toMatch(
+      /Treat emotion_definition as Psyche taxonomy[\s\S]*Psyche coaching playbook[\s\S]*batch CRUD/i
+    );
+    expect(
+      playbookByFocus.get("emotion_definition")?.askSequence.join(" ")
+    ).toMatch(/felt signature[\s\S]*signal, protect, warn about, long for, or demand/i);
   });
 
   it("keeps specialized onboarding routes present in generated OpenAPI", async () => {
@@ -904,6 +1014,7 @@ describe("forge onboarding contract", () => {
           "classification",
           "aliases",
           "summary",
+          "methodRoutes",
           "readRoutes",
           "writeRoutes",
           "routeSelectionQuestions",
@@ -915,6 +1026,9 @@ describe("forge onboarding contract", () => {
           }),
           aliases: expect.objectContaining({
             type: "array"
+          }),
+          methodRoutes: expect.objectContaining({
+            additionalProperties: { type: "string" }
           }),
           readRoutes: expect.objectContaining({
             additionalProperties: { type: "string" }
@@ -930,11 +1044,16 @@ describe("forge onboarding contract", () => {
         additionalProperties: false,
         required: expect.arrayContaining([
           "specializedRouteToolRule",
-          "specializedRouteToolExample"
+          "specializedRouteToolExample",
+          "specializedRouteToolExamples"
         ]),
         properties: expect.objectContaining({
           specializedRouteToolRule: { type: "string" },
-          specializedRouteToolExample: { type: "string" }
+          specializedRouteToolExample: { type: "string" },
+          specializedRouteToolExamples: expect.objectContaining({
+            type: "object",
+            additionalProperties: { type: "string" }
+          })
         })
       })
     );

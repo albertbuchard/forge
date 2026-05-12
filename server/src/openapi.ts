@@ -3896,6 +3896,7 @@ export function buildOpenApiDocument() {
                 "classification",
                 "aliases",
                 "summary",
+                "methodRoutes",
                 "readRoutes",
                 "writeRoutes",
                 "routeSelectionQuestions",
@@ -3908,6 +3909,10 @@ export function buildOpenApiDocument() {
                 },
                 aliases: arrayOf({ type: "string" }),
                 summary: { type: "string" },
+                methodRoutes: {
+                  type: "object",
+                  additionalProperties: { type: "string" }
+                },
                 readRoutes: {
                   type: "object",
                   additionalProperties: { type: "string" }
@@ -4228,7 +4233,8 @@ export function buildOpenApiDocument() {
           "specializedRouteToolRule",
           "createExample",
           "updateExample",
-          "specializedRouteToolExample"
+          "specializedRouteToolExample",
+          "specializedRouteToolExamples"
         ],
         properties: {
           preferredBatchRoutes: {
@@ -4254,7 +4260,11 @@ export function buildOpenApiDocument() {
           specializedRouteToolRule: { type: "string" },
           createExample: { type: "string" },
           updateExample: { type: "string" },
-          specializedRouteToolExample: { type: "string" }
+          specializedRouteToolExample: { type: "string" },
+          specializedRouteToolExamples: {
+            type: "object",
+            additionalProperties: { type: "string" }
+          }
         }
       }
     }
