@@ -2,6 +2,7 @@ import Foundation
 
 enum ForgeDiscoverySource: String, Codable {
     case simulator
+    case tunnel
     case tailscale
     case lan
     case bonjour
@@ -71,14 +72,64 @@ struct CompanionPairingSessionState: Decodable, Hashable {
     let updatedAt: String
 }
 
+struct PairingTransport: Codable, Hashable {
+    let protocolName: String
+    let provider: String
+    let status: String
+    let publicBaseUrl: String?
+    let localBaseUrl: String?
+    let proxyBaseUrl: String?
+    let recreateCommand: String?
+    let startedAt: String?
+    let lastError: String?
+    let notes: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case protocolName = "protocol"
+        case provider
+        case status
+        case publicBaseUrl
+        case localBaseUrl
+        case proxyBaseUrl
+        case recreateCommand
+        case startedAt
+        case lastError
+        case notes
+    }
+}
+
 struct PairingPayload: Codable {
     let kind: String
     let apiBaseUrl: String
     let uiBaseUrl: String?
+    let transportMode: String?
+    let transport: PairingTransport?
     let sessionId: String
     let pairingToken: String
     let expiresAt: String
     let capabilities: [String]
+
+    init(
+        kind: String,
+        apiBaseUrl: String,
+        uiBaseUrl: String?,
+        sessionId: String,
+        pairingToken: String,
+        expiresAt: String,
+        capabilities: [String],
+        transportMode: String? = nil,
+        transport: PairingTransport? = nil
+    ) {
+        self.kind = kind
+        self.apiBaseUrl = apiBaseUrl
+        self.uiBaseUrl = uiBaseUrl
+        self.transportMode = transportMode
+        self.transport = transport
+        self.sessionId = sessionId
+        self.pairingToken = pairingToken
+        self.expiresAt = expiresAt
+        self.capabilities = capabilities
+    }
 }
 
 struct CompanionSyncPayload: Codable {

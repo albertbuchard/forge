@@ -92,7 +92,9 @@ enum CompanionPairingURLResolver {
             sessionId: payload.sessionId,
             pairingToken: payload.pairingToken,
             expiresAt: payload.expiresAt,
-            capabilities: payload.capabilities
+            capabilities: payload.capabilities,
+            transportMode: payload.transportMode,
+            transport: payload.transport
         )
     }
 
@@ -110,7 +112,9 @@ enum CompanionPairingURLResolver {
             sessionId: payload.sessionId,
             pairingToken: payload.pairingToken,
             expiresAt: session.expiresAt,
-            capabilities: session.capabilities.isEmpty ? payload.capabilities : session.capabilities
+            capabilities: session.capabilities.isEmpty ? payload.capabilities : session.capabilities,
+            transportMode: payload.transportMode,
+            transport: payload.transport
         )
     }
 }

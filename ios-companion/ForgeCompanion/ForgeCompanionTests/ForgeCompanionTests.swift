@@ -153,6 +153,44 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(refreshed.capabilities, ["healthkit.sleep", "healthkit.fitness", "watch-ready"])
     }
 
+    func testPairingPayloadDecodesAndPreservesTunnelTransport() throws {
+        let json = """
+        {
+          "kind": "forge-companion-pairing",
+          "apiBaseUrl": "https://forge-companion-test.trycloudflare.com/api/v1",
+          "uiBaseUrl": "https://forge-companion-test.trycloudflare.com/forge/",
+          "transportMode": "tunnel",
+          "transport": {
+            "protocol": "https-tunnel",
+            "provider": "cloudflare-quick-tunnel",
+            "status": "ready",
+            "publicBaseUrl": "https://forge-companion-test.trycloudflare.com",
+            "localBaseUrl": "http://127.0.0.1:4317",
+            "proxyBaseUrl": "http://127.0.0.1:52241",
+            "recreateCommand": "cloudflared tunnel --url http://127.0.0.1:52241",
+            "startedAt": "2026-04-07T10:00:00Z",
+            "notes": ["Quick tunnel is active through an allow-listed mobile API proxy."]
+          },
+          "sessionId": "pair_test",
+          "pairingToken": "token",
+          "expiresAt": "2099-01-01T00:00:00Z",
+          "capabilities": ["healthkit.sleep"]
+        }
+        """
+        let payload = try JSONDecoder().decode(
+            PairingPayload.self,
+            from: Data(json.utf8)
+        )
+
+        let normalized = CompanionPairingURLResolver.normalizedPayload(payload)
+
+        XCTAssertEqual(normalized.transportMode, "tunnel")
+        XCTAssertEqual(normalized.transport?.protocolName, "https-tunnel")
+        XCTAssertEqual(normalized.transport?.provider, "cloudflare-quick-tunnel")
+        XCTAssertEqual(normalized.transport?.publicBaseUrl, "https://forge-companion-test.trycloudflare.com")
+        XCTAssertEqual(normalized.transport?.notes.first, "Quick tunnel is active through an allow-listed mobile API proxy.")
+    }
+
     func testWatchBootstrapDecodesCompactHabitPayload() throws {
         let json = """
         {

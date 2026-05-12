@@ -601,6 +601,11 @@ import { registerWebRoutes } from "./web.js";
 import { createManagerRuntime } from "./managers/runtime.js";
 import { isManagerError } from "./managers/type-guards.js";
 import {
+  buildCompanionPairingTransport,
+  getCompanionTunnelStatus,
+  stopCompanionTunnel
+} from "./services/companion-tunnel.js";
+import {
   createCompanionPairingSession,
   createCompanionPairingSessionSchema,
   createSleepSession,
@@ -803,6 +808,18 @@ function buildApiBaseUrl(request: {
       : "";
   const basePath = forwardedPrefix.replace(/\/$/, "");
   return `${request.protocol}://${host}${basePath}/api/v1`;
+}
+
+function buildUiBaseUrlFromApiBaseUrl(apiBaseUrl: string) {
+  try {
+    const url = new URL(apiBaseUrl);
+    url.pathname = "/forge/";
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return apiBaseUrl;
+  }
 }
 
 function readSingleForwardedHeader(value: unknown): string | null {
@@ -7688,6 +7705,7 @@ export async function buildServer(
     clearInterval(cronSchedulerTimer);
     clearInterval(dataBackupTimer);
     taskRunWatchdog?.stop();
+    await stopCompanionTunnel();
     await managers.backgroundJobs.stop();
   });
 
@@ -8795,14 +8813,26 @@ export async function buildServer(
     requireOperatorSession(request.headers as Record<string, unknown>, {
       route: "/api/v1/health/pairing-sessions"
     });
+    const parsed = createCompanionPairingSessionSchema.parse(request.body ?? {});
+    const requestApiBaseUrl = buildApiBaseUrl({
+      protocol: request.protocol,
+      headers: request.headers as Record<string, unknown>
+    });
+    const pairingTransport = await buildCompanionPairingTransport({
+      requestedMode: parsed.transportMode,
+      requestApiBaseUrl,
+      requestUiBaseUrl: buildUiBaseUrlFromApiBaseUrl(requestApiBaseUrl)
+    });
     reply.code(201);
-    return createCompanionPairingSession(
-      buildApiBaseUrl({
-        protocol: request.protocol,
-        headers: request.headers as Record<string, unknown>
-      }),
-      createCompanionPairingSessionSchema.parse(request.body ?? {})
-    );
+    return createCompanionPairingSession(pairingTransport, parsed);
+  });
+  app.get("/api/v1/health/companion-tunnel", async (request) => {
+    requireOperatorSession(request.headers as Record<string, unknown>, {
+      route: "/api/v1/health/companion-tunnel"
+    });
+    return {
+      tunnel: getCompanionTunnelStatus()
+    };
   });
   app.delete("/api/v1/health/pairing-sessions/:id", async (request, reply) => {
     const auth = requireOperatorSession(

@@ -197,4 +197,49 @@ describe("SettingsMobilePage", () => {
       );
     });
   });
+
+  it("requests tunnel pairing by default and keeps manual HTTP explicit", async () => {
+    createCompanionPairingSessionMock.mockResolvedValue({
+      qrPayload: {
+        kind: "forge-companion-pairing",
+        apiBaseUrl: "https://forge-companion-test.trycloudflare.com/api/v1",
+        uiBaseUrl: "https://forge-companion-test.trycloudflare.com/forge/",
+        transportMode: "tunnel",
+        transport: {
+          protocol: "https-tunnel",
+          provider: "configured-url",
+          status: "ready",
+          publicBaseUrl: "https://forge-companion-test.trycloudflare.com",
+          localBaseUrl: "http://127.0.0.1:4317",
+          notes: ["Using configured tunnel."]
+        },
+        sessionId: "pairing_tunnel",
+        pairingToken: "token",
+        expiresAt: "2026-04-12T09:30:00.000Z",
+        capabilities: ["background-sync"]
+      }
+    });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Generate tunnel QR/i }));
+
+    await waitFor(() => {
+      expect(createCompanionPairingSessionMock).toHaveBeenCalledWith({
+        userId: "user_operator",
+        transportMode: "tunnel"
+      });
+    });
+    expect(await screen.findByText("Managed tunnel")).toBeInTheDocument();
+    expect(screen.getByText(/forge-companion-test/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Manual HTTP/i }));
+
+    await waitFor(() => {
+      expect(createCompanionPairingSessionMock).toHaveBeenLastCalledWith({
+        userId: "user_operator",
+        transportMode: "manual-http"
+      });
+    });
+  });
 });

@@ -23,6 +23,7 @@ Forge is built as a production-grade monorepo application with:
 - OpenClaw, Hermes, and Codex adapter layers
 - Swift iPhone companion
 - provider-neutral health adapters spanning Swift ingestion, Fastify normalization, and React read models
+- tunnel-first mobile pairing: Fastify creates a KittyLitter/Alleycat-inspired one-time pairing payload that prefers a recreated HTTPS companion tunnel and keeps manual HTTP/TCP or Tailscale routing as an explicit advanced option
 
 Forge's preferred public onboarding path is a Node-based guided installer exposed as `npx forge-memory`. That installer should be the single front door for UI-only installs and OpenClaw, Hermes, and Codex adapter installs. It should always install the Forge UI/runtime as the base layer, run automated host/data discovery in the background, ask a polished guided question flow, show host adapters in an interactive checkbox menu with detected runtimes selected by default, missing runtimes shown as disabled "not found" rows, Space to toggle rows, and a Skip option, configure selected adapters against one shared data root, expose runtime commands such as `configure`, `status`, `ui`, `doctor`, `restart`, and `pair-ios`, make `configure` rerun the full flow with current config as defaults, default the iOS pairing prompt to yes, support source-backed development installs through `npx forge-memory --dev`, default dev mode to the real shared Forge data folder, and leave direct adapter installs as advanced/reference paths rather than the main user journey.
 

@@ -61,6 +61,11 @@ npx forge-memory uninstall
 npx forge-memory pair-ios
 ```
 
+`pair-ios` now generates the companion tunnel QR by default. If `cloudflared` is already
+installed, Forge creates a temporary HTTPS tunnel through a mobile-only API proxy; if you
+run a managed tunnel, set `FORGE_COMPANION_TUNNEL_BASE_URL` before starting Forge. Direct
+HTTP/TCP pairing remains available with `npx forge-memory pair-ios --manual-http`.
+
 `export` creates a portable backup of the real Forge data folder. `uninstall` removes the Forge Memory runtime manager and cache but keeps the Forge data folder by default; use `--remove-data` only when you explicitly want to delete the data too.
 
 After install, the usual local addresses are:

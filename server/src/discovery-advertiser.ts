@@ -3,6 +3,11 @@ import os from "node:os";
 import { promisify } from "node:util";
 import { Bonjour } from "bonjour-service";
 import { logForgeDebug } from "./debug.js";
+import {
+  companionTunnelApiBaseUrlFromPublicBase,
+  companionTunnelUiBaseUrlFromPublicBase,
+  readConfiguredCompanionTunnelBaseUrl
+} from "./services/companion-tunnel.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -40,6 +45,7 @@ export async function startForgeDiscoveryAdvertiser(
     uiBaseUrl: options.tailscaleUiBaseUrl,
     basePath
   });
+  const configuredTunnelBaseUrl = readConfiguredCompanionTunnelBaseUrl();
 
   const bonjour = new Bonjour({}, (error: unknown) => {
     logForgeDebug(
@@ -60,6 +66,13 @@ export async function startForgeDiscoveryAdvertiser(
         tsApiBaseUrl: tailscaleTargets.apiBaseUrl ?? "",
         tsUiBaseUrl: tailscaleTargets.uiBaseUrl ?? "",
         tsDnsName: tailscaleTargets.dnsName ?? "",
+        tunnelApiBaseUrl: configuredTunnelBaseUrl
+          ? companionTunnelApiBaseUrlFromPublicBase(configuredTunnelBaseUrl)
+          : "",
+        tunnelUiBaseUrl: configuredTunnelBaseUrl
+          ? companionTunnelUiBaseUrlFromPublicBase(configuredTunnelBaseUrl)
+          : "",
+        tunnelProvider: configuredTunnelBaseUrl ? "configured-url" : "",
         watchReady: "1"
       }
     });

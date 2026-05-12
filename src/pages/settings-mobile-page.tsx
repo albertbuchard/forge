@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import QRCode from "qrcode";
 import {
+  Cable,
   ChevronDown,
   ChevronUp,
+  Cloud,
   Link2,
   QrCode,
   RefreshCcw,
@@ -26,6 +28,10 @@ import {
   revokeAllCompanionPairingSessions,
   revokeCompanionPairingSession
 } from "@/lib/api";
+import type {
+  CompanionPairingQrPayload,
+  CompanionPairingTransportMode
+} from "@/lib/types";
 import { getSingleSelectedUserId } from "@/lib/user-ownership";
 
 function formatCapabilityLabel(capability: string) {
@@ -85,6 +91,19 @@ function sourceTone(enabled: boolean, syncEligible: boolean) {
   return syncEligible ? "signal" : "default";
 }
 
+function formatTransportLabel(payload: CompanionPairingQrPayload) {
+  if (payload.transportMode === "tunnel") {
+    return payload.transport?.provider === "configured-url"
+      ? "Managed tunnel"
+      : "Quick tunnel";
+  }
+  return "Manual HTTP";
+}
+
+function transportTone(payload: CompanionPairingQrPayload) {
+  return payload.transportMode === "tunnel" ? "signal" : "meta";
+}
+
 export function SettingsMobilePage() {
   const shell = useForgeShell();
   const queryClient = useQueryClient();
@@ -95,13 +114,7 @@ export function SettingsMobilePage() {
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [qrPanelOpen, setQrPanelOpen] = useState(false);
   const [latestPairing, setLatestPairing] = useState<{
-    qrPayload: {
-      apiBaseUrl: string;
-      sessionId: string;
-      pairingToken: string;
-      expiresAt: string;
-      capabilities: string[];
-    };
+    qrPayload: CompanionPairingQrPayload;
   } | null>(null);
 
   const overviewQuery = useQuery({
@@ -110,9 +123,10 @@ export function SettingsMobilePage() {
   });
 
   const pairingMutation = useMutation({
-    mutationFn: async () =>
+    mutationFn: async (transportMode: CompanionPairingTransportMode = "tunnel") =>
       createCompanionPairingSession({
-        userId: defaultUserId ?? null
+        userId: defaultUserId ?? null,
+        transportMode
       }),
     onSuccess: async (result) => {
       setLatestPairing({ qrPayload: result.qrPayload });
@@ -211,7 +225,11 @@ export function SettingsMobilePage() {
       setQrPanelOpen(true);
       return;
     }
-    await pairingMutation.mutateAsync();
+    await pairingMutation.mutateAsync("tunnel");
+  };
+
+  const handleManualHttpPairing = async () => {
+    await pairingMutation.mutateAsync("manual-http");
   };
 
   return (
@@ -251,32 +269,49 @@ export function SettingsMobilePage() {
                 Pair iPhone
               </div>
               <div className="mt-2 text-lg text-white">
-                Open a pairing QR only when you need it
+                Open a tunnel QR only when you need it
               </div>
               <div className="mt-2 max-w-3xl text-sm leading-6 text-white/58">
-                Keep the page compact by generating or reopening the one-time
-                QR only when you are about to scan it from Forge Companion.
+                Forge now defaults to a recreated companion tunnel, with direct
+                HTTP kept as the advanced local-network path.
               </div>
             </div>
-            <Button
-              onClick={() => void handleQrAction()}
-              pending={pairingMutation.isPending}
-              pendingLabel="Generating"
-            >
-              <QrCode className="size-4" />
-              {latestPairing
-                ? qrPanelOpen
-                  ? "Hide QR"
-                  : "Show QR"
-                : "Generate QR"}
-              {latestPairing ? (
-                qrPanelOpen ? (
-                  <ChevronUp className="size-4" />
-                ) : (
-                  <ChevronDown className="size-4" />
-                )
-              ) : null}
-            </Button>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => void handleManualHttpPairing()}
+                pending={
+                  pairingMutation.isPending &&
+                  pairingMutation.variables === "manual-http"
+                }
+                pendingLabel="Generating"
+              >
+                <Cable className="size-4" />
+                Manual HTTP
+              </Button>
+              <Button
+                onClick={() => void handleQrAction()}
+                pending={
+                  pairingMutation.isPending &&
+                  pairingMutation.variables !== "manual-http"
+                }
+                pendingLabel="Generating"
+              >
+                <QrCode className="size-4" />
+                {latestPairing
+                  ? qrPanelOpen
+                    ? "Hide QR"
+                    : "Show QR"
+                  : "Generate tunnel QR"}
+                {latestPairing ? (
+                  qrPanelOpen ? (
+                    <ChevronUp className="size-4" />
+                  ) : (
+                    <ChevronDown className="size-4" />
+                  )
+                ) : null}
+              </Button>
+            </div>
           </div>
 
           {qrPanelOpen ? (
@@ -289,8 +324,8 @@ export function SettingsMobilePage() {
                     className="w-full max-w-[320px]"
                   />
                   <div className="max-w-[320px] text-center text-sm text-slate-600">
-                    Scan this in the iOS companion to pass the Forge API
-                    address and the one-time pairing token.
+                    Scan this in the iOS companion to pass the recreated
+                    endpoint and one-time pairing token.
                   </div>
                 </div>
               ) : (
@@ -302,13 +337,19 @@ export function SettingsMobilePage() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="text-sm text-white/62">
                   {latestPairing ? (
-                    <>
-                      Expires{" "}
-                      {new Date(
-                        latestPairing.qrPayload.expiresAt
-                      ).toLocaleString()}
-                      .
-                    </>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge tone={transportTone(latestPairing.qrPayload)}>
+                        <Cloud className="size-3" />
+                        {formatTransportLabel(latestPairing.qrPayload)}
+                      </Badge>
+                      <span>
+                        Expires{" "}
+                        {new Date(
+                          latestPairing.qrPayload.expiresAt
+                        ).toLocaleString()}
+                        .
+                      </span>
+                    </div>
                   ) : (
                     "Generate the one-time QR and scan it from the iPhone app."
                   )}
@@ -318,10 +359,10 @@ export function SettingsMobilePage() {
                     variant="secondary"
                     pending={pairingMutation.isPending}
                     pendingLabel="Generating"
-                    onClick={() => void pairingMutation.mutateAsync()}
+                    onClick={() => void pairingMutation.mutateAsync("tunnel")}
                   >
                     <RefreshCcw className="size-4" />
-                    Regenerate QR
+                    Regenerate tunnel QR
                   </Button>
                 ) : null}
               </div>
@@ -446,10 +487,10 @@ export function SettingsMobilePage() {
               Pairing path
             </div>
             <div className="grid gap-2 text-sm text-white/62">
-              <div>1. Generate a one-time QR code here inside Forge Settings.</div>
-              <div>2. Scan it in Forge Companion to pass the API URL and pairing token.</div>
+              <div>1. Generate the tunnel QR here or with npx forge-memory pair-ios.</div>
+              <div>2. Scan it in Forge Companion to pass the endpoint and pairing token.</div>
               <div>3. Approve Health access on iPhone, then run the first sync.</div>
-              <div>4. Review import history below and open Sleep, Sports, or Vitals to inspect the imported records.</div>
+              <div>4. Use Manual HTTP only for a local, Tailscale, or direct TCP route.</div>
             </div>
           </div>
 

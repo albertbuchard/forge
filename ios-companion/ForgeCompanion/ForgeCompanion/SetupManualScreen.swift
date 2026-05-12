@@ -31,11 +31,11 @@ struct SetupManualScreen: View {
                     .font(.system(size: 28, weight: .bold, design: .rounded))
                     .foregroundStyle(CompanionStyle.textPrimary)
 
-                Text("Use a known machine name or paste a pairing code.")
+                Text("Use direct HTTP only when you intentionally want a local or Tailscale route.")
                     .font(.system(size: 15, weight: .medium, design: .rounded))
                     .foregroundStyle(CompanionStyle.textSecondary)
 
-                Text("In Forge web: Settings -> Mobile companion. Open the QR panel there to scan the code or copy the JSON payload.")
+                Text("The tunnel QR is the default path. Manual setup remains available for known hosts and copied JSON payloads.")
                     .font(.system(size: 12, weight: .medium, design: .rounded))
                     .foregroundStyle(CompanionStyle.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -46,7 +46,7 @@ struct SetupManualScreen: View {
                             .font(.system(size: 16, weight: .bold, design: .rounded))
                             .foregroundStyle(CompanionStyle.textPrimary)
 
-                        Text("Best for Tailscale. Enter a `.ts.net` machine name and Forge will try `/api/v1` and `/forge/` there.")
+                        Text("Best for Tailscale or a reachable LAN host. Enter a machine name and Forge will try /api/v1 and /forge/ there.")
                             .font(.system(size: 13, weight: .medium, design: .rounded))
                             .foregroundStyle(CompanionStyle.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -100,7 +100,7 @@ struct SetupManualScreen: View {
                             .font(.system(size: 16, weight: .bold, design: .rounded))
                             .foregroundStyle(CompanionStyle.textPrimary)
 
-                        Text("Paste the JSON payload from Forge web -> Settings -> Mobile companion. It appears in the same panel as the QR code.")
+                        Text("Paste the JSON payload from Forge Settings -> Mobile. Tunnel payloads include their endpoint and pairing token.")
                             .font(.system(size: 13, weight: .medium, design: .rounded))
                             .foregroundStyle(CompanionStyle.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
