@@ -2803,6 +2803,7 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
     "Once the route family is clear, say it plainly enough that another agent could follow the same path without guessing.",
     "For Movement specifically, treat missing-data corrections as user-defined overlay boxes unless the user is editing an already-recorded stay or trip. When the user already gave a clear instruction like 'that missing block was home', act after only the last ambiguity is resolved.",
     "For action workflows such as task_run, work_adjustment, questionnaire_run, preference_judgment, preference_signal, and self_observation, keep the question focused on the missing action payload and do not downgrade the request into generic batch CRUD.",
+    "For read-model-only health surfaces such as sleep_overview and sports_overview, use the dedicated overview reads first when the user wants review, pattern interpretation, recovery context, or training-load context. Move to sleep_session or workout_session writes only after one specific stored session needs enrichment.",
     "For normal stored Preferences and questionnaire records, use batch CRUD by default; switch to dedicated action routes only for judgments, signals, run answers, clone/draft/publish lifecycle, or visual comparison gameplay.",
     "When the user wants to remember a book, article, paper, source, concept, person, conversation, project reference, recurring explanation, or personal manual, consider wiki_page before note or self_observation.",
     "For meaning-bearing updates, especially in Psyche, briefly say what feels newly true before you ask for the one structural detail that still changes the save."
@@ -3017,6 +3018,30 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
             "Use the shared batch CRUD path for ordinary workout_session create or update work, and reserve the reflective helper for enrichment after review.",
             "Ask what it connects to in Forge if links matter.",
             "Ask about tags only if they help later retrieval."
+        ]
+    },
+    {
+        focus: "sleep_overview",
+        openingQuestion: "What are you trying to understand from your sleep picture right now?",
+        coachingGoal: "Review recent nights, regularity, score, stages, and recovery context before deciding whether one sleep_session needs enrichment.",
+        askSequence: [
+            "Ask what practical sleep question the user wants the overview to answer.",
+            "Ask which night or date range matters only if the scope is not already clear.",
+            "Use the dedicated sleep overview read before asking the user to reconstruct metrics from memory.",
+            "Reflect the pattern or decision the user is trying to understand.",
+            "Move to a sleep_session write only when one specific night needs reflective context, tags, notes, or links."
+        ]
+    },
+    {
+        focus: "sports_overview",
+        openingQuestion: "What are you trying to understand from your workout picture right now?",
+        coachingGoal: "Review workouts, training load, effort, activity types, and recovery context before deciding whether one workout_session needs enrichment.",
+        askSequence: [
+            "Ask what practical training or recovery question the user wants the overview to answer.",
+            "Ask which workout or date range matters only if the scope is not already clear.",
+            "Use the dedicated sports overview read before asking the user to reconstruct metrics from memory.",
+            "Reflect the decision the user is trying to make from the training picture.",
+            "Move to a workout_session write only when one specific workout needs reflective context, tags, notes, or links."
         ]
     },
     {
@@ -4521,10 +4546,15 @@ function buildAgentOnboardingPayload(request) {
             },
             readModelOnlySurfaces: {
                 sleepOverview: "/api/v1/health/sleep",
+                sleep_overview: "/api/v1/health/sleep",
                 sportsOverview: "/api/v1/health/fitness",
+                sports_overview: "/api/v1/health/fitness",
                 selfObservation: "/api/v1/psyche/self-observation/calendar",
+                self_observation: "/api/v1/psyche/self-observation/calendar",
                 calendarOverview: "/api/v1/calendar/overview",
+                calendar_overview: "/api/v1/calendar/overview",
                 operatorOverview: "/api/v1/operator/overview",
+                operator_overview: "/api/v1/operator/overview",
                 operatorContext: "/api/v1/operator/context"
             }
         },

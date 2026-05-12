@@ -184,7 +184,9 @@ describe("forge onboarding contract", () => {
       "questionnaire_run",
       "self_observation",
       "sleep_session",
+      "sleep_overview",
       "workout_session",
+      "sports_overview",
       "wiki_page",
       "movement",
       "life_force",
@@ -232,7 +234,9 @@ describe("forge onboarding contract", () => {
       "questionnaire_run",
       "self_observation",
       "sleep_session",
+      "sleep_overview",
       "workout_session",
+      "sports_overview",
       "wiki_page",
       "movement",
       "life_force",
@@ -490,7 +494,9 @@ describe("forge onboarding contract", () => {
     expect(routeModel.readModelOnlySurfaces).toEqual(
       expect.objectContaining({
         sleepOverview: "/api/v1/health/sleep",
+        sleep_overview: "/api/v1/health/sleep",
         sportsOverview: "/api/v1/health/fitness",
+        sports_overview: "/api/v1/health/fitness",
         selfObservation: "/api/v1/psyche/self-observation/calendar"
       })
     );

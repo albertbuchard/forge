@@ -17085,7 +17085,17 @@ test("settings and local agent token management persist through the versioned AP
     );
     assert.equal(
       onboardingBody.onboarding.entityRouteModel.readModelOnlySurfaces
+        .sleep_overview,
+      "/api/v1/health/sleep"
+    );
+    assert.equal(
+      onboardingBody.onboarding.entityRouteModel.readModelOnlySurfaces
         .sportsOverview,
+      "/api/v1/health/fitness"
+    );
+    assert.equal(
+      onboardingBody.onboarding.entityRouteModel.readModelOnlySurfaces
+        .sports_overview,
       "/api/v1/health/fitness"
     );
     assert.equal(

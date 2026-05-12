@@ -237,6 +237,10 @@ Use this quick split before the conversation gets too detailed.
   `preference_signal`, and `self_observation` are action workflows. Start from what
   the user is trying to do, then use the dedicated action tool or note-backed write
   model.
+- `sleep_overview` and `sports_overview` are read-model-only surfaces. Use them when
+  the user wants to review nights, workouts, training load, recovery context, or
+  health patterns before deciding whether one stored `sleep_session` or
+  `workout_session` needs enrichment.
 - Movement, Life Force, and Workbench are specialized domain areas. Use their
   dedicated route families for timelines and overlays, energy profile/templates and
   fatigue signals, and Workbench flow execution or result artifacts. When available,
@@ -289,6 +293,14 @@ still knowing the exact write/read family before it acts.
 - `self_observation`: read-model and note-backed workflow. Read the self-observation
   calendar, then create or update an observed `note` with `frontmatter.observedAt`
   only when a lightweight episode observation is the right container.
+- `sleep_overview`: read-model-only health surface. Use the sleep overview route or
+  `forge_get_sleep_overview` when the user wants to review recent nights, regularity,
+  score, stages, or recovery patterns before deciding whether a specific
+  `sleep_session` needs reflective enrichment.
+- `sports_overview`: read-model-only health surface. Use the sports overview route or
+  `forge_get_sports_overview` when the user wants to review workouts, training load,
+  effort, type distribution, or recovery context before deciding whether a specific
+  `workout_session` needs reflective enrichment.
 - `movement`: specialized domain surface. Use the dedicated movement routes for day,
   month, all-time, timeline, places, trip detail, selection aggregates, manual
   overlays, and repair actions.
@@ -1162,6 +1174,82 @@ Ready to update when:
 Preferred opening question:
 
 - "What about this workout feels most worth remembering or connecting?"
+
+## Sleep Overview
+
+Aim: review sleep patterns before deciding whether one night needs a reflective update
+or a planning follow-up.
+
+Arc:
+
+1. Ask what the user wants to understand from the sleep picture: one night, a recent
+   trend, regularity, recovery, stages, or links to work and Psyche context.
+2. Read the sleep overview before asking the user to reconstruct metrics from memory.
+3. Reflect the practical question the user is trying to answer from the overview.
+4. Move to `sleep_session` enrichment only when one specific night needs context,
+   tags, notes, or links.
+
+Helpful follow-up lanes:
+
+- which night or date range matters
+- whether the question is recovery, regularity, stages, schedule drift, or links
+- what decision the sleep review should help with
+
+Route note:
+
+- `sleep_overview` is a read-model-only surface. Use `forge_get_sleep_overview` or
+  `/api/v1/health/sleep` for review. Do not create, update, or delete
+  `sleep_overview` through batch CRUD.
+- If the review reveals that one night needs reflective context, switch to the stored
+  `sleep_session` batch route or reflective update helper for that known session.
+
+Ready to review when:
+
+- the user's practical sleep question is clear
+- the relevant night or date range is clear enough
+
+Preferred opening question:
+
+- "What are you trying to understand from your sleep picture right now?"
+
+## Sports Overview
+
+Aim: review workout and training-load context before deciding whether one workout
+needs a reflective update or recovery follow-up.
+
+Arc:
+
+1. Ask what the user wants to understand from the sports picture: one workout, a
+   recent training trend, effort, volume, type mix, recovery, or links to mood and
+   goals.
+2. Read the sports overview before asking the user to reconstruct metrics from memory.
+3. Reflect the practical decision the review should support.
+4. Move to `workout_session` enrichment only when one specific workout needs context,
+   tags, notes, or links.
+
+Helpful follow-up lanes:
+
+- which workout or date range matters
+- whether the question is load, effort, activity type, recovery, mood, or links
+- what decision the sports review should help with
+
+Route note:
+
+- `sports_overview` is a read-model-only surface. Use `forge_get_sports_overview` or
+  `/api/v1/health/fitness` for review. Do not create, update, or delete
+  `sports_overview` through batch CRUD.
+- If the review reveals that one workout needs reflective context, switch to the
+  stored `workout_session` batch route or reflective update helper for that known
+  session.
+
+Ready to review when:
+
+- the user's practical training or recovery question is clear
+- the relevant workout or date range is clear enough
+
+Preferred opening question:
+
+- "What are you trying to understand from your workout picture right now?"
 
 ## Calendar Connection
 

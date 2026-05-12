@@ -255,6 +255,10 @@ For wiki-specific recall:
 - Specialized CRUD entities: `wiki_page` and `calendar_connection`.
 - Action/workflow entities: `task_run`, `questionnaire_run`, preference game/judgment/signal flows, calendar connection sync/setup, self-observation review, work adjustments, and import/sync jobs.
 - Read-model-only surfaces: operator overview/context, sleep overview, sports overview, self-observation calendar, and calendar overview.
+- In `forge_get_agent_onboarding.entityRouteModel.readModelOnlySurfaces`, sleep and
+  sports overview routes are available under both `sleepOverview`/`sportsOverview`
+  and the entity-style aliases `sleep_overview`/`sports_overview`. Treat those as
+  read-only overview surfaces, not batch CRUD entities.
 - `task_run` is not a batch entity. Use the live task-run tools instead.
 - `forge_post_insight` is still the preferred write for agent-authored recommendations, even though `insight` also exists in the simple-entity catalog.
 - Sleep and workout sessions are batch entities for normal CRUD. Use the dedicated health tools only for read models and reflective enrichment on one existing record.
