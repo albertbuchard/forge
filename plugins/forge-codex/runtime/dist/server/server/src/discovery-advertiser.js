@@ -3,6 +3,7 @@ import os from "node:os";
 import { promisify } from "node:util";
 import { Bonjour } from "bonjour-service";
 import { logForgeDebug } from "./debug.js";
+import { companionIrohApiBaseUrlFromNodeId, companionIrohUiBaseUrlFromNodeId, getCompanionIrohStatus } from "./services/companion-iroh.js";
 const execFileAsync = promisify(execFile);
 export async function startForgeDiscoveryAdvertiser(options) {
     if (options.enabled === false ||
@@ -15,6 +16,8 @@ export async function startForgeDiscoveryAdvertiser(options) {
         uiBaseUrl: options.tailscaleUiBaseUrl,
         basePath
     });
+    const irohTransport = getCompanionIrohStatus();
+    const irohNodeId = irohTransport.pairPayload?.node_id;
     const bonjour = new Bonjour({}, (error) => {
         logForgeDebug(`[forge-discovery] ignored mDNS advertisement error: ${formatDiscoveryError(error)}`);
     });
@@ -31,6 +34,16 @@ export async function startForgeDiscoveryAdvertiser(options) {
                 tsApiBaseUrl: tailscaleTargets.apiBaseUrl ?? "",
                 tsUiBaseUrl: tailscaleTargets.uiBaseUrl ?? "",
                 tsDnsName: tailscaleTargets.dnsName ?? "",
+                irohApiBaseUrl: irohNodeId
+                    ? companionIrohApiBaseUrlFromNodeId(irohNodeId)
+                    : "",
+                irohUiBaseUrl: irohNodeId
+                    ? companionIrohUiBaseUrlFromNodeId(irohNodeId)
+                    : "",
+                irohProvider: irohNodeId ? "forge-companion-iroh" : "",
+                irohNodeId: irohNodeId ?? "",
+                irohRelay: irohTransport.pairPayload?.relay ?? "",
+                irohAlpn: irohTransport.alpn ?? "",
                 watchReady: "1"
             }
         });

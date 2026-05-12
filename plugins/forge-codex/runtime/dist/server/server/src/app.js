@@ -64,6 +64,7 @@ import { buildOpenApiDocument } from "./openapi.js";
 import { registerWebRoutes } from "./web.js";
 import { createManagerRuntime } from "./managers/runtime.js";
 import { isManagerError } from "./managers/type-guards.js";
+import { buildCompanionPairingTransport, getCompanionIrohStatus, stopCompanionIroh } from "./services/companion-iroh.js";
 import { createCompanionPairingSession, createCompanionPairingSessionSchema, createSleepSession, createSleepSessionSchema, createWorkoutSession, createWorkoutSessionSchema, deleteSleepSession, deleteWorkoutSession, getCompanionPairingSessionById, getCompanionOverview, getFitnessViewData, getSleepSessionById, getSleepSessionDetailById, getSleepTimelineOverlaysForRange, getSleepViewData, getVitalsViewData, getWorkoutSessionById, heartbeatCompanionPairing, heartbeatCompanionPairingSchema, ingestMobileHealthSync, mobileHealthSyncSchema, patchCompanionPairingSourceState, patchCompanionPairingSourceStateSchema, companionSourceKeySchema, requireValidPairing, revokeAllCompanionPairingSessions, revokeAllCompanionPairingSessionsSchema, revokeCompanionPairingSession, updateMobileCompanionSourceState, updateMobileCompanionSourceStateSchema, verifyCompanionPairing, verifyCompanionPairingSchema, updateSleepMetadata, updateSleepMetadataSchema, updateWorkoutMetadata, updateWorkoutMetadataSchema } from "./health.js";
 import { analyzeMovementUserBoxPreflight, createMovementUserBox, createMovementPlace, deleteMovementUserBox, getMovementAllTimeSummary, getMovementBoxDetail, getMovementDayDetail, getMovementMobileBootstrap, getMovementTimeline, getMovementSelectionAggregate, getMovementSettings, getMovementTripDetail, getMovementMonthSummary, invalidateAutomaticMovementBox, listMovementPlaces, movementAutomaticBoxInvalidateSchema, movementMobileBootstrapSchema, movementMobilePlaceMutationSchema, movementMobileStayPatchSchema, movementMobileUserBoxCreateSchema, movementMobileUserBoxPreflightSchema, movementMobileUserBoxPatchSchema, movementMobileAutomaticBoxInvalidateSchema, movementMobileTimelineSchema, movementPlaceMutationSchema, movementPlacePatchSchema, movementSelectionAggregateSchema, movementStayPatchSchema, movementTripPatchSchema, movementUserBoxCreateSchema, movementUserBoxPreflightSchema, movementUserBoxPatchSchema, movementSettingsPatchSchema, movementTimelineQuerySchema, movementTripPointPatchSchema, deleteMovementStay, deleteMovementTrip, deleteMovementTripPoint, updateMovementPlace, updateMovementSettings, updateMovementStay, updateMovementTrip, updateMovementUserBox, updateMovementTripPoint, resolveMovementTimelineSegmentForBox } from "./movement.js";
 import { getScreenTimeAllTimeSummary, getScreenTimeDayDetail, getScreenTimeMonthSummary, getScreenTimeSettings, screenTimeSettingsPatchSchema, updateScreenTimeSettings } from "./screen-time.js";
@@ -153,6 +154,18 @@ function buildApiBaseUrl(request) {
         : "";
     const basePath = forwardedPrefix.replace(/\/$/, "");
     return `${request.protocol}://${host}${basePath}/api/v1`;
+}
+function buildUiBaseUrlFromApiBaseUrl(apiBaseUrl) {
+    try {
+        const url = new URL(apiBaseUrl);
+        url.pathname = "/forge/";
+        url.search = "";
+        url.hash = "";
+        return url.toString();
+    }
+    catch {
+        return apiBaseUrl;
+    }
 }
 function readSingleForwardedHeader(value) {
     if (Array.isArray(value)) {
@@ -6213,6 +6226,7 @@ export async function buildServer(options = {}) {
         clearInterval(cronSchedulerTimer);
         clearInterval(dataBackupTimer);
         taskRunWatchdog?.stop();
+        await stopCompanionIroh();
         await managers.backgroundJobs.stop();
     });
     const enqueueWikiIngestJob = (jobId) => {
@@ -7000,11 +7014,26 @@ export async function buildServer(options = {}) {
         requireOperatorSession(request.headers, {
             route: "/api/v1/health/pairing-sessions"
         });
-        reply.code(201);
-        return createCompanionPairingSession(buildApiBaseUrl({
+        const parsed = createCompanionPairingSessionSchema.parse(request.body ?? {});
+        const requestApiBaseUrl = buildApiBaseUrl({
             protocol: request.protocol,
             headers: request.headers
-        }), createCompanionPairingSessionSchema.parse(request.body ?? {}));
+        });
+        const pairingTransport = await buildCompanionPairingTransport({
+            requestedMode: parsed.transportMode,
+            requestApiBaseUrl,
+            requestUiBaseUrl: buildUiBaseUrlFromApiBaseUrl(requestApiBaseUrl)
+        });
+        reply.code(201);
+        return createCompanionPairingSession(pairingTransport, parsed);
+    });
+    app.get("/api/v1/health/companion-iroh", async (request) => {
+        requireOperatorSession(request.headers, {
+            route: "/api/v1/health/companion-iroh"
+        });
+        return {
+            iroh: getCompanionIrohStatus()
+        };
     });
     app.delete("/api/v1/health/pairing-sessions/:id", async (request, reply) => {
         const auth = requireOperatorSession(request.headers, {

@@ -1,6 +1,112 @@
 import Foundation
 import UIKit
 
+@_silgen_name("forge_iroh_http_request_json")
+private func forge_iroh_http_request_json(_ inputJson: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>?
+
+@_silgen_name("forge_iroh_free_string")
+private func forge_iroh_free_string(_ value: UnsafeMutablePointer<CChar>?)
+
+struct ForgeIrohTransportResult {
+    let data: Data
+    let statusCode: Int
+    let headers: [String: String]
+}
+
+enum ForgeIrohTransportClient {
+    private struct Header: Codable {
+        let name: String
+        let value: String
+    }
+
+    private struct RequestEnvelope: Encodable {
+        let pairPayload: PairingTransportPairPayload
+        let method: String
+        let path: String
+        let headers: [Header]
+        let bodyBase64: String?
+    }
+
+    private struct ResponseEnvelope: Decodable {
+        let ok: Bool
+        let status: Int?
+        let headers: [Header]
+        let bodyBase64: String?
+        let error: String?
+    }
+
+    static func send(
+        method: String,
+        path: String,
+        headers: [String: String],
+        body: Data?,
+        transport: PairingTransport
+    ) async throws -> ForgeIrohTransportResult {
+        guard transport.isIrohTransport else {
+            throw URLError(.unsupportedURL)
+        }
+        guard let pairPayload = transport.pairPayload else {
+            throw NSError(
+                domain: "ForgeIrohTransport",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Iroh pairing payload is missing."]
+            )
+        }
+        let envelope = RequestEnvelope(
+            pairPayload: pairPayload,
+            method: method,
+            path: path,
+            headers: headers
+                .map { Header(name: $0.key, value: $0.value) }
+                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending },
+            bodyBase64: body?.base64EncodedString()
+        )
+        let task = Task.detached(priority: .userInitiated) { () throws -> ForgeIrohTransportResult in
+            let inputData = try JSONEncoder().encode(envelope)
+            guard let inputJson = String(data: inputData, encoding: .utf8) else {
+                throw URLError(.cannotDecodeRawData)
+            }
+            let outputJson: String = try inputJson.withCString { pointer in
+                guard let outputPointer = forge_iroh_http_request_json(pointer) else {
+                    throw URLError(.badServerResponse)
+                }
+                defer { forge_iroh_free_string(outputPointer) }
+                return String(cString: outputPointer)
+            }
+            let response = try JSONDecoder().decode(
+                ResponseEnvelope.self,
+                from: Data(outputJson.utf8)
+            )
+            guard response.ok else {
+                throw NSError(
+                    domain: "ForgeIrohTransport",
+                    code: response.status ?? -1,
+                    userInfo: [
+                        NSLocalizedDescriptionKey: response.error ?? "Forge Iroh request failed."
+                    ]
+                )
+            }
+            let responseData: Data
+            if let bodyBase64 = response.bodyBase64,
+               let decodedBody = Data(base64Encoded: bodyBase64) {
+                responseData = decodedBody
+            } else {
+                responseData = Data()
+            }
+            var headerMap: [String: String] = [:]
+            for header in response.headers {
+                headerMap[header.name] = header.value
+            }
+            return ForgeIrohTransportResult(
+                data: responseData,
+                statusCode: response.status ?? 500,
+                headers: headerMap
+            )
+        }
+        return try await task.value
+    }
+}
+
 struct ForgeSyncClient {
     static let movementTimelineServerCompatibleLimit = 120
 
@@ -255,7 +361,8 @@ struct ForgeSyncClient {
         let envelope: PairingVerificationEnvelope = try await sendRequest(
             path: "/mobile/pairing/verify",
             apiBaseUrl: apiBaseUrl,
-            body: requestBody
+            body: requestBody,
+            transport: payload.transport
         )
         companionDebugLog("ForgeSyncClient", "verifyPairing success session=\(payload.sessionId)")
         return envelope.pairing.pairingSession
@@ -273,7 +380,8 @@ struct ForgeSyncClient {
                 sessionId: payload.sessionId,
                 pairingToken: payload.pairingToken,
                 device: await currentDeviceDescriptor()
-            )
+            ),
+            transport: payload.transport
         )
         companionDebugLog(
             "ForgeSyncClient",
@@ -314,15 +422,16 @@ struct ForgeSyncClient {
         return envelope.qrPayload
     }
 
-    func pushHealthSync(payload: CompanionSyncPayload, apiBaseUrl: String) async throws -> SyncReceipt {
+    func pushHealthSync(payload: CompanionSyncPayload, pairing: PairingPayload) async throws -> SyncReceipt {
         companionDebugLog(
             "ForgeSyncClient",
-            "pushHealthSync start session=\(payload.sessionId) apiBaseUrl=\(apiBaseUrl) raw=\(payload.sleepRawRecords.count) nights=\(payload.sleepNights.count) segments=\(payload.sleepSegments.count) legacySleep=\(payload.sleepSessions.count) workouts=\(payload.workouts.count) vitalsDays=\(payload.vitals.daySummaries.count) stays=\(payload.movement.stays.count) trips=\(payload.movement.trips.count)"
+            "pushHealthSync start session=\(payload.sessionId) apiBaseUrl=\(pairing.apiBaseUrl) raw=\(payload.sleepRawRecords.count) nights=\(payload.sleepNights.count) segments=\(payload.sleepSegments.count) legacySleep=\(payload.sleepSessions.count) workouts=\(payload.workouts.count) vitalsDays=\(payload.vitals.daySummaries.count) stays=\(payload.movement.stays.count) trips=\(payload.movement.trips.count)"
         )
         let envelope: SyncEnvelope = try await sendRequest(
             path: "/mobile/healthkit/sync",
-            apiBaseUrl: apiBaseUrl,
-            body: payload
+            apiBaseUrl: pairing.apiBaseUrl,
+            body: payload,
+            transport: pairing.transport
         )
         companionDebugLog(
             "ForgeSyncClient",
@@ -344,7 +453,8 @@ struct ForgeSyncClient {
             body: MovementBootstrapRequest(
                 sessionId: payload.sessionId,
                 pairingToken: payload.pairingToken
-            )
+            ),
+            transport: payload.transport
         )
         companionDebugLog(
             "ForgeSyncClient",
@@ -376,7 +486,8 @@ struct ForgeSyncClient {
                 syncEligible: syncEligible,
                 lastObservedAt: lastObservedAt,
                 metadata: metadata
-            )
+            ),
+            transport: payload.transport
         )
         return envelope.pairingSession
     }
@@ -392,7 +503,8 @@ struct ForgeSyncClient {
             body: WatchBootstrapRequest(
                 sessionId: payload.sessionId,
                 pairingToken: payload.pairingToken
-            )
+            ),
+            transport: payload.transport
         )
         companionDebugLog(
             "ForgeSyncClient",
@@ -419,7 +531,8 @@ struct ForgeSyncClient {
                 pairingToken: payload.pairingToken,
                 before: before,
                 limit: requestLimit
-            )
+            ),
+            transport: payload.transport
         )
         companionDebugLog(
             "ForgeSyncClient",
@@ -443,7 +556,8 @@ struct ForgeSyncClient {
                 sessionId: pairing.sessionId,
                 pairingToken: pairing.pairingToken,
                 box: box
-            )
+            ),
+            transport: pairing.transport
         )
         companionDebugLog(
             "ForgeSyncClient",
@@ -469,7 +583,8 @@ struct ForgeSyncClient {
                 sessionId: pairing.sessionId,
                 pairingToken: pairing.pairingToken,
                 patch: patch
-            )
+            ),
+            transport: pairing.transport
         )
         companionDebugLog(
             "ForgeSyncClient",
@@ -493,7 +608,8 @@ struct ForgeSyncClient {
                 sessionId: pairing.sessionId,
                 pairingToken: pairing.pairingToken,
                 draft: draft
-            )
+            ),
+            transport: pairing.transport
         )
         return envelope.preflight
     }
@@ -513,7 +629,8 @@ struct ForgeSyncClient {
             body: MovementUserBoxDeleteRequest(
                 sessionId: pairing.sessionId,
                 pairingToken: pairing.pairingToken
-            )
+            ),
+            transport: pairing.transport
         )
         companionDebugLog(
             "ForgeSyncClient",
@@ -538,7 +655,8 @@ struct ForgeSyncClient {
                 sessionId: pairing.sessionId,
                 pairingToken: pairing.pairingToken,
                 invalidate: payload
-            )
+            ),
+            transport: pairing.transport
         )
         companionDebugLog(
             "ForgeSyncClient",
@@ -579,7 +697,8 @@ struct ForgeSyncClient {
                     linkedPeople: [],
                     metadata: [:]
                 )
-            )
+            ),
+            transport: pairing.transport
         )
         companionDebugLog(
             "ForgeSyncClient",
@@ -602,7 +721,8 @@ struct ForgeSyncClient {
             body: MovementBootstrapRequest(
                 sessionId: pairing.sessionId,
                 pairingToken: pairing.pairingToken
-            )
+            ),
+            transport: pairing.transport
         )
         companionDebugLog(
             "ForgeSyncClient",
@@ -632,7 +752,8 @@ struct ForgeSyncClient {
                     placeExternalUid: placeExternalUid,
                     placeLabel: placeLabel
                 )
-            )
+            ),
+            transport: pairing.transport
         )
         companionDebugLog(
             "ForgeSyncClient",
@@ -660,7 +781,8 @@ struct ForgeSyncClient {
                 dateKey: action.dateKey,
                 status: action.status,
                 note: action.note
-            )
+            ),
+            transport: pairing.transport
         )
         companionDebugLog(
             "ForgeSyncClient",
@@ -696,7 +818,8 @@ struct ForgeSyncClient {
                         payload: action.payload
                     )
                 }
-            )
+            ),
+            transport: pairing.transport
         )
         companionDebugLog(
             "ForgeSyncClient",
@@ -710,7 +833,8 @@ struct ForgeSyncClient {
         apiBaseUrl: String,
         method: String = "POST",
         body: Body,
-        session: URLSession? = nil
+        session: URLSession? = nil,
+        transport: PairingTransport? = nil
     ) async throws -> Response {
         guard let url = URL(string: "\(apiBaseUrl)\(path)") else {
             companionDebugLog(
@@ -720,21 +844,55 @@ struct ForgeSyncClient {
             throw URLError(.badURL)
         }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = method
+        var requestHeaders: [String: String] = [
+            "Accept": "application/json"
+        ]
+        let requestBody: Data?
         if method != "GET" {
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try JSONEncoder().encode(body)
+            requestHeaders["Content-Type"] = "application/json"
+            requestBody = try JSONEncoder().encode(body)
+        } else {
+            requestBody = nil
         }
 
         companionDebugLog(
             "ForgeSyncClient",
-            "sendRequest start method=\(method) url=\(url.absoluteString) bodyBytes=\(request.httpBody?.count ?? 0)"
+            "sendRequest start method=\(method) url=\(url.absoluteString) bodyBytes=\(requestBody?.count ?? 0) transport=\(transport?.protocolName ?? "urlsession")"
         )
-        let (data, response) = try await (session ?? Self.bootstrapSession).data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            companionDebugLog("ForgeSyncClient", "sendRequest badServerResponse url=\(url.absoluteString)")
-            throw URLError(.badServerResponse)
+        let data: Data
+        let httpResponse: HTTPURLResponse
+        if let transport, transport.isIrohTransport {
+            let irohResult = try await ForgeIrohTransportClient.send(
+                method: method,
+                path: apiRequestPath(apiBaseUrl: apiBaseUrl, endpointPath: path),
+                headers: requestHeaders,
+                body: requestBody,
+                transport: transport
+            )
+            data = irohResult.data
+            guard let response = HTTPURLResponse(
+                url: url,
+                statusCode: irohResult.statusCode,
+                httpVersion: "HTTP/1.1",
+                headerFields: irohResult.headers
+            ) else {
+                throw URLError(.badServerResponse)
+            }
+            httpResponse = response
+        } else {
+            var request = URLRequest(url: url)
+            request.httpMethod = method
+            for (name, value) in requestHeaders {
+                request.setValue(value, forHTTPHeaderField: name)
+            }
+            request.httpBody = requestBody
+            let (urlSessionData, response) = try await (session ?? Self.bootstrapSession).data(for: request)
+            guard let urlSessionResponse = response as? HTTPURLResponse else {
+                companionDebugLog("ForgeSyncClient", "sendRequest badServerResponse url=\(url.absoluteString)")
+                throw URLError(.badServerResponse)
+            }
+            data = urlSessionData
+            httpResponse = urlSessionResponse
         }
 
         companionDebugLog(
@@ -770,6 +928,21 @@ struct ForgeSyncClient {
 
         companionDebugLog("ForgeSyncClient", "sendRequest decode success url=\(url.absoluteString)")
         return try JSONDecoder().decode(Response.self, from: data)
+    }
+
+    private func apiRequestPath(apiBaseUrl: String, endpointPath: String) -> String {
+        let basePath: String
+        if let url = URL(string: apiBaseUrl) {
+            basePath = url.path
+                .replacingOccurrences(of: "/+$", with: "", options: .regularExpression)
+        } else {
+            basePath = "/api/v1"
+        }
+        let normalizedBasePath = basePath.isEmpty ? "/api/v1" : basePath
+        let normalizedEndpointPath = endpointPath.hasPrefix("/")
+            ? endpointPath
+            : "/\(endpointPath)"
+        return "\(normalizedBasePath)\(normalizedEndpointPath)"
     }
 
     private func makeSession() -> URLSession {

@@ -3,7 +3,7 @@
   "version": "0.2.61",
   "description": "Curated OpenClaw adapter for the Forge collaboration API, UI entrypoint, and localhost auto-start runtime.",
   "type": "module",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "private": false,
   "repository": {
     "type": "git",
@@ -103,7 +103,7 @@
     "axios": "^1.16.0",
     "fast-xml-parser": "^5.7.1",
     "follow-redirects": "^1.16.0",
-    "hono": "4.12.14",
+    "hono": "^4.12.18",
     "ip-address": "^10.2.0",
     "uuid": "^14.0.0"
   },

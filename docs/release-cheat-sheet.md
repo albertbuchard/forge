@@ -49,6 +49,8 @@ All release tags must point at commits already on `main`. The workflows verify t
 - the `projects/forge` nested repo must be connected to GitHub with Actions enabled
 - you need permission to push `main` and push tags
 - the workflows must stay in the Forge repo, not only in the parent monorepo
+- Rust stable must be available for OpenClaw builds because the package now bundles
+  Forge's `companion-iroh` transport host for iOS pairing
 
 ### OpenClaw npm release
 
@@ -97,6 +99,8 @@ Notes:
 - npm Trusted Publishing currently requires GitHub-hosted runners
 - the workflow installs Node `22.14.0` and upgrades npm to `11.5.1+` because that is
   required for npm trusted publishing
+- the workflow installs Rust stable before packaging so `npm run build:openclaw-plugin`
+  can build the `forge-companion-iroh` binary and copy the Rust source fallback
 
 ### Hermes PyPI release
 
@@ -138,6 +142,9 @@ One-time Apple-side setup:
    Do not rely on Xcode-managed automatic signing on hosted runners, because each
    fresh runner can create another throwaway Apple Development certificate and
    eventually exhaust the Apple account certificate limit.
+6. The iOS workflow installs Rust stable with `aarch64-apple-ios`,
+   `aarch64-apple-ios-sim`, and `x86_64-apple-ios` targets so Xcode can link the
+   native Forge Iroh bridge.
 
 ## GitHub Secrets
 

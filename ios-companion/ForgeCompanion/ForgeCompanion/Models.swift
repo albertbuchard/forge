@@ -2,7 +2,7 @@ import Foundation
 
 enum ForgeDiscoverySource: String, Codable {
     case simulator
-    case tunnel
+    case iroh
     case tailscale
     case lan
     case bonjour
@@ -72,13 +72,33 @@ struct CompanionPairingSessionState: Decodable, Hashable {
     let updatedAt: String
 }
 
+struct PairingTransportPairPayload: Codable, Hashable {
+    let v: Int
+    let nodeId: String
+    let token: String
+    let hostName: String?
+    let relay: String?
+
+    enum CodingKeys: String, CodingKey {
+        case v
+        case nodeId = "node_id"
+        case token
+        case hostName = "host_name"
+        case relay
+    }
+}
+
 struct PairingTransport: Codable, Hashable {
     let protocolName: String
     let provider: String
     let status: String
     let publicBaseUrl: String?
     let localBaseUrl: String?
-    let proxyBaseUrl: String?
+    let nodeId: String?
+    let relay: String?
+    let alpn: String?
+    let agent: String?
+    let pairPayload: PairingTransportPairPayload?
     let recreateCommand: String?
     let startedAt: String?
     let lastError: String?
@@ -90,11 +110,21 @@ struct PairingTransport: Codable, Hashable {
         case status
         case publicBaseUrl
         case localBaseUrl
-        case proxyBaseUrl
+        case nodeId
+        case relay
+        case alpn
+        case agent
+        case pairPayload
         case recreateCommand
         case startedAt
         case lastError
         case notes
+    }
+}
+
+extension PairingTransport {
+    var isIrohTransport: Bool {
+        protocolName == "iroh"
     }
 }
 

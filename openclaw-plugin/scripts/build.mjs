@@ -1,4 +1,4 @@
-import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, copyFile, cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
@@ -15,6 +15,11 @@ const codexRuntimeDistDir = path.join(codexRuntimeRoot, "dist");
 const codexRuntimeMigrationsDir = path.join(codexRuntimeRoot, "server", "migrations");
 const repoWebDistDir = path.join(repoRoot, "dist");
 const repoMigrationsDir = path.join(repoRoot, "server", "migrations");
+const companionIrohRoot = path.join(repoRoot, "companion-iroh");
+const companionIrohManifest = path.join(companionIrohRoot, "Cargo.toml");
+const companionIrohBinaryName = process.platform === "win32" ? "forge-companion-iroh.exe" : "forge-companion-iroh";
+const companionIrohPlatformKey = `${process.platform}-${process.arch}`;
+const companionIrohPrebuiltDir = (process.env.FORGE_COMPANION_IROH_PREBUILT_DIR ?? "").trim();
 const pluginServerEntrySource = `import { existsSync } from "node:fs";
 import { spawn } from "node:child_process";
 import path from "node:path";
@@ -198,6 +203,94 @@ async function removePackagedGamificationAssets() {
   await removePath(path.join(pluginDistDir, "gamification"));
 }
 
+async function chmodIfExists(filePath) {
+  try {
+    await chmod(filePath, 0o755);
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return;
+    }
+    throw error;
+  }
+}
+
+async function copyPrebuiltCompanionIroh() {
+  if (!companionIrohPrebuiltDir) {
+    return;
+  }
+
+  const prebuiltRoot = path.resolve(repoRoot, companionIrohPrebuiltDir);
+  const sourceRoot =
+    path.basename(prebuiltRoot) === "companion-iroh"
+      ? prebuiltRoot
+      : path.join(prebuiltRoot, "companion-iroh");
+  let entries;
+  try {
+    entries = await readdir(sourceRoot, { withFileTypes: true });
+  } catch (error) {
+    throw new Error(
+      `FORGE_COMPANION_IROH_PREBUILT_DIR did not contain companion binaries at ${sourceRoot}: ${error.message}`
+    );
+  }
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+    const sourcePlatformDir = path.join(sourceRoot, entry.name);
+    const targetPlatformDir = path.join(pluginDistDir, "companion-iroh", entry.name);
+    await cp(sourcePlatformDir, targetPlatformDir, {
+      recursive: true,
+      force: true
+    });
+    await chmodIfExists(path.join(targetPlatformDir, "forge-companion-iroh"));
+    await chmodIfExists(path.join(targetPlatformDir, "forge-companion-iroh.exe"));
+  }
+}
+
+async function packageCompanionIroh() {
+  await run(
+    "cargo",
+    [
+      "build",
+      "--release",
+      "--manifest-path",
+      companionIrohManifest,
+      "--bin",
+      "forge-companion-iroh"
+    ],
+    repoRoot
+  );
+
+  const binarySource = path.join(
+    companionIrohRoot,
+    "target",
+    "release",
+    companionIrohBinaryName
+  );
+  const binaryDir = path.join(
+    pluginDistDir,
+    "companion-iroh",
+    companionIrohPlatformKey
+  );
+  await mkdir(binaryDir, { recursive: true });
+  await copyFile(binarySource, path.join(binaryDir, companionIrohBinaryName));
+  if (process.platform !== "win32") {
+    await chmod(path.join(binaryDir, companionIrohBinaryName), 0o755);
+  }
+  await copyPrebuiltCompanionIroh();
+
+  const sourceDir = path.join(pluginDistDir, "companion-iroh-src");
+  await removePath(sourceDir);
+  await mkdir(sourceDir, { recursive: true });
+  await copyFile(path.join(companionIrohRoot, "Cargo.toml"), path.join(sourceDir, "Cargo.toml"));
+  await copyFile(path.join(companionIrohRoot, "Cargo.lock"), path.join(sourceDir, "Cargo.lock"));
+  await cp(path.join(companionIrohRoot, "src"), path.join(sourceDir, "src"), {
+    recursive: true,
+    force: true
+  });
+}
+
 await removePath(pluginDistDir);
 await removePath(pluginServerDir);
 await mkdir(pluginDistDir, { recursive: true });
@@ -219,6 +312,7 @@ await run("npm", ["run", "build"], repoRoot);
 
 await cp(repoWebDistDir, pluginDistDir, { recursive: true, force: true });
 await removePackagedGamificationAssets();
+await packageCompanionIroh();
 await mkdir(path.join(pluginDistDir, "server", "server"), { recursive: true });
 await cp(repoMigrationsDir, path.join(pluginDistDir, "server", "server", "migrations"), { recursive: true, force: true });
 await mkdir(path.join(pluginServerDir), { recursive: true });

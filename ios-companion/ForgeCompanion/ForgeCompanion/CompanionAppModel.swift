@@ -1420,7 +1420,7 @@ final class CompanionAppModel: ObservableObject {
             latestSyncPayloadSummary = payloadSummary
             let receipt = try await syncClient.pushHealthSync(
                 payload: payload,
-                apiBaseUrl: pairing.apiBaseUrl
+                pairing: pairing
             )
             if let pairingSession = receipt.pairingSession {
                 applyPairingSessionState(pairingSession, reason: "sync-\(trigger)")

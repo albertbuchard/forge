@@ -109,6 +109,10 @@ export const createCompanionPairingSessionSchema = z.object({
     label: z.string().trim().default("Forge Companion"),
     userId: z.string().trim().nullable().optional(),
     expiresInMinutes: z.coerce.number().int().min(5).max(24 * 60).default(30),
+    transportMode: z
+        .enum(["iroh", "manual-http"])
+        .default("iroh")
+        .transform((mode) => mode),
     capabilities: z
         .array(z.enum([
         "healthkit.sleep",
@@ -1471,8 +1475,17 @@ export function updateMobileCompanionSourceState(payload) {
         }
     });
 }
-export function createCompanionPairingSession(baseApiUrl, input) {
+export function createCompanionPairingSession(pairingTransport, input) {
     const parsed = createCompanionPairingSessionSchema.parse(input);
+    const resolvedTransport = typeof pairingTransport === "string"
+        ? {
+            apiBaseUrl: pairingTransport,
+            uiBaseUrl: null,
+            transportMode: "manual-http",
+            transport: undefined
+        }
+        : pairingTransport;
+    const baseApiUrl = resolvedTransport.apiBaseUrl;
     const now = new Date();
     const userId = parsed.userId ?? "user_operator";
     const serializedCapabilities = JSON.stringify(parsed.capabilities);
@@ -1484,10 +1497,9 @@ export function createCompanionPairingSession(baseApiUrl, input) {
        FROM companion_pairing_sessions
        WHERE user_id = ?
          AND label = ?
-         AND api_base_url = ?
          AND capability_flags_json = ?
          AND status = 'pending'`)
-        .all(userId, parsed.label, baseApiUrl, serializedCapabilities);
+        .all(userId, parsed.label, serializedCapabilities);
     if (stalePendingRows.length > 0) {
         revokePairingRows(stalePendingRows, {
             actor: null,
@@ -1510,6 +1522,9 @@ export function createCompanionPairingSession(baseApiUrl, input) {
     const qrPayload = {
         kind: "forge-companion-pairing",
         apiBaseUrl: baseApiUrl,
+        uiBaseUrl: resolvedTransport.uiBaseUrl ?? undefined,
+        transportMode: resolvedTransport.transportMode ?? parsed.transportMode,
+        transport: resolvedTransport.transport,
         sessionId: id,
         pairingToken,
         expiresAt,

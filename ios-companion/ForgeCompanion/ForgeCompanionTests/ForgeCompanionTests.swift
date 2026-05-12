@@ -153,23 +153,32 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(refreshed.capabilities, ["healthkit.sleep", "healthkit.fitness", "watch-ready"])
     }
 
-    func testPairingPayloadDecodesAndPreservesTunnelTransport() throws {
+    func testPairingPayloadDecodesAndPreservesIrohTransport() throws {
         let json = """
         {
           "kind": "forge-companion-pairing",
-          "apiBaseUrl": "https://forge-companion-test.trycloudflare.com/api/v1",
-          "uiBaseUrl": "https://forge-companion-test.trycloudflare.com/forge/",
-          "transportMode": "tunnel",
+          "apiBaseUrl": "forge-iroh://fakednodeid/api/v1",
+          "uiBaseUrl": "forge-iroh://fakednodeid/forge/",
+          "transportMode": "iroh",
           "transport": {
-            "protocol": "https-tunnel",
-            "provider": "cloudflare-quick-tunnel",
+            "protocol": "iroh",
+            "provider": "forge-companion-iroh",
             "status": "ready",
-            "publicBaseUrl": "https://forge-companion-test.trycloudflare.com",
             "localBaseUrl": "http://127.0.0.1:4317",
-            "proxyBaseUrl": "http://127.0.0.1:52241",
-            "recreateCommand": "cloudflared tunnel --url http://127.0.0.1:52241",
+            "nodeId": "fakednodeid",
+            "relay": "https://relay.example.com",
+            "alpn": "forge-companion/1",
+            "agent": "forge",
+            "pairPayload": {
+              "v": 1,
+              "node_id": "fakednodeid",
+              "token": "hosttoken",
+              "host_name": "test-host",
+              "relay": "https://relay.example.com"
+            },
+            "recreateCommand": "forge-companion-iroh host --state-dir ~/.forge/companion-iroh --local-base-url http://127.0.0.1:4317",
             "startedAt": "2026-04-07T10:00:00Z",
-            "notes": ["Quick tunnel is active through an allow-listed mobile API proxy."]
+            "notes": ["Iroh transport is active."]
           },
           "sessionId": "pair_test",
           "pairingToken": "token",
@@ -184,11 +193,13 @@ final class ForgeCompanionTests: XCTestCase {
 
         let normalized = CompanionPairingURLResolver.normalizedPayload(payload)
 
-        XCTAssertEqual(normalized.transportMode, "tunnel")
-        XCTAssertEqual(normalized.transport?.protocolName, "https-tunnel")
-        XCTAssertEqual(normalized.transport?.provider, "cloudflare-quick-tunnel")
-        XCTAssertEqual(normalized.transport?.publicBaseUrl, "https://forge-companion-test.trycloudflare.com")
-        XCTAssertEqual(normalized.transport?.notes.first, "Quick tunnel is active through an allow-listed mobile API proxy.")
+        XCTAssertEqual(normalized.transportMode, "iroh")
+        XCTAssertEqual(normalized.transport?.protocolName, "iroh")
+        XCTAssertEqual(normalized.transport?.provider, "forge-companion-iroh")
+        XCTAssertEqual(normalized.transport?.nodeId, "fakednodeid")
+        XCTAssertEqual(normalized.transport?.alpn, "forge-companion/1")
+        XCTAssertEqual(normalized.transport?.pairPayload?.token, "hosttoken")
+        XCTAssertEqual(normalized.transport?.notes.first, "Iroh transport is active.")
     }
 
     func testWatchBootstrapDecodesCompactHabitPayload() throws {

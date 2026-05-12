@@ -20,7 +20,7 @@ It gives you one place to:
 - let OpenClaw, Hermes, Codex, the browser app, and the iPhone companion use the same local Forge runtime
 - keep the database local by default, with optional explicit data folders and backups in `Settings -> Data`
 
-Forge is built with React 19, TypeScript 5.x, Vite 6, Tailwind CSS 4, Fastify 5, SQLite, generated OpenAPI, Tauri 2, OpenClaw, Hermes, Codex MCP, and a Swift iPhone companion.
+Forge is built with React 19, TypeScript 5.x, Vite 6, Tailwind CSS 4, Fastify 5, SQLite, generated OpenAPI, Tauri 2, OpenClaw, Hermes, Codex MCP, a Rust Iroh companion transport, and a Swift iPhone companion that links the same Rust transport core natively.
 
 ## Start Here
 
@@ -61,10 +61,11 @@ npx forge-memory uninstall
 npx forge-memory pair-ios
 ```
 
-`pair-ios` now generates the companion tunnel QR by default. If `cloudflared` is already
-installed, Forge creates a temporary HTTPS tunnel through a mobile-only API proxy; if you
-run a managed tunnel, set `FORGE_COMPANION_TUNNEL_BASE_URL` before starting Forge. Direct
-HTTP/TCP pairing remains available with `npx forge-memory pair-ios --manual-http`.
+`pair-ios` now generates an Iroh QR by default. The QR contains the desktop Iroh
+node id, pairing token, optional relay hint, and ALPN `forge-companion/1`; the iPhone app
+uses its native Rust bridge to speak QUIC to Forge. Direct HTTP/TCP pairing remains
+available with `npx forge-memory pair-ios --manual-http` for deliberate LAN, Tailscale,
+or debugging setups.
 
 `export` creates a portable backup of the real Forge data folder. `uninstall` removes the Forge Memory runtime manager and cache but keeps the Forge data folder by default; use `--remove-data` only when you explicitly want to delete the data too.
 
@@ -75,6 +76,12 @@ After install, the usual local addresses are:
 - OpenAPI: `http://127.0.0.1:4317/api/v1/openapi.json`
 
 Manual OpenClaw, Hermes, and Codex setup still exists for advanced cases in [`docs/openclaw-plugin.md`](./docs/openclaw-plugin.md), [`docs/hermes-plugin.md`](./docs/hermes-plugin.md), and [`plugins/forge-codex/README.md`](./plugins/forge-codex/README.md).
+
+## License
+
+Forge-owned public code is licensed under Apache-2.0. The license is permissive,
+commercial-use friendly, and includes an explicit patent grant, which keeps a clean path
+for future closed-source commercial Forge forks.
 
 ### Run The Source App Locally
 

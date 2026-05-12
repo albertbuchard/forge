@@ -62,6 +62,11 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
+      - name: Set up Rust for Forge Iroh iOS bridge
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+
       - name: Verify CI release credentials are configured
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.FORGE_IOS_BUILD_CERTIFICATE_BASE64 }}

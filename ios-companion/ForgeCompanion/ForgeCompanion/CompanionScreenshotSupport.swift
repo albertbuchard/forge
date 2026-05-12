@@ -61,25 +61,35 @@ enum CompanionScreenshotFixtures {
 
     static func pairingPayload() -> PairingPayload {
         PairingPayload(
-            kind: "health_pairing",
-            apiBaseUrl: "https://forge-companion-demo.trycloudflare.com/api/v1",
-            uiBaseUrl: "https://forge-companion-demo.trycloudflare.com/forge/",
+            kind: "forge-companion-pairing",
+            apiBaseUrl: "forge-iroh://fakednodeid/api/v1",
+            uiBaseUrl: "forge-iroh://fakednodeid/forge/",
             sessionId: "pair_screenshot_forge_companion",
             pairingToken: "forge-screenshot-token",
             expiresAt: isoString(referenceDate.addingTimeInterval(60 * 60 * 24 * 30)),
             capabilities: ["healthkit.sleep", "healthkit.fitness", "movement.timeline"],
-            transportMode: "tunnel",
+            transportMode: "iroh",
             transport: PairingTransport(
-                protocolName: "https-tunnel",
-                provider: "cloudflare-quick-tunnel",
+                protocolName: "iroh",
+                provider: "forge-companion-iroh",
                 status: "ready",
-                publicBaseUrl: "https://forge-companion-demo.trycloudflare.com",
+                publicBaseUrl: nil,
                 localBaseUrl: "http://127.0.0.1:4317",
-                proxyBaseUrl: "http://127.0.0.1:52241",
-                recreateCommand: "cloudflared tunnel --url http://127.0.0.1:52241",
+                nodeId: "fakednodeid",
+                relay: "https://relay.example.com",
+                alpn: "forge-companion/1",
+                agent: "forge",
+                pairPayload: PairingTransportPairPayload(
+                    v: 1,
+                    nodeId: "fakednodeid",
+                    token: "forge-screenshot-host-token",
+                    hostName: "Forge Demo",
+                    relay: "https://relay.example.com"
+                ),
+                recreateCommand: "forge-companion-iroh host --state-dir ~/.forge/companion-iroh --local-base-url http://127.0.0.1:4317",
                 startedAt: isoString(referenceDate),
                 lastError: nil,
-                notes: ["Quick tunnel is active through an allow-listed mobile API proxy."]
+                notes: ["Iroh transport is active for Forge Companion."]
             )
         )
     }
@@ -87,14 +97,14 @@ enum CompanionScreenshotFixtures {
     static func discoveredServers() -> [DiscoveredForgeServer] {
         [
             DiscoveredForgeServer(
-                id: "forge-tunnel-bonjour-macbook-pro",
+                id: "forge-iroh-bonjour-macbook-pro",
                 name: "Forge on Albert's Mac",
-                host: "forge-companion-demo.trycloudflare.com",
+                host: "fakednodeid",
                 apiBaseUrl: pairingPayload().apiBaseUrl,
-                uiBaseUrl: pairingPayload().uiBaseUrl ?? "https://forge-companion-demo.trycloudflare.com/forge/",
-                source: .tunnel,
+                uiBaseUrl: pairingPayload().uiBaseUrl ?? "forge-iroh://fakednodeid/forge/",
+                source: .iroh,
                 canBootstrapPairing: true,
-                detail: "Companion tunnel with live /api and /forge reachability."
+                detail: "Iroh companion transport with live /api and /forge reachability."
             ),
             DiscoveredForgeServer(
                 id: "forge-lan-macbook-pro",

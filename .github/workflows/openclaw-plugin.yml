@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - ".github/workflows/openclaw-plugin.yml"
+      - "companion-iroh/**"
       - "openclaw-plugin/**"
       - "openclaw.plugin.json"
       - "skills/forge-openclaw/**"
@@ -16,6 +17,7 @@ on:
   pull_request:
     paths:
       - ".github/workflows/openclaw-plugin.yml"
+      - "companion-iroh/**"
       - "openclaw-plugin/**"
       - "openclaw.plugin.json"
       - "skills/forge-openclaw/**"
@@ -30,6 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-node@v5
         with:
           node-version: 22

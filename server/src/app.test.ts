@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { access, mkdtemp, readFile, rm } from "node:fs/promises";
+import { access, chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
@@ -81,11 +81,19 @@ async function loadSharedMovementFixture(id: string) {
   return scenario!;
 }
 
-test("companion pairing defaults to a configured tunnel transport", async () => {
-  const originalTunnelBaseUrl = process.env.FORGE_COMPANION_TUNNEL_BASE_URL;
-  process.env.FORGE_COMPANION_TUNNEL_BASE_URL =
-    "https://forge-companion-test.trycloudflare.com";
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-companion-tunnel-"));
+test("companion pairing defaults to Iroh transport", async () => {
+  const originalIrohBin = process.env.FORGE_COMPANION_IROH_BIN;
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-companion-iroh-"));
+  const fakeIrohBin = path.join(rootDir, "fake-forge-companion-iroh.sh");
+  await writeFile(
+    fakeIrohBin,
+    `#!/bin/sh
+printf '%s\\n' '{"event":"ready","pairPayload":{"v":1,"node_id":"fakednodeid","token":"hosttoken","host_name":"test-host","relay":"https://relay.example.com"},"alpn":"forge-companion/1"}'
+while true; do sleep 1; done
+`
+  );
+  await chmod(fakeIrohBin, 0o755);
+  process.env.FORGE_COMPANION_IROH_BIN = fakeIrohBin;
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
@@ -110,33 +118,44 @@ test("companion pairing defaults to a configured tunnel transport", async () => 
         transport: {
           protocol: string;
           provider: string;
-          publicBaseUrl: string;
+          nodeId: string;
+          relay: string;
+          alpn: string;
+          agent: string;
+          pairPayload: {
+            v: number;
+            node_id: string;
+            token: string;
+          };
         };
       };
     };
-    assert.equal(payload.qrPayload.transportMode, "tunnel");
+    assert.equal(payload.qrPayload.transportMode, "iroh");
     assert.equal(
       payload.qrPayload.apiBaseUrl,
-      "https://forge-companion-test.trycloudflare.com/api/v1"
+      "forge-iroh://fakednodeid/api/v1"
     );
     assert.equal(
       payload.qrPayload.uiBaseUrl,
-      "https://forge-companion-test.trycloudflare.com/forge/"
+      "forge-iroh://fakednodeid/forge/"
     );
-    assert.equal(payload.qrPayload.transport.protocol, "https-tunnel");
-    assert.equal(payload.qrPayload.transport.provider, "configured-url");
-    assert.equal(
-      payload.qrPayload.transport.publicBaseUrl,
-      "https://forge-companion-test.trycloudflare.com"
-    );
+    assert.equal(payload.qrPayload.transport.protocol, "iroh");
+    assert.equal(payload.qrPayload.transport.provider, "forge-companion-iroh");
+    assert.equal(payload.qrPayload.transport.nodeId, "fakednodeid");
+    assert.equal(payload.qrPayload.transport.relay, "https://relay.example.com");
+    assert.equal(payload.qrPayload.transport.alpn, "forge-companion/1");
+    assert.equal(payload.qrPayload.transport.agent, "forge");
+    assert.equal(payload.qrPayload.transport.pairPayload.v, 1);
+    assert.equal(payload.qrPayload.transport.pairPayload.node_id, "fakednodeid");
+    assert.equal(payload.qrPayload.transport.pairPayload.token, "hosttoken");
   } finally {
     await app.close();
     closeDatabase();
     await rm(rootDir, { recursive: true, force: true });
-    if (originalTunnelBaseUrl === undefined) {
-      delete process.env.FORGE_COMPANION_TUNNEL_BASE_URL;
+    if (originalIrohBin === undefined) {
+      delete process.env.FORGE_COMPANION_IROH_BIN;
     } else {
-      process.env.FORGE_COMPANION_TUNNEL_BASE_URL = originalTunnelBaseUrl;
+      process.env.FORGE_COMPANION_IROH_BIN = originalIrohBin;
     }
   }
 });

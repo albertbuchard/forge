@@ -3,6 +3,7 @@ import WebKit
 
 struct ForgeWebView: UIViewRepresentable {
     let url: URL
+    let transport: PairingTransport?
     let reloadToken: UUID
     @Binding var isLoading: Bool
     @Binding var errorMessage: String?
@@ -19,6 +20,12 @@ struct ForgeWebView: UIViewRepresentable {
         let configuration = WKWebViewConfiguration()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.applicationNameForUserAgent = "ForgeCompanion"
+        if let transport, transport.isIrohTransport {
+            configuration.setURLSchemeHandler(
+                ForgeIrohURLSchemeHandler(transport: transport),
+                forURLScheme: "forge-iroh"
+            )
+        }
 
         let source = """
         window.__forgeCompanionEmbedded = true;
@@ -232,6 +239,64 @@ struct ForgeWebView: UIViewRepresentable {
                 )
             }
         }
+    }
+}
+
+private final class ForgeIrohURLSchemeHandler: NSObject, WKURLSchemeHandler {
+    private let transport: PairingTransport
+    private var activeTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
+
+    init(transport: PairingTransport) {
+        self.transport = transport
+    }
+
+    func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
+        let key = ObjectIdentifier(urlSchemeTask as AnyObject)
+        let request = urlSchemeTask.request
+        let task = Task {
+            do {
+                guard let url = request.url else {
+                    throw URLError(.badURL)
+                }
+                var path = url.path.isEmpty ? "/" : url.path
+                if let query = url.query, !query.isEmpty {
+                    path += "?\(query)"
+                }
+                let result = try await ForgeIrohTransportClient.send(
+                    method: request.httpMethod ?? "GET",
+                    path: path,
+                    headers: request.allHTTPHeaderFields ?? [:],
+                    body: request.httpBody,
+                    transport: transport
+                )
+                guard let response = HTTPURLResponse(
+                    url: url,
+                    statusCode: result.statusCode,
+                    httpVersion: "HTTP/1.1",
+                    headerFields: result.headers
+                ) else {
+                    throw URLError(.badServerResponse)
+                }
+                await MainActor.run {
+                    urlSchemeTask.didReceive(response)
+                    urlSchemeTask.didReceive(result.data)
+                    urlSchemeTask.didFinish()
+                    activeTasks.removeValue(forKey: key)
+                }
+            } catch {
+                await MainActor.run {
+                    urlSchemeTask.didFailWithError(error)
+                    activeTasks.removeValue(forKey: key)
+                }
+            }
+        }
+        activeTasks[key] = task
+    }
+
+    func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {
+        let key = ObjectIdentifier(urlSchemeTask as AnyObject)
+        activeTasks[key]?.cancel()
+        activeTasks.removeValue(forKey: key)
     }
 }
 

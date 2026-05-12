@@ -35,7 +35,7 @@ struct SetupManualScreen: View {
                     .font(.system(size: 15, weight: .medium, design: .rounded))
                     .foregroundStyle(CompanionStyle.textSecondary)
 
-                Text("The tunnel QR is the default path. Manual setup remains available for known hosts and copied JSON payloads.")
+                Text("The Iroh QR is the default path. Manual setup remains available for known hosts and copied JSON payloads.")
                     .font(.system(size: 12, weight: .medium, design: .rounded))
                     .foregroundStyle(CompanionStyle.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -100,7 +100,7 @@ struct SetupManualScreen: View {
                             .font(.system(size: 16, weight: .bold, design: .rounded))
                             .foregroundStyle(CompanionStyle.textPrimary)
 
-                        Text("Paste the JSON payload from Forge Settings -> Mobile. Tunnel payloads include their endpoint and pairing token.")
+                        Text("Paste the JSON payload from Forge Settings -> Mobile. Iroh payloads include the desktop node and pairing token.")
                             .font(.system(size: 13, weight: .medium, design: .rounded))
                             .foregroundStyle(CompanionStyle.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)

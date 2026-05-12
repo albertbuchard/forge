@@ -4,10 +4,10 @@ import { promisify } from "node:util";
 import { Bonjour } from "bonjour-service";
 import { logForgeDebug } from "./debug.js";
 import {
-  companionTunnelApiBaseUrlFromPublicBase,
-  companionTunnelUiBaseUrlFromPublicBase,
-  readConfiguredCompanionTunnelBaseUrl
-} from "./services/companion-tunnel.js";
+  companionIrohApiBaseUrlFromNodeId,
+  companionIrohUiBaseUrlFromNodeId,
+  getCompanionIrohStatus
+} from "./services/companion-iroh.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -45,7 +45,8 @@ export async function startForgeDiscoveryAdvertiser(
     uiBaseUrl: options.tailscaleUiBaseUrl,
     basePath
   });
-  const configuredTunnelBaseUrl = readConfiguredCompanionTunnelBaseUrl();
+  const irohTransport = getCompanionIrohStatus();
+  const irohNodeId = irohTransport.pairPayload?.node_id;
 
   const bonjour = new Bonjour({}, (error: unknown) => {
     logForgeDebug(
@@ -66,13 +67,16 @@ export async function startForgeDiscoveryAdvertiser(
         tsApiBaseUrl: tailscaleTargets.apiBaseUrl ?? "",
         tsUiBaseUrl: tailscaleTargets.uiBaseUrl ?? "",
         tsDnsName: tailscaleTargets.dnsName ?? "",
-        tunnelApiBaseUrl: configuredTunnelBaseUrl
-          ? companionTunnelApiBaseUrlFromPublicBase(configuredTunnelBaseUrl)
+        irohApiBaseUrl: irohNodeId
+          ? companionIrohApiBaseUrlFromNodeId(irohNodeId)
           : "",
-        tunnelUiBaseUrl: configuredTunnelBaseUrl
-          ? companionTunnelUiBaseUrlFromPublicBase(configuredTunnelBaseUrl)
+        irohUiBaseUrl: irohNodeId
+          ? companionIrohUiBaseUrlFromNodeId(irohNodeId)
           : "",
-        tunnelProvider: configuredTunnelBaseUrl ? "configured-url" : "",
+        irohProvider: irohNodeId ? "forge-companion-iroh" : "",
+        irohNodeId: irohNodeId ?? "",
+        irohRelay: irohTransport.pairPayload?.relay ?? "",
+        irohAlpn: irohTransport.alpn ?? "",
         watchReady: "1"
       }
     });
