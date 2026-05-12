@@ -103,6 +103,52 @@
           }
         }
       },
+      "UserSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "kind",
+          "handle",
+          "displayName",
+          "description",
+          "accentColor",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "human",
+              "bot"
+            ]
+          },
+          "handle": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "accentColor": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "Tag": {
         "type": "object",
         "additionalProperties": false,
@@ -423,7 +469,9 @@
             "enum": [
               "google",
               "apple",
-              "caldav"
+              "microsoft",
+              "caldav",
+              "macos_local"
             ]
           },
           "label": {
@@ -482,6 +530,436 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "CalendarConnectionMutationInput": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": [
+          "provider",
+          "label"
+        ],
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "google",
+              "apple",
+              "microsoft",
+              "caldav",
+              "macos_local"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "serverUrl": {
+            "type": "string"
+          },
+          "authSessionId": {
+            "type": "string"
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "selectedCalendarUrls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "forgeCalendarUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createForgeCalendar": {
+            "type": "boolean"
+          },
+          "replaceConnectionIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "CalendarConnectionPatchInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "selectedCalendarUrls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "CalendarDiscoveryInput": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": [
+          "provider"
+        ],
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "apple",
+              "caldav"
+            ]
+          },
+          "serverUrl": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        }
+      },
+      "CalendarDiscoveryPayload": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": [
+          "provider",
+          "accountLabel",
+          "serverUrl",
+          "principalUrl",
+          "homeUrl",
+          "calendars"
+        ],
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "google",
+              "apple",
+              "microsoft",
+              "caldav",
+              "macos_local"
+            ]
+          },
+          "accountLabel": {
+            "type": "string"
+          },
+          "serverUrl": {
+            "type": "string"
+          },
+          "principalUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "homeUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "calendars": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "required": [
+                "url",
+                "displayName",
+                "description",
+                "color",
+                "timezone",
+                "isPrimary",
+                "canWrite",
+                "selectedByDefault",
+                "isForgeCandidate"
+              ],
+              "properties": {
+                "url": {
+                  "type": "string"
+                },
+                "displayName": {
+                  "type": "string"
+                },
+                "dedupedName": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "color": {
+                  "type": "string"
+                },
+                "timezone": {
+                  "type": "string"
+                },
+                "isPrimary": {
+                  "type": "boolean"
+                },
+                "canWrite": {
+                  "type": "boolean"
+                },
+                "selectedByDefault": {
+                  "type": "boolean"
+                },
+                "isForgeCandidate": {
+                  "type": "boolean"
+                },
+                "sourceId": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "sourceTitle": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "sourceType": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "calendarType": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "hostCalendarId": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "canonicalKey": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "MacOSLocalCalendarDiscoveryPayload": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": [
+          "status",
+          "requestedAt",
+          "sources"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "not_determined",
+              "denied",
+              "restricted",
+              "full_access",
+              "unavailable"
+            ]
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "required": [
+                "sourceId",
+                "sourceTitle",
+                "sourceType",
+                "accountLabel",
+                "accountIdentityKey",
+                "calendars"
+              ],
+              "properties": {
+                "sourceId": {
+                  "type": "string"
+                },
+                "sourceTitle": {
+                  "type": "string"
+                },
+                "sourceType": {
+                  "type": "string"
+                },
+                "accountLabel": {
+                  "type": "string"
+                },
+                "accountIdentityKey": {
+                  "type": "string"
+                },
+                "calendars": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "required": [
+                      "url",
+                      "displayName",
+                      "description",
+                      "color",
+                      "timezone",
+                      "isPrimary",
+                      "canWrite",
+                      "selectedByDefault",
+                      "isForgeCandidate"
+                    ],
+                    "properties": {
+                      "url": {
+                        "type": "string"
+                      },
+                      "displayName": {
+                        "type": "string"
+                      },
+                      "dedupedName": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "type": "string"
+                      },
+                      "color": {
+                        "type": "string"
+                      },
+                      "timezone": {
+                        "type": "string"
+                      },
+                      "isPrimary": {
+                        "type": "boolean"
+                      },
+                      "canWrite": {
+                        "type": "boolean"
+                      },
+                      "selectedByDefault": {
+                        "type": "boolean"
+                      },
+                      "isForgeCandidate": {
+                        "type": "boolean"
+                      },
+                      "sourceId": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "sourceTitle": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "sourceType": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "calendarType": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "hostCalendarId": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "canonicalKey": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       },
@@ -584,7 +1062,9 @@
             "enum": [
               "google",
               "apple",
-              "caldav"
+              "microsoft",
+              "caldav",
+              "macos_local"
             ]
           },
           "connectionId": {
@@ -2088,6 +2568,11 @@
           "level",
           "currentLevelXp",
           "nextLevelXp",
+          "xpIntoLevel",
+          "xpToNextLevel",
+          "currentLevelStartXp",
+          "nextLevelTotalXp",
+          "levelCurveVersion",
           "weeklyXp",
           "streakDays",
           "comboMultiplier",
@@ -2107,6 +2592,21 @@
           },
           "nextLevelXp": {
             "type": "integer"
+          },
+          "xpIntoLevel": {
+            "type": "integer"
+          },
+          "xpToNextLevel": {
+            "type": "integer"
+          },
+          "currentLevelStartXp": {
+            "type": "integer"
+          },
+          "nextLevelTotalXp": {
+            "type": "integer"
+          },
+          "levelCurveVersion": {
+            "type": "string"
           },
           "weeklyXp": {
             "type": "integer"
@@ -3578,6 +4078,216 @@
           }
         }
       },
+      "DoctorFixProposal": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "description",
+          "requiresConfirmation"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "safe_auto_fix"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "requiresConfirmation": {
+            "type": "boolean"
+          }
+        }
+      },
+      "DoctorCheck": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "group",
+          "title",
+          "status",
+          "severity",
+          "summary",
+          "evidence",
+          "affectedCount"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "group": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "warn",
+              "fail",
+              "skipped"
+            ]
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "info",
+              "warning",
+              "error"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "affectedCount": {
+            "type": "integer"
+          },
+          "fix": {
+            "$ref": "#/components/schemas/DoctorFixProposal"
+          }
+        }
+      },
+      "ForgeDoctorReport": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": [
+          "ok",
+          "now",
+          "integrity",
+          "runtime",
+          "health",
+          "settingsFile",
+          "settingsSummary",
+          "checks",
+          "issues",
+          "fixProposals",
+          "warnings"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "now": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "integrity": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": [
+              "score",
+              "status",
+              "headline",
+              "lastCheckedAt"
+            ],
+            "properties": {
+              "score": {
+                "type": "integer"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "healthy",
+                  "warning",
+                  "critical"
+                ]
+              },
+              "headline": {
+                "type": "string"
+              },
+              "lastCheckedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "runtime": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "health": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "settingsFile": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "settingsSummary": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DoctorCheck"
+            }
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DoctorCheck"
+            }
+          },
+          "fixProposals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DoctorFixProposal"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "DoctorFixResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "fixId",
+          "status",
+          "summary"
+        ],
+        "properties": {
+          "fixId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "applied",
+              "skipped",
+              "failed"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          }
+        }
+      },
       "ExecutionSettings": {
         "type": "object",
         "additionalProperties": false,
@@ -4403,7 +5113,9 @@
                 "requiredForCreate",
                 "highValueOptionalFields",
                 "exampleQuestions",
-                "notes"
+                "notes",
+                "routePosture",
+                "apiAccessHint"
               ],
               "properties": {
                 "focus": {
@@ -4444,6 +5156,12 @@
                   "items": {
                     "type": "string"
                   }
+                },
+                "routePosture": {
+                  "type": "string"
+                },
+                "apiAccessHint": {
+                  "type": "string"
                 }
               }
             }
@@ -4463,7 +5181,9 @@
                 "focus",
                 "openingQuestion",
                 "coachingGoal",
-                "askSequence"
+                "askSequence",
+                "routePosture",
+                "apiAccessHint"
               ],
               "properties": {
                 "focus": {
@@ -4480,6 +5200,12 @@
                   "items": {
                     "type": "string"
                   }
+                },
+                "routePosture": {
+                  "type": "string"
+                },
+                "apiAccessHint": {
+                  "type": "string"
                 }
               }
             }
@@ -4556,7 +5282,57 @@
                 "type": "object",
                 "additionalProperties": {
                   "type": "object",
-                  "additionalProperties": true
+                  "additionalProperties": false,
+                  "required": [
+                    "classification",
+                    "aliases",
+                    "summary",
+                    "readRoutes",
+                    "writeRoutes",
+                    "routeSelectionQuestions",
+                    "notes"
+                  ],
+                  "properties": {
+                    "classification": {
+                      "type": "string",
+                      "enum": [
+                        "specialized_domain_surface"
+                      ]
+                    },
+                    "aliases": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "summary": {
+                      "type": "string"
+                    },
+                    "readRoutes": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "writeRoutes": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "routeSelectionQuestions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "notes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
                 }
               },
               "readModelOnlySurfaces": {
@@ -5016,6 +5792,7 @@
               "bootstrap",
               "readModels",
               "uiWorkflow",
+              "specializedDomainWorkflow",
               "entityWorkflow",
               "wikiWorkflow",
               "healthWorkflow",
@@ -5038,6 +5815,12 @@
                 }
               },
               "uiWorkflow": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "specializedDomainWorkflow": {
                 "type": "array",
                 "items": {
                   "type": "string"
@@ -5184,8 +5967,11 @@
               "searchRule",
               "createRule",
               "updateRule",
+              "specializedRouteToolRule",
               "createExample",
-              "updateExample"
+              "updateExample",
+              "specializedRouteToolExample",
+              "specializedRouteToolExamples"
             ],
             "properties": {
               "preferredBatchRoutes": {
@@ -5244,11 +6030,23 @@
               "updateRule": {
                 "type": "string"
               },
+              "specializedRouteToolRule": {
+                "type": "string"
+              },
               "createExample": {
                 "type": "string"
               },
               "updateExample": {
                 "type": "string"
+              },
+              "specializedRouteToolExample": {
+                "type": "string"
+              },
+              "specializedRouteToolExamples": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
               }
             }
           }
@@ -8624,20 +9422,530 @@
           }
         }
       },
+      "GamificationCatalogItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "kind",
+          "category",
+          "tier",
+          "difficulty",
+          "hidden",
+          "title",
+          "summary",
+          "requirement",
+          "requirementText",
+          "reward",
+          "unlockType",
+          "rewardPayload",
+          "assetKey",
+          "sheetKey",
+          "rarity",
+          "sortOrder"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "trophy",
+              "unlock"
+            ]
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "xp_levels",
+              "streaks",
+              "tasks",
+              "projects",
+              "habits",
+              "psyche",
+              "wiki",
+              "agents"
+            ]
+          },
+          "tier": {
+            "type": "string",
+            "enum": [
+              "bronze",
+              "silver",
+              "gold",
+              "platinum"
+            ]
+          },
+          "difficulty": {
+            "type": "string",
+            "enum": [
+              "intro",
+              "standard",
+              "hard",
+              "legendary"
+            ]
+          },
+          "hidden": {
+            "type": "boolean"
+          },
+          "title": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "requirement": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Typed requirement: atomic metric threshold, allOf, or anyOf composite gate."
+          },
+          "requirementText": {
+            "type": "string"
+          },
+          "reward": {
+            "type": "string"
+          },
+          "unlockType": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "mascot_skin",
+                  "mascot_pose",
+                  "hud_treatment",
+                  "streak_effect",
+                  "trophy_shelf",
+                  "icon_frame",
+                  "celebration_variant"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rewardPayload": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "assetKey": {
+            "type": "string"
+          },
+          "sheetKey": {
+            "type": "string"
+          },
+          "rarity": {
+            "type": "string",
+            "enum": [
+              "common",
+              "rare",
+              "epic",
+              "legendary"
+            ]
+          },
+          "sortOrder": {
+            "type": "integer"
+          }
+        }
+      },
+      "GamificationCatalogEntry": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/GamificationCatalogItem"
+          },
+          {
+            "type": "object",
+            "required": [
+              "unlocked",
+              "unlockedAt",
+              "progressCurrent",
+              "progressTarget",
+              "progressPercent",
+              "celebrationSeenAt"
+            ],
+            "properties": {
+              "unlocked": {
+                "type": "boolean"
+              },
+              "unlockedAt": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "progressCurrent": {
+                "type": "integer"
+              },
+              "progressTarget": {
+                "type": "integer"
+              },
+              "progressPercent": {
+                "type": "number"
+              },
+              "celebrationSeenAt": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "GamificationCatalogPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "scope",
+          "equipment",
+          "items",
+          "totalCount",
+          "unlockedCount",
+          "trophyCount",
+          "unlockCount",
+          "nextUnlock",
+          "newestUnlock",
+          "nextTargets",
+          "recentlyUnlocked"
+        ],
+        "properties": {
+          "scope": {
+            "$ref": "#/components/schemas/GamificationScope"
+          },
+          "equipment": {
+            "$ref": "#/components/schemas/GamificationEquipment"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GamificationCatalogEntry"
+            }
+          },
+          "totalCount": {
+            "type": "integer"
+          },
+          "unlockedCount": {
+            "type": "integer"
+          },
+          "trophyCount": {
+            "type": "integer"
+          },
+          "unlockCount": {
+            "type": "integer"
+          },
+          "nextUnlock": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GamificationCatalogEntry"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "newestUnlock": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GamificationCatalogEntry"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "nextTargets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GamificationCatalogEntry"
+            }
+          },
+          "recentlyUnlocked": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GamificationCatalogEntry"
+            }
+          }
+        }
+      },
+      "GamificationEquipment": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "selectedMascotSkin",
+          "selectedHudTreatment",
+          "selectedStreakEffect",
+          "selectedTrophyShelf",
+          "selectedCelebrationVariant",
+          "updatedAt"
+        ],
+        "properties": {
+          "selectedMascotSkin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "selectedHudTreatment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "selectedStreakEffect": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "selectedTrophyShelf": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "selectedCelebrationVariant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updatedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "GamificationMascotState": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mood",
+          "spriteKey",
+          "streakSpriteKey",
+          "headline",
+          "line",
+          "pressureLevel",
+          "missedDays",
+          "lastActiveDateKey"
+        ],
+        "properties": {
+          "mood": {
+            "type": "string",
+            "enum": [
+              "idle",
+              "forging",
+              "wise",
+              "celebrating",
+              "pressure",
+              "comeback",
+              "exhausted",
+              "proud",
+              "absent"
+            ]
+          },
+          "spriteKey": {
+            "type": "string"
+          },
+          "streakSpriteKey": {
+            "type": "string"
+          },
+          "headline": {
+            "type": "string"
+          },
+          "line": {
+            "type": "string"
+          },
+          "pressureLevel": {
+            "type": "integer"
+          },
+          "missedDays": {
+            "type": "integer"
+          },
+          "lastActiveDateKey": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "GamificationCelebration": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "userId",
+          "kind",
+          "itemId",
+          "title",
+          "summary",
+          "assetKey",
+          "metadata",
+          "createdAt",
+          "seenAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "xp",
+              "level",
+              "trophy",
+              "unlock",
+              "streak",
+              "comeback"
+            ]
+          },
+          "itemId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "assetKey": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "seenAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "GamificationScope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mode",
+          "userIds",
+          "users",
+          "label"
+        ],
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "selected_user",
+              "operator_fallback",
+              "aggregate_fallback"
+            ]
+          },
+          "userIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "users": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserSummary"
+            }
+          },
+          "label": {
+            "type": "string"
+          }
+        }
+      },
       "XpMetricsPayload": {
         "type": "object",
         "additionalProperties": false,
         "required": [
+          "scope",
           "profile",
           "achievements",
           "milestoneRewards",
           "momentumPulse",
+          "catalogPreview",
+          "unlockedItemCount",
+          "totalItemCount",
+          "nextUnlock",
+          "newestUnlock",
+          "nextTargets",
+          "equipment",
+          "mascot",
+          "celebrations",
           "recentLedger",
           "rules",
           "dailyAmbientXp",
           "dailyAmbientCap"
         ],
         "properties": {
+          "scope": {
+            "$ref": "#/components/schemas/GamificationScope"
+          },
           "profile": {
             "$ref": "#/components/schemas/GamificationProfile"
           },
@@ -8655,6 +9963,56 @@
           },
           "momentumPulse": {
             "$ref": "#/components/schemas/XpMomentumPulse"
+          },
+          "catalogPreview": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GamificationCatalogEntry"
+            }
+          },
+          "unlockedItemCount": {
+            "type": "integer"
+          },
+          "totalItemCount": {
+            "type": "integer"
+          },
+          "nextUnlock": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GamificationCatalogEntry"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "newestUnlock": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GamificationCatalogEntry"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "nextTargets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GamificationCatalogEntry"
+            }
+          },
+          "equipment": {
+            "$ref": "#/components/schemas/GamificationEquipment"
+          },
+          "mascot": {
+            "$ref": "#/components/schemas/GamificationMascotState"
+          },
+          "celebrations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GamificationCelebration"
+            }
           },
           "recentLedger": {
             "type": "array",
@@ -9115,6 +10473,93 @@
           "Health"
         ],
         "operationId": "gethealth"
+      }
+    },
+    "/api/v1/doctor": {
+      "get": {
+        "summary": "Run Forge Doctor diagnostics for runtime, settings, storage, entities, hierarchy, rewards, and fix proposals",
+        "responses": {
+          "200": {
+            "description": "Forge Doctor report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "doctor"
+                  ],
+                  "properties": {
+                    "doctor": {
+                      "$ref": "#/components/schemas/ForgeDoctorReport"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Platform"
+        ],
+        "operationId": "getdoctor"
+      }
+    },
+    "/api/v1/doctor/fixes": {
+      "post": {
+        "summary": "Apply explicitly requested safe Forge Doctor fixes",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "fixIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "applyAllSafe": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Forge Doctor fix result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "results",
+                    "doctor"
+                  ],
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/DoctorFixResult"
+                      }
+                    },
+                    "doctor": {
+                      "$ref": "#/components/schemas/ForgeDoctorReport"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Platform"
+        ],
+        "operationId": "postdoctor_fixes"
       }
     },
     "/api/v1/health/sleep": {
@@ -14613,6 +16058,80 @@
         "operationId": "getcalendar_overview"
       }
     },
+    "/api/v1/calendar/macos-local/discovery": {
+      "get": {
+        "summary": "Discover calendars already configured on this Mac through EventKit",
+        "responses": {
+          "200": {
+            "description": "macOS local calendar discovery",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "discovery"
+                  ],
+                  "properties": {
+                    "discovery": {
+                      "$ref": "#/components/schemas/MacOSLocalCalendarDiscoveryPayload"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Calendar"
+        ],
+        "operationId": "getcalendar_macos_local_discovery"
+      }
+    },
+    "/api/v1/calendar/discovery": {
+      "post": {
+        "summary": "Discover Apple or custom CalDAV calendars before creating a connection",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CalendarDiscoveryInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Calendar discovery",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "discovery"
+                  ],
+                  "properties": {
+                    "discovery": {
+                      "$ref": "#/components/schemas/CalendarDiscoveryPayload"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Calendar"
+        ],
+        "operationId": "postcalendar_discovery"
+      }
+    },
     "/api/v1/calendar/connections": {
       "get": {
         "summary": "List connected calendar providers",
@@ -14645,7 +16164,9 @@
                             "enum": [
                               "google",
                               "apple",
-                              "caldav"
+                              "microsoft",
+                              "caldav",
+                              "macos_local"
                             ]
                           },
                           "label": {
@@ -14681,8 +16202,18 @@
         "operationId": "getcalendar_connections"
       },
       "post": {
-        "summary": "Create a Google, Apple, or custom CalDAV calendar connection",
+        "summary": "Create a Google, Apple, Exchange Online, local Mac, or custom CalDAV calendar connection",
         "description": "Forge first discovers the writable calendars for the account, then stores the chosen mirrored calendars and either reuses the existing shared Forge write target or saves a new one when needed.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CalendarConnectionMutationInput"
+              }
+            }
+          }
+        },
         "responses": {
           "201": {
             "description": "Created calendar connection",
@@ -14710,6 +16241,110 @@
           "Calendar"
         ],
         "operationId": "postcalendar_connections"
+      }
+    },
+    "/api/v1/calendar/connections/{id}": {
+      "patch": {
+        "summary": "Update one calendar connection label or selected mirrored calendars",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CalendarConnectionPatchInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated calendar connection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "connection"
+                  ],
+                  "properties": {
+                    "connection": {
+                      "$ref": "#/components/schemas/CalendarConnection"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Calendar"
+        ],
+        "operationId": "patchcalendar_connections_id"
+      },
+      "delete": {
+        "summary": "Delete one calendar connection and stop mirroring it",
+        "responses": {
+          "200": {
+            "description": "Deleted calendar connection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "connection"
+                  ],
+                  "properties": {
+                    "connection": {
+                      "$ref": "#/components/schemas/CalendarConnection"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Calendar"
+        ],
+        "operationId": "deletecalendar_connections_id"
+      }
+    },
+    "/api/v1/calendar/connections/{id}/discovery": {
+      "get": {
+        "summary": "Rediscover available calendars for an existing calendar connection",
+        "responses": {
+          "200": {
+            "description": "Calendar connection discovery",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "discovery"
+                  ],
+                  "properties": {
+                    "discovery": {
+                      "$ref": "#/components/schemas/CalendarDiscoveryPayload"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Calendar"
+        ],
+        "operationId": "getcalendar_connections_id_discovery"
       }
     },
     "/api/v1/calendar/connections/{id}/sync": {
@@ -16561,6 +18196,22 @@
     "/api/v1/metrics/xp": {
       "get": {
         "summary": "Get explainable XP metrics and reward-ledger state",
+        "parameters": [
+          {
+            "name": "userIds",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true,
+            "description": "Selected Forge user IDs. Exactly one valid ID returns selected-user progression; otherwise the API falls back to the active operator and then aggregate progression."
+          }
+        ],
         "responses": {
           "200": {
             "description": "XP metrics payload",
@@ -16585,6 +18236,240 @@
           "Metrics"
         ],
         "operationId": "getmetrics_xp"
+      }
+    },
+    "/api/v1/gamification/catalog": {
+      "get": {
+        "summary": "Get the source-controlled trophy and cosmetic unlock catalog with selected-user progress",
+        "parameters": [
+          {
+            "name": "userIds",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true,
+            "description": "Selected Forge user IDs used to resolve catalog progress and unlock state."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Gamification catalog payload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "catalog"
+                  ],
+                  "properties": {
+                    "catalog": {
+                      "$ref": "#/components/schemas/GamificationCatalogPayload"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Metrics"
+        ],
+        "operationId": "getgamification_catalog"
+      }
+    },
+    "/api/v1/gamification/equipment": {
+      "get": {
+        "summary": "Get selected-user equipped gamification cosmetics",
+        "parameters": [
+          {
+            "name": "userIds",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Equipped cosmetics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "equipment"
+                  ],
+                  "properties": {
+                    "equipment": {
+                      "$ref": "#/components/schemas/GamificationEquipment"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Metrics"
+        ],
+        "operationId": "getgamification_equipment"
+      },
+      "put": {
+        "summary": "Equip unlocked gamification cosmetics",
+        "parameters": [
+          {
+            "name": "userIds",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "selectedMascotSkin": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "selectedHudTreatment": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "selectedStreakEffect": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "selectedTrophyShelf": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "selectedCelebrationVariant": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated equipped cosmetics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "equipment"
+                  ],
+                  "properties": {
+                    "equipment": {
+                      "$ref": "#/components/schemas/GamificationEquipment"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Metrics"
+        ],
+        "operationId": "putgamification_equipment"
+      }
+    },
+    "/api/v1/gamification/celebrations/{id}/seen": {
+      "post": {
+        "summary": "Mark a queued gamification celebration as seen",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Celebration ID to mark consumed."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated gamification celebration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "celebration"
+                  ],
+                  "properties": {
+                    "celebration": {
+                      "$ref": "#/components/schemas/GamificationCelebration"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Metrics"
+        ],
+        "operationId": "postgamification_celebrations_id_seen"
       }
     },
     "/api/v1/insights": {

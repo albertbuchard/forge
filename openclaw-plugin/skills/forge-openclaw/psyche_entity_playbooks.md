@@ -188,6 +188,65 @@ material without a usable formulation.
   defending the formulation.
 - Do not use hypotheses as diagnosis, certainty, or replacement belief work. They are
   collaborative formulations that can be saved, revised, or discarded.
+- Hypotheses are not decorative reassurance. Use them when they help the user see a
+  function, prediction, protection, payoff, cost, or value conflict that their own
+  example already supports.
+- If a user is circling around a behavior pattern, mode, belief, or trigger report
+  after one concrete example is visible, offer one careful hypothesis and then one
+  question that tests or corrects it.
+- Do not make the user supply every interpretation alone. If the sequence is clear
+  enough, do the formulation work in plain language and invite correction.
+
+## Hypothesis To Record Bridge
+
+Once a hypothesis lands or is corrected, turn it into a saveable Forge shape instead
+of leaving it as warm reflective prose.
+
+- Name what the hypothesis is becoming: a belief sentence, functional loop, behavior,
+  mode, trigger report, value, event type, or emotion definition.
+- Translate the accepted hypothesis into the smallest useful record fields: title,
+  core sentence, cue, protection, payoff, cost, preferred response, fear, body signal,
+  or linked episode.
+- Ask one confirmation question about accuracy, not another broad exploration
+  question.
+- If the user corrects the hypothesis, revise the formulation once in their language
+  and then ask whether that corrected version is true enough to save.
+- If adjacent Psyche records became visible, mention them as optional links after the
+  primary record is stable. Do not switch containers midstream unless the user wants
+  that.
+- Save through shared batch entity routes only after the user accepts the working
+  wording or explicitly asks to save.
+
+## Psyche Hypothesis Map
+
+Use these shapes after at least one concrete example is clear. The hypothesis should
+help the user understand function, meaning, protection, cost, or connection. Keep it
+short, tentative, and correctable.
+
+- `psyche_value`: hypothesize about the longing or pain that makes the value alive
+  now, and what ordinary behavior would show movement toward it.
+- `behavior_pattern`: hypothesize about the cue, body/emotion shift, meaning,
+  behavior or urge, short-term payoff, long-term cost, and what a replacement response
+  would still need to protect.
+- `behavior`: hypothesize about the immediate problem the move solves, the cue or
+  urge that pulls it online, and whether it functions as away, committed, or recovery
+  behavior.
+- `belief_entry`: hypothesize about the rule, prediction, or self/other/world sentence
+  the moment seems to activate, then ask whether that wording lands.
+- `mode_profile`: hypothesize about the protective job, feared danger, burden, and
+  possible mode family only after the part's lived voice or posture is visible.
+- `mode_guide_session`: hypothesize about what the active part is trying to stop,
+  force, prevent, or secure right now while keeping candidate mode labels provisional.
+- `trigger_report`: hypothesize about the episode chain only after the situation,
+  felt stake, meaning, action, and consequence are at least partly visible.
+- `event_type`: hypothesize about the repeated emotional or relational stake that
+  makes future reports need the same category.
+- `emotion_definition`: hypothesize about the feeling's body signature, urge, warning,
+  protection, or longing, and what distinguishes it from nearby emotions.
+- schema themes: hypothesize through the concrete container that best fits the
+  material: belief sentence, recurring functional loop, active mode, one trigger
+  episode, or durable wiki explanation. Do not flatten schema work into a loose
+  self-observation.
 
 ## Therapeutic Direction Check
 

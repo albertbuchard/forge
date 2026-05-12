@@ -28,6 +28,22 @@ function getSectionSlice(document: string, section: string) {
   return document.slice(start, end);
 }
 
+function getPreferredOpeningQuestion(sectionSlice: string) {
+  const marker = "Preferred opening question:";
+  const markerIndex = sectionSlice.indexOf(marker);
+  expect(markerIndex, "preferred opening marker should exist").toBeGreaterThanOrEqual(
+    0
+  );
+  const afterMarker = sectionSlice.slice(markerIndex + marker.length);
+  const match = /-\s+"([^"]+)"/.exec(afterMarker);
+  expect(match?.[1], "preferred opening question should be quoted").toBeTruthy();
+  return match![1];
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 describe("question flow simulation cycles", () => {
   const nonPsycheSections = [
     "Goal",
@@ -72,6 +88,8 @@ describe("question flow simulation cycles", () => {
     "Event Type",
     "Emotion Definition"
   ] as const;
+
+  const allFlowSections = [...nonPsycheSections, ...psycheSections] as const;
 
   const simulatedUserScenarios: Record<
     (typeof nonPsycheSections)[number] | (typeof psycheSections)[number],
@@ -137,6 +155,15 @@ describe("question flow simulation cycles", () => {
       "Define the lived signature of dread versus ordinary anxiety."
   };
 
+  const fullFlowCoverageByCycle: Record<
+    "cycle1" | "cycle2" | "cycle3",
+    readonly (typeof allFlowSections)[number][]
+  > = {
+    cycle1: allFlowSections,
+    cycle2: allFlowSections,
+    cycle3: allFlowSections
+  };
+
   const expectedApiPosture: Record<
     (typeof nonPsycheSections)[number] | (typeof psycheSections)[number],
     "batch" | "specializedCrud" | "action" | "specializedDomain"
@@ -181,12 +208,57 @@ describe("question flow simulation cycles", () => {
     "Emotion Definition": "batch"
   };
 
+  const requiredRouteMatrixEntityTypes = [
+    "goal",
+    "project",
+    "strategy",
+    "task",
+    "habit",
+    "tag",
+    "note",
+    "insight",
+    "calendar_event",
+    "work_block_template",
+    "task_timebox",
+    "preference_catalog",
+    "preference_catalog_item",
+    "preference_context",
+    "preference_item",
+    "questionnaire_instrument",
+    "sleep_session",
+    "workout_session",
+    "psyche_value",
+    "behavior_pattern",
+    "behavior",
+    "belief_entry",
+    "mode_profile",
+    "mode_guide_session",
+    "trigger_report",
+    "event_type",
+    "emotion_definition",
+    "wiki_page",
+    "calendar_connection",
+    "task_run",
+    "work_adjustment",
+    "preference_judgment",
+    "preference_signal",
+    "questionnaire_run",
+    "self_observation",
+    "movement",
+    "life_force",
+    "workbench"
+  ] as const;
+
   it("cycle 1: every entity flow starts with visible direction instead of field collection", () => {
     expect(entityPlaybook).toMatch(/direction of the intake visible/i);
     expect(entityPlaybook).toMatch(/Opening move recipes/i);
     expect(entityPlaybook).toMatch(/Strategic record:/i);
     expect(entityPlaybook).toMatch(/Reusable record:/i);
     expect(entityPlaybook).toMatch(/Operational record:/i);
+    expect(entityPlaybook).toMatch(/Dedicated surface lane translation/i);
+    expect(entityPlaybook).toMatch(
+      /route\s+choice is an internal classification step, not a user-facing menu/i
+    );
     expect(entityPlaybook).toMatch(
       /trying to understand,\s*preserve,\s*decide,\s*schedule,\s*or change something/i
     );
@@ -215,11 +287,19 @@ describe("question flow simulation cycles", () => {
 
   it("uses explicit simulated scenarios for every required entity and surface in each cycle", () => {
     expect(Object.keys(simulatedUserScenarios).sort()).toEqual(
-      [...nonPsycheSections, ...psycheSections].sort()
+      [...allFlowSections].sort()
     );
     expect(Object.keys(expectedApiPosture).sort()).toEqual(
       Object.keys(simulatedUserScenarios).sort()
     );
+    for (const [cycleName, coveredFlows] of Object.entries(
+      fullFlowCoverageByCycle
+    )) {
+      expect(
+        [...coveredFlows].sort(),
+        `${cycleName} should explicitly retest every flow`
+      ).toEqual([...allFlowSections].sort());
+    }
 
     for (const section of nonPsycheSections) {
       expect(simulatedUserScenarios[section], `${section} scenario`).toMatch(
@@ -241,6 +321,47 @@ describe("question flow simulation cycles", () => {
         sectionSlice,
         `${section} should have therapeutic guidance`
       ).toMatch(/Aim:|Arc:/);
+    }
+  });
+
+  it("cycle 1: simulated first turns stay short, specific, and user-facing for every flow", () => {
+    const userFacingJargon =
+      /\b(API|CRUD|endpoint|route family|payload|mutation path|read path|schema field)\b/i;
+    const coldFormOpeners =
+      /^(What should this be called|What fields|Which endpoint|What payload)/i;
+
+    for (const section of nonPsycheSections) {
+      const opening = getPreferredOpeningQuestion(
+        getSectionSlice(entityPlaybook, section)
+      );
+      expect(opening, `${section} opening should be one question`).toMatch(/\?$/);
+      expect(opening, `${section} opening should stay concise`).toSatisfy(
+        (value: string) => value.length <= 150
+      );
+      expect(opening, `${section} opening should avoid API jargon`).not.toMatch(
+        userFacingJargon
+      );
+      expect(opening, `${section} opening should not start like a form`).not.toMatch(
+        coldFormOpeners
+      );
+    }
+
+    for (const section of psycheSections) {
+      const opening = getPreferredOpeningQuestion(
+        getSectionSlice(psychePlaybook, section)
+      );
+      expect(opening, `${section} opening should be one grounded question`).toMatch(
+        /\?$/
+      );
+      expect(opening, `${section} opening should stay concise`).toSatisfy(
+        (value: string) => value.length <= 165
+      );
+      expect(opening, `${section} opening should stay close to lived experience`).toMatch(
+        /^(When|What|Where|If|Can)\b/i
+      );
+      expect(opening, `${section} opening should not ask for diagnosis or fields`).not.toMatch(
+        /diagnos|schema|field|API|CRUD|route|payload/i
+      );
     }
   });
 
@@ -277,6 +398,29 @@ describe("question flow simulation cycles", () => {
       }
       expect(posture, `${section} posture`).toBe("batch");
       expect(entityPlaybook).toMatch(/shared batch entity routes by default/i);
+    }
+  });
+
+  it("cycle 1 retest: the route posture matrix explicitly covers every flow without route guessing", () => {
+    const matrix = getSectionSlice(entityPlaybook, "Full Route Posture Matrix");
+
+    expect(matrix).toMatch(/shared batch entity routes/i);
+    expect(matrix).toMatch(/specialized CRUD/i);
+    expect(matrix).toMatch(/action workflow/i);
+    expect(matrix).toMatch(/note-backed workflow/i);
+    expect(matrix).toMatch(/specialized domain surface/i);
+    expect(matrix).toMatch(/dedicated movement routes/i);
+    expect(matrix).toMatch(/dedicated Life Force routes/i);
+    expect(matrix).toMatch(/dedicated Workbench routes/i);
+    expect(entityPlaybook).toMatch(
+      /user already gave the concrete object, time window, weekday, flow, run, or\s+node/i
+    );
+
+    for (const entityType of requiredRouteMatrixEntityTypes) {
+      expect(
+        matrix,
+        `${entityType} should be explicit in the route posture matrix`
+      ).toMatch(new RegExp(`\\\`${escapeRegExp(entityType)}\\\``));
     }
   });
 
@@ -335,8 +479,22 @@ describe("question flow simulation cycles", () => {
     expect(psychePlaybook).toMatch(/emotionally meaningful kind of moment/i);
     expect(psychePlaybook).toMatch(/lived signature/i);
     expect(psychePlaybook).toMatch(/Interpretive Hypotheses/i);
+    expect(psychePlaybook).toMatch(/Hypothesis To Record Bridge/i);
     expect(psychePlaybook).toMatch(/collaborative formulations/i);
     expect(psychePlaybook).toMatch(/protecting, predicting, relieving, or\s+costing/i);
+    expect(psychePlaybook).toMatch(/Hypotheses are not decorative reassurance/i);
+    expect(psychePlaybook).toMatch(
+      /one concrete example is visible[\s\S]*offer one careful hypothesis[\s\S]*tests or corrects it/i
+    );
+    expect(psychePlaybook).toMatch(
+      /Do not make the user supply every interpretation alone/i
+    );
+    expect(psychePlaybook).toMatch(
+      /Once a hypothesis lands or is corrected[\s\S]*saveable Forge shape/i
+    );
+    expect(psychePlaybook).toMatch(
+      /Ask one confirmation question about accuracy, not another broad exploration\s+question/i
+    );
 
     const reflectiveNonPsyche = [
       "Goal",
@@ -359,6 +517,35 @@ describe("question flow simulation cycles", () => {
       expect(sectionSlice).toMatch(/Helpful follow-up lanes:/);
       expect(sectionSlice).toMatch(/Likely linked entities:/);
     }
+  });
+
+  it("cycle 2 retest: Psyche hypotheses are entity-specific, functional, and correctable", () => {
+    const hypothesisMap = getSectionSlice(psychePlaybook, "Psyche Hypothesis Map");
+
+    for (const entityType of [
+      "psyche_value",
+      "behavior_pattern",
+      "behavior",
+      "belief_entry",
+      "mode_profile",
+      "mode_guide_session",
+      "trigger_report",
+      "event_type",
+      "emotion_definition"
+    ] as const) {
+      expect(
+        hypothesisMap,
+        `${entityType} should have a hypothesis shape`
+      ).toMatch(new RegExp(`\\\`${escapeRegExp(entityType)}\\\``));
+    }
+
+    expect(hypothesisMap).toMatch(
+      /cue[\s\S]*body\/emotion[\s\S]*short-term payoff[\s\S]*long-term cost/i
+    );
+    expect(hypothesisMap).toMatch(/rule, prediction, or self\/other\/world sentence/i);
+    expect(hypothesisMap).toMatch(/protective job[\s\S]*feared danger[\s\S]*burden/i);
+    expect(hypothesisMap).toMatch(/feeling's body signature[\s\S]*urge[\s\S]*warning/i);
+    expect(hypothesisMap).toMatch(/Do not flatten schema work into a loose\s+self-observation/i);
   });
 
   it("cycle 3: all flows close efficiently, preserve only helpful questions, and avoid reopening settled formulations", () => {
@@ -391,7 +578,13 @@ describe("question flow simulation cycles", () => {
       /repeatable day-shape such as "Mondays crash after lunch"/i
     );
     expect(entityPlaybook).toMatch(
+      /overview route key is `overview`[\s\S]*GET \/api\/v1\/life-force[\s\S]*Do not invent `\/api\/v1\/life-force\/overview`/i
+    );
+    expect(entityPlaybook).toMatch(
       /public input contract or a published output/i
+    );
+    expect(entityPlaybook).toMatch(
+      /flow catalog questions[\s\S]*GET \/api\/v1\/workbench\/flows[\s\S]*available box\s+inputs[\s\S]*GET \/api\/v1\/workbench\/catalog\/boxes/i
     );
     expect(entityPlaybook).toMatch(
       /send one follow-up message into a saved flow chat/i
@@ -457,6 +650,86 @@ describe("question flow simulation cycles", () => {
     );
     expect(psychePlaybook).toMatch(
       /say in plain language what makes you think/i
+    );
+  });
+
+  it("cycle 3: specialized route examples cover Movement, Life Force, and Workbench without guessing", () => {
+    const onboardingSource = readRepoFile("server/src/app.ts");
+    const typeSource = readRepoFile("src/lib/types.ts");
+
+    expect(onboardingSource).toMatch(/specializedRouteToolExamples:/);
+    expect(typeSource).toMatch(/conceptModel:[\s\S]*movement: string;[\s\S]*lifeForce: string;[\s\S]*workbench: string;/);
+    expect(typeSource).toMatch(
+      /specializedDomainSurfaces:[\s\S]*classification: "specialized_domain_surface";[\s\S]*aliases: string\[\];[\s\S]*summary: string;[\s\S]*methodRoutes: Record<string, string>;[\s\S]*routeSelectionQuestions: string\[\];/i
+    );
+    expect(onboardingSource).toMatch(
+      /movementTimeline[\s\S]*"routeKey":"timeline"[\s\S]*"query"/
+    );
+    expect(onboardingSource).toMatch(
+      /Route-selection questions are internal[\s\S]*time window, place, selected span, stay, or trip/i
+    );
+    expect(onboardingSource).toMatch(
+      /movementAllTime[\s\S]*"routeKey":"allTime"/
+    );
+    expect(onboardingSource).toMatch(
+      /Use allTime for whole-history aggregates[\s\S]*selection for a bounded selected-span aggregate[\s\S]*tripDetail/i
+    );
+    expect(onboardingSource).toMatch(
+      /movementSelection[\s\S]*"routeKey":"selection"[\s\S]*"placeIds"/
+    );
+    expect(onboardingSource).toMatch(
+      /movementTripDetail[\s\S]*"routeKey":"tripDetail"[\s\S]*"id":"trip_123"/
+    );
+    expect(onboardingSource).toMatch(
+      /movementMissingStayPreflight[\s\S]*"routeKey":"userBoxPreflight"[\s\S]*"startedAt"[\s\S]*"placeLabel"/
+    );
+    expect(onboardingSource).toMatch(
+      /lifeForceOverview[\s\S]*"routeKey":"overview"/
+    );
+    expect(onboardingSource).toMatch(
+      /Route-selection questions are internal[\s\S]*current read, durable assumption, repeated weekday rhythm, or right-now state/i
+    );
+    expect(onboardingSource).toMatch(
+      /Use routeKey overview for the current read[\s\S]*GET \/api\/v1\/life-force[\s\S]*not \/api\/v1\/life-force\/overview/i
+    );
+    expect(onboardingSource).toMatch(
+      /Life Force overview route key maps to GET \/api\/v1\/life-force[\s\S]*do not invent \/api\/v1\/life-force\/overview/i
+    );
+    expect(onboardingSource).toMatch(
+      /lifeForceProfile[\s\S]*"routeKey":"profile"[\s\S]*"baselineDailyAp"/
+    );
+    expect(onboardingSource).toMatch(
+      /lifeForceWeekdayTemplate[\s\S]*"routeKey":"weekdayTemplate"[\s\S]*"pathParams"[\s\S]*"weekday"/
+    );
+    expect(onboardingSource).toMatch(
+      /lifeForceFatigueSignal[\s\S]*"routeKey":"fatigueSignal"[\s\S]*"intensity"/
+    );
+    expect(onboardingSource).toMatch(
+      /After one concrete example is clear and a hypothesis lands or is corrected[\s\S]*translate it into a saveable record shape/i
+    );
+    expect(onboardingSource).toMatch(
+      /workbenchFlowCatalog[\s\S]*"routeKey":"listFlows"/
+    );
+    expect(onboardingSource).toMatch(
+      /Route-selection questions are internal[\s\S]*saved flow, its input contract, one run, one node, or the public result/i
+    );
+    expect(onboardingSource).toMatch(
+      /Use listFlows for the saved flow catalog[\s\S]*boxCatalog for available input-box contracts/i
+    );
+    expect(onboardingSource).toMatch(
+      /workbenchBoxCatalog[\s\S]*"routeKey":"boxCatalog"/
+    );
+    expect(onboardingSource).toMatch(
+      /workbenchRunDetail[\s\S]*"routeKey":"runDetail"[\s\S]*"runId"/
+    );
+    expect(onboardingSource).toMatch(
+      /workbenchPublishedOutput[\s\S]*"routeKey":"publishedOutput"/
+    );
+    expect(onboardingSource).toMatch(
+      /workbenchLatestNodeOutput[\s\S]*"routeKey":"latestNodeOutput"[\s\S]*"nodeId"/
+    );
+    expect(onboardingSource).toMatch(
+      /workbenchRunFlow[\s\S]*"routeKey":"runFlow"[\s\S]*"pathParams"/
     );
   });
 });

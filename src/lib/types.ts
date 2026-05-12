@@ -3780,6 +3780,10 @@ export interface AgentOnboardingPayload {
     calendar: string;
     workBlock: string;
     taskTimebox: string;
+    workAdjustment: string;
+    movement: string;
+    lifeForce: string;
+    workbench: string;
     psyche: string;
   };
   psycheSubmoduleModel: {
@@ -3819,9 +3823,13 @@ export interface AgentOnboardingPayload {
     specializedDomainSurfaces: Record<
       string,
       {
+        classification: "specialized_domain_surface";
+        aliases: string[];
+        summary: string;
+        methodRoutes: Record<string, string>;
         readRoutes: Record<string, string>;
         writeRoutes: Record<string, string>;
-        routeSelectionQuestions?: string[];
+        routeSelectionQuestions: string[];
         notes: string[];
       }
     >;

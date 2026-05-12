@@ -1,5 +1,9 @@
-import { request as httpRequest, type IncomingMessage } from "node:http";
-import { request as httpsRequest } from "node:https";
+import {
+  Agent as HttpAgent,
+  request as httpRequest,
+  type IncomingMessage
+} from "node:http";
+import { Agent as HttpsAgent, request as httpsRequest } from "node:https";
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { access, readFile } from "node:fs/promises";
@@ -114,7 +118,9 @@ function buildManagedDevWebLaunch(input: {
   }
 
   const host = input.env.FORGE_DEV_WEB_HOST?.trim() || "127.0.0.1";
-  const port = input.env.FORGE_DEV_WEB_PORT?.trim() || getDefaultDevWebOriginPort(input.origin);
+  const port =
+    input.env.FORGE_DEV_WEB_PORT?.trim() ||
+    getDefaultDevWebOriginPort(input.origin);
   return {
     command: process.execPath,
     args: [viteCliPath, "--host", host, "--port", port],
@@ -154,9 +160,14 @@ function resolveAsset(clientDir: string, requestPath: string): string {
   return path.join(clientDir, safePath);
 }
 
-async function resolveBuiltAsset(clientDir: string, requestPath: string): Promise<string> {
+async function resolveBuiltAsset(
+  clientDir: string,
+  requestPath: string
+): Promise<string> {
   if (requestPath.startsWith(gamificationSpriteRoutePrefix)) {
-    const relativeSpritePath = requestPath.slice(gamificationSpriteRoutePrefix.length);
+    const relativeSpritePath = requestPath.slice(
+      gamificationSpriteRoutePrefix.length
+    );
     return resolveGamificationSpriteAssetPath(relativeSpritePath);
   }
   return resolveAsset(clientDir, requestPath);
@@ -187,6 +198,7 @@ type ManagedDevWebRuntimeOptions = {
 type WebRouteOptions = {
   devWebRuntime?: DevWebRuntime;
   fetchImpl?: typeof fetch;
+  devAssetProxy?: DevAssetProxy;
 };
 
 function parseRequestTarget(requestPath: string) {
@@ -196,17 +208,24 @@ function parseRequestTarget(requestPath: string) {
 function copyProxyHeaders(response: Response, reply: FastifyReply) {
   for (const [name, value] of response.headers) {
     const lowerName = name.toLowerCase();
-    if (
-      lowerName === "connection" ||
-      lowerName === "content-length" ||
-      lowerName === "keep-alive" ||
-      lowerName === "transfer-encoding"
-    ) {
+    if (hopByHopHeaders.has(lowerName)) {
       continue;
     }
     reply.header(name, value);
   }
 }
+
+const hopByHopHeaders = new Set([
+  "connection",
+  "content-length",
+  "keep-alive",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade"
+]);
 
 function buildDevWebTarget(origin: URL, pathname: string, search: string) {
   const target = new URL(
@@ -237,10 +256,99 @@ async function proxyDevAsset(input: {
   return Buffer.from(await response.arrayBuffer());
 }
 
-function writeProxyUpgradeResponse(
-  socket: Duplex,
-  response: IncomingMessage
-) {
+type DevAssetProxy = {
+  fetch(input: {
+    origin: URL;
+    pathname: string;
+    search: string;
+    reply: FastifyReply;
+  }): Promise<Buffer | string>;
+  close(): void;
+};
+
+export function createKeepAliveDevAssetProxy(): DevAssetProxy {
+  const httpAgent = new HttpAgent({
+    keepAlive: true,
+    maxFreeSockets: 8,
+    maxSockets: 32
+  });
+  const httpsAgent = new HttpsAgent({
+    keepAlive: true,
+    maxFreeSockets: 8,
+    maxSockets: 32
+  });
+
+  return {
+    fetch(input) {
+      const target = buildDevWebTarget(
+        input.origin,
+        input.pathname,
+        input.search
+      );
+      const isHttps = target.protocol === "https:";
+      const request = isHttps ? httpsRequest : httpRequest;
+      const agent = isHttps ? httpsAgent : httpAgent;
+
+      return new Promise((resolve, reject) => {
+        const proxyRequest = request(
+          target,
+          {
+            agent,
+            headers: {
+              Accept: "*/*",
+              Host: target.host
+            },
+            method: "GET"
+          },
+          (response) => {
+            input.reply.code(response.statusCode ?? 502);
+            for (const [name, value] of Object.entries(response.headers)) {
+              if (!value || hopByHopHeaders.has(name.toLowerCase())) {
+                continue;
+              }
+              input.reply.header(name, value);
+            }
+            if (!response.headers["cache-control"]) {
+              input.reply.header(
+                "Cache-Control",
+                "no-store, max-age=0, must-revalidate"
+              );
+            }
+
+            const chunks: Buffer[] = [];
+            response.on("data", (chunk: Buffer | string) => {
+              chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+            });
+            response.on("end", () => {
+              resolve(Buffer.concat(chunks));
+            });
+            response.on("error", reject);
+          }
+        );
+        proxyRequest.on("error", reject);
+        proxyRequest.end();
+      });
+    },
+    close() {
+      httpAgent.destroy();
+      httpsAgent.destroy();
+    }
+  };
+}
+
+function createDevAssetProxy(fetchImpl: typeof fetch): DevAssetProxy {
+  if (fetchImpl !== fetch) {
+    return {
+      fetch(input) {
+        return proxyDevAsset({ ...input, fetchImpl });
+      },
+      close() {}
+    };
+  }
+  return createKeepAliveDevAssetProxy();
+}
+
+function writeProxyUpgradeResponse(socket: Duplex, response: IncomingMessage) {
   const statusCode = response.statusCode ?? 101;
   const statusMessage = response.statusMessage ?? "Switching Protocols";
   const headerLines: string[] = [];
@@ -282,15 +390,14 @@ async function proxyDevWebSocket(input: {
     normalizedRequestPath,
     requestTarget.search
   );
-  const proxyRequest = (target.protocol === "https:" ? httpsRequest : httpRequest)(
-    target,
-    {
-      headers: {
-        ...input.request.headers,
-        host: target.host
-      }
+  const proxyRequest = (
+    target.protocol === "https:" ? httpsRequest : httpRequest
+  )(target, {
+    headers: {
+      ...input.request.headers,
+      host: target.host
     }
-  );
+  });
 
   proxyRequest.on("upgrade", (response, proxySocket, proxyHead) => {
     writeProxyUpgradeResponse(input.socket, response);
@@ -441,7 +548,10 @@ export function createManagedDevWebRuntime(
 async function serveAsset(
   requestPath: string,
   reply: FastifyReply,
-  options: { devWebRuntime: DevWebRuntime; fetchImpl: typeof fetch }
+  options: {
+    devWebRuntime: DevWebRuntime;
+    devAssetProxy: DevAssetProxy;
+  }
 ) {
   const requestTarget = parseRequestTarget(requestPath);
   if (requestTarget.pathname.startsWith("/api")) {
@@ -462,12 +572,11 @@ async function serveAsset(
     : await options.devWebRuntime.ensureReady();
   if (devWebOrigin) {
     try {
-      return await proxyDevAsset({
+      return await options.devAssetProxy.fetch({
         origin: devWebOrigin,
         pathname: normalizedRequestPath,
         search: requestTarget.search,
-        reply,
-        fetchImpl: options.fetchImpl
+        reply
       });
     } catch {
       reply.header("X-Forge-Web-Fallback", "built");
@@ -516,9 +625,11 @@ export async function registerWebRoutes(
 ): Promise<void> {
   const devWebRuntime = options.devWebRuntime ?? createManagedDevWebRuntime();
   const fetchImpl = options.fetchImpl ?? fetch;
+  const devAssetProxy = options.devAssetProxy ?? createDevAssetProxy(fetchImpl);
 
   app.addHook("onClose", async () => {
     await devWebRuntime.stop();
+    devAssetProxy.close();
   });
   app.server.on("upgrade", (request, socket, head) => {
     void (async () => {
@@ -531,9 +642,9 @@ export async function registerWebRoutes(
     })();
   });
   app.get("/", async (_request, reply) =>
-    serveAsset("/", reply, { devWebRuntime, fetchImpl })
+    serveAsset("/", reply, { devWebRuntime, devAssetProxy })
   );
   app.get("/*", async (request, reply) =>
-    serveAsset(request.url, reply, { devWebRuntime, fetchImpl })
+    serveAsset(request.url, reply, { devWebRuntime, devAssetProxy })
   );
 }

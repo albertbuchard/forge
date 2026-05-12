@@ -67,6 +67,24 @@ def _register_skill_bundle(ctx) -> None:
     _install_legacy_skill_bundle()
 
 
+def _hook_is_supported(hook_name: str) -> bool:
+    try:
+        from hermes_cli.plugins import VALID_HOOKS  # type: ignore
+    except Exception:
+        return True
+    return hook_name in VALID_HOOKS
+
+
+def _register_hook_if_supported(ctx, hook_name: str, handler) -> None:
+    register_hook = getattr(ctx, "register_hook", None)
+    if not callable(register_hook):
+        return
+    if not _hook_is_supported(hook_name):
+        logger.info("Skipping unsupported Hermes hook %s", hook_name)
+        return
+    register_hook(hook_name, handler)
+
+
 def register(ctx) -> None:
     ensure_plugin_config()
 
@@ -78,13 +96,11 @@ def register(ctx) -> None:
             handler=build_handler(spec["name"]),
         )
 
-    register_hook = getattr(ctx, "register_hook", None)
-    if callable(register_hook):
-        register_hook("gateway:startup", warm_gateway_runtime_presence)
-        register_hook("on_session_start", warm_startup_context)
-        register_hook("pre_llm_call", build_startup_context)
-        register_hook("on_session_finalize", clear_startup_context)
-        register_hook("on_session_reset", clear_startup_context)
+    _register_hook_if_supported(ctx, "gateway:startup", warm_gateway_runtime_presence)
+    _register_hook_if_supported(ctx, "on_session_start", warm_startup_context)
+    _register_hook_if_supported(ctx, "pre_llm_call", build_startup_context)
+    _register_hook_if_supported(ctx, "on_session_finalize", clear_startup_context)
+    _register_hook_if_supported(ctx, "on_session_reset", clear_startup_context)
 
     _register_skill_bundle(ctx)
     logger.info("Registered Forge Hermes plugin with %s tools", len(TOOL_CATALOG))

@@ -3930,10 +3930,12 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     askSequence: [
       "Ask what they are trying to make clearer, repair, or preserve about where they were before you narrow to the exact movement lane.",
       "Ask whether the user is trying to query behavior, add something manually, update an existing movement item, or link movement to another Forge entity.",
+      "Treat day, month, all-time, timeline, trip detail, and selection as internal route lanes. With the user, ask for the useful time window, place, selected span, stay, or trip instead of listing route choices.",
       "Ask whether the focus is a stay, a trip, a place, a timeline window, or a selected span.",
       "Ask for the time window, place, or movement item that makes the question concrete.",
       "Ask what they are trying to notice, preserve, or answer through that movement context.",
       "Choose the dedicated day, month, all-time, timeline, places, trip-detail, or selection route once the question shape is clear.",
+      "Use allTime for whole-history aggregates, selection for a bounded selected-span aggregate, and tripDetail only when a concrete trip id is known.",
       "If the truth of one uncertain span is still unclear, read the timeline or saved-box detail before you mutate it.",
       "Skip the meta lane question when the user already named the exact correction or review target and only one ambiguity remains.",
       "If the request is filling a missing-data gap, use a user-defined movement box rather than a raw stay or trip patch.",
@@ -3952,6 +3954,8 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     askSequence: [
       "Ask what feels off, important, or worth tracking in their energy picture before you reduce it to one life-force lane.",
       "Ask whether the job is overview, profile change, weekday-template change, or fatigue signaling.",
+      "Treat overview, profile, weekday-template, and fatigue-signal as internal route lanes. With the user, ask whether this is a current read, a durable assumption, a repeated weekday rhythm, or a right-now state instead of reciting route names.",
+      "Use routeKey overview for the current read; it maps to GET /api/v1/life-force, not /api/v1/life-force/overview.",
       "Ask what part of the current energy picture feels most important or inaccurate.",
       "Ask what should stay true if they are changing profile or template assumptions.",
       "Ask whether the user is describing a stable weekly shape or just how today feels when the lane is still blurred.",
@@ -3971,6 +3975,8 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     askSequence: [
       "Ask what they are trying to learn, repair, publish, or run through Workbench before you narrow to flow discovery, editing, execution, or results.",
       "Ask whether the job is flow discovery, one flow edit, execution, run history, published output, node-level inspection, or latest-node-output lookup.",
+      "Treat saved-flow catalog, box catalog, run history, run detail, node result, latest node output, and published output as internal read lanes. With the user, ask whether they need the saved flow, its input contract, one run, one node, or the public result instead of listing route keys.",
+      "Use listFlows for the saved flow catalog and boxCatalog for available input-box contracts; do not collapse both into a vague catalog read.",
       "Ask which flow, slug, run, or node the request is about.",
       "Ask whether they need the stable flow contract, one run result, one published output, one node result, or the latest node output.",
       "If the user already named the flow and action clearly, skip the meta lane question and ask only for the missing run, node, or output scope.",
@@ -3986,14 +3992,15 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     openingQuestion:
       "What kind of moment keeps happening that you want future reports to name the same way each time?",
     coachingGoal:
-      "Create a reusable incident category that will actually help future reports stay consistent.",
+      "Bridge into Psyche-quality questioning for a reusable incident category without flattening the lived episode into cold taxonomy.",
     askSequence: [
-      "Ask what kind of moment or incident this label should capture in lived terms.",
-      "Reflect the repeated moment back in plain language before narrowing the wording.",
-      "Ask how narrow or broad it should be.",
-      "Ask what would count as inside versus outside the category if that boundary is still fuzzy.",
-      "Offer a concise label if the lived meaning is clearer than the wording.",
-      "Ask for a short description only if the label could be ambiguous later."
+      "Treat event_type as Psyche taxonomy: use the event_type Psyche coaching playbook when the user is exploring meaning, and keep batch CRUD as the storage path.",
+      "Ask what kind of emotionally meaningful moment keeps recurring and why naming it consistently would help future trigger reports.",
+      "Reflect the repeated moment back in plain language by naming the emotional or relational stake before narrowing the wording.",
+      "Ask for one recent example if the boundary is still abstract.",
+      "Clarify what belongs inside this event type and what should stay outside it.",
+      "Offer one concise candidate label once the repeated moment is clear.",
+      "Link it to trigger reports, beliefs, patterns, modes, or emotion definitions only after the category itself feels accurate."
     ]
   },
   {
@@ -4001,13 +4008,15 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     openingQuestion:
       "When this feeling is present, what tells you it is this feeling and not a nearby one?",
     coachingGoal:
-      "Create a reusable emotion label with enough clarity to use consistently later.",
+      "Bridge into Psyche-quality questioning for a reusable emotion label by its lived signature, not by a dictionary definition.",
     askSequence: [
-      "Ask what this feeling is like in lived terms when the user says it.",
-      "Reflect the felt signature back in plain language before you settle the label.",
+      "Treat emotion_definition as Psyche taxonomy: use the emotion_definition Psyche coaching playbook when the user is exploring the feeling, and keep batch CRUD as the storage path.",
+      "Ask when this feeling was present recently and what made it recognizable.",
+      "Reflect the felt signature back in plain language before asking for category or label polish.",
       "Ask what distinguishes it from nearby emotions if that matters.",
-      "Offer a concise label if the felt meaning is clearer than the wording.",
-      "Ask for a broader category only if it will help later browsing or reporting."
+      "Ask what the feeling tends to signal, protect, warn about, long for, or demand.",
+      "Offer one concise definition in the user's language and invite correction.",
+      "Link it to trigger reports, modes, beliefs, or patterns only after the definition feels steady."
     ]
   }
 ] as const;
@@ -5326,6 +5335,34 @@ function buildAgentOnboardingPayload(request: {
             "Is this a missing-gap overlay, a saved-overlay repair, or an edit to one already-recorded stay, trip, or trip point?",
             "If the target is already known, what one time, place, or saved-object detail is still missing before acting?"
           ],
+          methodRoutes: {
+            day: "GET /api/v1/movement/day",
+            month: "GET /api/v1/movement/month",
+            allTime: "GET /api/v1/movement/all-time",
+            timeline: "GET /api/v1/movement/timeline",
+            places: "GET /api/v1/movement/places",
+            boxDetail: "GET /api/v1/movement/boxes/:id",
+            tripDetail: "GET /api/v1/movement/trips/:id",
+            selection: "POST /api/v1/movement/selection",
+            settings: "GET /api/v1/movement/settings",
+            settingsUpdate: "PATCH /api/v1/movement/settings",
+            placeCreate: "POST /api/v1/movement/places",
+            placeUpdate: "PATCH /api/v1/movement/places/:id",
+            userBoxCreate: "POST /api/v1/movement/user-boxes",
+            userBoxPreflight: "POST /api/v1/movement/user-boxes/preflight",
+            userBoxUpdate: "PATCH /api/v1/movement/user-boxes/:id",
+            userBoxDelete: "DELETE /api/v1/movement/user-boxes/:id",
+            automaticBoxInvalidate:
+              "POST /api/v1/movement/automatic-boxes/:id/invalidate",
+            stayUpdate: "PATCH /api/v1/movement/stays/:id",
+            stayDelete: "DELETE /api/v1/movement/stays/:id",
+            tripUpdate: "PATCH /api/v1/movement/trips/:id",
+            tripDelete: "DELETE /api/v1/movement/trips/:id",
+            tripPointUpdate:
+              "PATCH /api/v1/movement/trips/:id/points/:pointId",
+            tripPointDelete:
+              "DELETE /api/v1/movement/trips/:id/points/:pointId"
+          },
           readRoutes: {
             day: "/api/v1/movement/day",
             month: "/api/v1/movement/month",
@@ -5356,6 +5393,7 @@ function buildAgentOnboardingPayload(request: {
           },
           notes: [
             "Movement is not a normal batch CRUD entity family. It is a dedicated record of stays and trips: a stay means the user remained in the same place for a span of time, and a trip means they traveled between places.",
+            "Route-selection questions are internal. User-facing questions should ask for the useful time window, place, selected span, stay, or trip instead of reciting day/month/all-time/timeline/selection route keys.",
             "Use /api/v1/movement/day, /month, /all-time, /timeline, or /selection when the user wants behavioral answers such as how long they stayed at home, when they traveled, which places dominated a period, or what happened across a selected span.",
             "Use the movement write routes when the user wants to add a place or manual overlay, update a specific stay or trip, repair one recorded movement span, or attach movement context to another Forge record. If the user is filling a missing-data gap, the usual write path is a user-defined overlay box rather than a raw stay or trip patch.",
             "If the user is revising or removing an existing correction, first identify whether the saved object is a user-defined box, automatic box, recorded stay, recorded trip, or trip point so the repair or delete path stays truthful.",
@@ -5372,6 +5410,12 @@ function buildAgentOnboardingPayload(request: {
             "Are they describing a repeatable weekly shape or a one-off current state?",
             "If the lane is already clear, what one weekday, profile field, or signal detail is still missing?"
           ],
+          methodRoutes: {
+            overview: "GET /api/v1/life-force",
+            profile: "PATCH /api/v1/life-force/profile",
+            weekdayTemplate: "PUT /api/v1/life-force/templates/:weekday",
+            fatigueSignal: "POST /api/v1/life-force/fatigue-signals"
+          },
           readRoutes: {
             overview: "/api/v1/life-force"
           },
@@ -5382,6 +5426,7 @@ function buildAgentOnboardingPayload(request: {
           },
           notes: [
             "Life Force is a focused domain surface, not a batch CRUD entity type.",
+            "Route-selection questions are internal. User-facing questions should ask whether this is a current read, durable assumption, repeated weekday rhythm, or right-now state instead of reciting overview/profile/template/signal route keys.",
             "Use GET /api/v1/life-force for the current overview payload with stats, drains, recommendations, and current-curve state.",
             "Patch the profile only for durable personal settings, update weekday templates only for the curve itself, and post fatigue signals for real-time tired or recovered observations.",
             "If the user says something like 'I always dip on Tuesdays after lunch', treat that as a weekday-template change rather than a one-off fatigue signal.",
@@ -5399,6 +5444,12 @@ function buildAgentOnboardingPayload(request: {
             "Are they describing a repeatable weekly shape or a one-off current state?",
             "If the lane is already clear, what one weekday, profile field, or signal detail is still missing?"
           ],
+          methodRoutes: {
+            overview: "GET /api/v1/life-force",
+            profile: "PATCH /api/v1/life-force/profile",
+            weekdayTemplate: "PUT /api/v1/life-force/templates/:weekday",
+            fatigueSignal: "POST /api/v1/life-force/fatigue-signals"
+          },
           readRoutes: {
             overview: "/api/v1/life-force"
           },
@@ -5410,6 +5461,7 @@ function buildAgentOnboardingPayload(request: {
           notes: [
             "This `life_force` key exists so agents can look up the specialized route family by the entity catalog name without guessing that the canonical surface key is `lifeForce`.",
             "Life Force is a focused domain surface, not a batch CRUD entity type.",
+            "Route-selection questions are internal. User-facing questions should ask whether this is a current read, durable assumption, repeated weekday rhythm, or right-now state instead of reciting overview/profile/template/signal route keys.",
             "Use GET /api/v1/life-force for the current overview payload with stats, drains, recommendations, and current-curve state.",
             "Patch the profile only for durable personal settings, update weekday templates only for the curve itself, and post fatigue signals for real-time tired or recovered observations.",
             "If the user says something like 'I always dip on Tuesdays after lunch', treat that as a weekday-template change rather than a one-off fatigue signal.",
@@ -5427,6 +5479,26 @@ function buildAgentOnboardingPayload(request: {
             "Does the user need a stable public contract or one execution artifact?",
             "If the flow is already known, what one run, node, or output scope detail is still missing before acting?"
           ],
+          methodRoutes: {
+            listFlows: "GET /api/v1/workbench/flows",
+            flowById: "GET /api/v1/workbench/flows/:id",
+            flowBySlug: "GET /api/v1/workbench/flows/by-slug/:slug",
+            publishedOutput: "GET /api/v1/workbench/flows/:id/output",
+            runs: "GET /api/v1/workbench/flows/:id/runs",
+            runDetail: "GET /api/v1/workbench/flows/:id/runs/:runId",
+            runNodes: "GET /api/v1/workbench/flows/:id/runs/:runId/nodes",
+            nodeResult:
+              "GET /api/v1/workbench/flows/:id/runs/:runId/nodes/:nodeId",
+            latestNodeOutput:
+              "GET /api/v1/workbench/flows/:id/nodes/:nodeId/output",
+            boxCatalog: "GET /api/v1/workbench/catalog/boxes",
+            createFlow: "POST /api/v1/workbench/flows",
+            updateFlow: "PATCH /api/v1/workbench/flows/:id",
+            deleteFlow: "DELETE /api/v1/workbench/flows/:id",
+            runFlow: "POST /api/v1/workbench/flows/:id/run",
+            runByPayload: "POST /api/v1/workbench/run",
+            chatFlow: "POST /api/v1/workbench/flows/:id/chat"
+          },
           readRoutes: {
             listFlows: "/api/v1/workbench/flows",
             flowById: "/api/v1/workbench/flows/:id",
@@ -5451,6 +5523,7 @@ function buildAgentOnboardingPayload(request: {
           },
           notes: [
             "Workbench is a dedicated execution surface, not a batch CRUD entity family.",
+            "Route-selection questions are internal. User-facing questions should ask whether the user needs the saved flow, its input contract, one run, one node, or the public result instead of reciting Workbench route keys.",
             "Use the flow routes when the agent needs stable public input contracts, published outputs, node-level results, or reusable execution history.",
             "If the user is still figuring out inputs or editable structure, read flow detail or box catalog before asking them to author a payload from memory.",
             "Prefer the dedicated output and node-result routes over reverse-engineering raw traces.",
@@ -5686,7 +5759,7 @@ function buildAgentOnboardingPayload(request: {
       saveSuggestionTone: "gentle_optional",
       maxQuestionsPerTurn: 1,
       psycheExplorationRule:
-        "When a Psyche entity needs understanding first, begin with one exploratory question before any working formulation, replacement belief, suggested title, or save pitch. Keep the opening reflection to one or two short sentences, stay in plain prose instead of bullets or numbered lists, keep that first reply short, do not mention Forge search or save structure yet, avoid colons or list-shaped phrasing, prefer what/when/how over why until the experience is grounded, wait for the user's answer before offering a fuller formulation, ask permission before moving from charged exploration into naming or challenge when needed, make the next question help the user feel more able to name the experience rather than more examined, do not widen into adjacent entities until the current one has a working sentence the user recognizes, and once the lived experience is coherent stop deepening and help the user name it cleanly. When the user is updating a Psyche record because of one fresh episode, anchor in that episode before renaming the durable formulation, begin with the smallest part of the old wording that no longer fits, and do not reopen the full origin story unless the new understanding is truly structural. If the user accepts the wording, move toward the save instead of reopening deeper exploration.",
+        "When a Psyche entity needs understanding first, begin with one exploratory question before any working formulation, replacement belief, suggested title, or save pitch. Keep the opening reflection to one or two short sentences, stay in plain prose instead of bullets or numbered lists, keep that first reply short, do not mention Forge search or save structure yet, avoid colons or list-shaped phrasing, prefer what/when/how over why until the experience is grounded, wait for the user's answer before offering a fuller formulation, ask permission before moving from charged exploration into naming or challenge when needed, make the next question help the user feel more able to name the experience rather than more examined, do not widen into adjacent entities until the current one has a working sentence the user recognizes, and once the lived experience is coherent stop deepening and help the user name it cleanly. After one concrete example is clear and a hypothesis lands or is corrected, translate it into a saveable record shape such as a belief sentence, functional loop, behavior, mode, trigger report, value, event type, or emotion definition; ask one accuracy question instead of reopening broad exploration, then use the shared batch entity routes after the user accepts the wording or explicitly asks to save. When the user is updating a Psyche record because of one fresh episode, anchor in that episode before renaming the durable formulation, begin with the smallest part of the old wording that no longer fits, and do not reopen the full origin story unless the new understanding is truly structural. If the user accepts the wording, move toward the save instead of reopening deeper exploration.",
       specializedSurfaceRule:
         "For Movement, Life Force, and Workbench, clarify the job first, then choose the dedicated route family internally and do not guess at a generic CRUD path. Use specializedDomainSurfaces.routeSelectionQuestions when they are present so the next follow-up selects the right route instead of asking generic questions. When available, use forge_call_movement_route, forge_call_life_force_route, or forge_call_workbench_route after the lane is clear. In user-facing language, talk about timeline, overlay, weekday template, published output, run detail, or node result rather than surfaces, payloads, read paths, mutation paths, or CRUD. If the truth of the current state is still uncertain, read the relevant dedicated view before you mutate it. When the user already named a precise correction or review target, confirm only the route-selecting detail that is still missing. After a concrete Movement, Life Force, or Workbench correction, read the relevant view back when the user is trying to understand the result rather than just store it. The canonical runtime routes stay under /api/v1/*, and the OpenClaw HTTP mirror exposes the same families under /forge/v1/movement, /forge/v1/life-force, and /forge/v1/workbench.",
       reviewShortcutRule:
@@ -5726,13 +5799,47 @@ function buildAgentOnboardingPayload(request: {
       updateRule:
         "Each update operation must include entityType, id, and patch. For projects, lifecycle changes are status patches: active to restart, paused to suspend, completed to finish. Keep task and project scheduling rules on those same patch payloads. Official habit outcomes can also be logged through forge_update_entities by patching the habit with checkIn: { status, dateKey?, note?, description? } instead of route-hunting. Calendar-event updates still run downstream provider projection sync, and manual health-session field edits belong on the batch route by default rather than on the reflective review helpers.",
       specializedRouteToolRule:
-        "forge_call_movement_route, forge_call_life_force_route, and forge_call_workbench_route expect { routeKey, pathParams?, query?, body? }. Choose routeKey from the tool schema or entityRouteModel.specializedDomainSurfaces, fill pathParams for placeholders such as id, weekday, slug, runId, nodeId, or pointId, use query for read filters and userIds, and use body only for POST, PATCH, or PUT route keys. Normal stored entities still use the shared batch entity tools.",
+        "forge_call_movement_route, forge_call_life_force_route, and forge_call_workbench_route expect { routeKey, pathParams?, query?, body? }. Choose routeKey from the tool schema or entityRouteModel.specializedDomainSurfaces, fill pathParams for placeholders such as id, weekday, slug, runId, nodeId, or pointId, use query for read filters and userIds, and use body only for POST, PATCH, or PUT route keys. The Life Force overview route key maps to GET /api/v1/life-force; do not invent /api/v1/life-force/overview. Normal stored entities still use the shared batch entity tools.",
       createExample:
         '{"operations":[{"entityType":"goal","data":{"title":"Create meaningfully"},"clientRef":"goal-create-1"},{"entityType":"goal","data":{"title":"Build a beautiful family"},"clientRef":"goal-create-2"}]}',
       updateExample:
         '{"operations":[{"entityType":"project","id":"project_123","patch":{"status":"paused","schedulingRules":{"blockWorkBlockKinds":["main_activity"],"allowWorkBlockKinds":["secondary_activity"]}},"clientRef":"project-suspend-1"},{"entityType":"habit","id":"habit_456","patch":{"checkIn":{"status":"missed","note":"Resisted the urge after dinner.","description":"85 sec reset"}},"clientRef":"habit-check-in-1"}]}',
       specializedRouteToolExample:
-        '{"routeKey":"weekdayTemplate","pathParams":{"weekday":"monday"},"body":{"points":[{"hour":13,"freeAp":-4}]}}'
+        '{"routeKey":"weekdayTemplate","pathParams":{"weekday":"monday"},"body":{"points":[{"hour":13,"freeAp":-4}]}}',
+      specializedRouteToolExamples: {
+        movementAllTime:
+          '{"routeKey":"allTime","query":{"userIds":["user_operator"]}}',
+        movementTimeline:
+          '{"routeKey":"timeline","query":{"from":"2026-05-01T00:00:00.000Z","to":"2026-05-06T23:59:59.999Z","userIds":["user_operator"]}}',
+        movementSelection:
+          '{"routeKey":"selection","query":{"from":"2026-05-01T00:00:00.000Z","to":"2026-05-14T23:59:59.999Z","placeIds":["place_home"],"userIds":["user_operator"]}}',
+        movementTripDetail:
+          '{"routeKey":"tripDetail","pathParams":{"id":"trip_123"}}',
+        movementMissingStayPreflight:
+          '{"routeKey":"userBoxPreflight","body":{"kind":"stay","startedAt":"2026-05-06T13:00:00.000Z","endedAt":"2026-05-06T15:00:00.000Z","placeLabel":"Home","userId":"user_operator"}}',
+        movementMissingStayCreate:
+          '{"routeKey":"userBoxCreate","body":{"kind":"stay","startedAt":"2026-05-06T13:00:00.000Z","endedAt":"2026-05-06T15:00:00.000Z","placeLabel":"Home","userId":"user_operator","note":"Manual correction after reviewing the timeline."}}',
+        lifeForceOverview:
+          '{"routeKey":"overview"}',
+        lifeForceProfile:
+          '{"routeKey":"profile","body":{"baselineDailyAp":24,"recoveryNotes":"Clinic-admin days need a lower expected afternoon load."}}',
+        lifeForceWeekdayTemplate:
+          '{"routeKey":"weekdayTemplate","pathParams":{"weekday":"monday"},"body":{"points":[{"hour":13,"freeAp":-4}]}}',
+        lifeForceFatigueSignal:
+          '{"routeKey":"fatigueSignal","body":{"signal":"tired","intensity":7,"note":"Sharp post-lunch dip after clinic admin."}}',
+        workbenchFlowCatalog:
+          '{"routeKey":"listFlows","query":{"includeArchived":false}}',
+        workbenchBoxCatalog:
+          '{"routeKey":"boxCatalog"}',
+        workbenchRunDetail:
+          '{"routeKey":"runDetail","pathParams":{"id":"flow_research_digest","runId":"run_123"}}',
+        workbenchPublishedOutput:
+          '{"routeKey":"publishedOutput","pathParams":{"id":"flow_research_digest"}}',
+        workbenchLatestNodeOutput:
+          '{"routeKey":"latestNodeOutput","pathParams":{"id":"flow_research_digest","nodeId":"node_summary"}}',
+        workbenchRunFlow:
+          '{"routeKey":"runFlow","pathParams":{"id":"flow_research_digest"},"body":{"input":{"topic":"question flow quality"}}}'
+      }
     }
   };
 }

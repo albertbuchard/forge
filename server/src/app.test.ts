@@ -4037,6 +4037,18 @@ test("movement sync stores places, stays, trips, and serves the movement workspa
     assert.equal(timeline.movement.hasMore, true);
     assert.ok(timeline.movement.nextCursor);
 
+    const scopedTimelineResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/movement/timeline?limit=1&userIds=user_operator"
+    });
+    assert.equal(scopedTimelineResponse.statusCode, 200);
+    const scopedTimeline = scopedTimelineResponse.json() as {
+      movement: {
+        segments: Array<{ kind: "stay" | "trip" | "missing" }>;
+      };
+    };
+    assert.equal(scopedTimeline.movement.segments.length, 1);
+
     const olderTimelineResponse = await app.inject({
       method: "POST",
       url: "/api/v1/mobile/movement/timeline",

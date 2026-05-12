@@ -1,5 +1,5 @@
-import { request as httpRequest } from "node:http";
-import { request as httpsRequest } from "node:https";
+import { Agent as HttpAgent, request as httpRequest } from "node:http";
+import { Agent as HttpsAgent, request as httpsRequest } from "node:https";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { access, readFile } from "node:fs/promises";
@@ -80,7 +80,8 @@ function buildManagedDevWebLaunch(input) {
         };
     }
     const host = input.env.FORGE_DEV_WEB_HOST?.trim() || "127.0.0.1";
-    const port = input.env.FORGE_DEV_WEB_PORT?.trim() || getDefaultDevWebOriginPort(input.origin);
+    const port = input.env.FORGE_DEV_WEB_PORT?.trim() ||
+        getDefaultDevWebOriginPort(input.origin);
     return {
         command: process.execPath,
         args: [viteCliPath, "--host", host, "--port", port],
@@ -136,15 +137,23 @@ function parseRequestTarget(requestPath) {
 function copyProxyHeaders(response, reply) {
     for (const [name, value] of response.headers) {
         const lowerName = name.toLowerCase();
-        if (lowerName === "connection" ||
-            lowerName === "content-length" ||
-            lowerName === "keep-alive" ||
-            lowerName === "transfer-encoding") {
+        if (hopByHopHeaders.has(lowerName)) {
             continue;
         }
         reply.header(name, value);
     }
 }
+const hopByHopHeaders = new Set([
+    "connection",
+    "content-length",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade"
+]);
 function buildDevWebTarget(origin, pathname, search) {
     const target = new URL(pathname.startsWith("/") ? pathname.slice(1) : pathname, origin);
     target.search = search;
@@ -162,6 +171,72 @@ async function proxyDevAsset(input) {
         return "";
     }
     return Buffer.from(await response.arrayBuffer());
+}
+export function createKeepAliveDevAssetProxy() {
+    const httpAgent = new HttpAgent({
+        keepAlive: true,
+        maxFreeSockets: 8,
+        maxSockets: 32
+    });
+    const httpsAgent = new HttpsAgent({
+        keepAlive: true,
+        maxFreeSockets: 8,
+        maxSockets: 32
+    });
+    return {
+        fetch(input) {
+            const target = buildDevWebTarget(input.origin, input.pathname, input.search);
+            const isHttps = target.protocol === "https:";
+            const request = isHttps ? httpsRequest : httpRequest;
+            const agent = isHttps ? httpsAgent : httpAgent;
+            return new Promise((resolve, reject) => {
+                const proxyRequest = request(target, {
+                    agent,
+                    headers: {
+                        Accept: "*/*",
+                        Host: target.host
+                    },
+                    method: "GET"
+                }, (response) => {
+                    input.reply.code(response.statusCode ?? 502);
+                    for (const [name, value] of Object.entries(response.headers)) {
+                        if (!value || hopByHopHeaders.has(name.toLowerCase())) {
+                            continue;
+                        }
+                        input.reply.header(name, value);
+                    }
+                    if (!response.headers["cache-control"]) {
+                        input.reply.header("Cache-Control", "no-store, max-age=0, must-revalidate");
+                    }
+                    const chunks = [];
+                    response.on("data", (chunk) => {
+                        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+                    });
+                    response.on("end", () => {
+                        resolve(Buffer.concat(chunks));
+                    });
+                    response.on("error", reject);
+                });
+                proxyRequest.on("error", reject);
+                proxyRequest.end();
+            });
+        },
+        close() {
+            httpAgent.destroy();
+            httpsAgent.destroy();
+        }
+    };
+}
+function createDevAssetProxy(fetchImpl) {
+    if (fetchImpl !== fetch) {
+        return {
+            fetch(input) {
+                return proxyDevAsset({ ...input, fetchImpl });
+            },
+            close() { }
+        };
+    }
+    return createKeepAliveDevAssetProxy();
 }
 function writeProxyUpgradeResponse(socket, response) {
     const statusCode = response.statusCode ?? 101;
@@ -344,12 +419,11 @@ async function serveAsset(requestPath, reply, options) {
         : await options.devWebRuntime.ensureReady();
     if (devWebOrigin) {
         try {
-            return await proxyDevAsset({
+            return await options.devAssetProxy.fetch({
                 origin: devWebOrigin,
                 pathname: normalizedRequestPath,
                 search: requestTarget.search,
-                reply,
-                fetchImpl: options.fetchImpl
+                reply
             });
         }
         catch {
@@ -393,8 +467,10 @@ async function serveAsset(requestPath, reply, options) {
 export async function registerWebRoutes(app, options = {}) {
     const devWebRuntime = options.devWebRuntime ?? createManagedDevWebRuntime();
     const fetchImpl = options.fetchImpl ?? fetch;
+    const devAssetProxy = options.devAssetProxy ?? createDevAssetProxy(fetchImpl);
     app.addHook("onClose", async () => {
         await devWebRuntime.stop();
+        devAssetProxy.close();
     });
     app.server.on("upgrade", (request, socket, head) => {
         void (async () => {
@@ -406,6 +482,6 @@ export async function registerWebRoutes(app, options = {}) {
             });
         })();
     });
-    app.get("/", async (_request, reply) => serveAsset("/", reply, { devWebRuntime, fetchImpl }));
-    app.get("/*", async (request, reply) => serveAsset(request.url, reply, { devWebRuntime, fetchImpl }));
+    app.get("/", async (_request, reply) => serveAsset("/", reply, { devWebRuntime, devAssetProxy }));
+    app.get("/*", async (request, reply) => serveAsset(request.url, reply, { devWebRuntime, devAssetProxy }));
 }
