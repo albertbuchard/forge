@@ -47,7 +47,8 @@ function parseArgs(argv) {
     skipAdapters: false,
     printUrl: false,
     removeData: false,
-    removeAdapters: false
+    removeAdapters: false,
+    manualHttp: false
   };
   const values = {};
   const positionals = [];
@@ -69,6 +70,7 @@ function parseArgs(argv) {
     else if (arg === "--print-url") flags.printUrl = true;
     else if (arg === "--remove-data") flags.removeData = true;
     else if (arg === "--remove-adapters") flags.removeAdapters = true;
+    else if (arg === "--manual-http" || arg === "--no-tunnel") flags.manualHttp = true;
     else if (arg.startsWith("--output=")) values.output = arg.slice("--output=".length);
     else if (arg === "--output") values.output = argv[++index];
     else if (arg.startsWith("--data-root=")) values.dataRoot = arg.slice("--data-root=".length);
@@ -937,14 +939,32 @@ async function uninstallForgeMemory(parsed) {
   };
 }
 
-async function createPairing(config) {
+async function createPairing(config, options = {}) {
+  const transportMode = options.transportMode ?? "tunnel";
   const response = await fetch(new URL("/api/v1/health/pairing-sessions", baseUrl(config)), {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json" },
-    body: JSON.stringify({ userId: null })
+    body: JSON.stringify({ userId: null, transportMode })
   });
   if (!response.ok) throw new Error(`Pairing request failed with ${response.status}`);
   return response.json();
+}
+
+function printPairing(pairing) {
+  console.log("\nScan this QR in Forge Companion:\n");
+  qrcode.generate(JSON.stringify(pairing.qrPayload), { small: true });
+  const transport = pairing.qrPayload?.transport;
+  if (transport?.provider) {
+    const label = pairing.qrPayload.transportMode === "tunnel" ? "Tunnel" : "Manual HTTP";
+    console.log(`${color.cyan(label)}: ${pairing.qrPayload.apiBaseUrl}`);
+    if (transport.recreateCommand) {
+      console.log(`${color.dim("recreate:")} ${transport.recreateCommand}`);
+    }
+    for (const note of transport.notes ?? []) {
+      console.log(color.dim(note));
+    }
+  }
+  console.log(JSON.stringify(pairing.qrPayload, null, 2));
 }
 
 async function runInstall(parsed, command) {
@@ -965,11 +985,11 @@ async function runInstall(parsed, command) {
   let pairing = null;
   if (shouldPair && !parsed.flags.dryRun) {
     if (!runtimeResult) await startRuntime(config);
-    pairing = await createPairing(config);
+    pairing = await createPairing(config, {
+      transportMode: parsed.flags.manualHttp ? "manual-http" : "tunnel"
+    });
     if (pairing?.qrPayload && !parsed.flags.json) {
-      console.log("\nScan this QR in Forge Companion:\n");
-      qrcode.generate(JSON.stringify(pairing.qrPayload), { small: true });
-      console.log(JSON.stringify(pairing.qrPayload, null, 2));
+      printPairing(pairing);
     }
   }
   const summary = { ok: true, config, writeResult, adapterResults, runtimeResult, pairing: Boolean(pairing) };
@@ -1041,13 +1061,14 @@ async function runUi(parsed) {
 async function runPairIos(parsed) {
   const config = await readConfig();
   await startRuntime(config);
-  const pairing = await createPairing(config);
+  const pairing = await createPairing(config, {
+    transportMode: parsed.flags.manualHttp ? "manual-http" : "tunnel"
+  });
   if (parsed.flags.json) {
     console.log(JSON.stringify(pairing, null, 2));
     return;
   }
-  qrcode.generate(JSON.stringify(pairing.qrPayload), { small: true });
-  console.log(JSON.stringify(pairing.qrPayload, null, 2));
+  printPairing(pairing);
 }
 
 async function runLogs() {
@@ -1122,6 +1143,7 @@ Options:
   --adapters <list>     Comma list: openclaw,hermes,codex or none
   --skip-adapters       Configure UI/runtime only
   --skip-pair-ios       Do not prompt or create iOS pairing
+  --manual-http         Use direct HTTP/TCP for iOS pairing instead of the default tunnel
   --no-start            Configure without starting runtime
   --output <path>        Export destination for forge-memory export
   --remove-adapters      During uninstall, remove host adapter config entries

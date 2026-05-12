@@ -28,6 +28,8 @@ import type {
   CalendarResource,
   CalendarSchedulingRules,
   CompanionOverviewPayload,
+  CompanionPairingQrPayload,
+  CompanionPairingTransportMode,
   DiagnosticLogEntry,
   EventLogEntry,
   FitnessViewData,
@@ -3600,18 +3602,12 @@ export function createCompanionPairingSession(input?: {
   label?: string;
   userId?: string | null;
   expiresInMinutes?: number;
+  transportMode?: CompanionPairingTransportMode;
   capabilities?: string[];
 }) {
   return request<{
     session: CompanionOverviewPayload["pairings"][number];
-    qrPayload: {
-      kind: string;
-      apiBaseUrl: string;
-      sessionId: string;
-      pairingToken: string;
-      expiresAt: string;
-      capabilities: string[];
-    };
+    qrPayload: CompanionPairingQrPayload;
   }>("/api/v1/health/pairing-sessions", {
     method: "POST",
     body: JSON.stringify(input ?? {})

@@ -1,9 +1,9 @@
-Forge Companion 1.0.35 keeps pairing alive more reliably.
+Forge Companion 1.0.35 makes pairing dramatically easier away from a local network.
 
-The app now saves Forge's refreshed pairing expiry after verification, heartbeat,
-sync, movement bootstrap, and source-state updates, so a healthy paired phone should
-not fall back into repeated re-pairing just because the original QR code expired.
+Forge now creates tunnel-first pairing sessions by default, so the iPhone app can use
+a recreated, token-bound endpoint instead of depending on a fragile LAN, direct TCP,
+or Tailscale-only path.
 
-It also keeps a lightweight heartbeat and periodic sync cadence active while the app
-is open, schedules background refresh when iOS allows it, and starts a short refresh
-window when the app leaves the foreground.
+Manual HTTP pairing is still available for advanced local setups, and the app now
+preserves the transport metadata from QR codes and discovery advertisements so it can
+prefer the strongest route automatically.

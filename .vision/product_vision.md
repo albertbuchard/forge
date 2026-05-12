@@ -9,6 +9,11 @@ Tailwind CSS 4, Fastify 5, SQLite, generated OpenAPI contracts, OpenClaw/Hermes/
 adapter surfaces, and a Swift iPhone companion that syncs HealthKit and other phone-native
 signals into the same canonical Forge data model.
 
+The companion connection should feel like KittyLitter's Alleycat-style pairing rather
+than a fragile local address handoff: Forge generates a one-time payload with a default
+HTTPS tunnel endpoint that can be recreated, and direct HTTP, LAN, or Tailscale URLs stay
+available as deliberate advanced choices.
+
 Forge's progression layer uses that same stack: SQLite reward projections, Fastify API
 read models, React surfaces, Framer Motion celebration effects, source-controlled catalog
 data, small in-repo mascot previews, and optional per-style raster sprite archives hosted

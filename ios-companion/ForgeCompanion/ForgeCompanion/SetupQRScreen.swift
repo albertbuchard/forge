@@ -24,14 +24,14 @@ struct SetupQRScreen: View {
             Spacer(minLength: 0)
 
             VStack(alignment: .leading, spacing: 22) {
-                Text("Scan the QR code from Forge.")
+                Text("Scan the Forge tunnel QR.")
                     .font(.system(size: 28, weight: .bold, design: .rounded))
                     .foregroundStyle(CompanionStyle.textPrimary)
 
                 VStack(alignment: .leading, spacing: 12) {
-                    step("1", "Open Forge.")
-                    step("2", "Go to Settings, then Mobile.")
-                    step("3", "Show the QR code and scan it here.")
+                    step("1", "Open Forge Settings, then Mobile.")
+                    step("2", "Generate the tunnel QR or run npx forge-memory pair-ios.")
+                    step("3", "Scan it here and approve the native permissions.")
                 }
 
                 Button("Open scanner") {

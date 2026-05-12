@@ -192,12 +192,14 @@ final class ForgeServerDiscovery {
         switch source {
         case .simulator:
             return 0
-        case .tailscale:
+        case .tunnel:
             return 1
-        case .bonjour:
+        case .tailscale:
             return 2
-        case .lan:
+        case .bonjour:
             return 3
+        case .lan:
+            return 4
         }
     }
 
@@ -374,6 +376,14 @@ final class ForgeServerDiscovery {
     }
 
     private static func probeBonjourSeed(_ seed: BonjourSeed) async -> [DiscoveredForgeServer] {
+        if let tunnelServer = await probeTunnelAdvertisement(seed) {
+            companionDebugLog(
+                "ForgeServerDiscovery",
+                "probeBonjourSeed using tunnel-preferred service=\(seed.name)"
+            )
+            return [tunnelServer]
+        }
+
         if let tailscaleServer = await probeTailscaleAdvertisement(seed) {
             companionDebugLog(
                 "ForgeServerDiscovery",
@@ -387,6 +397,33 @@ final class ForgeServerDiscovery {
         }
 
         return []
+    }
+
+    private static func probeTunnelAdvertisement(_ seed: BonjourSeed) async -> DiscoveredForgeServer? {
+        let rawApiBaseUrl = seed.txtRecords["tunnelApiBaseUrl"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rawUiBaseUrl = seed.txtRecords["tunnelUiBaseUrl"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard
+            let apiBaseUrl = normalizedTailscaleBaseUrl(rawApiBaseUrl)
+        else {
+            return nil
+        }
+        let resolvedUiBaseUrl = normalizedTailscaleUiUrl(rawUiBaseUrl) ?? inferredUiBaseUrl(from: apiBaseUrl)
+        async let apiProbe = probeForgeHealth(apiBaseUrl: apiBaseUrl)
+        async let uiProbe = probeForgeUi(uiBaseUrl: resolvedUiBaseUrl)
+        guard await apiProbe, await uiProbe else {
+            return nil
+        }
+        let host = URL(string: apiBaseUrl)?.host ?? seed.host
+        return DiscoveredForgeServer(
+            id: "forge-tunnel-bonjour-\(host)",
+            name: seed.name,
+            host: host,
+            apiBaseUrl: apiBaseUrl,
+            uiBaseUrl: resolvedUiBaseUrl,
+            source: .tunnel,
+            canBootstrapPairing: true,
+            detail: "HTTPS companion tunnel advertised by Forge"
+        )
     }
 
     private static func probeTailscaleAdvertisement(_ seed: BonjourSeed) async -> DiscoveredForgeServer? {

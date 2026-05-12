@@ -1218,6 +1218,33 @@ export interface CompanionPairingSession {
   updatedAt: string;
 }
 
+export type CompanionPairingTransportMode = "tunnel" | "manual-http";
+
+export interface CompanionPairingTransportPayload {
+  protocol: "https-tunnel" | "http";
+  provider: "cloudflare-quick-tunnel" | "configured-url" | "manual-http";
+  status: "ready" | "starting" | "unavailable" | "error";
+  publicBaseUrl?: string;
+  localBaseUrl: string;
+  proxyBaseUrl?: string;
+  recreateCommand?: string;
+  startedAt?: string;
+  lastError?: string;
+  notes: string[];
+}
+
+export interface CompanionPairingQrPayload {
+  kind: string;
+  apiBaseUrl: string;
+  uiBaseUrl?: string;
+  transportMode: CompanionPairingTransportMode;
+  transport?: CompanionPairingTransportPayload;
+  sessionId: string;
+  pairingToken: string;
+  expiresAt: string;
+  capabilities: string[];
+}
+
 export interface CompanionPairingSourceState {
   desiredEnabled: boolean;
   appliedEnabled: boolean;

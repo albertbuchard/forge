@@ -81,6 +81,106 @@ async function loadSharedMovementFixture(id: string) {
   return scenario!;
 }
 
+test("companion pairing defaults to a configured tunnel transport", async () => {
+  const originalTunnelBaseUrl = process.env.FORGE_COMPANION_TUNNEL_BASE_URL;
+  process.env.FORGE_COMPANION_TUNNEL_BASE_URL =
+    "https://forge-companion-test.trycloudflare.com";
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-companion-tunnel-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: {
+        userId: "user_operator"
+      }
+    });
+    assert.equal(response.statusCode, 201);
+    const payload = response.json() as {
+      qrPayload: {
+        apiBaseUrl: string;
+        uiBaseUrl: string;
+        transportMode: string;
+        transport: {
+          protocol: string;
+          provider: string;
+          publicBaseUrl: string;
+        };
+      };
+    };
+    assert.equal(payload.qrPayload.transportMode, "tunnel");
+    assert.equal(
+      payload.qrPayload.apiBaseUrl,
+      "https://forge-companion-test.trycloudflare.com/api/v1"
+    );
+    assert.equal(
+      payload.qrPayload.uiBaseUrl,
+      "https://forge-companion-test.trycloudflare.com/forge/"
+    );
+    assert.equal(payload.qrPayload.transport.protocol, "https-tunnel");
+    assert.equal(payload.qrPayload.transport.provider, "configured-url");
+    assert.equal(
+      payload.qrPayload.transport.publicBaseUrl,
+      "https://forge-companion-test.trycloudflare.com"
+    );
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+    if (originalTunnelBaseUrl === undefined) {
+      delete process.env.FORGE_COMPANION_TUNNEL_BASE_URL;
+    } else {
+      process.env.FORGE_COMPANION_TUNNEL_BASE_URL = originalTunnelBaseUrl;
+    }
+  }
+});
+
+test("companion pairing keeps manual HTTP available as an explicit transport", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-companion-manual-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: {
+        userId: "user_operator",
+        transportMode: "manual-http"
+      }
+    });
+    assert.equal(response.statusCode, 201);
+    const payload = response.json() as {
+      qrPayload: {
+        apiBaseUrl: string;
+        transportMode: string;
+        transport: {
+          protocol: string;
+          provider: string;
+        };
+      };
+    };
+    assert.equal(payload.qrPayload.transportMode, "manual-http");
+    assert.equal(payload.qrPayload.apiBaseUrl, "http://127.0.0.1:4317/api/v1");
+    assert.equal(payload.qrPayload.transport.protocol, "http");
+    assert.equal(payload.qrPayload.transport.provider, "manual-http");
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("companion pairings collapse stale duplicates and support bulk revoke", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-companion-"));
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });

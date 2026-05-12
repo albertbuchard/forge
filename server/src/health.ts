@@ -139,6 +139,7 @@ export const createCompanionPairingSessionSchema = z.object({
   label: z.string().trim().default("Forge Companion"),
   userId: z.string().trim().nullable().optional(),
   expiresInMinutes: z.coerce.number().int().min(5).max(24 * 60).default(30),
+  transportMode: z.enum(["tunnel", "manual-http"]).default("tunnel"),
   capabilities: z
     .array(
       z.enum([
@@ -2139,10 +2140,27 @@ export function updateMobileCompanionSourceState(
 }
 
 export function createCompanionPairingSession(
-  baseApiUrl: string,
+  pairingTransport:
+    | string
+    | {
+        apiBaseUrl: string;
+        uiBaseUrl?: string | null;
+        transportMode?: "tunnel" | "manual-http";
+        transport?: Record<string, unknown>;
+      },
   input: z.infer<typeof createCompanionPairingSessionSchema>
 ) {
   const parsed = createCompanionPairingSessionSchema.parse(input);
+  const resolvedTransport =
+    typeof pairingTransport === "string"
+      ? {
+          apiBaseUrl: pairingTransport,
+          uiBaseUrl: null,
+          transportMode: "manual-http" as const,
+          transport: undefined
+        }
+      : pairingTransport;
+  const baseApiUrl = resolvedTransport.apiBaseUrl;
   const now = new Date();
   const userId = parsed.userId ?? "user_operator";
   const serializedCapabilities = JSON.stringify(parsed.capabilities);
@@ -2157,14 +2175,12 @@ export function createCompanionPairingSession(
        FROM companion_pairing_sessions
        WHERE user_id = ?
          AND label = ?
-         AND api_base_url = ?
          AND capability_flags_json = ?
          AND status = 'pending'`
     )
     .all(
       userId,
       parsed.label,
-      baseApiUrl,
       serializedCapabilities
     ) as PairingSessionRow[];
   if (stalePendingRows.length > 0) {
@@ -2204,6 +2220,9 @@ export function createCompanionPairingSession(
   const qrPayload = {
     kind: "forge-companion-pairing",
     apiBaseUrl: baseApiUrl,
+    uiBaseUrl: resolvedTransport.uiBaseUrl ?? undefined,
+    transportMode: resolvedTransport.transportMode ?? parsed.transportMode,
+    transport: resolvedTransport.transport,
     sessionId: id,
     pairingToken,
     expiresAt,

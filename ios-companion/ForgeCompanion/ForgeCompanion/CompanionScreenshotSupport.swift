@@ -62,26 +62,39 @@ enum CompanionScreenshotFixtures {
     static func pairingPayload() -> PairingPayload {
         PairingPayload(
             kind: "health_pairing",
-            apiBaseUrl: "https://macbook-pro--de-francis-lalanne.tail47ba04.ts.net/api/v1",
-            uiBaseUrl: "https://macbook-pro--de-francis-lalanne.tail47ba04.ts.net/forge/",
+            apiBaseUrl: "https://forge-companion-demo.trycloudflare.com/api/v1",
+            uiBaseUrl: "https://forge-companion-demo.trycloudflare.com/forge/",
             sessionId: "pair_screenshot_forge_companion",
             pairingToken: "forge-screenshot-token",
             expiresAt: isoString(referenceDate.addingTimeInterval(60 * 60 * 24 * 30)),
-            capabilities: ["healthkit.sleep", "healthkit.fitness", "movement.timeline"]
+            capabilities: ["healthkit.sleep", "healthkit.fitness", "movement.timeline"],
+            transportMode: "tunnel",
+            transport: PairingTransport(
+                protocolName: "https-tunnel",
+                provider: "cloudflare-quick-tunnel",
+                status: "ready",
+                publicBaseUrl: "https://forge-companion-demo.trycloudflare.com",
+                localBaseUrl: "http://127.0.0.1:4317",
+                proxyBaseUrl: "http://127.0.0.1:52241",
+                recreateCommand: "cloudflared tunnel --url http://127.0.0.1:52241",
+                startedAt: isoString(referenceDate),
+                lastError: nil,
+                notes: ["Quick tunnel is active through an allow-listed mobile API proxy."]
+            )
         )
     }
 
     static func discoveredServers() -> [DiscoveredForgeServer] {
         [
             DiscoveredForgeServer(
-                id: "forge-ts-bonjour-macbook-pro",
+                id: "forge-tunnel-bonjour-macbook-pro",
                 name: "Forge on Albert's Mac",
-                host: "macbook-pro--de-francis-lalanne.tail47ba04.ts.net",
+                host: "forge-companion-demo.trycloudflare.com",
                 apiBaseUrl: pairingPayload().apiBaseUrl,
-                uiBaseUrl: pairingPayload().uiBaseUrl ?? "https://macbook-pro--de-francis-lalanne.tail47ba04.ts.net/forge/",
-                source: .tailscale,
+                uiBaseUrl: pairingPayload().uiBaseUrl ?? "https://forge-companion-demo.trycloudflare.com/forge/",
+                source: .tunnel,
                 canBootstrapPairing: true,
-                detail: "Secure Tailscale route with live /api and /forge reachability."
+                detail: "Companion tunnel with live /api and /forge reachability."
             ),
             DiscoveredForgeServer(
                 id: "forge-lan-macbook-pro",
