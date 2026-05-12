@@ -48,6 +48,8 @@ describe("question flow quality coverage", () => {
       ["Self Observation", /what happened in the situation/i, /situation, cue, emotion\/body, thought\/meaning, behavior\/urge, and consequence/i],
       ["Sleep Session", /important enough to remember or connect/i, /reflective takeaway/i],
       ["Workout Session", /most worth remembering or connecting/i, /subjective effort, mood, meaning/i],
+      ["Sleep Overview", /understand from your sleep picture/i, /read-model-only surface/i],
+      ["Sports Overview", /understand from your workout picture/i, /read-model-only surface/i],
       ["Calendar Connection", /calendar provider are you trying to connect/i, /workflow they are trying to unlock/i],
       ["Preference Judgment", /comparison are you actually trying to settle/i, /pairwise preference decision/i],
       ["Preference Signal", /remember about this item right now/i, /favorite, veto, bookmark,[\s\S]*compare-later/i],
@@ -297,6 +299,14 @@ describe("question flow quality coverage", () => {
     expect(entityPlaybook).toMatch(
       /task_run[\s\S]*work_adjustment[\s\S]*questionnaire_run[\s\S]*preference_judgment[\s\S]*preference_signal[\s\S]*self_observation[\s\S]*action workflows/i
     );
+    expect(entityPlaybook).toMatch(
+      /sleep_overview[\s\S]*read-model-only health surface|read-model-only health surface[\s\S]*sleep_overview/i
+    );
+    expect(entityPlaybook).toMatch(
+      /sports_overview[\s\S]*read-model-only health surface|read-model-only health surface[\s\S]*sports_overview/i
+    );
+    expect(entityPlaybook).toMatch(/forge_get_sleep_overview/);
+    expect(entityPlaybook).toMatch(/forge_get_sports_overview/);
     expect(entityPlaybook).toMatch(
       /task_run[\s\S]*\/api\/v1\/tasks\/:id\/runs[\s\S]*\/api\/v1\/task-runs\/:id\/heartbeat/i
     );

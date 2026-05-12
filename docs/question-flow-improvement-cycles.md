@@ -1,10 +1,48 @@
 # Forge Question Flow Improvement Cycles
 
-Run date: 2026-05-08
+Latest run date: 2026-05-12
 
 This report records the three-cycle evaluation for Forge agent question flows. The
 same full flow set was tested in each cycle so improvements were kept only where they
 helped the entity or specialized surface.
+
+## 2026-05-12 Automation Pass
+
+Setup verification:
+
+- Confirmed OpenClaw and Hermes configs still point at
+  `/Users/omarclaw/Documents/aurel-monorepo/data/forge` and verified the live
+  `forge.sqlite` handle was open there, preserving existing data.
+- Built the repo-local OpenClaw plugin with `npm run build:openclaw-plugin`.
+- Built the Hermes packaged runtime with
+  `node plugins/forge-hermes/scripts/build-package-runtime.mjs`.
+- Reinstalled OpenClaw from `./openclaw-plugin` with `--link` and reinstalled Hermes
+  editable from `./plugins/forge-hermes`.
+- Restarted both gateways, verified `openclaw plugins info forge-openclaw-plugin`,
+  `openclaw forge health`, Hermes editable import path, live onboarding, and OpenAPI.
+
+Cycle 1 tested every stored entity and specialized surface: planning and
+collaboration, calendar, preferences, questionnaires and reflection, health, wiki,
+every Psyche entity, Movement, Life Force, and Workbench. The suite passed, but the
+live catalog also contained read-model-only `sleep_overview` and `sports_overview`
+surfaces that were not explicitly represented in the simulation matrix. The change
+added Sleep Overview and Sports Overview playbook sections, scenarios, route posture
+coverage, and tests. Retest across the full suite passed, so the change was kept.
+
+Cycle 2 retested the expanded full set with emphasis on API path clarity. The new
+health overview question flows were good, but live onboarding exposed the read model
+paths only as `sleepOverview` and `sportsOverview`, while the entity catalog names are
+`sleep_overview` and `sports_overview`. That forced unnecessary key translation. The
+change added entity-style aliases to `entityRouteModel.readModelOnlySurfaces` and
+locked them in onboarding and server tests. Retest passed, so the alias change was
+kept.
+
+Cycle 3 retested the expanded full set again with emphasis on parity across skills,
+onboarding, and OpenAPI. The remaining weakness was skill prose: OpenClaw, Hermes,
+and Codex mentioned sleep and sports overviews but did not explicitly point agents to
+`entityRouteModel.readModelOnlySurfaces` or the new entity-style aliases. The change
+updated all three skill surfaces and packaged copies, then added parity assertions.
+Retest passed, so the guidance was kept.
 
 ## 2026-05-10 Automation Pass
 
@@ -141,6 +179,8 @@ Every cycle simulated creation, update, review, or navigation around these flows
 | self_observation | Log the moment before disengagement. |
 | sleep_session | Attach reflective context to last night's sleep. |
 | workout_session | Link a hard workout to mood and recovery. |
+| sleep_overview | Review recent nights to understand whether recovery is improving. |
+| sports_overview | Review recent workouts to understand whether training load helps or drains. |
 | wiki_page | Create a durable research-method reference page. |
 | movement | Correct a missing movement span and review the timeline. |
 | life_force | Update the model for Monday post-lunch crashes. |

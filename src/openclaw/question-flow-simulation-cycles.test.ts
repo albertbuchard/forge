@@ -63,6 +63,8 @@ describe("question flow simulation cycles", () => {
     "Self Observation",
     "Sleep Session",
     "Workout Session",
+    "Sleep Overview",
+    "Sports Overview",
     "Calendar Connection",
     "Preference Judgment",
     "Preference Signal",
@@ -117,6 +119,10 @@ describe("question flow simulation cycles", () => {
     "Self Observation": "Log what I noticed in the moment before I disengaged.",
     "Sleep Session": "Attach reflective context to last night's poor sleep.",
     "Workout Session": "Connect a hard workout to mood and recovery context.",
+    "Sleep Overview":
+      "Review recent nights to understand whether my recovery is actually improving.",
+    "Sports Overview":
+      "Review recent workouts to understand whether training load is helping or draining me.",
     "Calendar Connection":
       "Connect a calendar so Forge can read commitments and write planning blocks.",
     "Preference Judgment":
@@ -166,7 +172,7 @@ describe("question flow simulation cycles", () => {
 
   const expectedApiPosture: Record<
     (typeof nonPsycheSections)[number] | (typeof psycheSections)[number],
-    "batch" | "specializedCrud" | "action" | "specializedDomain"
+    "batch" | "specializedCrud" | "action" | "specializedDomain" | "readModel"
   > = {
     Goal: "batch",
     Project: "batch",
@@ -185,6 +191,8 @@ describe("question flow simulation cycles", () => {
     "Self Observation": "action",
     "Sleep Session": "batch",
     "Workout Session": "batch",
+    "Sleep Overview": "readModel",
+    "Sports Overview": "readModel",
     "Calendar Connection": "specializedCrud",
     "Preference Judgment": "action",
     "Preference Signal": "action",
@@ -244,6 +252,8 @@ describe("question flow simulation cycles", () => {
     "preference_signal",
     "questionnaire_run",
     "self_observation",
+    "sleep_overview",
+    "sports_overview",
     "movement",
     "life_force",
     "workbench"
@@ -274,7 +284,7 @@ describe("question flow simulation cycles", () => {
       const sectionSlice = getSectionSlice(entityPlaybook, section);
       expect(sectionSlice).toMatch(/Aim:/);
       expect(sectionSlice).toMatch(/Preferred opening question:/);
-      expect(sectionSlice).toMatch(/Ready to (save|act|update|start)/i);
+      expect(sectionSlice).toMatch(/Ready to (save|act|update|start|review)/i);
     }
 
     for (const section of psycheSections) {
@@ -396,6 +406,10 @@ describe("question flow simulation cycles", () => {
         expect(sectionSlice).toMatch(/specialized CRUD|wiki page|calendar connection/i);
         continue;
       }
+      if (posture === "readModel") {
+        expect(sectionSlice).toMatch(/read-model-only|overview route|overview read/i);
+        continue;
+      }
       expect(posture, `${section} posture`).toBe("batch");
       expect(entityPlaybook).toMatch(/shared batch entity routes by default/i);
     }
@@ -408,6 +422,7 @@ describe("question flow simulation cycles", () => {
     expect(matrix).toMatch(/specialized CRUD/i);
     expect(matrix).toMatch(/action workflow/i);
     expect(matrix).toMatch(/note-backed workflow/i);
+    expect(matrix).toMatch(/read-model-only health surface/i);
     expect(matrix).toMatch(/specialized domain surface/i);
     expect(matrix).toMatch(/dedicated movement routes/i);
     expect(matrix).toMatch(/dedicated Life Force routes/i);
@@ -503,6 +518,8 @@ describe("question flow simulation cycles", () => {
       "Self Observation",
       "Sleep Session",
       "Workout Session",
+      "Sleep Overview",
+      "Sports Overview",
       "Preference Context",
       "Questionnaire Instrument"
     ] as const;

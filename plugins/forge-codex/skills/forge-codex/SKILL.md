@@ -259,6 +259,10 @@ Surface rule:
    adjustments, and similar action-heavy operations.
 7. Read-model-only surfaces include operator overview/context, sleep overview,
    sports overview, self-observation calendar, and calendar overview.
+   In `forge_get_agent_onboarding.entityRouteModel.readModelOnlySurfaces`, health
+   overview routes are available under both `sleepOverview`/`sportsOverview` and
+   the entity-style aliases `sleep_overview`/`sports_overview`. Treat those as
+   read-only overview surfaces, not batch CRUD entities.
 8. Use the task-run tools for truthful live work:
    - `forge_start_task_run`
    - `forge_heartbeat_task_run`

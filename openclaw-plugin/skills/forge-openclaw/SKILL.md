@@ -173,6 +173,11 @@ Health rule:
 
 - Sleep and sports records are first-class health surfaces, not generic notes or tasks.
 - Use `forge_get_sleep_overview` and `forge_get_sports_overview` for review and trend reading.
+- In `forge_get_agent_onboarding.entityRouteModel.readModelOnlySurfaces`, the health
+  overview routes are published under both the plain names `sleepOverview` and
+  `sportsOverview` and the entity-style aliases `sleep_overview` and
+  `sports_overview`. Treat those as read-only overview surfaces, not batch CRUD
+  entities.
 - Use the shared batch entity tools for ordinary `sleep_session` and `workout_session` create, update, delete, and search work. Do not force agents into a large one-route-per-entity mental model when the batch routes already cover the record cleanly.
 - Use `forge_update_sleep_session` and `forge_update_workout_session` only when the job is reflective enrichment on one existing health record after review, such as attaching notes, tags, mood, meaning, or Forge links.
 - Habit-generated workouts and imported HealthKit workouts belong to the same workout record model, so do not invent a separate storage path for sport sessions.
