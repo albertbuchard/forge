@@ -25,7 +25,7 @@ jobs:
 
       - name: Verify tag points at main
         run: |
-          git fetch origin main --depth=1
+          git fetch origin main
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
             echo "Release tags must point to a commit on origin/main." >&2
             exit 1
@@ -48,6 +48,9 @@ jobs:
           registry-url: "https://registry.npmjs.org"
           cache: "npm"
           cache-dependency-path: "packages/forge-memory/package-lock.json"
+
+      - name: Set up Safe Chain
+        run: ./scripts/setup-safe-chain-ci.sh
 
       - name: Upgrade npm for trusted publishing
         run: npm install --global npm@^11.5.1

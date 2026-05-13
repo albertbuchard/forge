@@ -24,7 +24,7 @@ jobs:
 
       - name: Verify tag points at main
         run: |
-          git fetch origin main --depth=1
+          git fetch origin main
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
             echo "Release tags must point to a commit on origin/main." >&2
             exit 1
@@ -41,6 +41,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Set up Safe Chain
+        run: ./scripts/setup-safe-chain-ci.sh
 
       - name: Install dependencies
         run: npm ci
