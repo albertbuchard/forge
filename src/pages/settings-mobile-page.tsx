@@ -263,7 +263,7 @@ export function SettingsMobilePage() {
   };
 
   return (
-    <div className="mx-auto grid w-full max-w-[1220px] gap-5">
+    <div className="mx-auto grid w-full max-w-[1220px] gap-5 pb-24 lg:pb-0">
       <PageHero
         title="Mobile companion"
         description="Pair the native iPhone companion, sync Apple Health, and keep the bridge open for watch and location signals."
@@ -293,7 +293,7 @@ export function SettingsMobilePage() {
         ) : null}
 
         <Card className="grid gap-4">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
                 Pair iPhone
@@ -307,9 +307,10 @@ export function SettingsMobilePage() {
                 or Tailscale path.
               </div>
             </div>
-            <div className="flex flex-wrap justify-end gap-2">
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
               <Button
                 variant="secondary"
+                className="w-full sm:w-auto"
                 onClick={() => void handleManualHttpPairing()}
                 pending={
                   pairingMutation.isPending &&
@@ -321,6 +322,7 @@ export function SettingsMobilePage() {
                 Advanced HTTP
               </Button>
               <Button
+                className="w-full sm:w-auto"
                 onClick={() => void handleQrAction()}
                 pending={
                   pairingMutation.isPending &&
