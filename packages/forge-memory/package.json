@@ -5,6 +5,15 @@
   "type": "module",
   "license": "Apache-2.0",
   "private": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/albertbuchard/forge.git",
+    "directory": "packages/forge-memory"
+  },
+  "homepage": "https://github.com/albertbuchard/forge/tree/main/packages/forge-memory#readme",
+  "bugs": {
+    "url": "https://github.com/albertbuchard/forge/issues"
+  },
   "bin": {
     "forge-memory": "./bin/forge-memory.mjs"
   },
