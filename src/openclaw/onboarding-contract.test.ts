@@ -543,7 +543,7 @@ describe("forge onboarding contract", () => {
         expect.objectContaining({
           classification: "batch_crud_entity",
           preferredMutationPath:
-            "/api/v1/entities/create | /api/v1/entities/update | /api/v1/entities/delete | /api/v1/entities/search"
+            "/api/v1/entities/create | /api/v1/entities/update | /api/v1/entities/delete | /api/v1/entities/restore | /api/v1/entities/search"
         })
       );
     }
@@ -611,10 +611,26 @@ describe("forge onboarding contract", () => {
 
     expect(entityByType.get("self_observation")).toEqual(
       expect.objectContaining({
-        classification: "read_model_only_surface",
+        classification: "action_workflow_entity",
         preferredMutationPath:
           "Read the calendar surface; mutate it by creating or updating note-backed observations with frontmatter.observedAt.",
-        preferredReadPath: "/api/v1/psyche/self-observation/calendar"
+        preferredReadPath: "/api/v1/psyche/self-observation/calendar",
+        preferredMutationTool:
+          "forge_get_self_observation_calendar | forge_create_entities | forge_update_entities"
+      })
+    );
+    expect(entityByType.get("sleep_session")).toEqual(
+      expect.objectContaining({
+        preferredMutationTool: expect.stringMatching(
+          /forge_update_sleep_session for reflective enrichment after review/
+        )
+      })
+    );
+    expect(entityByType.get("workout_session")).toEqual(
+      expect.objectContaining({
+        preferredMutationTool: expect.stringMatching(
+          /forge_update_workout_session for reflective enrichment after review/
+        )
       })
     );
     expect(entityByType.get("movement")).toEqual(
@@ -762,9 +778,9 @@ describe("forge onboarding contract", () => {
     );
     expect(playbookByFocus.get("self_observation")).toEqual(
       expect.objectContaining({
-        routePosture: "read_model_only_surface",
+        routePosture: "action_workflow_entity",
         apiAccessHint: expect.stringMatching(
-          /\/api\/v1\/psyche\/self-observation\/calendar/
+          /\/api\/v1\/psyche\/self-observation\/calendar[\s\S]*forge_get_self_observation_calendar/
         )
       })
     );
@@ -791,6 +807,18 @@ describe("forge onboarding contract", () => {
         routePosture: "batch_crud_entity",
         apiAccessHint: expect.stringMatching(/\/api\/v1\/entities\/create/)
       })
+    );
+    const modeProfilePlaybook = psycheByFocus.get("mode_profile");
+    expect(modeProfilePlaybook).toBeDefined();
+    const modeProfileSequence = modeProfilePlaybook?.askSequence.join(" ") ?? "";
+    expect(modeProfileSequence).toMatch(
+      /protective job before choosing a family label/i
+    );
+    expect(
+      modeProfileSequence.indexOf("Clarify its fear, burden, and protective job"),
+      "mode profile should formulate fear and burden before the family label"
+    ).toBeLessThan(
+      modeProfileSequence.indexOf("Choose the mode family only after")
     );
 
     expect(playbookByFocus.get("task_run")).toEqual(

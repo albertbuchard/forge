@@ -1957,14 +1957,15 @@ function classifyOnboardingEntity(entityType) {
         entityType === "questionnaire_run" ||
         entityType === "preference_judgment" ||
         entityType === "preference_signal" ||
-        entityType === "work_adjustment") {
+        entityType === "work_adjustment" ||
+        entityType === "self_observation") {
         return "action_workflow_entity";
     }
     return "read_model_only_surface";
 }
 function buildPreferredMutationPath(entityType) {
     if (entityType in AGENT_ONBOARDING_BATCH_ROUTE_BASES) {
-        return "/api/v1/entities/create | /api/v1/entities/update | /api/v1/entities/delete | /api/v1/entities/search";
+        return "/api/v1/entities/create | /api/v1/entities/update | /api/v1/entities/delete | /api/v1/entities/restore | /api/v1/entities/search";
     }
     switch (entityType) {
         case "wiki_page":
@@ -1998,6 +1999,12 @@ function buildPreferredMutationPath(entityType) {
     }
 }
 function buildPreferredMutationTool(entityType) {
+    if (entityType === "sleep_session") {
+        return "forge_create_entities | forge_update_entities | forge_delete_entities | forge_search_entities | forge_update_sleep_session for reflective enrichment after review";
+    }
+    if (entityType === "workout_session") {
+        return "forge_create_entities | forge_update_entities | forge_delete_entities | forge_search_entities | forge_update_workout_session for reflective enrichment after review";
+    }
     if (entityType in AGENT_ONBOARDING_BATCH_ROUTE_BASES) {
         return "forge_create_entities | forge_update_entities | forge_delete_entities | forge_search_entities";
     }
@@ -2016,6 +2023,8 @@ function buildPreferredMutationTool(entityType) {
             return "forge_submit_preferences_signal";
         case "work_adjustment":
             return "forge_adjust_work_minutes";
+        case "self_observation":
+            return "forge_get_self_observation_calendar | forge_create_entities | forge_update_entities";
         case "movement":
             return "forge_call_movement_route";
         case "life_force":
@@ -3417,10 +3426,11 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
         coachingGoal: "Help the user describe how the mode shows up, what it is trying to do, what it fears, and what burden it carries, rather than reducing it to a label only.",
         askSequence: [
             "Start with a recent moment when this part-state took over.",
-            "Choose the mode family once the lived description is clearer.",
-            "Name the mode in the user's language.",
             "Describe the felt persona, body posture, imagery, or symbolic form.",
-            "Clarify its fear, burden, and protective job.",
+            "Clarify what it is trying to protect, prevent, control, or force.",
+            "Clarify its fear, burden, and protective job before choosing a family label.",
+            "Offer one candidate name or formulation in the user's language and invite correction.",
+            "Choose the mode family only after the lived description, protective job, fear, or burden is visible enough.",
             "Explore when it first became necessary or familiar.",
             "Notice linked patterns, behaviors, values, and what a healthy-adult response would need to do."
         ],

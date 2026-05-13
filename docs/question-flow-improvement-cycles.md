@@ -1,10 +1,54 @@
 # Forge Question Flow Improvement Cycles
 
-Latest run date: 2026-05-12
+Latest run date: 2026-05-13
 
 This report records the three-cycle evaluation for Forge agent question flows. The
 same full flow set was tested in each cycle so improvements were kept only where they
 helped the entity or specialized surface.
+
+## 2026-05-13 Automation Pass
+
+Setup verification:
+
+- Read the prior automation memory and kept the May 9, May 10, and May 12 changes as
+  regression expectations.
+- Confirmed OpenClaw and Hermes configs still point at
+  `/Users/omarclaw/Documents/aurel-monorepo/data/forge`, and verified the live
+  `forge.sqlite` handle was open there. No data-root repair, merge, or data deletion
+  was performed.
+- Built the repo-local OpenClaw plugin with `npm run build:openclaw-plugin`.
+- Built the Hermes packaged runtime with
+  `node plugins/forge-hermes/scripts/build-package-runtime.mjs`.
+- Reinstalled OpenClaw from `./openclaw-plugin` with `--link` and reinstalled Hermes
+  editable from `./plugins/forge-hermes`.
+- Restarted both gateways, verified `openclaw plugins info forge-openclaw-plugin`,
+  `openclaw forge health`, Hermes editable import path, live onboarding, and OpenAPI.
+
+Cycle 1 tested every listed stored entity and specialized surface: planning and
+collaboration, calendar, preferences, questionnaires and reflection, health, wiki,
+every Psyche entity, Movement, Life Force, and Workbench. Baseline tests passed, but
+the live `self_observation` entity catalog still classified the flow as
+`read_model_only_surface` even though the playbooks and route model describe it as a
+note-backed action workflow. That could make an agent read the calendar and then
+hesitate to create or update the observed note. The change reclassified
+`self_observation` as `action_workflow_entity`, published the tool path
+`forge_get_self_observation_calendar | forge_create_entities |
+forge_update_entities`, and made `sleep_session` and `workout_session` mention their
+reflective enrichment helpers while keeping ordinary health-session CRUD on shared
+batch routes. Retest across the full suite passed, so the change was kept.
+
+Cycle 2 retested the full flow set with emphasis on Psyche quality. The baseline was
+strong for values, patterns, beliefs, trigger reports, event types, and emotion
+definitions, but live `mode_profile` onboarding still placed mode-family selection too
+early in the sequence. The change moved family selection after lived description,
+protective job, fear, and burden, and added a candidate formulation step in the
+user's language. Retest passed, so the mode-profile change was kept.
+
+Cycle 3 retested the full flow set with emphasis on API completeness. The shared
+batch route model and tools exposed restore, but the entity-catalog preferred mutation
+path for normal stored entities omitted `/api/v1/entities/restore`. The change added
+restore to the published preferred batch mutation path and locked it with onboarding
+contract coverage. Retest passed, so the route-completeness change was kept.
 
 ## 2026-05-12 Automation Pass
 
