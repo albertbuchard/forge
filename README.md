@@ -67,6 +67,11 @@ uses its native Rust bridge to speak QUIC to Forge. Direct HTTP/TCP pairing rema
 available with `npx forge-memory pair-ios --manual-http` for deliberate LAN, Tailscale,
 or debugging setups.
 
+The short install path is intentionally the whole base setup. If you want the lower
+level networking details, read the companion transport reference in
+[`docs/companion-iroh.md`](./docs/companion-iroh.md) or the published
+[Companion Transport guide](https://albertbuchard.github.io/forge/companion-transport.html).
+
 `export` creates a portable backup of the real Forge data folder. `uninstall` removes the Forge Memory runtime manager and cache but keeps the Forge data folder by default; use `--remove-data` only when you explicitly want to delete the data too.
 
 After install, the usual local addresses are:
@@ -169,18 +174,19 @@ If OpenClaw, Hermes, Codex, and the browser should share one Forge system, point
 
 ## Screenshots
 
-| Surface | Screenshot |
-| --- | --- |
-| Projects | ![Forge projects board](./openclaw-plugin/docs/assets/forge-projects-board.png) |
-| Execution board | ![Forge Kanban board](./openclaw-plugin/docs/assets/forge-kanban-board.png) |
-| Knowledge and memory | ![Forge wiki memory](./openclaw-plugin/docs/assets/forge-wiki-memory.png) |
-| Sleep and health | ![Forge sleep overview](./openclaw-plugin/docs/assets/forge-sleep-overview.png) |
+| Surface              | Screenshot                                                                      |
+| -------------------- | ------------------------------------------------------------------------------- |
+| Projects             | ![Forge projects board](./openclaw-plugin/docs/assets/forge-projects-board.png) |
+| Execution board      | ![Forge Kanban board](./openclaw-plugin/docs/assets/forge-kanban-board.png)     |
+| Knowledge and memory | ![Forge wiki memory](./openclaw-plugin/docs/assets/forge-wiki-memory.png)       |
+| Sleep and health     | ![Forge sleep overview](./openclaw-plugin/docs/assets/forge-sleep-overview.png) |
 
 ## Documentation
 
 - Docs home: [albertbuchard.github.io/forge](https://albertbuchard.github.io/forge/)
 - Features: [albertbuchard.github.io/forge/features.html](https://albertbuchard.github.io/forge/features.html)
 - Integrations: [albertbuchard.github.io/forge/integrations.html](https://albertbuchard.github.io/forge/integrations.html)
+- Companion transport: [albertbuchard.github.io/forge/companion-transport.html](https://albertbuchard.github.io/forge/companion-transport.html)
 - API reference: [albertbuchard.github.io/forge/api/](https://albertbuchard.github.io/forge/api/)
 - Repo docs: [`docs/`](./docs)
 
