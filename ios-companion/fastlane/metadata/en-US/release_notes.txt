@@ -1,9 +1,7 @@
-Forge Companion 1.0.35 makes pairing dramatically easier away from a local network.
+Forge Companion 1.0.36 switches pairing to Forge's own Rust Iroh/QUIC transport.
 
-Forge now creates Iroh pairing sessions by default, so the iPhone app can use
-a Rust-backed QUIC endpoint instead of depending on a fragile LAN, direct TCP, or
-Tailscale-only path.
+New QR codes carry a Forge node id, relay hint, ALPN forge-companion/1, and pairing
+token so the app can connect through the native Forge transport instead of depending on
+Tailscale or a fragile local-network address.
 
-Manual HTTP pairing is still available for advanced local setups, and the app now links
-the native Rust Iroh bridge so QR codes can carry the real node id, relay hint, ALPN,
-and pairing token.
+Manual HTTP pairing remains available for advanced local setups.
