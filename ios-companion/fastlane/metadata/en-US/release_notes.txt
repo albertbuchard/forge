@@ -1,7 +1,7 @@
-Forge Companion 1.0.36 switches pairing to Forge's own Rust Iroh/QUIC transport.
+Forge Companion 1.0.37 polishes the Forge QR pairing flow on iPhone.
 
-New QR codes carry a Forge node id, relay hint, ALPN forge-companion/1, and pairing
-token so the app can connect through the native Forge transport instead of depending on
-Tailscale or a fragile local-network address.
+The setup screen now leads with Scan Forge QR, keeps Manual connection as the fallback,
+and explains the Forge Iroh/QUIC route without requiring a separate Tailscale app.
 
-Manual HTTP pairing remains available for advanced local setups.
+This build also ships through the corrected TestFlight release lane so processed builds
+are distributed to the configured beta group instead of only being uploaded.
