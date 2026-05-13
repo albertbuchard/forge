@@ -29,7 +29,7 @@ struct QRScannerScreen: View {
 
                 Spacer()
 
-                Text("Scan the Forge QR code.")
+                Text("Align the Forge QR in the camera.")
                     .font(.system(size: 14, weight: .semibold, design: .rounded))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 16)

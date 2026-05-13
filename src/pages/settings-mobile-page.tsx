@@ -3,12 +3,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import QRCode from "qrcode";
 import {
   Cable,
+  Check,
   ChevronDown,
   ChevronUp,
   Cloud,
+  Clipboard,
   Link2,
+  LockKeyhole,
   QrCode,
   RefreshCcw,
+  ScanLine,
   ShieldOff,
   UploadCloud
 } from "lucide-react";
@@ -111,6 +115,8 @@ export function SettingsMobilePage() {
   const defaultUserId = getSingleSelectedUserId(selectedUserIds);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [qrPanelOpen, setQrPanelOpen] = useState(false);
+  const [payloadPanelOpen, setPayloadPanelOpen] = useState(false);
+  const [payloadCopied, setPayloadCopied] = useState(false);
   const [latestPairing, setLatestPairing] = useState<{
     qrPayload: CompanionPairingQrPayload;
   } | null>(null);
@@ -187,6 +193,11 @@ export function SettingsMobilePage() {
     }).then(setQrDataUrl);
   }, [latestPairing]);
 
+  useEffect(() => {
+    setPayloadPanelOpen(false);
+    setPayloadCopied(false);
+  }, [latestPairing]);
+
   if (overviewQuery.isLoading) {
     return (
       <SurfaceSkeleton
@@ -214,6 +225,10 @@ export function SettingsMobilePage() {
     (pairing) => pairing.status !== "revoked"
   );
   const revokedPairingsCount = overview.pairings.length - activePairings.length;
+  const pairingPayloadText = latestPairing
+    ? JSON.stringify(latestPairing.qrPayload, null, 2)
+    : "";
+
   const handleQrAction = async () => {
     if (latestPairing && qrPanelOpen) {
       setQrPanelOpen(false);
@@ -228,6 +243,23 @@ export function SettingsMobilePage() {
 
   const handleManualHttpPairing = async () => {
     await pairingMutation.mutateAsync("manual-http");
+  };
+
+  const handleCopyPairingPayload = async () => {
+    if (!pairingPayloadText) {
+      return;
+    }
+    if (!navigator.clipboard) {
+      setPayloadPanelOpen(true);
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(pairingPayloadText);
+      setPayloadCopied(true);
+      window.setTimeout(() => setPayloadCopied(false), 1800);
+    } catch {
+      setPayloadPanelOpen(true);
+    }
   };
 
   return (
@@ -267,11 +299,12 @@ export function SettingsMobilePage() {
                 Pair iPhone
               </div>
               <div className="mt-2 text-lg text-white">
-                Pair through Iroh by default
+                Pair your iPhone privately
               </div>
               <div className="mt-2 max-w-3xl text-sm leading-6 text-white/58">
-                Forge now uses a Rust Iroh bridge by default, with direct HTTP
-                kept as the advanced local-network path.
+                Forge uses its own Iroh/QUIC companion route by default. Scan
+                once from the iPhone app; manual HTTP stays as the advanced LAN
+                or Tailscale path.
               </div>
             </div>
             <div className="flex flex-wrap justify-end gap-2">
@@ -285,7 +318,7 @@ export function SettingsMobilePage() {
                 pendingLabel="Generating"
               >
                 <Cable className="size-4" />
-                Manual HTTP
+                Advanced HTTP
               </Button>
               <Button
                 onClick={() => void handleQrAction()}
@@ -300,7 +333,7 @@ export function SettingsMobilePage() {
                   ? qrPanelOpen
                     ? "Hide QR"
                     : "Show QR"
-                  : "Generate Iroh QR"}
+                  : "Generate Forge QR"}
                 {latestPairing ? (
                   qrPanelOpen ? (
                     <ChevronUp className="size-4" />
@@ -314,74 +347,136 @@ export function SettingsMobilePage() {
 
           {qrPanelOpen ? (
             <div className="grid gap-4 rounded-[24px] border border-white/8 bg-white/[0.03] p-4 sm:p-5">
-              {qrDataUrl ? (
-                <div className="grid justify-items-center gap-4 rounded-[24px] bg-white px-6 py-6 text-slate-950">
-                  <img
-                    src={qrDataUrl}
-                    alt="Forge Companion pairing QR code"
-                    className="w-full max-w-[320px]"
-                  />
-                  <div className="max-w-[320px] text-center text-sm text-slate-600">
-                    Scan this in the iOS companion to pass the Iroh node and
-                    one-time pairing token.
+              <div className="grid gap-4 lg:grid-cols-[minmax(260px,360px)_1fr]">
+                {qrDataUrl ? (
+                  <div className="grid justify-items-center gap-4 rounded-[24px] bg-white px-6 py-6 text-slate-950">
+                    <img
+                      src={qrDataUrl}
+                      alt="Forge Companion pairing QR code"
+                      className="w-full max-w-[320px]"
+                    />
+                    <div className="max-w-[320px] text-center text-sm text-slate-600">
+                      Scan this code from Forge Companion on iPhone.
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] px-5 py-8 text-center text-sm text-white/55">
-                  Generating the QR code now.
-                </div>
-              )}
+                ) : (
+                  <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] px-5 py-8 text-center text-sm text-white/55">
+                    Generating the QR code now.
+                  </div>
+                )}
 
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="text-sm text-white/62">
-                  {latestPairing ? (
-                    <div className="flex flex-wrap items-center gap-2">
+                <div className="grid content-start gap-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {latestPairing ? (
                       <Badge tone={transportTone(latestPairing.qrPayload)}>
                         <Cloud className="size-3" />
                         {formatTransportLabel(latestPairing.qrPayload)}
                       </Badge>
+                    ) : null}
+                    <Badge tone="meta">
+                      <LockKeyhole className="size-3" />
+                      One-time token
+                    </Badge>
+                  </div>
+
+                  <div className="grid gap-3 text-sm leading-6 text-white/66">
+                    <div className="flex gap-3">
+                      <ScanLine className="mt-1 size-4 shrink-0 text-white/45" />
+                      <span>Open Forge Companion and choose Scan Forge QR.</span>
+                    </div>
+                    <div className="flex gap-3">
+                      <LockKeyhole className="mt-1 size-4 shrink-0 text-white/45" />
                       <span>
-                        Expires{" "}
-                        {new Date(
-                          latestPairing.qrPayload.expiresAt
-                        ).toLocaleString()}
-                        .
+                        The iPhone receives the desktop node, relay hint, and
+                        pairing token for the Forge Iroh route.
                       </span>
                     </div>
-                  ) : (
-                    "Generate the one-time QR and scan it from the iPhone app."
-                  )}
+                    <div className="flex gap-3">
+                      <Check className="mt-1 size-4 shrink-0 text-white/45" />
+                      <span>
+                        After verification, the app moves straight into native
+                        permissions and first sync.
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] bg-white/[0.04] p-4">
+                    <div className="text-sm text-white/62">
+                      {latestPairing ? (
+                        <span>
+                          Expires{" "}
+                          {new Date(
+                            latestPairing.qrPayload.expiresAt
+                          ).toLocaleString()}
+                          .
+                        </span>
+                      ) : (
+                        "Generate the one-time QR and scan it from the iPhone app."
+                      )}
+                    </div>
+                    {latestPairing ? (
+                      <Button
+                        variant="secondary"
+                        pending={pairingMutation.isPending}
+                        pendingLabel="Generating"
+                        onClick={() => void pairingMutation.mutateAsync("iroh")}
+                      >
+                        <RefreshCcw className="size-4" />
+                        Regenerate QR
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
-                {latestPairing ? (
-                  <Button
-                    variant="secondary"
-                    pending={pairingMutation.isPending}
-                    pendingLabel="Generating"
-                    onClick={() => void pairingMutation.mutateAsync("iroh")}
-                  >
-                    <RefreshCcw className="size-4" />
-                    Regenerate Iroh QR
-                  </Button>
-                ) : null}
               </div>
 
               {latestPairing ? (
                 <div className="grid gap-3 rounded-[18px] bg-white/[0.04] p-4 text-sm text-white/62">
-                  <div className="rounded-[16px] bg-slate-950/60 p-3 font-mono text-[11px] leading-5 text-white/70">
-                    {JSON.stringify(latestPairing.qrPayload, null, 2)}
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="max-w-2xl">
+                      <div className="text-white/78">Fallback pairing payload</div>
+                      <div className="mt-1 text-xs leading-5 text-white/45">
+                        Use this only when the iPhone camera cannot scan the QR.
+                        The payload contains the same Forge Iroh connection
+                        recipe.
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="secondary"
+                        onClick={() => void handleCopyPairingPayload()}
+                      >
+                        {payloadCopied ? (
+                          <Check className="size-4" />
+                        ) : (
+                          <Clipboard className="size-4" />
+                        )}
+                        {payloadCopied ? "Copied" : "Copy payload"}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => setPayloadPanelOpen((open) => !open)}
+                      >
+                        {payloadPanelOpen ? "Hide payload" : "Show payload"}
+                        {payloadPanelOpen ? (
+                          <ChevronUp className="size-4" />
+                        ) : (
+                          <ChevronDown className="size-4" />
+                        )}
+                      </Button>
+                    </div>
                   </div>
-                  <div className="text-xs text-white/45">
-                    The same payload can be pasted into the iPhone app if the
-                    camera path is unavailable.
-                  </div>
+                  {payloadPanelOpen ? (
+                    <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-[16px] bg-slate-950/60 p-3 font-mono text-[11px] leading-5 text-white/70">
+                      {pairingPayloadText}
+                    </pre>
+                  ) : null}
                 </div>
               ) : null}
             </div>
           ) : (
-            <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] px-5 py-6 pr-36 text-sm text-white/55 sm:pr-5">
-              <span className="block max-w-[13rem] sm:max-w-none">
-                Tap the QR button when you actually want to pair a phone.
-              </span>
+            <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] px-5 py-6 text-sm leading-6 text-white/55">
+              Generate a one-time Forge QR when the iPhone is in your hand.
+              The code expires automatically and can be regenerated anytime.
             </div>
           )}
         </Card>
@@ -487,10 +582,10 @@ export function SettingsMobilePage() {
               Pairing path
             </div>
             <div className="grid gap-2 text-sm text-white/62">
-              <div>1. Generate the Iroh QR here or with npx forge-memory pair-ios.</div>
-              <div>2. Scan it in Forge Companion to pass the node id and pairing token.</div>
+              <div>1. Generate the Forge QR from this page.</div>
+              <div>2. Scan it in Forge Companion to pass the desktop node and pairing token.</div>
               <div>3. Approve Health access on iPhone, then run the first sync.</div>
-              <div>4. Use Manual HTTP only for a local, Tailscale, or direct TCP route.</div>
+              <div>4. Use Advanced HTTP only for a local, Tailscale, or direct TCP route.</div>
             </div>
           </div>
 

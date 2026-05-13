@@ -32,6 +32,30 @@ final class ForgeCompanionUITests: XCTestCase {
     }
 
     @MainActor
+    func testPairingSetupFlowPrioritizesForgeQRAndManualFallback() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["FORGE_SCREENSHOT_SCENARIO"] = "pairing"
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["Set up sync"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Choose your Forge connection."].exists)
+
+        let scanButton = app.buttons["Scan Forge QR"]
+        XCTAssertTrue(scanButton.waitForExistence(timeout: 8))
+        XCTAssertTrue(scanButton.isHittable)
+
+        let manualButton = app.buttons["Manual connection"]
+        XCTAssertTrue(manualButton.waitForExistence(timeout: 2))
+        XCTAssertTrue(manualButton.isHittable)
+
+        scanButton.tap()
+
+        XCTAssertTrue(app.staticTexts["Scan your Forge QR."].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Open camera scanner"].isHittable)
+        XCTAssertTrue(app.buttons["Paste pairing payload"].isHittable)
+    }
+
+    @MainActor
     func testMovementTimelineSelectedActionButtonsAreTappable() throws {
         let app = XCUIApplication()
         app.launchEnvironment["FORGE_SCREENSHOT_SCENARIO"] = "life-timeline"

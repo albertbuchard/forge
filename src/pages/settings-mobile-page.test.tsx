@@ -229,7 +229,7 @@ describe("SettingsMobilePage", () => {
 
     renderPage();
 
-    fireEvent.click(await screen.findByRole("button", { name: /Generate Iroh QR/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /Generate Forge QR/i }));
 
     await waitFor(() => {
       expect(createCompanionPairingSessionMock).toHaveBeenCalledWith({
@@ -238,9 +238,12 @@ describe("SettingsMobilePage", () => {
       });
     });
     expect(await screen.findByText("Iroh")).toBeInTheDocument();
+    expect(screen.getByText(/Fallback pairing payload/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Show payload/i }));
     expect(screen.getByText(/fakednodeid/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Manual HTTP/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Advanced HTTP/i }));
 
     await waitFor(() => {
       expect(createCompanionPairingSessionMock).toHaveBeenLastCalledWith({

@@ -44,7 +44,7 @@ struct SetupDiscoveryScreen: View {
                     .font(.system(size: 30, weight: .bold, design: .rounded))
                     .foregroundStyle(CompanionStyle.textPrimary)
 
-                Text("Pick your Forge runtime.")
+                Text("Choose your Forge connection.")
                     .font(.system(size: 15, weight: .medium, design: .rounded))
                     .foregroundStyle(CompanionStyle.textSecondary)
             }
@@ -95,7 +95,7 @@ struct SetupDiscoveryScreen: View {
                                     .font(.system(size: 16, weight: .semibold, design: .rounded))
                                     .foregroundStyle(CompanionStyle.textPrimary)
 
-                                Text("Keep Forge running, then scan again. If you already know the machine name, use Manual setup below.")
+                                Text("Keep Forge running, then scan again. The QR path works best when automatic discovery is not available.")
                                     .font(.system(size: 14, weight: .medium, design: .rounded))
                                     .foregroundStyle(CompanionStyle.textSecondary)
                                     .fixedSize(horizontal: false, vertical: true)
@@ -134,14 +134,14 @@ struct SetupDiscoveryScreen: View {
 
     private var footer: some View {
         VStack(spacing: 12) {
-            Button("Scan QR") {
+            Button("Scan Forge QR") {
                 companionDebugLog("SetupDiscoveryScreen", "tap Scan QR")
                 openQR()
             }
-            .buttonStyle(CompanionGhostButtonStyle())
+            .buttonStyle(CompanionFilledButtonStyle())
 
-            Button("Manual setup") {
-                companionDebugLog("SetupDiscoveryScreen", "tap Manual setup")
+            Button("Manual connection") {
+                companionDebugLog("SetupDiscoveryScreen", "tap Manual connection")
                 openManual()
             }
             .buttonStyle(CompanionGhostButtonStyle())
@@ -154,6 +154,21 @@ struct SetupDiscoveryScreen: View {
                     .padding(.top, 4)
             }
         }
+        .padding(.top, 14)
+        .background(
+            LinearGradient(
+                colors: [
+                    CompanionStyle.backgroundBottom.opacity(0),
+                    CompanionStyle.backgroundBottom.opacity(0.96),
+                    CompanionStyle.backgroundBottom
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .padding(.horizontal, -20)
+            .padding(.top, -22)
+            .padding(.bottom, -20)
+        )
     }
 
     private func serverRow(_ server: DiscoveredForgeServer) -> some View {
