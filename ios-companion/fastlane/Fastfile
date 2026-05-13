@@ -63,7 +63,7 @@ platform :ios do
       changelog: release_notes_text(config),
       groups: Array(config.dig(:release, :testflight_groups)),
       notify_external_testers: config.dig(:release, :notify_external_testers) == true,
-      skip_waiting_for_build_processing: true
+      skip_waiting_for_build_processing: config.dig(:release, :skip_waiting_for_build_processing) == true
     )
     write_release_summary(
       artifact_dir: artifact_dir,
