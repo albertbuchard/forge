@@ -1,6 +1,6 @@
 {
   "name": "forge-codex-runtime",
-  "version": "0.2.63",
+  "version": "0.2.65",
   "private": true,
   "type": "module"
 }
