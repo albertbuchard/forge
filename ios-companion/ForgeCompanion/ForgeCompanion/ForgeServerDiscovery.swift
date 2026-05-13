@@ -657,7 +657,7 @@ final class ForgeServerDiscovery {
             )
             return TailscalePeerFetchResult(
                 peers: [],
-                statusMessage: "This iPhone cannot read the Tailscale app peer list here. Use Manual setup with a known .ts.net machine name."
+                statusMessage: "This iPhone cannot read the Tailscale app peer list here. Use Manual connection with a known .ts.net machine name."
             )
         }
     }

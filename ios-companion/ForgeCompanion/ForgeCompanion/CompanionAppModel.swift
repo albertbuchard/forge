@@ -740,7 +740,7 @@ final class CompanionAppModel: ObservableObject {
         tailscaleDiscoveryMessage = report.tailscaleStatusMessage
         discoveryInFlight = false
         discoveryMessage = report.servers.isEmpty
-            ? "No Forge runtime found yet. Keep Forge running, or use Manual setup if you know the machine name."
+            ? "No Forge runtime found yet. Keep Forge running, scan a Forge QR, or use Manual connection if you know the machine name."
             : "Found \(report.servers.count) Forge runtime\(report.servers.count == 1 ? "" : "s")."
         companionDebugLog(
             "CompanionAppModel",

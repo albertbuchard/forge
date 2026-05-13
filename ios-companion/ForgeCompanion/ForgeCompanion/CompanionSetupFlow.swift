@@ -30,6 +30,7 @@ struct CompanionSetupFlow: View {
             case .qr:
                 SetupQRScreen(
                     goBack: { step = .discovery },
+                    openManual: { step = .manual },
                     openHealth: { step = .health }
                 )
             case .manual:

@@ -4,6 +4,7 @@ struct SetupQRScreen: View {
     @EnvironmentObject private var appModel: CompanionAppModel
 
     let goBack: () -> Void
+    let openManual: () -> Void
     let openHealth: () -> Void
 
     @State private var scannerVisible = false
@@ -24,21 +25,52 @@ struct SetupQRScreen: View {
             Spacer(minLength: 0)
 
             VStack(alignment: .leading, spacing: 22) {
-                Text("Scan the Forge Iroh QR.")
+                Text("Scan your Forge QR.")
                     .font(.system(size: 28, weight: .bold, design: .rounded))
                     .foregroundStyle(CompanionStyle.textPrimary)
 
+                Text("This is the default private connection path. Forge Companion receives the desktop node and one-time token, then verifies the session before any sync starts.")
+                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .foregroundStyle(CompanionStyle.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 VStack(alignment: .leading, spacing: 12) {
-                    step("1", "Open Forge Settings, then Mobile.")
-                    step("2", "Generate the Iroh QR or run npx forge-memory pair-ios.")
-                    step("3", "Scan it here and approve the native permissions.")
+                    step("1", "Open Forge on your computer and go to Settings -> Mobile.")
+                    step("2", "Choose Generate Forge QR.")
+                    step("3", "Scan it here, then approve Health access for the first sync.")
                 }
 
-                Button("Open scanner") {
+                CompanionSectionCard {
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: "lock.shield")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(CompanionStyle.accentStrong)
+                            .frame(width: 28, height: 28)
+
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text("No Tailscale app required for the default route.")
+                                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                .foregroundStyle(CompanionStyle.textPrimary)
+
+                            Text("Forge uses its own Iroh/QUIC companion transport; manual HTTP is only for explicit LAN or Tailscale fallback setups.")
+                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                .foregroundStyle(CompanionStyle.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+
+                Button("Open camera scanner") {
                     companionDebugLog("SetupQRScreen", "tap Open scanner")
                     scannerVisible = true
                 }
                 .buttonStyle(CompanionFilledButtonStyle())
+
+                Button("Paste pairing payload") {
+                    companionDebugLog("SetupQRScreen", "tap Paste pairing payload")
+                    openManual()
+                }
+                .buttonStyle(CompanionGhostButtonStyle())
 
                 if let error = appModel.latestError {
                     Text(error)
