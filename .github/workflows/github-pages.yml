@@ -10,6 +10,7 @@ on:
       - "package-lock.json"
       - "server/src/**"
       - "scripts/export-openapi-docs.ts"
+      - "scripts/setup-safe-chain-ci.sh"
       - "openclaw-plugin/docs/**"
       - ".github/workflows/github-pages.yml"
   workflow_dispatch:
@@ -36,6 +37,8 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: package-lock.json
+      - name: Set up Safe Chain
+        run: ./scripts/setup-safe-chain-ci.sh
       - run: npm ci
       - run: npm run docs:openapi
       - uses: actions/configure-pages@v5

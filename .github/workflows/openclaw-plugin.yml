@@ -9,6 +9,7 @@ on:
       - "openclaw-plugin/**"
       - "openclaw.plugin.json"
       - "skills/forge-openclaw/**"
+      - "scripts/setup-safe-chain-ci.sh"
       - "src/openclaw/**"
       - "server/src/app.ts"
       - "server/src/app.test.ts"
@@ -21,6 +22,7 @@ on:
       - "openclaw-plugin/**"
       - "openclaw.plugin.json"
       - "skills/forge-openclaw/**"
+      - "scripts/setup-safe-chain-ci.sh"
       - "src/openclaw/**"
       - "server/src/app.ts"
       - "server/src/app.test.ts"
@@ -38,6 +40,8 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: package-lock.json
+      - name: Set up Safe Chain
+        run: ./scripts/setup-safe-chain-ci.sh
       - run: npm ci
       - run: npm exec -- vitest run src/openclaw/parity.test.ts src/openclaw/index.test.ts src/openclaw/api-client.test.ts src/openclaw/manifest.test.ts
       - run: npm run build:openclaw-plugin
