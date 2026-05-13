@@ -47,11 +47,16 @@
         <section class="hero split">
           <div class="hero-card">
             <p class="eyebrow">Support</p>
-            <h1>Get the fastest path to fixing pairing, sync, connectivity, or runtime problems.</h1>
+            <h1>
+              Get the fastest path to fixing pairing, sync, connectivity, or
+              runtime problems.
+            </h1>
             <p class="lede">
-              Use this page when Forge or Forge Companion is not behaving as expected.
-              The common failure points are pairing, HealthKit permissions, shared
-              runtime configuration, Tailscale reachability, and local agent setup.
+              Use this page when Forge or Forge Companion is not behaving as
+              expected. The common failure points are pairing, HealthKit
+              permissions, shared runtime configuration, Iroh transport
+              reachability, manual HTTP/TCP fallback setup, and local agent
+              setup.
             </p>
           </div>
           <aside class="hero-card">
@@ -78,7 +83,8 @@ npx forge-memory doctor
 npx forge-memory ui</code></pre>
               <p>
                 Confirm the Forge backend, mounted web app, data folder, and
-                configured adapters before debugging agent or companion behavior.
+                configured adapters before debugging agent or companion
+                behavior.
               </p>
             </article>
             <article class="card">
@@ -88,8 +94,8 @@ port:     4317
 dataRoot: one shared location
 userId:   explicit on writes</code></pre>
               <p>
-                Most confusing behavior comes from different surfaces pointing at
-                different Forge stores instead of one shared runtime.
+                Most confusing behavior comes from different surfaces pointing
+                at different Forge stores instead of one shared runtime.
               </p>
             </article>
           </div>
@@ -113,18 +119,35 @@ userId:   explicit on writes</code></pre>
             <article class="card">
               <h3>Companion pairs but does not sync</h3>
               <p>
-                Verify that the iPhone companion and the browser are targeting the
-                same Forge origin and data root, then confirm Apple permissions for
-                HealthKit and local network access.
+                Verify that the iPhone companion and the browser are targeting
+                the same Forge runtime and data root, then confirm Apple
+                permissions for HealthKit. For Iroh pairings, check the
+                companion diagnostics for the
+                <code>forge-iroh://</code> API URL, node id, and
+                <code>forge-companion/1</code> transport.
               </p>
+            </article>
+            <article class="card">
+              <h3>Iroh QR does not connect</h3>
+              <p>
+                Re-run <code>npx forge-memory pair-ios</code> so Forge starts a
+                fresh Rust Iroh host and token. Use manual HTTP only when you
+                intentionally want LAN, Tailscale, or direct debugging behavior.
+              </p>
+              <div class="link-row">
+                <a class="button" href="./companion-transport.html"
+                  >Transport details</a
+                >
+              </div>
             </article>
             <article class="card">
               <h3>Tailscale route works for some pages only</h3>
               <p>
                 Forge should stay mounted through the backend at
-                <code>http://127.0.0.1:4317/forge/</code>. Tailscale should proxy
-                <code>/forge</code> to that backend route, not directly to the Vite
-                dev server.
+                <code>http://127.0.0.1:4317/forge/</code>. Tailscale should
+                proxy <code>/forge</code> to that backend route, not directly to
+                the Vite dev server. Tailscale is an advanced manual path, not
+                the default iPhone pairing transport.
               </p>
             </article>
             <article class="card">
@@ -140,8 +163,8 @@ userId:   explicit on writes</code></pre>
               <h3>Need a safe backup or clean removal</h3>
               <p>
                 Run <code>npx forge-memory export</code> before storage changes.
-                Run <code>npx forge-memory uninstall</code> to remove the runtime
-                manager and cache while keeping data by default.
+                Run <code>npx forge-memory uninstall</code> to remove the
+                runtime manager and cache while keeping data by default.
               </p>
             </article>
           </div>
@@ -151,8 +174,9 @@ userId:   explicit on writes</code></pre>
               alt="Forge Companion diagnostics screen showing connection checks and sync details."
             />
             <figcaption>
-              The companion diagnostics view is the right place to inspect pairing,
-              connection, and sync state before escalating a mobile-side issue.
+              The companion diagnostics view is the right place to inspect
+              pairing, connection, and sync state before escalating a
+              mobile-side issue.
             </figcaption>
           </figure>
         </section>
@@ -160,28 +184,42 @@ userId:   explicit on writes</code></pre>
         <section class="section" id="docs-map">
           <div class="section-heading">
             <p class="eyebrow">Where To Look Next</p>
-            <h2>Use the page that matches the kind of problem you are trying to solve.</h2>
+            <h2>
+              Use the page that matches the kind of problem you are trying to
+              solve.
+            </h2>
           </div>
           <div class="card-grid two">
             <article class="card">
               <h3><a href="./integrations.html">Integrations guide</a></h3>
               <p>
-                Best for OpenClaw, Hermes, Codex, shared-runtime setup, and iPhone
-                companion installation questions.
+                Best for OpenClaw, Hermes, Codex, shared-runtime setup, and
+                iPhone companion installation questions.
+              </p>
+            </article>
+            <article class="card">
+              <h3>
+                <a href="./companion-transport.html"
+                  >Companion transport guide</a
+                >
+              </h3>
+              <p>
+                Best for Iroh pairing, relay behavior, QR payload fields, manual
+                HTTP fallback, and transport verification.
               </p>
             </article>
             <article class="card">
               <h3><a href="./development.html">Development guide</a></h3>
               <p>
-                Best for local runtime commands, verification steps, and docs/API
-                generation details.
+                Best for local runtime commands, verification steps, and
+                docs/API generation details.
               </p>
             </article>
             <article class="card">
               <h3><a href="./features.html">Features guide</a></h3>
               <p>
-                Best when the question is whether a behavior is part of the product
-                model or a misunderstanding of the intended UX.
+                Best when the question is whether a behavior is part of the
+                product model or a misunderstanding of the intended UX.
               </p>
             </article>
             <article class="card">
@@ -197,17 +235,21 @@ userId:   explicit on writes</code></pre>
         <section class="section" id="contact">
           <div class="section-heading">
             <p class="eyebrow">Contact</p>
-            <h2>Use direct support when the docs do not cover the failure mode.</h2>
+            <h2>
+              Use direct support when the docs do not cover the failure mode.
+            </h2>
           </div>
           <div class="card-grid two">
             <article class="card">
               <h3>Email support</h3>
               <p>
-                <a href="mailto:albert.buchard@gmail.com">albert.buchard@gmail.com</a>
+                <a href="mailto:albert.buchard@gmail.com"
+                  >albert.buchard@gmail.com</a
+                >
               </p>
               <p>
-                Include the surface that failed, the exact URL or route, the date,
-                and what you already checked.
+                Include the surface that failed, the exact URL or route, the
+                date, and what you already checked.
               </p>
             </article>
             <article class="card">

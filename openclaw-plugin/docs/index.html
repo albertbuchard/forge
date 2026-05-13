@@ -46,14 +46,16 @@
         <section class="hero split">
           <div class="hero-card">
             <p class="eyebrow">What Forge Is</p>
-            <h1>Forge is a local-first operating system for your work and life.</h1>
+            <h1>
+              Forge is a local-first operating system for your work and life.
+            </h1>
             <p class="lede">
               Forge is a local-first system for goals, projects, tasks, task
               runs, notes, wiki pages, calendar planning, preferences, health
               records, movement history, sleep, and Psyche data. This site
-              explains the product itself: what each area is for, how the
-              pieces fit together, and where to go when you want to plan, act,
-              reflect, or connect Forge to your tools.
+              explains the product itself: what each area is for, how the pieces
+              fit together, and where to go when you want to plan, act, reflect,
+              or connect Forge to your tools.
             </p>
             <p class="lede" style="margin-top: 14px">
               Forge keeps planning, execution, memory, health, and agent access
@@ -66,6 +68,7 @@
               <span class="pill secondary">Fastify 5 + OpenAPI 3.1</span>
               <span class="pill">SQLite-backed wiki</span>
               <span class="pill secondary">OpenClaw + Hermes + Codex</span>
+              <span class="pill">Iroh iPhone pairing</span>
             </div>
             <div class="hero-actions" style="margin-top: 18px">
               <a class="button primary" href="#quick-start">Get started</a>
@@ -167,8 +170,12 @@ npx forge-memory pair-ios</code></pre>
                 debugging. They are reference paths, not the normal quickstart.
               </p>
               <div class="link-row">
-                <a class="button" href="./integrations.html#advanced-adapters">Advanced adapters</a>
-                <a class="button" href="./development.html#local-development">Source app</a>
+                <a class="button" href="./integrations.html#advanced-adapters"
+                  >Advanced adapters</a
+                >
+                <a class="button" href="./development.html#local-development"
+                  >Source app</a
+                >
               </div>
             </article>
           </div>
@@ -177,7 +184,10 @@ npx forge-memory pair-ios</code></pre>
         <section class="section" id="guide-map">
           <div class="section-heading">
             <p class="eyebrow">Guide Map</p>
-            <h2>Once Forge is running, use the docs in the order that fits your goal.</h2>
+            <h2>
+              Once Forge is running, use the docs in the order that fits your
+              goal.
+            </h2>
           </div>
           <div class="card-grid two">
             <article class="card">
@@ -209,7 +219,19 @@ npx forge-memory pair-ios</code></pre>
               </p>
             </article>
             <article class="card">
-              <h3><a href="./integrations.html#agent-identity">Agent identity</a></h3>
+              <h3>
+                <a href="./companion-transport.html">Companion transport</a>
+              </h3>
+              <p>
+                Keep the base install simple, then go deeper into Forge's own
+                Iroh and QUIC pairing path, relay behavior, QR payload, stream
+                protocol, fallback mode, and license boundary.
+              </p>
+            </article>
+            <article class="card">
+              <h3>
+                <a href="./integrations.html#agent-identity">Agent identity</a>
+              </h3>
               <p>
                 Understand why OpenClaw, Hermes, and Codex are stable agents,
                 why reconnects are sessions, and how those agents link to human
@@ -237,7 +259,10 @@ npx forge-memory pair-ios</code></pre>
         <section class="section">
           <div class="section-heading">
             <p class="eyebrow">Product At A Glance</p>
-            <h2>These screenshots show the core Forge surfaces before you dive into the deeper docs.</h2>
+            <h2>
+              These screenshots show the core Forge surfaces before you dive
+              into the deeper docs.
+            </h2>
           </div>
           <div class="card-grid two">
             <figure class="shot feature-shot">
@@ -246,9 +271,9 @@ npx forge-memory pair-ios</code></pre>
                 alt="Forge overview dashboard showing execution, planning, memory, and health cards."
               />
               <figcaption>
-                The overview dashboard is the fastest way to understand the product:
-                active work, linked context, health signals, and reflection all show
-                up in one local-first runtime.
+                The overview dashboard is the fastest way to understand the
+                product: active work, linked context, health signals, and
+                reflection all show up in one local-first runtime.
               </figcaption>
             </figure>
             <figure class="shot feature-shot">
@@ -257,8 +282,9 @@ npx forge-memory pair-ios</code></pre>
                 alt="Forge Kanban board showing execution lanes and task controls."
               />
               <figcaption>
-                Execution stays operational instead of decorative, with lane movement,
-                owner scopes, and fast task actions directly in the board.
+                Execution stays operational instead of decorative, with lane
+                movement, owner scopes, and fast task actions directly in the
+                board.
               </figcaption>
             </figure>
             <figure class="shot feature-shot">
@@ -267,8 +293,9 @@ npx forge-memory pair-ios</code></pre>
                 alt="Forge wiki memory view showing linked written context and shared notes."
               />
               <figcaption>
-                Notes and wiki memory stay close to execution, so context becomes part
-                of the system instead of getting stranded in external documents.
+                Notes and wiki memory stay close to execution, so context
+                becomes part of the system instead of getting stranded in
+                external documents.
               </figcaption>
             </figure>
             <figure class="shot feature-shot">
@@ -277,8 +304,8 @@ npx forge-memory pair-ios</code></pre>
                 alt="Forge sleep overview showing the latest night summary and sleep calendar."
               />
               <figcaption>
-                Health surfaces such as sleep are first-class product areas, not side
-                widgets bolted onto a project tracker.
+                Health surfaces such as sleep are first-class product areas, not
+                side widgets bolted onto a project tracker.
               </figcaption>
             </figure>
           </div>
@@ -343,7 +370,9 @@ npx forge-memory pair-ios</code></pre>
         <section class="section">
           <div class="section-heading">
             <p class="eyebrow">Current Stack</p>
-            <h2>The product runs on a modern local-first web and sync stack.</h2>
+            <h2>
+              The product runs on a modern local-first web and sync stack.
+            </h2>
           </div>
           <table class="doc-table">
             <thead>
@@ -375,8 +404,11 @@ npx forge-memory pair-ios</code></pre>
               </tr>
               <tr>
                 <td>Desktop / native</td>
-                <td>Tauri 2 and iOS companion</td>
-                <td>Desktop shell plus HealthKit-powered iPhone companion.</td>
+                <td>Tauri 2, Swift iOS companion, Rust Iroh bridge</td>
+                <td>
+                  Desktop shell plus HealthKit-powered iPhone companion with
+                  default Iroh pairing.
+                </td>
               </tr>
               <tr>
                 <td>Docs</td>
@@ -429,7 +461,10 @@ API docs: /forge/api/</code></pre>
         <section class="section">
           <div class="section-heading">
             <p class="eyebrow">Core Product Areas</p>
-            <h2>These screenshots show how Forge turns planning and reflection into daily practice.</h2>
+            <h2>
+              These screenshots show how Forge turns planning and reflection
+              into daily practice.
+            </h2>
           </div>
           <div class="card-grid two">
             <figure class="shot feature-shot">
@@ -438,8 +473,8 @@ API docs: /forge/api/</code></pre>
                 alt="Forge Kanban board showing task lanes and execution controls."
               />
               <figcaption>
-                Kanban is the flagship execution board, with lane movement, filters,
-                owner scopes, and direct task actions.
+                Kanban is the flagship execution board, with lane movement,
+                filters, owner scopes, and direct task actions.
               </figcaption>
             </figure>
             <figure class="shot feature-shot">
@@ -448,9 +483,9 @@ API docs: /forge/api/</code></pre>
                 alt="Forge hierarchy view showing the goal-to-subtask tree, shared filters, and operational progress."
               />
               <figcaption>
-                The hierarchy view keeps the whole planning ladder visible at once,
-                so goals, projects, issues, tasks, and subtasks stay legible without
-                flattening them into one lane list.
+                The hierarchy view keeps the whole planning ladder visible at
+                once, so goals, projects, issues, tasks, and subtasks stay
+                legible without flattening them into one lane list.
               </figcaption>
             </figure>
             <figure class="shot feature-shot">
@@ -459,8 +494,8 @@ API docs: /forge/api/</code></pre>
                 alt="Forge Movement page showing the life timeline with stays and trips."
               />
               <figcaption>
-                Movement turns passive place and trip history into a life timeline with
-                stays, places, corrections, and linked context.
+                Movement turns passive place and trip history into a life
+                timeline with stays, places, corrections, and linked context.
               </figcaption>
             </figure>
             <figure class="shot feature-shot">
@@ -470,8 +505,8 @@ API docs: /forge/api/</code></pre>
               />
               <figcaption>
                 Sleep is now night-first: last-night recovery, weekly baseline,
-                calendar browsing, selected-night phases, and raw evidence on demand
-                all live in one health workspace.
+                calendar browsing, selected-night phases, and raw evidence on
+                demand all live in one health workspace.
               </figcaption>
             </figure>
           </div>
@@ -480,8 +515,8 @@ API docs: /forge/api/</code></pre>
         <footer class="footer">
           <p>
             Forge brings planning, execution, knowledge, movement, sleep, and
-            reflection into one local-first system that you can run yourself
-            and connect to your own tools.
+            reflection into one local-first system that you can run yourself and
+            connect to your own tools.
           </p>
           <p>
             Docs:

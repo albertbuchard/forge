@@ -5287,6 +5287,7 @@
                     "classification",
                     "aliases",
                     "summary",
+                    "methodRoutes",
                     "readRoutes",
                     "writeRoutes",
                     "routeSelectionQuestions",
@@ -5307,6 +5308,12 @@
                     },
                     "summary": {
                       "type": "string"
+                    },
+                    "methodRoutes": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
                     },
                     "readRoutes": {
                       "type": "object",

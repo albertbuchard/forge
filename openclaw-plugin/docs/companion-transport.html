@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Forge Companion Transport</title>
+    <meta
+      name="description"
+      content="Detailed guide to Forge Companion's Iroh and QUIC transport, pairing payload, relay behavior, protocol shape, fallback path, and license boundary."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Sora:wght@600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <div class="ambient a"></div>
+      <div class="ambient b"></div>
+
+      <header class="topbar">
+        <a class="brand" href="./index.html">
+          <span class="brand-mark">F</span>
+          <span class="brand-copy">
+            <strong>Forge</strong>
+            <span>Project Guide</span>
+          </span>
+        </a>
+        <nav class="topnav">
+          <a href="./index.html">Home</a>
+          <a href="./features.html">Features</a>
+          <a href="./engineering.html">Engineering</a>
+          <a href="./development.html">Development</a>
+          <a class="active" href="./integrations.html">Integrations</a>
+          <a href="./api/">API</a>
+          <a href="https://github.com/albertbuchard/forge">GitHub</a>
+        </nav>
+      </header>
+
+      <main class="page">
+        <div class="breadcrumbs">
+          <a href="./index.html">Docs</a>
+          <span>/</span>
+          <a href="./integrations.html">Integrations</a>
+          <span>/</span>
+          <span>Companion Transport</span>
+        </div>
+
+        <section class="hero split">
+          <div class="hero-card">
+            <p class="eyebrow">Companion Transport</p>
+            <h1>Forge uses its own Iroh and QUIC path for iPhone pairing.</h1>
+            <p class="lede">
+              The quickstart stays one command. This page is the deeper view:
+              what starts on the desktop, what the QR contains, how the phone
+              finds the machine, where relays fit, how Forge frames API
+              requests, and why the protocol is called
+              <code>forge-companion/1</code>.
+            </p>
+            <pre><code>npx forge-memory
+npx forge-memory pair-ios</code></pre>
+          </div>
+          <aside class="hero-card">
+            <p class="eyebrow">Jump To</p>
+            <ul class="guide-list">
+              <li><a href="#quick-path">Base install</a></li>
+              <li><a href="#network-model">Network model</a></li>
+              <li><a href="#pairing-payload">Pairing payload</a></li>
+              <li><a href="#wire-protocol">Wire protocol</a></li>
+              <li><a href="#fallbacks">Fallbacks</a></li>
+              <li><a href="#license">License boundary</a></li>
+              <li><a href="#verification">Verification</a></li>
+            </ul>
+          </aside>
+        </section>
+
+        <section class="section" id="quick-path">
+          <div class="section-heading">
+            <p class="eyebrow">Quick Path</p>
+            <h2>
+              The base install does not ask users to understand transport
+              internals.
+            </h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>Default user flow</h3>
+              <p>
+                Users run <code>npx forge-memory</code>. Forge installs the
+                local runtime, discovers host adapters, keeps one data folder
+                explicit, and offers iPhone pairing from the same guided flow.
+              </p>
+              <pre><code>npx forge-memory</code></pre>
+            </article>
+            <article class="card">
+              <h3>Later pairing</h3>
+              <p>
+                If Forge is already installed, pairing can be reopened without
+                repeating setup. This prints the default Iroh QR and transport
+                diagnostics.
+              </p>
+              <pre><code>npx forge-memory pair-ios</code></pre>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="network-model">
+          <div class="section-heading">
+            <p class="eyebrow">Network Model</p>
+            <h2>
+              The phone dials a desktop identity, not a changing IP address.
+            </h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>What starts on the desktop</h3>
+              <p>
+                Forge starts the repo-owned Rust host
+                <code>forge-companion-iroh</code>. The host creates or reloads
+                an Iroh secret key under the Forge data root, derives a stable
+                node id, registers ALPN <code>forge-companion/1</code>, and
+                proxies authenticated stream requests into the local Fastify
+                runtime.
+              </p>
+            </article>
+            <article class="card">
+              <h3>What the iPhone dials</h3>
+              <p>
+                The QR gives the iPhone a node id, token, optional relay hint,
+                and <code>forge-iroh://</code> URLs. The Swift app links the
+                same Rust transport core as a native static library, dials that
+                node id through Iroh, and sends Forge request envelopes over
+                QUIC streams.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Relay reality</h3>
+              <p>
+                Iroh still uses public rendezvous and relay infrastructure. That
+                replaces the need for the user to install Tailscale, open a
+                router port, or maintain a public Forge URL. It does not remove
+                the need for a public meeting point.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Direct path when possible</h3>
+              <p>
+                Iroh can use relay-assisted NAT traversal to attempt direct
+                encrypted QUIC. If the network blocks that path, encrypted QUIC
+                traffic can stay relayed. The relay is not the Forge app server
+                and does not need Forge's database.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="pairing-payload">
+          <div class="section-heading">
+            <p class="eyebrow">Pairing Payload</p>
+            <h2>The QR is a connection recipe, not just a URL.</h2>
+          </div>
+          <pre><code>{
+  "apiBaseUrl": "forge-iroh://&lt;node-id&gt;/api/v1",
+  "uiBaseUrl": "forge-iroh://&lt;node-id&gt;/forge/",
+  "transportMode": "iroh",
+  "transport": {
+    "protocol": "iroh",
+    "provider": "forge-companion-iroh",
+    "status": "ready",
+    "nodeId": "&lt;node-id&gt;",
+    "relay": "https://relay.example",
+    "alpn": "forge-companion/1",
+    "agent": "forge",
+    "pairPayload": {
+      "v": 1,
+      "node_id": "&lt;node-id&gt;",
+      "token": "&lt;pairing-token&gt;",
+      "host_name": "desktop-name",
+      "relay": "https://relay.example"
+    }
+  }
+}</code></pre>
+          <div class="card-grid three" style="margin-top: 18px">
+            <article class="card">
+              <h3>Node id</h3>
+              <p>
+                The stable public-key identity of the desktop Iroh endpoint. It
+                remains the durable target even when the current IP changes.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Pairing token</h3>
+              <p>
+                The app-level secret. The first stream frame must prove the
+                phone scanned the current QR before Forge accepts requests.
+              </p>
+            </article>
+            <article class="card">
+              <h3>ALPN</h3>
+              <p>
+                The QUIC protocol selector. Forge uses
+                <code>forge-companion/1</code> so this is clearly Forge's
+                protocol, not KittyLitter or Alleycat.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="wire-protocol">
+          <div class="section-heading">
+            <p class="eyebrow">Wire Protocol</p>
+            <h2>
+              Forge carries existing API requests over authenticated QUIC
+              streams.
+            </h2>
+          </div>
+          <table class="doc-table">
+            <thead>
+              <tr>
+                <th>Step</th>
+                <th>Message</th>
+                <th>Responsibility</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>1</td>
+                <td><code>connect</code> frame</td>
+                <td>
+                  First JSON frame includes version, pairing token, and agent
+                  <code>forge</code>.
+                </td>
+              </tr>
+              <tr>
+                <td>2</td>
+                <td><code>ok</code> frame</td>
+                <td>
+                  Desktop host validates the token and accepts or rejects the
+                  stream.
+                </td>
+              </tr>
+              <tr>
+                <td>3</td>
+                <td>HTTP request envelope</td>
+                <td>
+                  iPhone sends method, path, headers, and base64 body for a
+                  Forge API route.
+                </td>
+              </tr>
+              <tr>
+                <td>4</td>
+                <td>HTTP response envelope</td>
+                <td>
+                  Rust host proxies to Fastify and returns status, headers, and
+                  base64 body.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="section" id="fallbacks">
+          <div class="section-heading">
+            <p class="eyebrow">Fallbacks</p>
+            <h2>
+              Manual HTTP remains available, but it is no longer the default.
+            </h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>Use Iroh first</h3>
+              <p>
+                The default QR path should be Iroh. It avoids forcing users to
+                install a VPN app, configure port forwarding, or copy a LAN
+                address that breaks when the network changes.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Use HTTP deliberately</h3>
+              <p>
+                Direct HTTP/TCP is still useful for known LAN hosts, Tailscale
+                operator setups, and debugging. It is an explicit mode.
+              </p>
+              <pre><code>npx forge-memory pair-ios --manual-http</code></pre>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="license">
+          <div class="section-heading">
+            <p class="eyebrow">License Boundary</p>
+            <h2>Forge owns this protocol and keeps the code permissive.</h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>Forge license</h3>
+              <p>
+                Forge-owned public code is Apache-2.0. That keeps the open
+                source project permissive, patent-explicit, and compatible with
+                future closed-source commercial Forge forks.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Upstream boundary</h3>
+              <p>
+                Alleycat and KittyLitter were studied for the Iroh pairing
+                pattern. Forge does not vendor, link, copy, or name its protocol
+                after Alleycat. The protocol label is
+                <code>forge-companion/1</code>.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="verification">
+          <div class="section-heading">
+            <p class="eyebrow">Verification</p>
+            <h2>
+              Transport changes should be checked at Rust, TypeScript, server,
+              and iOS layers.
+            </h2>
+          </div>
+          <pre><code>cargo fmt --manifest-path companion-iroh/Cargo.toml --check
+cargo test --manifest-path companion-iroh/Cargo.toml
+cargo build --release --manifest-path companion-iroh/Cargo.toml --bin forge-companion-iroh
+npx tsc --noEmit
+npm run check:server
+npm run test:forge-memory</code></pre>
+          <p style="margin-top: 18px">
+            iOS bridge changes should also build and test
+            <code>ios-companion/ForgeCompanion.xcodeproj</code>. Dependency
+            installs should stay deliberate; most local checks can use the
+            already installed toolchains and packages.
+          </p>
+        </section>
+
+        <footer class="footer">
+          The short install path stays in the quickstart. This page is the
+          deeper reference for operators, contributors, and release checks.
+        </footer>
+      </main>
+    </div>
+    <script type="module" src="./lightbox.js"></script>
+  </body>
+</html>

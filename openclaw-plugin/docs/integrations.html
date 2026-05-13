@@ -50,7 +50,10 @@
         <section class="hero split">
           <div class="hero-card">
             <p class="eyebrow">Integrations</p>
-            <h1>Forge connects your browser, agents, and phone to the same life system.</h1>
+            <h1>
+              Forge connects your browser, agents, and phone to the same life
+              system.
+            </h1>
             <p class="lede">
               Forge is designed so your browser, agent hosts, and companion app
               all work from the same underlying system. The important idea is
@@ -68,6 +71,7 @@
               <li><a href="#hermes">Hermes</a></li>
               <li><a href="#codex">Codex</a></li>
               <li><a href="#ios">iPhone companion</a></li>
+              <li><a href="#companion-transport">Companion transport</a></li>
             </ul>
           </aside>
         </section>
@@ -75,7 +79,9 @@
         <section class="section" id="install">
           <div class="section-heading">
             <p class="eyebrow">Install</p>
-            <h2>Every Forge integration starts from the same guided command.</h2>
+            <h2>
+              Every Forge integration starts from the same guided command.
+            </h2>
           </div>
           <div class="card-grid two">
             <article class="card">
@@ -87,6 +93,10 @@
                 in the background and asks only for the choices that matter.
               </p>
               <pre><code>npx forge-memory</code></pre>
+              <p>
+                The deeper transport, relay, and protocol details live below the
+                quickstart so the base install stays small.
+              </p>
             </article>
             <article class="card">
               <h3>Configuration stays reusable</h3>
@@ -107,7 +117,10 @@ npx forge-memory uninstall</code></pre>
         <section class="section" id="shared-runtime">
           <div class="section-heading">
             <p class="eyebrow">Shared System</p>
-            <h2>Forge works best when every surface points at the same underlying instance.</h2>
+            <h2>
+              Forge works best when every surface points at the same underlying
+              instance.
+            </h2>
           </div>
           <div class="card-grid two">
             <article class="card">
@@ -121,9 +134,10 @@ userIds:  explicit on cross-owner reads</code></pre>
             <article class="card">
               <h3>Why this matters</h3>
               <p>
-                If OpenClaw, Hermes, Codex, and the browser are meant to see the same
-                goals, tasks, notes, strategies, and users, they must point at the
-                same Forge instance rather than drifting onto separate default stores.
+                If OpenClaw, Hermes, Codex, and the browser are meant to see the
+                same goals, tasks, notes, strategies, and users, they must point
+                at the same Forge instance rather than drifting onto separate
+                default stores.
               </p>
             </article>
           </div>
@@ -146,10 +160,10 @@ userIds:  explicit on cross-owner reads</code></pre>
                 session key.
               </p>
               <p>
-                Every reconnect creates or updates a <strong>runtime
-                session</strong> under that agent identity. Sessions keep
-                heartbeat, reconnect, and event history, but they do not become
-                new agents.
+                Every reconnect creates or updates a
+                <strong>runtime session</strong> under that agent identity.
+                Sessions keep heartbeat, reconnect, and event history, but they
+                do not become new agents.
               </p>
             </article>
             <article class="card">
@@ -158,8 +172,8 @@ userIds:  explicit on cross-owner reads</code></pre>
                 A Forge <strong>user</strong> is the owner or actor for work:
                 Kanban lanes, task ownership, notes, scoped reads, and
                 provenance. One agent identity can be linked to one or several
-                users. That lets the same OpenClaw runtime act for Albert,
-                spawn a bot user, or work inside a constrained Kanban without
+                users. That lets the same OpenClaw runtime act for Albert, spawn
+                a bot user, or work inside a constrained Kanban without
                 pretending it is a different installed agent.
               </p>
               <p>
@@ -256,12 +270,17 @@ userIds:  explicit on cross-owner reads</code></pre>
                   </tr>
                   <tr>
                     <td><code>users</code></td>
-                    <td>Human or bot ownership, Kanban scope, and provenance.</td>
+                    <td>
+                      Human or bot ownership, Kanban scope, and provenance.
+                    </td>
                     <td>Yes</td>
                   </tr>
                   <tr>
                     <td><code>agent_identity_users</code></td>
-                    <td>The link between a stable agent and the users it may act for.</td>
+                    <td>
+                      The link between a stable agent and the users it may act
+                      for.
+                    </td>
                     <td>Yes</td>
                   </tr>
                 </tbody>
@@ -287,7 +306,10 @@ userIds:  explicit on cross-owner reads</code></pre>
           <div class="identity-diagram-card">
             <div class="diagram-heading">
               <p class="eyebrow">Ownership Model</p>
-              <h3>Agent identity answers "which runtime?", user answers "whose work?".</h3>
+              <h3>
+                Agent identity answers "which runtime?", user answers "whose
+                work?".
+              </h3>
             </div>
             <div
               class="ownership-diagram"
@@ -384,9 +406,9 @@ openclaw forge health</code></pre>
             <article class="card">
               <h3>What you get</h3>
               <p>
-                The plugin exposes a curated Forge operating surface rather than every
-                internal route. It is optimized around operator overview, entity
-                mutation, live work, notes, wiki, health, and UI handoff.
+                The plugin exposes a curated Forge operating surface rather than
+                every internal route. It is optimized around operator overview,
+                entity mutation, live work, notes, wiki, health, and UI handoff.
               </p>
             </article>
           </div>
@@ -420,8 +442,8 @@ openclaw forge health</code></pre>
               <h3>Config location</h3>
               <pre><code>~/.hermes/forge/config.json</code></pre>
               <p>
-                Use the same origin, port, and data root as the browser and OpenClaw
-                if Hermes is meant to share the same Forge system.
+                Use the same origin, port, and data root as the browser and
+                OpenClaw if Hermes is meant to share the same Forge system.
               </p>
             </article>
           </div>
@@ -460,32 +482,33 @@ codex mcp list</code></pre>
             <article class="card">
               <h3>What it is for</h3>
               <p>
-                The Codex adapter lives in <code>plugins/forge-codex/</code> and is
-                built for shared-runtime work against the same local Forge system
-                used by the browser, OpenClaw, and Hermes.
+                The Codex adapter lives in <code>plugins/forge-codex/</code> and
+                is built for shared-runtime work against the same local Forge
+                system used by the browser, OpenClaw, and Hermes.
               </p>
             </article>
             <article class="card">
               <h3>Runtime payload</h3>
               <p>
-                The OpenClaw build path also copies the built runtime into the Codex
-                runtime payload so agent surfaces stay aligned with the same app/API
-                behavior.
+                The OpenClaw build path also copies the built runtime into the
+                Codex runtime payload so agent surfaces stay aligned with the
+                same app/API behavior.
               </p>
             </article>
             <article class="card">
               <h3>How to make it widely available</h3>
               <p>
-                For broad public distribution, the better path is a hosted remote
-                MCP server over HTTPS with auth, so users can install Forge with
-                one command instead of cloning the repo first.
+                For broad public distribution, the better path is a hosted
+                remote MCP server over HTTPS with auth, so users can install
+                Forge with one command instead of cloning the repo first.
               </p>
               <pre><code>codex mcp add forge --url https://your-forge-mcp.example.com/mcp
 codex mcp list</code></pre>
               <p>
                 That is the cleanest public install story for Codex today. The
-                repo-local launcher is ideal for contributors and local-first use,
-                but a remote MCP endpoint is what makes Forge easy to adopt at scale.
+                repo-local launcher is ideal for contributors and local-first
+                use, but a remote MCP endpoint is what makes Forge easy to adopt
+                at scale.
               </p>
             </article>
           </div>
@@ -500,15 +523,17 @@ codex mcp list</code></pre>
         <section class="section" id="ios">
           <div class="section-heading">
             <p class="eyebrow">iPhone Companion</p>
-            <h2>The iPhone companion brings movement and HealthKit into Forge.</h2>
+            <h2>
+              The iPhone companion brings movement and HealthKit into Forge.
+            </h2>
           </div>
           <div class="card-grid two">
             <article class="card">
               <h3>What the companion does</h3>
               <p>
                 The iOS companion pairs to a local Forge runtime, requests Apple
-                permissions, imports HealthKit sleep and workout data, and writes
-                structured Forge records rather than opaque snapshots.
+                permissions, imports HealthKit sleep and workout data, and
+                writes structured Forge records rather than opaque snapshots.
               </p>
             </article>
             <article class="card">
@@ -518,6 +543,15 @@ codex mcp list</code></pre>
 /api/v1/mobile/healthkit/sync
 /api/v1/health/sleep
 /api/v1/health/fitness</code></pre>
+            </article>
+            <article class="card">
+              <h3>Default transport</h3>
+              <p>
+                Pairing uses Forge's own Rust Iroh transport by default. The QR
+                contains a desktop node id, pairing token, optional relay hint,
+                and ALPN <code>forge-companion/1</code>. Manual HTTP/TCP stays
+                available as an explicit advanced mode.
+              </p>
             </article>
           </div>
           <figure class="shot">
@@ -532,34 +566,96 @@ codex mcp list</code></pre>
           </figure>
         </section>
 
+        <section class="section" id="companion-transport">
+          <div class="section-heading">
+            <p class="eyebrow">Companion Transport</p>
+            <h2>
+              Forge Companion dials a Forge endpoint identity over Iroh and
+              QUIC.
+            </h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>What the QR means</h3>
+              <p>
+                The Iroh QR is a connection recipe, not only a URL. It tells the
+                iPhone which desktop node id to dial, which protocol to
+                negotiate, which relay hint to use if present, and which token
+                must appear in the first stream frame.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Why this is not Tailscale</h3>
+              <p>
+                Tailscale gives the whole device a VPN address. Forge embeds
+                Iroh at the app layer, so the companion app can connect without
+                requiring the user to install a VPN. Iroh still uses relay and
+                discovery infrastructure as the public meeting point.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Why this is not Alleycat</h3>
+              <p>
+                Alleycat and KittyLitter were studied for the Iroh pairing
+                pattern, but Forge does not use Alleycat source or the
+                <code>alleycat/1</code> protocol. Forge's protocol is
+                <code>forge-companion/1</code>.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Detailed view</h3>
+              <p>
+                The companion transport guide explains the relay model, pairing
+                payload, first-frame token auth, request envelopes, fallback
+                mode, code ownership, and verification commands.
+              </p>
+              <div class="link-row">
+                <a class="button" href="./companion-transport.html"
+                  >Open transport guide</a
+                >
+              </div>
+            </article>
+          </div>
+        </section>
+
         <section class="section">
           <div class="section-heading">
             <p class="eyebrow">Deeper Guides</p>
-            <h2>If you want implementation detail, these longer guides go further.</h2>
+            <h2>
+              If you want implementation detail, these longer guides go further.
+            </h2>
           </div>
           <ul class="guide-list">
             <li>
-              <a href="https://github.com/albertbuchard/forge/blob/main/docs/openclaw-plugin.md"
+              <a
+                href="https://github.com/albertbuchard/forge/blob/main/docs/openclaw-plugin.md"
                 >OpenClaw plugin guide</a
               >
             </li>
             <li>
-              <a href="https://github.com/albertbuchard/forge/blob/main/docs/hermes-plugin.md"
+              <a
+                href="https://github.com/albertbuchard/forge/blob/main/docs/hermes-plugin.md"
                 >Hermes plugin guide</a
               >
             </li>
             <li>
-              <a href="https://github.com/albertbuchard/forge/blob/main/plugins/forge-codex/README.md"
+              <a
+                href="https://github.com/albertbuchard/forge/blob/main/plugins/forge-codex/README.md"
                 >Codex MCP guide</a
               >
             </li>
             <li>
-              <a href="https://github.com/albertbuchard/forge/blob/main/docs/multi-user-and-strategies.md"
+              <a href="./companion-transport.html">Companion transport guide</a>
+            </li>
+            <li>
+              <a
+                href="https://github.com/albertbuchard/forge/blob/main/docs/multi-user-and-strategies.md"
                 >Multi-user and strategies guide</a
               >
             </li>
             <li>
-              <a href="https://github.com/albertbuchard/forge/blob/main/docs/calendar-provider-setup.md"
+              <a
+                href="https://github.com/albertbuchard/forge/blob/main/docs/calendar-provider-setup.md"
                 >Calendar provider setup</a
               >
             </li>

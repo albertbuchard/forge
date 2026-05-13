@@ -50,18 +50,22 @@
         <section class="hero split">
           <div class="hero-card">
             <p class="eyebrow">Run Forge Yourself</p>
-            <h1>Start Forge locally and verify the real product paths, not just the code.</h1>
+            <h1>
+              Start Forge locally and verify the real product paths, not just
+              the code.
+            </h1>
             <p class="lede">
-              If you want to try Forge, contribute to it, or operate it
-              locally, this page shows the main commands and the checks that
-              matter. The key rule is simple: make sure the app and API
-              actually load where users expect them.
+              If you want to try Forge, contribute to it, or operate it locally,
+              this page shows the main commands and the checks that matter. The
+              key rule is simple: make sure the app and API actually load where
+              users expect them.
             </p>
           </div>
           <aside class="hero-card">
             <p class="eyebrow">Jump To</p>
             <ul class="guide-list">
               <li><a href="#dev-installer">Forge Memory dev mode</a></li>
+              <li><a href="#dependency-safety">Dependency safety</a></li>
               <li><a href="#local-development">Local development</a></li>
               <li><a href="#workflow-model">Workflow model</a></li>
               <li><a href="#verification">Verification</a></li>
@@ -101,10 +105,43 @@ npx forge-memory stop</code></pre>
           </div>
         </section>
 
+        <section class="section" id="dependency-safety">
+          <div class="section-heading">
+            <p class="eyebrow">Dependency Safety</p>
+            <h2>
+              Use installed dependencies for checks and keep new installs
+              deliberate.
+            </h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>Local verification posture</h3>
+              <p>
+                Most contributor checks can run against the already installed
+                Node, Rust, Ruby, Python, and Xcode toolchains. Avoid running
+                package-manager installs just to inspect or verify an unrelated
+                documentation change.
+              </p>
+            </article>
+            <article class="card">
+              <h3>CI release guard</h3>
+              <p>
+                Forge release workflows run
+                <code>scripts/setup-safe-chain-ci.sh</code> before npm, PyPI,
+                and docs package steps where Safe Chain can protect the install
+                surface. Cargo, Bundler, Xcode, and binary toolchains still need
+                normal lockfile and release-review discipline.
+              </p>
+            </article>
+          </div>
+        </section>
+
         <section class="section" id="local-development">
           <div class="section-heading">
             <p class="eyebrow">Local Development</p>
-            <h2>These commands get the app running in a realistic local setup.</h2>
+            <h2>
+              These commands get the app running in a realistic local setup.
+            </h2>
           </div>
           <div class="card-grid two">
             <article class="card">
@@ -112,8 +149,8 @@ npx forge-memory stop</code></pre>
               <pre><code>npm install
 npm run dev</code></pre>
               <p>
-                The normal repo dev command starts the Fastify backend and the Vite
-                UI together.
+                The normal repo dev command starts the Fastify backend and the
+                Vite UI together.
               </p>
             </article>
             <article class="card">
@@ -121,8 +158,8 @@ npm run dev</code></pre>
               <pre><code>npm run dev:server:openclaw-data
 FORGE_BASE_PATH=/forge/ npm run dev:web -- --host 127.0.0.1 --port 3027</code></pre>
               <p>
-                Use this path when you need the repo runtime aligned with the tracked
-                shared Forge data root.
+                Use this path when you need the repo runtime aligned with the
+                tracked shared Forge data root.
               </p>
             </article>
             <article class="card">
@@ -130,10 +167,10 @@ FORGE_BASE_PATH=/forge/ npm run dev:web -- --host 127.0.0.1 --port 3027</code></
               <pre><code>FORGE_OPENCLAW_DEV=1 node ./openclaw-plugin/server/index.js
 npm run dev:openclaw-plugin-runtime</code></pre>
               <p>
-                The OpenClaw plugin entrypoint stays on the built runtime by default.
-                Set <code>FORGE_OPENCLAW_DEV=1</code> only during local development to
-                have that same entrypoint launch the source-backed autoreloading backend
-                on port <code>4317</code>.
+                The OpenClaw plugin entrypoint stays on the built runtime by
+                default. Set <code>FORGE_OPENCLAW_DEV=1</code> only during local
+                development to have that same entrypoint launch the
+                source-backed autoreloading backend on port <code>4317</code>.
               </p>
             </article>
           </div>
@@ -142,16 +179,20 @@ npm run dev:openclaw-plugin-runtime</code></pre>
         <section class="section" id="workflow-model">
           <div class="section-heading">
             <p class="eyebrow">Workflow Model</p>
-            <h2>Forge’s planning workflow belongs here, not on the landing page.</h2>
+            <h2>
+              Forge’s planning workflow belongs here, not on the landing page.
+            </h2>
           </div>
           <div class="card-grid two">
             <article class="card">
               <h3>Planning sequence</h3>
               <p>
                 The canonical Forge planning flow is:
-                <strong>PRD -&gt; issues -&gt; tasks -&gt; subtasks when needed -&gt; closeout</strong>.
-                Projects are PRD-backed, issues are vertical slices, and tasks
-                should fit one focused AI session.
+                <strong
+                  >PRD -&gt; issues -&gt; tasks -&gt; subtasks when needed -&gt;
+                  closeout</strong
+                >. Projects are PRD-backed, issues are vertical slices, and
+                tasks should fit one focused AI session.
               </p>
             </article>
             <article class="card">
@@ -187,7 +228,9 @@ npm run dev:openclaw-plugin-runtime</code></pre>
         <section class="section">
           <div class="section-heading">
             <p class="eyebrow">Primary Commands</p>
-            <h2>The main commands for building, testing, and exporting docs.</h2>
+            <h2>
+              The main commands for building, testing, and exporting docs.
+            </h2>
           </div>
           <table class="doc-table">
             <thead>
@@ -199,7 +242,9 @@ npm run dev:openclaw-plugin-runtime</code></pre>
             <tbody>
               <tr>
                 <td><code>npm run dev</code></td>
-                <td>Run Fastify and Vite together for repo-local development.</td>
+                <td>
+                  Run Fastify and Vite together for repo-local development.
+                </td>
               </tr>
               <tr>
                 <td><code>npm run build</code></td>
@@ -215,11 +260,17 @@ npm run dev:openclaw-plugin-runtime</code></pre>
               </tr>
               <tr>
                 <td><code>npm run docs:openapi</code></td>
-                <td>Export the current generated OpenAPI document into the Pages artifact.</td>
+                <td>
+                  Export the current generated OpenAPI document into the Pages
+                  artifact.
+                </td>
               </tr>
               <tr>
                 <td><code>npm run build:openclaw-plugin</code></td>
-                <td>Bundle the published OpenClaw package with the built Forge runtime payload.</td>
+                <td>
+                  Bundle the published OpenClaw package with the built Forge
+                  runtime payload.
+                </td>
               </tr>
             </tbody>
           </table>
@@ -228,7 +279,10 @@ npm run dev:openclaw-plugin-runtime</code></pre>
         <section class="section" id="verification">
           <div class="section-heading">
             <p class="eyebrow">Verification</p>
-            <h2>After changes, verify the product is still reachable and trustworthy.</h2>
+            <h2>
+              After changes, verify the product is still reachable and
+              trustworthy.
+            </h2>
           </div>
           <div class="card-grid two">
             <article class="card">
@@ -253,7 +307,10 @@ curl -I http://127.0.0.1:3027/forge/</code></pre>
         <section class="section" id="docs-pipeline">
           <div class="section-heading">
             <p class="eyebrow">Docs Pipeline</p>
-            <h2>The public guide and API explorer are generated from the product itself.</h2>
+            <h2>
+              The public guide and API explorer are generated from the product
+              itself.
+            </h2>
           </div>
           <div class="card-grid two">
             <article class="card">
@@ -268,8 +325,8 @@ curl -I http://127.0.0.1:3027/forge/</code></pre>
               <h3>How GitHub Pages stays accurate</h3>
               <p>
                 The docs export script writes the current generated spec into
-                <code>openclaw-plugin/docs/api/openapi.json</code> so GitHub Pages can
-                render the same contract without a live Forge server.
+                <code>openclaw-plugin/docs/api/openapi.json</code> so GitHub
+                Pages can render the same contract without a live Forge server.
               </p>
             </article>
           </div>
@@ -279,28 +336,30 @@ curl -I http://127.0.0.1:3027/forge/</code></pre>
         <section class="section" id="release-adjacent">
           <div class="section-heading">
             <p class="eyebrow">Release Paths</p>
-            <h2>These commands matter when Forge is being packaged or published.</h2>
+            <h2>
+              These commands matter when Forge is being packaged or published.
+            </h2>
           </div>
           <div class="card-grid three">
             <article class="card">
               <h3>OpenClaw package</h3>
               <p>
-                Use <code>npm run build:openclaw-plugin</code> to produce the published
-                OpenClaw package payload with the built runtime.
+                Use <code>npm run build:openclaw-plugin</code> to produce the
+                published OpenClaw package payload with the built runtime.
               </p>
             </article>
             <article class="card">
               <h3>Plugin parity</h3>
               <p>
-                Run <code>npm run check:openclaw-plugin</code> when the adapter surface,
-                runtime packaging, or manifest behavior changes.
+                Run <code>npm run check:openclaw-plugin</code> when the adapter
+                surface, runtime packaging, or manifest behavior changes.
               </p>
             </article>
             <article class="card">
               <h3>Pages deploy</h3>
               <p>
-                The GitHub Pages workflow publishes the static docs site from the
-                repo’s docs artifact, including the exported OpenAPI JSON.
+                The GitHub Pages workflow publishes the static docs site from
+                the repo’s docs artifact, including the exported OpenAPI JSON.
               </p>
             </article>
           </div>

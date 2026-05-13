@@ -65,22 +65,42 @@ If you want to regenerate later:
 Forge web settings generate a QR payload with:
 
 - `apiBaseUrl`
+- `uiBaseUrl`
 - `sessionId`
 - `pairingToken`
 - `expiresAt`
 - requested capabilities
+- `transportMode`
+- `transport`
 
-The companion scans the QR payload, stores it in the keychain-backed app model, requests the relevant permissions, then posts sync payloads to Forge.
+The default `transportMode` is `iroh`. In that mode the QR contains
+`forge-iroh://` API and UI URLs plus a transport payload with the desktop Iroh node
+id, the pairing token, an optional relay hint, and ALPN `forge-companion/1`.
+
+The companion scans the QR payload, stores it in the keychain-backed app model,
+requests the relevant permissions, then sends sync payloads to Forge. For Iroh
+payloads, the Swift app uses the native Rust bridge to dial the desktop node id over
+Iroh/QUIC and carries Forge API request envelopes over the authenticated stream. For
+manual payloads, it keeps the older direct HTTP/TCP path.
+
+Manual HTTP/TCP remains available when the operator intentionally wants LAN,
+Tailscale, or debugging behavior:
+
+```bash
+npx forge-memory pair-ios --manual-http
+```
 
 Watch actions are never sent directly from the watch to Forge. The watch sends queued
 messages to the iPhone through WatchConnectivity, the iPhone submits canonical habit
 check-ins or watch capture batches to Forge, and the iPhone sends a compact bootstrap
 snapshot back to the watch and widget surfaces.
 
-Runtime discovery prefers Bonjour on the local network. The Forge runtime now
-advertises `_forge._tcp` and, when Tailscale Serve is available, includes the
-tailnet HTTPS base URLs in the Bonjour TXT record so the iPhone can discover both
-local-network and Tailscale paths from one source.
+Runtime discovery can still surface Bonjour candidates for known local or manual
+routes, but Iroh QR pairing is the default. When Forge advertises `_forge._tcp`, it
+can include Iroh metadata such as the `forge-iroh://` URLs and `forge-companion/1`
+ALPN alongside manual network hints.
+
+The deeper transport reference lives in `docs/companion-iroh.md`.
 
 ## App Store release automation
 
