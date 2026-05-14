@@ -233,6 +233,37 @@ export interface SchemaPressureEntry {
   activationCount: number;
 }
 
+export interface DevrageMetricPayload {
+  generatedAt: string;
+  latestDateKey: string | null;
+  rawSwearCount: number;
+  swearingMessagePercent: number;
+  conversationsScanned: number;
+  messagesScanned: number;
+  messagesWithSwears: number;
+  dailyAverage: {
+    rawSwearCount: number;
+    swearingMessagePercent: number;
+  };
+  weeklyAverage: {
+    rawSwearCount: number;
+    swearingMessagePercent: number;
+  };
+  history: Array<{
+    dateKey: string;
+    rawSwearCount: number;
+    swearingMessagePercent: number;
+    conversationsScanned: number;
+    messagesScanned: number;
+    messagesWithSwears: number;
+  }>;
+  sync: {
+    fullSyncCompletedAt: string | null;
+    lastDailySyncAt: string | null;
+    lastSyncedDateKey: string | null;
+  };
+}
+
 export interface PsycheOverviewPayload {
   generatedAt: string;
   domain: Domain;
@@ -243,6 +274,7 @@ export interface PsycheOverviewPayload {
   modes: ModeProfile[];
   reports: TriggerReport[];
   schemaPressure: SchemaPressureEntry[];
+  devrageMetric: DevrageMetricPayload;
   openInsights: number;
   openNotes: number;
   committedActions: string[];

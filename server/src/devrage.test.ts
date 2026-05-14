@@ -1,0 +1,150 @@
+import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
+import type { DevrageReport } from "forge-devrage";
+import {
+  closeDatabase,
+  configureDatabase,
+  initializeDatabase
+} from "./db.js";
+import {
+  getDevrageMetricPayload,
+  storeDevrageReport
+} from "./services/devrage.js";
+import { getPsycheOverview } from "./services/psyche.js";
+
+function reportFixture(): DevrageReport {
+  return {
+    generatedAt: "2026-05-14T08:00:00.000Z",
+    filesScanned: [],
+    conversationsScanned: 3,
+    messagesScanned: 30,
+    messagesWithSwears: 6,
+    totalSwears: 12,
+    byAgent: [{ agent: "codex", messages: 30, messagesWithSwears: 6, swears: 12 }],
+    bySource: [
+      {
+        source: "codex",
+        conversations: 3,
+        messages: 30,
+        messagesWithSwears: 6,
+        swears: 12
+      }
+    ],
+    conversations: [
+      {
+        source: "codex",
+        conversationId: "older",
+        sourceFile: "/synthetic/codex/older.jsonl",
+        updatedAt: "2026-05-12T10:00:00.000Z",
+        dateKey: "2026-05-12",
+        messages: 10,
+        messagesWithSwears: 1,
+        swears: 2
+      },
+      {
+        source: "codex",
+        conversationId: "yesterday",
+        sourceFile: "/synthetic/codex/yesterday.jsonl",
+        updatedAt: "2026-05-13T10:00:00.000Z",
+        dateKey: "2026-05-13",
+        messages: 8,
+        messagesWithSwears: 2,
+        swears: 4
+      },
+      {
+        source: "codex",
+        conversationId: "today",
+        sourceFile: "/synthetic/codex/today.jsonl",
+        updatedAt: "2026-05-14T10:00:00.000Z",
+        dateKey: "2026-05-14",
+        messages: 12,
+        messagesWithSwears: 3,
+        swears: 6
+      }
+    ],
+    daily: [],
+    topWords: [],
+    actualWords: [],
+    warnings: [],
+    roleFilter: ["user"],
+    sourceFilter: ["codex"],
+    dateFilter: {}
+  };
+}
+
+test("stores devrage as one history row per measured day", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-devrage-"));
+  configureDatabase({ dataRoot: rootDir, seedDemoData: true });
+  await initializeDatabase();
+
+  try {
+    storeDevrageReport(reportFixture(), {
+      fullSync: true,
+      syncedDateKey: null
+    });
+
+    const metric = getDevrageMetricPayload();
+    assert.equal(metric.latestDateKey, "2026-05-14");
+    assert.equal(metric.rawSwearCount, 6);
+    assert.equal(metric.messagesScanned, 12);
+    assert.equal(metric.messagesWithSwears, 3);
+    assert.equal(metric.swearingMessagePercent, 25);
+    assert.equal(metric.history.length, 3);
+    assert.equal(metric.dailyAverage.rawSwearCount, 4);
+    assert.equal(metric.weeklyAverage.rawSwearCount, 4);
+    assert.ok(metric.sync.fullSyncCompletedAt);
+
+    const psyche = getPsycheOverview();
+    assert.equal(psyche.devrageMetric.rawSwearCount, 6);
+    assert.equal(psyche.devrageMetric.history.length, 3);
+  } finally {
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("daily devrage resync replaces only that day's measurement rows", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-devrage-resync-"));
+  configureDatabase({ dataRoot: rootDir, seedDemoData: true });
+  await initializeDatabase();
+
+  try {
+    storeDevrageReport(reportFixture(), {
+      fullSync: true,
+      syncedDateKey: null
+    });
+    const dailyReport = reportFixture();
+    dailyReport.conversations = [
+      {
+        source: "codex",
+        conversationId: "today",
+        sourceFile: "/synthetic/codex/today.jsonl",
+        updatedAt: "2026-05-14T11:00:00.000Z",
+        dateKey: "2026-05-14",
+        messages: 20,
+        messagesWithSwears: 1,
+        swears: 1
+      }
+    ];
+
+    storeDevrageReport(dailyReport, {
+      fullSync: false,
+      syncedDateKey: "2026-05-14"
+    });
+
+    const metric = getDevrageMetricPayload();
+    assert.equal(metric.history.length, 3);
+    assert.equal(metric.rawSwearCount, 1);
+    assert.equal(metric.messagesScanned, 20);
+    assert.equal(metric.messagesWithSwears, 1);
+    assert.equal(metric.swearingMessagePercent, 5);
+    assert.equal(metric.sync.lastSyncedDateKey, "2026-05-14");
+    assert.ok(metric.sync.lastDailySyncAt);
+  } finally {
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});

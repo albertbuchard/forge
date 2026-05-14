@@ -11,6 +11,7 @@ import {
   listSchemaCatalog,
   listTriggerReports
 } from "../repositories/psyche.js";
+import { getDevrageMetricPayload } from "./devrage.js";
 import { psycheOverviewPayloadSchema, type PsycheOverviewPayload } from "../psyche-types.js";
 
 const PSYCHE_ENTITY_TYPE_SET = new Set([
@@ -45,6 +46,7 @@ export function getPsycheOverview(userIds?: string[]): PsycheOverviewPayload {
     ...behaviors.filter((behavior) => behavior.kind === "committed").map((behavior) => behavior.title),
     ...reports.flatMap((report) => report.nextMoves)
   ];
+  const devrageMetric = getDevrageMetricPayload();
   const schemaPressure = schemaCatalog
     .filter((schema) => schema.schemaType === "maladaptive")
     .map((schema) => {
@@ -72,6 +74,7 @@ export function getPsycheOverview(userIds?: string[]): PsycheOverviewPayload {
     modes,
     reports,
     schemaPressure,
+    devrageMetric,
     openInsights,
     openNotes,
     committedActions
