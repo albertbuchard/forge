@@ -245,6 +245,10 @@ Public docs, GitHub Pages docs, README, and agent-facing docs must all explain:
 - Apple Health and HealthKit are the first production adapter path, but the architecture must stay modular so Android Health Connect, Garmin, and other providers can plug into the same backend and UI contract without forking the product model.
 - The web sports surface must present friendly workout naming, provider provenance, and captured metrics/events/phases directly in the session UI instead of hiding them behind transport-only fields.
 
+### 12. Psyche Daily Metrics
+
+Psyche metrics are daily, local-first measurements derived from stored observations rather than live page-time scanners. Devrage is the first metric family: it stores conversation-day counts and daily metric rows for user-message swear count and swearing-message percentage, exposes those rows through a Psyche Metrics view, and renders them with the same history, coverage, baseline, delta, and sparkline treatment as Vitals. If no conversations or stored metric rows exist, devrage-specific cards stay hidden while the generic Metrics route remains available for future Psyche measures.
+
 ### 12. Gamified Progression
 
 Forge should make user momentum visible through a selected-user-first XP and trophy system. The progression model must extend the existing reward ledger rather than duplicating it: XP totals, levels, streaks, trophies, unlocks, and celebrations are projections of auditable reward events.

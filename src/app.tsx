@@ -30,6 +30,7 @@ import { PreferencesPage } from "@/pages/preferences-page";
 import { PsychePage } from "@/pages/psyche-page";
 import { PsycheBehaviorsPage } from "@/pages/psyche-behaviors-page";
 import { PsycheGoalMapPage } from "@/pages/psyche-goal-map-page";
+import { PsycheMetricsPage } from "@/pages/psyche-metrics-page";
 import { PsycheModeGuidePage } from "@/pages/psyche-mode-guide-page";
 import { PsycheModesPage } from "@/pages/psyche-modes-page";
 import { PsychePatternsPage } from "@/pages/psyche-patterns-page";
@@ -295,6 +296,15 @@ export function App() {
             )}
           />
           <Route path="psyche" element={<PsychePage />} />
+          <Route
+            path="psyche/metrics"
+            element={surface(
+              "psyche-metrics",
+              "Psyche metrics",
+              "Daily Psyche metric history with plots and summary statistics.",
+              <PsycheMetricsPage />
+            )}
+          />
           <Route
             path="psyche/values"
             element={surface(

@@ -148,6 +148,7 @@ import type {
   ModeGuideSessionInput,
   ModeProfile,
   ModeProfileInput,
+  PsycheMetricsViewData,
   PsycheOverviewPayload,
   PsycheObservationCalendarPayload,
   PsycheValue,
@@ -879,6 +880,12 @@ export function getPsycheOverview(userIds?: string[] | unknown) {
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
   return request<{ overview: PsycheOverviewPayload }>(
     `/api/v1/psyche/overview${suffix}`
+  );
+}
+
+export function getPsycheMetricsView() {
+  return request<{ metrics: PsycheMetricsViewData }>(
+    "/api/v1/psyche/metrics"
   );
 }
 

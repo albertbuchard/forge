@@ -500,6 +500,9 @@ export function getPsycheOverview(userIds) {
     const suffix = search.size > 0 ? `?${search.toString()}` : "";
     return request(`/api/v1/psyche/overview${suffix}`);
 }
+export function getPsycheMetricsView() {
+    return request("/api/v1/psyche/metrics");
+}
 export function listQuestionnaires(userIds) {
     const search = new URLSearchParams();
     appendUserIds(search, coerceUserIds(userIds));

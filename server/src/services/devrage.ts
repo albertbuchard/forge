@@ -1,10 +1,28 @@
 import { createHash } from "node:crypto";
 import { scanConversations, type DevrageReport, type MessageRole } from "forge-devrage";
 import { getDatabase, runInTransaction } from "../db.js";
+import { psycheMetricsViewDataSchema, type PsycheMetricsViewData } from "../psyche-types.js";
 
 const SWEAR_COUNT_KEY = "swear_count";
 const SWEARING_MESSAGE_PERCENT_KEY = "swearing_message_percent";
 const DEFAULT_ROLE_FILTER = new Set<MessageRole>(["user"]);
+
+const PSYCHE_METRIC_DEFINITIONS = {
+  [SWEAR_COUNT_KEY]: {
+    metric: "devrageSwearCount",
+    label: "Devrage swears",
+    category: "conversationTone",
+    unit: "swears",
+    aggregation: "cumulative" as const
+  },
+  [SWEARING_MESSAGE_PERCENT_KEY]: {
+    metric: "swearingMessagePercent",
+    label: "Swearing messages",
+    category: "conversationTone",
+    unit: "%",
+    aggregation: "discrete" as const
+  }
+};
 
 interface DevrageConversationMeasureRow {
   date_key: string;
@@ -21,8 +39,26 @@ interface DevrageSyncStateRow {
   updated_at: string;
 }
 
+interface DevrageMetricMeasureRow {
+  date_key: string;
+  metric_key: string;
+  value: number;
+  unit: string;
+  sample_count: number;
+  computed_at: string;
+}
+
+interface DevrageConversationTotalsRow {
+  conversations: number;
+  sources: number;
+  messages: number;
+  messages_with_swears: number;
+  swear_count: number;
+}
+
 export interface DevrageMetricPayload {
   generatedAt: string;
+  hasData: boolean;
   latestDateKey: string | null;
   rawSwearCount: number;
   swearingMessagePercent: number;
@@ -88,6 +124,7 @@ export function getDevrageMetricPayload(): DevrageMetricPayload {
 
   return {
     generatedAt,
+    hasData: history.some((day) => day.conversationsScanned > 0),
     latestDateKey: latest?.dateKey ?? null,
     rawSwearCount: latest?.rawSwearCount ?? 0,
     swearingMessagePercent: latest?.swearingMessagePercent ?? 0,
@@ -109,6 +146,184 @@ export function getDevrageMetricPayload(): DevrageMetricPayload {
       lastSyncedDateKey: state?.last_synced_date_key ?? null
     }
   };
+}
+
+export function getPsycheMetricsViewData(): PsycheMetricsViewData {
+  const rows = getDatabase()
+    .prepare(
+      `SELECT date_key, metric_key, value, unit, sample_count, computed_at
+       FROM psyche_devrage_metric_measures
+       ORDER BY date_key ASC, metric_key ASC`
+    )
+    .all() as unknown as DevrageMetricMeasureRow[];
+  const metricBuckets = new Map<
+    string,
+    {
+      label: string;
+      category: string;
+      unit: string;
+      aggregation: "discrete" | "cumulative";
+      days: Map<string, DevrageMetricMeasureRow[]>;
+    }
+  >();
+
+  for (const row of rows) {
+    const definition =
+      PSYCHE_METRIC_DEFINITIONS[
+        row.metric_key as keyof typeof PSYCHE_METRIC_DEFINITIONS
+      ];
+    if (!definition) {
+      continue;
+    }
+    const bucket = metricBuckets.get(definition.metric) ?? {
+      label: definition.label,
+      category: definition.category,
+      unit: definition.unit,
+      aggregation: definition.aggregation,
+      days: new Map<string, DevrageMetricMeasureRow[]>()
+    };
+    const dayRows = bucket.days.get(row.date_key) ?? [];
+    dayRows.push(row);
+    bucket.days.set(row.date_key, dayRows);
+    metricBuckets.set(definition.metric, bucket);
+  }
+
+  const metrics = [...metricBuckets.entries()]
+    .map(([metric, bucket]) => {
+      const days = [...bucket.days.entries()]
+        .sort((left, right) => left[0].localeCompare(right[0]))
+        .map(([dateKey, entries]) => {
+          const values = entries.map((entry) => Number(entry.value) || 0);
+          const value = average(values);
+          return {
+            dateKey,
+            average: round(value, bucket.aggregation === "cumulative" ? 0 : 1),
+            minimum: round(Math.min(...values), bucket.aggregation === "cumulative" ? 0 : 1),
+            maximum: round(Math.max(...values), bucket.aggregation === "cumulative" ? 0 : 1),
+            latest: round(values.at(-1) ?? value, bucket.aggregation === "cumulative" ? 0 : 1),
+            total:
+              bucket.aggregation === "cumulative"
+                ? round(sumNullable(values), 0)
+                : null,
+            sampleCount: entries.reduce((sum, entry) => sum + Number(entry.sample_count || 0), 0),
+            latestSampleAt:
+              entries
+                .map((entry) => entry.computed_at)
+                .filter(Boolean)
+                .sort()
+                .at(-1) ?? null
+          };
+        });
+      const latestDay =
+        [...days].reverse().find((day) =>
+          psycheMetricPrimaryValue({
+            aggregation: bucket.aggregation,
+            latest: day.latest,
+            average: day.average,
+            total: day.total,
+            maximum: day.maximum
+          }) !== null
+        ) ?? null;
+      const recentValues = days
+        .map((day) =>
+          psycheMetricPrimaryValue({
+            aggregation: bucket.aggregation,
+            latest: day.latest,
+            average: day.average,
+            total: day.total,
+            maximum: day.maximum
+          })
+        )
+        .filter((value): value is number => value != null);
+      const baselineValues = recentValues.slice(
+        Math.max(0, recentValues.length - 8),
+        recentValues.length - 1
+      );
+      const baselineValue =
+        baselineValues.length > 0 ? average(baselineValues) : recentValues.at(-2) ?? null;
+      const latestValue = latestDay
+        ? psycheMetricPrimaryValue({
+            aggregation: bucket.aggregation,
+            latest: latestDay.latest,
+            average: latestDay.average,
+            total: latestDay.total,
+            maximum: latestDay.maximum
+          })
+        : null;
+      const digits = bucket.aggregation === "cumulative" ? 0 : 1;
+      return {
+        metric,
+        label: bucket.label,
+        category: bucket.category,
+        unit: bucket.unit,
+        aggregation: bucket.aggregation,
+        latestValue: latestValue == null ? null : round(latestValue, digits),
+        latestDateKey: latestDay?.dateKey ?? null,
+        baselineValue: baselineValue == null ? null : round(baselineValue, digits),
+        deltaValue:
+          latestValue != null && baselineValue != null
+            ? round(latestValue - baselineValue, digits)
+            : null,
+        coverageDays: days.filter((day) => day.sampleCount > 0).length,
+        days
+      };
+    })
+    .sort((left, right) => {
+      if (left.category === right.category) {
+        return left.label.localeCompare(right.label);
+      }
+      return left.category.localeCompare(right.category);
+    });
+
+  const latestDateKey = rows.map((row) => row.date_key).sort().at(-1) ?? null;
+  const trackedDays = new Set(rows.map((row) => row.date_key)).size;
+  const categoryBreakdown = [...new Set(metrics.map((metric) => metric.category))]
+    .map((category) => {
+      const categoryMetrics = metrics.filter((metric) => metric.category === category);
+      return {
+        category,
+        metricCount: categoryMetrics.length,
+        coverageDays: Math.max(...categoryMetrics.map((metric) => metric.coverageDays), 0)
+      };
+    })
+    .sort((left, right) => right.metricCount - left.metricCount);
+  const context = getDevrageConversationTotals();
+  const dailyAverages = getMetricAverages();
+  const weeklyAverages = getMetricAverages(7);
+  const state = getDevrageSyncState();
+
+  return psycheMetricsViewDataSchema.parse({
+    summary: {
+      hasData: metrics.length > 0 && context.conversations > 0,
+      trackedDays,
+      metricCount: metrics.length,
+      latestDateKey,
+      latestMetricCount: metrics.filter((metric) => metric.latestDateKey === latestDateKey).length,
+      categoryBreakdown
+    },
+    context: {
+      generatedAt: nowIso(),
+      conversationsScanned: Number(context.conversations) || 0,
+      sourceCount: Number(context.sources) || 0,
+      messagesScanned: Number(context.messages) || 0,
+      messagesWithSwears: Number(context.messages_with_swears) || 0,
+      totalSwears: Number(context.swear_count) || 0,
+      dailyAverage: {
+        rawSwearCount: dailyAverages.rawSwearCount,
+        swearingMessagePercent: dailyAverages.swearingMessagePercent
+      },
+      weeklyAverage: {
+        rawSwearCount: weeklyAverages.rawSwearCount,
+        swearingMessagePercent: weeklyAverages.swearingMessagePercent
+      },
+      sync: {
+        fullSyncCompletedAt: state?.full_sync_completed_at ?? null,
+        lastDailySyncAt: state?.last_daily_sync_at ?? null,
+        lastSyncedDateKey: state?.last_synced_date_key ?? null
+      }
+    },
+    metrics
+  });
 }
 
 async function syncDevrageMetricHistoryInternal(options: { forceFull?: boolean; dateKey?: string }) {
@@ -318,6 +533,44 @@ function getMetricAverages(days?: number) {
     rawSwearCount: round(Number(swearAverage) || 0, 1),
     swearingMessagePercent: round(Number(percentAverage) || 0, 1)
   };
+}
+
+function getDevrageConversationTotals(): DevrageConversationTotalsRow {
+  return getDatabase()
+    .prepare(
+      `SELECT
+         COUNT(*) AS conversations,
+         COUNT(DISTINCT source) AS sources,
+         COALESCE(SUM(messages), 0) AS messages,
+         COALESCE(SUM(messages_with_swears), 0) AS messages_with_swears,
+         COALESCE(SUM(swear_count), 0) AS swear_count
+       FROM psyche_devrage_conversation_measures`
+    )
+    .get() as unknown as DevrageConversationTotalsRow;
+}
+
+function psycheMetricPrimaryValue(metric: {
+  aggregation: string;
+  latest: number | null;
+  average: number | null;
+  total: number | null;
+  maximum: number | null;
+}) {
+  if (metric.aggregation === "cumulative") {
+    return metric.total ?? metric.latest;
+  }
+  return metric.latest ?? metric.average ?? metric.maximum;
+}
+
+function average(values: number[]) {
+  if (values.length === 0) {
+    return 0;
+  }
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function sumNullable(values: number[]) {
+  return values.reduce((sum, value) => sum + value, 0);
 }
 
 function stableId(prefix: string, ...parts: string[]) {

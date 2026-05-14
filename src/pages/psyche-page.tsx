@@ -104,6 +104,13 @@ function DevrageMetricCard({ metric }: { metric: DevrageMetricPayload }) {
         <span>{formatCount(metric.messagesScanned)} messages</span>
         <span>{formatCount(metric.messagesWithSwears)} flagged</span>
       </div>
+
+      <Link
+        to="/psyche/metrics"
+        className="mt-4 inline-flex min-h-10 items-center justify-center rounded-[var(--radius-control)] border border-amber-200/14 bg-amber-200/10 px-4 py-2 text-sm font-medium text-amber-50 transition hover:bg-amber-200/14"
+      >
+        Open metrics
+      </Link>
     </Card>
   );
 }
@@ -217,6 +224,10 @@ export function PsychePage() {
     })[0] ?? null;
   const heroDescription =
     "Values, patterns, behaviors, beliefs, habits, and reports in one live field.";
+  const devrageAvailable =
+    overview.devrageMetric.hasData ||
+    overview.devrageMetric.conversationsScanned > 0 ||
+    overview.devrageMetric.history.length > 0;
   const heroActions = (
     <div className="flex flex-wrap items-center justify-end gap-2">
       <GamificationMiniHud metrics={shell.snapshot.metrics} />
@@ -383,15 +394,19 @@ export function PsychePage() {
         </Card>
       )
     },
-    {
-      id: "devrage",
-      title: "Devrage metric",
-      description: "Daily user-message frustration metric.",
-      defaultWidth: 4,
-      defaultHeight: 3,
-      minWidth: 4,
-      render: () => <DevrageMetricCard metric={overview.devrageMetric} />
-    },
+    ...(devrageAvailable
+      ? [
+          {
+            id: "devrage",
+            title: "Devrage metric",
+            description: "Daily user-message frustration metric.",
+            defaultWidth: 4,
+            defaultHeight: 3,
+            minWidth: 4,
+            render: () => <DevrageMetricCard metric={overview.devrageMetric} />
+          }
+        ]
+      : []),
     {
       id: "actions",
       title: "Open threads",
