@@ -3,6 +3,7 @@ import { listInsights } from "../repositories/collaboration.js";
 import { listNotes } from "../repositories/notes.js";
 import { filterOwnedEntities } from "../repositories/entity-ownership.js";
 import { listBehaviorPatterns, listBehaviors, listBeliefEntries, listModeProfiles, listPsycheValues, listSchemaCatalog, listTriggerReports } from "../repositories/psyche.js";
+import { getDevrageMetricPayload } from "./devrage.js";
 import { psycheOverviewPayloadSchema } from "../psyche-types.js";
 const PSYCHE_ENTITY_TYPE_SET = new Set([
     "psyche_value",
@@ -32,6 +33,7 @@ export function getPsycheOverview(userIds) {
         ...behaviors.filter((behavior) => behavior.kind === "committed").map((behavior) => behavior.title),
         ...reports.flatMap((report) => report.nextMoves)
     ];
+    const devrageMetric = getDevrageMetricPayload();
     const schemaPressure = schemaCatalog
         .filter((schema) => schema.schemaType === "maladaptive")
         .map((schema) => {
@@ -57,6 +59,7 @@ export function getPsycheOverview(userIds) {
         modes,
         reports,
         schemaPressure,
+        devrageMetric,
         openInsights,
         openNotes,
         committedActions

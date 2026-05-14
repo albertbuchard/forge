@@ -46,6 +46,7 @@ import { getInsightsPayload } from "./services/insights.js";
 import { buildLifeForcePayload, createFatigueSignal, listLifeForceTemplates, resolveLifeForceUser, updateLifeForceProfile, updateLifeForceTemplate } from "./services/life-force.js";
 import { createEntities, deleteEntities, deleteEntity, getSettingsBinPayload, restoreEntities, searchEntities, updateEntities } from "./services/entity-crud.js";
 import { getPsycheOverview } from "./services/psyche.js";
+import { syncDevrageMetricHistoryIfNeeded } from "./services/devrage.js";
 import { exportPsycheObservationCalendar, getPsycheObservationCalendar } from "./services/psyche-observation-calendar.js";
 import { getProjectBoard, getProjectSummary, listProjectSummaries } from "./services/projects.js";
 import { createDataBackup, exportData, getDataManagementState, maybeRunAutomaticBackup, restoreDataBackup, scanForDataRecoveryCandidates, switchDataRoot, updateDataManagementSettings } from "./services/data-management.js";
@@ -6231,10 +6232,27 @@ export async function buildServer(options = {}) {
     void maybeRunAutomaticBackup().catch(() => {
         // Ignore startup backup failures; the Data settings surface exposes recovery.
     });
+    const devrageMetricSyncEnabled = options.devrageMetricSync ?? !options.dataRoot;
+    const devrageMetricTimer = devrageMetricSyncEnabled
+        ? setInterval(() => {
+            void syncDevrageMetricHistoryIfNeeded().catch(() => {
+                // Devrage is a local metric import; failures should not break Forge.
+            });
+        }, 60 * 60 * 1000)
+        : null;
+    devrageMetricTimer?.unref?.();
+    if (devrageMetricSyncEnabled) {
+        void syncDevrageMetricHistoryIfNeeded().catch(() => {
+            // The Psyche metric payload exposes an empty state until sync succeeds.
+        });
+    }
     app.addHook("onClose", async () => {
         clearInterval(diagnosticRetentionTimer);
         clearInterval(cronSchedulerTimer);
         clearInterval(dataBackupTimer);
+        if (devrageMetricTimer) {
+            clearInterval(devrageMetricTimer);
+        }
         taskRunWatchdog?.stop();
         await stopCompanionIroh();
         await managers.backgroundJobs.stop();
