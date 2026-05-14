@@ -4804,6 +4804,81 @@ export function buildOpenApiDocument() {
     }
   };
 
+  const devrageMetricPayload = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "generatedAt",
+      "latestDateKey",
+      "rawSwearCount",
+      "swearingMessagePercent",
+      "conversationsScanned",
+      "messagesScanned",
+      "messagesWithSwears",
+      "dailyAverage",
+      "weeklyAverage",
+      "history",
+      "sync"
+    ],
+    properties: {
+      generatedAt: { type: "string", format: "date-time" },
+      latestDateKey: nullable({ type: "string" }),
+      rawSwearCount: { type: "number" },
+      swearingMessagePercent: { type: "number" },
+      conversationsScanned: { type: "integer" },
+      messagesScanned: { type: "integer" },
+      messagesWithSwears: { type: "integer" },
+      dailyAverage: {
+        type: "object",
+        additionalProperties: false,
+        required: ["rawSwearCount", "swearingMessagePercent"],
+        properties: {
+          rawSwearCount: { type: "number" },
+          swearingMessagePercent: { type: "number" }
+        }
+      },
+      weeklyAverage: {
+        type: "object",
+        additionalProperties: false,
+        required: ["rawSwearCount", "swearingMessagePercent"],
+        properties: {
+          rawSwearCount: { type: "number" },
+          swearingMessagePercent: { type: "number" }
+        }
+      },
+      history: arrayOf({
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "dateKey",
+          "rawSwearCount",
+          "swearingMessagePercent",
+          "conversationsScanned",
+          "messagesScanned",
+          "messagesWithSwears"
+        ],
+        properties: {
+          dateKey: { type: "string" },
+          rawSwearCount: { type: "number" },
+          swearingMessagePercent: { type: "number" },
+          conversationsScanned: { type: "integer" },
+          messagesScanned: { type: "integer" },
+          messagesWithSwears: { type: "integer" }
+        }
+      }),
+      sync: {
+        type: "object",
+        additionalProperties: false,
+        required: ["fullSyncCompletedAt", "lastDailySyncAt", "lastSyncedDateKey"],
+        properties: {
+          fullSyncCompletedAt: nullable({ type: "string", format: "date-time" }),
+          lastDailySyncAt: nullable({ type: "string", format: "date-time" }),
+          lastSyncedDateKey: nullable({ type: "string" })
+        }
+      }
+    }
+  };
+
   const psycheOverviewPayload = {
     type: "object",
     additionalProperties: false,
@@ -4816,6 +4891,7 @@ export function buildOpenApiDocument() {
       "beliefs",
       "modes",
       "schemaPressure",
+      "devrageMetric",
       "reports",
       "openInsights",
       "openNotes",
@@ -4839,6 +4915,7 @@ export function buildOpenApiDocument() {
           activationCount: { type: "integer" }
         }
       }),
+      devrageMetric: devrageMetricPayload,
       reports: arrayOf({ $ref: "#/components/schemas/TriggerReport" }),
       openInsights: { type: "integer" },
       openNotes: { type: "integer" },

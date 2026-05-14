@@ -24,6 +24,89 @@ import { ErrorState } from "@/components/ui/page-state";
 import { getEntityButtonClassName } from "@/lib/entity-visuals";
 import { cn } from "@/lib/utils";
 import { getPsycheOverview, listQuestionnaires } from "@/lib/api";
+import type { DevrageMetricPayload } from "@/lib/psyche-types";
+
+function formatPercent(value: number) {
+  return `${value.toFixed(value >= 10 ? 0 : 1)}%`;
+}
+
+function formatCount(value: number) {
+  return new Intl.NumberFormat().format(Math.round(value));
+}
+
+function formatSignedAverage(value: number, unit: "count" | "percent") {
+  const formatted = unit === "percent" ? formatPercent(value) : formatCount(value);
+  return formatted;
+}
+
+function DevrageMetricCard({ metric }: { metric: DevrageMetricPayload }) {
+  const latestHistory = metric.history.slice(0, 7).reverse();
+  const maxSwears = Math.max(1, ...latestHistory.map((day) => day.rawSwearCount));
+
+  return (
+    <Card className="min-w-0 border border-amber-200/12 bg-[linear-gradient(180deg,rgba(39,31,17,0.96),rgba(19,21,17,0.95))] p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-amber-100/72">
+            Devrage metric
+          </div>
+          <div className="mt-2 font-display text-[clamp(1.4rem,2.5vw,2.15rem)] leading-none text-white">
+            {formatCount(metric.rawSwearCount)} swears
+          </div>
+        </div>
+        <Badge className="bg-amber-200/10 text-amber-50">
+          {metric.latestDateKey ?? "No history"}
+        </Badge>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-[18px] bg-white/[0.045] px-4 py-3">
+          <div className="text-xs text-white/48">Swearing messages</div>
+          <div className="mt-1 text-2xl font-semibold text-white">
+            {formatPercent(metric.swearingMessagePercent)}
+          </div>
+        </div>
+        <div className="rounded-[18px] bg-white/[0.045] px-4 py-3">
+          <div className="text-xs text-white/48">Daily average</div>
+          <div className="mt-1 text-2xl font-semibold text-white">
+            {formatSignedAverage(metric.dailyAverage.rawSwearCount, "count")}
+          </div>
+        </div>
+        <div className="rounded-[18px] bg-white/[0.045] px-4 py-3">
+          <div className="text-xs text-white/48">Weekly average</div>
+          <div className="mt-1 text-2xl font-semibold text-white">
+            {formatSignedAverage(metric.weeklyAverage.rawSwearCount, "count")}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 flex h-16 items-end gap-1.5">
+        {latestHistory.length > 0 ? (
+          latestHistory.map((day) => (
+            <div
+              key={day.dateKey}
+              className="min-w-0 flex-1 rounded-t-[6px] bg-amber-200/50"
+              style={{
+                height: `${Math.max(8, (day.rawSwearCount / maxSwears) * 64)}px`
+              }}
+              title={`${day.dateKey}: ${formatCount(day.rawSwearCount)} swears, ${formatPercent(day.swearingMessagePercent)} swearing messages`}
+            />
+          ))
+        ) : (
+          <div className="self-center text-sm text-white/48">
+            History will appear after the first local backfill.
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2 text-xs text-white/50">
+        <span>{formatCount(metric.conversationsScanned)} conversations</span>
+        <span>{formatCount(metric.messagesScanned)} messages</span>
+        <span>{formatCount(metric.messagesWithSwears)} flagged</span>
+      </div>
+    </Card>
+  );
+}
 
 export function PsychePage() {
   const shell = useForgeShell();
@@ -301,10 +384,19 @@ export function PsychePage() {
       )
     },
     {
+      id: "devrage",
+      title: "Devrage metric",
+      description: "Daily user-message frustration metric.",
+      defaultWidth: 4,
+      defaultHeight: 3,
+      minWidth: 4,
+      render: () => <DevrageMetricCard metric={overview.devrageMetric} />
+    },
+    {
       id: "actions",
       title: "Open threads",
       description: "Action and pulse cards.",
-      defaultWidth: 12,
+      defaultWidth: 8,
       defaultHeight: 3,
       render: () => (
         <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">

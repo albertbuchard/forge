@@ -185,6 +185,30 @@ function createQueryResult(overrides: Record<string, unknown> = {}) {
   };
 }
 
+const emptyDevrageMetric = {
+  generatedAt: "2026-05-14T00:00:00.000Z",
+  latestDateKey: null,
+  rawSwearCount: 0,
+  swearingMessagePercent: 0,
+  conversationsScanned: 0,
+  messagesScanned: 0,
+  messagesWithSwears: 0,
+  dailyAverage: {
+    rawSwearCount: 0,
+    swearingMessagePercent: 0
+  },
+  weeklyAverage: {
+    rawSwearCount: 0,
+    swearingMessagePercent: 0
+  },
+  history: [],
+  sync: {
+    fullSyncCompletedAt: null,
+    lastDailySyncAt: null,
+    lastSyncedDateKey: null
+  }
+};
+
 function renderWithProviders(element: React.ReactNode, initialEntries: string[] = ["/"]) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -214,6 +238,11 @@ describe("psyche route states", () => {
             behaviors: [],
             beliefs: [],
             patterns: [],
+            modes: [],
+            schemaPressure: [],
+            committedActions: [],
+            generatedAt: "2026-05-14T00:00:00.000Z",
+            devrageMetric: emptyDevrageMetric,
             openInsights: 0,
             openNotes: 0
           }

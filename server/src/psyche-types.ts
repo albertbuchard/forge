@@ -267,6 +267,39 @@ export const schemaPressureEntrySchema = z.object({
   activationCount: z.number().int().nonnegative()
 });
 
+export const devrageMetricPayloadSchema = z.object({
+  generatedAt: z.string(),
+  latestDateKey: z.string().nullable(),
+  rawSwearCount: z.number().nonnegative(),
+  swearingMessagePercent: z.number().nonnegative(),
+  conversationsScanned: z.number().int().nonnegative(),
+  messagesScanned: z.number().int().nonnegative(),
+  messagesWithSwears: z.number().int().nonnegative(),
+  dailyAverage: z.object({
+    rawSwearCount: z.number().nonnegative(),
+    swearingMessagePercent: z.number().nonnegative()
+  }),
+  weeklyAverage: z.object({
+    rawSwearCount: z.number().nonnegative(),
+    swearingMessagePercent: z.number().nonnegative()
+  }),
+  history: z.array(
+    z.object({
+      dateKey: z.string(),
+      rawSwearCount: z.number().nonnegative(),
+      swearingMessagePercent: z.number().nonnegative(),
+      conversationsScanned: z.number().int().nonnegative(),
+      messagesScanned: z.number().int().nonnegative(),
+      messagesWithSwears: z.number().int().nonnegative()
+    })
+  ),
+  sync: z.object({
+    fullSyncCompletedAt: z.string().nullable(),
+    lastDailySyncAt: z.string().nullable(),
+    lastSyncedDateKey: z.string().nullable()
+  })
+});
+
 export const psycheOverviewPayloadSchema = z.object({
   generatedAt: z.string(),
   domain: domainSchema,
@@ -277,6 +310,7 @@ export const psycheOverviewPayloadSchema = z.object({
   modes: z.array(modeProfileSchema),
   reports: z.array(triggerReportSchema),
   schemaPressure: z.array(schemaPressureEntrySchema),
+  devrageMetric: devrageMetricPayloadSchema,
   openInsights: z.number().int().nonnegative(),
   openNotes: z.number().int().nonnegative(),
   committedActions: z.array(trimmedString)
@@ -467,6 +501,7 @@ export type ModeProfile = z.infer<typeof modeProfileSchema>;
 export type ModeTimelineEntry = z.infer<typeof modeTimelineEntrySchema>;
 export type ModeGuideSession = z.infer<typeof modeGuideSessionSchema>;
 export type TriggerReport = z.infer<typeof triggerReportSchema>;
+export type DevrageMetricPayload = z.infer<typeof devrageMetricPayloadSchema>;
 export type PsycheOverviewPayload = z.infer<typeof psycheOverviewPayloadSchema>;
 export type PsycheObservationEntry = z.infer<typeof psycheObservationEntrySchema>;
 export type PsycheObservationActivityEntry = z.infer<
