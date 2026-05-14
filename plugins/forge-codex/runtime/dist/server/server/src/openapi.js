@@ -4650,6 +4650,7 @@ export function buildOpenApiDocument() {
         additionalProperties: false,
         required: [
             "generatedAt",
+            "hasData",
             "latestDateKey",
             "rawSwearCount",
             "swearingMessagePercent",
@@ -4663,6 +4664,7 @@ export function buildOpenApiDocument() {
         ],
         properties: {
             generatedAt: { type: "string", format: "date-time" },
+            hasData: { type: "boolean" },
             latestDateKey: nullable({ type: "string" }),
             rawSwearCount: { type: "number" },
             swearingMessagePercent: { type: "number" },
@@ -4717,6 +4719,148 @@ export function buildOpenApiDocument() {
                     lastSyncedDateKey: nullable({ type: "string" })
                 }
             }
+        }
+    };
+    const dailyMetricDayRecord = {
+        type: "object",
+        additionalProperties: false,
+        required: [
+            "dateKey",
+            "average",
+            "minimum",
+            "maximum",
+            "latest",
+            "total",
+            "sampleCount",
+            "latestSampleAt"
+        ],
+        properties: {
+            dateKey: { type: "string" },
+            average: nullable({ type: "number" }),
+            minimum: nullable({ type: "number" }),
+            maximum: nullable({ type: "number" }),
+            latest: nullable({ type: "number" }),
+            total: nullable({ type: "number" }),
+            sampleCount: { type: "integer" },
+            latestSampleAt: nullable({ type: "string", format: "date-time" })
+        }
+    };
+    const dailyMetricRecord = {
+        type: "object",
+        additionalProperties: false,
+        required: [
+            "metric",
+            "label",
+            "category",
+            "unit",
+            "aggregation",
+            "latestValue",
+            "latestDateKey",
+            "baselineValue",
+            "deltaValue",
+            "coverageDays",
+            "days"
+        ],
+        properties: {
+            metric: { type: "string" },
+            label: { type: "string" },
+            category: { type: "string" },
+            unit: { type: "string" },
+            aggregation: { type: "string", enum: ["discrete", "cumulative"] },
+            latestValue: nullable({ type: "number" }),
+            latestDateKey: nullable({ type: "string" }),
+            baselineValue: nullable({ type: "number" }),
+            deltaValue: nullable({ type: "number" }),
+            coverageDays: { type: "integer" },
+            days: arrayOf(dailyMetricDayRecord)
+        }
+    };
+    const psycheMetricsViewData = {
+        type: "object",
+        additionalProperties: false,
+        required: ["summary", "context", "metrics"],
+        properties: {
+            summary: {
+                type: "object",
+                additionalProperties: false,
+                required: [
+                    "hasData",
+                    "trackedDays",
+                    "metricCount",
+                    "latestDateKey",
+                    "latestMetricCount",
+                    "categoryBreakdown"
+                ],
+                properties: {
+                    hasData: { type: "boolean" },
+                    trackedDays: { type: "integer" },
+                    metricCount: { type: "integer" },
+                    latestDateKey: nullable({ type: "string" }),
+                    latestMetricCount: { type: "integer" },
+                    categoryBreakdown: arrayOf({
+                        type: "object",
+                        additionalProperties: false,
+                        required: ["category", "metricCount", "coverageDays"],
+                        properties: {
+                            category: { type: "string" },
+                            metricCount: { type: "integer" },
+                            coverageDays: { type: "integer" }
+                        }
+                    })
+                }
+            },
+            context: {
+                type: "object",
+                additionalProperties: false,
+                required: [
+                    "generatedAt",
+                    "conversationsScanned",
+                    "sourceCount",
+                    "messagesScanned",
+                    "messagesWithSwears",
+                    "totalSwears",
+                    "dailyAverage",
+                    "weeklyAverage",
+                    "sync"
+                ],
+                properties: {
+                    generatedAt: { type: "string", format: "date-time" },
+                    conversationsScanned: { type: "integer" },
+                    sourceCount: { type: "integer" },
+                    messagesScanned: { type: "integer" },
+                    messagesWithSwears: { type: "integer" },
+                    totalSwears: { type: "number" },
+                    dailyAverage: {
+                        type: "object",
+                        additionalProperties: false,
+                        required: ["rawSwearCount", "swearingMessagePercent"],
+                        properties: {
+                            rawSwearCount: { type: "number" },
+                            swearingMessagePercent: { type: "number" }
+                        }
+                    },
+                    weeklyAverage: {
+                        type: "object",
+                        additionalProperties: false,
+                        required: ["rawSwearCount", "swearingMessagePercent"],
+                        properties: {
+                            rawSwearCount: { type: "number" },
+                            swearingMessagePercent: { type: "number" }
+                        }
+                    },
+                    sync: {
+                        type: "object",
+                        additionalProperties: false,
+                        required: ["fullSyncCompletedAt", "lastDailySyncAt", "lastSyncedDateKey"],
+                        properties: {
+                            fullSyncCompletedAt: nullable({ type: "string", format: "date-time" }),
+                            lastDailySyncAt: nullable({ type: "string", format: "date-time" }),
+                            lastSyncedDateKey: nullable({ type: "string" })
+                        }
+                    }
+                }
+            },
+            metrics: arrayOf(dailyMetricRecord)
         }
     };
     const psycheOverviewPayload = {
@@ -5068,6 +5212,7 @@ export function buildOpenApiDocument() {
                 WorkoutSession: workoutSession,
                 SleepViewData: sleepViewData,
                 FitnessViewData: fitnessViewData,
+                PsycheMetricsViewData: psycheMetricsViewData,
                 PsycheOverviewPayload: psycheOverviewPayload,
                 Insight: insight,
                 InsightFeedback: insightFeedback,
@@ -7116,6 +7261,23 @@ export function buildOpenApiDocument() {
                                 }
                             }
                         }, "Psyche overview"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/psyche/metrics": {
+                get: {
+                    summary: "Get daily Psyche metric history",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["metrics"],
+                            properties: {
+                                metrics: {
+                                    $ref: "#/components/schemas/PsycheMetricsViewData"
+                                }
+                            }
+                        }, "Psyche metrics view"),
                         default: { $ref: "#/components/responses/Error" }
                     }
                 }

@@ -269,6 +269,7 @@ export const schemaPressureEntrySchema = z.object({
 
 export const devrageMetricPayloadSchema = z.object({
   generatedAt: z.string(),
+  hasData: z.boolean(),
   latestDateKey: z.string().nullable(),
   rawSwearCount: z.number().nonnegative(),
   swearingMessagePercent: z.number().nonnegative(),
@@ -298,6 +299,70 @@ export const devrageMetricPayloadSchema = z.object({
     lastDailySyncAt: z.string().nullable(),
     lastSyncedDateKey: z.string().nullable()
   })
+});
+
+export const psycheMetricDayRecordSchema = z.object({
+  dateKey: z.string(),
+  average: z.number().nullable(),
+  minimum: z.number().nullable(),
+  maximum: z.number().nullable(),
+  latest: z.number().nullable(),
+  total: z.number().nullable(),
+  sampleCount: z.number().int().nonnegative(),
+  latestSampleAt: z.string().nullable()
+});
+
+export const psycheMetricsViewDataSchema = z.object({
+  summary: z.object({
+    hasData: z.boolean(),
+    trackedDays: z.number().int().nonnegative(),
+    metricCount: z.number().int().nonnegative(),
+    latestDateKey: z.string().nullable(),
+    latestMetricCount: z.number().int().nonnegative(),
+    categoryBreakdown: z.array(
+      z.object({
+        category: z.string(),
+        metricCount: z.number().int().nonnegative(),
+        coverageDays: z.number().int().nonnegative()
+      })
+    )
+  }),
+  context: z.object({
+    generatedAt: z.string(),
+    conversationsScanned: z.number().int().nonnegative(),
+    sourceCount: z.number().int().nonnegative(),
+    messagesScanned: z.number().int().nonnegative(),
+    messagesWithSwears: z.number().int().nonnegative(),
+    totalSwears: z.number().nonnegative(),
+    dailyAverage: z.object({
+      rawSwearCount: z.number().nonnegative(),
+      swearingMessagePercent: z.number().nonnegative()
+    }),
+    weeklyAverage: z.object({
+      rawSwearCount: z.number().nonnegative(),
+      swearingMessagePercent: z.number().nonnegative()
+    }),
+    sync: z.object({
+      fullSyncCompletedAt: z.string().nullable(),
+      lastDailySyncAt: z.string().nullable(),
+      lastSyncedDateKey: z.string().nullable()
+    })
+  }),
+  metrics: z.array(
+    z.object({
+      metric: z.string(),
+      label: z.string(),
+      category: z.string(),
+      unit: z.string(),
+      aggregation: z.enum(["discrete", "cumulative"]),
+      latestValue: z.number().nullable(),
+      latestDateKey: z.string().nullable(),
+      baselineValue: z.number().nullable(),
+      deltaValue: z.number().nullable(),
+      coverageDays: z.number().int().nonnegative(),
+      days: z.array(psycheMetricDayRecordSchema)
+    })
+  )
 });
 
 export const psycheOverviewPayloadSchema = z.object({
@@ -502,6 +567,7 @@ export type ModeTimelineEntry = z.infer<typeof modeTimelineEntrySchema>;
 export type ModeGuideSession = z.infer<typeof modeGuideSessionSchema>;
 export type TriggerReport = z.infer<typeof triggerReportSchema>;
 export type DevrageMetricPayload = z.infer<typeof devrageMetricPayloadSchema>;
+export type PsycheMetricsViewData = z.infer<typeof psycheMetricsViewDataSchema>;
 export type PsycheOverviewPayload = z.infer<typeof psycheOverviewPayloadSchema>;
 export type PsycheObservationEntry = z.infer<typeof psycheObservationEntrySchema>;
 export type PsycheObservationActivityEntry = z.infer<

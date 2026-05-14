@@ -8834,6 +8834,7 @@ test("openapi document exposes schema-backed versioned contracts", async () => {
     assert.ok(body.components?.schemas?.TriggerReport);
     assert.ok(body.components?.schemas?.Note);
     assert.ok(body.components?.schemas?.PsycheOverviewPayload);
+    assert.ok(body.components?.schemas?.PsycheMetricsViewData);
     assert.ok(body.components?.schemas?.ApprovalRequest);
     assert.ok(body.components?.schemas?.RewardLedgerEvent);
     assert.ok(body.components?.schemas?.XpMetricsPayload);
@@ -8848,6 +8849,7 @@ test("openapi document exposes schema-backed versioned contracts", async () => {
     assert.ok(body.paths?.["/api/v1/agents/sessions/{id}/disconnect"]);
     assert.ok(body.paths?.["/api/v1/domains"]);
     assert.ok(body.paths?.["/api/v1/psyche/overview"]);
+    assert.ok(body.paths?.["/api/v1/psyche/metrics"]);
     assert.ok(body.paths?.["/api/v1/psyche/values"]);
     assert.ok(body.paths?.["/api/v1/psyche/values/{id}"]);
     assert.ok(body.paths?.["/api/v1/psyche/patterns"]);

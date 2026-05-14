@@ -9,7 +9,8 @@ const { useForgeShellMock } = vi.hoisted(() => ({
   useForgeShellMock: vi.fn()
 }));
 
-const { getVitalsViewMock } = vi.hoisted(() => ({
+const { getPsycheMetricsViewMock, getVitalsViewMock } = vi.hoisted(() => ({
+  getPsycheMetricsViewMock: vi.fn(),
   getVitalsViewMock: vi.fn()
 }));
 
@@ -18,6 +19,7 @@ vi.mock("@/components/shell/app-shell", () => ({
 }));
 
 vi.mock("@/lib/api", () => ({
+  getPsycheMetricsView: (...args: unknown[]) => getPsycheMetricsViewMock(...args),
   getVitalsView: (...args: unknown[]) => getVitalsViewMock(...args)
 }));
 
@@ -126,6 +128,40 @@ describe("VitalsPage", () => {
         ]
       }
     });
+    getPsycheMetricsViewMock.mockResolvedValue({
+      metrics: {
+        summary: {
+          hasData: false,
+          trackedDays: 0,
+          metricCount: 0,
+          latestDateKey: null,
+          latestMetricCount: 0,
+          categoryBreakdown: []
+        },
+        context: {
+          generatedAt: "2026-05-14T00:00:00.000Z",
+          conversationsScanned: 0,
+          sourceCount: 0,
+          messagesScanned: 0,
+          messagesWithSwears: 0,
+          totalSwears: 0,
+          dailyAverage: {
+            rawSwearCount: 0,
+            swearingMessagePercent: 0
+          },
+          weeklyAverage: {
+            rawSwearCount: 0,
+            swearingMessagePercent: 0
+          },
+          sync: {
+            fullSyncCompletedAt: null,
+            lastDailySyncAt: null,
+            lastSyncedDateKey: null
+          }
+        },
+        metrics: []
+      }
+    });
   });
 
   afterEach(() => {
@@ -142,5 +178,83 @@ describe("VitalsPage", () => {
     expect(screen.getAllByText("Resting heart rate").length).toBeGreaterThan(0);
     expect(screen.getByText("Body signals should feel operational, not medical-chart dead.")).toBeInTheDocument();
     expect(screen.getByText("12 tracked days across 5 metrics")).toBeInTheDocument();
+  });
+
+  it("renders Psyche metrics inside vitals when stored history exists", async () => {
+    getPsycheMetricsViewMock.mockResolvedValue({
+      metrics: {
+        summary: {
+          hasData: true,
+          trackedDays: 2,
+          metricCount: 2,
+          latestDateKey: "2026-05-14",
+          latestMetricCount: 2,
+          categoryBreakdown: [
+            { category: "conversationTone", metricCount: 2, coverageDays: 2 }
+          ]
+        },
+        context: {
+          generatedAt: "2026-05-14T00:00:00.000Z",
+          conversationsScanned: 3,
+          sourceCount: 1,
+          messagesScanned: 30,
+          messagesWithSwears: 6,
+          totalSwears: 12,
+          dailyAverage: {
+            rawSwearCount: 6,
+            swearingMessagePercent: 20
+          },
+          weeklyAverage: {
+            rawSwearCount: 6,
+            swearingMessagePercent: 20
+          },
+          sync: {
+            fullSyncCompletedAt: "2026-05-14T00:00:00.000Z",
+            lastDailySyncAt: null,
+            lastSyncedDateKey: null
+          }
+        },
+        metrics: [
+          {
+            metric: "devrageSwearCount",
+            label: "Devrage swears",
+            category: "conversationTone",
+            unit: "swears",
+            aggregation: "cumulative",
+            latestValue: 8,
+            latestDateKey: "2026-05-14",
+            baselineValue: 4,
+            deltaValue: 4,
+            coverageDays: 2,
+            days: [
+              { dateKey: "2026-05-13", average: 4, minimum: 4, maximum: 4, latest: 4, total: 4, sampleCount: 1, latestSampleAt: "2026-05-13T00:00:00.000Z" },
+              { dateKey: "2026-05-14", average: 8, minimum: 8, maximum: 8, latest: 8, total: 8, sampleCount: 2, latestSampleAt: "2026-05-14T00:00:00.000Z" }
+            ]
+          },
+          {
+            metric: "swearingMessagePercent",
+            label: "Swearing messages",
+            category: "conversationTone",
+            unit: "%",
+            aggregation: "discrete",
+            latestValue: 25,
+            latestDateKey: "2026-05-14",
+            baselineValue: 12.5,
+            deltaValue: 12.5,
+            coverageDays: 2,
+            days: [
+              { dateKey: "2026-05-13", average: 12.5, minimum: 12.5, maximum: 12.5, latest: 12.5, total: null, sampleCount: 8, latestSampleAt: "2026-05-13T00:00:00.000Z" },
+              { dateKey: "2026-05-14", average: 25, minimum: 25, maximum: 25, latest: 25, total: null, sampleCount: 12, latestSampleAt: "2026-05-14T00:00:00.000Z" }
+            ]
+          }
+        ]
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Psyche metrics")).toBeInTheDocument();
+    expect(screen.getByText("Conversation tone alongside body signals")).toBeInTheDocument();
+    expect(screen.getAllByText("Devrage swears").length).toBeGreaterThan(0);
   });
 });

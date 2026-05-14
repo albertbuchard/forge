@@ -46,7 +46,7 @@ import { getInsightsPayload } from "./services/insights.js";
 import { buildLifeForcePayload, createFatigueSignal, listLifeForceTemplates, resolveLifeForceUser, updateLifeForceProfile, updateLifeForceTemplate } from "./services/life-force.js";
 import { createEntities, deleteEntities, deleteEntity, getSettingsBinPayload, restoreEntities, searchEntities, updateEntities } from "./services/entity-crud.js";
 import { getPsycheOverview } from "./services/psyche.js";
-import { syncDevrageMetricHistoryIfNeeded } from "./services/devrage.js";
+import { getPsycheMetricsViewData, syncDevrageMetricHistoryIfNeeded } from "./services/devrage.js";
 import { exportPsycheObservationCalendar, getPsycheObservationCalendar } from "./services/psyche-observation-calendar.js";
 import { getProjectBoard, getProjectSummary, listProjectSummaries } from "./services/projects.js";
 import { createDataBackup, exportData, getDataManagementState, maybeRunAutomaticBackup, restoreDataBackup, scanForDataRecoveryCandidates, switchDataRoot, updateDataManagementSettings } from "./services/data-management.js";
@@ -5399,6 +5399,12 @@ function buildOperatorOverviewRouteGuide() {
                 requiredScope: "psyche.read"
             },
             {
+                id: "psyche_metrics",
+                path: "/api/v1/psyche/metrics",
+                summary: "Daily Psyche metric read model with stored devrage history and summary statistics.",
+                requiredScope: "psyche.read"
+            },
+            {
                 id: "xp_metrics",
                 path: "/api/v1/metrics/xp",
                 summary: "Reward profile, rule set, and recent reward-ledger events.",
@@ -7364,6 +7370,10 @@ export async function buildServer(options = {}) {
         requirePsycheScopedAccess(request.headers, ["psyche.read"], { route: "/api/v1/psyche/overview" });
         const userIds = resolveScopedUserIds(request.query);
         return { overview: getPsycheOverview(userIds) };
+    });
+    app.get("/api/v1/psyche/metrics", async (request) => {
+        requirePsycheScopedAccess(request.headers, ["psyche.read"], { route: "/api/v1/psyche/metrics" });
+        return { metrics: getPsycheMetricsViewData() };
     });
     app.get("/api/v1/psyche/questionnaires", async (request) => {
         requirePsycheScopedAccess(request.headers, ["psyche.read"], { route: "/api/v1/psyche/questionnaires" });

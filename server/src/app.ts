@@ -379,7 +379,10 @@ import {
   updateEntities
 } from "./services/entity-crud.js";
 import { getPsycheOverview } from "./services/psyche.js";
-import { syncDevrageMetricHistoryIfNeeded } from "./services/devrage.js";
+import {
+  getPsycheMetricsViewData,
+  syncDevrageMetricHistoryIfNeeded
+} from "./services/devrage.js";
 import {
   exportPsycheObservationCalendar,
   getPsycheObservationCalendar
@@ -6710,6 +6713,13 @@ function buildOperatorOverviewRouteGuide() {
         requiredScope: "psyche.read"
       },
       {
+        id: "psyche_metrics",
+        path: "/api/v1/psyche/metrics",
+        summary:
+          "Daily Psyche metric read model with stored devrage history and summary statistics.",
+        requiredScope: "psyche.read"
+      },
+      {
         id: "xp_metrics",
         path: "/api/v1/metrics/xp",
         summary: "Reward profile, rule set, and recent reward-ledger events.",
@@ -9274,6 +9284,14 @@ export async function buildServer(
       request.query as Record<string, unknown>
     );
     return { overview: getPsycheOverview(userIds) };
+  });
+  app.get("/api/v1/psyche/metrics", async (request) => {
+    requirePsycheScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["psyche.read"],
+      { route: "/api/v1/psyche/metrics" }
+    );
+    return { metrics: getPsycheMetricsViewData() };
   });
   app.get("/api/v1/psyche/questionnaires", async (request) => {
     requirePsycheScopedAccess(

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   BrainCircuit,
+  ChartNoAxesCombined,
   GitBranchPlus,
   HeartHandshake,
   ListChecks,
@@ -22,6 +23,7 @@ import { cn } from "@/lib/utils";
 
 export const PSYCHE_SECTIONS = [
   { to: "/psyche", label: "Overview", icon: BrainCircuit },
+  { to: "/psyche/metrics", label: "Metrics", icon: ChartNoAxesCombined },
   { to: "/psyche/values", label: "Values", icon: Orbit },
   { to: "/psyche/patterns", label: "Patterns", icon: Waves },
   { to: "/psyche/questionnaires", label: "Questionnaires", icon: ListChecks },

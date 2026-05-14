@@ -235,6 +235,7 @@ export interface SchemaPressureEntry {
 
 export interface DevrageMetricPayload {
   generatedAt: string;
+  hasData: boolean;
   latestDateKey: string | null;
   rawSwearCount: number;
   swearingMessagePercent: number;
@@ -262,6 +263,66 @@ export interface DevrageMetricPayload {
     lastDailySyncAt: string | null;
     lastSyncedDateKey: string | null;
   };
+}
+
+export interface PsycheMetricDayRecord {
+  dateKey: string;
+  average: number | null;
+  minimum: number | null;
+  maximum: number | null;
+  latest: number | null;
+  total: number | null;
+  sampleCount: number;
+  latestSampleAt: string | null;
+}
+
+export interface PsycheMetricsViewData {
+  summary: {
+    hasData: boolean;
+    trackedDays: number;
+    metricCount: number;
+    latestDateKey: string | null;
+    latestMetricCount: number;
+    categoryBreakdown: Array<{
+      category: string;
+      metricCount: number;
+      coverageDays: number;
+    }>;
+  };
+  context: {
+    generatedAt: string;
+    conversationsScanned: number;
+    sourceCount: number;
+    messagesScanned: number;
+    messagesWithSwears: number;
+    totalSwears: number;
+    dailyAverage: {
+      rawSwearCount: number;
+      swearingMessagePercent: number;
+    };
+    weeklyAverage: {
+      rawSwearCount: number;
+      swearingMessagePercent: number;
+    };
+    sync: {
+      fullSyncCompletedAt: string | null;
+      lastDailySyncAt: string | null;
+      lastSyncedDateKey: string | null;
+    };
+  };
+  metrics: Array<{
+    metric: string;
+    label: string;
+    category: string;
+    unit: string;
+    aggregation: "discrete" | "cumulative";
+    latestValue: number | null;
+    latestDateKey: string | null;
+    baselineValue: number | null;
+    deltaValue: number | null;
+    coverageDays: number;
+    days: PsycheMetricDayRecord[];
+  }>;
 }
 
 export interface PsycheOverviewPayload {

@@ -11,6 +11,7 @@ import {
 } from "./db.js";
 import {
   getDevrageMetricPayload,
+  getPsycheMetricsViewData,
   storeDevrageReport
 } from "./services/devrage.js";
 import { getPsycheOverview } from "./services/psyche.js";
@@ -87,6 +88,7 @@ test("stores devrage as one history row per measured day", async () => {
     });
 
     const metric = getDevrageMetricPayload();
+    assert.equal(metric.hasData, true);
     assert.equal(metric.latestDateKey, "2026-05-14");
     assert.equal(metric.rawSwearCount, 6);
     assert.equal(metric.messagesScanned, 12);
@@ -100,6 +102,49 @@ test("stores devrage as one history row per measured day", async () => {
     const psyche = getPsycheOverview();
     assert.equal(psyche.devrageMetric.rawSwearCount, 6);
     assert.equal(psyche.devrageMetric.history.length, 3);
+
+    const metricsView = getPsycheMetricsViewData();
+    assert.equal(metricsView.summary.hasData, true);
+    assert.equal(metricsView.summary.trackedDays, 3);
+    assert.equal(metricsView.summary.metricCount, 2);
+    assert.equal(metricsView.summary.latestDateKey, "2026-05-14");
+    assert.equal(metricsView.context.conversationsScanned, 3);
+    assert.equal(metricsView.context.messagesScanned, 30);
+    assert.equal(metricsView.context.messagesWithSwears, 6);
+    assert.equal(metricsView.context.totalSwears, 12);
+    assert.equal(metricsView.context.dailyAverage.rawSwearCount, 4);
+    assert.equal(metricsView.context.weeklyAverage.rawSwearCount, 4);
+    const swearCountMetric = metricsView.metrics.find(
+      (entry) => entry.metric === "devrageSwearCount"
+    );
+    assert.ok(swearCountMetric);
+    assert.equal(swearCountMetric.latestValue, 6);
+    assert.equal(swearCountMetric.coverageDays, 3);
+    const percentMetric = metricsView.metrics.find(
+      (entry) => entry.metric === "swearingMessagePercent"
+    );
+    assert.ok(percentMetric);
+    assert.equal(percentMetric.latestValue, 25);
+  } finally {
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("devrage metrics view stays empty before stored conversation history exists", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-devrage-empty-"));
+  configureDatabase({ dataRoot: rootDir, seedDemoData: true });
+  await initializeDatabase();
+
+  try {
+    const metric = getDevrageMetricPayload();
+    assert.equal(metric.hasData, false);
+
+    const metricsView = getPsycheMetricsViewData();
+    assert.equal(metricsView.summary.hasData, false);
+    assert.equal(metricsView.summary.trackedDays, 0);
+    assert.equal(metricsView.summary.metricCount, 0);
+    assert.equal(metricsView.metrics.length, 0);
   } finally {
     closeDatabase();
     await rm(rootDir, { recursive: true, force: true });

@@ -187,6 +187,7 @@ function createQueryResult(overrides: Record<string, unknown> = {}) {
 
 const emptyDevrageMetric = {
   generatedAt: "2026-05-14T00:00:00.000Z",
+  hasData: false,
   latestDateKey: null,
   rawSwearCount: 0,
   swearingMessagePercent: 0,
@@ -260,6 +261,7 @@ describe("psyche route states", () => {
     expect(
       screen.queryByText(/Sleep review now lives alongside the reflective module/i)
     ).not.toBeInTheDocument();
+    expect(screen.queryByText("Devrage metric")).not.toBeInTheDocument();
   });
 
   it("shows a loading state for the values route", () => {
