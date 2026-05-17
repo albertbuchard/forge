@@ -111,6 +111,10 @@ Concrete route-key examples for internal use:
   `{"routeKey":"selection","query":{"from":"2026-05-01T00:00:00.000Z","to":"2026-05-14T23:59:59.999Z","placeIds":["place_home"],"userIds":["user_operator"]}}`
 - Movement trip detail:
   `{"routeKey":"tripDetail","pathParams":{"id":"trip_123"}}`
+- Movement settings read:
+  `{"routeKey":"settings","query":{"userIds":["user_operator"]}}`
+- Movement settings update:
+  `{"routeKey":"settingsUpdate","body":{"trackingEnabled":true,"publishMode":"draft_review","retentionMode":"aggregates_only"}}`
 - Movement missing-stay correction:
   first `{"routeKey":"userBoxPreflight","body":{"kind":"stay","startedAt":"2026-05-06T13:00:00.000Z","endedAt":"2026-05-06T15:00:00.000Z","placeLabel":"Home","userId":"user_operator"}}`,
   then `{"routeKey":"userBoxCreate","body":{"kind":"stay","startedAt":"2026-05-06T13:00:00.000Z","endedAt":"2026-05-06T15:00:00.000Z","placeLabel":"Home","userId":"user_operator","note":"Manual correction after reviewing the timeline."}}`
@@ -126,6 +130,12 @@ Concrete route-key examples for internal use:
   `{"routeKey":"listFlows","query":{"includeArchived":false}}`
 - Workbench box catalog:
   `{"routeKey":"boxCatalog"}`
+- Workbench flow creation:
+  `{"routeKey":"createFlow","body":{"title":"Research digest","slug":"research-digest","description":"Turn a topic into a cited digest with a stable published summary.","nodes":[],"edges":[]}}`
+- Workbench flow edit:
+  `{"routeKey":"updateFlow","pathParams":{"id":"flow_research_digest"},"body":{"description":"Keep the same input contract but add a stronger evidence-check node."}}`
+- Workbench flow deletion:
+  `{"routeKey":"deleteFlow","pathParams":{"id":"flow_research_digest"}}`
 - Workbench run detail:
   `{"routeKey":"runDetail","pathParams":{"id":"flow_research_digest","runId":"run_123"}}`
 - Workbench published output:
@@ -134,6 +144,8 @@ Concrete route-key examples for internal use:
   `{"routeKey":"latestNodeOutput","pathParams":{"id":"flow_research_digest","nodeId":"node_summary"}}`
 - Workbench run execution:
   `{"routeKey":"runFlow","pathParams":{"id":"flow_research_digest"},"body":{"input":{"topic":"question flow quality"}}}`
+- Workbench flow chat follow-up:
+  `{"routeKey":"chatFlow","pathParams":{"id":"flow_research_digest"},"body":{"message":"Refine the summary around API route risks and keep the published output stable."}}`
 
 Preferences rule:
 
@@ -486,6 +498,10 @@ through `forge_create_entities` or `forge_update_entities`.
   `/api/v1/movement/day`, `/api/v1/movement/month`, `/api/v1/movement/all-time`,
   `/api/v1/movement/timeline`, `/api/v1/movement/places`,
   `/api/v1/movement/selection`, and `/api/v1/movement/trips/:id`.
+- Use `GET /api/v1/movement/settings` and `PATCH /api/v1/movement/settings` when
+  the user wants to inspect or change passive capture, publish mode, retention mode,
+  or companion readiness. Do not treat movement settings as a place, stay, trip, or
+  batch entity write.
 - When the user is filling a missing-data gap, the default write path is a user-defined overlay box, not a raw stay or trip patch. Use `POST /api/v1/movement/user-boxes/preflight` if you need to confirm overlap or snap to the nearest missing interval, then `POST /api/v1/movement/user-boxes` with `kind: "stay"` or `kind: "trip"`.
 - When the user is repairing already-saved movement data, use the repair routes that match the saved object:
   `PATCH /api/v1/movement/user-boxes/:id`,
@@ -496,7 +512,7 @@ through `forge_create_entities` or `forge_update_entities`.
 - Use `PATCH /api/v1/movement/stays/:id` or `PATCH /api/v1/movement/trips/:id` only when the user is editing an existing recorded stay or recorded trip. Do not use those routes to fill a missing span.
 - If the user says something as explicit as "that missing block was me staying home", do not reopen broad intake. Confirm the interval or place only if it is still ambiguous, then create the overlay and read the timeline back.
 - Life Force lives under `/api/v1/life-force*`. Use `GET /api/v1/life-force` for the current energy overview, `PATCH /api/v1/life-force/profile` for durable profile changes, `PUT /api/v1/life-force/templates/:weekday` for weekday curve edits, and `POST /api/v1/life-force/fatigue-signals` for real-time tired or recovered signals.
-- Workbench lives under `/api/v1/workbench/*`. Use those dedicated routes for flow catalog reads, flow CRUD, runs, published outputs, node results, and latest-node-output reads instead of trying to force Workbench through the batch entity routes.
+- Workbench lives under `/api/v1/workbench/*`. Use those dedicated routes for flow catalog reads, flow CRUD, runs, saved-flow chat follow-ups, published outputs, node results, and latest-node-output reads instead of trying to force Workbench through the batch entity routes.
 - If you need the OpenClaw HTTP mirror instead of the raw Forge runtime path, the
   same specialized families are exposed under `/forge/v1/movement/*`,
   `/forge/v1/life-force/*`, and `/forge/v1/workbench/*`.
@@ -505,8 +521,16 @@ through `forge_create_entities` or `forge_update_entities`.
   `POST /api/v1/workbench/flows` for flow creation,
   `PATCH /api/v1/workbench/flows/:id` and `DELETE /api/v1/workbench/flows/:id` for saved-flow edits or deletion,
   `/api/v1/workbench/flows/:id/run` or `/api/v1/workbench/run` for execution,
+  `POST /api/v1/workbench/flows/:id/chat` for saved-flow chat follow-ups,
   `/api/v1/workbench/flows/:id/output` for published outputs, and the run/node routes
   under `/api/v1/workbench/flows/:id` for run history and node-level inspection.
+- For Workbench flow creation or edits, clarify the stable input contract, intended
+  published output, and smallest structural change before asking for raw JSON or node
+  payloads. For deletion, confirm the saved flow and whether published outputs or run
+  history need preservation elsewhere before using the delete route.
+- For Workbench flow chat follow-ups, use `POST /api/v1/workbench/flows/:id/chat`
+  only when the user wants flow-specific conversation. Do not turn that follow-up
+  into a new run, note, or generic entity update unless the user asks for that.
 - If you are unsure which specialized route family applies, check `forge_get_agent_onboarding` and use its `entityRouteModel.specializedDomainSurfaces` section before guessing.
 - If the truth of the current Movement, Life Force, or Workbench state is still unclear, prefer the dedicated read before the mutation so the correction stays truthful.
 - After a concrete Movement, Life Force, or Workbench correction, read the relevant specialized view back when the user is trying to understand the result rather than only store it.

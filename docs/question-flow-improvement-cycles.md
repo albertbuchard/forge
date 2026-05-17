@@ -1,10 +1,75 @@
 # Forge Question Flow Improvement Cycles
 
-Latest run date: 2026-05-13
+Latest run date: 2026-05-17
 
 This report records the three-cycle evaluation for Forge agent question flows. The
 same full flow set was tested in each cycle so improvements were kept only where they
 helped the entity or specialized surface.
+
+## 2026-05-17 Automation Pass
+
+Setup verification:
+
+- Read prior automation memory and kept the May 13 self-observation, health-session
+  enrichment, mode-profile, and restore-route improvements as regression expectations.
+- Confirmed OpenClaw and Hermes configs still point at
+  `/Users/omarclaw/Documents/aurel-monorepo/data/forge`, and verified the live
+  `forge.sqlite` handle was open there. No data-root repair, merge, deletion, or
+  overwrite was performed.
+- Built the repo-local OpenClaw plugin with `npm run build:openclaw-plugin`.
+- Built the Hermes packaged runtime with
+  `node ./plugins/forge-hermes/scripts/build-package-runtime.mjs`.
+- Reinstalled OpenClaw from `./openclaw-plugin` with `--link`, enabled the plugin, and
+  restarted the OpenClaw gateway.
+- Reinstalled Hermes editable from `./plugins/forge-hermes` and verified the local
+  package import path.
+- Verified live Forge health, live onboarding, OpenAPI, OpenClaw runtime tool exposure,
+  and specialized route families for Movement, Life Force, and Workbench before the
+  improvement cycles.
+
+Every cycle retested the full flow set below: planning and collaboration, calendar,
+preferences, questionnaires and reflection, health, wiki, all Psyche entities, and
+the Movement, Life Force, and Workbench specialized surfaces. Scenarios included
+adding, updating, reviewing, navigating, and route-selecting each entity or domain
+surface, with Psyche evaluated for therapist-like active listening and specialized
+surfaces evaluated for exact API posture.
+
+Cycle 1 baseline strength was broad: normal stored entities stayed batch-first, Psyche
+flows still used concrete lived examples before interpretation, Movement and Life
+Force had dedicated route lanes, and Workbench read/run lanes were clear. The gap was
+Workbench flow lifecycle work. The playbooks and onboarding made it easy to inspect or
+run flows, but less clear how an agent should ask about creating, editing, or deleting
+a flow without starting with raw JSON or route-shaped wording. The change added a
+Workbench CRUD arc: clarify the flow job, stable inputs, expected public output, and
+smallest structural change; confirm deletion lifecycle effects and whether published
+outputs or run history need preservation; and publish `createFlow`, `updateFlow`, and
+`deleteFlow` route-key examples across onboarding, OpenClaw, Hermes, and Codex skills.
+First retest exposed two wording mismatches in tests, which were corrected. The second
+retest passed across the full focused suite, so the change was kept.
+
+Cycle 2 retested every entity and surface with emphasis on Movement. Question quality
+was strong for timeline, day/month/all-time reads, trips, places, selection
+aggregates, overlays, and repair actions, but live OpenAPI also exposes Movement
+settings and the question guidance did not make that lane explicit. That could make an
+agent treat passive capture, publish mode, retention, or companion readiness as place,
+stay, trip, or batch CRUD work. The change added Movement settings as its own lane in
+the playbooks, onboarding route-selection questions, route notes, and skill examples:
+`settings` for `GET /api/v1/movement/settings` and `settingsUpdate` for
+`PATCH /api/v1/movement/settings`. Retest first caught one old regex that assumed the
+old Movement route list; after updating it, the full focused suite passed. The change
+was kept.
+
+Cycle 3 retested the full matrix again with emphasis on Workbench route completeness.
+The live Workbench API exposes `POST /api/v1/workbench/flows/:id/chat`, but the agent
+contract did not make saved-flow chat follow-ups a first-class lane. That risked
+turning a flow-specific follow-up into a new run, a note, or a generic entity update.
+The change added a flow-chat arc, lane-to-route mapping, ready-to-act condition, and
+guardrail in the shared playbook; added `chatFlow` to live route-key examples and
+onboarding route-selection questions; and updated OpenClaw, Hermes, packaged Hermes,
+and Codex skill docs with the concrete route-key example and `POST` path. The first
+retest found that the playbook named the path without the `POST` method; after adding
+the method and refreshing plugin copies, retest passed across all 36 focused
+question-flow and contract assertions. The change was kept.
 
 ## 2026-05-13 Automation Pass
 

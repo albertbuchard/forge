@@ -592,6 +592,12 @@ describe("question flow simulation cycles", () => {
       /read the timeline or saved-box[\s\S]*detail before you mutate it/i
     );
     expect(entityPlaybook).toMatch(
+      /passive capture, publish mode, retention, or companion\s+readiness/i
+    );
+    expect(entityPlaybook).toMatch(
+      /GET \/api\/v1\/movement\/settings[\s\S]*PATCH \/api\/v1\/movement\/settings/i
+    );
+    expect(entityPlaybook).toMatch(
       /repeatable day-shape such as "Mondays crash after lunch"/i
     );
     expect(entityPlaybook).toMatch(
@@ -604,7 +610,16 @@ describe("question flow simulation cycles", () => {
       /flow catalog questions[\s\S]*GET \/api\/v1\/workbench\/flows[\s\S]*available box\s+inputs[\s\S]*GET \/api\/v1\/workbench\/catalog\/boxes/i
     );
     expect(entityPlaybook).toMatch(
+      /creating or editing a flow[\s\S]*stable inputs[\s\S]*expected public output/i
+    );
+    expect(entityPlaybook).toMatch(
+      /delete or archive a flow[\s\S]*future run, published output, or public contract/i
+    );
+    expect(entityPlaybook).toMatch(
       /send one follow-up message into a saved flow chat/i
+    );
+    expect(entityPlaybook).toMatch(
+      /flow chat follow-ups[\s\S]*saved flow chat route[\s\S]*new flow\s+run, note, or generic entity update/i
     );
     expect(entityPlaybook).toMatch(/run[\s\S]*summary/i);
     expect(entityPlaybook).toMatch(/one node result/i);
@@ -698,6 +713,12 @@ describe("question flow simulation cycles", () => {
       /movementTripDetail[\s\S]*"routeKey":"tripDetail"[\s\S]*"id":"trip_123"/
     );
     expect(onboardingSource).toMatch(
+      /movementSettings[\s\S]*"routeKey":"settings"/
+    );
+    expect(onboardingSource).toMatch(
+      /movementSettingsUpdate[\s\S]*"routeKey":"settingsUpdate"[\s\S]*"publishMode":"draft_review"/
+    );
+    expect(onboardingSource).toMatch(
       /movementMissingStayPreflight[\s\S]*"routeKey":"userBoxPreflight"[\s\S]*"startedAt"[\s\S]*"placeLabel"/
     );
     expect(onboardingSource).toMatch(
@@ -737,6 +758,15 @@ describe("question flow simulation cycles", () => {
       /workbenchBoxCatalog[\s\S]*"routeKey":"boxCatalog"/
     );
     expect(onboardingSource).toMatch(
+      /workbenchCreateFlow[\s\S]*"routeKey":"createFlow"/
+    );
+    expect(onboardingSource).toMatch(
+      /workbenchUpdateFlow[\s\S]*"routeKey":"updateFlow"[\s\S]*"pathParams"/
+    );
+    expect(onboardingSource).toMatch(
+      /workbenchDeleteFlow[\s\S]*"routeKey":"deleteFlow"[\s\S]*"pathParams"/
+    );
+    expect(onboardingSource).toMatch(
       /workbenchRunDetail[\s\S]*"routeKey":"runDetail"[\s\S]*"runId"/
     );
     expect(onboardingSource).toMatch(
@@ -747,6 +777,12 @@ describe("question flow simulation cycles", () => {
     );
     expect(onboardingSource).toMatch(
       /workbenchRunFlow[\s\S]*"routeKey":"runFlow"[\s\S]*"pathParams"/
+    );
+    expect(onboardingSource).toMatch(
+      /workbenchChatFlow[\s\S]*"routeKey":"chatFlow"[\s\S]*"message"/
+    );
+    expect(onboardingSource).toMatch(
+      /saved flow chat follow-ups[\s\S]*POST \/api\/v1\/workbench\/flows\/:id\/chat[\s\S]*new run, note, or generic entity update/i
     );
   });
 });
