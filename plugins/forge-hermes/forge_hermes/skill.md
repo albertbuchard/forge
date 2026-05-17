@@ -128,6 +128,10 @@ Concrete route-key examples for internal use:
   `{"routeKey":"selection","query":{"from":"2026-05-01T00:00:00.000Z","to":"2026-05-14T23:59:59.999Z","placeIds":["place_home"],"userIds":["user_operator"]}}`
 - Movement trip detail:
   `{"routeKey":"tripDetail","pathParams":{"id":"trip_123"}}`
+- Movement settings read:
+  `{"routeKey":"settings","query":{"userIds":["user_operator"]}}`
+- Movement settings update:
+  `{"routeKey":"settingsUpdate","body":{"trackingEnabled":true,"publishMode":"draft_review","retentionMode":"aggregates_only"}}`
 - Movement missing-stay correction:
   first `{"routeKey":"userBoxPreflight","body":{"kind":"stay","startedAt":"2026-05-06T13:00:00.000Z","endedAt":"2026-05-06T15:00:00.000Z","placeLabel":"Home","userId":"user_operator"}}`,
   then `{"routeKey":"userBoxCreate","body":{"kind":"stay","startedAt":"2026-05-06T13:00:00.000Z","endedAt":"2026-05-06T15:00:00.000Z","placeLabel":"Home","userId":"user_operator","note":"Manual correction after reviewing the timeline."}}`
@@ -143,6 +147,12 @@ Concrete route-key examples for internal use:
   `{"routeKey":"listFlows","query":{"includeArchived":false}}`
 - Workbench box catalog:
   `{"routeKey":"boxCatalog"}`
+- Workbench flow creation:
+  `{"routeKey":"createFlow","body":{"title":"Research digest","slug":"research-digest","description":"Turn a topic into a cited digest with a stable published summary.","nodes":[],"edges":[]}}`
+- Workbench flow edit:
+  `{"routeKey":"updateFlow","pathParams":{"id":"flow_research_digest"},"body":{"description":"Keep the same input contract but add a stronger evidence-check node."}}`
+- Workbench flow deletion:
+  `{"routeKey":"deleteFlow","pathParams":{"id":"flow_research_digest"}}`
 - Workbench run detail:
   `{"routeKey":"runDetail","pathParams":{"id":"flow_research_digest","runId":"run_123"}}`
 - Workbench published output:
@@ -151,6 +161,8 @@ Concrete route-key examples for internal use:
   `{"routeKey":"latestNodeOutput","pathParams":{"id":"flow_research_digest","nodeId":"node_summary"}}`
 - Workbench run execution:
   `{"routeKey":"runFlow","pathParams":{"id":"flow_research_digest"},"body":{"input":{"topic":"question flow quality"}}}`
+- Workbench flow chat follow-up:
+  `{"routeKey":"chatFlow","pathParams":{"id":"flow_research_digest"},"body":{"message":"Refine the summary around API route risks and keep the published output stable."}}`
 
 Treat `note` as a first-class Markdown entity. Notes can link to one or many Forge
 entities, carry note-owned `tags`, and optionally self-delete when `destroyAt` is set.
@@ -285,6 +297,10 @@ For wiki-specific recall:
   `/api/v1/movement/user-boxes/:id`,
   `/api/v1/movement/automatic-boxes/:id/invalidate`, and the stay/trip repair routes
   when the user is repairing already-saved movement data.
+- Use `GET /api/v1/movement/settings` and `PATCH /api/v1/movement/settings` when
+  the user wants to inspect or change passive capture, publish mode, retention mode,
+  or companion readiness. Do not treat movement settings as a place, stay, trip, or
+  batch entity write.
 - Life Force lane hints: overview is `GET /api/v1/life-force`, durable profile edits
   are `PATCH /api/v1/life-force/profile`, weekday curve edits are
   `PUT /api/v1/life-force/templates/:weekday`, and real-time tired or recovered
@@ -293,8 +309,16 @@ For wiki-specific recall:
   flow creation uses `POST /api/v1/workbench/flows`, saved-flow edits and deletion use
   `PATCH /api/v1/workbench/flows/:id` and `DELETE /api/v1/workbench/flows/:id`,
   execution uses `/api/v1/workbench/flows/:id/run` or `/api/v1/workbench/run`,
+  saved-flow chat follow-ups use `POST /api/v1/workbench/flows/:id/chat`,
   published outputs use `/api/v1/workbench/flows/:id/output`, and per-run or per-node
   inspection uses the run and node-result routes under `/api/v1/workbench/flows/:id`.
+- For Workbench flow creation or edits, clarify the stable input contract, intended
+  published output, and smallest structural change before asking for raw JSON or node
+  payloads. For deletion, confirm the saved flow and whether published outputs or run
+  history need preservation elsewhere before using the delete route.
+- For Workbench flow chat follow-ups, use `POST /api/v1/workbench/flows/:id/chat`
+  only when the user wants flow-specific conversation. Do not turn that follow-up
+  into a new run, note, or generic entity update unless the user asks for that.
 - Keep dedicated Preferences tools only for real preference actions and read models: workspace reads, game starts, context merges, entity seeding, judgments, direct signals, and score overrides.
 - For `work_adjustment`, ask what existing task or project the correction belongs to, whether time should be added or removed, and what truthful reason should stay with it before calling `forge_adjust_work_minutes`.
 - For `preference_judgment` and `preference_signal`, ask what comparison or direct mark the user is actually trying to make, what context it belongs to, and only then call the dedicated judgment or signal route.

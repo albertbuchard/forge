@@ -2712,7 +2712,7 @@ function buildPreferredMutationPath(entityType: string) {
     case "life_force":
       return "Use the dedicated Life Force route family for overview, profile edits, weekday templates, and fatigue signals.";
     case "workbench":
-      return "Use the dedicated Workbench route family for flow CRUD, execution, run history, published outputs, node results, and latest-node-output reads.";
+      return "Use the dedicated Workbench route family for flow CRUD, execution, saved-flow chat follow-ups, run history, published outputs, node results, and latest-node-output reads.";
     case "self_observation":
       return "Read the calendar surface; mutate it by creating or updating note-backed observations with frontmatter.observedAt.";
     case "sleep_overview":
@@ -3460,7 +3460,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
   enrichOnboardingEntityGuide({
     entityType: "movement",
     purpose:
-      "The specialized Movement surface for day, month, all-time, timeline, trip, place, selection, and manual overlay work.",
+      "The specialized Movement surface for day, month, all-time, timeline, trip, place, selection, settings, and manual overlay work.",
     minimumCreateFields: [],
     relationshipRules: [
       "Movement is a specialized domain surface, not a normal batch CRUD entity family.",
@@ -3492,7 +3492,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
   enrichOnboardingEntityGuide({
     entityType: "workbench",
     purpose:
-      "The specialized Workbench surface for flow catalog work, flow CRUD, execution, run history, published outputs, node results, and latest-node-output reads.",
+      "The specialized Workbench surface for flow catalog work, flow CRUD, execution, saved-flow chat follow-ups, run history, published outputs, node results, and latest-node-output reads.",
     minimumCreateFields: [],
     relationshipRules: [
       "Workbench is a specialized execution surface, not a normal batch CRUD entity family.",
@@ -3993,7 +3993,9 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
       "Ask whether the focus is a stay, a trip, a place, a timeline window, or a selected span.",
       "Ask for the time window, place, or movement item that makes the question concrete.",
       "Ask what they are trying to notice, preserve, or answer through that movement context.",
+      "If the user is changing movement operating behavior, ask whether this is about passive tracking, publish mode, retention, or companion readiness.",
       "Choose the dedicated day, month, all-time, timeline, places, trip-detail, or selection route once the question shape is clear.",
+      "Use the dedicated settings route for passive capture, publish mode, and retention behavior instead of treating those as place, stay, or trip edits.",
       "Use allTime for whole-history aggregates, selection for a bounded selected-span aggregate, and tripDetail only when a concrete trip id is known.",
       "If the truth of one uncertain span is still unclear, read the timeline or saved-box detail before you mutate it.",
       "Skip the meta lane question when the user already named the exact correction or review target and only one ambiguity remains.",
@@ -4038,6 +4040,9 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
       "Use listFlows for the saved flow catalog and boxCatalog for available input-box contracts; do not collapse both into a vague catalog read.",
       "Ask which flow, slug, run, or node the request is about.",
       "Ask whether they need the stable flow contract, one run result, one published output, one node result, or the latest node output.",
+      "If the user is creating or editing a flow, clarify what the flow should reliably produce, what input contract it should accept, and what smallest structural change is intended before asking for node details.",
+      "If the user wants to delete or archive a flow, confirm the saved flow and whether published outputs or run history need to be preserved elsewhere before calling the delete route.",
+      "If the user wants to send a follow-up into a saved flow chat, confirm the saved flow and what the message should accomplish instead of treating it as a new run or note.",
       "If the user already named the flow and action clearly, skip the meta lane question and ask only for the missing run, node, or output scope.",
       "If the user wants a stable public input contract or published output, prefer those dedicated reads instead of detouring through run history first.",
       "If the user is still shaping a payload or edit, prefer flow detail or box catalog reads before asking for structured inputs.",
@@ -5391,8 +5396,9 @@ function buildAgentOnboardingPayload(request: {
           summary:
             "Dedicated movement workspace API. Use these routes for stays, trips, time-in-place questions, visited places, trip detail, selection aggregates, user-defined overlays, and repair actions on already-recorded movement data.",
           routeSelectionQuestions: [
-            "Is the user asking for a day, month, all-time, timeline, place, trip detail, or selected-span answer?",
+            "Is the user asking for a day, month, all-time, timeline, place, trip detail, selected-span, or settings answer?",
             "Is this a missing-gap overlay, a saved-overlay repair, or an edit to one already-recorded stay, trip, or trip point?",
+            "If this is about operating behavior, is the change about passive tracking, publish mode, retention, or companion readiness?",
             "If the target is already known, what one time, place, or saved-object detail is still missing before acting?"
           ],
           methodRoutes: {
@@ -5455,6 +5461,7 @@ function buildAgentOnboardingPayload(request: {
             "Movement is not a normal batch CRUD entity family. It is a dedicated record of stays and trips: a stay means the user remained in the same place for a span of time, and a trip means they traveled between places.",
             "Route-selection questions are internal. User-facing questions should ask for the useful time window, place, selected span, stay, or trip instead of reciting day/month/all-time/timeline/selection route keys.",
             "Use /api/v1/movement/day, /month, /all-time, /timeline, or /selection when the user wants behavioral answers such as how long they stayed at home, when they traveled, which places dominated a period, or what happened across a selected span.",
+            "Use GET /api/v1/movement/settings and PATCH /api/v1/movement/settings when the user wants to inspect or change passive capture, publish mode, retention mode, or companion readiness. Do not route settings changes through stays, trips, places, or batch CRUD.",
             "Use the movement write routes when the user wants to add a place or manual overlay, update a specific stay or trip, repair one recorded movement span, or attach movement context to another Forge record. If the user is filling a missing-data gap, the usual write path is a user-defined overlay box rather than a raw stay or trip patch.",
             "If the user is revising or removing an existing correction, first identify whether the saved object is a user-defined box, automatic box, recorded stay, recorded trip, or trip point so the repair or delete path stays truthful.",
             "For an explicit statement like 'that missing block was me staying home', do not reopen broad intake. Preflight only if timing overlap is unclear, then create a user-defined `stay` box for that interval and read the updated timeline back."
@@ -5535,8 +5542,10 @@ function buildAgentOnboardingPayload(request: {
           summary:
             "Dedicated graph-flow API. Use it for flow catalog reads, flow CRUD, execution, run history, published outputs, node results, and latest successful node outputs.",
           routeSelectionQuestions: [
-            "Is the job flow discovery, flow editing, execution, run history, published output, run detail, node result, latest node output, or flow chat follow-up?",
+            "Is the job flow discovery, flow creation, flow editing, flow deletion, execution, run history, published output, run detail, node result, latest node output, or flow chat follow-up?",
             "Does the user need a stable public contract or one execution artifact?",
+            "For flow CRUD, what stable input contract, expected output, or lifecycle effect must stay true?",
+            "For flow chat follow-up, which saved flow should receive the message and what should the message accomplish?",
             "If the flow is already known, what one run, node, or output scope detail is still missing before acting?"
           ],
           methodRoutes: {
@@ -5586,6 +5595,10 @@ function buildAgentOnboardingPayload(request: {
             "Route-selection questions are internal. User-facing questions should ask whether the user needs the saved flow, its input contract, one run, one node, or the public result instead of reciting Workbench route keys.",
             "Use the flow routes when the agent needs stable public input contracts, published outputs, node-level results, or reusable execution history.",
             "If the user is still figuring out inputs or editable structure, read flow detail or box catalog before asking them to author a payload from memory.",
+            "For flow creation, clarify what the flow should reliably produce, which input contract it should accept, and which first node or box anchors the flow before asking for structured payload details.",
+            "For flow edits, ask what behavior should change while preserving the public contract unless the user explicitly wants the contract changed.",
+            "For flow deletion, confirm the saved flow and whether published outputs or run history need preservation elsewhere before using the delete route.",
+            "For saved flow chat follow-ups, use POST /api/v1/workbench/flows/:id/chat only when the user wants to continue a flow-specific conversation. Do not turn that into a new run, note, or generic entity update unless the user asks.",
             "Prefer the dedicated output and node-result routes over reverse-engineering raw traces.",
             "If the user only wants a published output, latest node output, or run detail, do not reopen a flow-edit intake before reading that artifact.",
             "If the user already named the flow and wants one output or one run, skip the broad lane question and ask only for the missing run, node, or output scope."
@@ -5880,6 +5893,10 @@ function buildAgentOnboardingPayload(request: {
           '{"routeKey":"selection","query":{"from":"2026-05-01T00:00:00.000Z","to":"2026-05-14T23:59:59.999Z","placeIds":["place_home"],"userIds":["user_operator"]}}',
         movementTripDetail:
           '{"routeKey":"tripDetail","pathParams":{"id":"trip_123"}}',
+        movementSettings:
+          '{"routeKey":"settings","query":{"userIds":["user_operator"]}}',
+        movementSettingsUpdate:
+          '{"routeKey":"settingsUpdate","body":{"trackingEnabled":true,"publishMode":"draft_review","retentionMode":"aggregates_only"}}',
         movementMissingStayPreflight:
           '{"routeKey":"userBoxPreflight","body":{"kind":"stay","startedAt":"2026-05-06T13:00:00.000Z","endedAt":"2026-05-06T15:00:00.000Z","placeLabel":"Home","userId":"user_operator"}}',
         movementMissingStayCreate:
@@ -5896,6 +5913,12 @@ function buildAgentOnboardingPayload(request: {
           '{"routeKey":"listFlows","query":{"includeArchived":false}}',
         workbenchBoxCatalog:
           '{"routeKey":"boxCatalog"}',
+        workbenchCreateFlow:
+          '{"routeKey":"createFlow","body":{"title":"Research digest","slug":"research-digest","description":"Turn a topic into a cited digest with a stable published summary.","nodes":[],"edges":[]}}',
+        workbenchUpdateFlow:
+          '{"routeKey":"updateFlow","pathParams":{"id":"flow_research_digest"},"body":{"description":"Keep the same input contract but add a stronger evidence-check node."}}',
+        workbenchDeleteFlow:
+          '{"routeKey":"deleteFlow","pathParams":{"id":"flow_research_digest"}}',
         workbenchRunDetail:
           '{"routeKey":"runDetail","pathParams":{"id":"flow_research_digest","runId":"run_123"}}',
         workbenchPublishedOutput:
@@ -5903,7 +5926,9 @@ function buildAgentOnboardingPayload(request: {
         workbenchLatestNodeOutput:
           '{"routeKey":"latestNodeOutput","pathParams":{"id":"flow_research_digest","nodeId":"node_summary"}}',
         workbenchRunFlow:
-          '{"routeKey":"runFlow","pathParams":{"id":"flow_research_digest"},"body":{"input":{"topic":"question flow quality"}}}'
+          '{"routeKey":"runFlow","pathParams":{"id":"flow_research_digest"},"body":{"input":{"topic":"question flow quality"}}}',
+        workbenchChatFlow:
+          '{"routeKey":"chatFlow","pathParams":{"id":"flow_research_digest"},"body":{"message":"Refine the summary around API route risks and keep the published output stable."}}'
       }
     }
   };

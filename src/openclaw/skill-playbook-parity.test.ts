@@ -133,6 +133,10 @@ describe("forge skill playbook parity", () => {
       expect(skill).toMatch(/Movement timeline read[\s\S]*"routeKey":"timeline"/i);
       expect(skill).toMatch(/Movement selection aggregate[\s\S]*"routeKey":"selection"/i);
       expect(skill).toMatch(/Movement trip detail[\s\S]*"routeKey":"tripDetail"/i);
+      expect(skill).toMatch(/Movement settings read[\s\S]*"routeKey":"settings"/i);
+      expect(skill).toMatch(/Movement settings update[\s\S]*"routeKey":"settingsUpdate"/i);
+      expect(skill).toMatch(/GET \/api\/v1\/movement\/settings[\s\S]*PATCH \/api\/v1\/movement\/settings/i);
+      expect(skill).toMatch(/passive capture[\s\S]*publish mode[\s\S]*retention mode/i);
       expect(skill).toMatch(/Movement missing-stay correction[\s\S]*"routeKey":"userBoxPreflight"[\s\S]*"routeKey":"userBoxCreate"/i);
       expect(skill).toMatch(/Life Force overview[\s\S]*"routeKey":"overview"/i);
       expect(skill).toMatch(/Life Force profile edit[\s\S]*"routeKey":"profile"/i);
@@ -140,10 +144,18 @@ describe("forge skill playbook parity", () => {
       expect(skill).toMatch(/Life Force fatigue signal[\s\S]*"routeKey":"fatigueSignal"/i);
       expect(skill).toMatch(/Workbench flow catalog[\s\S]*"routeKey":"listFlows"/i);
       expect(skill).toMatch(/Workbench box catalog[\s\S]*"routeKey":"boxCatalog"/i);
+      expect(skill).toMatch(/Workbench flow creation[\s\S]*"routeKey":"createFlow"/i);
+      expect(skill).toMatch(/Workbench flow edit[\s\S]*"routeKey":"updateFlow"/i);
+      expect(skill).toMatch(/Workbench flow deletion[\s\S]*"routeKey":"deleteFlow"/i);
       expect(skill).toMatch(/Workbench run detail[\s\S]*"routeKey":"runDetail"/i);
       expect(skill).toMatch(/Workbench published output[\s\S]*"routeKey":"publishedOutput"/i);
       expect(skill).toMatch(/Workbench latest node output[\s\S]*"routeKey":"latestNodeOutput"/i);
       expect(skill).toMatch(/Workbench run execution[\s\S]*"routeKey":"runFlow"/i);
+      expect(skill).toMatch(/Workbench flow chat follow-up[\s\S]*"routeKey":"chatFlow"/i);
+      expect(skill).toMatch(/stable input contract[\s\S]*intended\s+published output[\s\S]*smallest structural change/i);
+      expect(skill).toMatch(/deletion[\s\S]*published outputs or run\s+history need preservation/i);
+      expect(skill).toMatch(/POST \/api\/v1\/workbench\/flows\/:id\/chat/i);
+      expect(skill).toMatch(/new run, note, or generic entity update/i);
     }
     expect(openclawSkill).toMatch(/conversation is clearly about a Forge entity or domain surface/i);
     expect(openclawSkill).toMatch(/movement, life_force, workbench/i);
@@ -186,12 +198,14 @@ describe("forge skill playbook parity", () => {
     expect(codexSkill).toMatch(/\/api\/v1\/movement\/automatic-boxes\/:id\/invalidate/i);
     expect(codexSkill).toMatch(/\/api\/v1\/life-force\/profile/i);
     expect(codexSkill).toMatch(/\/api\/v1\/workbench\/flows\/:id\/run/i);
+    expect(codexSkill).toMatch(/\/api\/v1\/workbench\/flows\/:id\/chat/i);
     expect(codexSkill).toMatch(/PATCH \/api\/v1\/workbench\/flows\/:id/i);
     expect(codexSkill).toMatch(/DELETE \/api\/v1\/workbench\/flows\/:id/i);
     expect(codexSkill).toMatch(/timeline,[\s\S]*overlay,[\s\S]*weekday\s+template,[\s\S]*published output,[\s\S]*run detail,[\s\S]*node result/i);
     expect(hermesSkill).toMatch(/timeline,[\s\S]*overlay,[\s\S]*weekday\s+template,[\s\S]*published output,[\s\S]*run detail,[\s\S]*node result/i);
     expect(hermesSkill).toMatch(/PATCH \/api\/v1\/workbench\/flows\/:id/i);
     expect(hermesSkill).toMatch(/DELETE \/api\/v1\/workbench\/flows\/:id/i);
+    expect(hermesSkill).toMatch(/\/api\/v1\/workbench\/flows\/:id\/chat/i);
     expect(hermesSkill).toMatch(/four major stored-entity surfaces and three specialized domain surfaces/i);
     expect(hermesSkill).toMatch(/specialized domain surfaces are Movement,[\s\S]*Life Force,[\s\S]*Workbench/i);
     expect(hermesSkill).toMatch(/dedicated route families instead of[\s\S]*batch CRUD/i);
@@ -336,7 +350,7 @@ describe("forge skill playbook parity", () => {
     expect(entityPlaybook).toMatch(/\/api\/v1\/life-force\/profile/);
     expect(entityPlaybook).toMatch(/\/api\/v1\/workbench\/flows\/:id\/run/);
     expect(entityPlaybook).toMatch(
-      /day, month, all-time, timeline, places, trip-detail,[\s\S]*selection route/i
+      /day, month, all-time, timeline, places, trip-detail,[\s\S]*selection,[\s\S]*settings route/i
     );
     expect(entityPlaybook).toMatch(/stable public input contract or published output/i);
     expect(entityPlaybook).toMatch(/favorite, veto, or compare-later/i);
@@ -551,6 +565,8 @@ describe("forge skill playbook parity", () => {
     expect(openApiSource).toMatch(/"specialized_domain_surface"/);
     expect(openApiSource).toMatch(/"movementTimeline"/);
     expect(openApiSource).toMatch(/"movementAllTime"/);
+    expect(openApiSource).toMatch(/"movementSettings"/);
+    expect(openApiSource).toMatch(/"movementSettingsUpdate"/);
     expect(openApiSource).toMatch(/"movementAutomaticBoxInvalidate"/);
     expect(openApiSource).toMatch(/"workbenchFlows"/);
   });

@@ -374,6 +374,8 @@ describe("forge onboarding contract", () => {
     expect(routeModel.specializedDomainSurfaces.movement.methodRoutes).toEqual(
       expect.objectContaining({
         allTime: "GET /api/v1/movement/all-time",
+        settings: "GET /api/v1/movement/settings",
+        settingsUpdate: "PATCH /api/v1/movement/settings",
         selection: "POST /api/v1/movement/selection",
         userBoxPreflight: "POST /api/v1/movement/user-boxes/preflight",
         userBoxDelete: "DELETE /api/v1/movement/user-boxes/:id",
@@ -386,9 +388,12 @@ describe("forge onboarding contract", () => {
     ).toEqual(
       expect.arrayContaining([
         expect.stringMatching(
-          /day, month, all-time, timeline, place, trip detail/i
+          /day, month, all-time, timeline, place, trip detail, selected-span, or settings/i
         ),
-        expect.stringMatching(/missing-gap overlay|saved-overlay repair/i)
+        expect.stringMatching(/missing-gap overlay|saved-overlay repair/i),
+        expect.stringMatching(
+          /operating behavior[\s\S]*passive tracking[\s\S]*publish mode[\s\S]*retention/i
+        )
       ])
     );
 
@@ -475,6 +480,7 @@ describe("forge onboarding contract", () => {
         updateFlow: "PATCH /api/v1/workbench/flows/:id",
         deleteFlow: "DELETE /api/v1/workbench/flows/:id",
         runFlow: "POST /api/v1/workbench/flows/:id/run",
+        chatFlow: "POST /api/v1/workbench/flows/:id/chat",
         nodeResult:
           "GET /api/v1/workbench/flows/:id/runs/:runId/nodes/:nodeId",
         latestNodeOutput:
@@ -486,7 +492,13 @@ describe("forge onboarding contract", () => {
     ).toEqual(
       expect.arrayContaining([
         expect.stringMatching(
-          /flow discovery, flow editing, execution, run history, published output, run detail, node result, latest node output/i
+          /flow discovery, flow creation, flow editing, flow deletion, execution, run history, published output, run detail, node result, latest node output/i
+        ),
+        expect.stringMatching(
+          /flow CRUD[\s\S]*stable input contract[\s\S]*expected output[\s\S]*lifecycle effect/i
+        ),
+        expect.stringMatching(
+          /flow chat follow-up[\s\S]*saved flow[\s\S]*message[\s\S]*accomplish/i
         )
       ])
     );
@@ -655,7 +667,7 @@ describe("forge onboarding contract", () => {
       expect.objectContaining({
         classification: "specialized_domain_surface",
         preferredMutationPath:
-          "Use the dedicated Workbench route family for flow CRUD, execution, run history, published outputs, node results, and latest-node-output reads.",
+          "Use the dedicated Workbench route family for flow CRUD, execution, saved-flow chat follow-ups, run history, published outputs, node results, and latest-node-output reads.",
         preferredReadPath: "/api/v1/workbench/flows",
         preferredMutationTool: "forge_call_workbench_route"
       })
@@ -700,6 +712,10 @@ describe("forge onboarding contract", () => {
         movementTimeline: expect.stringMatching(/routeKey[\s\S]*timeline/),
         movementSelection: expect.stringMatching(/routeKey[\s\S]*selection/),
         movementTripDetail: expect.stringMatching(/routeKey[\s\S]*tripDetail/),
+        movementSettings: expect.stringMatching(/routeKey[\s\S]*settings/),
+        movementSettingsUpdate: expect.stringMatching(
+          /routeKey[\s\S]*settingsUpdate[\s\S]*publishMode/
+        ),
         movementMissingStayPreflight: expect.stringMatching(
           /routeKey[\s\S]*userBoxPreflight[\s\S]*startedAt[\s\S]*placeLabel/
         ),
@@ -721,6 +737,15 @@ describe("forge onboarding contract", () => {
         workbenchBoxCatalog: expect.stringMatching(
           /routeKey[\s\S]*boxCatalog/
         ),
+        workbenchCreateFlow: expect.stringMatching(
+          /routeKey[\s\S]*createFlow[\s\S]*stable published summary/
+        ),
+        workbenchUpdateFlow: expect.stringMatching(
+          /routeKey[\s\S]*updateFlow[\s\S]*pathParams/
+        ),
+        workbenchDeleteFlow: expect.stringMatching(
+          /routeKey[\s\S]*deleteFlow[\s\S]*pathParams/
+        ),
         workbenchRunDetail: expect.stringMatching(
           /routeKey[\s\S]*runDetail[\s\S]*pathParams[\s\S]*runId/
         ),
@@ -729,6 +754,12 @@ describe("forge onboarding contract", () => {
         ),
         workbenchLatestNodeOutput: expect.stringMatching(
           /routeKey[\s\S]*latestNodeOutput[\s\S]*nodeId/
+        ),
+        workbenchRunFlow: expect.stringMatching(
+          /routeKey[\s\S]*runFlow[\s\S]*pathParams/
+        ),
+        workbenchChatFlow: expect.stringMatching(
+          /routeKey[\s\S]*chatFlow[\s\S]*message/
         )
       })
     );

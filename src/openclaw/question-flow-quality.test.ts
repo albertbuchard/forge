@@ -185,8 +185,22 @@ describe("question flow quality coverage", () => {
       /flow catalog questions[\s\S]*GET \/api\/v1\/workbench\/flows[\s\S]*available box\s+inputs[\s\S]*GET \/api\/v1\/workbench\/catalog\/boxes/i
     );
     expect(entityPlaybook).toMatch(
+      /For new flows,[\s\S]*what the flow should reliably produce[\s\S]*input contract[\s\S]*first node or box/i
+    );
+    expect(entityPlaybook).toMatch(
+      /For flow edits,[\s\S]*what behavior should change[\s\S]*public contract stays\s+stable/i
+    );
+    expect(entityPlaybook).toMatch(
+      /For flow deletion,[\s\S]*confirm the saved flow[\s\S]*published outputs or run\s+history/i
+    );
+    expect(entityPlaybook).toMatch(
       /Treat day, month, all-time, timeline, trip detail, and selection as internal read\s+lanes/i
     );
+    expect(entityPlaybook).toMatch(
+      /settings as a separate movement lane[\s\S]*passive capture[\s\S]*publish mode[\s\S]*retention/i
+    );
+    expect(entityPlaybook).toMatch(/GET \/api\/v1\/movement\/settings/);
+    expect(entityPlaybook).toMatch(/PATCH \/api\/v1\/movement\/settings/);
     expect(entityPlaybook).toMatch(
       /Treat overview, profile, weekday-template, and fatigue-signal lanes as internal\s+route choices/i
     );
@@ -201,6 +215,10 @@ describe("question flow quality coverage", () => {
     );
     expect(entityPlaybook).toMatch(/DELETE \/api\/v1\/movement\/user-boxes\/:id/i);
     expect(entityPlaybook).toMatch(/send one follow-up message into a saved flow chat/i);
+    expect(entityPlaybook).toMatch(/POST \/api\/v1\/workbench\/flows\/:id\/chat/);
+    expect(entityPlaybook).toMatch(
+      /flow chat follow-ups[\s\S]*new flow\s+run, note, or generic entity update/i
+    );
     expect(entityPlaybook).toMatch(
       /Self-observation is not the default container for psychological material/i
     );

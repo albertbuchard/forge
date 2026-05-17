@@ -1370,8 +1370,9 @@ Preferred opening question:
 ## Movement
 
 Aim: clarify whether the user wants to understand time in place, review travel
-behavior, add or update a stay or trip, inspect one place, or link movement context to
-another Forge record before choosing the dedicated route family.
+behavior, add or update a stay or trip, inspect one place, change movement operating
+settings, or link movement context to another Forge record before choosing the
+dedicated route family.
 
 Arc:
 
@@ -1382,14 +1383,16 @@ Arc:
 3. Ask whether the focus is a stay, a trip, a place, a timeline window, or a selected span.
 4. Ask for the time window, place, or movement item that makes the question concrete.
 5. Ask what they are trying to notice, preserve, or answer through that movement context.
-6. Choose the dedicated day, month, all-time, timeline, places, trip-detail, or
-   selection route once the question shape is clear.
-7. If the truth of one uncertain span is still unclear, read the timeline or saved-box
+6. If the user is changing movement operating behavior, ask whether the change is
+   about passive tracking, publish mode, retention, or companion readiness.
+7. Choose the dedicated day, month, all-time, timeline, places, trip-detail,
+   selection, or settings route once the question shape is clear.
+8. If the truth of one uncertain span is still unclear, read the timeline or saved-box
    detail before you mutate it.
-8. Skip the meta lane question when the user already named the exact correction or
+9. Skip the meta lane question when the user already named the exact correction or
    review target and only one ambiguity remains.
-9. Use the dedicated movement route once you know whether the user needs timeline
-   review, overlay, place or trip detail, selection summary, or repair.
+10. Use the dedicated movement route once you know whether the user needs timeline
+   review, overlay, place or trip detail, selection summary, settings, or repair.
 
 Direct action rules:
 
@@ -1398,6 +1401,11 @@ Direct action rules:
 - Treat day, month, all-time, timeline, trip detail, and selection as internal read
   lanes. With the user, ask for the useful time window, place, selected span, stay, or
   trip instead of listing route choices.
+- Treat settings as a separate movement lane for passive capture, publish mode, and
+  retention behavior. Ask what operating behavior should change instead of routing it
+  through a place, stay, or trip edit.
+- Use settings reads before settings writes when the current capture or publish state
+  is uncertain.
 - Preflight with `/api/v1/movement/user-boxes/preflight` when overlap or exact timing
   is unclear, then create the overlay with `/api/v1/movement/user-boxes`.
 - Use `kind: "stay"` when the user stayed in one place and `kind: "trip"` when they
@@ -1427,6 +1435,8 @@ Helpful follow-up lanes:
 - whether the edit is a missing-gap overlay versus a true recorded stay/trip patch
 - whether the user is trying to repair one recorded movement item versus fill a
   missing span
+- whether they are changing passive capture, publish mode, retention, or companion
+  readiness rather than movement history
 
 Lane-to-route map:
 
@@ -1436,6 +1446,8 @@ Lane-to-route map:
   `/api/v1/movement/all-time`, `/api/v1/movement/places`, or `/api/v1/movement/selection`
 - inspect the full life timeline:
   `/api/v1/movement/timeline`
+- inspect or change passive capture and publishing settings:
+  `GET /api/v1/movement/settings` or `PATCH /api/v1/movement/settings`
 - create or revise one saved place:
   `/api/v1/movement/places` or `/api/v1/movement/places/:id`
 - inspect one trip:
@@ -1461,6 +1473,7 @@ Ready to act when:
 - the time range, place, stay, trip, or selection is clear enough
 - the user goal is clear enough to tell review, overlay, and repair apart
 - the user goal is clear enough to choose the route
+- for settings changes, the intended tracking, publish, or retention behavior is clear
 
 Preferred opening question:
 
@@ -1550,18 +1563,25 @@ Arc:
 
 1. Ask what they are trying to learn, repair, publish, or run through Workbench
    before you narrow to flow discovery, editing, execution, or results.
-2. Ask whether the job is flow discovery, one flow edit, execution, run history, published output, node-level inspection, or latest-node-output lookup.
+2. Ask whether the job is flow discovery, one flow edit, execution, run history, published output, node-level inspection, latest-node-output lookup, or a follow-up message in a saved flow chat.
 3. Ask which flow, slug, run, or node the request is about.
 4. Ask whether they need the stable flow contract, one run result, one published
    output, one node result, or the latest node output.
-5. If the user already named the flow and action clearly, skip the meta lane
+5. If the user is creating or editing a flow, clarify the flow's job, stable inputs,
+   expected public output, and the smallest structural change before asking for node
+   details.
+6. If the user wants to delete or archive a flow, ask which saved flow is affected
+   and what future run, published output, or public contract should no longer exist.
+7. If the user wants to continue a saved flow chat, ask which flow should receive the
+   follow-up and what the message should accomplish.
+8. If the user already named the flow and action clearly, skip the meta lane
    question and ask only for the missing run, node, or output scope.
-6. If the user wants a stable public input contract or published output, prefer those
+9. If the user wants a stable public input contract or published output, prefer those
    dedicated reads instead of detouring through run history first.
-7. If the user is debugging one failed run, ask whether the useful artifact is the run
+10. If the user is debugging one failed run, ask whether the useful artifact is the run
    summary, one node result, the latest node output, or the published output before
    you start asking for edits.
-8. Route to the dedicated workbench route family once the execution lane is clear.
+11. Route to the dedicated workbench route family once the execution lane is clear.
 
 Helpful follow-up lanes:
 
@@ -1582,7 +1602,7 @@ Lane-to-route map:
 - run from a payload-first contract:
   `/api/v1/workbench/run`
 - send one follow-up message into a saved flow chat:
-  `/api/v1/workbench/flows/:id/chat`
+  `POST /api/v1/workbench/flows/:id/chat`
 - inspect published output or run history:
   `/api/v1/workbench/flows/:id/output` or `/api/v1/workbench/flows/:id/runs`
 - inspect one run or node result:
@@ -1617,12 +1637,24 @@ Direct action rules:
   unless they explicitly want historical debugging.
 - If the user wants to understand what inputs a flow can accept before editing or
   running it, read the box catalog or flow detail before asking for a payload.
+- For new flows, ask what the flow should reliably produce, what input contract it
+  should accept, and what first node or box should anchor it. Do not start by asking
+  for raw JSON.
+- For flow edits, ask what behavior should change and how the public contract stays
+  stable, unless the user explicitly wants to change the contract.
+- For flow deletion, confirm the saved flow and whether published outputs or run
+  history still need to be preserved elsewhere before calling delete.
+- For flow chat follow-ups, use the saved flow chat route only when the user wants to
+  continue a flow-specific conversation. Do not turn a chat follow-up into a new flow
+  run, note, or generic entity update unless that is what the user asks for.
 
 Ready to act when:
 
 - the workbench lane is clear
 - the flow, run, or node is clear enough
 - the requested read or mutation is clear enough to choose the route
+- for flow CRUD, the intended stable input, output, or lifecycle effect is clear
+- for flow chat, the saved flow and follow-up message aim are clear
 
 Preferred opening question:
 
