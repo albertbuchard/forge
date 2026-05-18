@@ -7,6 +7,7 @@ FORGE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 HERMES_PLUGIN_DIR="${FORGE_DIR}/plugins/forge-hermes"
 HERMES_PLUGIN_MANIFEST="${HERMES_PLUGIN_DIR}/plugin.yaml"
 HERMES_PLUGIN_PACKAGE_VERSION="${HERMES_PLUGIN_DIR}/forge_hermes/version.py"
+HERMES_PLUGIN_RUNTIME_PACKAGE_JSON="${HERMES_PLUGIN_DIR}/forge_hermes/runtime/package.json"
 HERMES_PLUGIN_PYPROJECT="${HERMES_PLUGIN_DIR}/pyproject.toml"
 HERMES_PLUGIN_PYTHON_DIST="${HERMES_PLUGIN_DIR}/python-dist"
 HERMES_PLUGIN_BUILD_DIR="${HERMES_PLUGIN_DIR}/build"
@@ -261,7 +262,8 @@ NODE
 }
 
 write_release_versions() {
-  python3 - "$1" "${HERMES_PLUGIN_MANIFEST}" "${HERMES_PLUGIN_PACKAGE_VERSION}" <<'PY'
+  python3 - "$1" "${HERMES_PLUGIN_MANIFEST}" "${HERMES_PLUGIN_PACKAGE_VERSION}" "${HERMES_PLUGIN_RUNTIME_PACKAGE_JSON}" <<'PY'
+import json
 import re
 import sys
 from pathlib import Path
@@ -269,6 +271,7 @@ from pathlib import Path
 version = sys.argv[1]
 manifest_path = Path(sys.argv[2])
 package_version_path = Path(sys.argv[3])
+runtime_package_json_path = Path(sys.argv[4])
 
 manifest_text = manifest_path.read_text(encoding="utf-8")
 manifest_text, manifest_count = re.subn(
@@ -293,16 +296,25 @@ package_init_text, package_count = re.subn(
 if package_count != 1:
     raise SystemExit(f"Could not update __version__ in {package_version_path}")
 package_version_path.write_text(package_init_text, encoding="utf-8")
+
+runtime_package_json = json.loads(runtime_package_json_path.read_text(encoding="utf-8"))
+runtime_package_json["version"] = version
+runtime_package_json_path.write_text(
+    json.dumps(runtime_package_json, indent=2) + "\n",
+    encoding="utf-8",
+)
 PY
 }
 
 verify_version_alignment() {
   local version="$1"
-  local manifest_version package_version
+  local manifest_version package_version runtime_package_version
   manifest_version="$(read_manifest_version "${HERMES_PLUGIN_MANIFEST}")"
   package_version="$(read_package_version "${HERMES_PLUGIN_PACKAGE_VERSION}")"
+  runtime_package_version="$(read_json_version "${HERMES_PLUGIN_RUNTIME_PACKAGE_JSON}")"
   [[ "${manifest_version}" == "${version}" ]] || fail "plugin.yaml version mismatch: ${manifest_version}"
   [[ "${package_version}" == "${version}" ]] || fail "package version mismatch: ${package_version}"
+  [[ "${runtime_package_version}" == "${version}" ]] || fail "runtime package version mismatch: ${runtime_package_version}"
 }
 
 run_verification_suite() {
@@ -434,7 +446,7 @@ PY
 
 create_release_commit() {
   local version="$1"
-  git -C "${FORGE_DIR}" add "${HERMES_PLUGIN_MANIFEST}" "${HERMES_PLUGIN_PACKAGE_VERSION}" "${HERMES_PLUGIN_PYPROJECT}"
+  git -C "${FORGE_DIR}" add "${HERMES_PLUGIN_MANIFEST}" "${HERMES_PLUGIN_PACKAGE_VERSION}" "${HERMES_PLUGIN_RUNTIME_PACKAGE_JSON}" "${HERMES_PLUGIN_PYPROJECT}"
   git -C "${FORGE_DIR}" add -A "${HERMES_PLUGIN_DIR}/forge_hermes" "${HERMES_PLUGIN_DIR}/scripts"
   git -C "${FORGE_DIR}" commit -m "release(hermes): v${version}"
   RELEASE_COMMIT_CREATED=1
