@@ -58,6 +58,7 @@ import { SettingsUsersPage } from "@/pages/settings-users-page";
 import { RewardsPage } from "@/pages/rewards-page";
 import { SleepPage } from "@/pages/sleep-page";
 import { SportsPage } from "@/pages/sports-page";
+import { WorkoutDetailPage } from "@/pages/workout-detail-page";
 import { TaskDetailPage } from "@/pages/task-detail-page";
 import { TodayPage } from "@/pages/today-page";
 import { VitalsPage } from "@/pages/vitals-page";
@@ -284,6 +285,15 @@ export function App() {
               "Sports",
               "Fitness, workouts, and sports context.",
               <SportsPage />
+            )}
+          />
+          <Route
+            path="sports/workouts/:workoutId"
+            element={surface(
+              "sports-workout-detail",
+              "Workout Detail",
+              "Raw workout evidence, heart-rate zones, and session context.",
+              <WorkoutDetailPage />
             )}
           />
           <Route

@@ -345,6 +345,50 @@ struct CompanionSyncPayload: Codable {
         let metadata: [String: ScalarValue]
     }
 
+    struct WorkoutTimeSeriesSample: Codable {
+        let sourceSampleUid: String
+        let seriesIndex: Int
+        let metricKey: String
+        let label: String
+        let category: String
+        let unit: String
+        let value: Double
+        let startedAt: String
+        let endedAt: String
+        let sourceDevice: String
+        let sourceBundleIdentifier: String?
+        let sourceProductType: String?
+        let captureMethod: String
+        let qualityFlags: [String]
+        let metadata: [String: ScalarValue]
+        let provenance: [String: ScalarValue]
+    }
+
+    struct WorkoutRoutePoint: Codable {
+        let sourceRouteUid: String
+        let pointIndex: Int
+        let recordedAt: String
+        let latitude: Double
+        let longitude: Double
+        let altitudeMeters: Double?
+        let horizontalAccuracyMeters: Double?
+        let verticalAccuracyMeters: Double?
+        let speedMps: Double?
+        let courseDegrees: Double?
+        let metadata: [String: ScalarValue]
+        let provenance: [String: ScalarValue]
+    }
+
+    struct WorkoutCaptureQuality: Codable {
+        let status: String
+        let flags: [String]
+        let heartRateSamples: Int
+        let routePoints: Int
+        let associatedSampleQueryUsed: Bool
+        let fallbackTimeWindowUsed: Bool
+        let condensedSeriesExpanded: Bool
+    }
+
     struct WorkoutSession: Codable {
         let externalUid: String
         let workoutType: String
@@ -363,6 +407,10 @@ struct CompanionSyncPayload: Codable {
         let averageHeartRate: Double?
         let maxHeartRate: Double?
         let sourceDevice: String
+        let timeSeriesSamples: [WorkoutTimeSeriesSample]
+        let routePoints: [WorkoutRoutePoint]
+        let captureQuality: WorkoutCaptureQuality
+        let syncCursor: [String: ScalarValue]
         let links: [HealthLink]
         let annotations: WorkoutAnnotations
     }

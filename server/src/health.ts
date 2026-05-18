@@ -9,6 +9,19 @@ import {
   workoutDetailsSchema
 } from "./health-workout-adapters.js";
 import {
+  getHealthZoneProfile,
+  getStoredWorkoutAnalytics,
+  getWorkoutRawEvidence,
+  healthZoneProfilePatchSchema,
+  recomputeAndStoreWorkoutAnalytics,
+  upsertWorkoutRoutePoints,
+  upsertWorkoutTimeSeries,
+  workoutCaptureQualitySchema,
+  workoutRoutePointSchema,
+  workoutTimeSeriesSampleSchema,
+  patchHealthZoneProfile
+} from "./health-workout-analytics.js";
+import {
   getMovementMobileBootstrap,
   ingestMovementSync,
   movementSyncPayloadSchema
@@ -293,6 +306,10 @@ export const mobileHealthSyncSchema = z.object({
         sourceProductType: z.string().trim().optional(),
         activity: workoutActivityDescriptorSchema.optional(),
         details: workoutDetailsSchema.optional(),
+        timeSeriesSamples: z.array(workoutTimeSeriesSampleSchema).default([]),
+        routePoints: z.array(workoutRoutePointSchema).default([]),
+        captureQuality: workoutCaptureQualitySchema.optional(),
+        syncCursor: z.record(z.string(), z.unknown()).default({}),
         links: z.array(healthLinkSchema).default([]),
         annotations: workoutAnnotationSchema.partial().default({})
       })
@@ -1282,6 +1299,7 @@ type MappedSleepSourceRecord = ReturnType<typeof mapSleepSourceRecord>;
 function mapWorkoutSession(row: WorkoutSessionRow) {
   const provenance = safeJsonParse<Record<string, unknown>>(row.provenance_json, {});
   const derived = safeJsonParse<Record<string, unknown>>(row.derived_json, {});
+  const analytics = getStoredWorkoutAnalytics(row);
   const presentation = buildWorkoutSessionPresentation({
     source: row.source,
     sourceType: row.source_type,
@@ -1330,6 +1348,7 @@ function mapWorkoutSession(row: WorkoutSessionRow) {
     annotations: safeJsonParse(row.annotations_json, {}),
     provenance,
     derived,
+    analytics,
     generatedFromHabitId: row.generated_from_habit_id,
     generatedFromCheckInId: row.generated_from_check_in_id,
     reconciliationStatus: row.reconciliation_status,
@@ -1978,6 +1997,38 @@ export function getWorkoutSessionById(workoutId: string) {
     .prepare(`SELECT * FROM health_workout_sessions WHERE id = ?`)
     .get(workoutId) as WorkoutSessionRow | undefined;
   return row ? mapWorkoutSession(row) : undefined;
+}
+
+export function getWorkoutSessionDetailById(
+  workoutId: string,
+  resolution: "adaptive" | "raw" = "adaptive"
+) {
+  const row = getDatabase()
+    .prepare(`SELECT * FROM health_workout_sessions WHERE id = ?`)
+    .get(workoutId) as WorkoutSessionRow | undefined;
+  if (!row) {
+    return undefined;
+  }
+  const workout = mapWorkoutSession(row);
+  return {
+    workout,
+    analytics: getStoredWorkoutAnalytics(row),
+    evidence: getWorkoutRawEvidence(row, resolution),
+    zoneProfile: getHealthZoneProfile(row.user_id)
+  };
+}
+
+export { healthZoneProfilePatchSchema };
+
+export function getHealthZoneProfileForUser(userId: string) {
+  return getHealthZoneProfile(userId);
+}
+
+export function patchHealthZoneProfileForUser(
+  userId: string,
+  patch: z.infer<typeof healthZoneProfilePatchSchema>
+) {
+  return patchHealthZoneProfile(userId, patch);
 }
 
 function listPairingRows(userIds?: string[]) {
@@ -3241,6 +3292,7 @@ function insertOrUpdateWorkoutSession(
         now,
         matchedGenerated.id
       );
+    persistWorkoutEvidenceForInput(matchedGenerated.id, pairing.user_id, input);
     return {
       mode:
         matchedGenerated.generated_from_habit_id || matchedGenerated.source !== "apple_health"
@@ -3309,7 +3361,53 @@ function insertOrUpdateWorkoutSession(
       now,
       now
     );
+  persistWorkoutEvidenceForInput(id, pairing.user_id, input);
   return { mode: "created" as const, id };
+}
+
+function persistWorkoutEvidenceForInput(
+  workoutId: string,
+  userId: string,
+  input: z.infer<typeof mobileHealthSyncSchema>["workouts"][number]
+) {
+  if (input.timeSeriesSamples.length > 0) {
+    upsertWorkoutTimeSeries({
+      workoutId,
+      userId,
+      samples: input.timeSeriesSamples
+    });
+  }
+  if (input.routePoints.length > 0) {
+    upsertWorkoutRoutePoints({
+      workoutId,
+      userId,
+      points: input.routePoints
+    });
+  }
+  const row = getDatabase()
+    .prepare(`SELECT * FROM health_workout_sessions WHERE id = ?`)
+    .get(workoutId) as WorkoutSessionRow | undefined;
+  if (row) {
+    recomputeAndStoreWorkoutAnalytics(row);
+    if (input.captureQuality) {
+      const derived = safeJsonParse<Record<string, unknown>>(row.derived_json, {});
+      getDatabase()
+        .prepare(
+          `UPDATE health_workout_sessions
+           SET derived_json = ?, updated_at = ?
+           WHERE id = ?`
+        )
+        .run(
+          JSON.stringify({
+            ...derived,
+            captureQuality: input.captureQuality,
+            syncCursor: input.syncCursor
+          }),
+          nowIso(),
+          workoutId
+        );
+    }
+  }
 }
 
 function clusterSleepRowsByGap<T extends { started_at: string; ended_at: string }>(
@@ -4516,6 +4614,50 @@ export function getFitnessViewData(userIds?: string[]) {
   const orderedWorkoutTypes = [...workoutTypeBreakdown.entries()].sort(
     (left, right) => right[1].totalMinutes - left[1].totalMinutes
   );
+  const zoneTotals = new Map<string, { label: string; seconds: number }>();
+  let totalZoneSeconds = 0;
+  let heartRateCoverageSum = 0;
+  let heartRateCoverageCount = 0;
+  let totalTrainingLoad = 0;
+  let routeWorkoutCount = 0;
+  for (const session of recent) {
+    const analytics = session.analytics as
+      | {
+          zoneDurations?: Array<{ key: string; label: string; seconds: number }>;
+          dataQuality?: { sampleCoverage?: number };
+          load?: { trimp?: number | null };
+          routeSummary?: { hasRoute?: boolean };
+        }
+      | undefined;
+    for (const zone of analytics?.zoneDurations ?? []) {
+      const current = zoneTotals.get(zone.key) ?? {
+        label: zone.label,
+        seconds: 0
+      };
+      current.seconds += zone.seconds;
+      totalZoneSeconds += zone.seconds;
+      zoneTotals.set(zone.key, current);
+    }
+    if (typeof analytics?.dataQuality?.sampleCoverage === "number") {
+      heartRateCoverageSum += analytics.dataQuality.sampleCoverage;
+      heartRateCoverageCount += 1;
+    }
+    if (typeof analytics?.load?.trimp === "number") {
+      totalTrainingLoad += analytics.load.trimp;
+    }
+    if (analytics?.routeSummary?.hasRoute) {
+      routeWorkoutCount += 1;
+    }
+  }
+  const zoneMix = [...zoneTotals.entries()].map(([key, value]) => ({
+    key,
+    label: value.label,
+    seconds: Math.round(value.seconds),
+    percentage:
+      totalZoneSeconds > 0
+        ? Number((value.seconds / totalZoneSeconds).toFixed(4))
+        : 0
+  }));
   return {
     summary: {
       workoutCount: weekly.length,
@@ -4554,7 +4696,14 @@ export function getFitnessViewData(userIds?: string[]) {
           ?.workoutTypeLabel ?? null,
       streakDays: Array.from(
         new Set(weekly.map((session) => dayKey(session.startedAt)))
-      ).length
+      ).length,
+      averageHeartRateCoverage:
+        heartRateCoverageCount > 0
+          ? Number((heartRateCoverageSum / heartRateCoverageCount).toFixed(3))
+          : 0,
+      totalTrainingLoad: Number(totalTrainingLoad.toFixed(1)),
+      routeWorkoutCount,
+      zoneMix
     },
     weeklyTrend: weekly
       .map((session) => ({
@@ -4567,7 +4716,17 @@ export function getFitnessViewData(userIds?: string[]) {
         durationMinutes: Math.round(session.durationSeconds / 60),
         energyKcal: Math.round(
           session.totalEnergyKcal ?? session.activeEnergyKcal ?? 0
-        )
+        ),
+        zoneDurations:
+          (session.analytics as { zoneDurations?: unknown[] } | undefined)
+            ?.zoneDurations ?? [],
+        trainingLoad:
+          ((session.analytics as { load?: { trimp?: number | null } } | undefined)
+            ?.load?.trimp ?? null),
+        heartRateCoverage:
+          ((session.analytics as
+            | { dataQuality?: { sampleCoverage?: number } }
+            | undefined)?.dataQuality?.sampleCoverage ?? 0)
       }))
       .reverse(),
     typeBreakdown: orderedWorkoutTypes.map(([workoutType, metrics]) => ({
@@ -5349,6 +5508,7 @@ export function deleteWorkoutSession(
   if (!current) {
     return undefined;
   }
+  const deletedWorkout = mapWorkoutSession(current);
   getDatabase()
     .prepare(`DELETE FROM health_workout_sessions WHERE id = ?`)
     .run(workoutId);
@@ -5366,7 +5526,7 @@ export function deleteWorkoutSession(
       startedAt: current.started_at
     }
   });
-  return mapWorkoutSession(current);
+  return deletedWorkout;
 }
 
 export function updateWorkoutMetadata(

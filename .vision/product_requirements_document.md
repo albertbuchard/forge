@@ -224,6 +224,9 @@ Public docs, GitHub Pages docs, README, and agent-facing docs must all explain:
   - `providerRawValue`
   - `canonicalKey`
   - `canonicalLabel`
+- Workout sync is raw-evidence-first. The companion and backend must preserve workout-associated HealthKit evidence locally before computing derived analytics. Preserved evidence includes heart-rate samples, supported workout quantity samples, route points, workout events, activity phases/components, source/device metadata, scalar summaries, and partial-permission quality flags.
+- Heart-rate zone analytics are computed by Forge, not assumed to exist as historical HealthKit zone totals. The default model is adaptive Heart Rate Reserve/Karvonen with resting HR, known or inferred max HR, optional physiology profile fields, confidence levels, and clear unavailable/low-confidence states when raw HR is missing.
+- The Sports web surface must expose both aggregate training intelligence and per-workout drill-down: zone mix, training load, HR coverage, resting HR/VO2max context, route availability, dense HR timelines with zone bands, route maps with explicit tile-source configuration, events, phases, metrics, and polished missing-data states.
 
 ### 12. Gamification Achievement Contract
 
@@ -239,6 +242,8 @@ Public docs, GitHub Pages docs, README, and agent-facing docs must all explain:
   - `familyLabel`
 - The canonical contract must also preserve provider-captured workout evidence for drill-down:
   - scalar and aggregate metrics
+  - raw metric timelines
+  - route points
   - workout events
   - workout components or phases
   - provider metadata
