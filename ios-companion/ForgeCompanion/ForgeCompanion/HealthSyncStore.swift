@@ -9,6 +9,18 @@ actor HealthSyncStore {
         let healthDataDeferred: Bool
     }
 
+    struct WorkoutBatchProgress {
+        let batchIndex: Int
+        let totalBatches: Int
+        let uploadedWorkouts: Int
+        let totalWorkouts: Int
+    }
+
+    struct WorkoutStreamResult {
+        let totalWorkouts: Int
+        let healthDataDeferred: Bool
+    }
+
     enum VitalAggregationKind: String {
         case discrete
         case cumulative
@@ -511,7 +523,8 @@ actor HealthSyncStore {
         lastSuccessfulSyncAt: Date?,
         sourceStates: CompanionSyncPayload.SourceStates,
         movementPayload: CompanionSyncPayload.MovementPayload,
-        screenTimePayload: CompanionSyncPayload.ScreenTimePayload
+        screenTimePayload: CompanionSyncPayload.ScreenTimePayload,
+        includeWorkouts: Bool = true
     ) async throws -> BuildSyncPayloadResult {
         let endDate = Date()
         let fullWindowStart = Calendar.current.date(byAdding: .day, value: -syncWindowDays, to: endDate)
@@ -536,14 +549,15 @@ actor HealthSyncStore {
         let vitals: CompanionSyncPayload.VitalsPayload
         if canReadHealthData {
             async let fetchedSleepData = fetchSleepPayload(startDate: startDate, endDate: endDate)
-            async let fetchedWorkouts = fetchWorkoutSessions(startDate: workoutStartDate, endDate: endDate)
             async let fetchedVitals = fetchVitalsPayload(startDate: startDate, endDate: endDate)
             let fetchedSleepPayload = try await fetchedSleepData
             sleepSessions = fetchedSleepPayload.legacySessions
             sleepNights = fetchedSleepPayload.nights
             sleepSegments = fetchedSleepPayload.segments
             sleepRawRecords = fetchedSleepPayload.rawRecords
-            workouts = try await fetchedWorkouts
+            workouts = includeWorkouts
+                ? try await fetchWorkoutSessions(startDate: workoutStartDate, endDate: endDate)
+                : []
             vitals = try await fetchedVitals
         } else {
             companionDebugLog(
@@ -595,6 +609,70 @@ actor HealthSyncStore {
             payload: payload,
             healthDataDeferred: healthSyncEnabled && healthKitAuthorized && protectedDataAvailable == false
         )
+    }
+
+    func streamWorkoutSessionBatches(
+        healthKitAuthorized: Bool,
+        healthSyncEnabled: Bool,
+        lastSuccessfulSyncAt: Date?,
+        batchSize: Int = 10,
+        onBatch: @escaping ([CompanionSyncPayload.WorkoutSession], WorkoutBatchProgress) async throws -> Void
+    ) async throws -> WorkoutStreamResult {
+        let endDate = Date()
+        let fullWindowStart = Calendar.current.date(byAdding: .day, value: -syncWindowDays, to: endDate)
+            ?? endDate.addingTimeInterval(-Double(syncWindowDays) * 24 * 60 * 60)
+        let incrementalStart = lastSuccessfulSyncAt?.addingTimeInterval(-Double(incrementalLookbackHours) * 60 * 60)
+        let startDate = max(fullWindowStart, incrementalStart ?? fullWindowStart)
+        let workoutStartDate = lastSuccessfulSyncAt == nil ? Date(timeIntervalSince1970: 0) : startDate
+        let protectedDataAvailable = await isProtectedDataAvailable()
+        let canReadHealthData = healthSyncEnabled && healthKitAuthorized && protectedDataAvailable
+        guard canReadHealthData else {
+            companionDebugLog(
+                "HealthSyncStore",
+                "streamWorkoutSessionBatches deferred protectedDataAvailable=\(protectedDataAvailable) healthSyncEnabled=\(healthSyncEnabled) healthKitAuthorized=\(healthKitAuthorized)"
+            )
+            return WorkoutStreamResult(
+                totalWorkouts: 0,
+                healthDataDeferred: healthSyncEnabled && healthKitAuthorized && protectedDataAvailable == false
+            )
+        }
+
+        companionDebugLog(
+            "HealthSyncStore",
+            "streamWorkoutSessionBatches start start=\(isoString(workoutStartDate)) end=\(isoString(endDate)) batchSize=\(batchSize)"
+        )
+        let workouts = try await queryWorkouts(startDate: workoutStartDate, endDate: endDate)
+            .sorted { $0.startDate > $1.startDate }
+        guard workouts.isEmpty == false else {
+            companionDebugLog("HealthSyncStore", "streamWorkoutSessionBatches no workouts")
+            return WorkoutStreamResult(totalWorkouts: 0, healthDataDeferred: false)
+        }
+
+        let boundedBatchSize = max(1, batchSize)
+        let totalBatches = Int(ceil(Double(workouts.count) / Double(boundedBatchSize)))
+        var uploadedWorkouts = 0
+        for batchIndex in 0..<totalBatches {
+            let lowerBound = batchIndex * boundedBatchSize
+            let upperBound = min(workouts.count, lowerBound + boundedBatchSize)
+            let batchWorkouts = Array(workouts[lowerBound..<upperBound])
+            let sessions = try await mapWorkoutSessionsBounded(batchWorkouts)
+                .sorted { $0.startedAt > $1.startedAt }
+            uploadedWorkouts += sessions.count
+            try await onBatch(
+                sessions,
+                WorkoutBatchProgress(
+                    batchIndex: batchIndex + 1,
+                    totalBatches: totalBatches,
+                    uploadedWorkouts: uploadedWorkouts,
+                    totalWorkouts: workouts.count
+                )
+            )
+            companionDebugLog(
+                "HealthSyncStore",
+                "streamWorkoutSessionBatches uploaded batch=\(batchIndex + 1)/\(totalBatches) mapped=\(sessions.count) uploaded=\(uploadedWorkouts)/\(workouts.count)"
+            )
+        }
+        return WorkoutStreamResult(totalWorkouts: workouts.count, healthDataDeferred: false)
     }
 
     private func isProtectedDataAvailable() async -> Bool {
@@ -789,24 +867,46 @@ actor HealthSyncStore {
             "fetchWorkoutSessions start start=\(isoString(startDate)) end=\(isoString(endDate))"
         )
         let workouts = try await queryWorkouts(startDate: startDate, endDate: endDate)
-        let sessions = try await withThrowingTaskGroup(of: CompanionSyncPayload.WorkoutSession.self) { group in
-            for workout in workouts {
-                group.addTask {
-                    try await self.mapWorkoutSession(workout)
-                }
-            }
-
-            var mapped: [CompanionSyncPayload.WorkoutSession] = []
-            for try await session in group {
-                mapped.append(session)
-            }
-            return mapped.sorted { $0.startedAt > $1.startedAt }
-        }
+        let sessions = try await mapWorkoutSessionsBounded(workouts)
+            .sorted { $0.startedAt > $1.startedAt }
         companionDebugLog(
             "HealthSyncStore",
             "fetchWorkoutSessions success workouts=\(workouts.count) mapped=\(sessions.count)"
         )
         return sessions
+    }
+
+    private func mapWorkoutSessionsBounded(
+        _ workouts: [HKWorkout],
+        concurrencyLimit: Int = 2
+    ) async throws -> [CompanionSyncPayload.WorkoutSession] {
+        guard workouts.isEmpty == false else {
+            return []
+        }
+        let limit = max(1, concurrencyLimit)
+        var mapped: [CompanionSyncPayload.WorkoutSession] = []
+        mapped.reserveCapacity(workouts.count)
+        var index = 0
+        while index < workouts.count {
+            let upperBound = min(workouts.count, index + limit)
+            let window = Array(workouts[index..<upperBound])
+            let windowSessions = try await withThrowingTaskGroup(of: CompanionSyncPayload.WorkoutSession.self) { group in
+                for workout in window {
+                    group.addTask {
+                        try await self.mapWorkoutSession(workout)
+                    }
+                }
+
+                var sessions: [CompanionSyncPayload.WorkoutSession] = []
+                for try await session in group {
+                    sessions.append(session)
+                }
+                return sessions
+            }
+            mapped.append(contentsOf: windowSessions)
+            index = upperBound
+        }
+        return mapped
     }
 
     private func fetchVitalsPayload(

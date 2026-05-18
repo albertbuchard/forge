@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 import UIKit
 
 @_silgen_name("forge_iroh_http_request_json")
@@ -173,6 +174,114 @@ struct ForgeSyncClient {
         let sync: SyncReceipt
     }
 
+    struct HealthSyncUploadSession: Decodable {
+        let syncSessionId: String
+        let schemaVersion: String
+        let chunkTargetBytes: Int
+        let chunkMaxBytes: Int
+        let supportsCompression: Bool
+        let acceptedFamilies: [String]
+        let receivedChunkIds: [String]
+    }
+
+    struct HealthSyncChunkProgress: Decodable {
+        let receivedCounts: [String: Int]?
+        let byteTotals: [String: Int]?
+        let chunkCount: Int?
+        let receivedBytes: Int?
+    }
+
+    struct HealthSyncChunkReceipt: Decodable {
+        let accepted: Bool
+        let duplicate: Bool
+        let receivedCount: Int
+        let receivedBytes: Int
+        let progress: HealthSyncChunkProgress?
+    }
+
+    private struct HealthSyncSessionStartRequest: Encodable {
+        let sessionId: String
+        let pairingToken: String
+        let device: CompanionSyncPayload.Device
+        let permissions: CompanionSyncPayload.Permissions
+        let sourceStates: CompanionSyncPayload.SourceStates
+        let schemaVersion: String
+        let requestedFamilies: [String]
+        let expectedCounts: [String: Int]
+        let metadata: [String: String]
+    }
+
+    private struct HealthSyncSessionStartEnvelope: Decodable {
+        let upload: HealthSyncUploadSession
+    }
+
+    private struct EmptyDecodableEnvelope: Decodable {}
+
+    private struct HealthSyncChunkEnvelope: Decodable {
+        let chunk: HealthSyncChunkReceipt
+    }
+
+    private struct HealthSyncChunkRequest<Payload: Encodable>: Encodable {
+        let chunkId: String
+        let sequence: Int
+        let family: String
+        let recordCount: Int
+        let byteCount: Int
+        let checksumSha256: String
+        let payload: Payload
+    }
+
+    private struct HealthSyncSessionCompleteRequest: Encodable {
+        let finalCursor: [String: CompanionSyncPayload.ScalarValue]
+        let expectedCounts: [String: Int]
+    }
+
+    private struct SleepNightsChunkPayload: Encodable {
+        let sleepNights: [CompanionSyncPayload.SleepNight]
+    }
+
+    private struct SleepSegmentsChunkPayload: Encodable {
+        let sleepSegments: [CompanionSyncPayload.SleepSegment]
+    }
+
+    private struct SleepRawRecordsChunkPayload: Encodable {
+        let sleepRawRecords: [CompanionSyncPayload.SleepRawRecord]
+    }
+
+    private struct WorkoutSummariesChunkPayload: Encodable {
+        let workouts: [CompanionSyncPayload.WorkoutSession]
+    }
+
+    private struct WorkoutTimeSeriesChunkPayload: Encodable {
+        struct Workout: Encodable {
+            let externalUid: String
+            let samples: [CompanionSyncPayload.WorkoutTimeSeriesSample]
+        }
+
+        let workoutTimeSeries: [Workout]
+    }
+
+    private struct WorkoutRoutesChunkPayload: Encodable {
+        struct Workout: Encodable {
+            let externalUid: String
+            let routePoints: [CompanionSyncPayload.WorkoutRoutePoint]
+        }
+
+        let workoutRoutes: [Workout]
+    }
+
+    private struct VitalsChunkPayload: Encodable {
+        let vitals: CompanionSyncPayload.VitalsPayload
+    }
+
+    private struct MovementChunkPayload: Encodable {
+        let movement: CompanionSyncPayload.MovementPayload
+    }
+
+    private struct ScreenTimeChunkPayload: Encodable {
+        let screenTime: CompanionSyncPayload.ScreenTimePayload
+    }
+
     private struct MovementBootstrapEnvelope: Decodable {
         let pairingSession: CompanionPairingSessionState?
         let movement: SyncReceipt.MovementBootstrapEnvelope
@@ -342,9 +451,12 @@ struct ForgeSyncClient {
             let message: String
         }
 
+        let code: String?
         let error: String?
         let message: String?
         let details: [ValidationIssue]?
+        let recommendedMode: String?
+        let maxBytes: Int?
     }
 
     func verifyPairing(payload: PairingPayload, apiBaseUrl: String) async throws -> CompanionPairingSessionState {
@@ -438,6 +550,561 @@ struct ForgeSyncClient {
             "pushHealthSync success created=\(envelope.sync.imported.createdCount) updated=\(envelope.sync.imported.updatedCount) merged=\(envelope.sync.imported.mergedCount)"
         )
         return envelope.sync
+    }
+
+    func startHealthSyncSession(
+        pairing: PairingPayload,
+        permissions: CompanionSyncPayload.Permissions,
+        sourceStates: CompanionSyncPayload.SourceStates,
+        resumeSyncSessionId: String? = nil,
+        requestedFamilies: [String] = [
+            "sleep_nights",
+            "sleep_segments",
+            "sleep_raw_records",
+            "workout_summaries",
+            "workout_time_series",
+            "workout_routes",
+            "workout_tombstones",
+            "vitals",
+            "movement",
+            "screen_time"
+        ]
+    ) async throws -> HealthSyncUploadSession {
+        companionDebugLog(
+            "ForgeSyncClient",
+            "startHealthSyncSession start session=\(pairing.sessionId) families=\(requestedFamilies.joined(separator: ","))"
+        )
+        let envelope: HealthSyncSessionStartEnvelope = try await sendRequest(
+            path: "/mobile/healthkit/sync-sessions",
+            apiBaseUrl: pairing.apiBaseUrl,
+            body: HealthSyncSessionStartRequest(
+                sessionId: pairing.sessionId,
+                pairingToken: pairing.pairingToken,
+                device: await currentDeviceDescriptor(),
+                permissions: permissions,
+                sourceStates: sourceStates,
+                schemaVersion: "healthkit-sync-v2",
+                requestedFamilies: requestedFamilies,
+                expectedCounts: [:],
+                metadata: [
+                    "clientMode": "chunked",
+                    "clientPlatform": "ios",
+                    "resumeSyncSessionId": resumeSyncSessionId ?? ""
+                ]
+            ),
+            transport: pairing.transport
+        )
+        companionDebugLog(
+            "ForgeSyncClient",
+            "startHealthSyncSession success uploadSession=\(envelope.upload.syncSessionId) target=\(envelope.upload.chunkTargetBytes) max=\(envelope.upload.chunkMaxBytes)"
+        )
+        return envelope.upload
+    }
+
+    func uploadBaseHealthSyncChunks(
+        payload: CompanionSyncPayload,
+        uploadSession: HealthSyncUploadSession,
+        pairing: PairingPayload,
+        startingSequence: Int
+    ) async throws -> Int {
+        var sequence = startingSequence
+        sequence = try await uploadArrayHealthSyncChunks(
+            records: payload.sleepNights,
+            uploadSession: uploadSession,
+            pairing: pairing,
+            family: "sleep_nights",
+            startingSequence: sequence
+        ) { SleepNightsChunkPayload(sleepNights: $0) }
+        sequence = try await uploadArrayHealthSyncChunks(
+            records: payload.sleepSegments,
+            uploadSession: uploadSession,
+            pairing: pairing,
+            family: "sleep_segments",
+            startingSequence: sequence
+        ) { SleepSegmentsChunkPayload(sleepSegments: $0) }
+        sequence = try await uploadArrayHealthSyncChunks(
+            records: payload.sleepRawRecords,
+            uploadSession: uploadSession,
+            pairing: pairing,
+            family: "sleep_raw_records",
+            startingSequence: sequence
+        ) { SleepRawRecordsChunkPayload(sleepRawRecords: $0) }
+        sequence = try await uploadArrayHealthSyncChunks(
+            records: payload.vitals.daySummaries,
+            uploadSession: uploadSession,
+            pairing: pairing,
+            family: "vitals",
+            startingSequence: sequence
+        ) { VitalsChunkPayload(vitals: .init(daySummaries: $0)) }
+        sequence = try await uploadMovementHealthSyncChunks(
+            payload.movement,
+            uploadSession: uploadSession,
+            pairing: pairing,
+            startingSequence: sequence
+        )
+        sequence = try await uploadScreenTimeHealthSyncChunks(
+            payload.screenTime,
+            uploadSession: uploadSession,
+            pairing: pairing,
+            startingSequence: sequence
+        )
+        return sequence
+    }
+
+    func uploadWorkoutHealthSyncChunks(
+        workouts: [CompanionSyncPayload.WorkoutSession],
+        uploadSession: HealthSyncUploadSession,
+        pairing: PairingPayload,
+        startingSequence: Int
+    ) async throws -> Int {
+        var sequence = startingSequence
+        let summaries = workouts.map(summaryOnlyWorkout)
+        sequence = try await uploadChunkedWorkoutSummaries(
+            summaries,
+            uploadSession: uploadSession,
+            pairing: pairing,
+            startingSequence: sequence
+        )
+        sequence = try await uploadChunkedWorkoutTimeSeries(
+            workouts,
+            uploadSession: uploadSession,
+            pairing: pairing,
+            startingSequence: sequence
+        )
+        sequence = try await uploadChunkedWorkoutRoutes(
+            workouts,
+            uploadSession: uploadSession,
+            pairing: pairing,
+            startingSequence: sequence
+        )
+        return sequence
+    }
+
+    func completeHealthSyncSession(
+        uploadSession: HealthSyncUploadSession,
+        pairing: PairingPayload,
+        expectedCounts: [String: Int] = [:]
+    ) async throws -> SyncReceipt {
+        companionDebugLog(
+            "ForgeSyncClient",
+            "completeHealthSyncSession start uploadSession=\(uploadSession.syncSessionId)"
+        )
+        let envelope: SyncEnvelope = try await sendRequest(
+            path: "/mobile/healthkit/sync-sessions/\(uploadSession.syncSessionId)/complete",
+            apiBaseUrl: pairing.apiBaseUrl,
+            body: HealthSyncSessionCompleteRequest(
+                finalCursor: [:],
+                expectedCounts: expectedCounts
+            ),
+            transport: pairing.transport
+        )
+        companionDebugLog(
+            "ForgeSyncClient",
+            "completeHealthSyncSession success created=\(envelope.sync.imported.createdCount) updated=\(envelope.sync.imported.updatedCount) merged=\(envelope.sync.imported.mergedCount)"
+        )
+        return envelope.sync
+    }
+
+    func abortHealthSyncSession(uploadSession: HealthSyncUploadSession, pairing: PairingPayload) async {
+        do {
+            let _: EmptyDecodableEnvelope = try await sendRequest(
+                path: "/mobile/healthkit/sync-sessions/\(uploadSession.syncSessionId)",
+                apiBaseUrl: pairing.apiBaseUrl,
+                method: "DELETE",
+                body: Optional<String>.none as String?,
+                transport: pairing.transport
+            )
+        } catch {
+            companionDebugLog(
+                "ForgeSyncClient",
+                "abortHealthSyncSession failed uploadSession=\(uploadSession.syncSessionId) error=\(error.localizedDescription)"
+            )
+        }
+    }
+
+    private func uploadArrayHealthSyncChunks<Record, Payload: Encodable>(
+        records: [Record],
+        uploadSession: HealthSyncUploadSession,
+        pairing: PairingPayload,
+        family: String,
+        startingSequence: Int,
+        makePayload: ([Record]) -> Payload
+    ) async throws -> Int {
+        var sequence = startingSequence
+        let targetBytes = effectiveHealthSyncChunkTarget(uploadSession: uploadSession, pairing: pairing)
+        var current: [Record] = []
+        for record in records {
+            let candidate = current + [record]
+            if current.isEmpty == false && encodedByteCount(makePayload(candidate)) > targetBytes {
+                sequence = try await uploadHealthSyncChunk(
+                    uploadSession: uploadSession,
+                    pairing: pairing,
+                    sequence: sequence,
+                    family: family,
+                    recordCount: current.count,
+                    payload: makePayload(current)
+                )
+                current = [record]
+            } else {
+                current = candidate
+            }
+        }
+        sequence = try await uploadHealthSyncChunk(
+            uploadSession: uploadSession,
+            pairing: pairing,
+            sequence: sequence,
+            family: family,
+            recordCount: current.count,
+            payload: makePayload(current)
+        )
+        return sequence
+    }
+
+    private func uploadMovementHealthSyncChunks(
+        _ movement: CompanionSyncPayload.MovementPayload,
+        uploadSession: HealthSyncUploadSession,
+        pairing: PairingPayload,
+        startingSequence: Int
+    ) async throws -> Int {
+        var sequence = startingSequence
+        sequence = try await uploadArrayHealthSyncChunks(
+            records: movement.knownPlaces,
+            uploadSession: uploadSession,
+            pairing: pairing,
+            family: "movement",
+            startingSequence: sequence
+        ) { records in
+            MovementChunkPayload(
+                movement: .init(
+                    settings: movement.settings,
+                    knownPlaces: records,
+                    stays: [],
+                    trips: []
+                )
+            )
+        }
+        sequence = try await uploadArrayHealthSyncChunks(
+            records: movement.stays,
+            uploadSession: uploadSession,
+            pairing: pairing,
+            family: "movement",
+            startingSequence: sequence
+        ) { records in
+            MovementChunkPayload(
+                movement: .init(
+                    settings: movement.settings,
+                    knownPlaces: [],
+                    stays: records,
+                    trips: []
+                )
+            )
+        }
+        sequence = try await uploadArrayHealthSyncChunks(
+            records: movement.trips,
+            uploadSession: uploadSession,
+            pairing: pairing,
+            family: "movement",
+            startingSequence: sequence
+        ) { records in
+            MovementChunkPayload(
+                movement: .init(
+                    settings: movement.settings,
+                    knownPlaces: [],
+                    stays: [],
+                    trips: records
+                )
+            )
+        }
+        return sequence
+    }
+
+    private func uploadScreenTimeHealthSyncChunks(
+        _ screenTime: CompanionSyncPayload.ScreenTimePayload,
+        uploadSession: HealthSyncUploadSession,
+        pairing: PairingPayload,
+        startingSequence: Int
+    ) async throws -> Int {
+        var sequence = startingSequence
+        sequence = try await uploadArrayHealthSyncChunks(
+            records: screenTime.daySummaries,
+            uploadSession: uploadSession,
+            pairing: pairing,
+            family: "screen_time",
+            startingSequence: sequence
+        ) { records in
+            ScreenTimeChunkPayload(
+                screenTime: .init(
+                    settings: screenTime.settings,
+                    daySummaries: records,
+                    hourlySegments: []
+                )
+            )
+        }
+        sequence = try await uploadArrayHealthSyncChunks(
+            records: screenTime.hourlySegments,
+            uploadSession: uploadSession,
+            pairing: pairing,
+            family: "screen_time",
+            startingSequence: sequence
+        ) { records in
+            ScreenTimeChunkPayload(
+                screenTime: .init(
+                    settings: screenTime.settings,
+                    daySummaries: [],
+                    hourlySegments: records
+                )
+            )
+        }
+        return sequence
+    }
+
+    private func uploadChunkedWorkoutSummaries(
+        _ workouts: [CompanionSyncPayload.WorkoutSession],
+        uploadSession: HealthSyncUploadSession,
+        pairing: PairingPayload,
+        startingSequence: Int
+    ) async throws -> Int {
+        guard workouts.isEmpty == false else {
+            return startingSequence
+        }
+        var sequence = startingSequence
+        let targetBytes = effectiveHealthSyncChunkTarget(uploadSession: uploadSession, pairing: pairing)
+        var current: [CompanionSyncPayload.WorkoutSession] = []
+        for workout in workouts {
+            let candidate = current + [workout]
+            let candidatePayload = WorkoutSummariesChunkPayload(workouts: candidate)
+            if current.isEmpty == false && encodedByteCount(candidatePayload) > targetBytes {
+                sequence = try await uploadHealthSyncChunk(
+                    uploadSession: uploadSession,
+                    pairing: pairing,
+                    sequence: sequence,
+                    family: "workout_summaries",
+                    recordCount: current.count,
+                    payload: WorkoutSummariesChunkPayload(workouts: current)
+                )
+                current = [workout]
+            } else {
+                current = candidate
+            }
+        }
+        if current.isEmpty == false {
+            sequence = try await uploadHealthSyncChunk(
+                uploadSession: uploadSession,
+                pairing: pairing,
+                sequence: sequence,
+                family: "workout_summaries",
+                recordCount: current.count,
+                payload: WorkoutSummariesChunkPayload(workouts: current)
+            )
+        }
+        return sequence
+    }
+
+    private func uploadChunkedWorkoutTimeSeries(
+        _ workouts: [CompanionSyncPayload.WorkoutSession],
+        uploadSession: HealthSyncUploadSession,
+        pairing: PairingPayload,
+        startingSequence: Int
+    ) async throws -> Int {
+        var sequence = startingSequence
+        let targetBytes = effectiveHealthSyncChunkTarget(uploadSession: uploadSession, pairing: pairing)
+        for workout in workouts {
+            var current: [CompanionSyncPayload.WorkoutTimeSeriesSample] = []
+            for sample in workout.timeSeriesSamples {
+                let candidate = current + [sample]
+                let candidatePayload = WorkoutTimeSeriesChunkPayload(
+                    workoutTimeSeries: [
+                        .init(externalUid: workout.externalUid, samples: candidate)
+                    ]
+                )
+                if current.isEmpty == false && encodedByteCount(candidatePayload) > targetBytes {
+                    sequence = try await uploadHealthSyncChunk(
+                        uploadSession: uploadSession,
+                        pairing: pairing,
+                        sequence: sequence,
+                        family: "workout_time_series",
+                        recordCount: current.count,
+                        payload: WorkoutTimeSeriesChunkPayload(
+                            workoutTimeSeries: [
+                                .init(externalUid: workout.externalUid, samples: current)
+                            ]
+                        )
+                    )
+                    current = [sample]
+                } else {
+                    current = candidate
+                }
+            }
+            if current.isEmpty == false {
+                sequence = try await uploadHealthSyncChunk(
+                    uploadSession: uploadSession,
+                    pairing: pairing,
+                    sequence: sequence,
+                    family: "workout_time_series",
+                    recordCount: current.count,
+                    payload: WorkoutTimeSeriesChunkPayload(
+                        workoutTimeSeries: [
+                            .init(externalUid: workout.externalUid, samples: current)
+                        ]
+                    )
+                )
+            }
+        }
+        return sequence
+    }
+
+    private func uploadChunkedWorkoutRoutes(
+        _ workouts: [CompanionSyncPayload.WorkoutSession],
+        uploadSession: HealthSyncUploadSession,
+        pairing: PairingPayload,
+        startingSequence: Int
+    ) async throws -> Int {
+        var sequence = startingSequence
+        let targetBytes = effectiveHealthSyncChunkTarget(uploadSession: uploadSession, pairing: pairing)
+        for workout in workouts {
+            var current: [CompanionSyncPayload.WorkoutRoutePoint] = []
+            for point in workout.routePoints {
+                let candidate = current + [point]
+                let candidatePayload = WorkoutRoutesChunkPayload(
+                    workoutRoutes: [
+                        .init(externalUid: workout.externalUid, routePoints: candidate)
+                    ]
+                )
+                if current.isEmpty == false && encodedByteCount(candidatePayload) > targetBytes {
+                    sequence = try await uploadHealthSyncChunk(
+                        uploadSession: uploadSession,
+                        pairing: pairing,
+                        sequence: sequence,
+                        family: "workout_routes",
+                        recordCount: current.count,
+                        payload: WorkoutRoutesChunkPayload(
+                            workoutRoutes: [
+                                .init(externalUid: workout.externalUid, routePoints: current)
+                            ]
+                        )
+                    )
+                    current = [point]
+                } else {
+                    current = candidate
+                }
+            }
+            if current.isEmpty == false {
+                sequence = try await uploadHealthSyncChunk(
+                    uploadSession: uploadSession,
+                    pairing: pairing,
+                    sequence: sequence,
+                    family: "workout_routes",
+                    recordCount: current.count,
+                    payload: WorkoutRoutesChunkPayload(
+                        workoutRoutes: [
+                            .init(externalUid: workout.externalUid, routePoints: current)
+                        ]
+                    )
+                )
+            }
+        }
+        return sequence
+    }
+
+    private func uploadHealthSyncChunk<Payload: Encodable>(
+        uploadSession: HealthSyncUploadSession,
+        pairing: PairingPayload,
+        sequence: Int,
+        family: String,
+        recordCount: Int,
+        payload: Payload
+    ) async throws -> Int {
+        guard uploadSession.acceptedFamilies.contains(family) else {
+            companionDebugLog(
+                "ForgeSyncClient",
+                "uploadHealthSyncChunk skipped unsupported family=\(family) uploadSession=\(uploadSession.syncSessionId)"
+            )
+            return sequence
+        }
+        let chunkId = "\(uploadSession.syncSessionId)-\(String(format: "%06d", sequence))-\(family)"
+        if uploadSession.receivedChunkIds.contains(chunkId) {
+            companionDebugLog(
+                "ForgeSyncClient",
+                "uploadHealthSyncChunk skipped previously accepted family=\(family) sequence=\(sequence) chunkId=\(chunkId)"
+            )
+            return sequence + 1
+        }
+        let payloadData = try JSONEncoder().encode(payload)
+        let checksum = sha256Hex(payloadData)
+        let envelope: HealthSyncChunkEnvelope = try await sendRequest(
+            path: "/mobile/healthkit/sync-sessions/\(uploadSession.syncSessionId)/chunks",
+            apiBaseUrl: pairing.apiBaseUrl,
+            body: HealthSyncChunkRequest(
+                chunkId: chunkId,
+                sequence: sequence,
+                family: family,
+                recordCount: recordCount,
+                byteCount: payloadData.count,
+                checksumSha256: checksum,
+                payload: payload
+            ),
+            transport: pairing.transport
+        )
+        companionDebugLog(
+            "ForgeSyncClient",
+            "uploadHealthSyncChunk accepted family=\(family) sequence=\(sequence) records=\(recordCount) bytes=\(payloadData.count) duplicate=\(envelope.chunk.duplicate) received=\(envelope.chunk.receivedCount)"
+        )
+        return sequence + 1
+    }
+
+    private func summaryOnlyWorkout(
+        _ workout: CompanionSyncPayload.WorkoutSession
+    ) -> CompanionSyncPayload.WorkoutSession {
+        CompanionSyncPayload.WorkoutSession(
+            externalUid: workout.externalUid,
+            workoutType: workout.workoutType,
+            sourceSystem: workout.sourceSystem,
+            sourceBundleIdentifier: workout.sourceBundleIdentifier,
+            sourceProductType: workout.sourceProductType,
+            activity: workout.activity,
+            details: workout.details,
+            startedAt: workout.startedAt,
+            endedAt: workout.endedAt,
+            activeEnergyKcal: workout.activeEnergyKcal,
+            totalEnergyKcal: workout.totalEnergyKcal,
+            distanceMeters: workout.distanceMeters,
+            stepCount: workout.stepCount,
+            exerciseMinutes: workout.exerciseMinutes,
+            averageHeartRate: workout.averageHeartRate,
+            maxHeartRate: workout.maxHeartRate,
+            sourceDevice: workout.sourceDevice,
+            timeSeriesSamples: [],
+            routePoints: [],
+            captureQuality: workout.captureQuality,
+            syncCursor: workout.syncCursor,
+            links: workout.links,
+            annotations: workout.annotations
+        )
+    }
+
+    private func effectiveHealthSyncChunkTarget(
+        uploadSession: HealthSyncUploadSession,
+        pairing: PairingPayload
+    ) -> Int {
+        let protocolTarget = min(uploadSession.chunkTargetBytes, max(64_000, uploadSession.chunkMaxBytes - 32_000))
+        if pairing.transport?.isIrohTransport == true {
+            return max(64_000, Int(Double(protocolTarget) * 0.65))
+        }
+        return max(64_000, protocolTarget)
+    }
+
+    private func encodedByteCount(_ value: some Encodable) -> Int {
+        do {
+            return try JSONEncoder().encode(value).count
+        } catch {
+            return Int.max
+        }
+    }
+
+    private func sha256Hex(_ data: Data) -> String {
+        SHA256.hash(data: data)
+            .map { String(format: "%02x", $0) }
+            .joined()
     }
 
     func fetchMovementBootstrap(
@@ -902,6 +1569,20 @@ struct ForgeSyncClient {
         guard (200..<300).contains(httpResponse.statusCode) else {
             let decodedError = try? JSONDecoder().decode(ErrorEnvelope.self, from: data)
             let serverMessage = decodedError.flatMap { $0.message ?? $0.error }
+            let typedReason: String? = {
+                guard let decodedError else { return nil }
+                var parts: [String] = []
+                if let code = decodedError.code, code.isEmpty == false {
+                    parts.append("Forge code: \(code)")
+                }
+                if let recommendedMode = decodedError.recommendedMode, recommendedMode.isEmpty == false {
+                    parts.append("Recommended mode: \(recommendedMode)")
+                }
+                if let maxBytes = decodedError.maxBytes {
+                    parts.append("Max bytes: \(maxBytes)")
+                }
+                return parts.isEmpty ? nil : parts.joined(separator: ". ")
+            }()
             let validationMessage = decodedError?
                 .details?
                 .prefix(3)
@@ -915,14 +1596,17 @@ struct ForgeSyncClient {
                 "ForgeSyncClient",
                 "sendRequest failure status=\(httpResponse.statusCode) message=\(serverMessage ?? "nil") validation=\(validationMessage ?? "nil") body=\(responseBody)"
             )
+            var userInfo: [String: String] = [
+                NSLocalizedDescriptionKey: serverMessage
+                    ?? "Forge rejected the request with status \(httpResponse.statusCode)."
+            ]
+            if let failureReason = validationMessage ?? typedReason {
+                userInfo[NSLocalizedFailureReasonErrorKey] = failureReason
+            }
             throw NSError(
                 domain: "ForgeSyncClient",
                 code: httpResponse.statusCode,
-                userInfo: [
-                    NSLocalizedDescriptionKey: serverMessage
-                        ?? "Forge rejected the request with status \(httpResponse.statusCode).",
-                    NSLocalizedFailureReasonErrorKey: validationMessage ?? responseBody
-                ]
+                userInfo: userInfo
             )
         }
 

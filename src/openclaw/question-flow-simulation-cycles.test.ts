@@ -60,11 +60,14 @@ describe("question flow simulation cycles", () => {
     "Task Timebox",
     "Task Run",
     "Work Adjustment",
+    "Operator Overview",
+    "Operator Context",
     "Self Observation",
     "Sleep Session",
     "Workout Session",
     "Sleep Overview",
     "Sports Overview",
+    "Calendar Overview",
     "Calendar Connection",
     "Preference Judgment",
     "Preference Signal",
@@ -116,6 +119,10 @@ describe("question flow simulation cycles", () => {
     "Task Run": "Start live work on the current thesis task.",
     "Work Adjustment":
       "Add 35 minutes of real work that happened outside a live run.",
+    "Operator Overview":
+      "Review Forge overall to decide what needs attention first.",
+    "Operator Context":
+      "Inspect current work, risk, and next moves before changing anything.",
     "Self Observation": "Log what I noticed in the moment before I disengaged.",
     "Sleep Session": "Attach reflective context to last night's poor sleep.",
     "Workout Session": "Connect a hard workout to mood and recovery context.",
@@ -123,6 +130,8 @@ describe("question flow simulation cycles", () => {
       "Review recent nights to understand whether my recovery is actually improving.",
     "Sports Overview":
       "Review recent workouts to understand whether training load is helping or draining me.",
+    "Calendar Overview":
+      "Review this week before deciding whether to create a timebox or event.",
     "Calendar Connection":
       "Connect a calendar so Forge can read commitments and write planning blocks.",
     "Preference Judgment":
@@ -188,11 +197,14 @@ describe("question flow simulation cycles", () => {
     "Task Timebox": "batch",
     "Task Run": "action",
     "Work Adjustment": "action",
+    "Operator Overview": "readModel",
+    "Operator Context": "readModel",
     "Self Observation": "action",
     "Sleep Session": "batch",
     "Workout Session": "batch",
     "Sleep Overview": "readModel",
     "Sports Overview": "readModel",
+    "Calendar Overview": "readModel",
     "Calendar Connection": "specializedCrud",
     "Preference Judgment": "action",
     "Preference Signal": "action",
@@ -246,6 +258,9 @@ describe("question flow simulation cycles", () => {
     "emotion_definition",
     "wiki_page",
     "calendar_connection",
+    "operator_overview",
+    "operator_context",
+    "calendar_overview",
     "task_run",
     "work_adjustment",
     "preference_judgment",
@@ -690,6 +705,11 @@ describe("question flow simulation cycles", () => {
     const typeSource = readRepoFile("src/lib/types.ts");
 
     expect(onboardingSource).toMatch(/specializedRouteToolExamples:/);
+    expect(onboardingSource).toMatch(/operator_context:\s*"\/api\/v1\/operator\/context"/);
+    expect(onboardingSource).toMatch(/calendar_overview:\s*"\/api\/v1\/calendar\/overview"/);
+    expect(onboardingSource).toMatch(/focus:\s*"operator_overview"[\s\S]*forge_get_operator_overview/i);
+    expect(onboardingSource).toMatch(/focus:\s*"operator_context"[\s\S]*forge_get_operator_context/i);
+    expect(onboardingSource).toMatch(/focus:\s*"calendar_overview"[\s\S]*forge_get_calendar_overview/i);
     expect(typeSource).toMatch(/conceptModel:[\s\S]*movement: string;[\s\S]*lifeForce: string;[\s\S]*workbench: string;/);
     expect(typeSource).toMatch(
       /specializedDomainSurfaces:[\s\S]*classification: "specialized_domain_surface";[\s\S]*aliases: string\[\];[\s\S]*summary: string;[\s\S]*methodRoutes: Record<string, string>;[\s\S]*routeSelectionQuestions: string\[\];/i

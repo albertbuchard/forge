@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { getDatabase, runInTransaction } from "./db.js";
 import { HttpError } from "./errors.js";
@@ -321,6 +321,110 @@ export const mobileHealthSyncSchema = z.object({
   screenTime: screenTimeSyncPayloadSchema.default({})
 });
 
+const HEALTH_MOBILE_SYNC_SCHEMA_VERSION = "healthkit-sync-v2";
+const HEALTH_MOBILE_SYNC_CHUNK_TARGET_BYTES = 512_000;
+const HEALTH_MOBILE_SYNC_CHUNK_MAX_BYTES = 1_000_000;
+const HEALTH_MOBILE_SYNC_SESSION_TTL_MS = 1000 * 60 * 60 * 24;
+
+const mobileHealthSyncFamilySchema = z.enum([
+  "sleep_nights",
+  "sleep_segments",
+  "sleep_raw_records",
+  "workout_summaries",
+  "workout_time_series",
+  "workout_routes",
+  "workout_tombstones",
+  "vitals",
+  "movement",
+  "screen_time"
+]);
+
+const defaultMobileHealthSyncFamilies = mobileHealthSyncFamilySchema.options;
+
+export const mobileHealthSyncSessionStartSchema = mobileHealthSyncSchema
+  .pick({
+    sessionId: true,
+    pairingToken: true,
+    device: true,
+    permissions: true,
+    sourceStates: true
+  })
+  .extend({
+    schemaVersion: z
+      .string()
+      .trim()
+      .default(HEALTH_MOBILE_SYNC_SCHEMA_VERSION),
+    requestedFamilies: z
+      .array(mobileHealthSyncFamilySchema)
+      .default(defaultMobileHealthSyncFamilies),
+    expectedCounts: z.record(z.string(), z.number().int().nonnegative()).default({}),
+    metadata: z.record(z.string(), z.unknown()).default({})
+  });
+
+const workoutTimeSeriesChunkPayloadSchema = z.object({
+  workouts: z
+    .array(
+      z.object({
+        externalUid: z.string().trim().min(1),
+        samples: z.array(workoutTimeSeriesSampleSchema).default([])
+      })
+    )
+    .default([])
+});
+
+const workoutRouteChunkPayloadSchema = z.object({
+  workouts: z
+    .array(
+      z.object({
+        externalUid: z.string().trim().min(1),
+        routePoints: z.array(workoutRoutePointSchema).default([])
+      })
+    )
+    .default([])
+});
+
+const workoutTombstoneChunkPayloadSchema = z.object({
+  workouts: z
+    .array(
+      z.object({
+        externalUid: z.string().trim().min(1),
+        deletedAt: z.string().datetime().nullable().optional(),
+        reason: z.string().trim().default("healthkit_deleted")
+      })
+    )
+    .default([])
+});
+
+const mobileHealthSyncChunkPayloadSchema = z.object({
+  sleepNights: mobileHealthSyncSchema.shape.sleepNights.optional(),
+  sleepSegments: mobileHealthSyncSchema.shape.sleepSegments.optional(),
+  sleepRawRecords: mobileHealthSyncSchema.shape.sleepRawRecords.optional(),
+  workouts: mobileHealthSyncSchema.shape.workouts.optional(),
+  workoutTimeSeries: workoutTimeSeriesChunkPayloadSchema.shape.workouts.optional(),
+  workoutRoutes: workoutRouteChunkPayloadSchema.shape.workouts.optional(),
+  workoutTombstones: workoutTombstoneChunkPayloadSchema.shape.workouts.optional(),
+  vitals: vitalsSyncPayloadSchema.optional(),
+  movement: movementSyncPayloadSchema.optional(),
+  screenTime: screenTimeSyncPayloadSchema.optional()
+});
+
+export const mobileHealthSyncChunkSchema = z.object({
+  chunkId: z.string().trim().min(1),
+  sequence: z.number().int().nonnegative(),
+  family: mobileHealthSyncFamilySchema,
+  recordCount: z.number().int().nonnegative().default(0),
+  byteCount: z.number().int().nonnegative().default(0),
+  checksumSha256: z.string().trim().min(1),
+  payload: mobileHealthSyncChunkPayloadSchema.default({})
+});
+
+export const mobileHealthSyncSessionCompleteSchema = z.object({
+  finalCursor: z.record(z.string(), z.unknown()).default({}),
+  expectedCounts: z.record(z.string(), z.number().int().nonnegative()).default({})
+});
+
+type MobileHealthSyncFamily = z.infer<typeof mobileHealthSyncFamilySchema>;
+
 export const verifyCompanionPairingSchema = z.object({
   sessionId: z.string().trim().min(1),
   pairingToken: z.string().trim().min(1),
@@ -465,6 +569,45 @@ type PairingSourceStateRow = {
   sync_eligible: number;
   last_observed_at: string | null;
   metadata_json: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type MobileSyncSessionRow = {
+  id: string;
+  pairing_session_id: string;
+  user_id: string;
+  status: "running" | "completed" | "failed" | "aborted" | "expired";
+  schema_version: string;
+  requested_families_json: string;
+  source_metadata_json: string;
+  expected_counts_json: string;
+  received_counts_json: string;
+  byte_totals_json: string;
+  affected_workout_ids_json: string;
+  error_json: string;
+  started_at: string;
+  completed_at: string | null;
+  failed_at: string | null;
+  aborted_at: string | null;
+  expired_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type MobileSyncChunkRow = {
+  id: string;
+  sync_session_id: string;
+  chunk_id: string;
+  sequence: number;
+  family: MobileHealthSyncFamily;
+  checksum_sha256: string;
+  record_count: number;
+  byte_count: number;
+  payload_json: string;
+  payload_summary_json: string;
+  received_at: string;
+  applied_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -4017,6 +4160,598 @@ function replaceHistoricalSleepSessionsForDate(
       .prepare(`DELETE FROM health_sleep_sessions WHERE id = ?`)
       .run(historical.id);
   }
+}
+
+function mobileSyncSessionId() {
+  return `hms_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+}
+
+function mobileSyncChunkRecordId() {
+  return `hmsc_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+}
+
+function expireStaleMobileSyncSessions() {
+  const cutoff = new Date(Date.now() - HEALTH_MOBILE_SYNC_SESSION_TTL_MS).toISOString();
+  const now = nowIso();
+  getDatabase()
+    .prepare(
+      `UPDATE health_mobile_sync_sessions
+       SET status = 'expired', expired_at = ?, updated_at = ?
+       WHERE status = 'running' AND started_at < ?`
+    )
+    .run(now, now, cutoff);
+}
+
+function readMobileSyncSession(syncSessionId: string) {
+  return getDatabase()
+    .prepare(`SELECT * FROM health_mobile_sync_sessions WHERE id = ?`)
+    .get(syncSessionId) as MobileSyncSessionRow | undefined;
+}
+
+function ensureRunningMobileSyncSession(syncSessionId: string) {
+  expireStaleMobileSyncSessions();
+  const session = readMobileSyncSession(syncSessionId);
+  if (!session) {
+    throw new HttpError(
+      404,
+      "sync_session_not_found",
+      "The HealthKit sync session does not exist."
+    );
+  }
+  if (session.status !== "running") {
+    throw new HttpError(
+      409,
+      "sync_session_closed",
+      "The HealthKit sync session is no longer accepting chunks.",
+      { status: session.status }
+    );
+  }
+  return session;
+}
+
+function chunkPayloadJson(payload: z.infer<typeof mobileHealthSyncChunkSchema>["payload"]) {
+  return JSON.stringify(payload);
+}
+
+function chunkPayloadChecksum(payloadJson: string) {
+  return createHash("sha256").update(payloadJson).digest("hex");
+}
+
+function summarizeChunkPayload(
+  family: MobileHealthSyncFamily,
+  payload: z.infer<typeof mobileHealthSyncChunkSchema>["payload"]
+) {
+  switch (family) {
+    case "sleep_nights":
+      return { sleepNights: payload.sleepNights?.length ?? 0 };
+    case "sleep_segments":
+      return { sleepSegments: payload.sleepSegments?.length ?? 0 };
+    case "sleep_raw_records":
+      return { sleepRawRecords: payload.sleepRawRecords?.length ?? 0 };
+    case "workout_summaries":
+      return { workouts: payload.workouts?.length ?? 0 };
+    case "workout_time_series":
+      return {
+        workouts: payload.workoutTimeSeries?.length ?? 0,
+        samples:
+          payload.workoutTimeSeries?.reduce(
+            (sum, entry) => sum + entry.samples.length,
+            0
+          ) ?? 0
+      };
+    case "workout_routes":
+      return {
+        workouts: payload.workoutRoutes?.length ?? 0,
+        routePoints:
+          payload.workoutRoutes?.reduce(
+            (sum, entry) => sum + entry.routePoints.length,
+            0
+          ) ?? 0
+      };
+    case "workout_tombstones":
+      return { workouts: payload.workoutTombstones?.length ?? 0 };
+    case "vitals":
+      return { daySummaries: payload.vitals?.daySummaries.length ?? 0 };
+    case "movement":
+      return {
+        stays: payload.movement?.stays.length ?? 0,
+        trips: payload.movement?.trips.length ?? 0
+      };
+    case "screen_time":
+      return {
+        daySummaries: payload.screenTime?.daySummaries.length ?? 0,
+        hourlySegments: payload.screenTime?.hourlySegments.length ?? 0
+      };
+  }
+}
+
+function updateMobileSyncSessionProgress(syncSessionId: string) {
+  const chunks = getDatabase()
+    .prepare(
+      `SELECT family, record_count, byte_count
+       FROM health_mobile_sync_chunks
+       WHERE sync_session_id = ?`
+    )
+    .all(syncSessionId) as Array<{
+    family: MobileHealthSyncFamily;
+    record_count: number;
+    byte_count: number;
+  }>;
+  const receivedCounts: Record<string, number> = {};
+  const byteTotals: Record<string, number> = {};
+  for (const chunk of chunks) {
+    receivedCounts[chunk.family] =
+      (receivedCounts[chunk.family] ?? 0) + chunk.record_count;
+    byteTotals[chunk.family] =
+      (byteTotals[chunk.family] ?? 0) + chunk.byte_count;
+  }
+  getDatabase()
+    .prepare(
+      `UPDATE health_mobile_sync_sessions
+       SET received_counts_json = ?, byte_totals_json = ?, updated_at = ?
+       WHERE id = ?`
+    )
+    .run(JSON.stringify(receivedCounts), JSON.stringify(byteTotals), nowIso(), syncSessionId);
+  return {
+    receivedCounts,
+    byteTotals,
+    chunkCount: chunks.length,
+    receivedBytes: chunks.reduce((sum, chunk) => sum + chunk.byte_count, 0)
+  };
+}
+
+export function startMobileHealthSyncSession(
+  payload: z.infer<typeof mobileHealthSyncSessionStartSchema>
+) {
+  const parsed = mobileHealthSyncSessionStartSchema.parse(payload);
+  if (parsed.schemaVersion !== HEALTH_MOBILE_SYNC_SCHEMA_VERSION) {
+    throw new HttpError(
+      409,
+      "schema_version_unsupported",
+      "The companion HealthKit sync protocol is not supported by this Forge runtime.",
+      {
+        schemaVersion: HEALTH_MOBILE_SYNC_SCHEMA_VERSION,
+        requestedSchemaVersion: parsed.schemaVersion
+      }
+    );
+  }
+  expireStaleMobileSyncSessions();
+  const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+  const resumeSyncSessionId =
+    typeof parsed.metadata.resumeSyncSessionId === "string"
+      ? parsed.metadata.resumeSyncSessionId.trim()
+      : "";
+  if (resumeSyncSessionId.length > 0) {
+    const existing = readMobileSyncSession(resumeSyncSessionId);
+    if (
+      existing &&
+      existing.pairing_session_id === pairing.id &&
+      existing.status === "running"
+    ) {
+      const receivedChunkIds = getDatabase()
+        .prepare(
+          `SELECT chunk_id
+           FROM health_mobile_sync_chunks
+           WHERE sync_session_id = ?
+           ORDER BY sequence ASC`
+        )
+        .all(resumeSyncSessionId)
+        .map((row) => (row as { chunk_id: string }).chunk_id);
+      return {
+        syncSessionId: resumeSyncSessionId,
+        schemaVersion: HEALTH_MOBILE_SYNC_SCHEMA_VERSION,
+        chunkTargetBytes: HEALTH_MOBILE_SYNC_CHUNK_TARGET_BYTES,
+        chunkMaxBytes: HEALTH_MOBILE_SYNC_CHUNK_MAX_BYTES,
+        supportsCompression: false,
+        acceptedFamilies: safeJsonParse<MobileHealthSyncFamily[]>(
+          existing.requested_families_json,
+          parsed.requestedFamilies
+        ),
+        receivedChunkIds
+      };
+    }
+  }
+  const now = nowIso();
+  const syncSessionId = mobileSyncSessionId();
+  getDatabase()
+    .prepare(
+      `INSERT INTO health_mobile_sync_sessions (
+         id, pairing_session_id, user_id, status, schema_version,
+         requested_families_json, source_metadata_json, expected_counts_json,
+         received_counts_json, byte_totals_json, started_at, created_at, updated_at
+       )
+       VALUES (?, ?, ?, 'running', ?, ?, ?, ?, '{}', '{}', ?, ?, ?)`
+    )
+    .run(
+      syncSessionId,
+      pairing.id,
+      pairing.user_id,
+      HEALTH_MOBILE_SYNC_SCHEMA_VERSION,
+      JSON.stringify(parsed.requestedFamilies),
+      JSON.stringify({
+        sessionId: parsed.sessionId,
+        device: parsed.device,
+        permissions: parsed.permissions,
+        sourceStates: parsed.sourceStates,
+        metadata: parsed.metadata
+      }),
+      JSON.stringify(parsed.expectedCounts),
+      now,
+      now,
+      now
+    );
+  return {
+    syncSessionId,
+    schemaVersion: HEALTH_MOBILE_SYNC_SCHEMA_VERSION,
+    chunkTargetBytes: HEALTH_MOBILE_SYNC_CHUNK_TARGET_BYTES,
+    chunkMaxBytes: HEALTH_MOBILE_SYNC_CHUNK_MAX_BYTES,
+    supportsCompression: false,
+    acceptedFamilies: parsed.requestedFamilies,
+    receivedChunkIds: [] as string[]
+  };
+}
+
+export function ingestMobileHealthSyncChunk(
+  syncSessionId: string,
+  payload: z.infer<typeof mobileHealthSyncChunkSchema>,
+  rawPayloadJson?: string
+) {
+  const parsed = mobileHealthSyncChunkSchema.parse(payload);
+  const session = ensureRunningMobileSyncSession(syncSessionId);
+  const requestedFamilies = safeJsonParse<MobileHealthSyncFamily[]>(
+    session.requested_families_json,
+    []
+  );
+  if (
+    requestedFamilies.length > 0 &&
+    !requestedFamilies.includes(parsed.family)
+  ) {
+    throw new HttpError(
+      400,
+      "unsupported_family",
+      "This sync session did not request that HealthKit family.",
+      { family: parsed.family }
+    );
+  }
+  const existing = getDatabase()
+    .prepare(
+      `SELECT * FROM health_mobile_sync_chunks
+       WHERE sync_session_id = ? AND chunk_id = ?`
+    )
+    .get(syncSessionId, parsed.chunkId) as MobileSyncChunkRow | undefined;
+  if (existing) {
+    if (existing.checksum_sha256 !== parsed.checksumSha256) {
+      throw new HttpError(
+        409,
+        "chunk_checksum_mismatch",
+        "A chunk with the same id was already accepted with different content."
+      );
+    }
+    const progress = updateMobileSyncSessionProgress(syncSessionId);
+    return {
+      accepted: true,
+      duplicate: true,
+      receivedCount: progress.chunkCount,
+      receivedBytes: progress.receivedBytes,
+      progress
+    };
+  }
+  const payloadJson = chunkPayloadJson(parsed.payload);
+  const checksumPayloadJson = rawPayloadJson ?? payloadJson;
+  const actualByteCount = Buffer.byteLength(checksumPayloadJson, "utf8");
+  if (actualByteCount > HEALTH_MOBILE_SYNC_CHUNK_MAX_BYTES) {
+    throw new HttpError(
+      413,
+      "chunk_too_large",
+      "The HealthKit sync chunk is too large.",
+      {
+        maxBytes: HEALTH_MOBILE_SYNC_CHUNK_MAX_BYTES,
+        actualBytes: actualByteCount
+      }
+    );
+  }
+  const serverChecksum = chunkPayloadChecksum(checksumPayloadJson);
+  if (parsed.checksumSha256 !== serverChecksum) {
+    throw new HttpError(
+      409,
+      "chunk_checksum_mismatch",
+      "The HealthKit sync chunk checksum does not match its payload.",
+      { actualBytes: actualByteCount }
+    );
+  }
+  const now = nowIso();
+  getDatabase()
+    .prepare(
+      `INSERT INTO health_mobile_sync_chunks (
+         id, sync_session_id, chunk_id, sequence, family, checksum_sha256,
+         record_count, byte_count, payload_json, payload_summary_json,
+         received_at, applied_at, created_at, updated_at
+       )
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      mobileSyncChunkRecordId(),
+      syncSessionId,
+      parsed.chunkId,
+      parsed.sequence,
+      parsed.family,
+      serverChecksum,
+      parsed.recordCount,
+      parsed.byteCount || actualByteCount,
+      payloadJson,
+      JSON.stringify({
+        ...summarizeChunkPayload(parsed.family, parsed.payload),
+        clientByteCount: parsed.byteCount,
+        actualByteCount,
+        serverChecksum
+      }),
+      now,
+      now,
+      now,
+      now
+    );
+  const progress = updateMobileSyncSessionProgress(syncSessionId);
+  return {
+    accepted: true,
+    duplicate: false,
+    receivedCount: progress.chunkCount,
+    receivedBytes: progress.receivedBytes,
+    progress
+  };
+}
+
+function mergeMobileHealthSyncChunks(
+  session: MobileSyncSessionRow,
+  chunks: MobileSyncChunkRow[]
+) {
+  const pairing = getDatabase()
+    .prepare(`SELECT * FROM companion_pairing_sessions WHERE id = ?`)
+    .get(session.pairing_session_id) as PairingSessionRow | undefined;
+  if (!pairing) {
+    throw new HttpError(404, "pairing_invalid", "The sync pairing no longer exists.");
+  }
+  const metadata = safeJsonParse<{
+    sessionId?: string;
+    device?: z.infer<typeof mobileHealthSyncSchema>["device"];
+    permissions?: z.infer<typeof mobileHealthSyncSchema>["permissions"];
+    sourceStates?: z.infer<typeof mobileHealthSyncSchema>["sourceStates"];
+  }>(session.source_metadata_json, {});
+  const assembled = mobileHealthSyncSchema.parse({
+    sessionId: metadata.sessionId ?? pairing.id,
+    pairingToken: pairing.pairing_token,
+    device:
+      metadata.device ??
+      ({
+        name: pairing.device_name ?? "iPhone",
+        platform: pairing.platform ?? "ios",
+        appVersion: pairing.app_version ?? "",
+        sourceDevice: pairing.device_name ?? "iPhone"
+      } satisfies z.infer<typeof mobileHealthSyncSchema>["device"]),
+    permissions:
+      metadata.permissions ??
+      ({
+        healthKitAuthorized: false,
+        backgroundRefreshEnabled: false,
+        motionReady: false,
+        locationReady: false,
+        screenTimeReady: false
+      } satisfies z.infer<typeof mobileHealthSyncSchema>["permissions"]),
+    sourceStates: metadata.sourceStates,
+    sleepSessions: [],
+    sleepNights: [],
+    sleepSegments: [],
+    sleepRawRecords: [],
+    workouts: [],
+    vitals: { daySummaries: [] },
+    movement: {},
+    screenTime: {}
+  });
+  const workoutsByExternalUid = new Map<string, z.infer<typeof mobileHealthSyncSchema>["workouts"][number]>();
+  const tombstones: z.infer<typeof workoutTombstoneChunkPayloadSchema>["workouts"] = [];
+
+  for (const chunk of chunks.sort((left, right) => left.sequence - right.sequence)) {
+    const payload = mobileHealthSyncChunkPayloadSchema.parse(
+      safeJsonParse<Record<string, unknown>>(chunk.payload_json, {})
+    );
+    if (payload.sleepNights) {
+      assembled.sleepNights.push(...payload.sleepNights);
+    }
+    if (payload.sleepSegments) {
+      assembled.sleepSegments.push(...payload.sleepSegments);
+    }
+    if (payload.sleepRawRecords) {
+      assembled.sleepRawRecords.push(...payload.sleepRawRecords);
+    }
+    if (payload.workouts) {
+      for (const workout of payload.workouts) {
+        const previous = workoutsByExternalUid.get(workout.externalUid);
+        workoutsByExternalUid.set(workout.externalUid, {
+          ...(previous ?? workout),
+          ...workout,
+          timeSeriesSamples: [
+            ...(previous?.timeSeriesSamples ?? []),
+            ...workout.timeSeriesSamples
+          ],
+          routePoints: [
+            ...(previous?.routePoints ?? []),
+            ...workout.routePoints
+          ]
+        });
+      }
+    }
+    if (payload.workoutTimeSeries) {
+      for (const entry of payload.workoutTimeSeries) {
+        const workout = workoutsByExternalUid.get(entry.externalUid);
+        if (!workout) {
+          throw new HttpError(
+            409,
+            "missing_required_chunks",
+            "A workout time-series chunk arrived without a matching workout summary.",
+            { workoutExternalUid: entry.externalUid }
+          );
+        }
+        workout.timeSeriesSamples.push(...entry.samples);
+      }
+    }
+    if (payload.workoutRoutes) {
+      for (const entry of payload.workoutRoutes) {
+        const workout = workoutsByExternalUid.get(entry.externalUid);
+        if (!workout) {
+          throw new HttpError(
+            409,
+            "missing_required_chunks",
+            "A workout route chunk arrived without a matching workout summary.",
+            { workoutExternalUid: entry.externalUid }
+          );
+        }
+        workout.routePoints.push(...entry.routePoints);
+      }
+    }
+    if (payload.workoutTombstones) {
+      tombstones.push(...payload.workoutTombstones);
+    }
+    if (payload.vitals) {
+      assembled.vitals.daySummaries.push(...payload.vitals.daySummaries);
+    }
+    if (payload.movement) {
+      assembled.movement.settings = payload.movement.settings;
+      assembled.movement.knownPlaces.push(...payload.movement.knownPlaces);
+      assembled.movement.stays.push(...payload.movement.stays);
+      assembled.movement.trips.push(...payload.movement.trips);
+    }
+    if (payload.screenTime) {
+      assembled.screenTime.settings = payload.screenTime.settings;
+      assembled.screenTime.daySummaries.push(...payload.screenTime.daySummaries);
+      assembled.screenTime.hourlySegments.push(...payload.screenTime.hourlySegments);
+    }
+  }
+
+  assembled.workouts = [...workoutsByExternalUid.values()].sort((left, right) =>
+    right.startedAt.localeCompare(left.startedAt)
+  );
+  return { assembled, tombstones };
+}
+
+function applyWorkoutTombstones(
+  pairing: PairingSessionRow,
+  tombstones: z.infer<typeof workoutTombstoneChunkPayloadSchema>["workouts"]
+) {
+  if (tombstones.length === 0) {
+    return 0;
+  }
+  const deleteStmt = getDatabase().prepare(
+    `DELETE FROM health_workout_sessions
+     WHERE user_id = ? AND source = 'apple_health' AND external_uid = ?`
+  );
+  let deleted = 0;
+  for (const tombstone of tombstones) {
+    const result = deleteStmt.run(pairing.user_id, tombstone.externalUid);
+    deleted += Number(result.changes ?? 0);
+  }
+  return deleted;
+}
+
+function upsertMobileSyncFamilyCursors(
+  pairing: PairingSessionRow,
+  finalCursor: Record<string, unknown>
+) {
+  const now = nowIso();
+  const stmt = getDatabase().prepare(
+    `INSERT INTO health_mobile_sync_family_cursors (
+       id, pairing_session_id, user_id, family, cursor_json, updated_at
+     )
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(pairing_session_id, family)
+     DO UPDATE SET cursor_json = excluded.cursor_json, updated_at = excluded.updated_at`
+  );
+  for (const [family, cursor] of Object.entries(finalCursor)) {
+    stmt.run(
+      `hmscur_${randomUUID().replaceAll("-", "").slice(0, 10)}`,
+      pairing.id,
+      pairing.user_id,
+      family,
+      JSON.stringify(cursor),
+      now
+    );
+  }
+}
+
+export function completeMobileHealthSyncSession(
+  syncSessionId: string,
+  payload: z.infer<typeof mobileHealthSyncSessionCompleteSchema>
+) {
+  const parsed = mobileHealthSyncSessionCompleteSchema.parse(payload);
+  const session = ensureRunningMobileSyncSession(syncSessionId);
+  const chunks = getDatabase()
+    .prepare(
+      `SELECT * FROM health_mobile_sync_chunks
+       WHERE sync_session_id = ?
+       ORDER BY sequence ASC`
+    )
+    .all(syncSessionId) as MobileSyncChunkRow[];
+  if (chunks.length === 0) {
+    throw new HttpError(
+      409,
+      "missing_required_chunks",
+      "The HealthKit sync session has no accepted chunks."
+    );
+  }
+  const pairing = getDatabase()
+    .prepare(`SELECT * FROM companion_pairing_sessions WHERE id = ?`)
+    .get(session.pairing_session_id) as PairingSessionRow;
+  try {
+    const { assembled, tombstones } = mergeMobileHealthSyncChunks(session, chunks);
+    const sync = ingestMobileHealthSync(assembled);
+    const deletedWorkoutCount = applyWorkoutTombstones(pairing, tombstones);
+    upsertMobileSyncFamilyCursors(pairing, parsed.finalCursor);
+    const now = nowIso();
+    getDatabase()
+      .prepare(
+        `UPDATE health_mobile_sync_sessions
+         SET status = 'completed', expected_counts_json = ?, completed_at = ?,
+             updated_at = ?
+         WHERE id = ?`
+      )
+      .run(JSON.stringify(parsed.expectedCounts), now, now, syncSessionId);
+    return {
+      ...sync,
+      upload: {
+        syncSessionId,
+        chunks: chunks.length,
+        deletedWorkoutCount
+      }
+    };
+  } catch (error) {
+    const now = nowIso();
+    getDatabase()
+      .prepare(
+        `UPDATE health_mobile_sync_sessions
+         SET status = 'failed', failed_at = ?, error_json = ?, updated_at = ?
+         WHERE id = ?`
+      )
+      .run(
+        now,
+        JSON.stringify({
+          message: error instanceof Error ? error.message : String(error)
+        }),
+        now,
+        syncSessionId
+      );
+    throw error;
+  }
+}
+
+export function abortMobileHealthSyncSession(syncSessionId: string) {
+  const session = ensureRunningMobileSyncSession(syncSessionId);
+  const now = nowIso();
+  getDatabase()
+    .prepare(
+      `UPDATE health_mobile_sync_sessions
+       SET status = 'aborted', aborted_at = ?, updated_at = ?
+       WHERE id = ?`
+    )
+    .run(now, now, session.id);
+  return { syncSessionId, status: "aborted" as const };
 }
 
 export function ingestMobileHealthSync(

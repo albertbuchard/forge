@@ -25,7 +25,7 @@ final class ForgeCompanionUITests: XCTestCase {
     @MainActor
     func testExample() throws {
         // UI tests must launch the application that they test.
-        let app = XCUIApplication()
+        let app = makeApp()
         app.launch()
 
         // Use XCTAssert and related functions to verify your tests produce the correct results.
@@ -33,7 +33,7 @@ final class ForgeCompanionUITests: XCTestCase {
 
     @MainActor
     func testPairingSetupFlowPrioritizesForgeQRAndManualFallback() throws {
-        let app = XCUIApplication()
+        let app = makeApp()
         app.launchEnvironment["FORGE_SCREENSHOT_SCENARIO"] = "pairing"
         app.launch()
 
@@ -57,7 +57,7 @@ final class ForgeCompanionUITests: XCTestCase {
 
     @MainActor
     func testMovementTimelineSelectedActionButtonsAreTappable() throws {
-        let app = XCUIApplication()
+        let app = makeApp()
         app.launchEnvironment["FORGE_SCREENSHOT_SCENARIO"] = "life-timeline"
         app.launch()
 
@@ -94,8 +94,14 @@ final class ForgeCompanionUITests: XCTestCase {
     func testLaunchPerformance() throws {
         // This measures how long it takes to launch your application.
         measure(metrics: [XCTApplicationLaunchMetric()]) {
-            XCUIApplication().launch()
+            makeApp().launch()
         }
+    }
+
+    private func makeApp() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchEnvironment["FORGE_COMPANION_DISABLE_SIMULATOR_AUTOMATION"] = "1"
+        return app
     }
 
     private func tapFirstHittable(in query: XCUIElementQuery) -> Bool {

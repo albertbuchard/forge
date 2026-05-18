@@ -1,9 +1,9 @@
-Forge Companion 1.0.38 expands HealthKit workout sync for the new Forge sports cockpit.
+Forge Companion 1.0.39 makes HealthKit sports sync resumable for large workout histories.
 
-Workouts now send richer HealthKit evidence to Forge, including heart-rate timelines,
-route points, workout events, activity phases, energy, distance, speed, cadence, power,
-steps, swimming metrics, flights, and VO2 max samples when Health permissions allow it.
+Workout backfills now upload to Forge in bounded chunks instead of one oversized request,
+so raw heart-rate timelines, routes, workout summaries, sleep, vitals, movement, and
+screen-time evidence can resume after a network drop or app backgrounding.
 
-Heart-rate samples are linked to each workout first and then recovered by strict workout
-time windows when HealthKit associations are missing, so older sessions can still produce
-clear HR coverage, zone, and sync-quality states in Forge.
+Sync progress and diagnostics now show the active upload session, chunk family, payload
+size, and server limits, while Forge returns typed payload-too-large and checksum errors
+instead of exposing raw server JSON.

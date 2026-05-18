@@ -20,6 +20,7 @@ final class ForgeCompanionUITestsLaunchTests: XCTestCase {
     @MainActor
     func testLaunch() throws {
         let app = XCUIApplication()
+        app.launchEnvironment["FORGE_COMPANION_DISABLE_SIMULATOR_AUTOMATION"] = "1"
         app.launch()
 
         // Insert steps here to perform after app launch but before taking a screenshot,
