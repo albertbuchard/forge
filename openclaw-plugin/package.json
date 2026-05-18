@@ -105,6 +105,7 @@
     "follow-redirects": "^1.16.0",
     "hono": "^4.12.18",
     "ip-address": "^10.2.0",
+    "ws": "^8.20.1",
     "uuid": "^14.0.0"
   },
   "scripts": {
