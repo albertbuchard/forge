@@ -66,7 +66,7 @@ import { registerWebRoutes } from "./web.js";
 import { createManagerRuntime } from "./managers/runtime.js";
 import { isManagerError } from "./managers/type-guards.js";
 import { buildCompanionPairingTransport, getCompanionIrohStatus, stopCompanionIroh } from "./services/companion-iroh.js";
-import { createCompanionPairingSession, createCompanionPairingSessionSchema, createSleepSession, createSleepSessionSchema, createWorkoutSession, createWorkoutSessionSchema, deleteSleepSession, deleteWorkoutSession, getCompanionPairingSessionById, getCompanionOverview, getFitnessViewData, getSleepSessionById, getSleepSessionDetailById, getSleepTimelineOverlaysForRange, getSleepViewData, getVitalsViewData, getWorkoutSessionById, heartbeatCompanionPairing, heartbeatCompanionPairingSchema, ingestMobileHealthSync, mobileHealthSyncSchema, patchCompanionPairingSourceState, patchCompanionPairingSourceStateSchema, companionSourceKeySchema, requireValidPairing, revokeAllCompanionPairingSessions, revokeAllCompanionPairingSessionsSchema, revokeCompanionPairingSession, updateMobileCompanionSourceState, updateMobileCompanionSourceStateSchema, verifyCompanionPairing, verifyCompanionPairingSchema, updateSleepMetadata, updateSleepMetadataSchema, updateWorkoutMetadata, updateWorkoutMetadataSchema } from "./health.js";
+import { createCompanionPairingSession, createCompanionPairingSessionSchema, createSleepSession, createSleepSessionSchema, createWorkoutSession, createWorkoutSessionSchema, deleteSleepSession, deleteWorkoutSession, getCompanionPairingSessionById, getCompanionOverview, getFitnessViewData, getSleepSessionById, getSleepSessionDetailById, getSleepTimelineOverlaysForRange, getSleepViewData, getVitalsViewData, getHealthZoneProfileForUser, getWorkoutSessionById, getWorkoutSessionDetailById, heartbeatCompanionPairing, heartbeatCompanionPairingSchema, healthZoneProfilePatchSchema, ingestMobileHealthSync, mobileHealthSyncSchema, patchHealthZoneProfileForUser, patchCompanionPairingSourceState, patchCompanionPairingSourceStateSchema, companionSourceKeySchema, requireValidPairing, revokeAllCompanionPairingSessions, revokeAllCompanionPairingSessionsSchema, revokeCompanionPairingSession, updateMobileCompanionSourceState, updateMobileCompanionSourceStateSchema, verifyCompanionPairing, verifyCompanionPairingSchema, updateSleepMetadata, updateSleepMetadataSchema, updateWorkoutMetadata, updateWorkoutMetadataSchema } from "./health.js";
 import { analyzeMovementUserBoxPreflight, createMovementUserBox, createMovementPlace, deleteMovementUserBox, getMovementAllTimeSummary, getMovementBoxDetail, getMovementDayDetail, getMovementMobileBootstrap, getMovementTimeline, getMovementSelectionAggregate, getMovementSettings, getMovementTripDetail, getMovementMonthSummary, invalidateAutomaticMovementBox, listMovementPlaces, movementAutomaticBoxInvalidateSchema, movementMobileBootstrapSchema, movementMobilePlaceMutationSchema, movementMobileStayPatchSchema, movementMobileUserBoxCreateSchema, movementMobileUserBoxPreflightSchema, movementMobileUserBoxPatchSchema, movementMobileAutomaticBoxInvalidateSchema, movementMobileTimelineSchema, movementPlaceMutationSchema, movementPlacePatchSchema, movementSelectionAggregateSchema, movementStayPatchSchema, movementTripPatchSchema, movementUserBoxCreateSchema, movementUserBoxPreflightSchema, movementUserBoxPatchSchema, movementSettingsPatchSchema, movementTimelineQuerySchema, movementTripPointPatchSchema, deleteMovementStay, deleteMovementTrip, deleteMovementTripPoint, updateMovementPlace, updateMovementSettings, updateMovementStay, updateMovementTrip, updateMovementUserBox, updateMovementTripPoint, resolveMovementTimelineSegmentForBox } from "./movement.js";
 import { getScreenTimeAllTimeSummary, getScreenTimeDayDetail, getScreenTimeMonthSummary, getScreenTimeSettings, screenTimeSettingsPatchSchema, updateScreenTimeSettings } from "./screen-time.js";
 import { assertWatchReady, buildWatchBootstrap, ingestWatchCaptureBatch, mobileWatchBootstrapSchema, mobileWatchCaptureBatchSchema, mobileWatchHabitCheckInSchema } from "./watch-mobile.js";
@@ -6797,11 +6797,36 @@ export async function buildServer(options = {}) {
     app.get("/api/v1/health/vitals", async (request) => ({
         vitals: getVitalsViewData(resolveScopedUserIds(request.query))
     }));
+    app.get("/api/v1/health/zone-profile", async (request) => {
+        const userIds = resolveScopedUserIds(request.query);
+        return {
+            zoneProfile: getHealthZoneProfileForUser(userIds?.[0] ?? "user_operator")
+        };
+    });
+    app.patch("/api/v1/health/zone-profile", async (request) => {
+        const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/health/zone-profile" });
+        const userIds = resolveScopedUserIds(request.query);
+        void auth;
+        return {
+            zoneProfile: patchHealthZoneProfileForUser(userIds?.[0] ?? "user_operator", healthZoneProfilePatchSchema.parse(request.body ?? {}))
+        };
+    });
     app.post("/api/v1/health/workouts", async (request, reply) => {
         const auth = requireScopedAccess(request.headers, ["write"], { route: "/api/v1/health/workouts" });
         const workout = createWorkoutSession(createWorkoutSessionSchema.parse(request.body ?? {}), toActivityContext(auth));
         reply.code(201);
         return { workout };
+    });
+    app.get("/api/v1/health/workouts/:id/detail", async (request, reply) => {
+        const { id } = request.params;
+        const query = request.query;
+        const resolution = query.resolution === "raw" ? "raw" : "adaptive";
+        const detail = getWorkoutSessionDetailById(id, resolution);
+        if (!detail) {
+            reply.code(404);
+            return { error: "Workout session not found" };
+        }
+        return detail;
     });
     app.get("/api/v1/health/workouts/:id", async (request, reply) => {
         const { id } = request.params;
