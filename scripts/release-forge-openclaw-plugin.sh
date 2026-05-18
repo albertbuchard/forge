@@ -14,6 +14,7 @@ CODEX_PLUGIN_MANIFEST="${FORGE_DIR}/plugins/forge-codex/.codex-plugin/plugin.jso
 CODEX_RUNTIME_PACKAGE_JSON="${FORGE_DIR}/plugins/forge-codex/runtime/package.json"
 HERMES_PLUGIN_MANIFEST="${FORGE_DIR}/plugins/forge-hermes/plugin.yaml"
 HERMES_PLUGIN_PACKAGE_VERSION="${FORGE_DIR}/plugins/forge-hermes/forge_hermes/version.py"
+HERMES_PLUGIN_RUNTIME_PACKAGE_JSON="${FORGE_DIR}/plugins/forge-hermes/forge_hermes/runtime/package.json"
 FORGE_MEMORY_PACKAGE_JSON="${FORGE_DIR}/packages/forge-memory/package.json"
 FORGE_MEMORY_PACKAGE_LOCK_JSON="${FORGE_DIR}/packages/forge-memory/package-lock.json"
 SAFE_OPENCLAW_HOST_RANGE="2026.5.4"
@@ -30,6 +31,7 @@ ORIGINAL_CODEX_PLUGIN_VERSION=""
 ORIGINAL_CODEX_RUNTIME_VERSION=""
 ORIGINAL_HERMES_PLUGIN_VERSION=""
 ORIGINAL_HERMES_PACKAGE_VERSION=""
+ORIGINAL_HERMES_RUNTIME_VERSION=""
 ORIGINAL_FORGE_MEMORY_PACKAGE_VERSION=""
 ORIGINAL_FORGE_MEMORY_PACKAGE_LOCK_VERSION=""
 RELEASE_TARGET_VERSION=""
@@ -85,6 +87,7 @@ cleanup_release_workspace() {
     "${CODEX_PLUGIN_MANIFEST}" \
     "${CODEX_RUNTIME_PACKAGE_JSON}" \
     "${HERMES_PLUGIN_MANIFEST}" \
+    "${HERMES_PLUGIN_RUNTIME_PACKAGE_JSON}" \
     "${FORGE_MEMORY_PACKAGE_JSON}" \
     "${FORGE_MEMORY_PACKAGE_LOCK_JSON}" \
     "openclaw-plugin/server/migrations" \
@@ -106,7 +109,7 @@ rollback_release_state() {
     git -C "${FORGE_DIR}" reset --mixed HEAD~1 >/dev/null 2>&1 || true
   fi
 
-  if [[ -n "${ORIGINAL_ROOT_VERSION}" && -n "${ORIGINAL_PLUGIN_MANIFEST_VERSION}" && -n "${ORIGINAL_PLUGIN_PACKAGE_VERSION}" && -n "${ORIGINAL_PLUGIN_PACKAGE_LOCK_VERSION}" && -n "${ORIGINAL_CODEX_PLUGIN_VERSION}" && -n "${ORIGINAL_CODEX_RUNTIME_VERSION}" && -n "${ORIGINAL_HERMES_PLUGIN_VERSION}" && -n "${ORIGINAL_HERMES_PACKAGE_VERSION}" && -n "${ORIGINAL_FORGE_MEMORY_PACKAGE_VERSION}" && -n "${ORIGINAL_FORGE_MEMORY_PACKAGE_LOCK_VERSION}" ]]; then
+  if [[ -n "${ORIGINAL_ROOT_VERSION}" && -n "${ORIGINAL_PLUGIN_MANIFEST_VERSION}" && -n "${ORIGINAL_PLUGIN_PACKAGE_VERSION}" && -n "${ORIGINAL_PLUGIN_PACKAGE_LOCK_VERSION}" && -n "${ORIGINAL_CODEX_PLUGIN_VERSION}" && -n "${ORIGINAL_CODEX_RUNTIME_VERSION}" && -n "${ORIGINAL_HERMES_PLUGIN_VERSION}" && -n "${ORIGINAL_HERMES_PACKAGE_VERSION}" && -n "${ORIGINAL_HERMES_RUNTIME_VERSION}" && -n "${ORIGINAL_FORGE_MEMORY_PACKAGE_VERSION}" && -n "${ORIGINAL_FORGE_MEMORY_PACKAGE_LOCK_VERSION}" ]]; then
     write_release_versions "${ORIGINAL_ROOT_VERSION}" "${ROOT_MANIFEST}"
     write_release_versions "${ORIGINAL_PLUGIN_PACKAGE_VERSION}" "${PLUGIN_PACKAGE_JSON}"
     write_release_versions "${ORIGINAL_PLUGIN_PACKAGE_LOCK_VERSION}" "${PLUGIN_PACKAGE_LOCK_JSON}"
@@ -115,6 +118,7 @@ rollback_release_state() {
     write_release_versions "${ORIGINAL_CODEX_RUNTIME_VERSION}" "${CODEX_RUNTIME_PACKAGE_JSON}"
     write_release_versions "${ORIGINAL_HERMES_PLUGIN_VERSION}" "${HERMES_PLUGIN_MANIFEST}"
     write_release_versions "${ORIGINAL_HERMES_PACKAGE_VERSION}" "${HERMES_PLUGIN_PACKAGE_VERSION}"
+    write_release_versions "${ORIGINAL_HERMES_RUNTIME_VERSION}" "${HERMES_PLUGIN_RUNTIME_PACKAGE_JSON}"
     write_release_versions "${ORIGINAL_FORGE_MEMORY_PACKAGE_VERSION}" "${FORGE_MEMORY_PACKAGE_JSON}"
     write_release_versions "${ORIGINAL_FORGE_MEMORY_PACKAGE_LOCK_VERSION}" "${FORGE_MEMORY_PACKAGE_LOCK_JSON}"
   fi
@@ -366,7 +370,7 @@ verify_version_alignment() {
   local version
   version="$1"
   local actual
-  actual="$(node --input-type=module - "${ROOT_MANIFEST}" "${PLUGIN_PACKAGE_JSON}" "${PLUGIN_PACKAGE_LOCK_JSON}" "${PLUGIN_MANIFEST}" "${CODEX_PLUGIN_MANIFEST}" "${CODEX_RUNTIME_PACKAGE_JSON}" "${FORGE_MEMORY_PACKAGE_JSON}" "${FORGE_MEMORY_PACKAGE_LOCK_JSON}" <<'NODE'
+  actual="$(node --input-type=module - "${ROOT_MANIFEST}" "${PLUGIN_PACKAGE_JSON}" "${PLUGIN_PACKAGE_LOCK_JSON}" "${PLUGIN_MANIFEST}" "${CODEX_PLUGIN_MANIFEST}" "${CODEX_RUNTIME_PACKAGE_JSON}" "${HERMES_PLUGIN_RUNTIME_PACKAGE_JSON}" "${FORGE_MEMORY_PACKAGE_JSON}" "${FORGE_MEMORY_PACKAGE_LOCK_JSON}" <<'NODE'
 import fs from "node:fs";
 const files = process.argv.slice(2);
 const versions = files.map((file) => {
@@ -379,13 +383,16 @@ const versions = files.map((file) => {
 process.stdout.write(JSON.stringify(versions));
 NODE
 )"
-  [[ "${actual}" == "[\"${version}\",\"${version}\",\"${version}:${version}\",\"${version}\",\"${version}\",\"${version}\",\"${version}\",\"${version}:${version}\"]" ]] || fail "plugin versions are not aligned: ${actual}"
+  [[ "${actual}" == "[\"${version}\",\"${version}\",\"${version}:${version}\",\"${version}\",\"${version}\",\"${version}\",\"${version}\",\"${version}\",\"${version}:${version}\"]" ]] || fail "plugin versions are not aligned: ${actual}"
   local hermes_manifest_version
   hermes_manifest_version="$(read_hermes_manifest_version "${HERMES_PLUGIN_MANIFEST}")"
   [[ "${hermes_manifest_version}" == "${version}" ]] || fail "Hermes plugin manifest version mismatch: ${hermes_manifest_version}"
   local hermes_package_version
   hermes_package_version="$(read_hermes_package_version "${HERMES_PLUGIN_PACKAGE_VERSION}")"
   [[ "${hermes_package_version}" == "${version}" ]] || fail "Hermes Python package version mismatch: ${hermes_package_version}"
+  local hermes_runtime_version
+  hermes_runtime_version="$(read_json_version "${HERMES_PLUGIN_RUNTIME_PACKAGE_JSON}")"
+  [[ "${hermes_runtime_version}" == "${version}" ]] || fail "Hermes runtime package version mismatch: ${hermes_runtime_version}"
 }
 
 verify_openclaw_host_floor() {
@@ -431,7 +438,7 @@ run_verification_suite() {
 
 create_release_commit() {
   local version="$1"
-  git -C "${FORGE_DIR}" add "${ROOT_MANIFEST}" "${PLUGIN_PACKAGE_JSON}" "${PLUGIN_PACKAGE_LOCK_JSON}" "${PLUGIN_MANIFEST}" "${CODEX_PLUGIN_MANIFEST}" "${CODEX_RUNTIME_PACKAGE_JSON}" "${HERMES_PLUGIN_MANIFEST}" "${HERMES_PLUGIN_PACKAGE_VERSION}" "${FORGE_MEMORY_PACKAGE_JSON}" "${FORGE_MEMORY_PACKAGE_LOCK_JSON}"
+  git -C "${FORGE_DIR}" add "${ROOT_MANIFEST}" "${PLUGIN_PACKAGE_JSON}" "${PLUGIN_PACKAGE_LOCK_JSON}" "${PLUGIN_MANIFEST}" "${CODEX_PLUGIN_MANIFEST}" "${CODEX_RUNTIME_PACKAGE_JSON}" "${HERMES_PLUGIN_MANIFEST}" "${HERMES_PLUGIN_PACKAGE_VERSION}" "${HERMES_PLUGIN_RUNTIME_PACKAGE_JSON}" "${FORGE_MEMORY_PACKAGE_JSON}" "${FORGE_MEMORY_PACKAGE_LOCK_JSON}"
   git -C "${FORGE_DIR}" add -A \
     "${FORGE_DIR}/plugins/forge-codex/runtime/dist" \
     "${FORGE_DIR}/plugins/forge-codex/runtime/server/migrations"
@@ -516,6 +523,7 @@ main() {
   ORIGINAL_CODEX_RUNTIME_VERSION="$(read_json_version "${CODEX_RUNTIME_PACKAGE_JSON}")"
   ORIGINAL_HERMES_PLUGIN_VERSION="$(read_hermes_manifest_version "${HERMES_PLUGIN_MANIFEST}")"
   ORIGINAL_HERMES_PACKAGE_VERSION="$(read_hermes_package_version "${HERMES_PLUGIN_PACKAGE_VERSION}")"
+  ORIGINAL_HERMES_RUNTIME_VERSION="$(read_json_version "${HERMES_PLUGIN_RUNTIME_PACKAGE_JSON}")"
   ORIGINAL_FORGE_MEMORY_PACKAGE_VERSION="$(read_json_version "${FORGE_MEMORY_PACKAGE_JSON}")"
   ORIGINAL_FORGE_MEMORY_PACKAGE_LOCK_VERSION="$(read_json_version "${FORGE_MEMORY_PACKAGE_LOCK_JSON}")"
 
@@ -538,7 +546,7 @@ main() {
       fi
     )
     echo "Releasing forge-openclaw-plugin ${current_version} -> ${next_version}"
-    write_release_versions "${next_version}" "${ROOT_MANIFEST}" "${PLUGIN_PACKAGE_JSON}" "${PLUGIN_PACKAGE_LOCK_JSON}" "${PLUGIN_MANIFEST}" "${CODEX_PLUGIN_MANIFEST}" "${CODEX_RUNTIME_PACKAGE_JSON}" "${HERMES_PLUGIN_MANIFEST}" "${HERMES_PLUGIN_PACKAGE_VERSION}" "${FORGE_MEMORY_PACKAGE_JSON}" "${FORGE_MEMORY_PACKAGE_LOCK_JSON}"
+    write_release_versions "${next_version}" "${ROOT_MANIFEST}" "${PLUGIN_PACKAGE_JSON}" "${PLUGIN_PACKAGE_LOCK_JSON}" "${PLUGIN_MANIFEST}" "${CODEX_PLUGIN_MANIFEST}" "${CODEX_RUNTIME_PACKAGE_JSON}" "${HERMES_PLUGIN_MANIFEST}" "${HERMES_PLUGIN_PACKAGE_VERSION}" "${HERMES_PLUGIN_RUNTIME_PACKAGE_JSON}" "${FORGE_MEMORY_PACKAGE_JSON}" "${FORGE_MEMORY_PACKAGE_LOCK_JSON}"
   fi
 
   RELEASE_TARGET_VERSION="${next_version}"
