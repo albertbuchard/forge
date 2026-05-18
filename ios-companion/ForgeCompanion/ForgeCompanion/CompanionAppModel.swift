@@ -298,7 +298,9 @@ final class CompanionAppModel: ObservableObject {
 
     private static var disablesSimulatorAutomation: Bool {
 #if DEBUG
-        ProcessInfo.processInfo.environment["FORGE_COMPANION_DISABLE_SIMULATOR_AUTOMATION"] == "1"
+        let environment = ProcessInfo.processInfo.environment
+        return environment["FORGE_COMPANION_DISABLE_SIMULATOR_AUTOMATION"] == "1"
+            || environment["XCTestConfigurationFilePath"] != nil
 #else
         false
 #endif
@@ -487,6 +489,15 @@ final class CompanionAppModel: ObservableObject {
             configureScreenshotScenario(screenshotScenario)
             return
         }
+        if Self.disablesSimulatorAutomation {
+            restoreCachedState()
+            Task {
+                companionDebugLog("CompanionAppModel", "startup simulator automation disabled")
+                await refreshHealthAccessStatus()
+                refreshSyncState()
+            }
+            return
+        }
         watchSessionManager.configure { [weak self] in
             self?.pairing
         }
@@ -498,19 +509,13 @@ final class CompanionAppModel: ObservableObject {
             companionDebugLog("CompanionAppModel", "background refresh closure invoked")
             return await self.performBackgroundRefresh()
         }
-        if pairing != nil && Self.disablesSimulatorAutomation == false {
+        if pairing != nil {
             companionDebugLog("CompanionAppModel", "init scheduling background refresh because pairing exists")
             backgroundScheduler.schedule()
             startMaintenanceLoop(reason: "restore")
         }
         Task {
             companionDebugLog("CompanionAppModel", "startup task begin")
-            if Self.disablesSimulatorAutomation {
-                await refreshHealthAccessStatus()
-                refreshSyncState()
-                companionDebugLog("CompanionAppModel", "startup simulator automation disabled")
-                return
-            }
             await attemptLocalSimulatorBootstrapIfNeeded()
             await refreshHealthAccessStatus()
             refreshSyncState()
@@ -921,7 +926,9 @@ final class CompanionAppModel: ObservableObject {
         pairing = normalizedPairingPayload(payload)
         lastSyncMessage = "Pairing restored"
         persistPairing()
-        startMaintenanceLoop(reason: "restorePairing")
+        if Self.disablesSimulatorAutomation == false {
+            startMaintenanceLoop(reason: "restorePairing")
+        }
         companionDebugLog("CompanionAppModel", "restorePairing restored session=\(payload.sessionId)")
     }
 
