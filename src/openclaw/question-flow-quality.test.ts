@@ -389,6 +389,7 @@ describe("question flow quality coverage", () => {
       ["Belief", /what does it start telling you/i, /one explicit sentence/i],
       ["Mode Profile", /what feels most at risk/i, /protect, prevent, or control/i],
       ["Mode Guide Session", /what just happened/i, /candidate mode labels only after enough evidence exists/i],
+      ["Flashcard", /exact urge sentence or situation/i, /one simple message/i],
       ["Trigger Report", /what happened in that moment/i, /emotionally meaningful episode/i],
       ["Event Type", /keeps happening/i, /emotionally meaningful kind of moment/i],
       ["Emotion Definition", /not a nearby one/i, /lived signature/i]

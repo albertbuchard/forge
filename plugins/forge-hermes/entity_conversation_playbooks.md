@@ -275,7 +275,8 @@ still knowing the exact write/read family before it acts.
   CRUD. Use health overview/read helpers for review and reflective update helpers only
   when enriching one already-known record after review.
 - `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`,
-  `mode_guide_session`, `trigger_report`, `event_type`, and `emotion_definition`:
+  `mode_guide_session`, `flashcard`, `trigger_report`, `event_type`, and
+  `emotion_definition`:
   psychologically meaningful records, but normal stored entities for API purposes.
   Search and mutate through shared batch entity routes after the formulation is clear.
 - `wiki_page`: specialized CRUD. Use wiki page/search/upsert routes so page rows,
@@ -1170,7 +1171,8 @@ Arc:
    visible.
 6. Decide whether this should stay a lightweight self-observation or become a
    `trigger_report`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`,
-   `mode_guide_session`, `event_type`, `emotion_definition`, or wiki page.
+   `mode_guide_session`, `flashcard`, `event_type`, `emotion_definition`, or wiki
+   page.
 7. Link the observation to the structured record when the structured record is the
    real container.
 
@@ -1193,7 +1195,8 @@ Route note:
 - Do not promote self-observation over functional analysis. If the user is describing
   a loop, use `behavior_pattern`; if they are describing one emotionally meaningful
   episode, use `trigger_report`; if a part-state is central, use `mode_guide_session`
-  or `mode_profile`; if a belief sentence is central, use `belief_entry`.
+  or `mode_profile`; if a belief sentence is central, use `belief_entry`; if the
+  user needs a rehearsable reminder during the trigger or urge, use `flashcard`.
 - If the user wants to remember a source, concept, book, article, or durable personal
   explanation, use `wiki_page` rather than self-observation.
 

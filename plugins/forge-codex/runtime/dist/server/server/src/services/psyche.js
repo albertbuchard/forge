@@ -2,7 +2,7 @@ import { getDomainBySlug } from "../repositories/domains.js";
 import { listInsights } from "../repositories/collaboration.js";
 import { listNotes } from "../repositories/notes.js";
 import { filterOwnedEntities } from "../repositories/entity-ownership.js";
-import { listBehaviorPatterns, listBehaviors, listBeliefEntries, listModeProfiles, listPsycheValues, listSchemaCatalog, listTriggerReports } from "../repositories/psyche.js";
+import { listBehaviorPatterns, listBehaviors, listBeliefEntries, listFlashcards, listModeProfiles, listPsycheValues, listSchemaCatalog, listTriggerReports } from "../repositories/psyche.js";
 import { getDevrageMetricPayload } from "./devrage.js";
 import { psycheOverviewPayloadSchema } from "../psyche-types.js";
 const PSYCHE_ENTITY_TYPE_SET = new Set([
@@ -11,6 +11,7 @@ const PSYCHE_ENTITY_TYPE_SET = new Set([
     "behavior",
     "belief_entry",
     "mode_profile",
+    "flashcard",
     "trigger_report"
 ]);
 export function getPsycheOverview(userIds) {
@@ -23,6 +24,7 @@ export function getPsycheOverview(userIds) {
     const behaviors = filterOwnedEntities("behavior", listBehaviors(), userIds);
     const beliefs = filterOwnedEntities("belief_entry", listBeliefEntries(), userIds);
     const modes = filterOwnedEntities("mode_profile", listModeProfiles(), userIds);
+    const flashcards = filterOwnedEntities("flashcard", listFlashcards(), userIds);
     const reports = filterOwnedEntities("trigger_report", listTriggerReports(5), userIds);
     const schemaCatalog = listSchemaCatalog();
     const notes = filterOwnedEntities("note", listNotes({ limit: 200 }), userIds);
@@ -57,6 +59,7 @@ export function getPsycheOverview(userIds) {
         behaviors,
         beliefs,
         modes,
+        flashcards,
         reports,
         schemaPressure,
         devrageMetric,

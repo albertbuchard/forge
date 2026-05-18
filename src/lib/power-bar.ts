@@ -21,6 +21,7 @@ export const POWER_BAR_SEARCH_ENTITY_TYPES: CrudEntityType[] = [
   "behavior",
   "belief_entry",
   "mode_profile",
+  "flashcard",
   "trigger_report"
 ];
 
@@ -115,6 +116,8 @@ export function powerBarEntityTypeLabel(
       return "Belief";
     case "mode_profile":
       return "Mode";
+    case "flashcard":
+      return "Flashcard";
     case "trigger_report":
       return "Report";
     default:
@@ -135,6 +138,7 @@ export function inferPowerBarTitle(
             entity.title,
             entity.displayName,
             entity.statement,
+            entity.message,
             entity.name,
             entity.label,
             entity.slug
@@ -159,6 +163,8 @@ export function inferPowerBarDetail(
     entity.endState,
     entity.whyItMatters,
     entity.valuedDirection,
+    entity.triggerSentence,
+    entity.triggerSituation,
     entity.contentPlain
   ]
     .map(readString)
@@ -237,6 +243,8 @@ export function buildPowerBarHref(
       return `/psyche/schemas-beliefs?focus=${encodeURIComponent(id)}`;
     case "mode_profile":
       return `/psyche/modes?focus=${encodeURIComponent(id)}`;
+    case "flashcard":
+      return `/psyche/flashcards?focus=${encodeURIComponent(id)}`;
     case "trigger_report":
       return `/psyche/reports/${encodeURIComponent(id)}`;
     default:

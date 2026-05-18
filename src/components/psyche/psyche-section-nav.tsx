@@ -8,6 +8,7 @@ import {
   Moon,
   MonitorSmartphone,
   Orbit,
+  PanelTop,
   SlidersHorizontal,
   Sparkles,
   StickyNote,
@@ -24,6 +25,7 @@ import { cn } from "@/lib/utils";
 export const PSYCHE_SECTIONS = [
   { to: "/psyche", label: "Overview", icon: BrainCircuit },
   { to: "/psyche/metrics", label: "Metrics", icon: ChartNoAxesCombined },
+  { to: "/psyche/flashcards", label: "Flashcards", icon: PanelTop },
   { to: "/psyche/values", label: "Values", icon: Orbit },
   { to: "/psyche/patterns", label: "Patterns", icon: Waves },
   { to: "/psyche/questionnaires", label: "Questionnaires", icon: ListChecks },

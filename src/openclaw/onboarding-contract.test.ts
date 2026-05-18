@@ -197,6 +197,7 @@ describe("forge onboarding contract", () => {
       "belief_entry",
       "mode_profile",
       "mode_guide_session",
+      "flashcard",
       "event_type",
       "emotion_definition",
       "trigger_report"
@@ -256,6 +257,7 @@ describe("forge onboarding contract", () => {
       "belief_entry",
       "mode_profile",
       "mode_guide_session",
+      "flashcard",
       "trigger_report",
       "event_type",
       "emotion_definition"
@@ -551,6 +553,7 @@ describe("forge onboarding contract", () => {
       "belief_entry",
       "mode_profile",
       "mode_guide_session",
+      "flashcard",
       "event_type",
       "emotion_definition",
       "trigger_report"
@@ -844,6 +847,17 @@ describe("forge onboarding contract", () => {
         routePosture: "batch_crud_entity",
         apiAccessHint: expect.stringMatching(/\/api\/v1\/entities\/create/)
       })
+    );
+    expect(psycheByFocus.get("flashcard")).toEqual(
+      expect.objectContaining({
+        routePosture: "batch_crud_entity",
+        apiAccessHint: expect.stringMatching(
+          /\/api\/v1\/entities\/(?:create|search)[\s\S]*flashcard/i
+        )
+      })
+    );
+    expect(psycheByFocus.get("flashcard")?.askSequence.join(" ")).toMatch(
+      /message[\s\S]*tags[\s\S]*trigger/i
     );
     const modeProfilePlaybook = psycheByFocus.get("mode_profile");
     expect(modeProfilePlaybook).toBeDefined();

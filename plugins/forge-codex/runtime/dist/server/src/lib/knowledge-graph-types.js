@@ -65,6 +65,11 @@ export const KNOWLEDGE_GRAPH_HIERARCHY_LANES = [
         kinds: ["mode", "mode_session"]
     },
     {
+        id: "flashcards",
+        label: "Flashcards",
+        kinds: ["flashcard"]
+    },
+    {
         id: "reports",
         label: "Reports / Event Types / Emotions",
         kinds: ["report", "event_type", "emotion"]
@@ -110,6 +115,12 @@ export const KNOWLEDGE_GRAPH_RELATION_LABELS = {
     mode_pattern: "Mode to pattern",
     mode_behavior: "Mode to behavior",
     mode_value: "Mode to value",
+    flashcard_value: "Flashcard to value",
+    flashcard_behavior: "Flashcard to behavior",
+    flashcard_pattern: "Flashcard to pattern",
+    flashcard_belief: "Flashcard to belief",
+    flashcard_mode: "Flashcard to mode",
+    flashcard_report: "Flashcard to report",
     report_value: "Report to value",
     report_pattern: "Report to pattern",
     report_goal: "Report to goal",
@@ -165,6 +176,12 @@ export const KNOWLEDGE_GRAPH_RELATION_FAMILY_MAP = {
     mode_pattern: "contextual",
     mode_behavior: "contextual",
     mode_value: "contextual",
+    flashcard_value: "contextual",
+    flashcard_behavior: "contextual",
+    flashcard_pattern: "contextual",
+    flashcard_belief: "contextual",
+    flashcard_mode: "contextual",
+    flashcard_report: "contextual",
     report_value: "contextual",
     report_pattern: "contextual",
     report_goal: "contextual",
@@ -234,6 +251,8 @@ export function getKnowledgeGraphEntityHref(entityType, entityId, options) {
             return `/psyche/modes?focus=${encodeURIComponent(entityId)}`;
         case "mode_guide_session":
             return `/psyche/modes`;
+        case "flashcard":
+            return `/psyche/flashcards?focus=${encodeURIComponent(entityId)}`;
         case "trigger_report":
             return `/psyche/reports/${encodeURIComponent(entityId)}`;
         case "note":

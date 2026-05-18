@@ -363,6 +363,159 @@ test("batch entity routes handle preferences CRUD and questionnaire instrument C
   }
 });
 
+test("batch entity routes create, update, search, and delete Psyche flashcards", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-batch-flashcards-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/entities/create",
+      headers: { cookie: operatorCookie },
+      payload: {
+        operations: [
+          {
+            entityType: "flashcard",
+            clientRef: "urge-card",
+            data: {
+              userId: "user_operator",
+              title: "Late urge card",
+              message: "This urge is a wave. Wait ten minutes before acting.",
+              triggerSentence: "I feel the urge to drink.",
+              triggerSituation: "Late evening shame or loneliness",
+              tags: ["urge", "sobriety"],
+              backgroundColor: "#f8fafc",
+              textColor: "#111827",
+              accentColor: "#6ee7b7",
+              typography: "serif",
+              layout: "centered",
+              visualStyle: "calm"
+            }
+          }
+        ]
+      }
+    });
+
+    assert.equal(createResponse.statusCode, 200);
+    const createBody = createResponse.json() as {
+      results: Array<{
+        ok: boolean;
+        entity?: {
+          id: string;
+          message?: string;
+          triggerSentence?: string;
+          tags?: string[];
+        };
+      }>;
+    };
+    assert.equal(createBody.results[0]?.ok, true);
+    const flashcard = createBody.results[0]?.entity;
+    assert.ok(flashcard?.id);
+    assert.equal(
+      flashcard.message,
+      "This urge is a wave. Wait ten minutes before acting."
+    );
+    assert.deepEqual(flashcard.tags, ["urge", "sobriety"]);
+
+    const updateResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/entities/update",
+      headers: { cookie: operatorCookie },
+      payload: {
+        operations: [
+          {
+            entityType: "flashcard",
+            id: flashcard.id,
+            patch: {
+              message: "Name the urge, breathe, and wait ten minutes.",
+              tags: ["urge", "sobriety", "grounding"],
+              visualStyle: "warm"
+            }
+          }
+        ]
+      }
+    });
+
+    assert.equal(updateResponse.statusCode, 200);
+    const updateBody = updateResponse.json() as {
+      results: Array<{ ok: boolean; entity?: { message?: string; tags?: string[] } }>;
+    };
+    assert.equal(updateBody.results[0]?.ok, true);
+    assert.equal(
+      updateBody.results[0]?.entity?.message,
+      "Name the urge, breathe, and wait ten minutes."
+    );
+    assert.deepEqual(updateBody.results[0]?.entity?.tags, [
+      "urge",
+      "sobriety",
+      "grounding"
+    ]);
+
+    const searchResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/entities/search",
+      headers: { cookie: operatorCookie },
+      payload: {
+        searches: [
+          {
+            entityTypes: ["flashcard"],
+            query: "drink",
+            limit: 10
+          },
+          {
+            entityTypes: ["flashcard"],
+            query: "grounding",
+            limit: 10
+          }
+        ]
+      }
+    });
+
+    assert.equal(searchResponse.statusCode, 200);
+    const searchBody = searchResponse.json() as {
+      results: Array<{
+        ok: boolean;
+        matches?: Array<{ entityType: string; id: string }>;
+      }>;
+    };
+    assert.equal(searchBody.results.every((result) => result.ok), true);
+    assert.ok(
+      searchBody.results[0]?.matches?.some(
+        (match) =>
+          match.entityType === "flashcard" && match.id === flashcard.id
+      )
+    );
+    assert.ok(
+      searchBody.results[1]?.matches?.some(
+        (match) =>
+          match.entityType === "flashcard" && match.id === flashcard.id
+      )
+    );
+
+    const deleteResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/entities/delete",
+      headers: { cookie: operatorCookie },
+      payload: {
+        operations: [{ entityType: "flashcard", id: flashcard.id }]
+      }
+    });
+    assert.equal(deleteResponse.statusCode, 200);
+    const deleteBody = deleteResponse.json() as {
+      results: Array<{ ok: boolean }>;
+    };
+    assert.equal(deleteBody.results[0]?.ok, true);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("batch entity routes create, update, search, and delete sleep and workout sessions", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-batch-health-entities-")

@@ -11,7 +11,7 @@ task runs, and agent-authored insights. The health side covers `sleep_session` a
 `workout_session`. The preferences side covers `preference_catalog`,
 `preference_catalog_item`, `preference_context`, and `preference_item` plus the game,
 judgments, and signals. The Psyche side covers values, patterns, behaviors, beliefs,
-modes, guided mode sessions, trigger reports, event types, reusable emotion
+modes, guided mode sessions, flashcards, trigger reports, event types, reusable emotion
 definitions, `questionnaire_instrument`, `questionnaire_run`, and the note-backed
 self-observation calendar. Movement, Life Force, and Workbench use dedicated route
 families and must not be forced through batch CRUD. Forge is explicitly multi-user: every stored entity can
@@ -164,8 +164,8 @@ Surface rule:
   fall back to field-by-field intake.
 - For Psyche entities, use [`psyche_entity_playbooks.md`](./psyche_entity_playbooks.md)
   before storing `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`,
-  `mode_profile`, `mode_guide_session`, `trigger_report`, `event_type`, or
-  `emotion_definition`.
+  `mode_profile`, `mode_guide_session`, `flashcard`, `trigger_report`,
+  `event_type`, or `emotion_definition`.
 - Treat `event_type` and `emotion_definition` as psychologically meaningful Psyche
   records, not plain taxonomy rows. Start from the repeated lived moment or felt
   signature before settling the reusable label.
@@ -257,8 +257,8 @@ Surface rule:
    - `goal`, `project`, `strategy`, `task`, `habit`, `tag`, `note`, `insight`
    - `calendar_event`, `work_block_template`, `task_timebox`
    - `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`,
-     `mode_profile`, `mode_guide_session`, `trigger_report`, `event_type`,
-     `emotion_definition`
+     `mode_profile`, `mode_guide_session`, `flashcard`, `trigger_report`,
+     `event_type`, `emotion_definition`
    - `preference_catalog`, `preference_catalog_item`, `preference_context`,
      `preference_item`
    - `questionnaire_instrument`, `sleep_session`, `workout_session`
@@ -331,9 +331,15 @@ Surface rule:
   behavior/urge, and consequence; use `trigger_report` for one meaningful episode,
   `behavior_pattern` for recurring-loop functional analysis, `behavior` for one
   repeated move, `belief_entry` for a core sentence, `mode_guide_session` or
-  `mode_profile` for a part-state, and `wiki_page` for durable memory. If a schema
-  theme is visible, preserve it through the matching belief, pattern, mode, trigger
-  report, or wiki explanation instead of hiding it in self-observation.
+  `mode_profile` for a part-state, `flashcard` for a rehearsable reminder during an
+  urge or trigger, and `wiki_page` for durable memory. If a schema theme is visible,
+  preserve it through the matching belief, pattern, mode, trigger report, flashcard,
+  or wiki explanation instead of hiding it in self-observation.
+- If the user says they feel an urge or asks for help not doing something, search
+  existing `flashcard` records first with `forge_search_entities` and
+  `entityTypes: ["flashcard"]`. If a card matches, show the card message first, then
+  add brief grounding, urge-surfing, cognitive defusion, schema/mode-aware reflection,
+  or values-based support around it.
 - Preferred mutation path for wiki content: use the wiki tools instead of batch CRUD.
 - Habit outcome writes in the shared agent model should go through `forge_update_entities` on `entityType: "habit"` with `patch.checkIn`, not direct raw calls to `/api/v1/habits/:id/check-ins`.
 - `patch.checkIn` accepts `status` plus optional `dateKey`, `note`, and `description`; if `description` is provided, it replaces the habit's stored `description` in the same write.
@@ -402,7 +408,8 @@ Surface rule:
   `task_timebox { taskId, title, startsAt, endsAt }`, `psyche_value { title }`,
   `behavior_pattern { title }`, `behavior { kind, title }`,
   `belief_entry { statement, beliefType }`, `mode_profile { family, title }`,
-  `mode_guide_session { summary, answers }`, `trigger_report { title }`,
+  `mode_guide_session { summary, answers }`, `flashcard { message }`,
+  `trigger_report { title }`,
   `event_type { label }`, `emotion_definition { label }`,
   `preference_catalog { userId, domain, title }`,
   `preference_catalog_item { catalogId, label }`,

@@ -725,6 +725,49 @@ export function deleteModeGuideSession(sessionId) {
         method: "DELETE"
     });
 }
+function readBatchEntity(result) {
+    if (result.ok !== true || !result.entity) {
+        const error = typeof result.error === "object" && result.error !== null
+            ? JSON.stringify(result.error)
+            : "Batch entity operation failed.";
+        throw new Error(error);
+    }
+    return result.entity;
+}
+export async function listFlashcards(userIds) {
+    const response = await searchEntities({
+        searches: [
+            {
+                entityTypes: ["flashcard"],
+                userIds: coerceUserIds(userIds),
+                limit: 500
+            }
+        ]
+    });
+    const matches = (response.results[0]?.matches ?? []);
+    return { flashcards: matches };
+}
+export async function createFlashcard(input) {
+    const response = await createEntities({
+        operations: [{ entityType: "flashcard", data: input }],
+        atomic: true
+    });
+    return { flashcard: readBatchEntity(response.results[0] ?? {}) };
+}
+export async function patchFlashcard(flashcardId, patch) {
+    const response = await updateEntities({
+        operations: [{ entityType: "flashcard", id: flashcardId, patch }],
+        atomic: true
+    });
+    return { flashcard: readBatchEntity(response.results[0] ?? {}) };
+}
+export async function deleteFlashcard(flashcardId) {
+    const response = await deleteEntities({
+        operations: [{ entityType: "flashcard", id: flashcardId }],
+        atomic: true
+    });
+    return { flashcard: readBatchEntity(response.results[0] ?? {}) };
+}
 export function listEventTypes() {
     return request("/api/v1/psyche/event-types");
 }

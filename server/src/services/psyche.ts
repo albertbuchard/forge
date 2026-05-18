@@ -6,6 +6,7 @@ import {
   listBehaviorPatterns,
   listBehaviors,
   listBeliefEntries,
+  listFlashcards,
   listModeProfiles,
   listPsycheValues,
   listSchemaCatalog,
@@ -20,6 +21,7 @@ const PSYCHE_ENTITY_TYPE_SET = new Set([
   "behavior",
   "belief_entry",
   "mode_profile",
+  "flashcard",
   "trigger_report"
 ]);
 
@@ -34,6 +36,7 @@ export function getPsycheOverview(userIds?: string[]): PsycheOverviewPayload {
   const behaviors = filterOwnedEntities("behavior", listBehaviors(), userIds);
   const beliefs = filterOwnedEntities("belief_entry", listBeliefEntries(), userIds);
   const modes = filterOwnedEntities("mode_profile", listModeProfiles(), userIds);
+  const flashcards = filterOwnedEntities("flashcard", listFlashcards(), userIds);
   const reports = filterOwnedEntities("trigger_report", listTriggerReports(5), userIds);
   const schemaCatalog = listSchemaCatalog();
   const notes = filterOwnedEntities("note", listNotes({ limit: 200 }), userIds);
@@ -72,6 +75,7 @@ export function getPsycheOverview(userIds?: string[]): PsycheOverviewPayload {
     behaviors,
     beliefs,
     modes,
+    flashcards,
     reports,
     schemaPressure,
     devrageMetric,

@@ -83,6 +83,7 @@ const SUPPORTED_SOURCE_ENTITY_TYPES: CrudEntityType[] = [
   "belief_entry",
   "mode_profile",
   "mode_guide_session",
+  "flashcard",
   "event_type",
   "emotion_definition",
   "trigger_report"

@@ -38,6 +38,17 @@ const actions: ForgeCreateAction[] = [
     onSelect: vi.fn()
   },
   {
+    id: "flashcard",
+    kind: "flashcard",
+    group: "Psyche",
+    title: "Flashcard",
+    quickActionTitle: "Create flashcard",
+    description: "Write a compact therapeutic card.",
+    aliases: ["flashcard"],
+    filterIds: ["flashcard"],
+    onSelect: vi.fn()
+  },
+  {
     id: "wiki_page",
     kind: "wiki_page",
     group: "Knowledge",
@@ -102,6 +113,7 @@ describe("CreateMenu", () => {
     expect(screen.getByText("New life goal")).toBeInTheDocument();
     expect(screen.getByText("New task")).toBeInTheDocument();
     expect(screen.getByText("Value")).toBeInTheDocument();
+    expect(screen.getByText("Flashcard")).toBeInTheDocument();
     expect(screen.getByText("Wiki page")).toBeInTheDocument();
   });
 

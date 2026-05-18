@@ -22,6 +22,7 @@ import {
   createBeliefEntrySchema,
   createEmotionDefinitionSchema,
   createEventTypeSchema,
+  createFlashcardSchema,
   createModeGuideSessionSchema,
   createModeProfileSchema,
   createPsycheValueSchema,
@@ -29,6 +30,7 @@ import {
   domainSchema,
   emotionDefinitionSchema,
   eventTypeSchema,
+  flashcardSchema,
   modeFamilySchema,
   modeGuideResultSchema,
   modeGuideSessionSchema,
@@ -42,6 +44,7 @@ import {
   updateBeliefEntrySchema,
   updateEmotionDefinitionSchema,
   updateEventTypeSchema,
+  updateFlashcardSchema,
   updateModeGuideSessionSchema,
   updateModeProfileSchema,
   updatePsycheValueSchema,
@@ -54,6 +57,7 @@ import {
   type CreateBeliefEntryInput,
   type CreateEmotionDefinitionInput,
   type CreateEventTypeInput,
+  type CreateFlashcardInput,
   type CreateModeGuideSessionInput,
   type CreateModeProfileInput,
   type CreatePsycheValueInput,
@@ -61,6 +65,7 @@ import {
   type Domain,
   type EmotionDefinition,
   type EventType,
+  type Flashcard,
   type ModeGuideSession,
   type ModeProfile,
   type PsycheValue,
@@ -71,6 +76,7 @@ import {
   type UpdateBeliefEntryInput,
   type UpdateEmotionDefinitionInput,
   type UpdateEventTypeInput,
+  type UpdateFlashcardInput,
   type UpdateModeGuideSessionInput,
   type UpdateModeProfileInput,
   type UpdatePsycheValueInput,
@@ -201,6 +207,29 @@ type ModeGuideSessionRow = RowBase & {
   results_json: string;
 };
 
+type FlashcardRow = RowBase & {
+  domain_id: string;
+  title: string;
+  message: string;
+  trigger_sentence: string;
+  trigger_situation: string;
+  tags_json: string;
+  background_color: string;
+  text_color: string;
+  accent_color: string;
+  typography: Flashcard["typography"];
+  image_url: string;
+  image_alt: string;
+  layout: Flashcard["layout"];
+  visual_style: Flashcard["visualStyle"];
+  linked_value_ids_json: string;
+  linked_behavior_ids_json: string;
+  linked_pattern_ids_json: string;
+  linked_belief_ids_json: string;
+  linked_mode_ids_json: string;
+  linked_report_ids_json: string;
+};
+
 type TriggerReportRow = RowBase & {
   domain_id: string;
   title: string;
@@ -252,6 +281,7 @@ function assignOwnedEntity<
     | "belief_entry"
     | "mode_profile"
     | "mode_guide_session"
+    | "flashcard"
     | "trigger_report"
 >(entityType: EntityType, entityId: string, userId: string | null | undefined, actor?: string | null) {
   return setEntityOwner(entityType, entityId, userId, actor ?? null);
@@ -431,6 +461,34 @@ function mapModeGuideSession(row: ModeGuideSessionRow): ModeGuideSession {
   });
 }
 
+function mapFlashcard(row: FlashcardRow): Flashcard {
+  return flashcardSchema.parse({
+    id: row.id,
+    domainId: row.domain_id,
+    title: row.title,
+    message: row.message,
+    triggerSentence: row.trigger_sentence,
+    triggerSituation: row.trigger_situation,
+    tags: parseJson<string[]>(row.tags_json),
+    backgroundColor: row.background_color,
+    textColor: row.text_color,
+    accentColor: row.accent_color,
+    typography: row.typography,
+    imageUrl: row.image_url,
+    imageAlt: row.image_alt,
+    layout: row.layout,
+    visualStyle: row.visual_style,
+    linkedValueIds: filterDeletedIds("psyche_value", parseJson<string[]>(row.linked_value_ids_json)),
+    linkedBehaviorIds: filterDeletedIds("behavior", parseJson<string[]>(row.linked_behavior_ids_json)),
+    linkedPatternIds: filterDeletedIds("behavior_pattern", parseJson<string[]>(row.linked_pattern_ids_json)),
+    linkedBeliefIds: filterDeletedIds("belief_entry", parseJson<string[]>(row.linked_belief_ids_json)),
+    linkedModeIds: filterDeletedIds("mode_profile", parseJson<string[]>(row.linked_mode_ids_json)),
+    linkedReportIds: filterDeletedIds("trigger_report", parseJson<string[]>(row.linked_report_ids_json)),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  });
+}
+
 function mapTriggerReport(row: TriggerReportRow): TriggerReport {
   const emotions = parseJson<TriggerReport["emotions"]>(row.emotions_json).map((emotion) =>
     emotion.emotionDefinitionId && isEntityDeleted("emotion_definition", emotion.emotionDefinitionId)
@@ -589,6 +647,7 @@ function mapCreateUpdateContext(input: {
       | "behavior"
       | "belief_entry"
       | "mode_profile"
+      | "flashcard"
       | "trigger_report"
       | "event_type"
       | "emotion_definition",
@@ -1096,6 +1155,7 @@ export function deletePsycheValue(valueId: string, context: PsycheContext): Psyc
     removeIdFromStringArrayColumn("belief_entries", "linked_value_ids_json", valueId);
     removeIdFromStringArrayColumn("mode_profiles", "linked_value_ids_json", valueId);
     removeIdFromStringArrayColumn("trigger_reports", "linked_value_ids_json", valueId);
+    removeIdFromStringArrayColumn("psyche_flashcards", "linked_value_ids_json", valueId);
     unlinkEntityNotes("psyche_value", valueId);
     clearEntityOwner("psyche_value", valueId);
     getDatabase()
@@ -1278,6 +1338,7 @@ export function deleteBehaviorPattern(patternId: string, context: PsycheContext)
     removeIdFromStringArrayColumn("psyche_behaviors", "linked_pattern_ids_json", patternId);
     removeIdFromStringArrayColumn("mode_profiles", "linked_pattern_ids_json", patternId);
     removeIdFromStringArrayColumn("trigger_reports", "linked_pattern_ids_json", patternId);
+    removeIdFromStringArrayColumn("psyche_flashcards", "linked_pattern_ids_json", patternId);
     unlinkEntityNotes("behavior_pattern", patternId);
     clearEntityOwner("behavior_pattern", patternId);
     getDatabase()
@@ -1444,6 +1505,7 @@ export function deleteBehavior(behaviorId: string, context: PsycheContext): Beha
     removeIdFromStringArrayColumn("belief_entries", "linked_behavior_ids_json", behaviorId);
     removeIdFromStringArrayColumn("mode_profiles", "linked_behavior_ids_json", behaviorId);
     removeIdFromStringArrayColumn("trigger_reports", "linked_behavior_ids_json", behaviorId);
+    removeIdFromStringArrayColumn("psyche_flashcards", "linked_behavior_ids_json", behaviorId);
     nullifyTriggerBehaviorReferences(behaviorId);
     unlinkEntityNotes("behavior", behaviorId);
     clearEntityOwner("behavior", behaviorId);
@@ -1608,6 +1670,7 @@ export function deleteBeliefEntry(beliefId: string, context: PsycheContext): Bel
   return runInTransaction(() => {
     removeIdFromStringArrayColumn("behavior_patterns", "linked_belief_ids_json", beliefId);
     removeIdFromStringArrayColumn("trigger_reports", "linked_belief_ids_json", beliefId);
+    removeIdFromStringArrayColumn("psyche_flashcards", "linked_belief_ids_json", beliefId);
     nullifyTriggerThoughtBeliefReferences(beliefId);
     unlinkEntityNotes("belief_entry", beliefId);
     clearEntityOwner("belief_entry", beliefId);
@@ -1780,6 +1843,7 @@ export function deleteModeProfile(modeId: string, context: PsycheContext): ModeP
     removeIdFromStringArrayColumn("psyche_behaviors", "linked_mode_ids_json", modeId);
     removeIdFromStringArrayColumn("belief_entries", "linked_mode_ids_json", modeId);
     removeIdFromStringArrayColumn("trigger_reports", "linked_mode_ids_json", modeId);
+    removeIdFromStringArrayColumn("psyche_flashcards", "linked_mode_ids_json", modeId);
     nullifyTriggerTimelineModeReferences(modeId);
     unlinkEntityNotes("mode_profile", modeId);
     clearEntityOwner("mode_profile", modeId);
@@ -1932,6 +1996,189 @@ export function deleteModeGuideSession(sessionId: string, context: PsycheContext
       actor: context.actor ?? null,
       source: context.source,
       metadata: { summary: existing.summary }
+    });
+    return existing;
+  });
+}
+
+const FLASHCARD_SELECT = `SELECT
+  id, domain_id, title, message, trigger_sentence, trigger_situation, tags_json,
+  background_color, text_color, accent_color, typography, image_url, image_alt,
+  layout, visual_style, linked_value_ids_json, linked_behavior_ids_json,
+  linked_pattern_ids_json, linked_belief_ids_json, linked_mode_ids_json,
+  linked_report_ids_json, created_at, updated_at
+ FROM psyche_flashcards`;
+
+export function listFlashcards(): Flashcard[] {
+  const rows = getDatabase()
+    .prepare(
+      `${FLASHCARD_SELECT}
+       WHERE domain_id = ?
+       ORDER BY updated_at DESC`
+    )
+    .all(PSYCHE_DOMAIN_ID) as FlashcardRow[];
+  return filterDeletedEntities("flashcard", rows.map(mapFlashcard));
+}
+
+export function getFlashcardById(flashcardId: string): Flashcard | undefined {
+  if (isEntityDeleted("flashcard", flashcardId)) {
+    return undefined;
+  }
+  const row = getRow<FlashcardRow>(
+    `${FLASHCARD_SELECT}
+     WHERE id = ?`,
+    flashcardId
+  );
+  return row ? decorateOwnedEntity("flashcard", mapFlashcard(row)) : undefined;
+}
+
+export function createFlashcard(input: CreateFlashcardInput, context: PsycheContext): Flashcard {
+  const parsed = createFlashcardSchema.parse(input);
+  const now = new Date().toISOString();
+  const flashcard = flashcardSchema.parse({
+    id: buildId("flc"),
+    domainId: PSYCHE_DOMAIN_ID,
+    ...parsed,
+    createdAt: now,
+    updatedAt: now
+  });
+
+  getDatabase()
+    .prepare(
+      `INSERT INTO psyche_flashcards (
+        id, domain_id, title, message, trigger_sentence, trigger_situation, tags_json,
+        background_color, text_color, accent_color, typography, image_url, image_alt,
+        layout, visual_style, linked_value_ids_json, linked_behavior_ids_json,
+        linked_pattern_ids_json, linked_belief_ids_json, linked_mode_ids_json,
+        linked_report_ids_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      flashcard.id,
+      flashcard.domainId,
+      flashcard.title,
+      flashcard.message,
+      flashcard.triggerSentence,
+      flashcard.triggerSituation,
+      JSON.stringify(flashcard.tags),
+      flashcard.backgroundColor,
+      flashcard.textColor,
+      flashcard.accentColor,
+      flashcard.typography,
+      flashcard.imageUrl,
+      flashcard.imageAlt,
+      flashcard.layout,
+      flashcard.visualStyle,
+      JSON.stringify(flashcard.linkedValueIds),
+      JSON.stringify(flashcard.linkedBehaviorIds),
+      JSON.stringify(flashcard.linkedPatternIds),
+      JSON.stringify(flashcard.linkedBeliefIds),
+      JSON.stringify(flashcard.linkedModeIds),
+      JSON.stringify(flashcard.linkedReportIds),
+      flashcard.createdAt,
+      flashcard.updatedAt
+    );
+  assignOwnedEntity("flashcard", flashcard.id, parsed.userId, context.actor);
+
+  mapCreateUpdateContext({
+    entityType: "flashcard",
+    entityId: flashcard.id,
+    title: "Flashcard added",
+    eventKind: "flashcard.created",
+    source: context.source,
+    actor: context.actor ?? null,
+    metadata: { domainId: flashcard.domainId }
+  });
+  return decorateOwnedEntity("flashcard", flashcard);
+}
+
+export function updateFlashcard(
+  flashcardId: string,
+  patch: UpdateFlashcardInput,
+  context: PsycheContext
+): Flashcard | undefined {
+  const existing = getFlashcardById(flashcardId);
+  if (!existing) {
+    return undefined;
+  }
+  const parsed = updateFlashcardSchema.parse(patch);
+  const updated = flashcardSchema.parse({
+    ...existing,
+    ...parsed,
+    updatedAt: new Date().toISOString()
+  });
+
+  getDatabase()
+    .prepare(
+      `UPDATE psyche_flashcards
+       SET title = ?, message = ?, trigger_sentence = ?, trigger_situation = ?,
+           tags_json = ?, background_color = ?, text_color = ?, accent_color = ?,
+           typography = ?, image_url = ?, image_alt = ?, layout = ?, visual_style = ?,
+           linked_value_ids_json = ?, linked_behavior_ids_json = ?, linked_pattern_ids_json = ?,
+           linked_belief_ids_json = ?, linked_mode_ids_json = ?, linked_report_ids_json = ?,
+           updated_at = ?
+       WHERE id = ?`
+    )
+    .run(
+      updated.title,
+      updated.message,
+      updated.triggerSentence,
+      updated.triggerSituation,
+      JSON.stringify(updated.tags),
+      updated.backgroundColor,
+      updated.textColor,
+      updated.accentColor,
+      updated.typography,
+      updated.imageUrl,
+      updated.imageAlt,
+      updated.layout,
+      updated.visualStyle,
+      JSON.stringify(updated.linkedValueIds),
+      JSON.stringify(updated.linkedBehaviorIds),
+      JSON.stringify(updated.linkedPatternIds),
+      JSON.stringify(updated.linkedBeliefIds),
+      JSON.stringify(updated.linkedModeIds),
+      JSON.stringify(updated.linkedReportIds),
+      updated.updatedAt,
+      flashcardId
+    );
+  if (parsed.userId !== undefined) {
+    assignOwnedEntity("flashcard", flashcardId, parsed.userId, context.actor);
+  }
+
+  mapCreateUpdateContext({
+    entityType: "flashcard",
+    entityId: flashcardId,
+    title: "Flashcard updated",
+    eventKind: "flashcard.updated",
+    source: context.source,
+    actor: context.actor ?? null,
+    metadata: { domainId: updated.domainId }
+  });
+  return decorateOwnedEntity("flashcard", updated);
+}
+
+export function deleteFlashcard(flashcardId: string, context: PsycheContext): Flashcard | undefined {
+  const existing = getFlashcardById(flashcardId);
+  if (!existing) {
+    return undefined;
+  }
+
+  return runInTransaction(() => {
+    unlinkEntityNotes("flashcard", flashcardId);
+    clearEntityOwner("flashcard", flashcardId);
+    getDatabase()
+      .prepare(`DELETE FROM psyche_flashcards WHERE id = ?`)
+      .run(flashcardId);
+
+    mapCreateUpdateContext({
+      entityType: "flashcard",
+      entityId: flashcardId,
+      title: "Flashcard deleted",
+      eventKind: "flashcard.deleted",
+      source: context.source,
+      actor: context.actor ?? null,
+      metadata: { domainId: existing.domainId }
     });
     return existing;
   });
@@ -2138,6 +2385,7 @@ export function deleteTriggerReport(reportId: string, context: PsycheContext): T
 
   return runInTransaction(() => {
     removeIdFromStringArrayColumn("belief_entries", "linked_report_ids_json", reportId);
+    removeIdFromStringArrayColumn("psyche_flashcards", "linked_report_ids_json", reportId);
     unlinkEntityNotes("trigger_report", reportId);
     clearEntityOwner("trigger_report", reportId);
     getDatabase()

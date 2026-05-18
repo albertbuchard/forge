@@ -39,6 +39,7 @@ import {
   listBehaviors,
   listBehaviorPatterns,
   listBeliefs,
+  listFlashcards,
   listModes,
   listNotes,
   listPsycheValues,
@@ -83,6 +84,7 @@ const FILTERABLE_ENTITY_TYPES = new Set<CrudEntityType>([
   "behavior",
   "belief_entry",
   "mode_profile",
+  "flashcard",
   "trigger_report"
 ]);
 
@@ -242,6 +244,10 @@ export function NotesPage() {
   const modesQuery = useQuery({
     queryKey: ["forge-psyche-modes"],
     queryFn: listModes
+  });
+  const flashcardsQuery = useQuery({
+    queryKey: ["forge-psyche-flashcards"],
+    queryFn: listFlashcards
   });
   const reportsQuery = useQuery({
     queryKey: ["forge-psyche-reports"],
@@ -434,6 +440,26 @@ export function NotesPage() {
         ),
         kind: getEntityKindForCrudEntityType("mode_profile") ?? undefined
       })) satisfies EntityLinkOption[]),
+      ...((flashcardsQuery.data?.flashcards ?? []).map((flashcard) => ({
+        value: encodeLinkedValue("flashcard", flashcard.id),
+        label: flashcard.title || flashcard.message,
+        description: formatOwnedEntityDescription(
+          flashcard.triggerSentence || flashcard.triggerSituation,
+          flashcard.user,
+          "Flashcard"
+        ),
+        searchText: buildOwnedEntitySearchText(
+          [
+            flashcard.title,
+            flashcard.message,
+            flashcard.triggerSentence,
+            flashcard.triggerSituation,
+            ...flashcard.tags
+          ],
+          flashcard
+        ),
+        kind: getEntityKindForCrudEntityType("flashcard") ?? undefined
+      })) satisfies EntityLinkOption[]),
       ...((reportsQuery.data?.reports ?? []).map((report) => ({
         value: encodeLinkedValue("trigger_report", report.id),
         label: report.title,
@@ -454,6 +480,7 @@ export function NotesPage() {
   }, [
     behaviorsQuery.data?.behaviors,
     beliefsQuery.data?.beliefs,
+    flashcardsQuery.data?.flashcards,
     modesQuery.data?.modes,
     patternsQuery.data?.patterns,
     reportsQuery.data?.reports,

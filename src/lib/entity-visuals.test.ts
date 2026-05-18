@@ -30,6 +30,7 @@ describe("entity visuals", () => {
       "belief",
       "mode",
       "mode_session",
+      "flashcard",
       "report",
       "event_type",
       "emotion",
@@ -73,6 +74,7 @@ describe("entity visuals", () => {
     expect(getEntityKindForCrudEntityType("emotion_definition")).toBe(
       "emotion"
     );
+    expect(getEntityKindForCrudEntityType("flashcard")).toBe("flashcard");
     expect(getEntityKindForCrudEntityType("note", { noteKind: "wiki" })).toBe(
       "wiki_page"
     );

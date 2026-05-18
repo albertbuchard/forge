@@ -7,6 +7,7 @@ import {
   listBehaviors,
   listBehaviorPatterns,
   listBeliefs,
+  listFlashcards,
   listModes,
   listNotes,
   listPsycheValues,
@@ -170,6 +171,10 @@ export function EntityNotesSurface({
     queryKey: ["forge-psyche-modes"],
     queryFn: listModes
   });
+  const flashcardsQuery = useQuery({
+    queryKey: ["forge-psyche-flashcards"],
+    queryFn: listFlashcards
+  });
   const reportsQuery = useQuery({
     queryKey: ["forge-psyche-reports"],
     queryFn: listTriggerReports
@@ -228,6 +233,13 @@ export function EntityNotesSurface({
         id: mode.id,
         label: formatOwnedEntityOptionLabel(mode.title, mode.user)
       })),
+      flashcard: (flashcardsQuery.data?.flashcards ?? []).map((flashcard) => ({
+        id: flashcard.id,
+        label: formatOwnedEntityOptionLabel(
+          flashcard.title || flashcard.message,
+          flashcard.user
+        )
+      })),
       mode_guide_session: [],
       event_type: [],
       emotion_definition: [],
@@ -249,6 +261,7 @@ export function EntityNotesSurface({
     [
       behaviorsQuery.data?.behaviors,
       beliefsQuery.data?.beliefs,
+      flashcardsQuery.data?.flashcards,
       modesQuery.data?.modes,
       notesQuery.data?.notes,
       patternsQuery.data?.patterns,
@@ -478,6 +491,7 @@ export function EntityNotesSurface({
               "belief_entry",
               "mode_profile",
               "mode_guide_session",
+              "flashcard",
               "event_type",
               "emotion_definition",
               "trigger_report"

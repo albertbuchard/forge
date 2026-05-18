@@ -50,6 +50,7 @@ Forge should not rely on sprawling schemas for work items. The main contract sho
 Forge already has strong foundations:
 
 - goals, projects, strategies, tasks, task runs, habits, notes, wiki, preferences, health, movement, and Psyche surfaces
+- Psyche flashcards as batch CRUD records for therapeutic reminder cards that can be retrieved by tags, trigger wording, title, or linked Psyche context during urge and trigger support
 - a React web app mounted under `/forge/`
 - a Fastify API under `/api/v1/`
 - local-first SQLite persistence, including SQLite-backed wiki and evidence memory

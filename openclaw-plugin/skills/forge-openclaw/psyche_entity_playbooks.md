@@ -237,6 +237,9 @@ short, tentative, and correctable.
   possible mode family only after the part's lived voice or posture is visible.
 - `mode_guide_session`: hypothesize about what the active part is trying to stop,
   force, prevent, or secure right now while keeping candidate mode labels provisional.
+- `flashcard`: hypothesize about the cue, urge sentence, mode/belief activation, or
+  values pivot the card should meet, then help craft one brief message the user can
+  recognize in that moment.
 - `trigger_report`: hypothesize about the episode chain only after the situation,
   felt stake, meaning, action, and consequence are at least partly visible.
 - `event_type`: hypothesize about the repeated emotional or relational stake that
@@ -384,8 +387,9 @@ will preserve the structure best.
 Psyche records are psychologically meaningful, but they are still normal stored Forge
 entities for API purposes. Once the formulation is clear and the user has consented to
 save or update it, use the shared batch entity routes for `psyche_value`,
-`behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`,
-`mode_guide_session`, `trigger_report`, `event_type`, and `emotion_definition`.
+  `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`,
+`mode_guide_session`, `flashcard`, `trigger_report`, `event_type`, and
+`emotion_definition`.
 
 Keep the route decision internal. With the user, keep talking about the lived moment,
 belief sentence, pattern, mode, value, report, event kind, or feeling signature.
@@ -400,7 +404,15 @@ Do not divert Psyche material into `self_observation` just because it started as
 episode. Use `trigger_report` for one emotionally meaningful incident, use
 `behavior_pattern` for a recurring functional loop, use `belief_entry` for one
 explicit sentence, and use `mode_guide_session` or `mode_profile` when a part-state is
-central.
+central. Use `flashcard` when the user needs a small rehearsable message to retrieve
+during an urge, trigger, mode activation, belief activation, or values-based pivot.
+
+When a user says they feel an urge or asks for help not doing something, search
+existing `flashcard` records before creating a new one. Use `forge_search_entities`
+with `entityTypes: ["flashcard"]` and query text from the urge, tags, trigger
+sentence, trigger situation, and user's own words. If a card matches, show the card's
+message first, then add brief grounding, urge-surfing, cognitive defusion,
+schema/mode-aware reflection, or values-based coaching around it.
 
 ## Lane chooser
 
@@ -828,6 +840,55 @@ Ready to save when:
 Preferred opening question:
 
 - "What just happened, and what is this part trying to get you to do or stop doing right now?"
+
+## Flashcard
+
+Aim: craft a small therapeutic card that can be retrieved during a specific urge,
+trigger, belief activation, mode shift, or values-based pivot.
+
+Arc:
+
+1. Start from the exact moment the card should help: the urge sentence, trigger cue,
+   mode activation, belief activation, or situation.
+2. Reflect what the card is trying to interrupt, steady, help the user tolerate, or
+   help the user choose.
+3. Ask for the one simple message that should be centered on the card, or offer one
+   concise working sentence if the user's meaning is clearer than their wording.
+4. Ask for tags, trigger sentence, and trigger situation before the title, because
+   retrieval matters more than the title.
+5. Ask about color, background, typography, image, layout, and visual tone only after
+   the message and retrieval cues are clear.
+6. If the user is in an urge right now, search existing flashcards first, show the
+   matching message first, then support it with brief psychotherapy-informed guidance.
+
+Helpful follow-up lanes:
+
+- the exact urge sentence or trigger cue
+- what the card should help the user remember when the urge is strongest
+- whether the card should interrupt an urge, comfort a part, challenge a belief, or
+  pivot toward a value
+- tags and trigger wording for future retrieval
+- visual tone, colors, typography, layout, or image after the message is clear
+
+Likely linked entities:
+
+- `behavior` when the card supports interrupting or replacing one recurring move
+- `behavior_pattern` when the card belongs to a larger loop
+- `belief_entry` when the card answers one activated belief sentence
+- `mode_profile` when the card speaks to a recurring part-state
+- `psyche_value` when the card points back to a chosen value
+- `trigger_report` when the card was created from one meaningful episode
+
+Ready to save when:
+
+- the main `message` is clear enough to show back during the hard moment
+- at least one retrieval cue is clear: tag, trigger sentence, trigger situation, or
+  linked Psyche record
+- title and visual styling are either chosen or intentionally left for later
+
+Preferred opening question:
+
+- "What exact urge sentence or situation should make this card appear?"
 
 ## Trigger Report
 

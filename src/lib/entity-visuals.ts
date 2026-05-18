@@ -45,6 +45,7 @@ export const ENTITY_KINDS = [
   "belief",
   "mode",
   "mode_session",
+  "flashcard",
   "report",
   "event_type",
   "emotion",
@@ -225,6 +226,13 @@ const ENTITY_VISUAL_SEEDS: ReadonlyArray<EntityVisualSeed> = [
     accentRgb: [192, 132, 252]
   },
   {
+    kind: "flashcard",
+    label: "Flashcard",
+    icon: PanelTop,
+    iconName: "PanelTop",
+    accentRgb: [20, 184, 166]
+  },
+  {
     kind: "report",
     label: "Report",
     icon: FileText,
@@ -324,6 +332,7 @@ const CRUD_ENTITY_KIND_MAP: Partial<Record<CrudEntityType, EntityKind>> = {
   belief_entry: "belief",
   mode_profile: "mode",
   mode_guide_session: "mode_session",
+  flashcard: "flashcard",
   event_type: "event_type",
   emotion_definition: "emotion",
   trigger_report: "report"

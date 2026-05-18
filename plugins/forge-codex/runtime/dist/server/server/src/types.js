@@ -147,6 +147,7 @@ export const activityEntityTypeSchema = z.enum([
     "belief_entry",
     "mode_profile",
     "mode_guide_session",
+    "flashcard",
     "trigger_report",
     "preference_catalog",
     "preference_catalog_item",
@@ -362,6 +363,7 @@ export const crudEntityTypeSchema = z.enum([
     "belief_entry",
     "mode_profile",
     "mode_guide_session",
+    "flashcard",
     "event_type",
     "emotion_definition",
     "trigger_report",
@@ -387,6 +389,7 @@ export const rewardableEntityTypeSchema = z.enum([
     "behavior",
     "belief_entry",
     "mode_profile",
+    "flashcard",
     "trigger_report"
 ]);
 export const deleteModeSchema = z.enum(["soft", "hard"]);

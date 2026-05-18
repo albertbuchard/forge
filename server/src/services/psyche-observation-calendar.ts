@@ -45,6 +45,7 @@ const ACTIVITY_ENTITY_LABELS: Record<ActivityEntityType, string> = {
   belief_entry: "Belief",
   mode_profile: "Mode",
   mode_guide_session: "Mode guide session",
+  flashcard: "Flashcard",
   trigger_report: "Trigger report",
   questionnaire_run: "Questionnaire run",
   event_type: "Event type",

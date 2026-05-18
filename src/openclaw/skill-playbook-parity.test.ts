@@ -220,6 +220,8 @@ describe("forge skill playbook parity", () => {
     expect(codexSkill).toMatch(/Movement, Life Force, and Workbench use dedicated route[\s\S]*batch CRUD/i);
 
     for (const skill of [openclawSkill, hermesSkill, codexSkill]) {
+      expect(skill).toMatch(/flashcard/);
+      expect(skill).toMatch(/flashcard \{ message \}|`flashcard`[\s\S]*message/i);
       expect(skill).toMatch(/`event_type`[\s\S]*`emotion_definition`/);
       expect(skill).toMatch(/psychologically meaningful Psyche\s+records/i);
       expect(skill).toMatch(/repeated lived moment or felt\s+signature/i);
@@ -384,6 +386,7 @@ describe("forge skill playbook parity", () => {
     expect(psychePlaybook).toMatch(/`behavior_pattern`[\s\S]*cue[\s\S]*short-term payoff[\s\S]*long-term cost/i);
     expect(psychePlaybook).toMatch(/`belief_entry`[\s\S]*rule, prediction, or self\/other\/world sentence/i);
     expect(psychePlaybook).toMatch(/`mode_profile`[\s\S]*protective job[\s\S]*feared danger[\s\S]*burden/i);
+    expect(psychePlaybook).toMatch(/`flashcard`[\s\S]*cue[\s\S]*urge sentence[\s\S]*brief message/i);
     expect(psychePlaybook).toMatch(/`emotion_definition`[\s\S]*body signature[\s\S]*urge[\s\S]*warning/i);
     expect(psychePlaybook).toMatch(/shared batch entity routes[\s\S]*psyche_value[\s\S]*emotion_definition/i);
     expect(psychePlaybook).toMatch(/Keep the route decision internal/i);
@@ -412,6 +415,7 @@ describe("forge skill playbook parity", () => {
     expect(psychePlaybook).toMatch(/What happened the last time this pattern showed up/i);
     expect(psychePlaybook).toMatch(/What did you find yourself doing the last time this move showed up/i);
     expect(psychePlaybook).toMatch(/When that reaction hits, what does it start telling you about you, them, or what happens next/i);
+    expect(psychePlaybook).toMatch(/What exact urge sentence or situation should make this card appear/i);
     expect(psychePlaybook).toMatch(/What kind of moment keeps happening that you want future reports to name the same way each time/i);
     expect(psychePlaybook).toMatch(/When this feeling is present, what tells you it is this feeling and not a nearby one/i);
     expect(psychePlaybook).toMatch(/emotionally meaningful kind of moment/i);
@@ -437,6 +441,16 @@ describe("forge skill playbook parity", () => {
           /batch routes for basic Preferences CRUD/i
         ],
         questioning: [/Ask only for what is missing or unclear/i]
+      },
+      {
+        request:
+          "I feel the urge to drink. Help me with the flashcard I made for this.",
+        required: [
+          /entityTypes: \["flashcard"\]/,
+          /show the card message first|show the flashcard message first/i,
+          /urge-surfing|cognitive defusion|values-based support/i
+        ],
+        questioning: [/exact urge sentence or situation/i]
       },
       {
         request:

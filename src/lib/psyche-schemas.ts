@@ -95,6 +95,29 @@ export const modeGuideSessionSchema = z.object({
   userId: ownedUserId
 });
 
+export const flashcardSchema = z.object({
+  title: trimmed.default(""),
+  message: nonEmpty,
+  triggerSentence: trimmed.default(""),
+  triggerSituation: trimmed.default(""),
+  tags: z.array(trimmed).default([]),
+  backgroundColor: trimmed.default("#f8fafc"),
+  textColor: trimmed.default("#111827"),
+  accentColor: trimmed.default("#6ee7b7"),
+  typography: z.enum(["serif", "sans", "mono", "display"]).default("serif"),
+  imageUrl: trimmed.default(""),
+  imageAlt: trimmed.default(""),
+  layout: z.enum(["centered", "top_left", "image_split", "poster"]).default("centered"),
+  visualStyle: z.enum(["calm", "urgent", "warm", "clinical", "playful"]).default("calm"),
+  linkedValueIds: z.array(z.string()).default([]),
+  linkedBehaviorIds: z.array(z.string()).default([]),
+  linkedPatternIds: z.array(z.string()).default([]),
+  linkedBeliefIds: z.array(z.string()).default([]),
+  linkedModeIds: z.array(z.string()).default([]),
+  linkedReportIds: z.array(z.string()).default([]),
+  userId: ownedUserId
+});
+
 export const eventTypeSchema = z.object({
   label: nonEmpty,
   description: trimmed,
@@ -176,6 +199,7 @@ export type BehaviorInput = z.infer<typeof behaviorSchema>;
 export type BeliefEntryInput = z.infer<typeof beliefEntrySchema>;
 export type ModeProfileInput = z.infer<typeof modeProfileSchema>;
 export type ModeGuideSessionInput = z.infer<typeof modeGuideSessionSchema>;
+export type FlashcardInput = z.infer<typeof flashcardSchema>;
 export type EventTypeInput = z.infer<typeof eventTypeSchema>;
 export type EmotionDefinitionInput = z.infer<typeof emotionDefinitionSchema>;
 export type TriggerReportInput = z.infer<typeof triggerReportSchema>;

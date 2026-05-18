@@ -71,6 +71,8 @@ export function getEntityRoute(entityType: CrudEntityType, entityId: string) {
       return `/psyche/schemas-beliefs?focus=${entityId}`;
     case "mode_profile":
       return `/psyche/modes?focus=${entityId}`;
+    case "flashcard":
+      return `/psyche/flashcards?focus=${entityId}`;
     case "trigger_report":
       return `/psyche/reports/${entityId}`;
     default:
