@@ -114,7 +114,10 @@ describe("forge skill playbook parity", () => {
       expect(skill).toMatch(/Batch CRUD is the default for normal stored entities/i);
       expect(skill).toMatch(/readModelOnlySurfaces/i);
       expect(skill).toMatch(/sleepOverview[\s\S]*sportsOverview[\s\S]*sleep_overview[\s\S]*sports_overview/i);
-      expect(skill).toMatch(/read-only overview surfaces[\s\S]*not batch CRUD\s+entities/i);
+      expect(skill).toMatch(/operatorOverview[\s\S]*operatorContext[\s\S]*calendarOverview/i);
+      expect(skill).toMatch(/operator_overview[\s\S]*operator_context[\s\S]*calendar_overview/i);
+      expect(skill).toMatch(/read-only(?: overview)? surfaces[\s\S]*not batch CRUD\s+entities/i);
+      expect(skill).toMatch(/forge_get_operator_overview[\s\S]*forge_get_operator_context[\s\S]*forge_get_calendar_overview/i);
       expect(skill).toMatch(/wiki_page[\s\S]*calendar_connection[\s\S]*specialized CRUD surfaces/i);
       expect(skill).toMatch(/task_run[\s\S]*work_adjustment[\s\S]*questionnaire_run[\s\S]*preference_judgment[\s\S]*preference_signal[\s\S]*self_observation[\s\S]*action workflows/i);
       expect(skill).toMatch(/Movement, Life Force, and Workbench are specialized domain surfaces/i);

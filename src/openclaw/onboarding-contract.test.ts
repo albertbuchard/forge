@@ -509,7 +509,13 @@ describe("forge onboarding contract", () => {
         sleep_overview: "/api/v1/health/sleep",
         sportsOverview: "/api/v1/health/fitness",
         sports_overview: "/api/v1/health/fitness",
-        selfObservation: "/api/v1/psyche/self-observation/calendar"
+        selfObservation: "/api/v1/psyche/self-observation/calendar",
+        calendarOverview: "/api/v1/calendar/overview",
+        calendar_overview: "/api/v1/calendar/overview",
+        operatorOverview: "/api/v1/operator/overview",
+        operator_overview: "/api/v1/operator/overview",
+        operatorContext: "/api/v1/operator/context",
+        operator_context: "/api/v1/operator/context"
       })
     );
   });

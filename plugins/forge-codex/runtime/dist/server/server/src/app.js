@@ -66,7 +66,7 @@ import { registerWebRoutes } from "./web.js";
 import { createManagerRuntime } from "./managers/runtime.js";
 import { isManagerError } from "./managers/type-guards.js";
 import { buildCompanionPairingTransport, getCompanionIrohStatus, stopCompanionIroh } from "./services/companion-iroh.js";
-import { createCompanionPairingSession, createCompanionPairingSessionSchema, createSleepSession, createSleepSessionSchema, createWorkoutSession, createWorkoutSessionSchema, deleteSleepSession, deleteWorkoutSession, getCompanionPairingSessionById, getCompanionOverview, getFitnessViewData, getSleepSessionById, getSleepSessionDetailById, getSleepTimelineOverlaysForRange, getSleepViewData, getVitalsViewData, getHealthZoneProfileForUser, getWorkoutSessionById, getWorkoutSessionDetailById, heartbeatCompanionPairing, heartbeatCompanionPairingSchema, healthZoneProfilePatchSchema, ingestMobileHealthSync, mobileHealthSyncSchema, patchHealthZoneProfileForUser, patchCompanionPairingSourceState, patchCompanionPairingSourceStateSchema, companionSourceKeySchema, requireValidPairing, revokeAllCompanionPairingSessions, revokeAllCompanionPairingSessionsSchema, revokeCompanionPairingSession, updateMobileCompanionSourceState, updateMobileCompanionSourceStateSchema, verifyCompanionPairing, verifyCompanionPairingSchema, updateSleepMetadata, updateSleepMetadataSchema, updateWorkoutMetadata, updateWorkoutMetadataSchema } from "./health.js";
+import { createCompanionPairingSession, createCompanionPairingSessionSchema, createSleepSession, createSleepSessionSchema, createWorkoutSession, createWorkoutSessionSchema, deleteSleepSession, deleteWorkoutSession, getCompanionPairingSessionById, getCompanionOverview, getFitnessViewData, getSleepSessionById, getSleepSessionDetailById, getSleepTimelineOverlaysForRange, getSleepViewData, getVitalsViewData, getHealthZoneProfileForUser, getWorkoutSessionById, getWorkoutSessionDetailById, heartbeatCompanionPairing, heartbeatCompanionPairingSchema, healthZoneProfilePatchSchema, abortMobileHealthSyncSession, completeMobileHealthSyncSession, ingestMobileHealthSync, ingestMobileHealthSyncChunk, mobileHealthSyncChunkSchema, mobileHealthSyncSessionCompleteSchema, mobileHealthSyncSessionStartSchema, mobileHealthSyncSchema, patchHealthZoneProfileForUser, patchCompanionPairingSourceState, patchCompanionPairingSourceStateSchema, companionSourceKeySchema, requireValidPairing, startMobileHealthSyncSession, revokeAllCompanionPairingSessions, revokeAllCompanionPairingSessionsSchema, revokeCompanionPairingSession, updateMobileCompanionSourceState, updateMobileCompanionSourceStateSchema, verifyCompanionPairing, verifyCompanionPairingSchema, updateSleepMetadata, updateSleepMetadataSchema, updateWorkoutMetadata, updateWorkoutMetadataSchema } from "./health.js";
 import { analyzeMovementUserBoxPreflight, createMovementUserBox, createMovementPlace, deleteMovementUserBox, getMovementAllTimeSummary, getMovementBoxDetail, getMovementDayDetail, getMovementMobileBootstrap, getMovementTimeline, getMovementSelectionAggregate, getMovementSettings, getMovementTripDetail, getMovementMonthSummary, invalidateAutomaticMovementBox, listMovementPlaces, movementAutomaticBoxInvalidateSchema, movementMobileBootstrapSchema, movementMobilePlaceMutationSchema, movementMobileStayPatchSchema, movementMobileUserBoxCreateSchema, movementMobileUserBoxPreflightSchema, movementMobileUserBoxPatchSchema, movementMobileAutomaticBoxInvalidateSchema, movementMobileTimelineSchema, movementPlaceMutationSchema, movementPlacePatchSchema, movementSelectionAggregateSchema, movementStayPatchSchema, movementTripPatchSchema, movementUserBoxCreateSchema, movementUserBoxPreflightSchema, movementUserBoxPatchSchema, movementSettingsPatchSchema, movementTimelineQuerySchema, movementTripPointPatchSchema, deleteMovementStay, deleteMovementTrip, deleteMovementTripPoint, updateMovementPlace, updateMovementSettings, updateMovementStay, updateMovementTrip, updateMovementUserBox, updateMovementTripPoint, resolveMovementTimelineSegmentForBox } from "./movement.js";
 import { getScreenTimeAllTimeSummary, getScreenTimeDayDetail, getScreenTimeMonthSummary, getScreenTimeSettings, screenTimeSettingsPatchSchema, updateScreenTimeSettings } from "./screen-time.js";
 import { assertWatchReady, buildWatchBootstrap, ingestWatchCaptureBatch, mobileWatchBootstrapSchema, mobileWatchCaptureBatchSchema, mobileWatchHabitCheckInSchema } from "./watch-mobile.js";
@@ -2970,6 +2970,18 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
         ]
     },
     {
+        focus: "calendar_overview",
+        openingQuestion: "What are you trying to understand or decide from your calendar picture?",
+        coachingGoal: "Review commitments, work blocks, provider state, and existing timeboxes before creating or changing calendar records.",
+        askSequence: [
+            "Ask what practical calendar question the user wants the overview to answer.",
+            "Ask which day, week, date range, or owner scope matters only if it changes the read.",
+            "Use forge_get_calendar_overview before asking the user to reconstruct availability from memory.",
+            "Reflect the scheduling or planning decision the user is trying to make.",
+            "Move to calendar_event, work_block_template, task_timebox, or calendar_connection only when one concrete follow-up action is visible."
+        ]
+    },
+    {
         focus: "calendar_connection",
         openingQuestion: "Which calendar provider are you trying to connect, and what do you want Forge to do with it?",
         coachingGoal: "Connect the right provider deliberately without turning setup into a credential dump.",
@@ -3002,6 +3014,29 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
             "Ask whether time should be added or removed.",
             "Ask what real work or correction the adjustment is meant to capture.",
             "Ask for a short audit note only if the reason would otherwise be unclear later."
+        ]
+    },
+    {
+        focus: "operator_overview",
+        openingQuestion: "What are you trying to understand about Forge overall right now?",
+        coachingGoal: "Read the broad Forge state before choosing a specific entity action.",
+        askSequence: [
+            "Ask what broad Forge question the user wants the overview to answer.",
+            "Ask which owner or user scope matters only if several humans or bots are in play.",
+            "Use forge_get_operator_overview before reopening a create or update intake.",
+            "Reflect the attention cue, priority, or handoff decision the overview should support.",
+            "Move into a specific entity flow only when the overview points to a concrete goal, project, task, habit, note, Psyche record, or action."
+        ]
+    },
+    {
+        focus: "operator_context",
+        openingQuestion: "What current work, risk, or next move are you trying to check?",
+        coachingGoal: "Inspect current work, active runs, risk, and next moves before changing records.",
+        askSequence: [
+            "Ask whether the user is checking current work, risk, blockers, active sessions, or the next move.",
+            "Use forge_get_operator_context before mutating tasks, projects, runs, or notes when the current state is uncertain.",
+            "Reflect whether the read is meant to decide continue, stop, reprioritize, update, or create.",
+            "Move to task_run, work_adjustment, task, project, or note flow only when one concrete follow-up is visible."
         ]
     },
     {
@@ -4592,7 +4627,8 @@ function buildAgentOnboardingPayload(request) {
                 calendar_overview: "/api/v1/calendar/overview",
                 operatorOverview: "/api/v1/operator/overview",
                 operator_overview: "/api/v1/operator/overview",
-                operatorContext: "/api/v1/operator/context"
+                operatorContext: "/api/v1/operator/context",
+                operator_context: "/api/v1/operator/context"
             }
         },
         multiUserModel: {
@@ -6355,6 +6391,8 @@ export async function buildServer(options = {}) {
     app.setErrorHandler((error, request, reply) => {
         const validationIssues = error instanceof ZodError ? formatValidationIssues(error) : undefined;
         const routeUrl = request.routeOptions.url || request.url;
+        const isBodyTooLarge = typeof error.code === "string" &&
+            error.code === "FST_ERR_CTP_BODY_TOO_LARGE";
         const validationHelp = validationIssues
             ? buildValidationHelp(request.method, routeUrl, validationIssues)
             : undefined;
@@ -6364,20 +6402,24 @@ export async function buildServer(options = {}) {
                 ? error.statusCode
                 : error instanceof ZodError
                     ? 400
-                    : 500;
+                    : isBodyTooLarge
+                        ? 413
+                        : 500;
         if (!shouldSkipAutomaticDiagnosticRoute(routeUrl)) {
             try {
                 recordDiagnosticLog({
                     level: statusCode >= 500 ? "error" : "warning",
                     source: normalizeDiagnosticSource(request.headers["x-forge-source"]),
                     scope: "api_error",
-                    eventKey: isHttpError(error)
-                        ? error.code
-                        : isManagerError(error)
+                    eventKey: isBodyTooLarge
+                        ? "payload_too_large"
+                        : isHttpError(error)
                             ? error.code
-                            : statusCode === 400
-                                ? "invalid_request"
-                                : "internal_error",
+                            : isManagerError(error)
+                                ? error.code
+                                : statusCode === 400
+                                    ? "invalid_request"
+                                    : "internal_error",
                     message: getErrorMessage(error),
                     route: routeUrl,
                     functionName: "setErrorHandler",
@@ -6401,13 +6443,25 @@ export async function buildServer(options = {}) {
                 ? error.code
                 : isManagerError(error)
                     ? error.code
-                    : statusCode === 400
-                        ? "invalid_request"
-                        : "internal_error",
+                    : isBodyTooLarge
+                        ? "payload_too_large"
+                        : statusCode === 400
+                            ? "invalid_request"
+                            : "internal_error",
             error: validationIssues
                 ? `Request validation failed for ${request.method.toUpperCase()} ${routeUrl}. ${validationHelp?.validationSummary ?? ""}`.trim()
-                : getErrorMessage(error),
+                : isBodyTooLarge
+                    ? "The request body is too large. Use chunked HealthKit sync."
+                    : getErrorMessage(error),
             statusCode,
+            ...(isBodyTooLarge
+                ? {
+                    recommendedMode: "chunked",
+                    maxBytes: typeof request.routeOptions.bodyLimit === "number"
+                        ? request.routeOptions.bodyLimit
+                        : undefined
+                }
+                : {}),
             ...(validationIssues ? { details: validationIssues } : {}),
             ...(validationHelp ?? {}),
             ...(isHttpError(error) && error.details ? error.details : {}),
@@ -7343,7 +7397,27 @@ export async function buildServer(options = {}) {
             watch: buildWatchBootstrap(pairing)
         };
     });
-    app.post("/api/v1/mobile/healthkit/sync", async (request) => ({
+    app.post("/api/v1/mobile/healthkit/sync-sessions", async (request) => ({
+        upload: startMobileHealthSyncSession(mobileHealthSyncSessionStartSchema.parse(request.body ?? {}))
+    }));
+    app.post("/api/v1/mobile/healthkit/sync-sessions/:id/chunks", { bodyLimit: 1_250_000 }, async (request) => {
+        const { id } = request.params;
+        const rawPayloadJson = JSON.stringify((request.body ?? {}).payload ?? {});
+        return {
+            chunk: ingestMobileHealthSyncChunk(id, mobileHealthSyncChunkSchema.parse(request.body ?? {}), rawPayloadJson)
+        };
+    });
+    app.post("/api/v1/mobile/healthkit/sync-sessions/:id/complete", async (request) => {
+        const { id } = request.params;
+        return {
+            sync: completeMobileHealthSyncSession(id, mobileHealthSyncSessionCompleteSchema.parse(request.body ?? {}))
+        };
+    });
+    app.delete("/api/v1/mobile/healthkit/sync-sessions/:id", async (request) => {
+        const { id } = request.params;
+        return { upload: abortMobileHealthSyncSession(id) };
+    });
+    app.post("/api/v1/mobile/healthkit/sync", { bodyLimit: 8_000_000 }, async (request) => ({
         sync: ingestMobileHealthSync(mobileHealthSyncSchema.parse(request.body ?? {}))
     }));
     app.patch("/api/v1/health/workouts/:id", async (request, reply) => {

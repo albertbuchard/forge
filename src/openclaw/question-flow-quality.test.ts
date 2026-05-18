@@ -45,11 +45,14 @@ describe("question flow quality coverage", () => {
       ["Task Timebox", /make time for/i, /planned work with completed work/i],
       ["Task Run", /Which task should I start/i, /Start the run instead of turning it into intake/i],
       ["Work Adjustment", /time correction belong to/i, /truthfully/i],
+      ["Operator Overview", /understand about Forge overall/i, /read-model-only operator surface/i],
+      ["Operator Context", /current work, risk, or next move/i, /read-model-only operator surface/i],
       ["Self Observation", /what happened in the situation/i, /situation, cue, emotion\/body, thought\/meaning, behavior\/urge, and consequence/i],
       ["Sleep Session", /important enough to remember or connect/i, /reflective takeaway/i],
       ["Workout Session", /most worth remembering or connecting/i, /subjective effort, mood, meaning/i],
       ["Sleep Overview", /understand from your sleep picture/i, /read-model-only surface/i],
       ["Sports Overview", /understand from your workout picture/i, /read-model-only surface/i],
+      ["Calendar Overview", /understand or decide from your calendar picture/i, /read-model-only calendar surface/i],
       ["Calendar Connection", /calendar provider are you trying to connect/i, /workflow they are trying to unlock/i],
       ["Preference Judgment", /comparison are you actually trying to settle/i, /pairwise preference decision/i],
       ["Preference Signal", /remember about this item right now/i, /favorite, veto, bookmark,[\s\S]*compare-later/i],
@@ -323,8 +326,20 @@ describe("question flow quality coverage", () => {
     expect(entityPlaybook).toMatch(
       /sports_overview[\s\S]*read-model-only health surface|read-model-only health surface[\s\S]*sports_overview/i
     );
+    expect(entityPlaybook).toMatch(
+      /operator_overview[\s\S]*read-model-only operator surface|read-model-only operator surface[\s\S]*operator_overview/i
+    );
+    expect(entityPlaybook).toMatch(
+      /operator_context[\s\S]*read-model-only operator surface|read-model-only operator surface[\s\S]*operator_context/i
+    );
+    expect(entityPlaybook).toMatch(
+      /calendar_overview[\s\S]*read-model-only calendar surface|read-model-only calendar surface[\s\S]*calendar_overview/i
+    );
     expect(entityPlaybook).toMatch(/forge_get_sleep_overview/);
     expect(entityPlaybook).toMatch(/forge_get_sports_overview/);
+    expect(entityPlaybook).toMatch(/forge_get_operator_overview/);
+    expect(entityPlaybook).toMatch(/forge_get_operator_context/);
+    expect(entityPlaybook).toMatch(/forge_get_calendar_overview/);
     expect(entityPlaybook).toMatch(
       /task_run[\s\S]*\/api\/v1\/tasks\/:id\/runs[\s\S]*\/api\/v1\/task-runs\/:id\/heartbeat/i
     );

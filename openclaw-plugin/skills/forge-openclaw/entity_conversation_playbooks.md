@@ -237,10 +237,11 @@ Use this quick split before the conversation gets too detailed.
   `preference_signal`, and `self_observation` are action workflows. Start from what
   the user is trying to do, then use the dedicated action tool or note-backed write
   model.
-- `sleep_overview` and `sports_overview` are read-model-only surfaces. Use them when
-  the user wants to review nights, workouts, training load, recovery context, or
-  health patterns before deciding whether one stored `sleep_session` or
-  `workout_session` needs enrichment.
+- `operator_overview`, `operator_context`, `calendar_overview`, `sleep_overview`,
+  and `sports_overview` are read-model-only surfaces. Use them when the user wants
+  to understand current Forge state, work risk, calendar commitments, nights,
+  workouts, training load, recovery context, or health patterns before deciding
+  whether a stored entity needs creation or enrichment.
 - Movement, Life Force, and Workbench are specialized domain areas. Use their
   dedicated route families for timelines and overlays, energy profile/templates and
   fatigue signals, and Workbench flow execution or result artifacts. When available,
@@ -282,6 +283,19 @@ still knowing the exact write/read family before it acts.
 - `calendar_connection`: specialized CRUD. Use provider discovery, connection CRUD,
   selected-calendar rediscovery, sync, and delete routes rather than batch entity
   tools.
+- `operator_overview`: read-model-only operator surface. Use
+  `forge_get_operator_overview` or `/api/v1/operator/overview` when the user wants
+  the current Forge picture, attention cues, or broad status before choosing a
+  specific entity action.
+- `operator_context`: read-model-only operator surface. Use
+  `forge_get_operator_context` or `/api/v1/operator/context` when the user wants
+  current work, active runs, risks, board context, or next moves before mutating
+  anything.
+- `calendar_overview`: read-model-only calendar surface. Use
+  `forge_get_calendar_overview` or `/api/v1/calendar/overview` when the user wants
+  mirrored events, work blocks, timeboxes, provider state, or availability before
+  creating a `calendar_event`, `work_block_template`, `task_timebox`, or
+  `calendar_connection`.
 - `task_run`: action workflow. Use task-run start, heartbeat, focus, complete, and
   release routes; never treat status changes as proof of live work.
 - `work_adjustment`: action workflow. Use the signed work-adjustment route for real
@@ -1061,6 +1075,81 @@ Preferred opening question:
 
 - "Which task or project should this time correction belong to?"
 
+## Operator Overview
+
+Aim: read the broad Forge state before choosing a specific action, without turning a
+status check into generic intake.
+
+Arc:
+
+1. Ask what the user is trying to understand about Forge overall.
+2. Read the operator overview before asking the user to reconstruct active work,
+   attention cues, or broad status from memory.
+3. Reflect the practical decision the overview should support.
+4. Move into a specific entity flow only when the overview points to a concrete goal,
+   project, task, habit, note, Psyche record, or follow-up action.
+
+Helpful follow-up lanes:
+
+- whether the user wants a broad status read, a priority decision, or a handoff
+- which owner or user scope matters if several humans or bots are involved
+- what decision the overview should help them make next
+
+Route note:
+
+- `operator_overview` is a read-model-only operator surface. Use
+  `forge_get_operator_overview` or `/api/v1/operator/overview`; do not create,
+  update, or delete `operator_overview` through batch CRUD.
+- If the read reveals a specific record that needs work, switch to that record's
+  normal route posture after the user chooses the follow-up.
+
+Ready to review when:
+
+- the broad question is clear enough
+- any owner or user scope that changes the read is clear enough
+
+Preferred opening question:
+
+- "What are you trying to understand about Forge overall right now?"
+
+## Operator Context
+
+Aim: inspect current work, active runs, risk, and next moves before changing records.
+
+Arc:
+
+1. Ask whether the user is checking current work, risk, blockers, active sessions, or
+   the next move.
+2. Read operator context before reopening a create or update intake.
+3. Reflect what the read is meant to decide: continue, stop, reprioritize, update, or
+   create.
+4. Move to task-run, work-adjustment, task, project, or note flow only when one
+   concrete follow-up is visible.
+
+Helpful follow-up lanes:
+
+- current task or active run
+- blocked or stale work
+- next move versus broad review
+- owner or user scope when bot and human work are both present
+
+Route note:
+
+- `operator_context` is a read-model-only operator surface. Use
+  `forge_get_operator_context` or `/api/v1/operator/context`; do not mutate it
+  through batch CRUD.
+- If the user decides to start, complete, release, or adjust work after the read,
+  switch to the dedicated action workflow for that operation.
+
+Ready to review when:
+
+- the current-work question is clear
+- any user or owner scope is clear enough
+
+Preferred opening question:
+
+- "What current work, risk, or next move are you trying to check?"
+
 ## Self Observation
 
 Aim: capture one observed episode in a structured chain without letting a loose note
@@ -1250,6 +1339,46 @@ Ready to review when:
 Preferred opening question:
 
 - "What are you trying to understand from your workout picture right now?"
+
+## Calendar Overview
+
+Aim: review commitments, work blocks, provider state, and existing timeboxes before
+creating or changing calendar records.
+
+Arc:
+
+1. Ask what the user is trying to understand or decide from the calendar picture.
+2. Ask for the date range or owner scope only if it changes the read.
+3. Read the calendar overview before asking the user to recreate availability from
+   memory.
+4. Reflect the practical decision the overview should support.
+5. Move to `calendar_event`, `work_block_template`, `task_timebox`, or
+   `calendar_connection` only when a specific follow-up action is visible.
+
+Helpful follow-up lanes:
+
+- which day, week, or date range matters
+- whether the question is availability, conflicts, provider health, work blocks, or
+  existing timeboxes
+- what scheduling or planning decision the review should support
+
+Route note:
+
+- `calendar_overview` is a read-model-only calendar surface. Use
+  `forge_get_calendar_overview` or `/api/v1/calendar/overview`; do not create,
+  update, or delete `calendar_overview` through batch CRUD.
+- If the review reveals a concrete scheduling action, switch to the stored
+  `calendar_event`, `work_block_template`, or `task_timebox` batch route, or to the
+  specialized `calendar_connection` lifecycle route.
+
+Ready to review when:
+
+- the user's practical calendar question is clear
+- the relevant date range or owner scope is clear enough
+
+Preferred opening question:
+
+- "What are you trying to understand or decide from your calendar picture?"
 
 ## Calendar Connection
 

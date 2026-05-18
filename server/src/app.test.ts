@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { access, chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
@@ -79,6 +80,10 @@ async function loadSharedMovementFixture(id: string) {
   const scenario = parsed.scenarios.find((entry) => entry.id === id);
   assert.ok(scenario, `Missing shared movement fixture: ${id}`);
   return scenario!;
+}
+
+function sha256Json(value: unknown) {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
 test("companion pairing defaults to Iroh transport", async () => {
@@ -2794,6 +2799,443 @@ test("mobile health sync exposes structured apple health workout descriptors and
       ["heart_rate", "heart_rate", "heart_rate", "heart_rate", "heart_rate", "running_power"]
     );
     assert.equal(detail.evidence.routePoints.length, 2);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("mobile health sync returns typed payload-too-large errors for oversized legacy uploads", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-health-too-large-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync",
+      headers: {
+        "content-type": "application/json"
+      },
+      payload: JSON.stringify({
+        oversized: "x".repeat(8_100_000)
+      })
+    });
+    assert.equal(response.statusCode, 413);
+    const body = response.json() as {
+      code: string;
+      recommendedMode?: string;
+      error: string;
+    };
+    assert.equal(body.code, "payload_too_large");
+    assert.equal(body.recommendedMode, "chunked");
+    assert.match(body.error, /chunked HealthKit sync/i);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("mobile health chunked sync assembles workout summaries, HR samples, and routes", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-health-chunked-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const pairingResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: {
+        userId: "user_operator"
+      }
+    });
+    assert.equal(pairingResponse.statusCode, 201);
+    const qrPayload = (
+      pairingResponse.json() as {
+        qrPayload: {
+          sessionId: string;
+          pairingToken: string;
+        };
+      }
+    ).qrPayload;
+
+    const startResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync-sessions",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        device: {
+          name: "Omar iPhone",
+          platform: "ios",
+          appVersion: "1.0",
+          sourceDevice: "iPhone"
+        },
+        permissions: {
+          healthKitAuthorized: true,
+          backgroundRefreshEnabled: true,
+          motionReady: false,
+          locationReady: false,
+          screenTimeReady: false
+        },
+        sourceStates: {
+          health: {
+            desiredEnabled: true,
+            appliedEnabled: true,
+            authorizationStatus: "approved",
+            syncEligible: true,
+            lastObservedAt: "2026-04-07T08:00:00.000Z",
+            metadata: {}
+          },
+          movement: {
+            desiredEnabled: false,
+            appliedEnabled: false,
+            authorizationStatus: "disabled",
+            syncEligible: false,
+            lastObservedAt: "2026-04-07T08:00:00.000Z",
+            metadata: {}
+          },
+          screenTime: {
+            desiredEnabled: false,
+            appliedEnabled: false,
+            authorizationStatus: "disabled",
+            syncEligible: false,
+            lastObservedAt: "2026-04-07T08:00:00.000Z",
+            metadata: {}
+          }
+        },
+        requestedFamilies: [
+          "workout_summaries",
+          "workout_time_series",
+          "workout_routes",
+          "vitals",
+          "movement",
+          "screen_time"
+        ]
+      }
+    });
+    assert.equal(startResponse.statusCode, 200);
+    const syncSessionId = (
+      startResponse.json() as { upload: { syncSessionId: string; chunkTargetBytes: number } }
+    ).upload.syncSessionId;
+    assert.ok(syncSessionId);
+
+    const workoutSummary = {
+      externalUid: "hk-workout-chunked-1",
+      workoutType: "walking",
+      startedAt: "2026-04-07T07:15:00.000Z",
+      endedAt: "2026-04-07T08:00:00.000Z",
+      activeEnergyKcal: 210,
+      totalEnergyKcal: 230,
+      distanceMeters: 3800,
+      stepCount: 4800,
+      exerciseMinutes: 45,
+      averageHeartRate: 116,
+      maxHeartRate: 148,
+      sourceDevice: "Apple Watch",
+      sourceSystem: "apple_health",
+      sourceBundleIdentifier: "com.apple.health",
+      sourceProductType: "Watch7,5",
+      activity: {
+        sourceSystem: "apple_health",
+        providerActivityType: "hk_workout_activity_type",
+        providerRawValue: 52,
+        canonicalKey: "walking",
+        canonicalLabel: "Walking",
+        familyKey: "cardio",
+        familyLabel: "Cardio",
+        isFallback: false
+      },
+      details: {
+        sourceSystem: "apple_health",
+        metrics: [],
+        events: [],
+        components: [],
+        metadata: {}
+      },
+      timeSeriesSamples: [],
+      routePoints: [],
+      captureQuality: {
+        status: "complete",
+        flags: [],
+        heartRateSamples: 2,
+        routePoints: 2,
+        associatedSampleQueryUsed: true,
+        fallbackTimeWindowUsed: false,
+        condensedSeriesExpanded: false
+      },
+      syncCursor: {
+        rawEvidenceVersion: "healthkit-workout-evidence-v2"
+      },
+      links: [],
+      annotations: {}
+    };
+    const summaryPayload = { workouts: [workoutSummary] };
+    const summaryChunk = {
+      chunkId: "chunk-summary-1",
+      sequence: 0,
+      family: "workout_summaries",
+      recordCount: 1,
+      byteCount: Buffer.byteLength(JSON.stringify(summaryPayload), "utf8"),
+      checksumSha256: sha256Json(summaryPayload),
+      payload: summaryPayload
+    };
+    const summaryResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/chunks`,
+      payload: summaryChunk
+    });
+    assert.equal(summaryResponse.statusCode, 200);
+    assert.equal((summaryResponse.json() as { chunk: { duplicate: boolean } }).chunk.duplicate, false);
+
+    const resumeResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync-sessions",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        device: {
+          name: "Omar iPhone",
+          platform: "ios",
+          appVersion: "1.0",
+          sourceDevice: "iPhone"
+        },
+        permissions: {
+          healthKitAuthorized: true,
+          backgroundRefreshEnabled: true,
+          motionReady: false,
+          locationReady: false,
+          screenTimeReady: false
+        },
+        sourceStates: {
+          health: {
+            desiredEnabled: true,
+            appliedEnabled: true,
+            authorizationStatus: "approved",
+            syncEligible: true,
+            lastObservedAt: "2026-04-07T08:00:00.000Z",
+            metadata: {}
+          },
+          movement: {
+            desiredEnabled: false,
+            appliedEnabled: false,
+            authorizationStatus: "disabled",
+            syncEligible: false,
+            lastObservedAt: "2026-04-07T08:00:00.000Z",
+            metadata: {}
+          },
+          screenTime: {
+            desiredEnabled: false,
+            appliedEnabled: false,
+            authorizationStatus: "disabled",
+            syncEligible: false,
+            lastObservedAt: "2026-04-07T08:00:00.000Z",
+            metadata: {}
+          }
+        },
+        requestedFamilies: [
+          "workout_summaries",
+          "workout_time_series",
+          "workout_routes",
+          "vitals",
+          "movement",
+          "screen_time"
+        ],
+        metadata: {
+          resumeSyncSessionId: syncSessionId
+        }
+      }
+    });
+    assert.equal(resumeResponse.statusCode, 200);
+    const resumedUpload = resumeResponse.json() as {
+      upload: { syncSessionId: string; receivedChunkIds: string[] };
+    };
+    assert.equal(resumedUpload.upload.syncSessionId, syncSessionId);
+    assert.deepEqual(resumedUpload.upload.receivedChunkIds, ["chunk-summary-1"]);
+
+    const duplicateResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/chunks`,
+      payload: summaryChunk
+    });
+    assert.equal(duplicateResponse.statusCode, 200);
+    assert.equal((duplicateResponse.json() as { chunk: { duplicate: boolean } }).chunk.duplicate, true);
+
+    const conflictResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/chunks`,
+      payload: {
+        ...summaryChunk,
+        checksumSha256: "different-checksum"
+      }
+    });
+    assert.equal(conflictResponse.statusCode, 409);
+    assert.equal(
+      (conflictResponse.json() as { code: string }).code,
+      "chunk_checksum_mismatch"
+    );
+
+    const badChecksumResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/chunks`,
+      payload: {
+        chunkId: "chunk-bad-checksum",
+        sequence: 1,
+        family: "vitals",
+        recordCount: 0,
+        byteCount: Buffer.byteLength(
+          JSON.stringify({ vitals: { daySummaries: [] } }),
+          "utf8"
+        ),
+        checksumSha256: "wrong-payload-checksum",
+        payload: { vitals: { daySummaries: [] } }
+      }
+    });
+    assert.equal(badChecksumResponse.statusCode, 409);
+    assert.equal(
+      (badChecksumResponse.json() as { code: string }).code,
+      "chunk_checksum_mismatch"
+    );
+
+    const timeSeriesPayload = {
+      workoutTimeSeries: [
+        {
+          externalUid: "hk-workout-chunked-1",
+          samples: [
+            {
+              sourceSampleUid: "hr-chunk-1",
+              seriesIndex: 0,
+              metricKey: "heart_rate",
+              label: "Heart rate",
+              category: "cardio",
+              unit: "bpm",
+              value: 118,
+              startedAt: "2026-04-07T07:15:00.000Z",
+              endedAt: "2026-04-07T07:30:00.000Z",
+              sourceDevice: "Apple Watch",
+              sourceBundleIdentifier: "com.apple.health",
+              sourceProductType: "Watch7,5",
+              captureMethod: "associated_workout",
+              qualityFlags: [],
+              metadata: {},
+              provenance: { sourceSystem: "apple_health" }
+            },
+            {
+              sourceSampleUid: "hr-chunk-2",
+              seriesIndex: 0,
+              metricKey: "heart_rate",
+              label: "Heart rate",
+              category: "cardio",
+              unit: "bpm",
+              value: 142,
+              startedAt: "2026-04-07T07:30:00.000Z",
+              endedAt: "2026-04-07T08:00:00.000Z",
+              sourceDevice: "Apple Watch",
+              sourceBundleIdentifier: "com.apple.health",
+              sourceProductType: "Watch7,5",
+              captureMethod: "associated_workout",
+              qualityFlags: [],
+              metadata: {},
+              provenance: { sourceSystem: "apple_health" }
+            }
+          ]
+        }
+      ]
+    };
+    const routePayload = {
+      workoutRoutes: [
+        {
+          externalUid: "hk-workout-chunked-1",
+          routePoints: [
+            {
+              sourceRouteUid: "route-chunk-1",
+              pointIndex: 0,
+              recordedAt: "2026-04-07T07:15:00.000Z",
+              latitude: 46.2044,
+              longitude: 6.1432,
+              altitudeMeters: 380,
+              horizontalAccuracyMeters: 4,
+              verticalAccuracyMeters: 6,
+              speedMps: 1.4,
+              courseDegrees: 42,
+              metadata: {},
+              provenance: { sourceSystem: "apple_health" }
+            },
+            {
+              sourceRouteUid: "route-chunk-1",
+              pointIndex: 1,
+              recordedAt: "2026-04-07T07:30:00.000Z",
+              latitude: 46.2052,
+              longitude: 6.1451,
+              altitudeMeters: 385,
+              horizontalAccuracyMeters: 4,
+              verticalAccuracyMeters: 6,
+              speedMps: 1.6,
+              courseDegrees: 48,
+              metadata: {},
+              provenance: { sourceSystem: "apple_health" }
+            }
+          ]
+        }
+      ]
+    };
+    for (const [index, [family, payload]] of [
+      ["workout_time_series", timeSeriesPayload],
+      ["workout_routes", routePayload],
+      ["vitals", { vitals: { daySummaries: [] } }],
+      ["movement", { movement: { settings: {}, knownPlaces: [], stays: [], trips: [] } }],
+      ["screen_time", { screenTime: { settings: {}, daySummaries: [], hourlySegments: [] } }]
+    ].entries()) {
+      const chunkPayload = {
+        chunkId: `chunk-${family}`,
+        sequence: index + 1,
+        family,
+        recordCount: 1,
+        byteCount: Buffer.byteLength(JSON.stringify(payload), "utf8"),
+        checksumSha256: sha256Json(payload),
+        payload
+      };
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/chunks`,
+        payload: chunkPayload
+      });
+      assert.equal(response.statusCode, 200, response.body);
+    }
+
+    const completeResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/complete`,
+      payload: {
+        finalCursor: {
+          workout_summaries: { lastWorkoutEndedAt: "2026-04-07T08:00:00.000Z" }
+        }
+      }
+    });
+    assert.equal(completeResponse.statusCode, 200);
+    const receipt = completeResponse.json() as { sync: { imported: { workouts: number } } };
+    assert.equal(receipt.sync.imported.workouts, 1);
+
+    const fitnessResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/health/fitness"
+    });
+    assert.equal(fitnessResponse.statusCode, 200);
+    const session = (
+      fitnessResponse.json() as {
+        fitness: {
+          sessions: Array<{ id: string; analytics?: { dataQuality: { heartRateSampleCount: number }; routeSummary: { pointCount: number } } }>;
+        };
+      }
+    ).fitness.sessions[0];
+    assert.ok(session);
+    assert.equal(session.analytics?.dataQuality.heartRateSampleCount, 2);
+    assert.equal(session.analytics?.routeSummary.pointCount, 2);
   } finally {
     await app.close();
     closeDatabase();
@@ -17196,6 +17638,22 @@ test("settings and local agent token management persist through the versioned AP
         /skip the meta lane question/i.test(step)
       )
     );
+    for (const focus of [
+      "operator_overview",
+      "operator_context",
+      "calendar_overview"
+    ]) {
+      const playbook = onboardingBody.onboarding.entityConversationPlaybooks.find(
+        (entry) => entry.focus === focus
+      );
+      assert.ok(playbook, `${focus} playbook should be published`);
+      assert.ok(
+        playbook.askSequence.some((step) =>
+          /before|overview|context/i.test(step)
+        ),
+        `${focus} playbook should guide read-before-write behavior`
+      );
+    }
     assert.deepEqual(
       onboardingBody.onboarding.recommendedPluginTools.bootstrap,
       ["forge_get_operator_overview"]
@@ -17418,6 +17876,21 @@ test("settings and local agent token management persist through the versioned AP
       onboardingBody.onboarding.entityRouteModel.readModelOnlySurfaces
         .sports_overview,
       "/api/v1/health/fitness"
+    );
+    assert.equal(
+      onboardingBody.onboarding.entityRouteModel.readModelOnlySurfaces
+        .calendar_overview,
+      "/api/v1/calendar/overview"
+    );
+    assert.equal(
+      onboardingBody.onboarding.entityRouteModel.readModelOnlySurfaces
+        .operator_overview,
+      "/api/v1/operator/overview"
+    );
+    assert.equal(
+      onboardingBody.onboarding.entityRouteModel.readModelOnlySurfaces
+        .operator_context,
+      "/api/v1/operator/context"
     );
     assert.equal(
       onboardingBody.onboarding.entityRouteModel.specializedCrudEntities

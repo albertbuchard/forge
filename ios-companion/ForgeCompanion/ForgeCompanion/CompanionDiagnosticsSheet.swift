@@ -84,6 +84,28 @@ struct CompanionDiagnosticsSheet: View {
 
             CompanionSectionCard {
                 VStack(alignment: .leading, spacing: 12) {
+                    sectionTitle("Chunked upload")
+                    overviewMetricRow("Session", appModel.activeHealthSyncSessionId ?? "No active session")
+                    overviewMetricRow("Last chunk", appModel.lastHealthSyncChunkId ?? "Waiting")
+                    overviewMetricRow("Last family", appModel.lastHealthSyncChunkFamily ?? "Waiting")
+                    overviewMetricRow(
+                        "Last payload",
+                        appModel.lastHealthSyncPayloadBytes.map { "\($0) bytes" } ?? "Waiting"
+                    )
+                    overviewMetricRow(
+                        "Server target",
+                        appModel.healthSyncChunkTargetBytes.map { "\($0) bytes" } ?? "Waiting"
+                    )
+                    overviewMetricRow(
+                        "Server max",
+                        appModel.healthSyncChunkMaxBytes.map { "\($0) bytes" } ?? "Waiting"
+                    )
+                    overviewMetricRow("Legacy fallback", appModel.healthSyncLegacyFallbackReason ?? "None")
+                }
+            }
+
+            CompanionSectionCard {
+                VStack(alignment: .leading, spacing: 12) {
                     sectionTitle("Latest payload")
                     if let summary = appModel.latestSyncPayloadSummary {
                         overviewMetricRow("Built", summary.builtAt.formatted(date: .omitted, time: .shortened))
@@ -97,6 +119,7 @@ struct CompanionDiagnosticsSheet: View {
                         overviewMetricRow("Workout avg HR", "\(summary.workoutsWithAverageHeartRate)")
                         overviewMetricRow("Workout max HR", "\(summary.workoutsWithMaxHeartRate)")
                         overviewMetricRow("Workout step counts", "\(summary.workoutsWithStepCount)")
+                        overviewMetricRow("Workout raw HR samples", "\(summary.rawHeartRateDatapointsSynced)")
                         overviewMetricRow("Known places", "\(summary.movementKnownPlaces)")
                         overviewMetricRow("Stays", "\(summary.movementStays)")
                         overviewMetricRow("Trips", "\(summary.movementTrips)")

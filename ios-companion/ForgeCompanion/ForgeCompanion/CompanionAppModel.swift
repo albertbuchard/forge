@@ -275,11 +275,33 @@ final class CompanionAppModel: ObservableObject {
         let capabilities: [String]
     }
 
+    private struct WorkoutUploadStats {
+        var workouts = 0
+        var workoutsWithAverageHeartRate = 0
+        var workoutsWithMaxHeartRate = 0
+        var workoutsWithStepCount = 0
+        var rawHeartRateDatapoints = 0
+    }
+
+    private struct HealthSyncRunResult {
+        let receipt: SyncReceipt
+        let payloadSummary: SyncPayloadSummary
+        let healthDataDeferred: Bool
+    }
+
     private enum SimulatorLocalForge {
         static let apiBaseUrl = "http://127.0.0.1:4317"
         static let uiBaseUrl = "http://127.0.0.1:3027/forge/"
         static let pairingLabel = "iOS Simulator"
         static let capabilities = ["healthkit.sleep", "healthkit.fitness"]
+    }
+
+    private static var disablesSimulatorAutomation: Bool {
+#if DEBUG
+        ProcessInfo.processInfo.environment["FORGE_COMPANION_DISABLE_SIMULATOR_AUTOMATION"] == "1"
+#else
+        false
+#endif
     }
 
     private enum StorageKeys {
@@ -292,6 +314,7 @@ final class CompanionAppModel: ObservableObject {
         static let healthAccessStatus = "forge_companion_health_access_status"
         static let deferredHealthPrompt = "forge_companion_deferred_health_prompt"
         static let movementPromptDeferred = "forge_companion_deferred_movement_prompt"
+        static let activeHealthSyncSessionId = "forge_companion_active_health_sync_session_id"
     }
 
     @Published var pairing: PairingPayload? {
@@ -319,6 +342,13 @@ final class CompanionAppModel: ObservableObject {
     }
     @Published var latestSyncReport: SyncReport?
     @Published var latestSyncPayloadSummary: SyncPayloadSummary?
+    @Published var activeHealthSyncSessionId: String?
+    @Published var lastHealthSyncChunkId: String?
+    @Published var lastHealthSyncChunkFamily: String?
+    @Published var lastHealthSyncPayloadBytes: Int?
+    @Published var healthSyncChunkTargetBytes: Int?
+    @Published var healthSyncChunkMaxBytes: Int?
+    @Published var healthSyncLegacyFallbackReason: String?
     @Published var healthSyncEnabled = true {
         didSet {
             UserDefaults.standard.set(healthSyncEnabled, forKey: StorageKeys.healthSyncEnabled)
@@ -468,13 +498,19 @@ final class CompanionAppModel: ObservableObject {
             companionDebugLog("CompanionAppModel", "background refresh closure invoked")
             return await self.performBackgroundRefresh()
         }
-        if pairing != nil {
+        if pairing != nil && Self.disablesSimulatorAutomation == false {
             companionDebugLog("CompanionAppModel", "init scheduling background refresh because pairing exists")
             backgroundScheduler.schedule()
             startMaintenanceLoop(reason: "restore")
         }
         Task {
             companionDebugLog("CompanionAppModel", "startup task begin")
+            if Self.disablesSimulatorAutomation {
+                await refreshHealthAccessStatus()
+                refreshSyncState()
+                companionDebugLog("CompanionAppModel", "startup simulator automation disabled")
+                return
+            }
             await attemptLocalSimulatorBootstrapIfNeeded()
             await refreshHealthAccessStatus()
             refreshSyncState()
@@ -928,6 +964,9 @@ final class CompanionAppModel: ObservableObject {
         {
             latestSyncPayloadSummary = summary
         }
+        activeHealthSyncSessionId = UserDefaults.standard.string(
+            forKey: StorageKeys.activeHealthSyncSessionId
+        )
 
         healthPermissionPromptDeferred = UserDefaults.standard.bool(
             forKey: StorageKeys.deferredHealthPrompt
@@ -1406,22 +1445,14 @@ final class CompanionAppModel: ObservableObject {
             await screenTimeStore.prepareSnapshotForSync(reason: trigger)
             let movementPayload = movementStore.buildMovementPayload()
             let screenTimePayload = screenTimeStore.buildScreenTimePayload()
-            let buildResult = try await healthStore.buildSyncPayload(
+            let syncResult = try await runChunkedHealthSync(
                 pairing: pairing,
-                healthKitAuthorized: healthAuthorizationGranted,
-                healthSyncEnabled: healthSyncEnabled,
-                lastSuccessfulSyncAt: lastSuccessfulSyncAt,
-                sourceStates: currentSourceStates,
+                trigger: trigger,
                 movementPayload: movementPayload,
                 screenTimePayload: screenTimePayload
             )
-            let payload = buildResult.payload
-            let payloadSummary = buildPayloadSummary(from: payload)
-            latestSyncPayloadSummary = payloadSummary
-            let receipt = try await syncClient.pushHealthSync(
-                payload: payload,
-                pairing: pairing
-            )
+            let receipt = syncResult.receipt
+            let payloadSummary = syncResult.payloadSummary
             if let pairingSession = receipt.pairingSession {
                 applyPairingSessionState(pairingSession, reason: "sync-\(trigger)")
             }
@@ -1451,7 +1482,7 @@ final class CompanionAppModel: ObservableObject {
             )
             latestSyncReport = report
             persistSyncState(report: report, payloadSummary: payloadSummary)
-            if buildResult.healthDataDeferred {
+            if syncResult.healthDataDeferred {
                 lastSyncMessage =
                     "Synced movement while HealthKit stayed locked. Health data will resume after unlock."
             } else {
@@ -1502,6 +1533,160 @@ final class CompanionAppModel: ObservableObject {
             syncState = .error
             return false
         }
+    }
+
+    private func runChunkedHealthSync(
+        pairing: PairingPayload,
+        trigger: String,
+        movementPayload: CompanionSyncPayload.MovementPayload,
+        screenTimePayload: CompanionSyncPayload.ScreenTimePayload
+    ) async throws -> HealthSyncRunResult {
+        let permissions = currentHealthSyncPermissions(
+            movementPayload: movementPayload,
+            screenTimePayload: screenTimePayload
+        )
+        let sourceStates = currentSourceStates
+        let syncClient = self.syncClient
+        var uploadSession: ForgeSyncClient.HealthSyncUploadSession?
+        var sequence = 0
+        var workoutStats = WorkoutUploadStats()
+        var healthDataDeferred = false
+
+        do {
+            lastSyncMessage = "Starting Forge sync"
+            healthSyncLegacyFallbackReason = nil
+            let session = try await syncClient.startHealthSyncSession(
+                pairing: pairing,
+                permissions: permissions,
+                sourceStates: sourceStates,
+                resumeSyncSessionId: activeHealthSyncSessionId
+            )
+            uploadSession = session
+            activeHealthSyncSessionId = session.syncSessionId
+            UserDefaults.standard.set(
+                session.syncSessionId,
+                forKey: StorageKeys.activeHealthSyncSessionId
+            )
+            healthSyncChunkTargetBytes = session.chunkTargetBytes
+            healthSyncChunkMaxBytes = session.chunkMaxBytes
+            if session.receivedChunkIds.isEmpty == false {
+                healthSyncLegacyFallbackReason =
+                    "Resuming \(session.receivedChunkIds.count) accepted chunks"
+            }
+
+            lastSyncMessage = "Preparing HealthKit data"
+            let buildResult = try await healthStore.buildSyncPayload(
+                pairing: pairing,
+                healthKitAuthorized: healthAuthorizationGranted,
+                healthSyncEnabled: healthSyncEnabled,
+                lastSuccessfulSyncAt: lastSuccessfulSyncAt,
+                sourceStates: sourceStates,
+                movementPayload: movementPayload,
+                screenTimePayload: screenTimePayload,
+                includeWorkouts: false
+            )
+            healthDataDeferred = buildResult.healthDataDeferred
+            var payloadSummary = buildPayloadSummary(
+                from: buildResult.payload,
+                workoutStats: workoutStats
+            )
+            latestSyncPayloadSummary = payloadSummary
+
+            lastSyncMessage = "Uploading sleep, vitals, movement, and screen time"
+            lastHealthSyncChunkFamily = "base_health_families"
+            lastHealthSyncPayloadBytes = try? JSONEncoder().encode(buildResult.payload).count
+            sequence = try await syncClient.uploadBaseHealthSyncChunks(
+                payload: buildResult.payload,
+                uploadSession: session,
+                pairing: pairing,
+                startingSequence: sequence
+            )
+            lastHealthSyncChunkId = "\(session.syncSessionId)-\(String(format: "%06d", max(0, sequence - 1)))"
+
+            if healthDataDeferred == false {
+                lastSyncMessage = "Uploading workouts"
+                _ = try await healthStore.streamWorkoutSessionBatches(
+                    healthKitAuthorized: healthAuthorizationGranted,
+                    healthSyncEnabled: healthSyncEnabled,
+                    lastSuccessfulSyncAt: lastSuccessfulSyncAt,
+                    batchSize: 10
+                ) { [weak self] workouts, progress in
+                    await MainActor.run {
+                        self?.lastSyncMessage =
+                            "Uploading workouts \(progress.uploadedWorkouts)/\(progress.totalWorkouts)"
+                        self?.lastHealthSyncChunkFamily = "workouts"
+                        self?.lastHealthSyncPayloadBytes = try? JSONEncoder().encode(workouts).count
+                    }
+                    sequence = try await syncClient.uploadWorkoutHealthSyncChunks(
+                        workouts: workouts,
+                        uploadSession: session,
+                        pairing: pairing,
+                        startingSequence: sequence
+                    )
+                    let batchStats = Self.workoutUploadStats(for: workouts)
+                    await MainActor.run {
+                        workoutStats.workouts += batchStats.workouts
+                        workoutStats.workoutsWithAverageHeartRate += batchStats.workoutsWithAverageHeartRate
+                        workoutStats.workoutsWithMaxHeartRate += batchStats.workoutsWithMaxHeartRate
+                        workoutStats.workoutsWithStepCount += batchStats.workoutsWithStepCount
+                        workoutStats.rawHeartRateDatapoints += batchStats.rawHeartRateDatapoints
+                        payloadSummary = self?.buildPayloadSummary(
+                            from: buildResult.payload,
+                            workoutStats: workoutStats
+                        ) ?? payloadSummary
+                        self?.latestSyncPayloadSummary = payloadSummary
+                        self?.lastHealthSyncChunkId =
+                            "\(session.syncSessionId)-\(String(format: "%06d", max(0, sequence - 1)))"
+                    }
+                }
+            }
+
+            lastSyncMessage = "Finalizing in Forge"
+            let receipt = try await syncClient.completeHealthSyncSession(
+                uploadSession: session,
+                pairing: pairing,
+                expectedCounts: [
+                    "workout_summaries": workoutStats.workouts,
+                    "workout_time_series": workoutStats.rawHeartRateDatapoints,
+                    "sleep_nights": buildResult.payload.sleepNights.count,
+                    "sleep_segments": buildResult.payload.sleepSegments.count,
+                    "sleep_raw_records": buildResult.payload.sleepRawRecords.count
+                ]
+            )
+            activeHealthSyncSessionId = nil
+            UserDefaults.standard.removeObject(forKey: StorageKeys.activeHealthSyncSessionId)
+            return HealthSyncRunResult(
+                receipt: receipt,
+                payloadSummary: payloadSummary,
+                healthDataDeferred: healthDataDeferred
+            )
+        } catch {
+            if let uploadSession {
+                activeHealthSyncSessionId = uploadSession.syncSessionId
+                UserDefaults.standard.set(
+                    uploadSession.syncSessionId,
+                    forKey: StorageKeys.activeHealthSyncSessionId
+                )
+                lastSyncMessage = "Forge will resume from the last accepted chunk"
+            }
+            throw error
+        }
+    }
+
+    private func currentHealthSyncPermissions(
+        movementPayload: CompanionSyncPayload.MovementPayload,
+        screenTimePayload: CompanionSyncPayload.ScreenTimePayload
+    ) -> CompanionSyncPayload.Permissions {
+        CompanionSyncPayload.Permissions(
+            healthKitAuthorized: healthAuthorizationGranted,
+            backgroundRefreshEnabled: UIApplication.shared.backgroundRefreshStatus == .available,
+            motionReady: movementPayload.settings.motionPermissionStatus == "ready",
+            locationReady: movementPayload.settings.locationPermissionStatus == "always"
+                || movementPayload.settings.locationPermissionStatus == "when_in_use",
+            screenTimeReady: screenTimePayload.settings.authorizationStatus == "approved"
+                && screenTimePayload.settings.trackingEnabled
+                && screenTimePayload.settings.syncEnabled
+        )
     }
 
     private func refreshMovementBootstrap() async {
@@ -1790,9 +1975,9 @@ final class CompanionAppModel: ObservableObject {
             SyncCoverageRow(
                 id: "heart-rate",
                 title: "Heart rate",
-                value: "\(payloadSummary?.workoutsWithAverageHeartRate ?? 0) avg + \(payloadSummary?.workoutsWithMaxHeartRate ?? 0) max",
-                detail: "Workout heart-rate summaries still sync, and Forge now also receives daily resting heart rate, walking heart rate, and HRV body signals.",
-                isMissing: (payloadSummary?.workoutsWithAverageHeartRate ?? 0) == 0 && (payloadSummary?.workoutsWithMaxHeartRate ?? 0) == 0 && (payloadSummary?.vitalsMetricEntries ?? 0) == 0
+                value: "\(payloadSummary?.rawHeartRateDatapointsSynced ?? 0) raw + \(payloadSummary?.workoutsWithAverageHeartRate ?? 0) avg + \(payloadSummary?.workoutsWithMaxHeartRate ?? 0) max",
+                detail: "Workout heart-rate samples stream as raw HealthKit evidence in chunked sync, with summaries and daily resting HR/HRV/VO2 max kept alongside them.",
+                isMissing: (payloadSummary?.rawHeartRateDatapointsSynced ?? 0) == 0 && (payloadSummary?.workoutsWithAverageHeartRate ?? 0) == 0 && (payloadSummary?.workoutsWithMaxHeartRate ?? 0) == 0 && (payloadSummary?.vitalsMetricEntries ?? 0) == 0
             ),
             SyncCoverageRow(
                 id: "movement",
@@ -1839,18 +2024,36 @@ final class CompanionAppModel: ObservableObject {
         await watchSessionManager.refreshBootstrapIfPossible(reason: reason)
     }
 
-    private func buildPayloadSummary(from payload: CompanionSyncPayload) -> SyncPayloadSummary {
-        SyncPayloadSummary(
+    private static func workoutUploadStats(
+        for workouts: [CompanionSyncPayload.WorkoutSession]
+    ) -> WorkoutUploadStats {
+        WorkoutUploadStats(
+            workouts: workouts.count,
+            workoutsWithAverageHeartRate: workouts.reduce(0) { $0 + ($1.averageHeartRate == nil ? 0 : 1) },
+            workoutsWithMaxHeartRate: workouts.reduce(0) { $0 + ($1.maxHeartRate == nil ? 0 : 1) },
+            workoutsWithStepCount: workouts.reduce(0) { $0 + ($1.stepCount == nil ? 0 : 1) },
+            rawHeartRateDatapoints: workouts.reduce(0) { sum, workout in
+                sum + workout.timeSeriesSamples.filter { $0.metricKey == "heart_rate" }.count
+            }
+        )
+    }
+
+    private func buildPayloadSummary(
+        from payload: CompanionSyncPayload,
+        workoutStats: WorkoutUploadStats? = nil
+    ) -> SyncPayloadSummary {
+        let stats = workoutStats ?? Self.workoutUploadStats(for: payload.workouts)
+        return SyncPayloadSummary(
             builtAt: .now,
             sleepSessions: payload.sleepSessions.count,
             sleepNights: payload.sleepNights.count,
             sleepSegments: payload.sleepSegments.count,
             sleepRawRecords: payload.sleepRawRecords.count,
             sleepStageEntries: payload.sleepNights.reduce(0) { $0 + $1.stageBreakdown.count },
-            workouts: payload.workouts.count,
-            workoutsWithAverageHeartRate: payload.workouts.reduce(0) { $0 + ($1.averageHeartRate == nil ? 0 : 1) },
-            workoutsWithMaxHeartRate: payload.workouts.reduce(0) { $0 + ($1.maxHeartRate == nil ? 0 : 1) },
-            workoutsWithStepCount: payload.workouts.reduce(0) { $0 + ($1.stepCount == nil ? 0 : 1) },
+            workouts: stats.workouts,
+            workoutsWithAverageHeartRate: stats.workoutsWithAverageHeartRate,
+            workoutsWithMaxHeartRate: stats.workoutsWithMaxHeartRate,
+            workoutsWithStepCount: stats.workoutsWithStepCount,
             movementKnownPlaces: payload.movement.knownPlaces.count,
             movementStays: payload.movement.stays.count,
             movementTrips: payload.movement.trips.count,
@@ -1863,7 +2066,7 @@ final class CompanionAppModel: ObservableObject {
             screenTimeTotalActivitySeconds: payload.screenTime.daySummaries.isEmpty == false
                 ? payload.screenTime.daySummaries.reduce(0) { $0 + $1.totalActivitySeconds }
                 : payload.screenTime.hourlySegments.reduce(0) { $0 + $1.totalActivitySeconds },
-            rawHeartRateDatapointsSynced: 0
+            rawHeartRateDatapointsSynced: stats.rawHeartRateDatapoints
         )
     }
 

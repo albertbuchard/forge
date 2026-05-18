@@ -1,10 +1,71 @@
 # Forge Question Flow Improvement Cycles
 
-Latest run date: 2026-05-17
+Latest run date: 2026-05-18
 
 This report records the three-cycle evaluation for Forge agent question flows. The
 same full flow set was tested in each cycle so improvements were kept only where they
 helped the entity or specialized surface.
+
+## 2026-05-18 Automation Pass
+
+Setup verification:
+
+- Confirmed OpenClaw and Hermes configs point at
+  `/Users/omarclaw/Documents/aurel-monorepo/data/forge`.
+- Verified the live Forge process on `127.0.0.1:4317` has
+  `/Users/omarclaw/Documents/aurel-monorepo/data/forge/forge.sqlite` open. No data
+  root was changed, merged, deleted, or overwritten.
+- Built the repo-local OpenClaw plugin with `npm run build:openclaw-plugin`.
+- Built the Hermes packaged runtime with
+  `node ./plugins/forge-hermes/scripts/build-package-runtime.mjs`.
+- Reinstalled OpenClaw from `./openclaw-plugin` with `--link`, enabled it, restarted
+  the gateway, and verified `openclaw plugins info forge-openclaw-plugin` reports
+  source path `~/Documents/aurel-monorepo/projects/forge/openclaw-plugin` and
+  recorded version `0.2.69`.
+- Reinstalled Hermes editable from `./plugins/forge-hermes`, restarted the Hermes
+  gateway, and verified `forge-hermes-plugin 0.2.69` imports from the repo-local
+  editable package.
+- Verified live Forge health, OpenClaw `forge health`, live onboarding, and OpenAPI.
+  Live onboarding publishes 40 entity/catalog entries, shared batch routes for normal
+  entities, specialized route families for Movement, Life Force, and Workbench, and
+  read-only surfaces for operator, calendar, self-observation, sleep, and sports.
+
+Every cycle retested the full stored-entity and domain set: goal, project, strategy,
+task, habit, tag, note, insight, task_run, work_adjustment, calendar_event,
+work_block_template, task_timebox, calendar_connection, preference_catalog,
+preference_catalog_item, preference_context, preference_item, preference_judgment,
+preference_signal, questionnaire_instrument, questionnaire_run, self_observation,
+sleep_session, workout_session, wiki_page, every Psyche entity, Movement, Life Force,
+Workbench, and the read-only operator, calendar, sleep, and sports overview surfaces.
+
+Cycle 1 tested all existing flows with create, update, review, and route-selection
+scenarios. Strengths held: Psyche still starts from lived examples and functional
+hypotheses, normal stored records stay batch-first, and Movement/Life Force/Workbench
+use dedicated routes. The gap was automation freshness: live onboarding already exposed
+`operator_overview`, `operator_context`, and `calendar_overview` as important
+read-model surfaces, but the simulation matrix and playbook did not test them. The
+change added Operator Overview, Operator Context, and Calendar Overview sections,
+scenarios, preferred opening questions, route notes, and matrix entries. Retest passed,
+so the expanded read-model coverage was kept.
+
+Cycle 2 retested the expanded full set against live onboarding and OpenAPI. Question
+quality improved for the three new read-only surfaces, but the live onboarding payload
+still did not publish the same conversation playbooks and lacked the entity-style
+`operator_context` alias beside `operatorContext`. That made the route model slightly
+less self-contained for new agents. The change added the missing alias, added
+onboarding conversation playbooks for `operator_overview`, `operator_context`, and
+`calendar_overview`, and added contract tests to keep those surfaces explicit. Retest
+passed, so the onboarding changes were kept.
+
+Cycle 3 retested the full matrix again with emphasis on installed-agent parity. The
+remaining weakness was bundled guidance drift: OpenClaw, Hermes, and Codex skill
+copies did not all carry the expanded read-model language or the updated
+entity-conversation playbook. The change synchronized the playbook copies, updated
+OpenClaw/Hermes/Codex skill text to name `operatorOverview`, `operatorContext`,
+`calendarOverview`, `sleepOverview`, `sportsOverview`, and the entity-style aliases,
+and locked parity with skill-playbook tests. Retest passed across the focused
+question-flow, onboarding-contract, skill-parity, and server onboarding tests. No
+entity-specific regression was observed, so the parity changes were kept.
 
 ## 2026-05-17 Automation Pass
 
@@ -273,9 +334,12 @@ Every cycle simulated creation, update, review, or navigation around these flows
 | insight | Save a pattern from recent blocked work sessions. |
 | task_run | Start live work on the current task. |
 | work_adjustment | Add real minutes that happened outside a live run. |
+| operator_overview | Review Forge overall to decide what needs attention first. |
+| operator_context | Inspect current work, risk, and next moves before changing anything. |
 | calendar_event | Schedule a focused review call in local time. |
 | work_block_template | Create a repeating protected writing block. |
 | task_timebox | Reserve a future slot for an existing task. |
+| calendar_overview | Review a week before creating a timebox or event. |
 | calendar_connection | Connect a calendar for read/write planning. |
 | preference_catalog | Create a comparison pool for places to work. |
 | preference_catalog_item | Add one cafe candidate without ambiguity. |
