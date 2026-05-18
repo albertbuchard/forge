@@ -1,7 +1,9 @@
-Forge Companion 1.0.37 polishes the Forge QR pairing flow on iPhone.
+Forge Companion 1.0.38 expands HealthKit workout sync for the new Forge sports cockpit.
 
-The setup screen now leads with Scan Forge QR, keeps Manual connection as the fallback,
-and explains the Forge Iroh/QUIC route without requiring a separate Tailscale app.
+Workouts now send richer HealthKit evidence to Forge, including heart-rate timelines,
+route points, workout events, activity phases, energy, distance, speed, cadence, power,
+steps, swimming metrics, flights, and VO2 max samples when Health permissions allow it.
 
-This build also ships through the corrected TestFlight release lane so processed builds
-are distributed to the configured beta group instead of only being uploaded.
+Heart-rate samples are linked to each workout first and then recovered by strict workout
+time windows when HealthKit associations are missing, so older sessions can still produce
+clear HR coverage, zone, and sync-quality states in Forge.
