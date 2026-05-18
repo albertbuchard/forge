@@ -33,6 +33,7 @@ import type {
   DiagnosticLogEntry,
   EventLogEntry,
   FitnessViewData,
+  HealthZoneProfileRecord,
   GitHelperOverview,
   GitHelperSearchKind,
   GitHelperSearchResponse,
@@ -128,6 +129,7 @@ import type {
   WikiTreeNode,
   SleepViewData,
   WorkBlockTemplate,
+  WorkoutSessionDetailPayload,
   XpMetricsPayload,
   CrudEntityType,
   DeleteMode
@@ -3272,6 +3274,25 @@ export function getFitnessView(userIds?: string[] | unknown) {
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
   return request<{ fitness: FitnessViewData }>(
     `/api/v1/health/fitness${suffix}`
+  );
+}
+
+export function getWorkoutDetail(
+  workoutId: string,
+  resolution: "adaptive" | "raw" = "adaptive"
+) {
+  const search = new URLSearchParams({ resolution });
+  return request<WorkoutSessionDetailPayload>(
+    `/api/v1/health/workouts/${workoutId}/detail?${search.toString()}`
+  );
+}
+
+export function getHealthZoneProfile(userIds?: string[] | unknown) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ zoneProfile: HealthZoneProfileRecord }>(
+    `/api/v1/health/zone-profile${suffix}`
   );
 }
 

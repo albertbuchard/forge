@@ -1,6 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Scatter,
+  ScatterChart,
+  Tooltip,
+  XAxis,
+  YAxis
+} from "recharts";
 import {
   ArrowRight,
   CalendarDays,
@@ -49,6 +63,15 @@ type WorkoutDraft = {
   socialContext: string;
   tagsText: string;
   linkValues: string[];
+};
+
+const ZONE_COLORS: Record<string, string> = {
+  below_z1: "#94a3b8",
+  zone_1: "#38bdf8",
+  zone_2: "#22c55e",
+  zone_3: "#eab308",
+  zone_4: "#f97316",
+  zone_5: "#ef4444"
 };
 
 function humanizeToken(value: string | null | undefined) {
@@ -770,6 +793,35 @@ export function SportsPage() {
   }
 
   const { summary, weeklyTrend, typeBreakdown } = fitness;
+  const zoneMix = summary.zoneMix ?? [];
+  const zoneChartData = zoneMix.map((zone) => ({
+    zone: zone.label,
+    minutes: Math.round(zone.seconds / 60),
+    percentage: Math.round(zone.percentage * 100),
+    fill: ZONE_COLORS[zone.key] ?? "#f8fafc"
+  }));
+  const trendChartData = weeklyTrend.map((entry) => {
+    const zones = Object.fromEntries(
+      (entry.zoneDurations ?? []).map((zone) => [
+        zone.key,
+        Math.round(zone.seconds / 60)
+      ])
+    );
+    return {
+      date: entry.dateKey.slice(5),
+      duration: entry.durationMinutes,
+      load: entry.trainingLoad ?? 0,
+      coverage: Math.round((entry.heartRateCoverage ?? 0) * 100),
+      ...zones
+    };
+  });
+  const scatterData = sessions.map((session) => ({
+    duration: Math.round(session.durationSeconds / 60),
+    intensity: Math.round(((session.analytics?.load?.intensity ?? 0) * 100)),
+    load: session.analytics?.load?.trimp ?? 0,
+    type: workoutTypeLabel(session),
+    name: workoutTypeLabel(session)
+  }));
 
   function patchDraft(sessionId: string, patch: Partial<WorkoutDraft>) {
     setDrafts((current) => {
@@ -875,13 +927,13 @@ export function SportsPage() {
         </Card>
         <Card>
           <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-            Average effort
+            Training load
           </div>
           <div className="mt-3 font-display text-4xl text-white">
-            {summary.averageEffort || "n/a"}
+            {summary.totalTrainingLoad ?? "n/a"}
           </div>
           <div className="mt-2 text-sm text-white/58">
-            Subjective effort across sessions that carry a rating.
+            Forge TRIMP across recent sessions.
           </div>
         </Card>
         <Card>
@@ -897,17 +949,150 @@ export function SportsPage() {
         </Card>
         <Card>
           <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-            Top block
+            HR coverage
           </div>
-          <div className="mt-3 text-xl text-white">
-            {summary.topWorkoutTypeLabel ?? summary.topWorkoutType ?? "n/a"}
+          <div className="mt-3 font-display text-4xl text-white">
+            {Math.round((summary.averageHeartRateCoverage ?? 0) * 100)}%
           </div>
           <div className="mt-2 text-sm text-white/58">
-            Dominant workout type across the recent window.
+            Average raw HR sample coverage.
           </div>
         </Card>
         </section>
       </SportsSummaryBox>
+
+      <SportsCompositionBox>
+        <section className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+          <Card className="min-h-[320px]">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+              Load and volume trend
+            </div>
+            <div className="mt-4 h-[260px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={trendChartData}>
+                  <defs>
+                    <linearGradient id="sportsLoad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#f97316" stopOpacity={0.36} />
+                      <stop offset="100%" stopColor="#f97316" stopOpacity={0.04} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                  <XAxis dataKey="date" tick={{ fill: "rgba(255,255,255,0.55)", fontSize: 11 }} />
+                  <YAxis tick={{ fill: "rgba(255,255,255,0.55)", fontSize: 11 }} width={34} />
+                  <Tooltip
+                    contentStyle={{
+                      background: "rgba(8,12,22,0.94)",
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      borderRadius: 8,
+                      color: "white"
+                    }}
+                  />
+                  <Area type="monotone" dataKey="load" stroke="#f97316" fill="url(#sportsLoad)" strokeWidth={2} />
+                  <Area type="monotone" dataKey="duration" stroke="#38bdf8" fill="rgba(56,189,248,0.10)" strokeWidth={2} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+
+          <Card>
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+              Zone distribution
+            </div>
+            <div className="mt-4 grid gap-3">
+              {zoneMix.map((zone) => (
+                <div key={zone.key} className="grid gap-2">
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <span className="text-white/72">{zone.label}</span>
+                    <span className="text-white">
+                      {Math.round(zone.percentage * 100)}% · {minutesLabel(zone.seconds)}
+                    </span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-white/[0.08]">
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${Math.max(1, zone.percentage * 100)}%`,
+                        background: ZONE_COLORS[zone.key] ?? "#f8fafc"
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-5 h-[180px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={zoneChartData}>
+                  <XAxis dataKey="zone" tick={{ fill: "rgba(255,255,255,0.55)", fontSize: 10 }} />
+                  <YAxis tick={{ fill: "rgba(255,255,255,0.55)", fontSize: 10 }} width={34} />
+                  <Tooltip
+                    contentStyle={{
+                      background: "rgba(8,12,22,0.94)",
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      borderRadius: 8,
+                      color: "white"
+                    }}
+                  />
+                  <Bar dataKey="minutes" fill="#f97316" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+        </section>
+      </SportsCompositionBox>
+
+      <SportsCompositionBox>
+        <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <Card className="min-h-[300px]">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+              Duration vs intensity
+            </div>
+            <div className="mt-4 h-[250px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <ScatterChart data={scatterData}>
+                  <CartesianGrid stroke="rgba(255,255,255,0.08)" />
+                  <XAxis type="number" dataKey="duration" name="minutes" tick={{ fill: "rgba(255,255,255,0.55)", fontSize: 11 }} />
+                  <YAxis type="number" dataKey="intensity" name="intensity" tick={{ fill: "rgba(255,255,255,0.55)", fontSize: 11 }} width={38} />
+                  <Tooltip
+                    cursor={{ strokeDasharray: "3 3" }}
+                    contentStyle={{
+                      background: "rgba(8,12,22,0.94)",
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      borderRadius: 8,
+                      color: "white"
+                    }}
+                  />
+                  <Scatter dataKey="load" fill="#f97316" />
+                </ScatterChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+          <Card>
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+              Evidence quality
+            </div>
+            <div className="mt-4 grid gap-3">
+              <div className="rounded-[8px] bg-white/[0.04] p-4">
+                <div className="text-sm text-white/58">Raw HR coverage</div>
+                <div className="mt-2 text-2xl text-white">
+                  {Math.round((summary.averageHeartRateCoverage ?? 0) * 100)}%
+                </div>
+              </div>
+              <div className="rounded-[8px] bg-white/[0.04] p-4">
+                <div className="text-sm text-white/58">Route-backed workouts</div>
+                <div className="mt-2 text-2xl text-white">
+                  {summary.routeWorkoutCount ?? 0}
+                </div>
+              </div>
+              <div className="rounded-[8px] bg-white/[0.04] p-4">
+                <div className="text-sm text-white/58">Top sport</div>
+                <div className="mt-2 text-lg text-white">
+                  {summary.topWorkoutTypeLabel ?? summary.topWorkoutType ?? "n/a"}
+                </div>
+              </div>
+            </div>
+          </Card>
+        </section>
+      </SportsCompositionBox>
 
       <SportsCompositionBox>
         <section className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
@@ -1067,22 +1252,20 @@ export function SportsPage() {
                         transform: `translateY(${virtualRow.start}px)`
                       }}
                     >
-                      <button
-                        type="button"
+                      <div
                         className="grid w-full gap-3 rounded-[20px] border border-white/8 bg-white/[0.04] px-4 py-3 text-left transition hover:bg-white/[0.07]"
-                        onClick={() => {
-                          setSelectedWorkoutId(session.id);
-                          setEditorStep(0);
-                        }}
                       >
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <div className="flex items-center gap-2 text-white">
+                            <Link
+                              to={`/sports/workouts/${session.id}`}
+                              className="flex items-center gap-2 text-white transition hover:text-[var(--primary)]"
+                            >
                               <Dumbbell className="size-4 shrink-0 text-[var(--primary)]" />
                               <span className="truncate text-base font-medium">
                                 {workoutTypeLabel(session)}
                               </span>
-                            </div>
+                            </Link>
                             <div className="mt-2 flex items-center gap-2 text-sm text-white/56">
                               <CalendarDays className="size-3.5 shrink-0" />
                               <span className="truncate">
@@ -1093,10 +1276,18 @@ export function SportsPage() {
                               {activityFamilyLabel(session)} · {session.sourceDevice}
                             </div>
                           </div>
-                          <div className="inline-flex items-center gap-2 rounded-full bg-white/[0.05] px-3 py-1.5 text-xs text-white/70">
+                          <button
+                            type="button"
+                            aria-label={`Edit ${workoutTypeLabel(session)} reflection`}
+                            className="inline-flex items-center gap-2 rounded-full bg-white/[0.05] px-3 py-1.5 text-xs text-white/70 transition hover:bg-white/[0.08] hover:text-white"
+                            onClick={() => {
+                              setSelectedWorkoutId(session.id);
+                              setEditorStep(0);
+                            }}
+                          >
                             <span>{hasReflection ? "Reflected" : "Needs reflection"}</span>
                             <ArrowRight className="size-3.5" />
-                          </div>
+                          </button>
                         </div>
                         <div className="flex flex-wrap gap-2">
                           <Badge>{minutesLabel(session.durationSeconds)}</Badge>
@@ -1119,8 +1310,14 @@ export function SportsPage() {
                           <Badge tone="meta" className="capitalize">
                             {session.reconciliationStatus.replaceAll("_", " ")}
                           </Badge>
+                          {session.analytics?.confidence ? (
+                            <Badge tone="meta">{session.analytics.confidence} zones</Badge>
+                          ) : null}
+                          {session.analytics?.routeSummary?.hasRoute ? (
+                            <Badge tone="meta">Route</Badge>
+                          ) : null}
                         </div>
-                      </button>
+                      </div>
                     </div>
                   );
                 })}

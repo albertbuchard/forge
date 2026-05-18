@@ -1388,6 +1388,120 @@ export interface WorkoutDetailsRecord {
   metadata: Record<string, string | number | boolean | null>;
 }
 
+export interface WorkoutZoneDuration {
+  key: string;
+  label: string;
+  seconds: number;
+  percentage: number;
+}
+
+export interface WorkoutAnalyticsRecord {
+  zoneProfileId?: string | null;
+  confidence: "high" | "medium" | "low" | "unavailable" | string;
+  dataQuality: {
+    heartRateSampleCount?: number;
+    sampleCoverage?: number;
+    qualityFlags?: string[];
+  };
+  zoneDurations: WorkoutZoneDuration[];
+  hrSummary: {
+    averageHr?: number | null;
+    minHr?: number | null;
+    maxHr?: number | null;
+    restingHr?: number | null;
+    maxHrForZones?: number | null;
+    thresholds?: Array<{
+      key: string;
+      label: string;
+      lowerBpm: number;
+      upperBpm: number | null;
+    }>;
+  };
+  load: {
+    trimp?: number | null;
+    intensity?: number | null;
+    durationSeconds?: number;
+  };
+  routeSummary: {
+    hasRoute?: boolean;
+    pointCount?: number;
+    bounds?: {
+      minLatitude: number;
+      maxLatitude: number;
+      minLongitude: number;
+      maxLongitude: number;
+    } | null;
+    start?: { latitude: number; longitude: number; recordedAt: string } | null;
+    end?: { latitude: number; longitude: number; recordedAt: string } | null;
+  };
+  computedAt?: string;
+}
+
+export interface WorkoutTimeSeriesSampleRecord {
+  id: string;
+  sourceSampleUid: string;
+  seriesIndex: number;
+  metricKey: string;
+  label: string;
+  category: string;
+  unit: string;
+  value: number;
+  startedAt: string;
+  endedAt: string;
+  sourceDevice: string;
+  sourceBundleIdentifier: string | null;
+  sourceProductType: string | null;
+  captureMethod: string;
+  qualityFlags: string[];
+  metadata: Record<string, unknown>;
+  provenance: Record<string, unknown>;
+}
+
+export interface WorkoutRoutePointRecord {
+  id: string;
+  sourceRouteUid: string;
+  pointIndex: number;
+  recordedAt: string;
+  latitude: number;
+  longitude: number;
+  altitudeMeters: number | null;
+  horizontalAccuracyMeters: number | null;
+  verticalAccuracyMeters: number | null;
+  speedMps: number | null;
+  courseDegrees: number | null;
+  metadata: Record<string, unknown>;
+  provenance: Record<string, unknown>;
+}
+
+export interface HealthZoneProfileRecord {
+  id: string;
+  userId: string;
+  modelVersion: string;
+  birthYear: number | null;
+  sexAtBirth: string | null;
+  knownMaxHr: number | null;
+  thresholdHr: number | null;
+  restingHrOverride: number | null;
+  customZones: Array<{
+    key: string;
+    label: string;
+    lowerBpm: number;
+    upperBpm: number | null;
+  }>;
+  inferredMaxHr: number | null;
+  inferredRestingHr: number | null;
+  confidence: string;
+  thresholds: Array<{
+    key: string;
+    label: string;
+    lowerBpm: number;
+    upperBpm: number | null;
+  }>;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface SleepSessionRecord {
   id: string;
   externalUid: string;
@@ -1604,6 +1718,7 @@ export interface WorkoutSessionRecord {
   annotations: Record<string, unknown>;
   provenance: Record<string, unknown>;
   derived: Record<string, unknown>;
+  analytics?: WorkoutAnalyticsRecord;
   generatedFromHabitId: string | null;
   generatedFromCheckInId: string | null;
   reconciliationStatus: string;
@@ -1672,6 +1787,10 @@ export interface FitnessViewData {
     topWorkoutType: string | null;
     topWorkoutTypeLabel?: string | null;
     streakDays: number;
+    averageHeartRateCoverage?: number;
+    totalTrainingLoad?: number;
+    routeWorkoutCount?: number;
+    zoneMix?: WorkoutZoneDuration[];
   };
   weeklyTrend: Array<{
     id: string;
@@ -1682,6 +1801,9 @@ export interface FitnessViewData {
     activityFamilyLabel?: string;
     durationMinutes: number;
     energyKcal: number;
+    zoneDurations?: WorkoutZoneDuration[];
+    trainingLoad?: number | null;
+    heartRateCoverage?: number;
   }>;
   typeBreakdown: Array<{
     workoutType: string;
@@ -1693,6 +1815,16 @@ export interface FitnessViewData {
     energyKcal: number;
   }>;
   sessions: WorkoutSessionRecord[];
+}
+
+export interface WorkoutSessionDetailPayload {
+  workout: WorkoutSessionRecord;
+  analytics: WorkoutAnalyticsRecord;
+  evidence: {
+    timeSeries: WorkoutTimeSeriesSampleRecord[];
+    routePoints: WorkoutRoutePointRecord[];
+  };
+  zoneProfile: HealthZoneProfileRecord;
 }
 
 export interface VitalMetricDayRecord {

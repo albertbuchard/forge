@@ -626,11 +626,15 @@ import {
   getSleepTimelineOverlaysForRange,
   getSleepViewData,
   getVitalsViewData,
+  getHealthZoneProfileForUser,
   getWorkoutSessionById,
+  getWorkoutSessionDetailById,
   heartbeatCompanionPairing,
   heartbeatCompanionPairingSchema,
+  healthZoneProfilePatchSchema,
   ingestMobileHealthSync,
   mobileHealthSyncSchema,
+  patchHealthZoneProfileForUser,
   patchCompanionPairingSourceState,
   patchCompanionPairingSourceStateSchema,
   companionSourceKeySchema,
@@ -8470,6 +8474,31 @@ export async function buildServer(
       resolveScopedUserIds(request.query as Record<string, unknown>)
     )
   }));
+  app.get("/api/v1/health/zone-profile", async (request) => {
+    const userIds = resolveScopedUserIds(
+      request.query as Record<string, unknown>
+    );
+    return {
+      zoneProfile: getHealthZoneProfileForUser(userIds?.[0] ?? "user_operator")
+    };
+  });
+  app.patch("/api/v1/health/zone-profile", async (request) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/health/zone-profile" }
+    );
+    const userIds = resolveScopedUserIds(
+      request.query as Record<string, unknown>
+    );
+    void auth;
+    return {
+      zoneProfile: patchHealthZoneProfileForUser(
+        userIds?.[0] ?? "user_operator",
+        healthZoneProfilePatchSchema.parse(request.body ?? {})
+      )
+    };
+  });
   app.post("/api/v1/health/workouts", async (request, reply) => {
     const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
@@ -8482,6 +8511,17 @@ export async function buildServer(
     );
     reply.code(201);
     return { workout };
+  });
+  app.get("/api/v1/health/workouts/:id/detail", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const query = request.query as Record<string, unknown>;
+    const resolution = query.resolution === "raw" ? "raw" : "adaptive";
+    const detail = getWorkoutSessionDetailById(id, resolution);
+    if (!detail) {
+      reply.code(404);
+      return { error: "Workout session not found" };
+    }
+    return detail;
   });
   app.get("/api/v1/health/workouts/:id", async (request, reply) => {
     const { id } = request.params as { id: string };

@@ -2513,6 +2513,174 @@ test("mobile health sync exposes structured apple health workout descriptors and
                 indoorWorkout: false
               }
             },
+            timeSeriesSamples: [
+              {
+                sourceSampleUid: "hr-sample-1",
+                seriesIndex: 0,
+                metricKey: "heart_rate",
+                label: "Heart rate",
+                category: "cardio",
+                unit: "bpm",
+                value: 118,
+                startedAt: "2026-04-07T07:15:00.000Z",
+                endedAt: "2026-04-07T07:30:00.000Z",
+                sourceDevice: "Apple Watch",
+                sourceBundleIdentifier: "com.apple.health",
+                sourceProductType: "Watch7,5",
+                captureMethod: "associated_workout",
+                qualityFlags: [],
+                metadata: {},
+                provenance: {
+                  sourceSystem: "apple_health"
+                }
+              },
+              {
+                sourceSampleUid: "hr-sample-2",
+                seriesIndex: 0,
+                metricKey: "heart_rate",
+                label: "Heart rate",
+                category: "cardio",
+                unit: "bpm",
+                value: 142,
+                startedAt: "2026-04-07T07:30:00.000Z",
+                endedAt: "2026-04-07T08:00:00.000Z",
+                sourceDevice: "Apple Watch",
+                sourceBundleIdentifier: "com.apple.health",
+                sourceProductType: "Watch7,5",
+                captureMethod: "associated_workout",
+                qualityFlags: [],
+                metadata: {},
+                provenance: {
+                  sourceSystem: "apple_health"
+                }
+              },
+              {
+                sourceSampleUid: "hr-sample-3",
+                seriesIndex: 0,
+                metricKey: "heart_rate",
+                label: "Heart rate",
+                category: "cardio",
+                unit: "bpm",
+                value: 135,
+                startedAt: "2026-04-07T07:35:00.000Z",
+                endedAt: "2026-04-07T07:40:00.000Z",
+                sourceDevice: "Apple Watch",
+                sourceBundleIdentifier: "com.apple.health",
+                sourceProductType: "Watch7,5",
+                captureMethod: "associated_workout",
+                qualityFlags: [],
+                metadata: {},
+                provenance: {
+                  sourceSystem: "apple_health"
+                }
+              },
+              {
+                sourceSampleUid: "hr-sample-4",
+                seriesIndex: 0,
+                metricKey: "heart_rate",
+                label: "Heart rate",
+                category: "cardio",
+                unit: "bpm",
+                value: 148,
+                startedAt: "2026-04-07T07:45:00.000Z",
+                endedAt: "2026-04-07T07:50:00.000Z",
+                sourceDevice: "Apple Watch",
+                sourceBundleIdentifier: "com.apple.health",
+                sourceProductType: "Watch7,5",
+                captureMethod: "associated_workout",
+                qualityFlags: [],
+                metadata: {},
+                provenance: {
+                  sourceSystem: "apple_health"
+                }
+              },
+              {
+                sourceSampleUid: "hr-sample-5",
+                seriesIndex: 0,
+                metricKey: "heart_rate",
+                label: "Heart rate",
+                category: "cardio",
+                unit: "bpm",
+                value: 122,
+                startedAt: "2026-04-07T07:55:00.000Z",
+                endedAt: "2026-04-07T08:00:00.000Z",
+                sourceDevice: "Apple Watch",
+                sourceBundleIdentifier: "com.apple.health",
+                sourceProductType: "Watch7,5",
+                captureMethod: "associated_workout",
+                qualityFlags: [],
+                metadata: {},
+                provenance: {
+                  sourceSystem: "apple_health"
+                }
+              },
+              {
+                sourceSampleUid: "power-sample-1",
+                seriesIndex: 0,
+                metricKey: "running_power",
+                label: "Running power",
+                category: "power",
+                unit: "W",
+                value: 184,
+                startedAt: "2026-04-07T07:30:00.000Z",
+                endedAt: "2026-04-07T07:45:00.000Z",
+                sourceDevice: "Apple Watch",
+                sourceBundleIdentifier: "com.apple.health",
+                sourceProductType: "Watch7,5",
+                captureMethod: "associated_workout",
+                qualityFlags: [],
+                metadata: {},
+                provenance: {
+                  sourceSystem: "apple_health"
+                }
+              }
+            ],
+            routePoints: [
+              {
+                sourceRouteUid: "route-1",
+                pointIndex: 0,
+                recordedAt: "2026-04-07T07:15:00.000Z",
+                latitude: 46.2044,
+                longitude: 6.1432,
+                altitudeMeters: 380,
+                horizontalAccuracyMeters: 4,
+                verticalAccuracyMeters: 6,
+                speedMps: 1.4,
+                courseDegrees: 42,
+                metadata: {},
+                provenance: {
+                  sourceSystem: "apple_health"
+                }
+              },
+              {
+                sourceRouteUid: "route-1",
+                pointIndex: 1,
+                recordedAt: "2026-04-07T07:30:00.000Z",
+                latitude: 46.2052,
+                longitude: 6.1451,
+                altitudeMeters: 385,
+                horizontalAccuracyMeters: 4,
+                verticalAccuracyMeters: 6,
+                speedMps: 1.6,
+                courseDegrees: 48,
+                metadata: {},
+                provenance: {
+                  sourceSystem: "apple_health"
+                }
+              }
+            ],
+            captureQuality: {
+              status: "complete",
+              flags: [],
+              heartRateSamples: 5,
+              routePoints: 2,
+              associatedSampleQueryUsed: true,
+              fallbackTimeWindowUsed: false,
+              condensedSeriesExpanded: false
+            },
+            syncCursor: {
+              rawEvidenceVersion: "healthkit-workout-evidence-v2"
+            },
             links: [],
             annotations: {}
           }
@@ -2560,6 +2728,12 @@ test("mobile health sync exposes structured apple health workout descriptors and
                 activity: { canonicalLabel: string };
               }>;
             };
+            analytics?: {
+              confidence: string;
+              dataQuality: { heartRateSampleCount: number; sampleCoverage: number };
+              routeSummary: { hasRoute: boolean; pointCount: number };
+              zoneDurations: Array<{ key: string; seconds: number }>;
+            };
           }>;
         };
       }
@@ -2594,6 +2768,32 @@ test("mobile health sync exposes structured apple health workout descriptors and
       session.details?.components.map((component) => component.activity.canonicalLabel),
       ["Cooldown"]
     );
+    assert.equal(session.analytics?.confidence, "medium");
+    assert.equal(session.analytics?.dataQuality.heartRateSampleCount, 5);
+    assert.equal(session.analytics?.routeSummary.hasRoute, true);
+    assert.equal(session.analytics?.routeSummary.pointCount, 2);
+    assert.ok(
+      (session.analytics?.zoneDurations ?? []).some((zone) => zone.seconds > 0)
+    );
+
+    const detailResponse = await app.inject({
+      method: "GET",
+      url: `/api/v1/health/workouts/${session.id}/detail?resolution=raw`
+    });
+    assert.equal(detailResponse.statusCode, 200);
+    const detail = detailResponse.json() as {
+      evidence: {
+        timeSeries: Array<{ metricKey: string }>;
+        routePoints: Array<{ latitude: number }>;
+      };
+      analytics: { confidence: string };
+    };
+    assert.equal(detail.analytics.confidence, "medium");
+    assert.deepEqual(
+      detail.evidence.timeSeries.map((sample) => sample.metricKey).sort(),
+      ["heart_rate", "heart_rate", "heart_rate", "heart_rate", "heart_rate", "running_power"]
+    );
+    assert.equal(detail.evidence.routePoints.length, 2);
   } finally {
     await app.close();
     closeDatabase();
