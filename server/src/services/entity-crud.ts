@@ -64,6 +64,7 @@ import {
   createBeliefEntrySchema,
   createEmotionDefinitionSchema,
   createEventTypeSchema,
+  createFlashcardSchema,
   createModeGuideSessionSchema,
   createModeProfileSchema,
   createPsycheValueSchema,
@@ -73,6 +74,7 @@ import {
   updateBeliefEntrySchema,
   updateEmotionDefinitionSchema,
   updateEventTypeSchema,
+  updateFlashcardSchema,
   updateModeGuideSessionSchema,
   updateModeProfileSchema,
   updatePsycheValueSchema,
@@ -104,6 +106,7 @@ import {
   createBeliefEntry,
   createEmotionDefinition,
   createEventType,
+  createFlashcard,
   createModeGuideSession,
   createModeProfile,
   createPsycheValue,
@@ -113,6 +116,7 @@ import {
   deleteBeliefEntry,
   deleteEmotionDefinition,
   deleteEventType,
+  deleteFlashcard,
   deleteModeGuideSession,
   deleteModeProfile,
   deletePsycheValue,
@@ -122,6 +126,7 @@ import {
   getBeliefEntryById,
   getEmotionDefinitionById,
   getEventTypeById,
+  getFlashcardById,
   getModeGuideSessionById,
   getModeProfileById,
   getPsycheValueById,
@@ -131,6 +136,7 @@ import {
   listBeliefEntries,
   listEmotionDefinitions,
   listEventTypes,
+  listFlashcards,
   listModeGuideSessions,
   listModeProfiles,
   listPsycheValues,
@@ -140,6 +146,7 @@ import {
   updateBeliefEntry,
   updateEmotionDefinition,
   updateEventType,
+  updateFlashcard,
   updateModeGuideSession,
   updateModeProfile,
   updatePsycheValue,
@@ -497,6 +504,17 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     update: (id, patch, context) => updateModeGuideSession(id, patch as never, context) as Record<string, unknown> | undefined,
     hardDelete: (id, context) => deleteModeGuideSession(id, context) as Record<string, unknown> | undefined
   },
+  flashcard: {
+    entityType: "flashcard",
+    routeBase: "/api/v1/entities",
+    deleteMode: "soft_default",
+    inBin: true,
+    list: () => listFlashcards() as Array<Record<string, unknown>>,
+    get: (id) => getFlashcardById(id) as Record<string, unknown> | undefined,
+    create: (data, context) => createFlashcard(data as never, context) as Record<string, unknown>,
+    update: (id, patch, context) => updateFlashcard(id, patch as never, context) as Record<string, unknown> | undefined,
+    hardDelete: (id, context) => deleteFlashcard(id, context) as Record<string, unknown> | undefined
+  },
   event_type: {
     entityType: "event_type",
     routeBase: "/api/v1/psyche/event-types",
@@ -623,6 +641,7 @@ const CREATE_ENTITY_SCHEMAS: Record<CrudEntityType, { parse: (value: unknown) =>
   belief_entry: createBeliefEntrySchema,
   mode_profile: createModeProfileSchema,
   mode_guide_session: createModeGuideSessionSchema,
+  flashcard: createFlashcardSchema,
   event_type: createEventTypeSchema,
   emotion_definition: createEmotionDefinitionSchema,
   trigger_report: createTriggerReportSchema,
@@ -653,6 +672,7 @@ const UPDATE_ENTITY_SCHEMAS: Record<CrudEntityType, { parse: (value: unknown) =>
   belief_entry: updateBeliefEntrySchema,
   mode_profile: updateModeProfileSchema,
   mode_guide_session: updateModeGuideSessionSchema,
+  flashcard: updateFlashcardSchema,
   event_type: updateEventTypeSchema,
   emotion_definition: updateEmotionDefinitionSchema,
   trigger_report: updateTriggerReportSchema,
@@ -961,10 +981,12 @@ function describeEntity(entityType: CrudEntityType, entity: Record<string, unkno
         ? entity.name
         : typeof entity.label === "string" && entity.label.trim().length > 0
           ? entity.label
-          : typeof entity.summary === "string" && entity.summary.trim().length > 0
-            ? entity.summary
-            : typeof entity.body === "string" && entity.body.trim().length > 0
-              ? entity.body.slice(0, 72)
+            : typeof entity.summary === "string" && entity.summary.trim().length > 0
+              ? entity.summary
+              : typeof entity.message === "string" && entity.message.trim().length > 0
+                ? entity.message.slice(0, 72)
+              : typeof entity.body === "string" && entity.body.trim().length > 0
+                ? entity.body.slice(0, 72)
               : entityType.replaceAll("_", " ");
 
   const subtitle =
@@ -1062,6 +1084,15 @@ function matchesLinkedTo(entityType: CrudEntityType, entity: Record<string, unkn
         (linkedTo.entityType === "behavior_pattern" && Array.isArray(entity.linkedPatternIds) && entity.linkedPatternIds.includes(linkedTo.id)) ||
         (linkedTo.entityType === "behavior" && Array.isArray(entity.linkedBehaviorIds) && entity.linkedBehaviorIds.includes(linkedTo.id)) ||
         (linkedTo.entityType === "psyche_value" && Array.isArray(entity.linkedValueIds) && entity.linkedValueIds.includes(linkedTo.id))
+      );
+    case "flashcard":
+      return (
+        (linkedTo.entityType === "psyche_value" && Array.isArray(entity.linkedValueIds) && entity.linkedValueIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "behavior" && Array.isArray(entity.linkedBehaviorIds) && entity.linkedBehaviorIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "behavior_pattern" && Array.isArray(entity.linkedPatternIds) && entity.linkedPatternIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "belief_entry" && Array.isArray(entity.linkedBeliefIds) && entity.linkedBeliefIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "mode_profile" && Array.isArray(entity.linkedModeIds) && entity.linkedModeIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "trigger_report" && Array.isArray(entity.linkedReportIds) && entity.linkedReportIds.includes(linkedTo.id))
       );
     case "trigger_report":
       return (

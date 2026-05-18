@@ -5,7 +5,7 @@ import { filterOwnedEntities } from "../repositories/entity-ownership.js";
 import { listGoals } from "../repositories/goals.js";
 import { listHabits } from "../repositories/habits.js";
 import { listNotes } from "../repositories/notes.js";
-import { listBehaviors, listBehaviorPatterns, listBeliefEntries, listEmotionDefinitions, listEventTypes, listModeGuideSessions, listModeProfiles, listPsycheValues, listTriggerReports } from "../repositories/psyche.js";
+import { listBehaviors, listBehaviorPatterns, listBeliefEntries, listEmotionDefinitions, listEventTypes, listFlashcards, listModeGuideSessions, listModeProfiles, listPsycheValues, listTriggerReports } from "../repositories/psyche.js";
 import { listStrategies } from "../repositories/strategies.js";
 import { listTags } from "../repositories/tags.js";
 import { listTasks } from "../repositories/tasks.js";
@@ -40,6 +40,7 @@ const BASE_NODE_SIZE = {
     belief: 38,
     mode: 38,
     mode_session: 34,
+    flashcard: 36,
     report: 40,
     event_type: 32,
     emotion: 30,
@@ -250,6 +251,7 @@ export function buildKnowledgeGraph(userIds, query = {}) {
     const beliefs = filterOwnedEntities("belief_entry", listBeliefEntries(), userIds);
     const modes = filterOwnedEntities("mode_profile", listModeProfiles(), userIds);
     const modeSessions = filterOwnedEntities("mode_guide_session", listModeGuideSessions(), userIds);
+    const flashcards = filterOwnedEntities("flashcard", listFlashcards(), userIds);
     const reports = filterOwnedEntities("trigger_report", listTriggerReports(), userIds);
     const wikiSpaces = listWikiSpaces();
     const flows = listAiConnectors();
@@ -1150,6 +1152,90 @@ export function buildKnowledgeGraph(userIds, query = {}) {
                 relationKind: "mode_session_mode",
                 label: "Session suggests mode",
                 strength: Math.max(0.6, Math.min(1, result.confidence)),
+                directional: true,
+                structural: false
+            });
+        }
+    }
+    for (const flashcard of flashcards) {
+        nodes.set(buildKnowledgeGraphNodeId("flashcard", flashcard.id), makeNode({
+            entityType: "flashcard",
+            entityId: flashcard.id,
+            entityKind: "flashcard",
+            title: flashcard.title || truncate(flashcard.message, 72),
+            subtitle: flashcard.triggerSentence || flashcard.triggerSituation,
+            description: flashcard.message,
+            previewStats: [
+                { label: "Tags", value: flashcard.tags.length },
+                { label: "Values", value: flashcard.linkedValueIds.length },
+                { label: "Reports", value: flashcard.linkedReportIds.length }
+            ],
+            owner: flashcard,
+            href: getKnowledgeGraphEntityHref("flashcard", flashcard.id),
+            updatedAt: flashcard.updatedAt
+        }));
+        for (const linkedId of flashcard.linkedValueIds) {
+            addEdge(edges, {
+                source: buildKnowledgeGraphNodeId("flashcard", flashcard.id),
+                target: buildKnowledgeGraphNodeId("psyche_value", linkedId),
+                relationKind: "flashcard_value",
+                label: "Flashcard to value",
+                strength: 0.78,
+                directional: true,
+                structural: false
+            });
+        }
+        for (const linkedId of flashcard.linkedBehaviorIds) {
+            addEdge(edges, {
+                source: buildKnowledgeGraphNodeId("flashcard", flashcard.id),
+                target: buildKnowledgeGraphNodeId("behavior", linkedId),
+                relationKind: "flashcard_behavior",
+                label: "Flashcard to behavior",
+                strength: 0.76,
+                directional: true,
+                structural: false
+            });
+        }
+        for (const linkedId of flashcard.linkedPatternIds) {
+            addEdge(edges, {
+                source: buildKnowledgeGraphNodeId("flashcard", flashcard.id),
+                target: buildKnowledgeGraphNodeId("behavior_pattern", linkedId),
+                relationKind: "flashcard_pattern",
+                label: "Flashcard to pattern",
+                strength: 0.76,
+                directional: true,
+                structural: false
+            });
+        }
+        for (const linkedId of flashcard.linkedBeliefIds) {
+            addEdge(edges, {
+                source: buildKnowledgeGraphNodeId("flashcard", flashcard.id),
+                target: buildKnowledgeGraphNodeId("belief_entry", linkedId),
+                relationKind: "flashcard_belief",
+                label: "Flashcard to belief",
+                strength: 0.74,
+                directional: true,
+                structural: false
+            });
+        }
+        for (const linkedId of flashcard.linkedModeIds) {
+            addEdge(edges, {
+                source: buildKnowledgeGraphNodeId("flashcard", flashcard.id),
+                target: buildKnowledgeGraphNodeId("mode_profile", linkedId),
+                relationKind: "flashcard_mode",
+                label: "Flashcard to mode",
+                strength: 0.74,
+                directional: true,
+                structural: false
+            });
+        }
+        for (const linkedId of flashcard.linkedReportIds) {
+            addEdge(edges, {
+                source: buildKnowledgeGraphNodeId("flashcard", flashcard.id),
+                target: buildKnowledgeGraphNodeId("trigger_report", linkedId),
+                relationKind: "flashcard_report",
+                label: "Flashcard to report",
+                strength: 0.74,
                 directional: true,
                 structural: false
             });

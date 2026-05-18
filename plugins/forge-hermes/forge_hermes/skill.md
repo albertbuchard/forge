@@ -12,8 +12,8 @@ task runs, and agent-authored insights. The Health side covers sleep sessions,
 sports and workout sessions, companion pairing, and habit-generated workout records.
 The Preferences side covers contextual taste modeling, pairwise comparisons, direct
 signals, editable concept libraries, and preference items. The Psyche side covers
-values, patterns, behaviors, beliefs, modes, guided mode sessions, trigger reports,
-event types, reusable emotion definitions, structured questionnaires, questionnaire
+values, patterns, behaviors, beliefs, modes, guided mode sessions, flashcards,
+trigger reports, event types, reusable emotion definitions, structured questionnaires, questionnaire
 runs, and a self-observation calendar backed by note-based observations. Forge also has a SQLite-backed Wiki
 memory layer with explicit spaces, Markdown content in database rows, backlinks, optional
 embeddings, and structured Forge links. The specialized domain surfaces are Movement,
@@ -173,8 +173,8 @@ memory`.
 For Psyche entities, do not treat Forge like a raw schema form. Use the active-listening
 playbooks in [`psyche_entity_playbooks.md`](./psyche_entity_playbooks.md) before
 persisting `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`,
-`mode_profile`, `mode_guide_session`, `trigger_report`, `event_type`, or
-`emotion_definition`.
+`mode_profile`, `mode_guide_session`, `flashcard`, `trigger_report`,
+`event_type`, or `emotion_definition`.
 Treat `event_type` and `emotion_definition` as psychologically meaningful Psyche
 records: begin with the repeated lived moment or felt signature before you settle the
 reusable label.
@@ -263,7 +263,7 @@ For wiki-specific recall:
 
 ## Entity guidance
 
-- Batch CRUD entities: `goal`, `project`, `strategy`, `task`, `habit`, `tag`, `note`, `insight`, `calendar_event`, `work_block_template`, `task_timebox`, `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`, `mode_guide_session`, `trigger_report`, `event_type`, `emotion_definition`, `preference_catalog`, `preference_catalog_item`, `preference_context`, `preference_item`, `questionnaire_instrument`, `sleep_session`, and `workout_session`.
+- Batch CRUD entities: `goal`, `project`, `strategy`, `task`, `habit`, `tag`, `note`, `insight`, `calendar_event`, `work_block_template`, `task_timebox`, `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`, `mode_guide_session`, `flashcard`, `trigger_report`, `event_type`, `emotion_definition`, `preference_catalog`, `preference_catalog_item`, `preference_context`, `preference_item`, `questionnaire_instrument`, `sleep_session`, and `workout_session`.
 - Specialized CRUD entities: `wiki_page` and `calendar_connection`.
 - Action/workflow entities: `task_run`, `questionnaire_run`, preference game/judgment/signal flows, calendar connection sync/setup, self-observation review, work adjustments, and import/sync jobs.
 - Read-model-only surfaces: operator overview/context, sleep overview, sports overview, self-observation calendar, and calendar overview.
@@ -333,7 +333,7 @@ For wiki-specific recall:
 - Self-observation is note-backed. Read the calendar through the dedicated self-observation tool, but create or update the stored observation through `note` with tag `Self-observation`, `frontmatter.observedAt`, and links to the relevant Psyche or Forge records.
 - Exact create-shape expectations live in `forge_get_agent_onboarding`. Use its `entityCatalog` as the schema source of truth for `minimumCreateFields`, `fieldGuide`, examples, classification, and preferred mutation path instead of guessing field names.
 - High-signal minimums worth remembering:
-  `goal { title }`, `project { goalId, title }`, `strategy { title, graph }`, `task { title }`, `habit { title }`, `tag { label }`, `note { contentMarkdown, links }`, `calendar_event { title, startAt, endAt }`, `work_block_template { title, kind, timezone, weekDays, startMinute, endMinute, blockingState }`, `task_timebox { taskId, title, startsAt, endsAt }`, `psyche_value { title }`, `behavior_pattern { title }`, `behavior { kind, title }`, `belief_entry { statement, beliefType }`, `mode_profile { family, title }`, `mode_guide_session { summary, answers }`, `trigger_report { title }`, `event_type { label }`, `emotion_definition { label }`, `preference_catalog { userId, domain, title }`, `preference_catalog_item { catalogId, label }`, `preference_context { userId, domain, name }`, `preference_item { userId, domain, label }`, `questionnaire_instrument { title, sourceClass, availability, isSelfReport, versionLabel, definition, scoring, provenance }`, `sleep_session { startedAt, endedAt }`, `workout_session { workoutType, startedAt, endedAt }`.
+  `goal { title }`, `project { goalId, title }`, `strategy { title, graph }`, `task { title }`, `habit { title }`, `tag { label }`, `note { contentMarkdown, links }`, `calendar_event { title, startAt, endAt }`, `work_block_template { title, kind, timezone, weekDays, startMinute, endMinute, blockingState }`, `task_timebox { taskId, title, startsAt, endsAt }`, `psyche_value { title }`, `behavior_pattern { title }`, `behavior { kind, title }`, `belief_entry { statement, beliefType }`, `mode_profile { family, title }`, `mode_guide_session { summary, answers }`, `flashcard { message }`, `trigger_report { title }`, `event_type { label }`, `emotion_definition { label }`, `preference_catalog { userId, domain, title }`, `preference_catalog_item { catalogId, label }`, `preference_context { userId, domain, name }`, `preference_item { userId, domain, label }`, `questionnaire_instrument { title, sourceClass, availability, isSelfReport, versionLabel, definition, scoring, provenance }`, `sleep_session { startedAt, endedAt }`, `workout_session { workoutType, startedAt, endedAt }`.
 - For `goal`, `project`, or `task`, nested `notes` on create can include `contentMarkdown`, `author`, `tags`, `destroyAt`, and extra `links`.
 - Standalone `note` creates can include `contentMarkdown`, `author`, `tags`, `destroyAt`, and `links`.
 - When preserving a work summary from `forge_log_work`, `forge_complete_task_run`, or `forge_release_task_run`, prefer `closeoutNote` so the summary becomes a real linked note rather than transient run metadata.
@@ -352,7 +352,8 @@ For wiki-specific recall:
 - User-aware writes should set `userId` when ownership matters explicitly, especially when Hermes is working across human and bot accounts.
 - Notes are searchable and editable records, not comment strings. If the user cares about durable context, preserve it as a note.
 - The wiki is the durable long-form memory surface. Use it for canonical reference pages, ingest, backlink-aware recall, books, articles, sources, concepts, and personal manuals rather than overloading normal notes.
-- Self-observation is only for lightweight observed episode notes. When the user describes a psychological chain, map situation, cue, emotion/body, thought/meaning, behavior/urge, and consequence; use `trigger_report` for one meaningful episode, `behavior_pattern` for recurring-loop functional analysis, `behavior` for one repeated move, `belief_entry` for a core sentence, `mode_guide_session` or `mode_profile` for a part-state, and `wiki_page` for durable memory. If a schema theme is visible, preserve it through the matching belief, pattern, mode, trigger report, or wiki explanation instead of hiding it in self-observation.
+- Self-observation is only for lightweight observed episode notes. When the user describes a psychological chain, map situation, cue, emotion/body, thought/meaning, behavior/urge, and consequence; use `trigger_report` for one meaningful episode, `behavior_pattern` for recurring-loop functional analysis, `behavior` for one repeated move, `belief_entry` for a core sentence, `mode_guide_session` or `mode_profile` for a part-state, `flashcard` for a rehearsable reminder during an urge or trigger, and `wiki_page` for durable memory. If a schema theme is visible, preserve it through the matching belief, pattern, mode, trigger report, flashcard, or wiki explanation instead of hiding it in self-observation.
+- If the user says they feel an urge or asks for help not doing something, search existing `flashcard` records first with `forge_search_entities` and `entityTypes: ["flashcard"]`. If a card matches, show the card message first, then add brief grounding, urge-surfing, cognitive defusion, schema/mode-aware reflection, or values-based support around it.
 - The UI route is `/sports`, but the backend overview route is `/api/v1/health/fitness`. Treat both as the same sports surface.
 - Use `forge_update_sleep_session` and `forge_update_workout_session` only to enrich those records with reflective context, tags, and links. Normal stored-record CRUD for those entities belongs on the shared batch routes.
 - Ephemeral notes are appropriate for scratch memory, temporary handoffs, or “what just happened” captures that should disappear automatically later.

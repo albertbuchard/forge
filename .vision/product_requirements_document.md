@@ -32,6 +32,8 @@ The gamified progression layer is part of the same production stack. It uses the
 
 The current progression direction is Forge Gamification: one canonical source-controlled catalog with 144 achievements and cosmetic unlocks, generated transparent atlas-backed trophy and cosmetic sprites, 30 Forge Smith mascot states, selectable gamification art themes, selected-user-first metric evaluation, and cosmetic equipment that never gates core Forge functionality. Forge defaults to the lighthearted `Fantasy` style but does not download the full art pack until the operator opts in from the first-run prompt or settings. Forge does not maintain stale released-catalog forks; future catalog growth should happen through normal migrations and canonical ID changes when required.
 
+Psyche flashcards are first-class Psyche records stored through shared batch CRUD. They hold one main therapeutic message plus retrieval cues such as tags, trigger sentence, trigger situation, optional compact title, and links to values, behaviors, patterns, beliefs, modes, or trigger reports. The web app should render them as polished flexible cards with selectable colors, typography, layout, visual tone, and optional images. OpenClaw, Hermes, and Codex skills should search flashcards when the user reports an urge or trigger, show the card message first, and then wrap it with brief psychotherapy-informed support.
+
 ## Core Requirements
 
 ### 1. Project Management Hierarchy

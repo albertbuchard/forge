@@ -146,6 +146,7 @@ import type {
   EmotionDefinitionInput,
   EventType,
   EventTypeInput,
+  Flashcard,
   ModeGuideSession,
   ModeGuideSessionInput,
   ModeProfile,
@@ -160,6 +161,7 @@ import type {
   TriggerReportDetailPayload,
   TriggerReportInput
 } from "./psyche-types";
+import type { FlashcardInput } from "./psyche-schemas";
 import type {
   CreateQuestionnaireInstrumentInput,
   QuestionnaireInstrumentDetail,
@@ -1260,6 +1262,58 @@ export function deleteModeGuideSession(sessionId: string) {
       method: "DELETE"
     }
   );
+}
+
+function readBatchEntity<T>(result: Record<string, unknown>): T {
+  if (result.ok !== true || !result.entity) {
+    const error =
+      typeof result.error === "object" && result.error !== null
+        ? JSON.stringify(result.error)
+        : "Batch entity operation failed.";
+    throw new Error(error);
+  }
+  return result.entity as T;
+}
+
+export async function listFlashcards(userIds?: string[] | unknown) {
+  const response = await searchEntities({
+    searches: [
+      {
+        entityTypes: ["flashcard"],
+        userIds: coerceUserIds(userIds),
+        limit: 500
+      }
+    ]
+  });
+  const matches = (response.results[0]?.matches ?? []) as Flashcard[];
+  return { flashcards: matches };
+}
+
+export async function createFlashcard(input: FlashcardInput) {
+  const response = await createEntities({
+    operations: [{ entityType: "flashcard", data: input }],
+    atomic: true
+  });
+  return { flashcard: readBatchEntity<Flashcard>(response.results[0] ?? {}) };
+}
+
+export async function patchFlashcard(
+  flashcardId: string,
+  patch: Partial<FlashcardInput>
+) {
+  const response = await updateEntities({
+    operations: [{ entityType: "flashcard", id: flashcardId, patch }],
+    atomic: true
+  });
+  return { flashcard: readBatchEntity<Flashcard>(response.results[0] ?? {}) };
+}
+
+export async function deleteFlashcard(flashcardId: string) {
+  const response = await deleteEntities({
+    operations: [{ entityType: "flashcard", id: flashcardId }],
+    atomic: true
+  });
+  return { flashcard: readBatchEntity<Flashcard>(response.results[0] ?? {}) };
 }
 
 export function listEventTypes() {

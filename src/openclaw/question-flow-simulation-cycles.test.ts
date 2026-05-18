@@ -89,6 +89,7 @@ describe("question flow simulation cycles", () => {
     "Belief",
     "Mode Profile",
     "Mode Guide Session",
+    "Flashcard",
     "Trigger Report",
     "Event Type",
     "Emotion Definition"
@@ -162,6 +163,8 @@ describe("question flow simulation cycles", () => {
       "Describe the part that takes over when judgment feels near.",
     "Mode Guide Session":
       "Guide a present-moment mode inquiry after a sharp shame reaction.",
+    Flashcard:
+      "Create or retrieve a small card for the urge sentence I feel right now.",
     "Trigger Report":
       "Capture the emotionally meaningful episode from today's meeting.",
     "Event Type":
@@ -223,6 +226,7 @@ describe("question flow simulation cycles", () => {
     Belief: "batch",
     "Mode Profile": "batch",
     "Mode Guide Session": "batch",
+    Flashcard: "batch",
     "Trigger Report": "batch",
     "Event Type": "batch",
     "Emotion Definition": "batch"
@@ -253,6 +257,7 @@ describe("question flow simulation cycles", () => {
     "belief_entry",
     "mode_profile",
     "mode_guide_session",
+    "flashcard",
     "trigger_report",
     "event_type",
     "emotion_definition",
@@ -561,6 +566,7 @@ describe("question flow simulation cycles", () => {
       "belief_entry",
       "mode_profile",
       "mode_guide_session",
+      "flashcard",
       "trigger_report",
       "event_type",
       "emotion_definition"

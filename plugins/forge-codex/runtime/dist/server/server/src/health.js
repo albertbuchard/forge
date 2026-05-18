@@ -3000,6 +3000,39 @@ function upsertMobileSyncFamilyCursors(pairing, finalCursor) {
         stmt.run(`hmscur_${randomUUID().replaceAll("-", "").slice(0, 10)}`, pairing.id, pairing.user_id, family, JSON.stringify(cursor), now);
     }
 }
+function validateMobileSyncExpectedCounts(syncSessionId, expectedCounts) {
+    const expectedEntries = Object.entries(expectedCounts).filter(([, expected]) => Number.isFinite(expected) && expected > 0);
+    if (expectedEntries.length === 0) {
+        return;
+    }
+    const progress = updateMobileSyncSessionProgress(syncSessionId);
+    const missingFamilies = expectedEntries
+        .map(([family, expected]) => ({
+        family,
+        expected,
+        received: progress.receivedCounts[family] ?? 0
+    }))
+        .filter((entry) => entry.received < entry.expected);
+    if (missingFamilies.length > 0) {
+        throw new HttpError(409, "missing_required_chunks", "The HealthKit sync session is missing required chunks.", { families: missingFamilies });
+    }
+}
+function markMobileSyncSessionFailed(session, error) {
+    const now = nowIso();
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    getDatabase()
+        .prepare(`UPDATE health_mobile_sync_sessions
+       SET status = 'failed', failed_at = ?, error_json = ?, updated_at = ?
+       WHERE id = ?`)
+        .run(now, JSON.stringify({
+        message: errorMessage
+    }), now, session.id);
+    getDatabase()
+        .prepare(`UPDATE companion_pairing_sessions
+       SET last_sync_error = ?, updated_at = ?
+       WHERE id = ?`)
+        .run(errorMessage, now, session.pairing_session_id);
+}
 export function completeMobileHealthSyncSession(syncSessionId, payload) {
     const parsed = mobileHealthSyncSessionCompleteSchema.parse(payload);
     const session = ensureRunningMobileSyncSession(syncSessionId);
@@ -3015,35 +3048,31 @@ export function completeMobileHealthSyncSession(syncSessionId, payload) {
         .prepare(`SELECT * FROM companion_pairing_sessions WHERE id = ?`)
         .get(session.pairing_session_id);
     try {
-        const { assembled, tombstones } = mergeMobileHealthSyncChunks(session, chunks);
-        const sync = ingestMobileHealthSync(assembled);
-        const deletedWorkoutCount = applyWorkoutTombstones(pairing, tombstones);
-        upsertMobileSyncFamilyCursors(pairing, parsed.finalCursor);
-        const now = nowIso();
-        getDatabase()
-            .prepare(`UPDATE health_mobile_sync_sessions
-         SET status = 'completed', expected_counts_json = ?, completed_at = ?,
-             updated_at = ?
-         WHERE id = ?`)
-            .run(JSON.stringify(parsed.expectedCounts), now, now, syncSessionId);
-        return {
-            ...sync,
-            upload: {
-                syncSessionId,
-                chunks: chunks.length,
-                deletedWorkoutCount
-            }
-        };
+        return runInTransaction(() => {
+            validateMobileSyncExpectedCounts(syncSessionId, parsed.expectedCounts);
+            const { assembled, tombstones } = mergeMobileHealthSyncChunks(session, chunks);
+            const sync = ingestMobileHealthSync(assembled);
+            const deletedWorkoutCount = applyWorkoutTombstones(pairing, tombstones);
+            upsertMobileSyncFamilyCursors(pairing, parsed.finalCursor);
+            const now = nowIso();
+            getDatabase()
+                .prepare(`UPDATE health_mobile_sync_sessions
+           SET status = 'completed', expected_counts_json = ?, completed_at = ?,
+               updated_at = ?
+           WHERE id = ?`)
+                .run(JSON.stringify(parsed.expectedCounts), now, now, syncSessionId);
+            return {
+                ...sync,
+                upload: {
+                    syncSessionId,
+                    chunks: chunks.length,
+                    deletedWorkoutCount
+                }
+            };
+        });
     }
     catch (error) {
-        const now = nowIso();
-        getDatabase()
-            .prepare(`UPDATE health_mobile_sync_sessions
-         SET status = 'failed', failed_at = ?, error_json = ?, updated_at = ?
-         WHERE id = ?`)
-            .run(now, JSON.stringify({
-            message: error instanceof Error ? error.message : String(error)
-        }), now, syncSessionId);
+        markMobileSyncSessionFailed(session, error);
         throw error;
     }
 }

@@ -3243,6 +3243,120 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
   }
 });
 
+test("mobile health chunked sync rejects incomplete expected counts without advancing pairing sync state", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-health-incomplete-chunked-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const pairingResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: {
+        userId: "user_operator"
+      }
+    });
+    assert.equal(pairingResponse.statusCode, 201);
+    const qrPayload = (
+      pairingResponse.json() as {
+        qrPayload: {
+          sessionId: string;
+          pairingToken: string;
+        };
+      }
+    ).qrPayload;
+
+    const startResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync-sessions",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        device: {
+          name: "Omar iPhone",
+          platform: "ios",
+          appVersion: "1.0",
+          sourceDevice: "iPhone"
+        },
+        permissions: {
+          healthKitAuthorized: true,
+          backgroundRefreshEnabled: true,
+          motionReady: false,
+          locationReady: false,
+          screenTimeReady: false
+        },
+        requestedFamilies: ["vitals"]
+      }
+    });
+    assert.equal(startResponse.statusCode, 200);
+    const syncSessionId = (
+      startResponse.json() as { upload: { syncSessionId: string } }
+    ).upload.syncSessionId;
+
+    const vitalsPayload = { vitals: { daySummaries: [] } };
+    const chunkResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/chunks`,
+      payload: {
+        chunkId: "chunk-empty-vitals",
+        sequence: 0,
+        family: "vitals",
+        recordCount: 0,
+        byteCount: Buffer.byteLength(JSON.stringify(vitalsPayload), "utf8"),
+        checksumSha256: sha256Json(vitalsPayload),
+        payload: vitalsPayload
+      }
+    });
+    assert.equal(chunkResponse.statusCode, 200, chunkResponse.body);
+
+    const completeResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/complete`,
+      payload: {
+        expectedCounts: {
+          vitals: 1
+        }
+      }
+    });
+    assert.equal(completeResponse.statusCode, 409);
+    assert.equal(
+      (completeResponse.json() as { code: string }).code,
+      "missing_required_chunks"
+    );
+
+    const syncSession = getDatabase()
+      .prepare(
+        `SELECT status, error_json
+         FROM health_mobile_sync_sessions
+         WHERE id = ?`
+      )
+      .get(syncSessionId) as { status: string; error_json: string };
+    assert.equal(syncSession.status, "failed");
+    assert.match(syncSession.error_json, /missing required chunks/i);
+
+    const pairing = getDatabase()
+      .prepare(
+        `SELECT last_sync_at, last_sync_error
+         FROM companion_pairing_sessions
+         WHERE id = ?`
+      )
+      .get(qrPayload.sessionId) as {
+      last_sync_at: string | null;
+      last_sync_error: string | null;
+    };
+    assert.equal(pairing.last_sync_at, null);
+    assert.match(pairing.last_sync_error ?? "", /missing required chunks/i);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("context ignores invalid scoped user ids instead of blanking the board", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-user-scope-"));
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
@@ -16362,6 +16476,7 @@ test("CRUD capability matrix keeps user-facing delete/bin entities explicit", ()
     "calendar_event",
     "emotion_definition",
     "event_type",
+    "flashcard",
     "goal",
     "habit",
     "insight",

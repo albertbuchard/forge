@@ -13,12 +13,16 @@ export const behaviorKindSchema = z.enum(["away", "committed", "recovery"]);
 export const beliefTypeSchema = z.enum(["absolute", "conditional"]);
 export const modeFamilySchema = z.enum(["coping", "child", "critic_parent", "healthy_adult", "happy_child"]);
 export const schemaTypeSchema = z.enum(["maladaptive", "adaptive"]);
+export const flashcardTypographySchema = z.enum(["serif", "sans", "mono", "display"]);
+export const flashcardLayoutSchema = z.enum(["centered", "top_left", "image_split", "poster"]);
+export const flashcardVisualStyleSchema = z.enum(["calm", "urgent", "warm", "clinical", "playful"]);
 export const PSYCHE_ENTITY_TYPES = [
     "psyche_value",
     "behavior_pattern",
     "behavior",
     "belief_entry",
     "mode_profile",
+    "flashcard",
     "trigger_report"
 ];
 export const domainSchema = z.object({
@@ -184,6 +188,32 @@ export const modeGuideSessionSchema = z.object({
     updatedAt: z.string(),
     ...ownedEntityFieldsSchema
 });
+export const flashcardSchema = z.object({
+    id: z.string(),
+    domainId: z.string(),
+    title: trimmedString,
+    message: nonEmptyTrimmedString,
+    triggerSentence: trimmedString,
+    triggerSituation: trimmedString,
+    tags: z.array(trimmedString).default([]),
+    backgroundColor: trimmedString,
+    textColor: trimmedString,
+    accentColor: trimmedString,
+    typography: flashcardTypographySchema,
+    imageUrl: trimmedString,
+    imageAlt: trimmedString,
+    layout: flashcardLayoutSchema,
+    visualStyle: flashcardVisualStyleSchema,
+    linkedValueIds: uniqueStringArraySchema.default([]),
+    linkedBehaviorIds: uniqueStringArraySchema.default([]),
+    linkedPatternIds: uniqueStringArraySchema.default([]),
+    linkedBeliefIds: uniqueStringArraySchema.default([]),
+    linkedModeIds: uniqueStringArraySchema.default([]),
+    linkedReportIds: uniqueStringArraySchema.default([]),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+    ...ownedEntityFieldsSchema
+});
 export const triggerEmotionSchema = z.object({
     id: z.string(),
     emotionDefinitionId: z.string().nullable().default(null),
@@ -341,6 +371,7 @@ export const psycheOverviewPayloadSchema = z.object({
     behaviors: z.array(behaviorSchema),
     beliefs: z.array(beliefEntrySchema),
     modes: z.array(modeProfileSchema),
+    flashcards: z.array(flashcardSchema),
     reports: z.array(triggerReportSchema),
     schemaPressure: z.array(schemaPressureEntrySchema),
     devrageMetric: devrageMetricPayloadSchema,
@@ -456,6 +487,29 @@ export const createModeGuideSessionSchema = z.object({
     userId: optionalOwnedUserIdSchema
 });
 export const updateModeGuideSessionSchema = createModeGuideSessionSchema.partial();
+export const createFlashcardSchema = z.object({
+    title: trimmedString.default(""),
+    message: nonEmptyTrimmedString,
+    triggerSentence: trimmedString.default(""),
+    triggerSituation: trimmedString.default(""),
+    tags: z.array(trimmedString).default([]),
+    backgroundColor: trimmedString.default("#f8fafc"),
+    textColor: trimmedString.default("#111827"),
+    accentColor: trimmedString.default("#6ee7b7"),
+    typography: flashcardTypographySchema.default("serif"),
+    imageUrl: trimmedString.default(""),
+    imageAlt: trimmedString.default(""),
+    layout: flashcardLayoutSchema.default("centered"),
+    visualStyle: flashcardVisualStyleSchema.default("calm"),
+    linkedValueIds: uniqueStringArraySchema.default([]),
+    linkedBehaviorIds: uniqueStringArraySchema.default([]),
+    linkedPatternIds: uniqueStringArraySchema.default([]),
+    linkedBeliefIds: uniqueStringArraySchema.default([]),
+    linkedModeIds: uniqueStringArraySchema.default([]),
+    linkedReportIds: uniqueStringArraySchema.default([]),
+    userId: optionalOwnedUserIdSchema
+});
+export const updateFlashcardSchema = createFlashcardSchema.partial();
 export const createEventTypeSchema = z.object({
     label: nonEmptyTrimmedString,
     description: trimmedString.default(""),

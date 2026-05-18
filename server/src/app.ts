@@ -2453,6 +2453,161 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
     ]
   },
   {
+    entityType: "flashcard",
+    purpose:
+      "A small therapeutic reminder card with a central message, optional title, tags, trigger cue, visual styling, and links to Psyche records.",
+    minimumCreateFields: ["message"],
+    relationshipRules: [
+      "Flashcards are normal stored Psyche entities and should use shared batch CRUD routes.",
+      "Use flashcards when the user wants a brief message to be shown back during an urge, trigger, mode, belief activation, or value reminder.",
+      "Tags, triggerSentence, triggerSituation, and optional title make the card findable; the message is the main therapeutic content."
+    ],
+    searchHints: [
+      "Search by tags, trigger wording, title, message, behavior, belief, pattern, mode, or urge language before creating a duplicate card.",
+      "When the user says they feel an urge, search flashcards first if the urge or trigger may have a prepared card."
+    ],
+    examples: [
+      '{"message":"This urge is a wave. You do not have to obey it; stay with your body for two minutes and choose again.","tags":["urge","sobriety"],"triggerSentence":"I feel the urge to drink","triggerSituation":"Late evening craving after shame or loneliness","visualStyle":"urgent","backgroundColor":"#111827","textColor":"#f8fafc","accentColor":"#6ee7b7"}'
+    ],
+    fieldGuide: [
+      {
+        name: "message",
+        type: "string",
+        required: true,
+        description: "The main sentence or brief therapeutic reminder shown on the card."
+      },
+      {
+        name: "title",
+        type: "string",
+        required: false,
+        description: "Compact optional retrieval title; not the main card content.",
+        defaultValue: ""
+      },
+      {
+        name: "triggerSentence",
+        type: "string",
+        required: false,
+        description: "A user phrase that should retrieve this card, such as an urge sentence.",
+        defaultValue: ""
+      },
+      {
+        name: "triggerSituation",
+        type: "string",
+        required: false,
+        description: "Situation or cue where this card should be shown.",
+        defaultValue: ""
+      },
+      {
+        name: "tags",
+        type: "string[]",
+        required: false,
+        description: "Retrieval tags such as urge, sobriety, shame, critic, or grounding.",
+        defaultValue: []
+      },
+      {
+        name: "backgroundColor",
+        type: "string",
+        required: false,
+        description: "Card background color.",
+        defaultValue: "#f8fafc"
+      },
+      {
+        name: "textColor",
+        type: "string",
+        required: false,
+        description: "Card text color.",
+        defaultValue: "#111827"
+      },
+      {
+        name: "accentColor",
+        type: "string",
+        required: false,
+        description: "Card accent color.",
+        defaultValue: "#6ee7b7"
+      },
+      {
+        name: "typography",
+        type: "serif|sans|mono|display",
+        required: false,
+        description: "Typography style.",
+        enumValues: ["serif", "sans", "mono", "display"],
+        defaultValue: "serif"
+      },
+      {
+        name: "imageUrl",
+        type: "string",
+        required: false,
+        description: "Optional image URL.",
+        defaultValue: ""
+      },
+      {
+        name: "imageAlt",
+        type: "string",
+        required: false,
+        description: "Optional image alt text.",
+        defaultValue: ""
+      },
+      {
+        name: "layout",
+        type: "centered|top_left|image_split|poster",
+        required: false,
+        description: "Flashcard layout style.",
+        enumValues: ["centered", "top_left", "image_split", "poster"],
+        defaultValue: "centered"
+      },
+      {
+        name: "visualStyle",
+        type: "calm|urgent|warm|clinical|playful",
+        required: false,
+        description: "Therapeutic visual tone.",
+        enumValues: ["calm", "urgent", "warm", "clinical", "playful"],
+        defaultValue: "calm"
+      },
+      {
+        name: "linkedValueIds",
+        type: "string[]",
+        required: false,
+        description: "Linked value ids.",
+        defaultValue: []
+      },
+      {
+        name: "linkedBehaviorIds",
+        type: "string[]",
+        required: false,
+        description: "Linked behavior ids.",
+        defaultValue: []
+      },
+      {
+        name: "linkedPatternIds",
+        type: "string[]",
+        required: false,
+        description: "Linked behavior pattern ids.",
+        defaultValue: []
+      },
+      {
+        name: "linkedBeliefIds",
+        type: "string[]",
+        required: false,
+        description: "Linked belief ids.",
+        defaultValue: []
+      },
+      {
+        name: "linkedModeIds",
+        type: "string[]",
+        required: false,
+        description: "Linked mode ids.",
+        defaultValue: []
+      },
+      {
+        name: "linkedReportIds",
+        type: "string[]",
+        required: false,
+        description: "Linked trigger report ids.",
+        defaultValue: []
+      }
+    ]
+  },
+  {
     entityType: "trigger_report",
     purpose:
       "A structured reflective incident report that ties situation, emotions, thoughts, behaviors, consequences, and next moves together.",
@@ -2653,6 +2808,7 @@ const AGENT_ONBOARDING_BATCH_ROUTE_BASES = {
   belief_entry: "/api/v1/psyche/beliefs",
   mode_profile: "/api/v1/psyche/modes",
   mode_guide_session: "/api/v1/psyche/mode-guides",
+  flashcard: "/api/v1/entities/search",
   event_type: "/api/v1/psyche/event-types",
   emotion_definition: "/api/v1/psyche/emotions",
   trigger_report: "/api/v1/psyche/reports",
@@ -3585,7 +3741,7 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
   "The opening question should help the user understand what they are actually trying to save, decide, review, or change, not make them perform the schema out loud.",
   "If the user already named the exact correction in usable language, confirm only the missing scope, timing, or route-selecting detail that still matters, then act.",
   "Keep API and architecture nouns out of user-facing questions unless the user asks about implementation. Do not ask the user about surfaces, route families, CRUD, payloads, mutation paths, or read paths; ask about the human object such as a wiki page, note, trigger report, behavior pattern, belief, mode, movement timeline, energy model, weekday pattern, flow, run, or node result.",
-  "Self-observation is not the default container for Psyche material. Use it only for a lightweight observed event note; prefer trigger_report for one emotionally meaningful episode, behavior_pattern for a recurring loop and functional analysis, behavior for one repeated move, belief_entry for a core sentence, mode_guide_session or mode_profile for an active part-state, and wiki_page for durable memory.",
+  "Self-observation is not the default container for Psyche material. Use it only for a lightweight observed event note; prefer trigger_report for one emotionally meaningful episode, behavior_pattern for a recurring loop and functional analysis, behavior for one repeated move, belief_entry for a core sentence, mode_guide_session or mode_profile for an active part-state, flashcard for a brief rehearsable reminder to use during a trigger or urge, and wiki_page for durable memory.",
   "Do not bury schema work in self-observation. If the user is describing a schema theme, preserve it through a belief_entry, behavior_pattern, mode_profile, mode_guide_session, trigger_report, or wiki_page depending on whether it appears as a rule, loop, part-state, live exploration, one episode, or durable explanation.",
   "Do not minimize functional analysis, trigger chains, behavior patterns, modes, beliefs, or schema themes. After at least one concrete example is clear, offer one careful interpretive hypothesis when it would help the user understand what the reaction may be protecting, predicting, relieving, or costing.",
   "Phrase Psyche interpretive hypotheses as collaborative and testable, not as verdicts. Ask whether the hypothesis lands or needs correction before turning it into a saved belief, pattern, mode, trigger report, or note.",
@@ -3860,9 +4016,25 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
       "Ask what emotion, body signal, thought, or meaning showed up.",
       "Ask what behavior showed up: what the user did, wanted to do, avoided, or repeated next.",
       "Ask what the immediate consequence was, including short-term relief or cost if it is visible.",
-      "Decide whether this should stay a lightweight self-observation or become a trigger_report, behavior_pattern, behavior, belief_entry, mode_profile, mode_guide_session, event_type, emotion_definition, or wiki page.",
+      "Decide whether this should stay a lightweight self-observation or become a trigger_report, behavior_pattern, behavior, belief_entry, mode_profile, mode_guide_session, flashcard, event_type, emotion_definition, or wiki page.",
       "Remember that self-observation is note-backed and should be written through an observed note with frontmatter.observedAt only when a lightweight observation is the right container.",
-      "Do not promote self-observation over functional analysis: use behavior_pattern for recurring loops, trigger_report for one emotionally meaningful episode, mode_guide_session or mode_profile for a central part-state, belief_entry for a central sentence, and wiki_page for durable memory."
+      "Do not promote self-observation over functional analysis: use behavior_pattern for recurring loops, trigger_report for one emotionally meaningful episode, mode_guide_session or mode_profile for a central part-state, belief_entry for a central sentence, flashcard for a rehearsable reminder during an urge or trigger, and wiki_page for durable memory."
+    ]
+  },
+  {
+    focus: "flashcard",
+    openingQuestion:
+      "What exact moment or urge should this card help you meet?",
+    coachingGoal:
+      "Craft a concise therapeutic reminder and retrieval cues before visual styling.",
+    askSequence: [
+      "Ask what moment, urge sentence, or trigger situation should bring this flashcard up.",
+      "Reflect what the card is trying to help the user interrupt, remember, tolerate, or choose.",
+      "Ask for the simple message that should be centered on the card, or offer a concise working sentence if the user's meaning is clearer than the wording.",
+      "Ask for tags and trigger wording before asking for a title, because retrieval matters more than the title.",
+      "Ask for color, typography, image, layout, and visual tone only after the message and retrieval cues are clear.",
+      "Use shared batch CRUD for create, update, delete, restore, and search; flashcard is a normal stored Psyche entity, not a dedicated route family.",
+      "When the user reports an urge or trigger, search flashcards by tags, triggerSentence, triggerSituation, message, title, and linked Psyche records, then show the message first with brief psychotherapy-informed support around it."
     ]
   },
   {
@@ -4392,6 +4564,55 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
     ]
   },
   {
+    focus: "flashcard",
+    useWhen:
+      "Use when the user wants a small therapeutic reminder card for an urge, trigger sentence, mode activation, belief activation, value reminder, or relapse-prevention moment.",
+    coachingGoal:
+      "Help the user craft one brief, memorable, usable message and enough retrieval cues to find it at the exact moment it matters.",
+    askSequence: [
+      "Start from the moment when the card should be shown, especially the user's own urge sentence or trigger cue.",
+      "Reflect what the card is trying to interrupt, steady, or help the user remember.",
+      "Ask what the card should say in one simple sentence or short message.",
+      "If the message is almost clear, offer one concise therapeutic wording and invite correction.",
+      "Ask for tags and trigger wording before title because retrieval matters more than the title.",
+      "Ask about color, typography, image, or layout only after the message and retrieval cues are clear.",
+      "Link values, behaviors, patterns, beliefs, modes, or reports only when those links will help future retrieval or coaching."
+    ],
+    requiredForCreate: ["message"],
+    highValueOptionalFields: [
+      "triggerSentence",
+      "triggerSituation",
+      "tags",
+      "title",
+      "visualStyle",
+      "backgroundColor",
+      "textColor",
+      "accentColor",
+      "typography",
+      "imageUrl",
+      "linkedBehaviorIds",
+      "linkedPatternIds",
+      "linkedBeliefIds",
+      "linkedModeIds",
+      "linkedValueIds"
+    ],
+    exampleQuestions: [
+      "What exact urge sentence or situation should make this card appear?",
+      "When you are in that moment, what do you most need to remember?",
+      "Should this card interrupt the urge, comfort a part, challenge a belief, or point you back to a value?",
+      "If this were only one sentence on the card, what should it say?",
+      "What tags would help us find it later?",
+      "What visual tone should it have: calm, urgent, warm, clinical, or playful?"
+    ],
+    notes: [
+      "The message is the main content; title is optional and compact.",
+      "Use shared batch entity routes for flashcard create, update, delete, restore, and search.",
+      "When the user says they feel an urge or trigger, search flashcards by triggerSentence, triggerSituation, tags, message, and linked Psyche records before creating a new card.",
+      "When showing a card, display or quote the message first, then add brief grounding, urge-surfing, cognitive defusion, schema-mode, or values-based coaching around it.",
+      "Do not make the user fill styling fields before the therapeutic sentence is clear."
+    ]
+  },
+  {
     focus: "trigger_report",
     useWhen:
       "Use for one specific emotionally meaningful incident that should be mapped from situation through emotions, thoughts, behaviors, consequences, and next moves.",
@@ -4519,12 +4740,14 @@ function buildPlaybookRouteInfo(focus: string) {
   );
   const routePosture = guide?.classification ?? classifyOnboardingEntity(focus);
   const apiAccessHint = [
+    `Focus: ${focus}.`,
     `Route posture: ${routePosture}.`,
     guide?.preferredMutationPath
       ? `Mutation: ${guide.preferredMutationPath}.`
       : null,
     guide?.preferredReadPath ? `Read: ${guide.preferredReadPath}.` : null,
-    guide?.preferredMutationTool ? `Tool: ${guide.preferredMutationTool}.` : null
+    guide?.preferredMutationTool ? `Tool: ${guide.preferredMutationTool}.` : null,
+    `Entity type: ${focus}.`
   ]
     .filter(Boolean)
     .join(" ");
@@ -5267,7 +5490,7 @@ function buildAgentOnboardingPayload(request: {
       workbench:
         "Workbench is Forge's graph-flow execution system. Treat flows, runs, published outputs, node results, and latest-node-output reads as a dedicated API family instead of a normal entity-batch surface.",
       psyche:
-        "Forge Psyche is the reflective domain for values, patterns, behaviors, beliefs, modes, and trigger reports. It is sensitive and should be handled deliberately."
+        "Forge Psyche is the reflective domain for values, patterns, behaviors, beliefs, modes, flashcards, and trigger reports. It is sensitive and should be handled deliberately."
     },
     psycheSubmoduleModel: {
       value:
@@ -5284,6 +5507,8 @@ function buildAgentOnboardingPayload(request: {
         "A mode profile is a durable description of a recurring part-state or strategy, including family, fear, burden, protective job, and origin context.",
       modeGuideSession:
         "A mode guide session is the guided reasoning worksheet that stores answers and candidate mode interpretations before or alongside a durable mode profile.",
+      flashcard:
+        "A flashcard is a small therapeutic reminder card. It has one main message, optional title, tags, trigger cue, visual styling, optional image, and links to Psyche records so agents can retrieve and show it during urges or triggering situations.",
       eventType:
         "An event type is reusable incident taxonomy for trigger reports, such as criticism, conflict, rupture, or overload.",
       emotionDefinition:
@@ -5312,7 +5537,7 @@ function buildAgentOnboardingPayload(request: {
       "Task runs represent live work sessions on tasks and are separate from task status.",
       "Notes can link to one or many entities and are the canonical place for Markdown progress context or close-out evidence.",
       "Psyche values can link to goals, projects, and tasks.",
-      "Behavior patterns, behaviors, beliefs, modes, and trigger reports cross-link to describe one reflective model rather than isolated records.",
+      "Behavior patterns, behaviors, beliefs, modes, flashcards, and trigger reports cross-link to describe one reflective model rather than isolated records.",
       "Insights can point at one entity, but they exist to capture interpretation or advice rather than raw work items."
     ],
     entityRouteModel: {
@@ -5334,6 +5559,7 @@ function buildAgentOnboardingPayload(request: {
         "belief_entry",
         "mode_profile",
         "mode_guide_session",
+        "flashcard",
         "event_type",
         "emotion_definition",
         "trigger_report",

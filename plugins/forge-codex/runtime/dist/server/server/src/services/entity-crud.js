@@ -6,12 +6,12 @@ import { createCalendarEvent, createTaskTimebox, createWorkBlockTemplate, delete
 import { createNote, deleteNote, getNoteById, listNotes, unlinkNotesForEntity, updateNote } from "../repositories/notes.js";
 import { clearEntityOwner, filterOwnedEntities } from "../repositories/entity-ownership.js";
 import { createPreferenceCatalog, createPreferenceCatalogItem, createPreferenceContext, createPreferenceItem, deletePreferenceCatalog, deletePreferenceCatalogItem, deletePreferenceContext, deletePreferenceItem, getPreferenceCatalogById, getPreferenceCatalogItemById, getPreferenceContextById, getPreferenceItemById, listPreferenceCatalogItems, listPreferenceCatalogs, listPreferenceContexts, listPreferenceItems, updatePreferenceCatalog, updatePreferenceCatalogItem, updatePreferenceContext, updatePreferenceItem } from "../repositories/preferences.js";
-import { createBehaviorPatternSchema, createBehaviorSchema, createBeliefEntrySchema, createEmotionDefinitionSchema, createEventTypeSchema, createModeGuideSessionSchema, createModeProfileSchema, createPsycheValueSchema, createTriggerReportSchema, updateBehaviorPatternSchema, updateBehaviorSchema, updateBeliefEntrySchema, updateEmotionDefinitionSchema, updateEventTypeSchema, updateModeGuideSessionSchema, updateModeProfileSchema, updatePsycheValueSchema, updateTriggerReportSchema } from "../psyche-types.js";
+import { createBehaviorPatternSchema, createBehaviorSchema, createBeliefEntrySchema, createEmotionDefinitionSchema, createEventTypeSchema, createFlashcardSchema, createModeGuideSessionSchema, createModeProfileSchema, createPsycheValueSchema, createTriggerReportSchema, updateBehaviorPatternSchema, updateBehaviorSchema, updateBeliefEntrySchema, updateEmotionDefinitionSchema, updateEventTypeSchema, updateFlashcardSchema, updateModeGuideSessionSchema, updateModeProfileSchema, updatePsycheValueSchema, updateTriggerReportSchema } from "../psyche-types.js";
 import { buildSettingsBinPayload, cascadeSoftDeleteAnchoredCollaboration, clearDeletedEntityRecord, getDeletedEntityRecord, listDeletedEntities, restoreAnchoredCollaboration, restoreDeletedEntityRecord, upsertDeletedEntityRecord } from "../repositories/deleted-entities.js";
 import { createGoal, deleteGoal, getGoalById, listGoals, updateGoal } from "../repositories/goals.js";
 import { createHabit, deleteHabit, getHabitById, listHabits, updateHabit } from "../repositories/habits.js";
 import { createQuestionnaireInstrument, deleteQuestionnaireInstrument, getQuestionnaireInstrumentEntityById, listQuestionnaireInstrumentEntities, updateQuestionnaireInstrument, updateQuestionnaireInstrumentSchema } from "../repositories/questionnaires.js";
-import { createBehavior, createBehaviorPattern, createBeliefEntry, createEmotionDefinition, createEventType, createModeGuideSession, createModeProfile, createPsycheValue, createTriggerReport, deleteBehavior, deleteBehaviorPattern, deleteBeliefEntry, deleteEmotionDefinition, deleteEventType, deleteModeGuideSession, deleteModeProfile, deletePsycheValue, deleteTriggerReport, getBehaviorById, getBehaviorPatternById, getBeliefEntryById, getEmotionDefinitionById, getEventTypeById, getModeGuideSessionById, getModeProfileById, getPsycheValueById, getTriggerReportById, listBehaviors, listBehaviorPatterns, listBeliefEntries, listEmotionDefinitions, listEventTypes, listModeGuideSessions, listModeProfiles, listPsycheValues, listTriggerReports, updateBehavior, updateBehaviorPattern, updateBeliefEntry, updateEmotionDefinition, updateEventType, updateModeGuideSession, updateModeProfile, updatePsycheValue, updateTriggerReport } from "../repositories/psyche.js";
+import { createBehavior, createBehaviorPattern, createBeliefEntry, createEmotionDefinition, createEventType, createFlashcard, createModeGuideSession, createModeProfile, createPsycheValue, createTriggerReport, deleteBehavior, deleteBehaviorPattern, deleteBeliefEntry, deleteEmotionDefinition, deleteEventType, deleteFlashcard, deleteModeGuideSession, deleteModeProfile, deletePsycheValue, deleteTriggerReport, getBehaviorById, getBehaviorPatternById, getBeliefEntryById, getEmotionDefinitionById, getEventTypeById, getFlashcardById, getModeGuideSessionById, getModeProfileById, getPsycheValueById, getTriggerReportById, listBehaviors, listBehaviorPatterns, listBeliefEntries, listEmotionDefinitions, listEventTypes, listFlashcards, listModeGuideSessions, listModeProfiles, listPsycheValues, listTriggerReports, updateBehavior, updateBehaviorPattern, updateBeliefEntry, updateEmotionDefinition, updateEventType, updateFlashcard, updateModeGuideSession, updateModeProfile, updatePsycheValue, updateTriggerReport } from "../repositories/psyche.js";
 import { createProject, deleteProject, getProjectById, listProjects, updateProject } from "../repositories/projects.js";
 import { createStrategy, deleteStrategy, getStrategyById, listStrategies, updateStrategy } from "../repositories/strategies.js";
 import { createTag, deleteTag, getTagById, listTags, updateTag } from "../repositories/tags.js";
@@ -245,6 +245,17 @@ const CRUD_ENTITY_CAPABILITIES = {
         update: (id, patch, context) => updateModeGuideSession(id, patch, context),
         hardDelete: (id, context) => deleteModeGuideSession(id, context)
     },
+    flashcard: {
+        entityType: "flashcard",
+        routeBase: "/api/v1/entities",
+        deleteMode: "soft_default",
+        inBin: true,
+        list: () => listFlashcards(),
+        get: (id) => getFlashcardById(id),
+        create: (data, context) => createFlashcard(data, context),
+        update: (id, patch, context) => updateFlashcard(id, patch, context),
+        hardDelete: (id, context) => deleteFlashcard(id, context)
+    },
     event_type: {
         entityType: "event_type",
         routeBase: "/api/v1/psyche/event-types",
@@ -367,6 +378,7 @@ const CREATE_ENTITY_SCHEMAS = {
     belief_entry: createBeliefEntrySchema,
     mode_profile: createModeProfileSchema,
     mode_guide_session: createModeGuideSessionSchema,
+    flashcard: createFlashcardSchema,
     event_type: createEventTypeSchema,
     emotion_definition: createEmotionDefinitionSchema,
     trigger_report: createTriggerReportSchema,
@@ -396,6 +408,7 @@ const UPDATE_ENTITY_SCHEMAS = {
     belief_entry: updateBeliefEntrySchema,
     mode_profile: updateModeProfileSchema,
     mode_guide_session: updateModeGuideSessionSchema,
+    flashcard: updateFlashcardSchema,
     event_type: updateEventTypeSchema,
     emotion_definition: updateEmotionDefinitionSchema,
     trigger_report: updateTriggerReportSchema,
@@ -636,9 +649,11 @@ function describeEntity(entityType, entity) {
                 ? entity.label
                 : typeof entity.summary === "string" && entity.summary.trim().length > 0
                     ? entity.summary
-                    : typeof entity.body === "string" && entity.body.trim().length > 0
-                        ? entity.body.slice(0, 72)
-                        : entityType.replaceAll("_", " ");
+                    : typeof entity.message === "string" && entity.message.trim().length > 0
+                        ? entity.message.slice(0, 72)
+                        : typeof entity.body === "string" && entity.body.trim().length > 0
+                            ? entity.body.slice(0, 72)
+                            : entityType.replaceAll("_", " ");
     const subtitle = typeof entity.description === "string" && entity.description.trim().length > 0
         ? entity.description
         : typeof entity.summary === "string" && entity.summary.trim().length > 0
@@ -708,6 +723,13 @@ function matchesLinkedTo(entityType, entity, linkedTo) {
             return ((linkedTo.entityType === "behavior_pattern" && Array.isArray(entity.linkedPatternIds) && entity.linkedPatternIds.includes(linkedTo.id)) ||
                 (linkedTo.entityType === "behavior" && Array.isArray(entity.linkedBehaviorIds) && entity.linkedBehaviorIds.includes(linkedTo.id)) ||
                 (linkedTo.entityType === "psyche_value" && Array.isArray(entity.linkedValueIds) && entity.linkedValueIds.includes(linkedTo.id)));
+        case "flashcard":
+            return ((linkedTo.entityType === "psyche_value" && Array.isArray(entity.linkedValueIds) && entity.linkedValueIds.includes(linkedTo.id)) ||
+                (linkedTo.entityType === "behavior" && Array.isArray(entity.linkedBehaviorIds) && entity.linkedBehaviorIds.includes(linkedTo.id)) ||
+                (linkedTo.entityType === "behavior_pattern" && Array.isArray(entity.linkedPatternIds) && entity.linkedPatternIds.includes(linkedTo.id)) ||
+                (linkedTo.entityType === "belief_entry" && Array.isArray(entity.linkedBeliefIds) && entity.linkedBeliefIds.includes(linkedTo.id)) ||
+                (linkedTo.entityType === "mode_profile" && Array.isArray(entity.linkedModeIds) && entity.linkedModeIds.includes(linkedTo.id)) ||
+                (linkedTo.entityType === "trigger_report" && Array.isArray(entity.linkedReportIds) && entity.linkedReportIds.includes(linkedTo.id)));
         case "trigger_report":
             return ((linkedTo.entityType === "behavior_pattern" && Array.isArray(entity.linkedPatternIds) && entity.linkedPatternIds.includes(linkedTo.id)) ||
                 (linkedTo.entityType === "psyche_value" && Array.isArray(entity.linkedValueIds) && entity.linkedValueIds.includes(linkedTo.id)) ||

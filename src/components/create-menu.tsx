@@ -35,6 +35,7 @@ export type ForgeCreateActionId =
   | "psyche_value"
   | "behavior_pattern"
   | "behavior"
+  | "flashcard"
   | "trigger_report"
   | "wiki_page";
 
@@ -57,6 +58,7 @@ type ForgeCreateActionSpec = {
     | "psyche_value"
     | "behavior_pattern"
     | "behavior"
+    | "flashcard"
     | "trigger_report"
     | "wiki_page"
   >;
@@ -222,6 +224,23 @@ function buildForgeCreateActionSpecs(
       filterIds: ["behavior"]
     },
     {
+      id: "flashcard",
+      kind: "flashcard",
+      group: "Psyche",
+      title: "Flashcard",
+      quickActionTitle: "Create flashcard",
+      description:
+        "Write a compact therapeutic card for urges, triggers, or values-based pivots.",
+      aliases: [
+        "flashcard",
+        "card",
+        "urge card",
+        "trigger card",
+        "therapy card"
+      ],
+      filterIds: ["flashcard"]
+    },
+    {
       id: "trigger_report",
       kind: "report",
       group: "Psyche",
@@ -305,6 +324,9 @@ export function useForgeCreateActions({
               return;
             case "behavior":
               navigate("/psyche/behaviors?create=1");
+              return;
+            case "flashcard":
+              navigate("/psyche/flashcards?create=1");
               return;
             case "trigger_report":
               navigate("/psyche/reports?create=1");

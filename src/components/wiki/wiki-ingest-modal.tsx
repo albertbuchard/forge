@@ -53,6 +53,7 @@ const SEARCHABLE_ENTITY_TYPES: CrudEntityType[] = [
   "habit",
   "strategy",
   "psyche_value",
+  "flashcard",
   "note"
 ];
 

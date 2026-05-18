@@ -29,6 +29,7 @@ import { StrategyDetailPage } from "@/pages/strategy-detail-page";
 import { PreferencesPage } from "@/pages/preferences-page";
 import { PsychePage } from "@/pages/psyche-page";
 import { PsycheBehaviorsPage } from "@/pages/psyche-behaviors-page";
+import { PsycheFlashcardsPage } from "@/pages/psyche-flashcards-page";
 import { PsycheGoalMapPage } from "@/pages/psyche-goal-map-page";
 import { PsycheMetricsPage } from "@/pages/psyche-metrics-page";
 import { PsycheModeGuidePage } from "@/pages/psyche-mode-guide-page";
@@ -313,6 +314,15 @@ export function App() {
               "Psyche metrics",
               "Daily Psyche metric history with plots and summary statistics.",
               <PsycheMetricsPage />
+            )}
+          />
+          <Route
+            path="psyche/flashcards"
+            element={surface(
+              "psyche-flashcards",
+              "Psyche flashcards",
+              "Therapeutic reminder cards for urges, triggers, and values-based pivots.",
+              <PsycheFlashcardsPage />
             )}
           />
           <Route

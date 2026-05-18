@@ -168,6 +168,32 @@ export interface ModeGuideSession extends OwnedEntity {
   updatedAt: string;
 }
 
+export interface Flashcard extends OwnedEntity {
+  id: string;
+  domainId: string;
+  title: string;
+  message: string;
+  triggerSentence: string;
+  triggerSituation: string;
+  tags: string[];
+  backgroundColor: string;
+  textColor: string;
+  accentColor: string;
+  typography: "serif" | "sans" | "mono" | "display";
+  imageUrl: string;
+  imageAlt: string;
+  layout: "centered" | "top_left" | "image_split" | "poster";
+  visualStyle: "calm" | "urgent" | "warm" | "clinical" | "playful";
+  linkedValueIds: string[];
+  linkedBehaviorIds: string[];
+  linkedPatternIds: string[];
+  linkedBeliefIds: string[];
+  linkedModeIds: string[];
+  linkedReportIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface TriggerEmotion {
   id: string;
   emotionDefinitionId: string | null;
@@ -333,6 +359,7 @@ export interface PsycheOverviewPayload {
   behaviors: Behavior[];
   beliefs: BeliefEntry[];
   modes: ModeProfile[];
+  flashcards: Flashcard[];
   reports: TriggerReport[];
   schemaPressure: SchemaPressureEntry[];
   devrageMetric: DevrageMetricPayload;

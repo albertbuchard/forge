@@ -1,6 +1,6 @@
 ---
 name: forge-openclaw-plugin
-description: use when the user wants to save, search, update, review, start, stop, reward, explain, compare, or run Forge records, or when the conversation is clearly about a Forge entity or domain surface such as a goal, project, strategy, task, habit, note, wiki_page, calendar_event, calendar_connection, work_block_template, task_timebox, task_run, work_adjustment, insight, preference item, preference context, preference catalog, preference judgment, preference signal, questionnaire instrument, questionnaire run, self observation, movement, life_force, workbench, psyche_value, behavior_pattern, behavior, belief_entry, mode_profile, mode_guide_session, trigger_report, event_type, emotion_definition, sleep_session, or workout_session. identify the exact Forge object or specialized surface, keep the main conversation natural, guide psyche intake with active listening before storing it, and for psyche issues that need understanding first usually begin with one exploratory question before any formulation or save suggestion.
+description: use when the user wants to save, search, update, review, start, stop, reward, explain, compare, or run Forge records, or when the conversation is clearly about a Forge entity or domain surface such as a goal, project, strategy, task, habit, note, wiki_page, calendar_event, calendar_connection, work_block_template, task_timebox, task_run, work_adjustment, insight, preference item, preference context, preference catalog, preference judgment, preference signal, questionnaire instrument, questionnaire run, self observation, movement, life_force, workbench, psyche_value, behavior_pattern, behavior, belief_entry, mode_profile, mode_guide_session, flashcard, trigger_report, event_type, emotion_definition, sleep_session, or workout_session. identify the exact Forge object or specialized surface, keep the main conversation natural, guide psyche intake with active listening before storing it, and for psyche issues that need understanding first usually begin with one exploratory question before any formulation or save suggestion.
 ---
 
 Forge is the user's structured system for planning work, doing work, reflecting on patterns, and keeping a truthful record of what is happening. Use it when the user is clearly working inside that system, or when they are describing something that naturally belongs there and would benefit from being stored, updated, reviewed, or acted on in Forge. Keep the conversation natural first. Do not turn every message into intake. When a real Forge entity is clearly present, name the exact entity type plainly, help with the substance of the conversation, and then offer Forge once, lightly, if storing it would genuinely help.
@@ -59,7 +59,7 @@ PM surface rule:
   human/bot ownership filters.
 - Guided modal flows handle create, edit, move, link, and closeout actions.
 
-Forge has four major stored-entity surfaces and three specialized domain surfaces. The planning side covers goals, projects, strategies, tasks, habits, notes, calendar events, recurring work blocks, task timeboxes, live work sessions, and agent-authored insights. The Health side covers sleep sessions, sports and workout sessions, companion pairing, and habit-generated workout records that should still stay linked to the broader Forge graph. The Preferences side covers contextual taste modeling, pairwise comparisons, direct signals, editable concept libraries, and preference items that can come from Forge entities or seeded concept domains such as food, activities, places, countries, fashion, people, media, and tools. The Psyche side covers values, patterns, behaviors, beliefs, modes, guided mode sessions, trigger reports, event types, and reusable emotion definitions. The specialized domain surfaces are Movement, Life Force, and Workbench; agents must use their dedicated route families instead of forcing them through batch CRUD. Forge also has a SQLite-backed Wiki memory layer with explicit spaces, Markdown content in database rows, backlinks, optional embeddings, and structured links back to Forge entities. Forge is also multi-user: every entity can belong to a typed `human` or `bot` user through `userId`, and read routes can scope to one or many users with `userId` or repeated `userIds`. The current access posture is configurable through a directional user graph, but the live default is still permissive: Forge can list users directly, every relationship edge starts open, and a user can read or affect another user's linked records when the route explicitly asks for them. Use `forge_get_user_directory` when owner identity or cross-user access matters. Strategies can also be locked into a contract with `isLocked`; once locked, do not mutate the graph or target structure unless the user explicitly wants the strategy unlocked first. The model should use the real entity names, not vague substitutes. Say `project`, not “initiative”. Say `behavior_pattern`, not “theme”. Say `trigger_report`, not “incident note”.
+Forge has four major stored-entity surfaces and three specialized domain surfaces. The planning side covers goals, projects, strategies, tasks, habits, notes, calendar events, recurring work blocks, task timeboxes, live work sessions, and agent-authored insights. The Health side covers sleep sessions, sports and workout sessions, companion pairing, and habit-generated workout records that should still stay linked to the broader Forge graph. The Preferences side covers contextual taste modeling, pairwise comparisons, direct signals, editable concept libraries, and preference items that can come from Forge entities or seeded concept domains such as food, activities, places, countries, fashion, people, media, and tools. The Psyche side covers values, patterns, behaviors, beliefs, modes, guided mode sessions, flashcards, trigger reports, event types, and reusable emotion definitions. The specialized domain surfaces are Movement, Life Force, and Workbench; agents must use their dedicated route families instead of forcing them through batch CRUD. Forge also has a SQLite-backed Wiki memory layer with explicit spaces, Markdown content in database rows, backlinks, optional embeddings, and structured links back to Forge entities. Forge is also multi-user: every entity can belong to a typed `human` or `bot` user through `userId`, and read routes can scope to one or many users with `userId` or repeated `userIds`. The current access posture is configurable through a directional user graph, but the live default is still permissive: Forge can list users directly, every relationship edge starts open, and a user can read or affect another user's linked records when the route explicitly asks for them. Use `forge_get_user_directory` when owner identity or cross-user access matters. Strategies can also be locked into a contract with `isLocked`; once locked, do not mutate the graph or target structure unless the user explicitly wants the strategy unlocked first. The model should use the real entity names, not vague substitutes. Say `project`, not “initiative”. Say `behavior_pattern`, not “theme”. Say `trigger_report`, not “incident note”.
 Habits are a first-class recurring entity in the planning side.
 NEGATIVE HABIT CHECK-IN RULE: for a `negative` habit, the correct aligned/resisted outcome is `missed`. `missed` means the bad habit was resisted, the user stayed aligned, and the habit should award its XP bonus.
 
@@ -237,7 +237,7 @@ Forge data location rule:
 
 Psyche interview rule:
 
-- For `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`, `mode_guide_session`, `trigger_report`, `event_type`, and `emotion_definition`, do not jump straight to raw field collection.
+- For `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`, `mode_guide_session`, `flashcard`, `trigger_report`, `event_type`, and `emotion_definition`, do not jump straight to raw field collection.
 - Treat `event_type` and `emotion_definition` as psychologically meaningful Psyche records, not cold taxonomy labels; start from the repeated lived moment or felt signature before wording the reusable label.
 - First use the active-listening playbooks in [`psyche_entity_playbooks.md`](./psyche_entity_playbooks.md).
 - Ask permission before going deeper, ask one or two focused questions at a time, reflect back what you heard, and summarize before moving on.
@@ -276,6 +276,8 @@ Self-observation rule:
 - If the core is a sentence the user believes, prefer `belief_entry`.
 - If a part-state, protector, critic, child state, or healthy-adult stance is active,
   prefer `mode_guide_session` or `mode_profile`.
+- If the user needs a brief rehearsable message during an urge, trigger, belief
+  activation, mode shift, or relapse-prevention moment, prefer `flashcard`.
 - If a schema theme is visible, do not bury it in self-observation: preserve it as
   the belief, recurring pattern, active mode, guided mode session, trigger report, or
   wiki explanation that best matches the material.
@@ -317,6 +319,10 @@ Use these exact entity meanings when deciding what the user is describing.
 `mode_profile` is one recurring state, voice, or inner role, such as inner critic, abandoned child, detached protector, overcontroller, or healthy adult.
 
 `mode_guide_session` is a guided exploration record used to understand what mode may be active right now. It is a structured worksheet, not the final durable profile unless the user wants it that way.
+
+`flashcard` is a small therapeutic reminder card. Use it when the user wants a sentence or short message that can be shown back during an urge, trigger, mode activation, belief activation, or values-based pivot. The message is the main content; title is optional and compact. Tags, trigger sentence, trigger situation, and Psyche links matter most for retrieval. Styling fields such as colors, typography, layout, visual tone, and image make the card easier to recognize but should come after the therapeutic sentence is clear.
+
+When a user says something like "I feel the urge to drink" or "help me not do this", search existing `flashcard` records first with `forge_search_entities` using `entityTypes: ["flashcard"]` and the user's urge, trigger words, tags, and situation language. If a matching card exists, show the flashcard message first, then add brief psychotherapy-informed support around it: grounding, urge surfing, cognitive defusion, schema/mode-aware reflection, or a values pivot. Do not create a new card until you have checked whether an existing one already fits.
 
 `trigger_report` is one specific emotionally meaningful episode described as what happened, what was felt, what was thought, what was done, what happened next, and what would help next time.
 
@@ -440,6 +446,16 @@ Only ask if missing or unclear:
 2. If it had a voice, what would it say, fear, or need?
 3. Would it help if we suggested one or two candidate mode labels, with reasons, before deciding whether to store a durable profile?
 
+`flashcard`
+Use for a small therapeutic card to retrieve during an urge, trigger, mode activation, belief activation, or values-based pivot.
+Minimum field: `message`
+Usually useful: `triggerSentence`, `triggerSituation`, `tags`, optional compact `title`, visual styling, optional `imageUrl`, links to values, behaviors, patterns, beliefs, modes, or reports
+Only ask if missing or unclear:
+
+1. What exact urge sentence, trigger, or situation should bring this card up?
+2. What one simple message should be centered on the card when that moment hits?
+3. What tags or trigger wording will help us find it later, and only then what visual tone, colors, typography, or image should it use?
+
 `trigger_report`
 Use for one specific emotionally important episode.
 Minimum field: `title`
@@ -480,7 +496,7 @@ Use the batch entity tools for stored records:
 `forge_search_entities`, `forge_create_entities`, `forge_update_entities`, `forge_delete_entities`, `forge_restore_entities`
 
 These tools operate on:
-`goal`, `project`, `strategy`, `task`, `habit`, `tag`, `note`, `insight`, `calendar_event`, `work_block_template`, `task_timebox`, `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`, `mode_guide_session`, `trigger_report`, `event_type`, `emotion_definition`, `preference_catalog`, `preference_catalog_item`, `preference_context`, `preference_item`, `questionnaire_instrument`, `sleep_session`, `workout_session`
+`goal`, `project`, `strategy`, `task`, `habit`, `tag`, `note`, `insight`, `calendar_event`, `work_block_template`, `task_timebox`, `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`, `mode_guide_session`, `flashcard`, `trigger_report`, `event_type`, `emotion_definition`, `preference_catalog`, `preference_catalog_item`, `preference_context`, `preference_item`, `questionnaire_instrument`, `sleep_session`, `workout_session`
 
 Use the wiki tools for SQLite-backed memory work:
 `forge_get_wiki_settings`, `forge_list_wiki_pages`, `forge_get_wiki_page`, `forge_search_wiki`, `forge_upsert_wiki_page`, `forge_get_wiki_health`, `forge_sync_wiki_vault`, `forge_reindex_wiki_embeddings`, `forge_ingest_wiki_source`

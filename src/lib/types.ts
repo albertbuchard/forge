@@ -97,6 +97,7 @@ export type CrudEntityType =
   | "belief_entry"
   | "mode_profile"
   | "mode_guide_session"
+  | "flashcard"
   | "event_type"
   | "emotion_definition"
   | "trigger_report"
@@ -121,6 +122,7 @@ export type RewardableEntityType =
   | "behavior"
   | "belief_entry"
   | "mode_profile"
+  | "flashcard"
   | "trigger_report";
 export type DeleteMode = "soft" | "hard";
 

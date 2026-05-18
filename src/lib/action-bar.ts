@@ -21,6 +21,7 @@ export const ACTION_BAR_SEARCH_ENTITY_TYPES: CrudEntityType[] = [
   "behavior",
   "belief_entry",
   "mode_profile",
+  "flashcard",
   "trigger_report"
 ];
 
@@ -40,6 +41,7 @@ export type ActionBarFilterId =
   | "behavior"
   | "belief_entry"
   | "mode_profile"
+  | "flashcard"
   | "trigger_report";
 
 export type ActionBarFilterToken = {
@@ -169,6 +171,8 @@ export function actionBarEntityTypeLabel(
       return "Belief";
     case "mode_profile":
       return "Mode";
+    case "flashcard":
+      return "Flashcard";
     case "trigger_report":
       return "Report";
     default:
@@ -282,6 +286,14 @@ export const ACTION_BAR_FILTER_TOKENS: ActionBarFilterToken[] = [
     entityTypes: ["mode_profile"]
   },
   {
+    id: "flashcard",
+    family: "entity-type",
+    label: "Flashcard",
+    kind: "flashcard",
+    searchText: "flashcard card urge trigger reminder psyche",
+    entityTypes: ["flashcard"]
+  },
+  {
     id: "trigger_report",
     family: "entity-type",
     label: "Report",
@@ -304,6 +316,8 @@ export function inferActionBarTitle(
   const candidates =
     entityType === "belief_entry"
       ? [entity.statement, entity.title, entity.name]
+      : entityType === "flashcard"
+        ? [entity.title, entity.message, entity.triggerSentence]
       : entityType === "note"
         ? [entity.title, entity.slug]
         : [
@@ -334,6 +348,8 @@ export function inferActionBarDetail(
     entity.endState,
     entity.whyItMatters,
     entity.valuedDirection,
+    entity.triggerSentence,
+    entity.triggerSituation,
     entity.contentPlain
   ]
     .map(readString)
@@ -411,6 +427,8 @@ export function buildActionBarHref(
       return `/psyche/schemas-beliefs?focus=${encodeURIComponent(id)}`;
     case "mode_profile":
       return `/psyche/modes?focus=${encodeURIComponent(id)}`;
+    case "flashcard":
+      return `/psyche/flashcards?focus=${encodeURIComponent(id)}`;
     case "trigger_report":
       return `/psyche/reports/${encodeURIComponent(id)}`;
     default:

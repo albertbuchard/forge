@@ -1385,6 +1385,7 @@ export function buildOpenApiDocument() {
           "belief_entry",
           "mode_profile",
           "mode_guide_session",
+          "flashcard",
           "trigger_report",
           "note",
           "tag",

@@ -86,6 +86,7 @@ const ENTITY_CREATION_REWARD_SOURCES: EntityCreationRewardSource[] = [
   { entityType: "behavior", tableName: "psyche_behaviors", titleColumn: "title" },
   { entityType: "belief_entry", tableName: "belief_entries", titleColumn: "statement" },
   { entityType: "mode_profile", tableName: "mode_profiles", titleColumn: "title" },
+  { entityType: "flashcard", tableName: "psyche_flashcards", titleColumn: "title" },
   { entityType: "trigger_report", tableName: "trigger_reports", titleColumn: "title" }
 ];
 
@@ -712,6 +713,7 @@ function buildMetricValues(input: {
     "belief_entry",
     "mode_profile",
     "mode_guide_session",
+    "flashcard",
     "trigger_report"
   ]);
   const nonManualXp = positiveRewards.reduce(

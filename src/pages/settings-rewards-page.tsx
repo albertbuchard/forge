@@ -24,6 +24,11 @@ import {
 } from "@/lib/api";
 import type { RewardRule, RewardableEntityType } from "@/lib/types";
 
+type RewardableOption = {
+  id: string;
+  label: string;
+};
+
 type RewardRuleFormValues = {
   title: string;
   description: string;
@@ -131,7 +136,7 @@ export function SettingsRewardsPage() {
   });
 
   const rewardRules = rewardRulesQuery.data?.rules ?? [];
-  const rewardableOptionsByType = useMemo(
+  const rewardableOptionsByType = useMemo<Record<RewardableEntityType, RewardableOption[]>>(
     () => ({
       system: [{ id: "operator_manual_reward", label: "Operator reward ledger" }],
       goal: shell.snapshot.goals.map((goal) => ({ id: goal.id, label: goal.title })),
@@ -146,6 +151,10 @@ export function SettingsRewardsPage() {
       behavior: (psycheOverviewQuery.data?.behaviors ?? []).map((behavior) => ({ id: behavior.id, label: behavior.title })),
       belief_entry: (psycheOverviewQuery.data?.beliefs ?? []).map((belief) => ({ id: belief.id, label: belief.statement })),
       mode_profile: (psycheOverviewQuery.data?.modes ?? []).map((mode) => ({ id: mode.id, label: mode.title })),
+      flashcard: (psycheOverviewQuery.data?.flashcards ?? []).map((flashcard) => ({
+        id: flashcard.id,
+        label: flashcard.title || flashcard.message
+      })),
       trigger_report: (psycheOverviewQuery.data?.reports ?? []).map((report) => ({ id: report.id, label: report.title }))
     }),
     [psycheOverviewQuery.data, shell.snapshot.dashboard.projects, shell.snapshot.goals, shell.snapshot.habits, shell.snapshot.tags, shell.snapshot.tasks]

@@ -24,6 +24,7 @@ describe("action bar helpers", () => {
     expect(actionBarEntityTypeToKind("behavior")).toBe("behavior");
     expect(actionBarEntityTypeToKind("belief_entry")).toBe("belief");
     expect(actionBarEntityTypeToKind("mode_profile")).toBe("mode");
+    expect(actionBarEntityTypeToKind("flashcard")).toBe("flashcard");
     expect(actionBarEntityTypeToKind("trigger_report")).toBe("report");
     expect(actionBarEntityTypeToKind("calendar_event")).toBe("calendar_event");
     expect(actionBarEntityTypeToKind("work_block_template")).toBe("work_block");
@@ -43,6 +44,9 @@ describe("action bar helpers", () => {
     expect(
       buildActionBarHref("psyche_value", "value-1", { id: "value-1" })
     ).toBe("/psyche/values?focus=value-1");
+    expect(
+      buildActionBarHref("flashcard", "card-1", { id: "card-1" })
+    ).toBe("/psyche/flashcards?focus=card-1");
     expect(
       buildActionBarHref("trigger_report", "report-1", { id: "report-1" })
     ).toBe("/psyche/reports/report-1");
@@ -82,6 +86,13 @@ describe("action bar helpers", () => {
         }
       })
     ).toContain("Operator");
+
+    expect(
+      inferActionBarTitle("flashcard", {
+        id: "card-1",
+        message: "Ride the urge for ten minutes."
+      })
+    ).toBe("Ride the urge for ten minutes.");
 
     expect(
       actionBarEntityTypeLabel("note", {
