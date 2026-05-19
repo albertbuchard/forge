@@ -2930,9 +2930,20 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
       }
     });
     assert.equal(startResponse.statusCode, 200);
-    const syncSessionId = (
-      startResponse.json() as { upload: { syncSessionId: string; chunkTargetBytes: number } }
-    ).upload.syncSessionId;
+    const startPayload = startResponse.json() as {
+      upload: {
+        syncSessionId: string;
+        chunkTargetBytes: number;
+        chunkPayloadEncoding: string;
+        acceptedPayloadEncodings: string[];
+      };
+    };
+    assert.equal(startPayload.upload.chunkPayloadEncoding, "payload_json_base64");
+    assert.deepEqual(startPayload.upload.acceptedPayloadEncodings, [
+      "payload_json_base64",
+      "legacy_payload_object"
+    ]);
+    const syncSessionId = startPayload.upload.syncSessionId;
     assert.ok(syncSessionId);
 
     const workoutSummary = {
@@ -3163,6 +3174,27 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
     assert.equal(
       (byteStableBadChecksumResponse.json() as { code: string; mode?: string }).mode,
       "payload_json_base64"
+    );
+    const checksumDiagnostic = getDatabase()
+      .prepare(
+        `SELECT details_json
+         FROM diagnostic_logs
+         WHERE event_key = 'chunk_checksum_mismatch'
+         ORDER BY created_at DESC, id DESC
+         LIMIT 1`
+      )
+      .get() as { details_json: string } | undefined;
+    assert.ok(checksumDiagnostic);
+    const checksumDiagnosticDetails = JSON.parse(checksumDiagnostic.details_json) as {
+      error?: { details?: { mode?: string; chunkId?: string } };
+    };
+    assert.equal(
+      checksumDiagnosticDetails.error?.details?.mode,
+      "payload_json_base64"
+    );
+    assert.equal(
+      checksumDiagnosticDetails.error?.details?.chunkId,
+      "chunk-byte-stable-bad-checksum"
     );
 
     const malformedBase64Response = await app.inject({

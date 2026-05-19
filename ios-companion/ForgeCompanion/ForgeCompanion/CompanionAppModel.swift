@@ -1679,7 +1679,12 @@ final class CompanionAppModel: ObservableObject {
                 healthDataDeferred: healthDataDeferred
             )
         } catch {
-            if let uploadSession {
+            if Self.isHealthSyncChunkProtocolUnsupported(error) {
+                activeHealthSyncSessionId = nil
+                UserDefaults.standard.removeObject(forKey: StorageKeys.activeHealthSyncSessionId)
+                lastSyncMessage = "Forge needs a runtime restart before HealthKit chunk sync."
+                healthSyncLegacyFallbackReason = "The Forge runtime did not advertise byte-stable chunk support"
+            } else if let uploadSession {
                 if Self.isHealthSyncChunkChecksumMismatch(error) {
                     await syncClient.abortHealthSyncSession(uploadSession: uploadSession, pairing: pairing)
                     activeHealthSyncSessionId = nil
@@ -1697,6 +1702,16 @@ final class CompanionAppModel: ObservableObject {
             }
             throw error
         }
+    }
+
+    private static func isHealthSyncChunkProtocolUnsupported(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        let failureReason = nsError.userInfo[NSLocalizedFailureReasonErrorKey] as? String
+        return nsError.domain == "ForgeSyncClient" &&
+            (
+                nsError.localizedDescription.contains("HealthKit chunk sync") ||
+                failureReason?.contains("healthkit_chunk_protocol_unsupported") == true
+            )
     }
 
     private static func isHealthSyncChunkChecksumMismatch(_ error: Error) -> Bool {

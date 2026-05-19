@@ -2939,6 +2939,34 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(wirePayload.checksumSha256, expectedChecksum)
     }
 
+    func testHealthSyncUploadSessionRequiresByteStablePayloadEncoding() {
+        let supported = ForgeSyncClient.HealthSyncUploadSession(
+            syncSessionId: "hms_supported",
+            schemaVersion: "healthkit-sync-v2",
+            chunkTargetBytes: 512_000,
+            chunkMaxBytes: 1_000_000,
+            chunkPayloadEncoding: "payload_json_base64",
+            acceptedPayloadEncodings: ["payload_json_base64", "legacy_payload_object"],
+            supportsCompression: false,
+            acceptedFamilies: ["vitals"],
+            receivedChunkIds: []
+        )
+        XCTAssertTrue(supported.supportsByteStablePayloadEncoding)
+
+        let staleRuntime = ForgeSyncClient.HealthSyncUploadSession(
+            syncSessionId: "hms_stale",
+            schemaVersion: "healthkit-sync-v2",
+            chunkTargetBytes: 512_000,
+            chunkMaxBytes: 1_000_000,
+            chunkPayloadEncoding: nil,
+            acceptedPayloadEncodings: nil,
+            supportsCompression: false,
+            acceptedFamilies: ["vitals"],
+            receivedChunkIds: []
+        )
+        XCTAssertFalse(staleRuntime.supportsByteStablePayloadEncoding)
+    }
+
     func testCompanionDebugLogPlainTextExportUsesChronologicalLines() {
         let earlier = CompanionDebugLogEntry(
             id: "log_earlier",
