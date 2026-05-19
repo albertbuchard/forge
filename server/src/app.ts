@@ -9540,7 +9540,7 @@ export async function buildServer(
   }));
   app.post(
     "/api/v1/mobile/healthkit/sync-sessions/:id/chunks",
-    { bodyLimit: 1_250_000 },
+    { bodyLimit: 1_600_000 },
     async (request) => {
       const { id } = request.params as { id: string };
       const rawPayloadJson = JSON.stringify(

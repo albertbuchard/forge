@@ -1529,6 +1529,17 @@ final class CompanionAppModel: ObservableObject {
                 return false
             }
             let failureReason = nsError.userInfo[NSLocalizedFailureReasonErrorKey] as? String
+            if Self.isHealthSyncChunkChecksumMismatch(error) {
+                let message = "Forge rejected a corrupted chunk. Retry starts a clean sync session."
+                companionDebugLog(
+                    "CompanionAppModel",
+                    "performSync failed trigger=\(trigger) checksumMismatch description=\(nsError.localizedDescription) reason=\(failureReason ?? "nil")"
+                )
+                lastSyncMessage = message
+                latestError = message
+                syncState = .error
+                return false
+            }
             let combinedMessage = failureReason?.isEmpty == false
                 ? "\(error.localizedDescription): \(failureReason!)"
                 : error.localizedDescription
@@ -1669,15 +1680,33 @@ final class CompanionAppModel: ObservableObject {
             )
         } catch {
             if let uploadSession {
-                activeHealthSyncSessionId = uploadSession.syncSessionId
-                UserDefaults.standard.set(
-                    uploadSession.syncSessionId,
-                    forKey: StorageKeys.activeHealthSyncSessionId
-                )
-                lastSyncMessage = "Forge will resume from the last accepted chunk"
+                if Self.isHealthSyncChunkChecksumMismatch(error) {
+                    await syncClient.abortHealthSyncSession(uploadSession: uploadSession, pairing: pairing)
+                    activeHealthSyncSessionId = nil
+                    UserDefaults.standard.removeObject(forKey: StorageKeys.activeHealthSyncSessionId)
+                    lastSyncMessage = "Forge rejected a corrupted chunk. Retry starts a clean sync session."
+                    healthSyncLegacyFallbackReason = "Last upload session was reset after a chunk checksum mismatch"
+                } else {
+                    activeHealthSyncSessionId = uploadSession.syncSessionId
+                    UserDefaults.standard.set(
+                        uploadSession.syncSessionId,
+                        forKey: StorageKeys.activeHealthSyncSessionId
+                    )
+                    lastSyncMessage = "Forge will resume from the last accepted chunk"
+                }
             }
             throw error
         }
+    }
+
+    private static func isHealthSyncChunkChecksumMismatch(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        let failureReason = nsError.userInfo[NSLocalizedFailureReasonErrorKey] as? String
+        return nsError.domain == "ForgeSyncClient" &&
+            (
+                nsError.localizedDescription.contains("chunk_checksum_mismatch") ||
+                failureReason?.contains("chunk_checksum_mismatch") == true
+            )
     }
 
     private func currentHealthSyncPermissions(

@@ -8,6 +8,7 @@
 import XCTest
 import CoreLocation
 import HealthKit
+import CryptoKit
 @testable import ForgeCompanion
 
 private struct SharedMovementFixtureCatalog: Decodable {
@@ -2906,6 +2907,36 @@ final class ForgeCompanionTests: XCTestCase {
 
         XCTAssertTrue(externalUid.hasPrefix("ios-place-"))
         XCTAssertGreaterThan(externalUid.count, "ios-place-".count)
+    }
+
+    func testHealthSyncChunkWirePayloadHashesBase64PayloadBytes() throws {
+        struct DictionaryHeavyPayload: Encodable {
+            let vitals: Vitals
+
+            struct Vitals: Encodable {
+                let daySummaries: [String]
+                let metadata: [String: String]
+            }
+        }
+        let payload = DictionaryHeavyPayload(
+            vitals: .init(
+                daySummaries: [],
+                metadata: [
+                    "zeta": "encoded first",
+                    "alpha": "encoded second"
+                ]
+            )
+        )
+
+        let wirePayload = try ForgeSyncClient.healthSyncChunkWirePayloadForTesting(payload)
+        let decodedPayloadData = try XCTUnwrap(Data(base64Encoded: wirePayload.payloadJsonBase64))
+        let expectedChecksum = SHA256.hash(data: wirePayload.payloadData)
+            .map { String(format: "%02x", $0) }
+            .joined()
+
+        XCTAssertEqual(decodedPayloadData, wirePayload.payloadData)
+        XCTAssertEqual(wirePayload.byteCount, wirePayload.payloadData.count)
+        XCTAssertEqual(wirePayload.checksumSha256, expectedChecksum)
     }
 
     func testCompanionDebugLogPlainTextExportUsesChronologicalLines() {

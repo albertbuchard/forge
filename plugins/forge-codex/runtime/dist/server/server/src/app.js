@@ -7620,7 +7620,7 @@ export async function buildServer(options = {}) {
     app.post("/api/v1/mobile/healthkit/sync-sessions", async (request) => ({
         upload: startMobileHealthSyncSession(mobileHealthSyncSessionStartSchema.parse(request.body ?? {}))
     }));
-    app.post("/api/v1/mobile/healthkit/sync-sessions/:id/chunks", { bodyLimit: 1_250_000 }, async (request) => {
+    app.post("/api/v1/mobile/healthkit/sync-sessions/:id/chunks", { bodyLimit: 1_600_000 }, async (request) => {
         const { id } = request.params;
         const rawPayloadJson = JSON.stringify((request.body ?? {}).payload ?? {});
         return {

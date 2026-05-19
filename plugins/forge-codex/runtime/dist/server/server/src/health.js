@@ -339,6 +339,7 @@ export const mobileHealthSyncChunkSchema = z.object({
     recordCount: z.number().int().nonnegative().default(0),
     byteCount: z.number().int().nonnegative().default(0),
     checksumSha256: z.string().trim().min(1),
+    payloadJsonBase64: z.string().trim().min(1).optional(),
     payload: mobileHealthSyncChunkPayloadSchema.default({})
 });
 export const mobileHealthSyncSessionCompleteSchema = z.object({
@@ -2685,6 +2686,58 @@ function chunkPayloadJson(payload) {
 function chunkPayloadChecksum(payloadJson) {
     return createHash("sha256").update(payloadJson).digest("hex");
 }
+function parseBase64ChunkPayload(payloadJsonBase64, context) {
+    const compactBase64 = payloadJsonBase64.replace(/\s/g, "");
+    if (compactBase64.length === 0 ||
+        compactBase64.length % 4 === 1 ||
+        !/^[A-Za-z0-9+/]*={0,2}$/.test(compactBase64)) {
+        throw new HttpError(400, "invalid_chunk_payload", "The HealthKit sync chunk payload encoding is invalid.", { mode: "payload_json_base64" });
+    }
+    const decoded = Buffer.from(compactBase64, "base64");
+    const recoded = decoded.toString("base64").replace(/=+$/g, "");
+    if (recoded !== compactBase64.replace(/=+$/g, "")) {
+        throw new HttpError(400, "invalid_chunk_payload", "The HealthKit sync chunk payload encoding is invalid.", { mode: "payload_json_base64" });
+    }
+    const payloadJson = decoded.toString("utf8");
+    let rawPayload;
+    try {
+        rawPayload = JSON.parse(payloadJson);
+    }
+    catch (error) {
+        console.warn("[healthkit-sync] invalid chunk JSON payload", {
+            syncSessionId: context.syncSessionId,
+            chunkId: context.chunkId,
+            family: context.family,
+            mode: "payload_json_base64",
+            bytes: decoded.length,
+            error: error instanceof Error ? error.message : String(error)
+        });
+        throw new HttpError(400, "invalid_chunk_payload", "The HealthKit sync chunk payload is not valid JSON.", { mode: "payload_json_base64" });
+    }
+    const parsedPayload = mobileHealthSyncChunkPayloadSchema.parse(rawPayload);
+    return {
+        payload: parsedPayload,
+        payloadJson,
+        byteCount: decoded.length,
+        mode: "payload_json_base64"
+    };
+}
+function resolveChunkWirePayload(parsed, syncSessionId, rawPayloadJson) {
+    if (parsed.payloadJsonBase64) {
+        return parseBase64ChunkPayload(parsed.payloadJsonBase64, {
+            syncSessionId,
+            chunkId: parsed.chunkId,
+            family: parsed.family
+        });
+    }
+    const payloadJson = rawPayloadJson ?? chunkPayloadJson(parsed.payload);
+    return {
+        payload: parsed.payload,
+        payloadJson,
+        byteCount: Buffer.byteLength(payloadJson, "utf8"),
+        mode: "legacy_payload_object"
+    };
+}
 function summarizeChunkPayload(family, payload) {
     switch (family) {
         case "sleep_nights":
@@ -2834,18 +2887,28 @@ export function ingestMobileHealthSyncChunk(syncSessionId, payload, rawPayloadJs
             progress
         };
     }
-    const payloadJson = chunkPayloadJson(parsed.payload);
-    const checksumPayloadJson = rawPayloadJson ?? payloadJson;
-    const actualByteCount = Buffer.byteLength(checksumPayloadJson, "utf8");
+    const wirePayload = resolveChunkWirePayload(parsed, syncSessionId, rawPayloadJson);
+    const payloadJson = wirePayload.payloadJson;
+    const actualByteCount = wirePayload.byteCount;
     if (actualByteCount > HEALTH_MOBILE_SYNC_CHUNK_MAX_BYTES) {
         throw new HttpError(413, "chunk_too_large", "The HealthKit sync chunk is too large.", {
             maxBytes: HEALTH_MOBILE_SYNC_CHUNK_MAX_BYTES,
             actualBytes: actualByteCount
         });
     }
-    const serverChecksum = chunkPayloadChecksum(checksumPayloadJson);
+    const serverChecksum = chunkPayloadChecksum(payloadJson);
     if (parsed.checksumSha256 !== serverChecksum) {
-        throw new HttpError(409, "chunk_checksum_mismatch", "The HealthKit sync chunk checksum does not match its payload.", { actualBytes: actualByteCount });
+        console.warn("[healthkit-sync] chunk checksum mismatch", {
+            syncSessionId,
+            chunkId: parsed.chunkId,
+            family: parsed.family,
+            mode: wirePayload.mode,
+            clientChecksum: parsed.checksumSha256.slice(0, 12),
+            serverChecksum: serverChecksum.slice(0, 12),
+            clientByteCount: parsed.byteCount,
+            actualByteCount
+        });
+        throw new HttpError(409, "chunk_checksum_mismatch", "The HealthKit sync chunk checksum does not match its payload.", { actualBytes: actualByteCount, mode: wirePayload.mode });
     }
     const now = nowIso();
     getDatabase()
@@ -2856,10 +2919,11 @@ export function ingestMobileHealthSyncChunk(syncSessionId, payload, rawPayloadJs
        )
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(mobileSyncChunkRecordId(), syncSessionId, parsed.chunkId, parsed.sequence, parsed.family, serverChecksum, parsed.recordCount, parsed.byteCount || actualByteCount, payloadJson, JSON.stringify({
-        ...summarizeChunkPayload(parsed.family, parsed.payload),
+        ...summarizeChunkPayload(parsed.family, wirePayload.payload),
         clientByteCount: parsed.byteCount,
         actualByteCount,
-        serverChecksum
+        serverChecksum,
+        mode: wirePayload.mode
     }), now, now, now, now);
     const progress = updateMobileSyncSessionProgress(syncSessionId);
     return {

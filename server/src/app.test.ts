@@ -86,6 +86,16 @@ function sha256Json(value: unknown) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
+function healthChunkPayloadJsonBase64(value: unknown) {
+  const payloadJson = JSON.stringify(value);
+  const payloadBuffer = Buffer.from(payloadJson, "utf8");
+  return {
+    byteCount: payloadBuffer.length,
+    checksumSha256: createHash("sha256").update(payloadBuffer).digest("hex"),
+    payloadJsonBase64: payloadBuffer.toString("base64")
+  };
+}
+
 test("companion pairing defaults to Iroh transport", async () => {
   const originalIrohBin = process.env.FORGE_COMPANION_IROH_BIN;
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-companion-iroh-"));
@@ -3102,6 +3112,103 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
       "chunk_checksum_mismatch"
     );
 
+    const byteStableVitalsPayload = {
+      vitals: {
+        daySummaries: [],
+        metadata: {
+          zeta: "encoded first by Swift",
+          alpha: "preserved as exact JSON bytes"
+        }
+      }
+    };
+    const byteStableChunk = {
+      chunkId: "chunk-byte-stable-vitals",
+      sequence: 1,
+      family: "vitals",
+      recordCount: 0,
+      ...healthChunkPayloadJsonBase64(byteStableVitalsPayload)
+    };
+    const byteStableResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/chunks`,
+      payload: byteStableChunk
+    });
+    assert.equal(byteStableResponse.statusCode, 200, byteStableResponse.body);
+
+    const byteStableDuplicateResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/chunks`,
+      payload: byteStableChunk
+    });
+    assert.equal(byteStableDuplicateResponse.statusCode, 200);
+    assert.equal(
+      (byteStableDuplicateResponse.json() as { chunk: { duplicate: boolean } }).chunk.duplicate,
+      true
+    );
+
+    const byteStableBadChecksumResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/chunks`,
+      payload: {
+        ...byteStableChunk,
+        chunkId: "chunk-byte-stable-bad-checksum",
+        checksumSha256: "0".repeat(64)
+      }
+    });
+    assert.equal(byteStableBadChecksumResponse.statusCode, 409);
+    assert.equal(
+      (byteStableBadChecksumResponse.json() as { code: string; mode?: string }).code,
+      "chunk_checksum_mismatch"
+    );
+    assert.equal(
+      (byteStableBadChecksumResponse.json() as { code: string; mode?: string }).mode,
+      "payload_json_base64"
+    );
+
+    const malformedBase64Response = await app.inject({
+      method: "POST",
+      url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/chunks`,
+      payload: {
+        chunkId: "chunk-malformed-base64",
+        sequence: 1,
+        family: "vitals",
+        recordCount: 0,
+        byteCount: 0,
+        checksumSha256: "0".repeat(64),
+        payloadJsonBase64: "not base64!"
+      }
+    });
+    assert.equal(malformedBase64Response.statusCode, 400);
+    assert.equal(
+      (malformedBase64Response.json() as { code: string }).code,
+      "invalid_chunk_payload"
+    );
+
+    const oversizedPayloadJson = JSON.stringify({
+      vitals: {
+        daySummaries: [],
+        metadata: {
+          oversized: "x".repeat(1_010_000)
+        }
+      }
+    });
+    const oversizedPayloadBuffer = Buffer.from(oversizedPayloadJson, "utf8");
+    const oversizedResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/chunks`,
+      payload: {
+        chunkId: "chunk-oversized-base64",
+        sequence: 1,
+        family: "vitals",
+        recordCount: 0,
+        byteCount: oversizedPayloadBuffer.length,
+        checksumSha256: createHash("sha256").update(oversizedPayloadBuffer).digest("hex"),
+        payloadJsonBase64: oversizedPayloadBuffer.toString("base64")
+      }
+    });
+    assert.equal(oversizedResponse.statusCode, 413);
+    assert.equal((oversizedResponse.json() as { code: string }).code, "chunk_too_large");
+
     const timeSeriesPayload = {
       workoutTimeSeries: [
         {
@@ -3193,7 +3300,7 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
     ].entries()) {
       const chunkPayload = {
         chunkId: `chunk-${family}`,
-        sequence: index + 1,
+        sequence: index + 2,
         family,
         recordCount: 1,
         byteCount: Buffer.byteLength(JSON.stringify(payload), "utf8"),
