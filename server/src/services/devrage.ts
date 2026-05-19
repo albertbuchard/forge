@@ -6,6 +6,7 @@ import { psycheMetricsViewDataSchema, type PsycheMetricsViewData } from "../psyc
 const SWEAR_COUNT_KEY = "swear_count";
 const SWEARING_MESSAGE_PERCENT_KEY = "swearing_message_percent";
 const DEFAULT_ROLE_FILTER = new Set<MessageRole>(["user"]);
+const DAILY_RESYNC_INTERVAL_MS = 60 * 60 * 1000;
 
 const PSYCHE_METRIC_DEFINITIONS = {
   [SWEAR_COUNT_KEY]: {
@@ -103,15 +104,37 @@ export async function syncDevrageMetricHistory(options: { forceFull?: boolean; d
 
 export async function syncDevrageMetricHistoryIfNeeded() {
   const state = getDevrageSyncState();
+  const nextSync = getNextDevrageMetricSync(state);
+  if (nextSync) {
+    await syncDevrageMetricHistory(nextSync);
+  }
+}
+
+export function getNextDevrageMetricSync(
+  state: DevrageSyncStateRow | null,
+  now = new Date()
+): { forceFull?: boolean; dateKey?: string } | null {
   if (!state?.full_sync_completed_at) {
-    await syncDevrageMetricHistory({ forceFull: true });
-    return;
+    return { forceFull: true };
   }
 
-  const today = todayDateKey();
+  const today = todayDateKey(now);
   if (state.last_synced_date_key !== today) {
-    await syncDevrageMetricHistory({ dateKey: today });
+    return { dateKey: today };
   }
+
+  const lastTodaySync = Date.parse(
+    state.last_daily_sync_at ?? state.full_sync_completed_at ?? state.updated_at
+  );
+  if (!Number.isFinite(lastTodaySync)) {
+    return { dateKey: today };
+  }
+
+  if (now.getTime() - lastTodaySync >= DAILY_RESYNC_INTERVAL_MS) {
+    return { dateKey: today };
+  }
+
+  return null;
 }
 
 export function getDevrageMetricPayload(): DevrageMetricPayload {
@@ -578,12 +601,12 @@ function stableId(prefix: string, ...parts: string[]) {
   return `${prefix}_${digest}`;
 }
 
-function todayDateKey() {
+function todayDateKey(date = new Date()) {
   return new Intl.DateTimeFormat("en-CA", {
     year: "numeric",
     month: "2-digit",
     day: "2-digit"
-  }).format(new Date());
+  }).format(date);
 }
 
 function nowIso() {

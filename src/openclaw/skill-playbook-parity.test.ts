@@ -125,8 +125,8 @@ describe("forge skill playbook parity", () => {
       expect(skill).toMatch(/forge_call_movement_route/);
       expect(skill).toMatch(/forge_call_life_force_route/);
       expect(skill).toMatch(/forge_call_workbench_route/);
-      expect(skill).toMatch(/live onboarding `methodRoutes` map[\s\S]*route-key tool schemas[\s\S]*exact route-key to method\/path/i);
-      expect(skill).toMatch(/methodRoutes[\s\S]*route-key-to-`METHOD \/api\/v1\/\.\.\.` source of truth/i);
+      expect(skill).toMatch(/live onboarding `routeKeys` list,[\s\S]*`methodRoutes` map[\s\S]*route-key tool schemas[\s\S]*exact route-key to method\/path/i);
+      expect(skill).toMatch(/routeKeys[\s\S]*allowed names[\s\S]*methodRoutes[\s\S]*route-key-to-`METHOD \/api\/v1\/\.\.\.` source of truth/i);
       expect(skill).toMatch(/POST aggregate reads[\s\S]*Movement `selection`[\s\S]*DELETE\s+repair paths/i);
       expect(skill).toMatch(/place IDs inside `routeKey`[\s\S]*invent a raw route\s+string/i);
       expect(skill).toMatch(/pathParams[\s\S]*placeholder names exactly/i);
@@ -558,6 +558,8 @@ describe("forge skill playbook parity", () => {
     expect(appSource).toMatch(/specializedDomainSurfaces:/);
     expect(appSource).toMatch(/life_force:\s*\{/);
     expect(appSource).toMatch(/aliases:\s*\[\s*"life_force"/);
+    expect(appSource).toMatch(/routeKeys:\s*\[/);
+    expect(appSource).toMatch(/routeKeys:\s*\[\s*"overview",\s*"profile",\s*"weekdayTemplate",\s*"fatigueSignal"\s*\]/);
     expect(appSource).toMatch(/methodRoutes:/);
     expect(appSource).toMatch(/selection:\s*"POST \/api\/v1\/movement\/selection"/);
     expect(appSource).toMatch(/overview:\s*"GET \/api\/v1\/life-force"/);
@@ -576,6 +578,7 @@ describe("forge skill playbook parity", () => {
     expect(openApiSource).toMatch(/"movement"/);
     expect(openApiSource).toMatch(/"lifeForce"/);
     expect(openApiSource).toMatch(/aliases/);
+    expect(openApiSource).toMatch(/routeKeys/);
     expect(openApiSource).toMatch(/methodRoutes/);
     expect(openApiSource).toMatch(/"workbench"/);
     expect(openApiSource).toMatch(/"specializedDomainSurfaces"/);

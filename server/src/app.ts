@@ -5673,6 +5673,31 @@ function buildAgentOnboardingPayload(request: {
           aliases: ["movement", "Movement"],
           summary:
             "Dedicated movement workspace API. Use these routes for stays, trips, time-in-place questions, visited places, trip detail, selection aggregates, user-defined overlays, and repair actions on already-recorded movement data.",
+          routeKeys: [
+            "day",
+            "month",
+            "allTime",
+            "timeline",
+            "places",
+            "boxDetail",
+            "tripDetail",
+            "selection",
+            "settings",
+            "settingsUpdate",
+            "placeCreate",
+            "placeUpdate",
+            "userBoxCreate",
+            "userBoxPreflight",
+            "userBoxUpdate",
+            "userBoxDelete",
+            "automaticBoxInvalidate",
+            "stayUpdate",
+            "stayDelete",
+            "tripUpdate",
+            "tripDelete",
+            "tripPointUpdate",
+            "tripPointDelete"
+          ],
           routeSelectionQuestions: [
             "Is the user asking for a day, month, all-time, timeline, place, trip detail, selected-span, or settings answer?",
             "Is this a missing-gap overlay, a saved-overlay repair, or an edit to one already-recorded stay, trip, or trip point?",
@@ -5750,6 +5775,7 @@ function buildAgentOnboardingPayload(request: {
           aliases: ["life_force", "life-force", "Life Force"],
           summary:
             "Dedicated life-force API. Use it to read the current energy budget, drains, recommendations, and warnings, then patch only the parts that are meant to be user-controlled.",
+          routeKeys: ["overview", "profile", "weekdayTemplate", "fatigueSignal"],
           routeSelectionQuestions: [
             "Is the user trying to understand the overview, change durable profile assumptions, change a weekday curve, or log a right-now fatigue signal?",
             "Are they describing a repeatable weekly shape or a one-off current state?",
@@ -5784,6 +5810,7 @@ function buildAgentOnboardingPayload(request: {
           aliases: ["lifeForce", "life-force", "Life Force"],
           summary:
             "Alias for the dedicated Life Force API keyed to the entity-style name `life_force`. Use the same overview, profile, weekday-template, and fatigue-signal routes as `lifeForce`.",
+          routeKeys: ["overview", "profile", "weekdayTemplate", "fatigueSignal"],
           routeSelectionQuestions: [
             "Is the user trying to understand the overview, change durable profile assumptions, change a weekday curve, or log a right-now fatigue signal?",
             "Are they describing a repeatable weekly shape or a one-off current state?",
@@ -5819,6 +5846,24 @@ function buildAgentOnboardingPayload(request: {
           aliases: ["workbench", "Workbench"],
           summary:
             "Dedicated graph-flow API. Use it for flow catalog reads, flow CRUD, execution, run history, published outputs, node results, and latest successful node outputs.",
+          routeKeys: [
+            "listFlows",
+            "flowById",
+            "flowBySlug",
+            "publishedOutput",
+            "runs",
+            "runDetail",
+            "runNodes",
+            "nodeResult",
+            "latestNodeOutput",
+            "boxCatalog",
+            "createFlow",
+            "updateFlow",
+            "deleteFlow",
+            "runFlow",
+            "runByPayload",
+            "chatFlow"
+          ],
           routeSelectionQuestions: [
             "Is the job flow discovery, flow creation, flow editing, flow deletion, execution, run history, published output, run detail, node result, latest node output, or flow chat follow-up?",
             "Does the user need a stable public contract or one execution artifact?",
@@ -5944,8 +5989,8 @@ function buildAgentOnboardingPayload(request: {
         ],
         verifyCommands: [
           `curl -s ${origin}/api/v1/health`,
-          "openclaw plugins install ./projects/forge/openclaw-plugin",
-          "openclaw plugins info forge-openclaw-plugin",
+          "openclaw plugins install --link --dangerously-force-unsafe-install ./projects/forge/openclaw-plugin",
+          "openclaw plugins inspect forge-openclaw-plugin --runtime",
           "openclaw gateway restart",
           "openclaw forge onboarding",
           "openclaw forge health"
@@ -5953,7 +5998,7 @@ function buildAgentOnboardingPayload(request: {
         configNotes: [
           "Localhost and Tailscale targets can usually use the operator-session path without a long-lived token.",
           "The operator-session route is /api/v1/auth/operator-session, so trusted local OpenClaw onboarding does not need a browser confirmation step.",
-          "If your current OpenClaw build blocks the repo-local install because of the package scanner, keep the repo folder on plugins.load.paths and verify that plugins info still points at the local Forge source path before continuing.",
+          "If your current OpenClaw build blocks the repo-local install because of the package scanner, keep the repo folder on plugins.load.paths and verify that plugins inspect --runtime still points at the local Forge source path before continuing.",
           "Use a distinct actor label such as Albert (claw) so OpenClaw-originated work stays obvious in Forge provenance.",
           "Create each agent as a Forge bot user, then use userId or userIds in tool inputs whenever the agent should focus on one human, one bot, or a specific collaboration slice.",
           "If you genuinely need a durable managed token, create it through /api/v1/settings/tokens instead of sending the operator into the Settings UI."

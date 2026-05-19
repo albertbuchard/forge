@@ -48,8 +48,9 @@ without guessing.
   route-key tools after the conversation has selected the lane. Life Force may be
   keyed as `lifeForce` and as the entity-style alias `life_force`; both names point
   to the same `/api/v1/life-force/*` route family.
-- The live onboarding `methodRoutes` map and the specialized route-key tool schemas
-  include the exact route-key to method/path map. Use `methodRoutes` as the
+- The live onboarding `routeKeys` list, `methodRoutes` map, and specialized
+  route-key tool schemas include the exact route-key to method/path map. Use
+  `routeKeys` for the allowed names and `methodRoutes` as the
   route-key-to-`METHOD /api/v1/...` source of truth when checking specialized
   methods, especially POST aggregate reads such as Movement `selection` and DELETE
   repair paths. When a route key's exact path contains placeholders such as `:id`,

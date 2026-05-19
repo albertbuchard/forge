@@ -3754,6 +3754,7 @@ export function buildOpenApiDocument() {
                                 "classification",
                                 "aliases",
                                 "summary",
+                                "routeKeys",
                                 "methodRoutes",
                                 "readRoutes",
                                 "writeRoutes",
@@ -3767,6 +3768,7 @@ export function buildOpenApiDocument() {
                                 },
                                 aliases: arrayOf({ type: "string" }),
                                 summary: { type: "string" },
+                                routeKeys: arrayOf({ type: "string" }),
                                 methodRoutes: {
                                     type: "object",
                                     additionalProperties: { type: "string" }

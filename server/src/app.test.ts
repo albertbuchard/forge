@@ -2726,6 +2726,7 @@ test("mobile health sync exposes structured apple health workout descriptors and
             activityFamilyLabel?: string;
           }>;
           sessions: Array<{
+            id: string;
             sourceSystem?: string;
             sourceBundleIdentifier?: string | null;
             sourceProductType?: string | null;

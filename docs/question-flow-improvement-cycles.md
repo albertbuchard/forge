@@ -1,10 +1,76 @@
 # Forge Question Flow Improvement Cycles
 
-Latest run date: 2026-05-18
+Latest run date: 2026-05-19
 
 This report records the three-cycle evaluation for Forge agent question flows. The
 same full flow set was tested in each cycle so improvements were kept only where they
 helped the entity or specialized surface.
+
+## 2026-05-19 Automation Pass
+
+Setup verification:
+
+- Confirmed OpenClaw and Hermes configs still point at
+  `/Users/omarclaw/Documents/aurel-monorepo/data/forge`.
+- Verified the live Forge process on `127.0.0.1:4317` has
+  `/Users/omarclaw/Documents/aurel-monorepo/data/forge/forge.sqlite` open. No data
+  root was changed, merged, deleted, or overwritten.
+- Built the repo-local OpenClaw plugin through
+  `node ./plugins/forge-hermes/scripts/build-package-runtime.mjs`, which runs the
+  OpenClaw plugin build and refreshes the Hermes packaged runtime from the same local
+  checkout.
+- Verified OpenClaw is loaded from
+  `~/Documents/aurel-monorepo/projects/forge/openclaw-plugin/dist/openclaw/index.js`
+  at version `0.2.73`; re-enabled it and restarted the OpenClaw gateway.
+- Reinstalled Hermes editable from `./plugins/forge-hermes`, restarted the Hermes
+  gateway, and verified `forge-hermes-plugin 0.2.73` imports from the repo-local
+  editable package.
+- Verified live Forge health, OpenClaw `forge health`, live onboarding, and OpenAPI.
+  Live onboarding publishes 41 entity/catalog entries, shared batch routes for normal
+  entities, specialized route families for Movement, Life Force, and Workbench, and
+  read-only surfaces for operator, calendar, self-observation, sleep, and sports.
+
+Every cycle retested the full stored-entity and domain set: goal, project, strategy,
+task, habit, tag, note, insight, task_run, work_adjustment, calendar_event,
+work_block_template, task_timebox, calendar_connection, preference_catalog,
+preference_catalog_item, preference_context, preference_item, preference_judgment,
+preference_signal, questionnaire_instrument, questionnaire_run, self_observation,
+sleep_session, workout_session, wiki_page, flashcard, every other Psyche entity,
+Movement, Life Force, Workbench, and the read-only operator, calendar, sleep, and
+sports overview surfaces. The specialized-surface sub-scenarios also covered every
+Movement, Life Force, and Workbench route lane: day, month, all-time, timeline,
+places, trip detail, selection aggregates, settings, overlays, repair actions,
+overview, profile, weekday templates, fatigue signals, flow catalog/detail, flow
+CRUD, execution, run history, published outputs, node results, latest node outputs,
+and saved-flow chat.
+
+Cycle 1 tested all flows with create, update, review, navigation, and specialized
+route-selection scenarios. Strengths held: Psyche flows stayed active-listening and
+hypothesis-capable, normal stored entities stayed batch-first, and Movement, Life
+Force, and Workbench stayed off generic CRUD. The gap was API guidance rather than
+tone: onboarding's OpenClaw connection guide still used a generic install/info
+verification path, while the verified local development path is the repo-local
+`--link` install with `--dangerously-force-unsafe-install` and
+`openclaw plugins inspect forge-openclaw-plugin --runtime`. The change updated the
+live onboarding guide and contract tests. The first retest caught one simulated
+Workbench lane that used "payload" in user-facing wording; that was replaced with
+"one-off input contract". Retest passed, so the change was kept.
+
+Cycle 2 retested the same full set against onboarding, OpenAPI, OpenClaw tools, and
+the static playbooks. Question quality remained stable, but the specialized API
+contract could still drift because onboarding exposed `methodRoutes` while route-key
+tools exposed their own enum lists. The change added explicit `routeKeys` arrays to
+the Movement, Life Force, `life_force` alias, and Workbench onboarding surfaces,
+updated the generated OpenAPI schema and shared TypeScript type, and added a
+cross-check that OpenClaw tool route-key enums match onboarding `routeKeys`. Retest
+passed, so the route-key contract was kept.
+
+Cycle 3 retested all entities and specialized route lanes again with emphasis on
+durable reporting and future automation freshness. The remaining weakness was this
+report itself: it still named the prior run as latest and did not record the
+41-entry catalog or the route-lane sub-scenarios. The change updated this report with
+the setup verification, full flow set, findings, changes, and retest result for all
+three cycles. Focused retest remained green, so no per-entity wording was reverted.
 
 ## 2026-05-18 Automation Pass
 

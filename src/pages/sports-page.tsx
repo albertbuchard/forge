@@ -766,7 +766,8 @@ export function SportsPage() {
   const rowVirtualizer = useVirtualizer({
     count: filteredSessions.length,
     getScrollElement: () => listRef.current,
-    estimateSize: () => 108,
+    estimateSize: () => 172,
+    measureElement: (element) => element?.getBoundingClientRect().height ?? 172,
     overscan: 8
   });
 
@@ -1247,6 +1248,8 @@ export function SportsPage() {
                   return (
                     <div
                       key={session.id}
+                      ref={rowVirtualizer.measureElement}
+                      data-index={virtualRow.index}
                       className="absolute left-0 top-0 w-full px-3 py-2"
                       style={{
                         transform: `translateY(${virtualRow.start}px)`
@@ -1255,11 +1258,11 @@ export function SportsPage() {
                       <div
                         className="grid w-full gap-3 rounded-[20px] border border-white/8 bg-white/[0.04] px-4 py-3 text-left transition hover:bg-white/[0.07]"
                       >
-                        <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="grid min-w-0 gap-3 sm:flex sm:items-start sm:justify-between">
                           <div className="min-w-0">
                             <Link
                               to={`/sports/workouts/${session.id}`}
-                              className="flex items-center gap-2 text-white transition hover:text-[var(--primary)]"
+                              className="flex min-w-0 items-center gap-2 text-white transition hover:text-[var(--primary)]"
                             >
                               <Dumbbell className="size-4 shrink-0 text-[var(--primary)]" />
                               <span className="truncate text-base font-medium">
@@ -1279,13 +1282,13 @@ export function SportsPage() {
                           <button
                             type="button"
                             aria-label={`Edit ${workoutTypeLabel(session)} reflection`}
-                            className="inline-flex items-center gap-2 rounded-full bg-white/[0.05] px-3 py-1.5 text-xs text-white/70 transition hover:bg-white/[0.08] hover:text-white"
+                            className="inline-flex w-fit max-w-full items-center gap-2 rounded-full bg-white/[0.05] px-3 py-1.5 text-xs text-white/70 transition hover:bg-white/[0.08] hover:text-white"
                             onClick={() => {
                               setSelectedWorkoutId(session.id);
                               setEditorStep(0);
                             }}
                           >
-                            <span>{hasReflection ? "Reflected" : "Needs reflection"}</span>
+                            <span className="truncate">{hasReflection ? "Reflected" : "Needs reflection"}</span>
                             <ArrowRight className="size-3.5" />
                           </button>
                         </div>

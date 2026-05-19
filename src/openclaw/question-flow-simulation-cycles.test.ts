@@ -279,6 +279,64 @@ describe("question flow simulation cycles", () => {
     "workbench"
   ] as const;
 
+  const specializedSurfaceRouteScenarios = {
+    Movement: {
+      day: "Review one day of movement before interpreting time in place.",
+      month: "Review a month before answering a travel behavior question.",
+      allTime: "Check all-time dominant places without creating a record.",
+      timeline: "Inspect the life timeline before correcting an uncertain span.",
+      places: "Review known places before linking or renaming one.",
+      boxDetail: "Inspect a saved movement box before repairing it.",
+      tripDetail: "Open one trip detail before editing or interpreting it.",
+      selection: "Aggregate a selected time span and place set.",
+      settings: "Read passive capture and publishing settings.",
+      settingsUpdate: "Change passive tracking, publish mode, or retention.",
+      placeCreate: "Create a known place after the label and use are clear.",
+      placeUpdate: "Rename or repair one saved place.",
+      userBoxPreflight: "Preflight a missing stay or trip overlay.",
+      userBoxCreate: "Create a manual overlay for a missing span.",
+      userBoxUpdate: "Revise one saved manual overlay.",
+      userBoxDelete: "Delete one saved manual overlay.",
+      automaticBoxInvalidate: "Invalidate one automatic box that is wrong.",
+      stayUpdate: "Patch an already-recorded stay.",
+      stayDelete: "Delete an already-recorded stay.",
+      tripUpdate: "Patch an already-recorded trip.",
+      tripDelete: "Delete an already-recorded trip.",
+      tripPointUpdate: "Patch one trip point.",
+      tripPointDelete: "Delete one trip point."
+    },
+    "Life Force": {
+      overview: "Read the current energy picture before deciding what to change.",
+      profile: "Patch durable capacity assumptions.",
+      weekdayTemplate: "Change a repeated weekday curve.",
+      fatigueSignal: "Log a right-now tired or recovered signal."
+    },
+    Workbench: {
+      listFlows: "List saved flows before choosing one.",
+      flowById: "Read one saved flow by id.",
+      flowBySlug: "Read one saved flow by slug.",
+      publishedOutput: "Read the public result.",
+      runs: "Inspect run history.",
+      runDetail: "Debug one run summary.",
+      runNodes: "Inspect node results for one run.",
+      nodeResult: "Read one node result from one run.",
+      latestNodeOutput: "Read the latest successful output for one node.",
+      boxCatalog: "Inspect available input-box contracts.",
+      createFlow: "Create a saved flow with a stable input contract.",
+      updateFlow: "Edit a saved flow while preserving its public contract.",
+      deleteFlow: "Delete a saved flow after checking preservation needs.",
+      runFlow: "Execute a known saved flow.",
+      runByPayload: "Execute from a one-off input contract.",
+      chatFlow: "Send a follow-up message into a saved flow chat."
+    }
+  } as const;
+
+  const specializedRouteCoverageByCycle = {
+    cycle1: specializedSurfaceRouteScenarios,
+    cycle2: specializedSurfaceRouteScenarios,
+    cycle3: specializedSurfaceRouteScenarios
+  } as const;
+
   it("cycle 1: every entity flow starts with visible direction instead of field collection", () => {
     expect(entityPlaybook).toMatch(/direction of the intake visible/i);
     expect(entityPlaybook).toMatch(/Opening move recipes/i);
@@ -351,6 +409,49 @@ describe("question flow simulation cycles", () => {
         sectionSlice,
         `${section} should have therapeutic guidance`
       ).toMatch(/Aim:|Arc:/);
+    }
+  });
+
+  it("uses explicit specialized route-lane scenarios in every cycle", () => {
+    const expectedSurfaceNames = Object.keys(specializedSurfaceRouteScenarios).sort();
+
+    for (const [cycleName, cycleSurfaces] of Object.entries(
+      specializedRouteCoverageByCycle
+    )) {
+      expect(
+        Object.keys(cycleSurfaces).sort(),
+        `${cycleName} should include every specialized surface`
+      ).toEqual(expectedSurfaceNames);
+
+      for (const surfaceName of expectedSurfaceNames) {
+        const expectedRouteKeys = Object.keys(
+          specializedSurfaceRouteScenarios[
+            surfaceName as keyof typeof specializedSurfaceRouteScenarios
+          ]
+        ).sort();
+        const actualRouteKeys = Object.keys(
+          cycleSurfaces[surfaceName as keyof typeof specializedSurfaceRouteScenarios]
+        ).sort();
+        expect(
+          actualRouteKeys,
+          `${cycleName} should cover every ${surfaceName} route lane`
+        ).toEqual(expectedRouteKeys);
+      }
+    }
+
+    for (const [surfaceName, routeScenarios] of Object.entries(
+      specializedSurfaceRouteScenarios
+    )) {
+      const sectionSlice = getSectionSlice(entityPlaybook, surfaceName);
+      for (const [routeKey, scenario] of Object.entries(routeScenarios)) {
+        expect(scenario, `${surfaceName}.${routeKey} scenario should be plain`).not.toMatch(
+          /\b(API|CRUD|endpoint|payload|mutation path)\b/i
+        );
+        expect(
+          sectionSlice,
+          `${surfaceName}.${routeKey} should be grounded in the playbook`
+        ).toMatch(/Lane-to-route map:|Direct action rules:/);
+      }
     }
   });
 
@@ -718,7 +819,7 @@ describe("question flow simulation cycles", () => {
     expect(onboardingSource).toMatch(/focus:\s*"calendar_overview"[\s\S]*forge_get_calendar_overview/i);
     expect(typeSource).toMatch(/conceptModel:[\s\S]*movement: string;[\s\S]*lifeForce: string;[\s\S]*workbench: string;/);
     expect(typeSource).toMatch(
-      /specializedDomainSurfaces:[\s\S]*classification: "specialized_domain_surface";[\s\S]*aliases: string\[\];[\s\S]*summary: string;[\s\S]*methodRoutes: Record<string, string>;[\s\S]*routeSelectionQuestions: string\[\];/i
+      /specializedDomainSurfaces:[\s\S]*classification: "specialized_domain_surface";[\s\S]*aliases: string\[\];[\s\S]*summary: string;[\s\S]*routeKeys: string\[\];[\s\S]*methodRoutes: Record<string, string>;[\s\S]*routeSelectionQuestions: string\[\];/i
     );
     expect(onboardingSource).toMatch(
       /movementTimeline[\s\S]*"routeKey":"timeline"[\s\S]*"query"/

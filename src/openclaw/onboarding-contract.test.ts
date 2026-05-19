@@ -81,6 +81,7 @@ async function loadOnboardingPayload() {
         {
           classification?: string;
           aliases?: string[];
+          routeKeys: string[];
           methodRoutes: Record<string, string>;
           readRoutes: Record<string, string>;
           writeRoutes: Record<string, string>;
@@ -385,6 +386,26 @@ describe("forge onboarding contract", () => {
           "DELETE /api/v1/movement/trips/:id/points/:pointId"
       })
     );
+    expect(routeModel.specializedDomainSurfaces.movement.routeKeys).toEqual(
+      Object.keys(routeModel.specializedDomainSurfaces.movement.methodRoutes)
+    );
+    expect(routeModel.specializedDomainSurfaces.movement.routeKeys).toEqual(
+      expect.arrayContaining([
+        "day",
+        "month",
+        "allTime",
+        "timeline",
+        "places",
+        "tripDetail",
+        "selection",
+        "settings",
+        "settingsUpdate",
+        "userBoxPreflight",
+        "userBoxCreate",
+        "automaticBoxInvalidate",
+        "tripPointDelete"
+      ])
+    );
     expect(
       routeModel.specializedDomainSurfaces.movement.routeSelectionQuestions
     ).toEqual(
@@ -425,6 +446,15 @@ describe("forge onboarding contract", () => {
         fatigueSignal: "POST /api/v1/life-force/fatigue-signals"
       })
     );
+    expect(routeModel.specializedDomainSurfaces.lifeForce.routeKeys).toEqual(
+      Object.keys(routeModel.specializedDomainSurfaces.lifeForce.methodRoutes)
+    );
+    expect(routeModel.specializedDomainSurfaces.lifeForce.routeKeys).toEqual([
+      "overview",
+      "profile",
+      "weekdayTemplate",
+      "fatigueSignal"
+    ]);
     expect(
       routeModel.specializedDomainSurfaces.lifeForce.routeSelectionQuestions
     ).toEqual(
@@ -449,7 +479,13 @@ describe("forge onboarding contract", () => {
         methodRoutes: expect.objectContaining({
           overview: "GET /api/v1/life-force",
           weekdayTemplate: "PUT /api/v1/life-force/templates/:weekday"
-        })
+        }),
+        routeKeys: [
+          "overview",
+          "profile",
+          "weekdayTemplate",
+          "fatigueSignal"
+        ]
       })
     );
 
@@ -488,6 +524,29 @@ describe("forge onboarding contract", () => {
         latestNodeOutput:
           "GET /api/v1/workbench/flows/:id/nodes/:nodeId/output"
       })
+    );
+    expect(routeModel.specializedDomainSurfaces.workbench.routeKeys).toEqual(
+      Object.keys(routeModel.specializedDomainSurfaces.workbench.methodRoutes)
+    );
+    expect(routeModel.specializedDomainSurfaces.workbench.routeKeys).toEqual(
+      expect.arrayContaining([
+        "listFlows",
+        "flowById",
+        "flowBySlug",
+        "boxCatalog",
+        "createFlow",
+        "updateFlow",
+        "deleteFlow",
+        "runFlow",
+        "runByPayload",
+        "chatFlow",
+        "runs",
+        "runDetail",
+        "runNodes",
+        "nodeResult",
+        "publishedOutput",
+        "latestNodeOutput"
+      ])
     );
     expect(
       routeModel.specializedDomainSurfaces.workbench.routeSelectionQuestions
@@ -1099,6 +1158,7 @@ describe("forge onboarding contract", () => {
           "classification",
           "aliases",
           "summary",
+          "routeKeys",
           "methodRoutes",
           "readRoutes",
           "writeRoutes",
@@ -1110,6 +1170,9 @@ describe("forge onboarding contract", () => {
             enum: ["specialized_domain_surface"]
           }),
           aliases: expect.objectContaining({
+            type: "array"
+          }),
+          routeKeys: expect.objectContaining({
             type: "array"
           }),
           methodRoutes: expect.objectContaining({
@@ -1195,8 +1258,8 @@ describe("forge onboarding contract", () => {
     const onboarding = await loadOnboardingPayload();
     expect(onboarding.connectionGuides?.openclaw?.verifyCommands ?? []).toEqual(
       expect.arrayContaining([
-        "openclaw plugins install ./projects/forge/openclaw-plugin",
-        "openclaw plugins info forge-openclaw-plugin",
+        "openclaw plugins install --link --dangerously-force-unsafe-install ./projects/forge/openclaw-plugin",
+        "openclaw plugins inspect forge-openclaw-plugin --runtime",
         "openclaw forge onboarding",
         "openclaw forge health"
       ])
