@@ -5,6 +5,7 @@ import { psycheMetricsViewDataSchema } from "../psyche-types.js";
 const SWEAR_COUNT_KEY = "swear_count";
 const SWEARING_MESSAGE_PERCENT_KEY = "swearing_message_percent";
 const DEFAULT_ROLE_FILTER = new Set(["user"]);
+const DAILY_RESYNC_INTERVAL_MS = 60 * 60 * 1000;
 const PSYCHE_METRIC_DEFINITIONS = {
     [SWEAR_COUNT_KEY]: {
         metric: "devrageSwearCount",
@@ -33,14 +34,27 @@ export async function syncDevrageMetricHistory(options = {}) {
 }
 export async function syncDevrageMetricHistoryIfNeeded() {
     const state = getDevrageSyncState();
+    const nextSync = getNextDevrageMetricSync(state);
+    if (nextSync) {
+        await syncDevrageMetricHistory(nextSync);
+    }
+}
+export function getNextDevrageMetricSync(state, now = new Date()) {
     if (!state?.full_sync_completed_at) {
-        await syncDevrageMetricHistory({ forceFull: true });
-        return;
+        return { forceFull: true };
     }
-    const today = todayDateKey();
+    const today = todayDateKey(now);
     if (state.last_synced_date_key !== today) {
-        await syncDevrageMetricHistory({ dateKey: today });
+        return { dateKey: today };
     }
+    const lastTodaySync = Date.parse(state.last_daily_sync_at ?? state.full_sync_completed_at ?? state.updated_at);
+    if (!Number.isFinite(lastTodaySync)) {
+        return { dateKey: today };
+    }
+    if (now.getTime() - lastTodaySync >= DAILY_RESYNC_INTERVAL_MS) {
+        return { dateKey: today };
+    }
+    return null;
 }
 export function getDevrageMetricPayload() {
     const generatedAt = nowIso();
@@ -396,12 +410,12 @@ function stableId(prefix, ...parts) {
     const digest = createHash("sha256").update(parts.join("\u0000")).digest("hex").slice(0, 20);
     return `${prefix}_${digest}`;
 }
-function todayDateKey() {
+function todayDateKey(date = new Date()) {
     return new Intl.DateTimeFormat("en-CA", {
         year: "numeric",
         month: "2-digit",
         day: "2-digit"
-    }).format(new Date());
+    }).format(date);
 }
 function nowIso() {
     return new Date().toISOString();

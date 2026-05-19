@@ -11,6 +11,7 @@ import {
 } from "./db.js";
 import {
   getDevrageMetricPayload,
+  getNextDevrageMetricSync,
   getPsycheMetricsViewData,
   storeDevrageReport
 } from "./services/devrage.js";
@@ -192,4 +193,45 @@ test("daily devrage resync replaces only that day's measurement rows", async () 
     closeDatabase();
     await rm(rootDir, { recursive: true, force: true });
   }
+});
+
+test("devrage sync refreshes today's rows after the hourly freshness window", () => {
+  const freshToday = getNextDevrageMetricSync(
+    {
+      full_sync_completed_at: "2026-05-14T08:00:00.000Z",
+      last_daily_sync_at: "2026-05-19T10:00:00.000Z",
+      last_synced_date_key: "2026-05-19",
+      updated_at: "2026-05-19T10:00:00.000Z"
+    },
+    new Date("2026-05-19T10:30:00.000Z")
+  );
+  assert.equal(freshToday, null);
+
+  const staleToday = getNextDevrageMetricSync(
+    {
+      full_sync_completed_at: "2026-05-14T08:00:00.000Z",
+      last_daily_sync_at: "2026-05-19T10:00:00.000Z",
+      last_synced_date_key: "2026-05-19",
+      updated_at: "2026-05-19T10:00:00.000Z"
+    },
+    new Date("2026-05-19T11:00:00.000Z")
+  );
+  assert.deepEqual(staleToday, { dateKey: "2026-05-19" });
+});
+
+test("devrage sync still starts with a full import and rolls to a new day", () => {
+  assert.deepEqual(getNextDevrageMetricSync(null, new Date("2026-05-19T10:00:00.000Z")), {
+    forceFull: true
+  });
+
+  const nextDay = getNextDevrageMetricSync(
+    {
+      full_sync_completed_at: "2026-05-14T08:00:00.000Z",
+      last_daily_sync_at: "2026-05-18T20:00:00.000Z",
+      last_synced_date_key: "2026-05-18",
+      updated_at: "2026-05-18T20:00:00.000Z"
+    },
+    new Date("2026-05-19T10:00:00.000Z")
+  );
+  assert.deepEqual(nextDay, { dateKey: "2026-05-19" });
 });

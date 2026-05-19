@@ -3997,6 +3997,7 @@ export interface AgentOnboardingPayload {
         classification: "specialized_domain_surface";
         aliases: string[];
         summary: string;
+        routeKeys: string[];
         methodRoutes: Record<string, string>;
         readRoutes: Record<string, string>;
         writeRoutes: Record<string, string>;

@@ -1,8 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   calendarOverviewQuerySchema,
   createCalendarConnectionSchema
 } from "../../server/src/types";
+import { buildServer } from "../../server/src/app";
 import { collectSupportedPluginApiRouteKeys, makeApiRouteKey } from "./parity";
 import { collectMirroredApiRouteKeys } from "./routes";
 import { registerForgePluginTools } from "./tools";
@@ -25,6 +29,37 @@ const TEST_CONFIG = {
   injectBootstrapContext: true,
   timeoutMs: 15000
 } as const;
+
+const tempRoots: string[] = [];
+
+afterEach(() => {
+  while (tempRoots.length > 0) {
+    const root = tempRoots.pop();
+    if (root) {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+async function loadOnboardingRouteKeys() {
+  const dataRoot = mkdtempSync(path.join(os.tmpdir(), "forge-tool-contract-"));
+  tempRoots.push(dataRoot);
+  const app = await buildServer({ dataRoot, taskRunWatchdog: false });
+  const response = await app.inject({
+    method: "GET",
+    url: "/api/v1/agents/onboarding"
+  });
+  expect(response.statusCode).toBe(200);
+  await app.close();
+
+  const surfaces = response.json().onboarding.entityRouteModel
+    .specializedDomainSurfaces as Record<string, { routeKeys: string[] }>;
+  return {
+    movement: [...surfaces.movement.routeKeys].sort(),
+    lifeForce: [...surfaces.lifeForce.routeKeys].sort(),
+    workbench: [...surfaces.workbench.routeKeys].sort()
+  };
+}
 
 function collectRegisteredTools() {
   const tools: RegisteredTool[] = [];
@@ -120,13 +155,30 @@ describe("openclaw tool contracts", () => {
     expect(required).toEqual(["label", "provider", "selectedCalendarUrls"]);
   });
 
-  it("publishes dedicated route-key tools for specialized domain surfaces", () => {
+  it("publishes dedicated route-key tools for specialized domain surfaces", async () => {
     const tools = collectRegisteredTools();
     const movement = requireTool(tools, "forge_call_movement_route");
     const lifeForce = requireTool(tools, "forge_call_life_force_route");
     const workbench = requireTool(tools, "forge_call_workbench_route");
+    const onboardingRouteKeys = await loadOnboardingRouteKeys();
+    const movementRouteKeys = readTypeBoxUnionValues(
+      movement.parameters ?? {},
+      "routeKey"
+    );
+    const lifeForceRouteKeys = readTypeBoxUnionValues(
+      lifeForce.parameters ?? {},
+      "routeKey"
+    );
+    const workbenchRouteKeys = readTypeBoxUnionValues(
+      workbench.parameters ?? {},
+      "routeKey"
+    );
 
-    expect(readTypeBoxUnionValues(movement.parameters ?? {}, "routeKey")).toEqual(
+    expect(movementRouteKeys).toEqual(onboardingRouteKeys.movement);
+    expect(lifeForceRouteKeys).toEqual(onboardingRouteKeys.lifeForce);
+    expect(workbenchRouteKeys).toEqual(onboardingRouteKeys.workbench);
+
+    expect(movementRouteKeys).toEqual(
       expect.arrayContaining([
         "day",
         "month",
@@ -153,10 +205,13 @@ describe("openclaw tool contracts", () => {
         "tripPointDelete"
       ])
     );
-    expect(readTypeBoxUnionValues(lifeForce.parameters ?? {}, "routeKey")).toEqual(
-      ["fatigueSignal", "overview", "profile", "weekdayTemplate"]
-    );
-    expect(readTypeBoxUnionValues(workbench.parameters ?? {}, "routeKey")).toEqual(
+    expect(lifeForceRouteKeys).toEqual([
+      "fatigueSignal",
+      "overview",
+      "profile",
+      "weekdayTemplate"
+    ]);
+    expect(workbenchRouteKeys).toEqual(
       expect.arrayContaining([
         "boxCatalog",
         "listFlows",
