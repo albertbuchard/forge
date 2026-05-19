@@ -262,6 +262,11 @@ export const mobileHealthSyncSchema = z.object({
 const HEALTH_MOBILE_SYNC_SCHEMA_VERSION = "healthkit-sync-v2";
 const HEALTH_MOBILE_SYNC_CHUNK_TARGET_BYTES = 512_000;
 const HEALTH_MOBILE_SYNC_CHUNK_MAX_BYTES = 1_000_000;
+const HEALTH_MOBILE_SYNC_CHUNK_PAYLOAD_ENCODING = "payload_json_base64";
+const HEALTH_MOBILE_SYNC_ACCEPTED_CHUNK_PAYLOAD_ENCODINGS = [
+    HEALTH_MOBILE_SYNC_CHUNK_PAYLOAD_ENCODING,
+    "legacy_payload_object"
+];
 const HEALTH_MOBILE_SYNC_SESSION_TTL_MS = 1000 * 60 * 60 * 24;
 const mobileHealthSyncFamilySchema = z.enum([
     "sleep_nights",
@@ -2830,6 +2835,8 @@ export function startMobileHealthSyncSession(payload) {
                 schemaVersion: HEALTH_MOBILE_SYNC_SCHEMA_VERSION,
                 chunkTargetBytes: HEALTH_MOBILE_SYNC_CHUNK_TARGET_BYTES,
                 chunkMaxBytes: HEALTH_MOBILE_SYNC_CHUNK_MAX_BYTES,
+                chunkPayloadEncoding: HEALTH_MOBILE_SYNC_CHUNK_PAYLOAD_ENCODING,
+                acceptedPayloadEncodings: HEALTH_MOBILE_SYNC_ACCEPTED_CHUNK_PAYLOAD_ENCODINGS,
                 supportsCompression: false,
                 acceptedFamilies: safeJsonParse(existing.requested_families_json, parsed.requestedFamilies),
                 receivedChunkIds
@@ -2857,6 +2864,8 @@ export function startMobileHealthSyncSession(payload) {
         schemaVersion: HEALTH_MOBILE_SYNC_SCHEMA_VERSION,
         chunkTargetBytes: HEALTH_MOBILE_SYNC_CHUNK_TARGET_BYTES,
         chunkMaxBytes: HEALTH_MOBILE_SYNC_CHUNK_MAX_BYTES,
+        chunkPayloadEncoding: HEALTH_MOBILE_SYNC_CHUNK_PAYLOAD_ENCODING,
+        acceptedPayloadEncodings: HEALTH_MOBILE_SYNC_ACCEPTED_CHUNK_PAYLOAD_ENCODINGS,
         supportsCompression: false,
         acceptedFamilies: parsed.requestedFamilies,
         receivedChunkIds: []
@@ -2908,7 +2917,16 @@ export function ingestMobileHealthSyncChunk(syncSessionId, payload, rawPayloadJs
             clientByteCount: parsed.byteCount,
             actualByteCount
         });
-        throw new HttpError(409, "chunk_checksum_mismatch", "The HealthKit sync chunk checksum does not match its payload.", { actualBytes: actualByteCount, mode: wirePayload.mode });
+        throw new HttpError(409, "chunk_checksum_mismatch", "The HealthKit sync chunk checksum does not match its payload.", {
+            syncSessionId,
+            chunkId: parsed.chunkId,
+            family: parsed.family,
+            actualBytes: actualByteCount,
+            clientBytes: parsed.byteCount,
+            clientChecksumPrefix: parsed.checksumSha256.slice(0, 12),
+            serverChecksumPrefix: serverChecksum.slice(0, 12),
+            mode: wirePayload.mode
+        });
     }
     const now = nowIso();
     getDatabase()

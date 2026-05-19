@@ -179,9 +179,16 @@ struct ForgeSyncClient {
         let schemaVersion: String
         let chunkTargetBytes: Int
         let chunkMaxBytes: Int
+        let chunkPayloadEncoding: String?
+        let acceptedPayloadEncodings: [String]?
         let supportsCompression: Bool
         let acceptedFamilies: [String]
         let receivedChunkIds: [String]
+
+        var supportsByteStablePayloadEncoding: Bool {
+            chunkPayloadEncoding == "payload_json_base64" ||
+                (acceptedPayloadEncodings ?? []).contains("payload_json_base64")
+        }
     }
 
     struct HealthSyncChunkProgress: Decodable {
@@ -603,8 +610,22 @@ struct ForgeSyncClient {
         )
         companionDebugLog(
             "ForgeSyncClient",
-            "startHealthSyncSession success uploadSession=\(envelope.upload.syncSessionId) target=\(envelope.upload.chunkTargetBytes) max=\(envelope.upload.chunkMaxBytes)"
+            "startHealthSyncSession success uploadSession=\(envelope.upload.syncSessionId) target=\(envelope.upload.chunkTargetBytes) max=\(envelope.upload.chunkMaxBytes) payloadEncoding=\(envelope.upload.chunkPayloadEncoding ?? "missing")"
         )
+        guard envelope.upload.supportsByteStablePayloadEncoding else {
+            companionDebugLog(
+                "ForgeSyncClient",
+                "startHealthSyncSession rejected runtime without payload_json_base64 support uploadSession=\(envelope.upload.syncSessionId)"
+            )
+            throw NSError(
+                domain: "ForgeSyncClient",
+                code: 426,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Forge runtime needs an update or restart before HealthKit chunk sync.",
+                    NSLocalizedFailureReasonErrorKey: "healthkit_chunk_protocol_unsupported"
+                ]
+            )
+        }
         return envelope.upload
     }
 

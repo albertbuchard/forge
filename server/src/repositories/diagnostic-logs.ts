@@ -73,9 +73,21 @@ function sanitizeDiagnosticValue(value: unknown, depth = 0): unknown {
   }
 
   if (value instanceof Error) {
+    const richError = value as Error & {
+      code?: unknown;
+      statusCode?: unknown;
+      details?: unknown;
+    };
     return {
       name: value.name,
       message: value.message,
+      ...(typeof richError.code === "string" ? { code: richError.code } : {}),
+      ...(typeof richError.statusCode === "number"
+        ? { statusCode: richError.statusCode }
+        : {}),
+      ...(richError.details && typeof richError.details === "object"
+        ? { details: sanitizeDiagnosticValue(richError.details, depth + 1) }
+        : {}),
       stack:
         typeof value.stack === "string"
           ? sanitizeDiagnosticValue(value.stack, depth + 1)

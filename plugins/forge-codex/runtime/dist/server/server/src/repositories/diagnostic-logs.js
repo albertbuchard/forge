@@ -38,9 +38,17 @@ function sanitizeDiagnosticValue(value, depth = 0) {
         return value.toISOString();
     }
     if (value instanceof Error) {
+        const richError = value;
         return {
             name: value.name,
             message: value.message,
+            ...(typeof richError.code === "string" ? { code: richError.code } : {}),
+            ...(typeof richError.statusCode === "number"
+                ? { statusCode: richError.statusCode }
+                : {}),
+            ...(richError.details && typeof richError.details === "object"
+                ? { details: sanitizeDiagnosticValue(richError.details, depth + 1) }
+                : {}),
             stack: typeof value.stack === "string"
                 ? sanitizeDiagnosticValue(value.stack, depth + 1)
                 : null

@@ -1,8 +1,7 @@
-Forge Companion 1.0.40 fixes HealthKit chunk verification for large workout histories.
+Forge Companion 1.0.41 fixes HealthKit chunk verification and stale Forge runtime detection.
 
-Workout chunks now send byte-stable payloads, so Forge verifies exactly the JSON bytes
-the phone hashed instead of reserializing nested HealthKit evidence and occasionally
-rejecting it as a checksum mismatch.
+Workout sync now requires Forge to advertise byte-stable chunk support before uploading.
+This prevents stale desktop runtimes from rejecting valid TestFlight chunks as corrupted.
 
-If a previous upload session hit the checksum bug, retry now starts a clean resumable
-sync instead of looping on the rejected chunk.
+If Forge needs to be restarted or updated, the companion now says that directly instead
+of looping on a false checksum mismatch.
