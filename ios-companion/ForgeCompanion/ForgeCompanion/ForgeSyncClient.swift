@@ -221,14 +221,21 @@ struct ForgeSyncClient {
         let chunk: HealthSyncChunkReceipt
     }
 
-    private struct HealthSyncChunkRequest<Payload: Encodable>: Encodable {
+    private struct HealthSyncChunkRequest: Encodable {
         let chunkId: String
         let sequence: Int
         let family: String
         let recordCount: Int
         let byteCount: Int
         let checksumSha256: String
-        let payload: Payload
+        let payloadJsonBase64: String
+    }
+
+    struct HealthSyncChunkWirePayload {
+        let payloadData: Data
+        let payloadJsonBase64: String
+        let checksumSha256: String
+        let byteCount: Int
     }
 
     private struct HealthSyncSessionCompleteRequest: Encodable {
@@ -1029,8 +1036,7 @@ struct ForgeSyncClient {
             )
             return sequence + 1
         }
-        let payloadData = try JSONEncoder().encode(payload)
-        let checksum = sha256Hex(payloadData)
+        let wirePayload = try Self.healthSyncChunkWirePayload(payload)
         let envelope: HealthSyncChunkEnvelope = try await sendRequest(
             path: "/mobile/healthkit/sync-sessions/\(uploadSession.syncSessionId)/chunks",
             apiBaseUrl: pairing.apiBaseUrl,
@@ -1039,15 +1045,15 @@ struct ForgeSyncClient {
                 sequence: sequence,
                 family: family,
                 recordCount: recordCount,
-                byteCount: payloadData.count,
-                checksumSha256: checksum,
-                payload: payload
+                byteCount: wirePayload.byteCount,
+                checksumSha256: wirePayload.checksumSha256,
+                payloadJsonBase64: wirePayload.payloadJsonBase64
             ),
             transport: pairing.transport
         )
         companionDebugLog(
             "ForgeSyncClient",
-            "uploadHealthSyncChunk accepted family=\(family) sequence=\(sequence) records=\(recordCount) bytes=\(payloadData.count) duplicate=\(envelope.chunk.duplicate) received=\(envelope.chunk.receivedCount)"
+            "uploadHealthSyncChunk accepted family=\(family) sequence=\(sequence) records=\(recordCount) bytes=\(wirePayload.byteCount) duplicate=\(envelope.chunk.duplicate) received=\(envelope.chunk.receivedCount)"
         )
         return sequence + 1
     }
@@ -1101,7 +1107,21 @@ struct ForgeSyncClient {
         }
     }
 
-    private func sha256Hex(_ data: Data) -> String {
+    static func healthSyncChunkWirePayloadForTesting(_ payload: some Encodable) throws -> HealthSyncChunkWirePayload {
+        try healthSyncChunkWirePayload(payload)
+    }
+
+    private static func healthSyncChunkWirePayload(_ payload: some Encodable) throws -> HealthSyncChunkWirePayload {
+        let payloadData = try JSONEncoder().encode(payload)
+        return HealthSyncChunkWirePayload(
+            payloadData: payloadData,
+            payloadJsonBase64: payloadData.base64EncodedString(),
+            checksumSha256: sha256Hex(payloadData),
+            byteCount: payloadData.count
+        )
+    }
+
+    private static func sha256Hex(_ data: Data) -> String {
         SHA256.hash(data: data)
             .map { String(format: "%02x", $0) }
             .joined()

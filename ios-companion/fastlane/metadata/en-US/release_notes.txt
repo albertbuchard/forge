@@ -1,9 +1,8 @@
-Forge Companion 1.0.39 makes HealthKit sports sync resumable for large workout histories.
+Forge Companion 1.0.40 fixes HealthKit chunk verification for large workout histories.
 
-Workout backfills now upload to Forge in bounded chunks instead of one oversized request,
-so raw heart-rate timelines, routes, workout summaries, sleep, vitals, movement, and
-screen-time evidence can resume after a network drop or app backgrounding.
+Workout chunks now send byte-stable payloads, so Forge verifies exactly the JSON bytes
+the phone hashed instead of reserializing nested HealthKit evidence and occasionally
+rejecting it as a checksum mismatch.
 
-Sync progress and diagnostics now show the active upload session, chunk family, payload
-size, and server limits, while Forge returns typed payload-too-large and checksum errors
-instead of exposing raw server JSON.
+If a previous upload session hit the checksum bug, retry now starts a clean resumable
+sync instead of looping on the rejected chunk.
