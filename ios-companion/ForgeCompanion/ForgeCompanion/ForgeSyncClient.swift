@@ -1058,20 +1058,40 @@ struct ForgeSyncClient {
             return sequence + 1
         }
         let wirePayload = try Self.healthSyncChunkWirePayload(payload)
-        let envelope: HealthSyncChunkEnvelope = try await sendRequest(
-            path: "/mobile/healthkit/sync-sessions/\(uploadSession.syncSessionId)/chunks",
-            apiBaseUrl: pairing.apiBaseUrl,
-            body: HealthSyncChunkRequest(
-                chunkId: chunkId,
-                sequence: sequence,
-                family: family,
-                recordCount: recordCount,
-                byteCount: wirePayload.byteCount,
-                checksumSha256: wirePayload.checksumSha256,
-                payloadJsonBase64: wirePayload.payloadJsonBase64
-            ),
-            transport: pairing.transport
+        companionDebugLog(
+            "ForgeSyncClient",
+            "uploadHealthSyncChunk prepared family=\(family) sequence=\(sequence) chunkId=\(chunkId) records=\(recordCount) bytes=\(wirePayload.byteCount) checksumPrefix=\(String(wirePayload.checksumSha256.prefix(12))) transport=\(pairing.transport?.protocolName ?? "urlsession")"
         )
+        let envelope: HealthSyncChunkEnvelope
+        do {
+            envelope = try await sendRequest(
+                path: "/mobile/healthkit/sync-sessions/\(uploadSession.syncSessionId)/chunks",
+                apiBaseUrl: pairing.apiBaseUrl,
+                body: HealthSyncChunkRequest(
+                    chunkId: chunkId,
+                    sequence: sequence,
+                    family: family,
+                    recordCount: recordCount,
+                    byteCount: wirePayload.byteCount,
+                    checksumSha256: wirePayload.checksumSha256,
+                    payloadJsonBase64: wirePayload.payloadJsonBase64
+                ),
+                transport: pairing.transport
+            )
+        } catch {
+            companionDebugLog(
+                "ForgeSyncClient",
+                "uploadHealthSyncChunk failed family=\(family) sequence=\(sequence) chunkId=\(chunkId) records=\(recordCount) bytes=\(wirePayload.byteCount) checksumPrefix=\(String(wirePayload.checksumSha256.prefix(12))) error=\(error.localizedDescription)"
+            )
+            throw Self.healthSyncChunkUploadError(
+                wrapping: error,
+                chunkId: chunkId,
+                family: family,
+                sequence: sequence,
+                byteCount: wirePayload.byteCount,
+                checksumSha256: wirePayload.checksumSha256
+            )
+        }
         companionDebugLog(
             "ForgeSyncClient",
             "uploadHealthSyncChunk accepted family=\(family) sequence=\(sequence) records=\(recordCount) bytes=\(wirePayload.byteCount) duplicate=\(envelope.chunk.duplicate) received=\(envelope.chunk.receivedCount)"
@@ -1146,6 +1166,24 @@ struct ForgeSyncClient {
         SHA256.hash(data: data)
             .map { String(format: "%02x", $0) }
             .joined()
+    }
+
+    private static func healthSyncChunkUploadError(
+        wrapping error: Error,
+        chunkId: String,
+        family: String,
+        sequence: Int,
+        byteCount: Int,
+        checksumSha256: String
+    ) -> Error {
+        let nsError = error as NSError
+        var userInfo = nsError.userInfo
+        userInfo["ForgeHealthSyncChunkId"] = chunkId
+        userInfo["ForgeHealthSyncChunkFamily"] = family
+        userInfo["ForgeHealthSyncChunkSequence"] = "\(sequence)"
+        userInfo["ForgeHealthSyncChunkByteCount"] = "\(byteCount)"
+        userInfo["ForgeHealthSyncChunkChecksumPrefix"] = String(checksumSha256.prefix(12))
+        return NSError(domain: nsError.domain, code: nsError.code, userInfo: userInfo)
     }
 
     func fetchMovementBootstrap(

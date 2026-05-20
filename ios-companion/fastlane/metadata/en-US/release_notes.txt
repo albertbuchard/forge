@@ -1,7 +1,12 @@
-Forge Companion 1.0.41 fixes HealthKit chunk verification and stale Forge runtime detection.
+Forge Companion 1.0.43 keeps the HealthKit chunk verification, stale Forge runtime
+detection, and raw workout-history backfill fixes aligned with the latest Forge runtime.
 
 Workout sync now requires Forge to advertise byte-stable chunk support before uploading.
 This prevents stale desktop runtimes from rejecting valid TestFlight chunks as corrupted.
 
 If Forge needs to be restarted or updated, the companion now says that directly instead
 of looping on a false checksum mismatch.
+
+Existing devices now run one full raw workout evidence backfill even if an older legacy
+sync had already succeeded. This restores historical HR timelines and route chunks for
+older workouts instead of syncing only the recent incremental window.

@@ -2967,6 +2967,24 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertFalse(staleRuntime.supportsByteStablePayloadEncoding)
     }
 
+    func testWorkoutBackfillPlanIgnoresGenericSyncCursorUntilRawWorkoutBackfillCompletes() {
+        let legacySyncDate = makeDate("2026-05-18T08:00:00.000Z")
+
+        let firstRawEvidenceSync = WorkoutBackfillSyncPlan(
+            lastSuccessfulSyncAt: legacySyncDate,
+            workoutBackfillCompletedAt: nil
+        )
+        XCTAssertTrue(firstRawEvidenceSync.requiresBackfill)
+        XCTAssertNil(firstRawEvidenceSync.workoutCursorDate)
+
+        let incrementalSync = WorkoutBackfillSyncPlan(
+            lastSuccessfulSyncAt: legacySyncDate,
+            workoutBackfillCompletedAt: makeDate("2026-05-19T08:00:00.000Z")
+        )
+        XCTAssertFalse(incrementalSync.requiresBackfill)
+        XCTAssertEqual(incrementalSync.workoutCursorDate, legacySyncDate)
+    }
+
     func testCompanionDebugLogPlainTextExportUsesChronologicalLines() {
         let earlier = CompanionDebugLogEntry(
             id: "log_earlier",

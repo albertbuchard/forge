@@ -254,6 +254,16 @@ struct CompanionSourceDiagnosticsRow: Identifiable {
     let lastObservedAt: String?
 }
 
+struct WorkoutBackfillSyncPlan {
+    let requiresBackfill: Bool
+    let workoutCursorDate: Date?
+
+    init(lastSuccessfulSyncAt: Date?, workoutBackfillCompletedAt: Date?) {
+        requiresBackfill = workoutBackfillCompletedAt == nil
+        workoutCursorDate = requiresBackfill ? nil : lastSuccessfulSyncAt
+    }
+}
+
 @MainActor
 final class CompanionAppModel: ObservableObject {
     private enum AutoSyncPolicy {
@@ -281,12 +291,15 @@ final class CompanionAppModel: ObservableObject {
         var workoutsWithMaxHeartRate = 0
         var workoutsWithStepCount = 0
         var rawHeartRateDatapoints = 0
+        var rawTimeSeriesDatapoints = 0
+        var routePoints = 0
     }
 
     private struct HealthSyncRunResult {
         let receipt: SyncReceipt
         let payloadSummary: SyncPayloadSummary
         let healthDataDeferred: Bool
+        let completedWorkoutBackfill: Bool
     }
 
     private enum SimulatorLocalForge {
@@ -311,6 +324,7 @@ final class CompanionAppModel: ObservableObject {
         static let latestSyncReport = "forge_companion_latest_sync_report"
         static let latestSyncPayloadSummary = "forge_companion_latest_sync_payload_summary"
         static let lastSuccessfulSyncAt = "forge_companion_last_successful_sync_at"
+        static let workoutBackfillCompletedAt = "forge_companion_workout_backfill_completed_at"
         static let healthSyncEnabled = "forge_companion_health_sync_enabled"
         static let healthAuthorizationGranted = "forge_companion_health_authorized"
         static let healthAccessStatus = "forge_companion_health_access_status"
@@ -370,6 +384,7 @@ final class CompanionAppModel: ObservableObject {
         }
     }
     @Published var lastSuccessfulSyncAt: Date?
+    private var workoutBackfillCompletedAt: Date?
     @Published var healthPermissionPromptDeferred = false
     @Published var movementPermissionPromptDeferred = false
     @Published private(set) var permissionSyncPhase: CompanionPermissionSyncPhase = .idle
@@ -601,6 +616,8 @@ final class CompanionAppModel: ObservableObject {
         keychain.delete(forKey: StorageKeys.pairingPayload)
         UserDefaults.standard.removeObject(forKey: StorageKeys.pairingPayload)
         UserDefaults.standard.removeObject(forKey: StorageKeys.deferredHealthPrompt)
+        UserDefaults.standard.removeObject(forKey: StorageKeys.workoutBackfillCompletedAt)
+        workoutBackfillCompletedAt = nil
         Task {
             await refreshWatchBootstrap(reason: "disconnect")
         }
@@ -958,6 +975,13 @@ final class CompanionAppModel: ObservableObject {
                 )
             )
         }
+        if UserDefaults.standard.object(forKey: StorageKeys.workoutBackfillCompletedAt) != nil {
+            workoutBackfillCompletedAt = Date(
+                timeIntervalSince1970: UserDefaults.standard.double(
+                    forKey: StorageKeys.workoutBackfillCompletedAt
+                )
+            )
+        }
 
         if
             let data = UserDefaults.standard.data(forKey: StorageKeys.latestSyncReport),
@@ -983,7 +1007,7 @@ final class CompanionAppModel: ObservableObject {
         )
         companionDebugLog(
             "CompanionAppModel",
-            "restoreCachedState complete healthAuthorized=\(healthAuthorizationGranted) lastSuccessfulSyncAt=\(lastSuccessfulSyncAt?.description ?? "nil")"
+            "restoreCachedState complete healthAuthorized=\(healthAuthorizationGranted) lastSuccessfulSyncAt=\(lastSuccessfulSyncAt?.description ?? "nil") workoutBackfillCompletedAt=\(workoutBackfillCompletedAt?.description ?? "nil")"
         )
     }
 
@@ -999,6 +1023,18 @@ final class CompanionAppModel: ObservableObject {
         if let data = try? JSONEncoder().encode(payloadSummary) {
             UserDefaults.standard.set(data, forKey: StorageKeys.latestSyncPayloadSummary)
         }
+    }
+
+    private func markWorkoutBackfillCompleted(at date: Date) {
+        workoutBackfillCompletedAt = date
+        UserDefaults.standard.set(
+            date.timeIntervalSince1970,
+            forKey: StorageKeys.workoutBackfillCompletedAt
+        )
+        companionDebugLog(
+            "CompanionAppModel",
+            "workout raw backfill completed at \(date)"
+        )
     }
 
     private func configureScreenshotScenario(_ scenario: CompanionScreenshotScenario) {
@@ -1489,6 +1525,9 @@ final class CompanionAppModel: ObservableObject {
             )
             latestSyncReport = report
             persistSyncState(report: report, payloadSummary: payloadSummary)
+            if syncResult.completedWorkoutBackfill {
+                markWorkoutBackfillCompleted(at: report.syncedAt)
+            }
             if syncResult.healthDataDeferred {
                 lastSyncMessage =
                     "Synced movement while HealthKit stayed locked. Health data will resume after unlock."
@@ -1569,6 +1608,10 @@ final class CompanionAppModel: ObservableObject {
         var sequence = 0
         var workoutStats = WorkoutUploadStats()
         var healthDataDeferred = false
+        let workoutBackfillPlan = WorkoutBackfillSyncPlan(
+            lastSuccessfulSyncAt: lastSuccessfulSyncAt,
+            workoutBackfillCompletedAt: workoutBackfillCompletedAt
+        )
 
         do {
             lastSyncMessage = "Starting Forge sync"
@@ -1622,11 +1665,17 @@ final class CompanionAppModel: ObservableObject {
             lastHealthSyncChunkId = "\(session.syncSessionId)-\(String(format: "%06d", max(0, sequence - 1)))"
 
             if healthDataDeferred == false {
-                lastSyncMessage = "Uploading workouts"
+                lastSyncMessage = workoutBackfillPlan.requiresBackfill
+                    ? "Uploading all workout history"
+                    : "Uploading workouts"
+                companionDebugLog(
+                    "CompanionAppModel",
+                    "workout chunk sync mode=\(workoutBackfillPlan.requiresBackfill ? "all-history-backfill" : "incremental") cursor=\(workoutBackfillPlan.workoutCursorDate?.description ?? "nil")"
+                )
                 _ = try await healthStore.streamWorkoutSessionBatches(
                     healthKitAuthorized: healthAuthorizationGranted,
                     healthSyncEnabled: healthSyncEnabled,
-                    lastSuccessfulSyncAt: lastSuccessfulSyncAt,
+                    lastSuccessfulSyncAt: workoutBackfillPlan.workoutCursorDate,
                     batchSize: 10
                 ) { [weak self] workouts, progress in
                     await MainActor.run {
@@ -1648,6 +1697,8 @@ final class CompanionAppModel: ObservableObject {
                         workoutStats.workoutsWithMaxHeartRate += batchStats.workoutsWithMaxHeartRate
                         workoutStats.workoutsWithStepCount += batchStats.workoutsWithStepCount
                         workoutStats.rawHeartRateDatapoints += batchStats.rawHeartRateDatapoints
+                        workoutStats.rawTimeSeriesDatapoints += batchStats.rawTimeSeriesDatapoints
+                        workoutStats.routePoints += batchStats.routePoints
                         payloadSummary = self?.buildPayloadSummary(
                             from: buildResult.payload,
                             workoutStats: workoutStats
@@ -1665,7 +1716,8 @@ final class CompanionAppModel: ObservableObject {
                 pairing: pairing,
                 expectedCounts: [
                     "workout_summaries": workoutStats.workouts,
-                    "workout_time_series": workoutStats.rawHeartRateDatapoints,
+                    "workout_time_series": workoutStats.rawTimeSeriesDatapoints,
+                    "workout_routes": workoutStats.routePoints,
                     "sleep_nights": buildResult.payload.sleepNights.count,
                     "sleep_segments": buildResult.payload.sleepSegments.count,
                     "sleep_raw_records": buildResult.payload.sleepRawRecords.count
@@ -1676,9 +1728,11 @@ final class CompanionAppModel: ObservableObject {
             return HealthSyncRunResult(
                 receipt: receipt,
                 payloadSummary: payloadSummary,
-                healthDataDeferred: healthDataDeferred
+                healthDataDeferred: healthDataDeferred,
+                completedWorkoutBackfill: workoutBackfillPlan.requiresBackfill && healthDataDeferred == false
             )
         } catch {
+            applyHealthSyncChunkErrorDiagnostics(error)
             if Self.isHealthSyncChunkProtocolUnsupported(error) {
                 activeHealthSyncSessionId = nil
                 UserDefaults.standard.removeObject(forKey: StorageKeys.activeHealthSyncSessionId)
@@ -1701,6 +1755,22 @@ final class CompanionAppModel: ObservableObject {
                 }
             }
             throw error
+        }
+    }
+
+    private func applyHealthSyncChunkErrorDiagnostics(_ error: Error) {
+        let nsError = error as NSError
+        if let chunkId = nsError.userInfo["ForgeHealthSyncChunkId"] as? String,
+           chunkId.isEmpty == false {
+            lastHealthSyncChunkId = chunkId
+        }
+        if let family = nsError.userInfo["ForgeHealthSyncChunkFamily"] as? String,
+           family.isEmpty == false {
+            lastHealthSyncChunkFamily = family
+        }
+        if let byteCountText = nsError.userInfo["ForgeHealthSyncChunkByteCount"] as? String,
+           let byteCount = Int(byteCountText) {
+            lastHealthSyncPayloadBytes = byteCount
         }
     }
 
@@ -2085,7 +2155,9 @@ final class CompanionAppModel: ObservableObject {
             workoutsWithStepCount: workouts.reduce(0) { $0 + ($1.stepCount == nil ? 0 : 1) },
             rawHeartRateDatapoints: workouts.reduce(0) { sum, workout in
                 sum + workout.timeSeriesSamples.filter { $0.metricKey == "heart_rate" }.count
-            }
+            },
+            rawTimeSeriesDatapoints: workouts.reduce(0) { $0 + $1.timeSeriesSamples.count },
+            routePoints: workouts.reduce(0) { $0 + $1.routePoints.count }
         )
     }
 
