@@ -355,8 +355,8 @@ export function WorkoutDetailPage() {
         </Card>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
-        <Card className="min-h-[360px]">
+      <section className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(280px,0.75fr)]">
+        <Card className="min-h-[360px] min-w-0 overflow-hidden">
           <div className="flex items-center gap-2 text-white">
             <HeartPulse className="size-4 text-[var(--primary)]" />
             Heart-rate timeline
@@ -372,7 +372,7 @@ export function WorkoutDetailPage() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
-                  <XAxis dataKey="time" tick={{ fill: "rgba(255,255,255,0.55)", fontSize: 11 }} />
+                  <XAxis dataKey="time" interval="preserveStartEnd" tick={{ fill: "rgba(255,255,255,0.55)", fontSize: 11 }} />
                   <YAxis tick={{ fill: "rgba(255,255,255,0.55)", fontSize: 11 }} width={42} />
                   <Tooltip
                     contentStyle={{
@@ -400,7 +400,7 @@ export function WorkoutDetailPage() {
           </div>
         </Card>
 
-        <Card>
+        <Card className="min-w-0 overflow-hidden">
           <div className="flex items-center gap-2 text-white">
             <Activity className="size-4 text-[var(--primary)]" />
             Zone mix
@@ -428,8 +428,8 @@ export function WorkoutDetailPage() {
         </Card>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <Card>
+      <section className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <Card className="min-w-0 overflow-hidden">
           <div className="flex items-center gap-2 text-white">
             <MapPinned className="size-4 text-[var(--primary)]" />
             Route
@@ -445,7 +445,7 @@ export function WorkoutDetailPage() {
           </div>
         </Card>
 
-        <Card>
+        <Card className="min-w-0 overflow-hidden">
           <div className="text-white">Captured metrics</div>
           <div className="mt-4 grid gap-3">
             {(workout.details?.metrics ?? []).slice(0, 14).map((metric) => (
@@ -463,8 +463,8 @@ export function WorkoutDetailPage() {
         </Card>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.7fr)]">
-        <Card>
+      <section className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.7fr)]">
+        <Card className="min-w-0 overflow-hidden">
           <div className="text-white">Events and phases</div>
           <div className="mt-4 grid gap-3">
             {[...(workout.details?.events ?? []), ...(workout.details?.components ?? [])]
@@ -495,7 +495,7 @@ export function WorkoutDetailPage() {
           </div>
         </Card>
 
-        <Card>
+        <Card className="min-w-0 overflow-hidden">
           <div className="text-white">Reflection</div>
           <div className="mt-4 grid gap-4">
             <label className="grid gap-2">

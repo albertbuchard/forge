@@ -244,6 +244,8 @@ describe("SportsPage", () => {
           energyKcal: 230
         }
       ],
+      vitalsTrend: [],
+      analysisSessions: [],
       sessions: [
         {
           id: "workout_1",
@@ -376,6 +378,9 @@ describe("SportsPage", () => {
     renderWithProviders();
 
     expect(await screen.findAllByText("Walking")).not.toHaveLength(0);
+    expect(screen.getByText("HR zone analysis")).toBeInTheDocument();
+    expect(screen.getByText("Average zones")).toBeInTheDocument();
+    expect(screen.getByText("Zone drift")).toBeInTheDocument();
     expect(screen.getByText("Cardio")).toBeInTheDocument();
 
     fireEvent.click(screen.getAllByRole("button", { name: /walking/i })[0]!);
