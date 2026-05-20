@@ -101,6 +101,7 @@ type ZoneTrendPoint = Record<ZoneKey, number> & {
 };
 
 type AnalysisDateMode = "all" | "recent_90" | "custom";
+type ZoneAnalysisChartMode = "rolling_stack" | "expanding_lines";
 
 function humanizeToken(value: string | null | undefined) {
   if (!value) {
@@ -422,6 +423,44 @@ function zoneTotalsForSessions(sessions: WorkoutSessionRecord[]) {
   return totals;
 }
 
+function zonePercentagesFromTotals(totals: Record<ZoneKey, number>) {
+  const totalSeconds = Object.values(totals).reduce(
+    (sum, seconds) => sum + seconds,
+    0
+  );
+  return Object.fromEntries(
+    ZONE_ORDER.map((zoneKey) => [
+      zoneKey,
+      totalSeconds > 0
+        ? Number(((totals[zoneKey] / totalSeconds) * 100).toFixed(1))
+        : 0
+    ])
+  ) as Record<ZoneKey, number>;
+}
+
+export function formatZoneTrendTooltipValue(
+  value: unknown,
+  name: unknown,
+  item?: { dataKey?: unknown }
+): [string, string] {
+  const dataKey =
+    typeof item?.dataKey === "string"
+      ? item.dataKey
+      : typeof name === "string"
+        ? name
+        : "";
+  const formattedValue =
+    typeof value === "number" ? Number(value.toFixed(1)) : String(value ?? "n/a");
+
+  if (dataKey === "restingHeartRate" || name === "Resting HR") {
+    return [`${formattedValue} bpm`, "Resting HR"];
+  }
+  if (dataKey === "vo2Max" || name === "VO2max") {
+    return [`${formattedValue} ml/kg/min`, "VO2max"];
+  }
+  return [`${formattedValue}%`, humanizeToken(dataKey)];
+}
+
 function buildZoneAnalysisView(
   sessions: WorkoutSessionRecord[],
   vitalsTrend: FitnessViewData["vitalsTrend"] | undefined
@@ -430,20 +469,26 @@ function buildZoneAnalysisView(
     const dateKey = dateKeyFromIso(session.startedAt);
     const rollingWindow = sessions.slice(Math.max(0, index - 2), index + 1);
     const rollingTotals = zoneTotalsForSessions(rollingWindow);
-    const rollingZoneSeconds = Object.values(rollingTotals).reduce(
-      (sum, seconds) => sum + seconds,
-      0
-    );
-    const zonePercentages = Object.fromEntries(
-      ZONE_ORDER.map((zoneKey) => [
-        zoneKey,
-        rollingZoneSeconds > 0
-          ? Number(
-              ((rollingTotals[zoneKey] / rollingZoneSeconds) * 100).toFixed(1)
-            )
-          : 0
-      ])
-    ) as Record<ZoneKey, number>;
+    const zonePercentages = zonePercentagesFromTotals(rollingTotals);
+    return {
+      id: session.id,
+      dateKey,
+      date: dateKey.slice(5),
+      session: workoutTypeLabel(session),
+      durationMinutes: Math.round(session.durationSeconds / 60),
+      confidence: session.analytics?.confidence ?? "unavailable",
+      restingHeartRate:
+        session.analytics?.hrSummary?.restingHr ??
+        getVitalOnOrBefore(vitalsTrend, dateKey, "restingHeartRate"),
+      vo2Max: getVitalOnOrBefore(vitalsTrend, dateKey, "vo2Max"),
+      ...zonePercentages
+    };
+  });
+
+  const expandingLineData = sessions.map((session, index): ZoneTrendPoint => {
+    const dateKey = dateKeyFromIso(session.startedAt);
+    const expandingTotals = zoneTotalsForSessions(sessions.slice(0, index + 1));
+    const zonePercentages = zonePercentagesFromTotals(expandingTotals);
     return {
       id: session.id,
       dateKey,
@@ -491,6 +536,7 @@ function buildZoneAnalysisView(
   return {
     sessions,
     lineData,
+    expandingLineData,
     averageZoneData,
     rawHrCount,
     exerciseLabels
@@ -858,6 +904,8 @@ export function SportsPage() {
   const [analysisExerciseQuery, setAnalysisExerciseQuery] = useState("");
   const [analysisDateMode, setAnalysisDateMode] =
     useState<AnalysisDateMode>("all");
+  const [analysisZoneChartMode, setAnalysisZoneChartMode] =
+    useState<ZoneAnalysisChartMode>("rolling_stack");
   const [analysisStartDate, setAnalysisStartDate] = useState("");
   const [analysisEndDate, setAnalysisEndDate] = useState("");
   const [analysisDefaultsApplied, setAnalysisDefaultsApplied] = useState(false);
@@ -1452,18 +1500,54 @@ export function SportsPage() {
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-                  Zone drift
+                  {analysisZoneChartMode === "expanding_lines"
+                    ? "Expanding zone lines"
+                    : "Zone drift"}
                 </div>
                 <div className="mt-2 text-lg text-white">
-                  Rolling duration-weighted zone mix with resting HR and VO2max overlay.
+                  {analysisZoneChartMode === "expanding_lines"
+                    ? "Expanding all-session average with resting HR and VO2max overlay."
+                    : "Rolling duration-weighted zone mix with resting HR and VO2max overlay."}
                 </div>
               </div>
-              <Badge tone="meta">HRR zones</Badge>
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
+                <div
+                  className="grid grid-cols-2 gap-1 rounded-[8px] border border-white/8 bg-white/[0.035] p-1"
+                  aria-label="Zone chart display"
+                >
+                  {[
+                    ["rolling_stack", "Stacked"],
+                    ["expanding_lines", "Lines"]
+                  ].map(([mode, label]) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      className={`min-h-9 rounded-[6px] px-3 py-1.5 text-xs font-medium transition ${
+                        analysisZoneChartMode === mode
+                          ? "bg-[var(--primary)]/18 text-white"
+                          : "text-white/58 hover:bg-white/[0.06] hover:text-white"
+                      }`}
+                      onClick={() =>
+                        setAnalysisZoneChartMode(mode as ZoneAnalysisChartMode)
+                      }
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <Badge tone="meta">HRR zones</Badge>
+              </div>
             </div>
             <div className="mt-4 h-[255px]">
               {zoneAnalysisView.lineData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={zoneAnalysisView.lineData}>
+                  <ComposedChart
+                    data={
+                      analysisZoneChartMode === "expanding_lines"
+                        ? zoneAnalysisView.expandingLineData
+                        : zoneAnalysisView.lineData
+                    }
+                  >
                     <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
                     <XAxis
                       dataKey="date"
@@ -1484,15 +1568,9 @@ export function SportsPage() {
                       width={42}
                     />
                     <Tooltip
-                      formatter={(value, name) => {
-                        if (name === "restingHeartRate") {
-                          return [`${value} bpm`, "Resting HR"];
-                        }
-                        if (name === "vo2Max") {
-                          return [value, "VO2max"];
-                        }
-                        return [`${value}%`, humanizeToken(String(name))];
-                      }}
+                      formatter={(value, name, item) =>
+                        formatZoneTrendTooltipValue(value, name, item)
+                      }
                       contentStyle={{
                         background: "rgba(8,12,22,0.94)",
                         border: "1px solid rgba(255,255,255,0.12)",
@@ -1506,16 +1584,31 @@ export function SportsPage() {
                         fontSize: 11
                       }}
                     />
-                    {ZONE_ORDER.map((zoneKey) => (
-                      <Bar
-                        key={zoneKey}
-                        yAxisId="zones"
-                        dataKey={zoneKey}
-                        stackId="zones"
-                        fill={ZONE_COLORS[zoneKey]}
-                        isAnimationActive={false}
-                      />
-                    ))}
+                    {analysisZoneChartMode === "expanding_lines"
+                      ? ZONE_ORDER.map((zoneKey) => (
+                          <Line
+                            key={zoneKey}
+                            yAxisId="zones"
+                            type="monotone"
+                            dataKey={zoneKey}
+                            name={humanizeToken(zoneKey)}
+                            stroke={ZONE_COLORS[zoneKey]}
+                            strokeWidth={2}
+                            dot={{ r: 2.5 }}
+                            activeDot={{ r: 4 }}
+                            connectNulls
+                          />
+                        ))
+                      : ZONE_ORDER.map((zoneKey) => (
+                          <Bar
+                            key={zoneKey}
+                            yAxisId="zones"
+                            dataKey={zoneKey}
+                            stackId="zones"
+                            fill={ZONE_COLORS[zoneKey]}
+                            isAnimationActive={false}
+                          />
+                        ))}
                     <Line
                       yAxisId="vitals"
                       type="monotone"
