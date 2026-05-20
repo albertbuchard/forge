@@ -3,7 +3,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
-import { SportsPage } from "@/pages/sports-page";
+import {
+  formatZoneTrendTooltipValue,
+  SportsPage
+} from "@/pages/sports-page";
 import type { FitnessViewData } from "@/lib/types";
 
 const {
@@ -381,7 +384,12 @@ describe("SportsPage", () => {
     expect(screen.getByText("HR zone analysis")).toBeInTheDocument();
     expect(screen.getByText("Average zones")).toBeInTheDocument();
     expect(screen.getByText("Zone drift")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Stacked" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Lines" })).toBeInTheDocument();
     expect(screen.getByText("Cardio")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Lines" }));
+    expect(screen.getByText("Expanding zone lines")).toBeInTheDocument();
 
     fireEvent.click(screen.getAllByRole("button", { name: /walking/i })[0]!);
 
@@ -394,5 +402,19 @@ describe("SportsPage", () => {
     expect(screen.getByText("Workout phases")).toBeInTheDocument();
     expect(screen.getByText("Cooldown")).toBeInTheDocument();
     expect(screen.getByText("Apple Health")).toBeInTheDocument();
+  });
+
+  it("formats zone-trend tooltip units for zones and physiological overlays", () => {
+    expect(
+      formatZoneTrendTooltipValue(74, "Resting HR", {
+        dataKey: "restingHeartRate"
+      })
+    ).toEqual(["74 bpm", "Resting HR"]);
+    expect(
+      formatZoneTrendTooltipValue(37.6, "VO2max", { dataKey: "vo2Max" })
+    ).toEqual(["37.6 ml/kg/min", "VO2max"]);
+    expect(
+      formatZoneTrendTooltipValue(59, "Zone 3", { dataKey: "zone_3" })
+    ).toEqual(["59%", "Zone 3"]);
   });
 });
