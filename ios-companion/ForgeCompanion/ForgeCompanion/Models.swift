@@ -802,6 +802,72 @@ struct SyncPayloadSummary: Codable {
     }
 }
 
+struct CompanionSyncUploadStatus {
+    let isSyncing: Bool
+    let message: String?
+    let payloadSummary: SyncPayloadSummary?
+    let lastChunkFamily: String?
+    let lastPayloadBytes: Int?
+    let activeSessionId: String?
+
+    var headline: String {
+        guard isSyncing else {
+            return "Ready for the next sync"
+        }
+        guard let message, message.isEmpty == false else {
+            return "Preparing sync"
+        }
+        return message
+    }
+
+    var uploadSummary: String {
+        guard let payloadSummary else {
+            return isSyncing ? "Counting HealthKit and movement records" : "No payload counted yet"
+        }
+        let parts = [
+            "\(payloadSummary.sleepRawRecords) raw sleep",
+            "\(payloadSummary.sleepSegments) segments",
+            "\(payloadSummary.sleepNights) nights",
+            "\(payloadSummary.workouts) workouts",
+            "\(payloadSummary.rawHeartRateDatapointsSynced) HR samples",
+            "\(payloadSummary.movementTrips) trips"
+        ]
+        return parts.joined(separator: ", ")
+    }
+
+    var transferSummary: String {
+        var parts: [String] = []
+        if let lastChunkFamily, lastChunkFamily.isEmpty == false {
+            parts.append(lastChunkFamily.replacingOccurrences(of: "_", with: " "))
+        }
+        if let lastPayloadBytes {
+            parts.append(Self.formatBytes(lastPayloadBytes))
+        }
+        if let activeSessionId, activeSessionId.isEmpty == false {
+            parts.append("session \(Self.shortSessionId(activeSessionId))")
+        }
+        return parts.isEmpty ? "Waiting for the first upload chunk" : parts.joined(separator: " • ")
+    }
+
+    private static func shortSessionId(_ value: String) -> String {
+        guard value.count > 10 else {
+            return value
+        }
+        return String(value.suffix(10))
+    }
+
+    private static func formatBytes(_ value: Int) -> String {
+        guard value >= 1024 else {
+            return "\(value) B"
+        }
+        let kilobytes = Double(value) / 1024
+        guard kilobytes >= 1024 else {
+            return String(format: "%.1f KB", kilobytes)
+        }
+        return String(format: "%.1f MB", kilobytes / 1024)
+    }
+}
+
 struct SyncCoverageRow: Identifiable {
     let id: String
     let title: String
