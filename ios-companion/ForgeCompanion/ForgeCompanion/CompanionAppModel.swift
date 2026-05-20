@@ -2056,6 +2056,17 @@ final class CompanionAppModel: ObservableObject {
         return "\(report.sleepRawRecords) raw, \(report.sleepSegments) segments, \(report.sleepNights) nights, \(report.workouts) workouts"
     }
 
+    var syncUploadStatus: CompanionSyncUploadStatus {
+        CompanionSyncUploadStatus(
+            isSyncing: syncState == .syncing || activeSyncTask != nil,
+            message: lastSyncMessage,
+            payloadSummary: latestSyncPayloadSummary,
+            lastChunkFamily: lastHealthSyncChunkFamily,
+            lastPayloadBytes: lastHealthSyncPayloadBytes,
+            activeSessionId: activeHealthSyncSessionId
+        )
+    }
+
     var lastSuccessfulSyncLabel: String {
         guard let lastSuccessfulSyncAt else {
             return "Never"

@@ -4491,7 +4491,10 @@ function buildAgentOnboardingPayload(request) {
             emotionDefinition: "An emotion definition is reusable emotion vocabulary for trigger reports. Reports can either reference one or fall back to raw labels.",
             triggerReport: "A trigger report is the one-episode incident chain: situation, emotions, thoughts, behaviors, consequences, extra mode labels, schema themes, and next moves."
         },
-        psycheCoachingPlaybooks: AGENT_ONBOARDING_PSYCHE_PLAYBOOKS.map(enrichConversationPlaybookWithRouteInfo),
+        psycheCoachingPlaybooks: AGENT_ONBOARDING_PSYCHE_PLAYBOOKS.map((playbook) => enrichConversationPlaybookWithRouteInfo({
+            ...playbook,
+            openingQuestion: playbook.exampleQuestions[0] ?? playbook.askSequence[0] ?? ""
+        })),
         conversationRules: AGENT_ONBOARDING_CONVERSATION_RULES,
         entityConversationPlaybooks: AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS.map(enrichConversationPlaybookWithRouteInfo),
         relationshipModel: [

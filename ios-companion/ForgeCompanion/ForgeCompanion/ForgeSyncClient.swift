@@ -15,6 +15,8 @@ struct ForgeIrohTransportResult {
 }
 
 enum ForgeIrohTransportClient {
+    private static let requestTimeoutNanoseconds: UInt64 = 45 * 1_000_000_000
+
     private struct Header: Codable {
         let name: String
         let value: String
@@ -104,7 +106,39 @@ enum ForgeIrohTransportClient {
                 headers: headerMap
             )
         }
-        return try await task.value
+        do {
+            return try await awaitResult(task, timeoutNanoseconds: requestTimeoutNanoseconds)
+        } catch {
+            task.cancel()
+            throw error
+        }
+    }
+
+    private static func awaitResult(
+        _ task: Task<ForgeIrohTransportResult, Error>,
+        timeoutNanoseconds: UInt64
+    ) async throws -> ForgeIrohTransportResult {
+        try await withThrowingTaskGroup(of: ForgeIrohTransportResult.self) { group in
+            group.addTask {
+                try await task.value
+            }
+            group.addTask {
+                try await Task.sleep(nanoseconds: timeoutNanoseconds)
+                throw NSError(
+                    domain: "ForgeIrohTransport",
+                    code: URLError.timedOut.rawValue,
+                    userInfo: [
+                        NSLocalizedDescriptionKey: "Forge Iroh request timed out.",
+                        NSLocalizedFailureReasonErrorKey: "No response arrived within 45 seconds."
+                    ]
+                )
+            }
+            guard let result = try await group.next() else {
+                throw URLError(.unknown)
+            }
+            group.cancelAll()
+            return result
+        }
     }
 }
 
@@ -1632,6 +1666,7 @@ struct ForgeSyncClient {
                 request.setValue(value, forHTTPHeaderField: name)
             }
             request.httpBody = requestBody
+            request.timeoutInterval = 20
             let (urlSessionData, response) = try await (session ?? Self.bootstrapSession).data(for: request)
             guard let urlSessionResponse = response as? HTTPURLResponse else {
                 companionDebugLog("ForgeSyncClient", "sendRequest badServerResponse url=\(url.absoluteString)")

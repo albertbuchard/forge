@@ -48,6 +48,7 @@ async function loadOnboardingPayload() {
       projectIds: string[];
       tagIds: string[];
     };
+    psycheSubmoduleModel: Record<string, string>;
     entityCatalog: Array<{
       entityType: string;
       classification: string;
@@ -66,7 +67,9 @@ async function loadOnboardingPayload() {
     conversationRules: string[];
     psycheCoachingPlaybooks: Array<{
       focus: string;
+      openingQuestion: string;
       askSequence: string[];
+      exampleQuestions?: string[];
       notes: string[];
       routePosture: string;
       apiAccessHint: string;
@@ -210,6 +213,9 @@ describe("forge onboarding contract", () => {
         `${entityType} should be published`
       ).toBe(true);
     }
+    expect(onboarding.psycheSubmoduleModel.flashcard).toMatch(
+      /therapeutic reminder card/i
+    );
 
     for (const focus of [
       "goal",
@@ -855,6 +861,14 @@ describe("forge onboarding contract", () => {
       );
     }
 
+    for (const entry of onboarding.psycheCoachingPlaybooks) {
+      expect(
+        entry.openingQuestion,
+        `${entry.focus} should publish a first-class opening question`
+      ).toMatch(/\?$/);
+      expect(entry.openingQuestion).toBe(entry.exampleQuestions?.[0]);
+    }
+
     expect(playbookByFocus.get("goal")).toEqual(
       expect.objectContaining({
         routePosture: "batch_crud_entity",
@@ -1113,12 +1127,16 @@ describe("forge onboarding contract", () => {
     )?.schemas;
     const routeModelSchema =
       openapiSchemas?.AgentOnboardingPayload?.properties?.entityRouteModel;
+    const psycheSubmoduleSchema =
+      openapiSchemas?.AgentOnboardingPayload?.properties?.psycheSubmoduleModel;
     const psychePlaybookSchema =
       openapiSchemas?.AgentOnboardingPayload?.properties?.psycheCoachingPlaybooks
         ?.items;
     const entityPlaybookSchema =
       openapiSchemas?.AgentOnboardingPayload?.properties
         ?.entityConversationPlaybooks?.items;
+    const interactionGuidanceSchema =
+      openapiSchemas?.AgentOnboardingPayload?.properties?.interactionGuidance;
     const mutationGuidanceSchema =
       openapiSchemas?.AgentOnboardingPayload?.properties?.mutationGuidance;
     const specializedSurfaceSchema =
@@ -1137,13 +1155,27 @@ describe("forge onboarding contract", () => {
     expect(
       openApiPaths.has("/api/v1/calendar/connections/{id}/discovery")
     ).toBe(true);
+    expect(psycheSubmoduleSchema).toEqual(
+      expect.objectContaining({
+        additionalProperties: false,
+        required: expect.arrayContaining(["flashcard"]),
+        properties: expect.objectContaining({
+          flashcard: { type: "string" }
+        })
+      })
+    );
 
     for (const schema of [psychePlaybookSchema, entityPlaybookSchema]) {
       expect(schema).toEqual(
         expect.objectContaining({
           additionalProperties: false,
-          required: expect.arrayContaining(["routePosture", "apiAccessHint"]),
+          required: expect.arrayContaining([
+            "openingQuestion",
+            "routePosture",
+            "apiAccessHint"
+          ]),
           properties: expect.objectContaining({
+            openingQuestion: { type: "string" },
             routePosture: { type: "string" },
             apiAccessHint: { type: "string" }
           })
@@ -1184,6 +1216,21 @@ describe("forge onboarding contract", () => {
           writeRoutes: expect.objectContaining({
             additionalProperties: { type: "string" }
           })
+        })
+      })
+    );
+    expect(interactionGuidanceSchema).toEqual(
+      expect.objectContaining({
+        additionalProperties: false,
+        required: expect.arrayContaining([
+          "specializedSurfaceRule",
+          "reviewShortcutRule",
+          "readModelWriteRule"
+        ]),
+        properties: expect.objectContaining({
+          specializedSurfaceRule: { type: "string" },
+          reviewShortcutRule: { type: "string" },
+          readModelWriteRule: { type: "string" }
         })
       })
     );

@@ -5516,8 +5516,11 @@ function buildAgentOnboardingPayload(request: {
       triggerReport:
         "A trigger report is the one-episode incident chain: situation, emotions, thoughts, behaviors, consequences, extra mode labels, schema themes, and next moves."
     },
-    psycheCoachingPlaybooks: AGENT_ONBOARDING_PSYCHE_PLAYBOOKS.map(
-      enrichConversationPlaybookWithRouteInfo
+    psycheCoachingPlaybooks: AGENT_ONBOARDING_PSYCHE_PLAYBOOKS.map((playbook) =>
+      enrichConversationPlaybookWithRouteInfo({
+        ...playbook,
+        openingQuestion: playbook.exampleQuestions[0] ?? playbook.askSequence[0] ?? ""
+      })
     ),
     conversationRules: AGENT_ONBOARDING_CONVERSATION_RULES,
     entityConversationPlaybooks:

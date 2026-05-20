@@ -547,3 +547,106 @@ Retest:
   exact route families, route-key examples, and OpenAPI coverage.
 - Psyche records remain therapeutically guided while still using batch CRUD for API
   storage once formulation and consent are clear.
+
+## 2026-05-20 Automation Run
+
+Setup:
+
+- Built the OpenClaw plugin from the repo-local checkout with `npm run build:openclaw-plugin`.
+- Built the Hermes packaged runtime with `node ./plugins/forge-hermes/scripts/build-package-runtime.mjs`.
+- Confirmed OpenClaw and Hermes config/runtime evidence point at
+  `/Users/omarclaw/Documents/aurel-monorepo/data/forge/forge.sqlite`.
+- Re-enabled/restarted OpenClaw from `./openclaw-plugin`, reinstalled Hermes editable
+  from `./plugins/forge-hermes`, restarted both gateways, and verified Forge health,
+  live onboarding, OpenAPI, and dedicated Movement/Life Force/Workbench route families.
+
+### Cycle 1
+
+Tested:
+
+- Re-ran the full simulation matrix for planning, calendar, preferences,
+  questionnaires/reflection, health, wiki, all Psyche records, Movement, Life Force,
+  and Workbench.
+- Simulated add, update, review, correction, navigation, and specialized route
+  selection scenarios for every flow in the matrix.
+- Compared static playbooks, live onboarding, TypeScript types, and OpenAPI schema.
+
+Found:
+
+- Question quality and routing posture stayed strong across the full matrix.
+- The live onboarding payload already exposed `recommendedPluginTools.specializedDomainWorkflow`
+  and specialized route examples, but the shared TypeScript onboarding type omitted
+  those fields.
+- OpenAPI declared `interactionGuidance` with `additionalProperties: false` while
+  omitting the live `specializedSurfaceRule`, `reviewShortcutRule`, and
+  `readModelWriteRule` fields.
+
+Changed:
+
+- Added `specializedDomainWorkflow` and specialized route example fields to the shared
+  TypeScript onboarding type.
+- Added the missing interaction guidance fields to the generated OpenAPI schema.
+- Added simulation/contract tests so future agents and generated clients see the same
+  specialized route guidance as the live payload.
+
+Retest:
+
+- Re-ran question-flow quality, three-cycle simulation, onboarding contract, and
+  skill-playbook parity tests.
+- Result: all passed; the contract-alignment change was kept and nothing was reverted.
+
+### Cycle 2
+
+Tested:
+
+- Re-ran the full flow matrix after Cycle 1.
+- Inspected live `entityConversationPlaybooks` and `psycheCoachingPlaybooks` directly
+  for every entity and domain surface.
+- Focused on whether a new agent using only live onboarding would receive the same
+  strong first-question guidance as the skill files.
+
+Found:
+
+- Non-Psyche live playbooks had explicit `openingQuestion` fields.
+- Psyche playbooks had strong `exampleQuestions`, but no first-class
+  `openingQuestion`, leaving Psyche first turns less explicit in the live contract.
+- Route posture for Psyche still correctly remained shared batch CRUD after consent.
+
+Changed:
+
+- Promoted the first Psyche example question into a first-class live
+  `openingQuestion`.
+- Updated TypeScript and OpenAPI schema for `AgentOnboardingPsychePlaybook`.
+- Added tests requiring every Psyche playbook to publish a concrete first question.
+
+Retest:
+
+- Re-ran the full suite.
+- Result: all passed; the Psyche opening-question contract was kept.
+
+### Cycle 3
+
+Tested:
+
+- Re-ran the full entity and specialized surface matrix after Cycle 2.
+- Checked Psyche catalog coverage across live onboarding, TypeScript, and OpenAPI.
+- Paid special attention to flashcards because they are psychologically meaningful
+  records and are used during urges/triggers.
+
+Found:
+
+- Live onboarding correctly described `flashcard` in `psycheSubmoduleModel`.
+- The TypeScript onboarding type and OpenAPI schema omitted the same `flashcard` key,
+  creating a schema drift around a Psyche entity that agents must treat as first-class.
+
+Changed:
+
+- Added `flashcard` to the TypeScript `psycheSubmoduleModel` contract.
+- Added `flashcard` to the OpenAPI `psycheSubmoduleModel` required/properties schema.
+- Added tests that lock flashcard into the live Psyche submodule model and schema.
+
+Retest:
+
+- Re-ran question-flow quality, three-cycle simulation, onboarding contract, and
+  skill-playbook parity tests.
+- Result: all passed; the flashcard contract fix was kept and nothing was reverted.

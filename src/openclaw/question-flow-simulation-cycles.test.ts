@@ -819,7 +819,19 @@ describe("question flow simulation cycles", () => {
     expect(onboardingSource).toMatch(/focus:\s*"calendar_overview"[\s\S]*forge_get_calendar_overview/i);
     expect(typeSource).toMatch(/conceptModel:[\s\S]*movement: string;[\s\S]*lifeForce: string;[\s\S]*workbench: string;/);
     expect(typeSource).toMatch(
+      /psycheSubmoduleModel:[\s\S]*modeGuideSession: string;[\s\S]*flashcard: string;[\s\S]*eventType: string;/i
+    );
+    expect(typeSource).toMatch(
+      /AgentOnboardingPsychePlaybook[\s\S]*openingQuestion: string;[\s\S]*exampleQuestions: string\[\];/i
+    );
+    expect(typeSource).toMatch(
       /specializedDomainSurfaces:[\s\S]*classification: "specialized_domain_surface";[\s\S]*aliases: string\[\];[\s\S]*summary: string;[\s\S]*routeKeys: string\[\];[\s\S]*methodRoutes: Record<string, string>;[\s\S]*routeSelectionQuestions: string\[\];/i
+    );
+    expect(typeSource).toMatch(
+      /recommendedPluginTools:[\s\S]*specializedDomainWorkflow: string\[\];/i
+    );
+    expect(typeSource).toMatch(
+      /mutationGuidance:[\s\S]*specializedRouteToolRule: string;[\s\S]*specializedRouteToolExample: string;[\s\S]*specializedRouteToolExamples: Record<string, string>;/i
     );
     expect(onboardingSource).toMatch(
       /movementTimeline[\s\S]*"routeKey":"timeline"[\s\S]*"query"/

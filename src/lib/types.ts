@@ -3878,6 +3878,7 @@ export interface AgentOnboardingPsychePlaybook {
   focus: string;
   useWhen: string;
   coachingGoal: string;
+  openingQuestion: string;
   askSequence: string[];
   requiredForCreate: string[];
   highValueOptionalFields: string[];
@@ -3971,6 +3972,7 @@ export interface AgentOnboardingPayload {
     schemaCatalog: string;
     modeProfile: string;
     modeGuideSession: string;
+    flashcard: string;
     eventType: string;
     emotionDefinition: string;
     triggerReport: string;
@@ -4100,6 +4102,7 @@ export interface AgentOnboardingPayload {
     bootstrap: string[];
     readModels: string[];
     uiWorkflow: string[];
+    specializedDomainWorkflow: string[];
     entityWorkflow: string[];
     wikiWorkflow: string[];
     healthWorkflow: string[];
@@ -4139,8 +4142,11 @@ export interface AgentOnboardingPayload {
     searchRule: string;
     createRule: string;
     updateRule: string;
+    specializedRouteToolRule: string;
     createExample: string;
     updateExample: string;
+    specializedRouteToolExample: string;
+    specializedRouteToolExamples: Record<string, string>;
   };
 }
 

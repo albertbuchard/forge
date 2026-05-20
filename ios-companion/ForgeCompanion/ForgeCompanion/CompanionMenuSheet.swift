@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct CompanionMenuSheet: View {
     @EnvironmentObject private var appModel: CompanionAppModel
@@ -143,8 +144,36 @@ struct CompanionMenuSheet: View {
     }
 }
 
+private struct SyncActivityIndicator: View {
+    let size: CGFloat
+    let color: Color
+
+    @State private var isRotating = false
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(color.opacity(0.18), lineWidth: 2)
+            Circle()
+                .trim(from: 0.08, to: 0.76)
+                .stroke(
+                    color,
+                    style: StrokeStyle(lineWidth: 2.4, lineCap: .round)
+                )
+                .rotationEffect(.degrees(isRotating ? 360 : 0))
+        }
+        .frame(width: size, height: size)
+        .onAppear {
+            withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) {
+                isRotating = true
+            }
+        }
+    }
+}
+
 struct CompanionSettingsSheet: View {
     @EnvironmentObject private var appModel: CompanionAppModel
+    @ObservedObject private var debugLogStore = CompanionDebugLogStore.shared
 
     let reopenSetup: () -> Void
     let reloadForge: () -> Void
@@ -154,6 +183,8 @@ struct CompanionSettingsSheet: View {
 
     @State private var syncing = false
     @State private var authorizing = false
+    @State private var syncLogsExpanded = false
+    @State private var logCopyConfirmation: String?
 
     var body: some View {
         NavigationStack {
@@ -284,28 +315,151 @@ struct CompanionSettingsSheet: View {
                 detailRow("State", value: appModel.syncStateLabel)
                 detailRow("Last sync", value: appModel.lastSuccessfulSyncLabel)
                 detailRow("Last payload", value: appModel.latestImportSummary)
+                syncStatusPanel
+                syncLogDisclosure
 
                 Button {
                     syncing = true
                     Task {
+                        defer {
+                            syncing = false
+                        }
                         await appModel.runManualSync()
-                        syncing = false
                     }
                 }
                 label: {
                     HStack(spacing: 10) {
-                        if syncing {
-                            ProgressView()
-                                .tint(Color(red: 13 / 255, green: 20 / 255, blue: 37 / 255))
+                        if syncInFlight {
+                            SyncActivityIndicator(
+                                size: 17,
+                                color: Color(red: 13 / 255, green: 20 / 255, blue: 37 / 255)
+                            )
                         }
 
-                        Text(syncing ? "Syncing now…" : "Run sync now")
+                        Text(syncInFlight ? "Syncing now…" : "Run sync now")
                     }
                 }
                 .buttonStyle(CompanionFilledButtonStyle())
-                .disabled(authorizing || syncing)
+                .disabled(authorizing || syncInFlight)
             }
         }
+    }
+
+    private var syncInFlight: Bool {
+        syncing || appModel.syncUploadStatus.isSyncing
+    }
+
+    private var syncStatusPanel: some View {
+        let status = appModel.syncUploadStatus
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 10) {
+                if syncInFlight {
+                    SyncActivityIndicator(size: 18, color: CompanionStyle.accentStrong)
+                } else {
+                    Image(systemName: appModel.latestError == nil ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(appModel.latestError == nil ? CompanionStyle.accentStrong : CompanionStyle.destructive)
+                }
+
+                Text(status.headline)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(CompanionStyle.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            detailRow(syncInFlight ? "Uploading" : "Prepared", value: status.uploadSummary)
+            detailRow("Transfer", value: status.transferSummary)
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white.opacity(0.045))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color.white.opacity(0.07), lineWidth: 1)
+                )
+        )
+    }
+
+    private var syncLogDisclosure: some View {
+        DisclosureGroup(isExpanded: $syncLogsExpanded) {
+            VStack(alignment: .leading, spacing: 10) {
+                Button {
+                    let exportText = debugLogStore.renderPlainText()
+                    UIPasteboard.general.string = exportText
+                    logCopyConfirmation = "Copied \(debugLogStore.entries.count) log lines"
+                    companionDebugLog("CompanionSettingsSheet", "copy sync diagnostics logs count=\(debugLogStore.entries.count)")
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "doc.on.doc")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text("Copy logs")
+                        Spacer(minLength: 8)
+                    }
+                }
+                .buttonStyle(CompanionGhostButtonStyle())
+
+                if let logCopyConfirmation {
+                    Text(logCopyConfirmation)
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(CompanionStyle.accentStrong)
+                }
+
+                ForEach(syncLogPreviewEntries) { entry in
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("\(entry.formattedTimestamp) • \(entry.scope)")
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .foregroundStyle(CompanionStyle.textMuted)
+                        Text(entry.message)
+                            .font(.system(size: 11, weight: .medium, design: .rounded))
+                            .foregroundStyle(entry.level == .error ? CompanionStyle.destructive : CompanionStyle.textSecondary)
+                            .lineLimit(3)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(.top, 10)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "list.bullet.rectangle")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(CompanionStyle.accentStrong)
+                    .frame(width: 18)
+
+                Text("Sync logs")
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(CompanionStyle.textPrimary)
+
+                Spacer(minLength: 8)
+
+                Text("\(debugLogStore.entries.count)")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(CompanionStyle.textMuted)
+            }
+        }
+        .tint(CompanionStyle.textPrimary)
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white.opacity(0.035))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color.white.opacity(0.06), lineWidth: 1)
+                )
+        )
+    }
+
+    private var syncLogPreviewEntries: [CompanionDebugLogEntry] {
+        Array(
+            debugLogStore.entries
+                .filter { entry in
+                    entry.scope == "CompanionAppModel" ||
+                        entry.scope == "ForgeSyncClient" ||
+                        entry.scope == "HealthSyncStore" ||
+                        entry.message.localizedCaseInsensitiveContains("sync")
+                }
+                .prefix(6)
+        )
     }
 
     private var movementCard: some View {

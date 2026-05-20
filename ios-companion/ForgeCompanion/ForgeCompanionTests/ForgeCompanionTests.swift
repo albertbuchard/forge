@@ -2985,6 +2985,50 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(incrementalSync.workoutCursorDate, legacySyncDate)
     }
 
+    func testSyncUploadStatusExplainsCurrentCountsAndTransferChunk() {
+        let payloadSummary = SyncPayloadSummary(
+            builtAt: makeDate("2026-05-20T08:00:00.000Z"),
+            sleepSessions: 0,
+            sleepNights: 2,
+            sleepSegments: 18,
+            sleepRawRecords: 42,
+            sleepStageEntries: 9,
+            workouts: 7,
+            workoutsWithAverageHeartRate: 5,
+            workoutsWithMaxHeartRate: 4,
+            workoutsWithStepCount: 3,
+            movementKnownPlaces: 4,
+            movementStays: 12,
+            movementTrips: 6,
+            movementTripPoints: 80,
+            movementTripStops: 5,
+            vitalsDaySummaries: 3,
+            vitalsMetricEntries: 24,
+            screenTimeDaySummaries: 1,
+            screenTimeHourlySegments: 10,
+            screenTimeTotalActivitySeconds: 3600,
+            rawHeartRateDatapointsSynced: 128
+        )
+
+        let status = CompanionSyncUploadStatus(
+            isSyncing: true,
+            message: "Uploading workouts 5/7",
+            payloadSummary: payloadSummary,
+            lastChunkFamily: "workout_time_series",
+            lastPayloadBytes: 1536,
+            activeSessionId: "hms_abcdefghijklmnopqrstuvwxyz"
+        )
+
+        XCTAssertEqual(status.headline, "Uploading workouts 5/7")
+        XCTAssertEqual(
+            status.uploadSummary,
+            "42 raw sleep, 18 segments, 2 nights, 7 workouts, 128 HR samples, 6 trips"
+        )
+        XCTAssertTrue(status.transferSummary.contains("workout time series"))
+        XCTAssertTrue(status.transferSummary.contains("1.5 KB"))
+        XCTAssertTrue(status.transferSummary.contains("session"))
+    }
+
     func testCompanionDebugLogPlainTextExportUsesChronologicalLines() {
         let earlier = CompanionDebugLogEntry(
             id: "log_earlier",
