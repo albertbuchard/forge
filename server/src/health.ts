@@ -5458,8 +5458,79 @@ export function getSleepViewData(userIds?: string[]) {
   };
 }
 
+function pickVitalMetricValue(
+  metrics: Record<string, StoredVitalMetricSummary>,
+  candidates: string[]
+) {
+  for (const key of candidates) {
+    const metric = metrics[key];
+    if (!metric) {
+      continue;
+    }
+    const value = vitalMetricPrimaryValue({
+      aggregation: metric.aggregation,
+      latest: metric.latest ?? null,
+      average: metric.average ?? null,
+      total: metric.total ?? null,
+      maximum: metric.maximum ?? null
+    });
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function buildFitnessVitalsTrend(rows: DailySummaryRow[]) {
+  const byDate = new Map<
+    string,
+    { restingHeartRate: number[]; vo2Max: number[] }
+  >();
+  for (const row of rows) {
+    const metrics = safeJsonParse<Record<string, StoredVitalMetricSummary>>(
+      row.metrics_json,
+      {}
+    );
+    const bucket = byDate.get(row.date_key) ?? {
+      restingHeartRate: [],
+      vo2Max: []
+    };
+    const restingHeartRate = pickVitalMetricValue(metrics, [
+      "restingHeartRate",
+      "resting_heart_rate"
+    ]);
+    const vo2Max = pickVitalMetricValue(metrics, [
+      "vo2Max",
+      "vo2max",
+      "vo2_max"
+    ]);
+    if (restingHeartRate != null) {
+      bucket.restingHeartRate.push(restingHeartRate);
+    }
+    if (vo2Max != null) {
+      bucket.vo2Max.push(vo2Max);
+    }
+    byDate.set(row.date_key, bucket);
+  }
+
+  return [...byDate.entries()]
+    .sort((left, right) => left[0].localeCompare(right[0]))
+    .slice(-90)
+    .map(([dateKey, values]) => ({
+      dateKey,
+      restingHeartRate:
+        values.restingHeartRate.length > 0
+          ? round(average(values.restingHeartRate), 1)
+          : null,
+      vo2Max: values.vo2Max.length > 0 ? round(average(values.vo2Max), 2) : null
+    }));
+}
+
 export function getFitnessViewData(userIds?: string[]) {
   const workouts = listWorkoutRows(userIds).map(mapWorkoutSession);
+  const vitalsTrend = buildFitnessVitalsTrend(
+    listDailySummaryRows("vitals", userIds)
+  );
   const recent = workouts.slice(0, 40);
   const weekly = recent.filter(
     (session) =>
@@ -5632,6 +5703,8 @@ export function getFitnessViewData(userIds?: string[]) {
       totalMinutes: metrics.totalMinutes,
       energyKcal: metrics.energyKcal
     })),
+    vitalsTrend,
+    analysisSessions: workouts,
     sessions: recent
   };
 }

@@ -1,13 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   Area,
   AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
+  ComposedChart,
+  Legend,
+  Line,
   ResponsiveContainer,
   Scatter,
   ScatterChart,
@@ -48,6 +51,7 @@ import {
   listTriggerReports,
   patchWorkoutSession
 } from "@/lib/api";
+import { formatLocalDateKey } from "@/lib/date-keys";
 import {
   buildHealthEntityLinkOptions,
   parseHealthLinkValues
@@ -73,6 +77,30 @@ const ZONE_COLORS: Record<string, string> = {
   zone_4: "#f97316",
   zone_5: "#ef4444"
 };
+
+const ZONE_ORDER = [
+  "below_z1",
+  "zone_1",
+  "zone_2",
+  "zone_3",
+  "zone_4",
+  "zone_5"
+] as const;
+
+type ZoneKey = (typeof ZONE_ORDER)[number];
+
+type ZoneTrendPoint = Record<ZoneKey, number> & {
+  id: string;
+  dateKey: string;
+  date: string;
+  session: string;
+  durationMinutes: number;
+  confidence: string;
+  restingHeartRate: number | null;
+  vo2Max: number | null;
+};
+
+type AnalysisDateMode = "all" | "recent_90" | "custom";
 
 function humanizeToken(value: string | null | undefined) {
   if (!value) {
@@ -107,6 +135,10 @@ function formatWorkoutWindow(startedAt: string, endedAt: string) {
     minute: "2-digit"
   });
   return `${dateFormatter.format(new Date(startedAt))} · ${timeFormatter.format(new Date(startedAt))} - ${timeFormatter.format(new Date(endedAt))}`;
+}
+
+function dateKeyFromIso(value: string) {
+  return formatLocalDateKey(new Date(value));
 }
 
 function buildWorkoutDraft(session: WorkoutSessionRecord): WorkoutDraft {
@@ -287,6 +319,182 @@ function matchesWorkoutFilters(
     }
     return true;
   });
+}
+
+function getVitalOnOrBefore(
+  vitals: FitnessViewData["vitalsTrend"] | undefined,
+  dateKey: string,
+  metric: "restingHeartRate" | "vo2Max"
+) {
+  if (!vitals || vitals.length === 0) {
+    return null;
+  }
+  const exactOrEarlier = [...vitals]
+    .filter((entry) => entry.dateKey <= dateKey && entry[metric] != null)
+    .sort((left, right) => right.dateKey.localeCompare(left.dateKey))[0];
+  return exactOrEarlier?.[metric] ?? null;
+}
+
+function isKickboxingSession(session: WorkoutSessionRecord) {
+  return [
+    session.workoutType,
+    session.workoutTypeLabel,
+    session.activityFamily,
+    session.activityFamilyLabel
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+    .includes("kickboxing");
+}
+
+function createExerciseTypeOptions(
+  sessions: WorkoutSessionRecord[],
+): FacetedTokenOption[] {
+  const options = new Map<string, FacetedTokenOption>();
+  for (const session of sessions) {
+    const id = `type:${session.workoutType}`;
+    options.set(id, {
+      id,
+      label: workoutTypeLabel(session),
+      description: activityFamilyLabel(session),
+      searchText: `${workoutTypeLabel(session)} ${activityFamilyLabel(session)} ${session.workoutType}`,
+      badge: <Badge tone="meta">{workoutTypeLabel(session)}</Badge>
+    });
+  }
+  return [...options.values()].sort((left, right) =>
+    left.label.localeCompare(right.label)
+  );
+}
+
+function filterAnalysisSessions(
+  sessions: WorkoutSessionRecord[],
+  selectedExerciseTypeIds: string[],
+  dateMode: AnalysisDateMode,
+  startDate: string,
+  endDate: string
+) {
+  const selectedWorkoutTypes = selectedExerciseTypeIds
+    .filter((id) => id.startsWith("type:"))
+    .map((id) => id.slice("type:".length));
+  const selectedSet = new Set(selectedWorkoutTypes);
+  const today = dateKeyFromIso(new Date().toISOString());
+  const recentThreshold = new Date(`${today}T12:00:00.000Z`);
+  recentThreshold.setUTCDate(recentThreshold.getUTCDate() - 90);
+  const recentStart = recentThreshold.toISOString().slice(0, 10);
+
+  return sessions
+    .filter((session) => {
+      if (selectedSet.size > 0 && !selectedSet.has(session.workoutType)) {
+        return false;
+      }
+      const dateKey = dateKeyFromIso(session.startedAt);
+      if (dateMode === "recent_90") {
+        return dateKey >= recentStart;
+      }
+      if (dateMode === "custom") {
+        if (startDate && dateKey < startDate) {
+          return false;
+        }
+        if (endDate && dateKey > endDate) {
+          return false;
+        }
+      }
+      return true;
+    })
+    .sort(
+      (left, right) =>
+        Date.parse(left.startedAt) - Date.parse(right.startedAt)
+    );
+}
+
+function zoneTotalsForSessions(sessions: WorkoutSessionRecord[]) {
+  const totals = Object.fromEntries(
+    ZONE_ORDER.map((zoneKey) => [zoneKey, 0])
+  ) as Record<ZoneKey, number>;
+  for (const session of sessions) {
+    for (const zone of session.analytics?.zoneDurations ?? []) {
+      if (ZONE_ORDER.includes(zone.key as ZoneKey)) {
+        totals[zone.key as ZoneKey] += zone.seconds;
+      }
+    }
+  }
+  return totals;
+}
+
+function buildZoneAnalysisView(
+  sessions: WorkoutSessionRecord[],
+  vitalsTrend: FitnessViewData["vitalsTrend"] | undefined
+) {
+  const lineData = sessions.map((session, index): ZoneTrendPoint => {
+    const dateKey = dateKeyFromIso(session.startedAt);
+    const rollingWindow = sessions.slice(Math.max(0, index - 2), index + 1);
+    const rollingTotals = zoneTotalsForSessions(rollingWindow);
+    const rollingZoneSeconds = Object.values(rollingTotals).reduce(
+      (sum, seconds) => sum + seconds,
+      0
+    );
+    const zonePercentages = Object.fromEntries(
+      ZONE_ORDER.map((zoneKey) => [
+        zoneKey,
+        rollingZoneSeconds > 0
+          ? Number(
+              ((rollingTotals[zoneKey] / rollingZoneSeconds) * 100).toFixed(1)
+            )
+          : 0
+      ])
+    ) as Record<ZoneKey, number>;
+    return {
+      id: session.id,
+      dateKey,
+      date: dateKey.slice(5),
+      session: workoutTypeLabel(session),
+      durationMinutes: Math.round(session.durationSeconds / 60),
+      confidence: session.analytics?.confidence ?? "unavailable",
+      restingHeartRate:
+        session.analytics?.hrSummary?.restingHr ??
+        getVitalOnOrBefore(vitalsTrend, dateKey, "restingHeartRate"),
+      vo2Max: getVitalOnOrBefore(vitalsTrend, dateKey, "vo2Max"),
+      ...zonePercentages
+    };
+  });
+
+  const allTotals = zoneTotalsForSessions(sessions);
+  const allZoneSeconds = Object.values(allTotals).reduce(
+    (sum, seconds) => sum + seconds,
+    0
+  );
+  const averageZoneData = ZONE_ORDER.map((zoneKey) => {
+    const label =
+      sessions
+        .flatMap((session) => session.analytics?.zoneDurations ?? [])
+        .find((zone) => zone.key === zoneKey)?.label ?? humanizeToken(zoneKey);
+    return {
+      key: zoneKey,
+      zone: label,
+      percentage:
+        allZoneSeconds > 0
+          ? Number(((allTotals[zoneKey] / allZoneSeconds) * 100).toFixed(1))
+          : 0,
+      fill: ZONE_COLORS[zoneKey] ?? "#f8fafc"
+    };
+  });
+
+  const rawHrCount = sessions.filter(
+    (session) =>
+      (session.analytics?.dataQuality?.heartRateSampleCount ?? 0) > 0
+  ).length;
+  const exerciseLabels = [
+    ...new Set(sessions.map((session) => workoutTypeLabel(session)))
+  ];
+
+  return {
+    sessions,
+    lineData,
+    averageZoneData,
+    rawHrCount,
+    exerciseLabels
+  };
 }
 
 function SportsSessionEditor({
@@ -638,13 +846,21 @@ function SportsSessionEditor({
 export function SportsPage() {
   const shell = useForgeShell();
   const queryClient = useQueryClient();
-  const listRef = useRef<HTMLDivElement | null>(null);
   const selectedUserIds = Array.isArray(shell.selectedUserIds)
     ? shell.selectedUserIds
     : [];
   const [drafts, setDrafts] = useState<Record<string, WorkoutDraft>>({});
   const [query, setQuery] = useState("");
   const [selectedFilterIds, setSelectedFilterIds] = useState<string[]>([]);
+  const [selectedAnalysisExerciseIds, setSelectedAnalysisExerciseIds] = useState<
+    string[]
+  >([]);
+  const [analysisExerciseQuery, setAnalysisExerciseQuery] = useState("");
+  const [analysisDateMode, setAnalysisDateMode] =
+    useState<AnalysisDateMode>("all");
+  const [analysisStartDate, setAnalysisStartDate] = useState("");
+  const [analysisEndDate, setAnalysisEndDate] = useState("");
+  const [analysisDefaultsApplied, setAnalysisDefaultsApplied] = useState(false);
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
   const [editorStep, setEditorStep] = useState(0);
 
@@ -684,6 +900,19 @@ export function SportsPage() {
     );
   }, [fitnessQuery.data]);
 
+  useEffect(() => {
+    if (analysisDefaultsApplied || !fitnessQuery.data) {
+      return;
+    }
+    const analysisSessions =
+      fitnessQuery.data.analysisSessions ?? fitnessQuery.data.sessions;
+    const kickboxing = analysisSessions.find(isKickboxingSession);
+    if (kickboxing) {
+      setSelectedAnalysisExerciseIds([`type:${kickboxing.workoutType}`]);
+    }
+    setAnalysisDefaultsApplied(true);
+  }, [analysisDefaultsApplied, fitnessQuery.data]);
+
   const saveMutation = useMutation({
     mutationFn: async (input: {
       workoutId: string;
@@ -719,6 +948,7 @@ export function SportsPage() {
 
   const fitness = fitnessQuery.data;
   const sessions = fitness?.sessions ?? [];
+  const analysisSessions = fitness?.analysisSessions ?? sessions;
   const linkOptions = buildHealthEntityLinkOptions({
     goals: shell.snapshot.dashboard.goals,
     projects: shell.snapshot.dashboard.projects,
@@ -733,6 +963,10 @@ export function SportsPage() {
   const searchOptions = useMemo(
     () => createWorkoutFilterOptions(sessions),
     [sessions]
+  );
+  const analysisExerciseOptions = useMemo(
+    () => createExerciseTypeOptions(analysisSessions),
+    [analysisSessions]
   );
   const filteredSessions = useMemo(() => {
     const normalizedQuery = normalize(query);
@@ -749,6 +983,23 @@ export function SportsPage() {
         return textMatch && matchesWorkoutFilters(session, selectedFilterIds);
       });
   }, [drafts, query, selectedFilterIds, sessions]);
+  const filteredAnalysisSessions = useMemo(
+    () =>
+      filterAnalysisSessions(
+        analysisSessions,
+        selectedAnalysisExerciseIds,
+        analysisDateMode,
+        analysisStartDate,
+        analysisEndDate
+      ),
+    [
+      analysisDateMode,
+      analysisEndDate,
+      analysisSessions,
+      analysisStartDate,
+      selectedAnalysisExerciseIds
+    ]
+  );
   const resultSummary =
     filteredSessions.length === sessions.length &&
     query.trim().length === 0 &&
@@ -762,14 +1013,6 @@ export function SportsPage() {
   const activeDraft = activeSession
     ? drafts[activeSession.id] ?? buildWorkoutDraft(activeSession)
     : null;
-
-  const rowVirtualizer = useVirtualizer({
-    count: filteredSessions.length,
-    getScrollElement: () => listRef.current,
-    estimateSize: () => 172,
-    measureElement: (element) => element?.getBoundingClientRect().height ?? 172,
-    overscan: 8
-  });
 
   if (fitnessQuery.isLoading) {
     return (
@@ -795,6 +1038,16 @@ export function SportsPage() {
 
   const { summary, weeklyTrend, typeBreakdown } = fitness;
   const zoneMix = summary.zoneMix ?? [];
+  const zoneAnalysisView = buildZoneAnalysisView(
+    filteredAnalysisSessions,
+    fitness.vitalsTrend
+  );
+  const selectedAnalysisLabel =
+    selectedAnalysisExerciseIds.length === 0
+      ? "All exercise types"
+      : zoneAnalysisView.exerciseLabels.length > 0
+        ? zoneAnalysisView.exerciseLabels.join(", ")
+        : `${selectedAnalysisExerciseIds.length} selected types`;
   const zoneChartData = zoneMix.map((zone) => ({
     zone: zone.label,
     minutes: Math.round(zone.seconds / 60),
@@ -1042,6 +1295,261 @@ export function SportsPage() {
       </SportsCompositionBox>
 
       <SportsCompositionBox>
+        <section className="grid gap-4">
+          <Card className="grid gap-4 overflow-hidden">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+                  HR zone analysis
+                </div>
+                <div className="mt-2 text-lg text-white">
+                  Filter all-time workout evidence by exercise type and date.
+                </div>
+              </div>
+              <Badge tone="meta">
+                {filteredAnalysisSessions.length} of {analysisSessions.length} sessions
+              </Badge>
+            </div>
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(280px,0.8fr)]">
+              <FacetedTokenSearch
+                title="Exercise types"
+                description="Select one, many, or none for all exercise types."
+                query={analysisExerciseQuery}
+                onQueryChange={setAnalysisExerciseQuery}
+                options={analysisExerciseOptions}
+                selectedOptionIds={selectedAnalysisExerciseIds}
+                onSelectedOptionIdsChange={setSelectedAnalysisExerciseIds}
+                resultSummary={selectedAnalysisLabel}
+                placeholder="Search exercise types"
+                emptyStateMessage="No exercise type matches."
+              />
+              <div className="grid gap-3 rounded-[8px] border border-white/8 bg-white/[0.035] p-4">
+                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+                  Date range
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    ["all", "All time"],
+                    ["recent_90", "90 days"],
+                    ["custom", "Custom"]
+                  ].map(([mode, label]) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      className={`rounded-[8px] border px-3 py-2 text-sm transition ${
+                        analysisDateMode === mode
+                          ? "border-[var(--primary)] bg-[var(--primary)]/12 text-white"
+                          : "border-white/8 bg-white/[0.04] text-white/62 hover:bg-white/[0.07] hover:text-white"
+                      }`}
+                      onClick={() => setAnalysisDateMode(mode as AnalysisDateMode)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="grid gap-2">
+                    <span className="text-sm text-white/58">Start</span>
+                    <Input
+                      type="date"
+                      value={analysisStartDate}
+                      onChange={(event) => {
+                        setAnalysisStartDate(event.target.value);
+                        setAnalysisDateMode("custom");
+                      }}
+                    />
+                  </label>
+                  <label className="grid gap-2">
+                    <span className="text-sm text-white/58">End</span>
+                    <Input
+                      type="date"
+                      value={analysisEndDate}
+                      onChange={(event) => {
+                        setAnalysisEndDate(event.target.value);
+                        setAnalysisDateMode("custom");
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+          <Card className="min-h-[330px] overflow-hidden">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+                  Average zones
+                </div>
+                <div className="mt-2 text-lg text-white">
+                  Duration-weighted proportion of time in each HR zone.
+                </div>
+              </div>
+              <Badge tone="meta">
+                {selectedAnalysisLabel}
+              </Badge>
+            </div>
+            <div className="mt-4 h-[235px]">
+              {zoneAnalysisView.sessions.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={zoneAnalysisView.averageZoneData}>
+                    <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                    <XAxis
+                      dataKey="zone"
+                      interval={0}
+                      tick={{ fill: "rgba(255,255,255,0.55)", fontSize: 10 }}
+                    />
+                    <YAxis
+                      unit="%"
+                      domain={[0, 100]}
+                      ticks={[0, 25, 50, 75, 100]}
+                      tick={{ fill: "rgba(255,255,255,0.55)", fontSize: 10 }}
+                      width={38}
+                    />
+                    <Tooltip
+                      formatter={(value) => [`${value}%`, "Average time"]}
+                      contentStyle={{
+                        background: "rgba(8,12,22,0.94)",
+                        border: "1px solid rgba(255,255,255,0.12)",
+                        borderRadius: 8,
+                        color: "white"
+                      }}
+                    />
+                    <Bar dataKey="percentage" radius={[4, 4, 0, 0]}>
+                      {zoneAnalysisView.averageZoneData.map((entry) => (
+                        <Cell key={entry.key} fill={entry.fill} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="grid h-full place-items-center rounded-[8px] bg-white/[0.035] p-6 text-center text-sm leading-6 text-white/54">
+                  No selected sessions with zone analytics are available yet.
+                </div>
+              )}
+            </div>
+            {zoneAnalysisView.sessions.length > 0 ? (
+              <div className="mt-3 grid gap-2 text-sm text-white/58 sm:grid-cols-3">
+                <div>{zoneAnalysisView.rawHrCount} sessions have raw HR timelines</div>
+                <div>
+                  Latest:{" "}
+                  {zoneAnalysisView.lineData.at(-1)?.dateKey ?? "n/a"}
+                </div>
+                <div>
+                  VO2max points:{" "}
+                  {
+                    zoneAnalysisView.lineData.filter(
+                      (entry) => entry.vo2Max != null
+                    ).length
+                  }
+                </div>
+              </div>
+            ) : null}
+          </Card>
+
+          <Card className="min-h-[330px] overflow-hidden">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+                  Zone drift
+                </div>
+                <div className="mt-2 text-lg text-white">
+                  Rolling duration-weighted zone mix with resting HR and VO2max overlay.
+                </div>
+              </div>
+              <Badge tone="meta">HRR zones</Badge>
+            </div>
+            <div className="mt-4 h-[255px]">
+              {zoneAnalysisView.lineData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={zoneAnalysisView.lineData}>
+                    <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fill: "rgba(255,255,255,0.55)", fontSize: 10 }}
+                    />
+                    <YAxis
+                      yAxisId="zones"
+                      domain={[0, 100]}
+                      ticks={[0, 25, 50, 75, 100]}
+                      unit="%"
+                      tick={{ fill: "rgba(255,255,255,0.55)", fontSize: 10 }}
+                      width={38}
+                    />
+                    <YAxis
+                      yAxisId="vitals"
+                      orientation="right"
+                      tick={{ fill: "rgba(255,255,255,0.55)", fontSize: 10 }}
+                      width={42}
+                    />
+                    <Tooltip
+                      formatter={(value, name) => {
+                        if (name === "restingHeartRate") {
+                          return [`${value} bpm`, "Resting HR"];
+                        }
+                        if (name === "vo2Max") {
+                          return [value, "VO2max"];
+                        }
+                        return [`${value}%`, humanizeToken(String(name))];
+                      }}
+                      contentStyle={{
+                        background: "rgba(8,12,22,0.94)",
+                        border: "1px solid rgba(255,255,255,0.12)",
+                        borderRadius: 8,
+                        color: "white"
+                      }}
+                    />
+                    <Legend
+                      wrapperStyle={{
+                        color: "rgba(255,255,255,0.7)",
+                        fontSize: 11
+                      }}
+                    />
+                    {ZONE_ORDER.map((zoneKey) => (
+                      <Bar
+                        key={zoneKey}
+                        yAxisId="zones"
+                        dataKey={zoneKey}
+                        stackId="zones"
+                        fill={ZONE_COLORS[zoneKey]}
+                        isAnimationActive={false}
+                      />
+                    ))}
+                    <Line
+                      yAxisId="vitals"
+                      type="monotone"
+                      dataKey="restingHeartRate"
+                      name="Resting HR"
+                      stroke="#e2e8f0"
+                      strokeWidth={2}
+                      dot={{ r: 3 }}
+                      connectNulls
+                    />
+                    <Line
+                      yAxisId="vitals"
+                      type="monotone"
+                      dataKey="vo2Max"
+                      name="VO2max"
+                      stroke="#a78bfa"
+                      strokeWidth={2}
+                      dot={{ r: 3 }}
+                      connectNulls
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="grid h-full place-items-center rounded-[8px] bg-white/[0.035] p-6 text-center text-sm leading-6 text-white/54">
+                  Select workouts with HR evidence to unlock the time-series plot.
+                </div>
+              )}
+            </div>
+          </Card>
+          </div>
+        </section>
+      </SportsCompositionBox>
+
+      <SportsCompositionBox>
         <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
           <Card className="min-h-[300px]">
             <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
@@ -1225,20 +1733,15 @@ export function SportsPage() {
           </div>
 
           <div
-            ref={listRef}
-            className="h-[34rem] overflow-y-auto rounded-[24px] border border-white/8 bg-white/[0.03]"
+            className="max-h-[34rem] overflow-y-auto rounded-[8px] border border-white/8 bg-white/[0.03] p-3"
           >
             {filteredSessions.length === 0 ? (
-              <div className="flex h-full items-center justify-center p-6 text-center text-sm leading-6 text-white/50">
+              <div className="flex min-h-[18rem] items-center justify-center p-6 text-center text-sm leading-6 text-white/50">
                 No workout matches the current search yet. Clear some filters or search by workout type, device, or reflection text.
               </div>
             ) : (
-              <div
-                className="relative w-full"
-                style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
-              >
-                {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                  const session = filteredSessions[virtualRow.index]!;
+              <div className="grid gap-3">
+                {filteredSessions.map((session) => {
                   const hasReflection =
                     session.meaningText.trim().length > 0 ||
                     session.moodBefore.trim().length > 0 ||
@@ -1248,78 +1751,71 @@ export function SportsPage() {
                   return (
                     <div
                       key={session.id}
-                      ref={rowVirtualizer.measureElement}
-                      data-index={virtualRow.index}
-                      className="absolute left-0 top-0 w-full px-3 py-2"
-                      style={{
-                        transform: `translateY(${virtualRow.start}px)`
-                      }}
+                      className="grid w-full min-w-0 gap-3 rounded-[8px] border border-white/8 bg-white/[0.04] px-4 py-3 text-left transition hover:bg-white/[0.07]"
                     >
-                      <div
-                        className="grid w-full gap-3 rounded-[20px] border border-white/8 bg-white/[0.04] px-4 py-3 text-left transition hover:bg-white/[0.07]"
-                      >
-                        <div className="grid min-w-0 gap-3 sm:flex sm:items-start sm:justify-between">
-                          <div className="min-w-0">
-                            <Link
-                              to={`/sports/workouts/${session.id}`}
-                              className="flex min-w-0 items-center gap-2 text-white transition hover:text-[var(--primary)]"
-                            >
-                              <Dumbbell className="size-4 shrink-0 text-[var(--primary)]" />
-                              <span className="truncate text-base font-medium">
-                                {workoutTypeLabel(session)}
-                              </span>
-                            </Link>
-                            <div className="mt-2 flex items-center gap-2 text-sm text-white/56">
-                              <CalendarDays className="size-3.5 shrink-0" />
-                              <span className="truncate">
-                                {formatWorkoutWindow(session.startedAt, session.endedAt)}
-                              </span>
-                            </div>
-                            <div className="mt-2 text-sm text-white/46">
-                              {activityFamilyLabel(session)} · {session.sourceDevice}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            aria-label={`Edit ${workoutTypeLabel(session)} reflection`}
-                            className="inline-flex w-fit max-w-full items-center gap-2 rounded-full bg-white/[0.05] px-3 py-1.5 text-xs text-white/70 transition hover:bg-white/[0.08] hover:text-white"
-                            onClick={() => {
-                              setSelectedWorkoutId(session.id);
-                              setEditorStep(0);
-                            }}
+                      <div className="grid min-w-0 gap-3 sm:flex sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <Link
+                            to={`/sports/workouts/${session.id}`}
+                            className="flex min-w-0 items-center gap-2 text-white transition hover:text-[var(--primary)]"
                           >
-                            <span className="truncate">{hasReflection ? "Reflected" : "Needs reflection"}</span>
-                            <ArrowRight className="size-3.5" />
-                          </button>
+                            <Dumbbell className="size-4 shrink-0 text-[var(--primary)]" />
+                            <span className="truncate text-base font-medium">
+                              {workoutTypeLabel(session)}
+                            </span>
+                          </Link>
+                          <div className="mt-2 flex min-w-0 items-center gap-2 text-sm text-white/56">
+                            <CalendarDays className="size-3.5 shrink-0" />
+                            <span className="min-w-0 truncate">
+                              {formatWorkoutWindow(session.startedAt, session.endedAt)}
+                            </span>
+                          </div>
+                          <div className="mt-2 text-sm text-white/46">
+                            {activityFamilyLabel(session)} · {session.sourceDevice}
+                          </div>
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                          <Badge>{minutesLabel(session.durationSeconds)}</Badge>
-                          {session.totalEnergyKcal ? (
-                            <Badge tone="meta">{Math.round(session.totalEnergyKcal)} kcal</Badge>
-                          ) : null}
-                          {session.distanceMeters ? (
-                            <Badge tone="meta">{kilometersLabel(session.distanceMeters)}</Badge>
-                          ) : null}
-                          {session.averageHeartRate ? (
-                            <Badge tone="meta">
-                              <HeartPulse className="mr-1 size-3.5" />
-                              {Math.round(session.averageHeartRate)} bpm
-                            </Badge>
-                          ) : null}
-                          <Badge tone="meta">{activityFamilyLabel(session)}</Badge>
-                          <Badge tone="meta" className="capitalize">
-                            {session.sourceType.replaceAll("_", " ")}
+                        <button
+                          type="button"
+                          aria-label={`Edit ${workoutTypeLabel(session)} reflection`}
+                          className="inline-flex w-fit max-w-full items-center gap-2 rounded-full bg-white/[0.05] px-3 py-1.5 text-xs text-white/70 transition hover:bg-white/[0.08] hover:text-white"
+                          onClick={() => {
+                            setSelectedWorkoutId(session.id);
+                            setEditorStep(0);
+                          }}
+                        >
+                          <span className="truncate">
+                            {hasReflection ? "Reflected" : "Needs reflection"}
+                          </span>
+                          <ArrowRight className="size-3.5 shrink-0" />
+                        </button>
+                      </div>
+                      <div className="flex min-w-0 flex-wrap gap-2">
+                        <Badge>{minutesLabel(session.durationSeconds)}</Badge>
+                        {session.totalEnergyKcal ? (
+                          <Badge tone="meta">{Math.round(session.totalEnergyKcal)} kcal</Badge>
+                        ) : null}
+                        {session.distanceMeters ? (
+                          <Badge tone="meta">{kilometersLabel(session.distanceMeters)}</Badge>
+                        ) : null}
+                        {session.averageHeartRate ? (
+                          <Badge tone="meta">
+                            <HeartPulse className="mr-1 size-3.5" />
+                            {Math.round(session.averageHeartRate)} bpm
                           </Badge>
-                          <Badge tone="meta" className="capitalize">
-                            {session.reconciliationStatus.replaceAll("_", " ")}
-                          </Badge>
-                          {session.analytics?.confidence ? (
-                            <Badge tone="meta">{session.analytics.confidence} zones</Badge>
-                          ) : null}
-                          {session.analytics?.routeSummary?.hasRoute ? (
-                            <Badge tone="meta">Route</Badge>
-                          ) : null}
-                        </div>
+                        ) : null}
+                        <Badge tone="meta">{activityFamilyLabel(session)}</Badge>
+                        <Badge tone="meta" className="capitalize">
+                          {session.sourceType.replaceAll("_", " ")}
+                        </Badge>
+                        <Badge tone="meta" className="capitalize">
+                          {session.reconciliationStatus.replaceAll("_", " ")}
+                        </Badge>
+                        {session.analytics?.confidence ? (
+                          <Badge tone="meta">{session.analytics.confidence} zones</Badge>
+                        ) : null}
+                        {session.analytics?.routeSummary?.hasRoute ? (
+                          <Badge tone="meta">Route</Badge>
+                        ) : null}
                       </div>
                     </div>
                   );

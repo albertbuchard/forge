@@ -1816,6 +1816,12 @@ export interface FitnessViewData {
     totalMinutes: number;
     energyKcal: number;
   }>;
+  vitalsTrend: Array<{
+    dateKey: string;
+    restingHeartRate: number | null;
+    vo2Max: number | null;
+  }>;
+  analysisSessions: WorkoutSessionRecord[];
   sessions: WorkoutSessionRecord[];
 }
 
