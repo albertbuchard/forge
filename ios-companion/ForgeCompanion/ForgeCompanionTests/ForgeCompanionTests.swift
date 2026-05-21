@@ -2929,7 +2929,8 @@ final class ForgeCompanionTests: XCTestCase {
         )
 
         let wirePayload = try ForgeSyncClient.healthSyncChunkWirePayloadForTesting(payload)
-        let decodedPayloadData = try XCTUnwrap(Data(base64Encoded: wirePayload.payloadJsonBase64))
+        let payloadJsonBase64 = try XCTUnwrap(wirePayload.payloadJsonBase64)
+        let decodedPayloadData = try XCTUnwrap(Data(base64Encoded: payloadJsonBase64))
         let expectedChecksum = SHA256.hash(data: wirePayload.payloadData)
             .map { String(format: "%02x", $0) }
             .joined()
@@ -2937,6 +2938,23 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(decodedPayloadData, wirePayload.payloadData)
         XCTAssertEqual(wirePayload.byteCount, wirePayload.payloadData.count)
         XCTAssertEqual(wirePayload.checksumSha256, expectedChecksum)
+    }
+
+    func testHealthSyncChunkWirePayloadCanCompressPayloadBytes() throws {
+        struct RepeatingPayload: Encodable {
+            let samples: [String]
+        }
+        let payload = RepeatingPayload(
+            samples: Array(repeating: "heart-rate-sample", count: 4_000)
+        )
+
+        let wirePayload = try ForgeSyncClient.compressedHealthSyncChunkWirePayloadForTesting(payload)
+        let compressed = try XCTUnwrap(wirePayload.compressedPayloadData)
+        let encodedCompressed = try XCTUnwrap(wirePayload.payloadJsonDeflateBase64)
+
+        XCTAssertEqual(Data(base64Encoded: encodedCompressed), compressed)
+        XCTAssertLessThan(compressed.count, wirePayload.payloadData.count)
+        XCTAssertEqual(wirePayload.compressedByteCount, compressed.count)
     }
 
     func testHealthSyncUploadSessionRequiresByteStablePayloadEncoding() {

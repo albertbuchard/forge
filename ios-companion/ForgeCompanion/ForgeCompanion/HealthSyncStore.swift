@@ -615,7 +615,7 @@ actor HealthSyncStore {
         healthKitAuthorized: Bool,
         healthSyncEnabled: Bool,
         lastSuccessfulSyncAt: Date?,
-        batchSize: Int = 10,
+        batchSize: Int = 100,
         onBatch: @escaping ([CompanionSyncPayload.WorkoutSession], WorkoutBatchProgress) async throws -> Void
     ) async throws -> WorkoutStreamResult {
         let endDate = Date()

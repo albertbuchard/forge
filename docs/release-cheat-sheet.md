@@ -42,6 +42,16 @@ npm exec --yes --package ./packages/forge-memory/forge-memory-${version}.tgz -- 
 
 All release tags must point at commits already on `main`. The workflows verify that.
 
+Registry-owned plugin releases must be prepared and tagged from the public Forge
+repository `albertbuchard/forge`, checked out at
+`/Users/omarclaw/Documents/aurel-monorepo/projects/forge`. Do not push OpenClaw,
+Forge Memory, or Hermes release tags from the parent private monorepo
+`albertbuchard/aurel-monorepo`: npm and PyPI trusted publishing are registered to
+the public Forge repository and will reject parent-monorepo runs with npm
+`E404`/permission errors or PyPI `invalid-publisher` errors. When that happens,
+the fix is to release again from the public Forge repo through GitHub Actions,
+not to invent local registry secrets or switch away from tag-driven CI.
+
 ## One-Time Requirements
 
 ### GitHub
@@ -290,6 +300,9 @@ Important iOS rule:
 
 - the marketing version in `ios-companion/release/release.yml` must exactly match the
   version embedded in the iOS release tag
+- 2026-05-22: Forge Companion `ios-testflight-v1.0.48` shipped through GitHub
+  Actions run `26258880832` and distributed `1.0.48 (26)` to Internal testers.
+  Do not re-tag the same TestFlight version just to repair plugin releases.
 
 ## What CI Actually Runs
 

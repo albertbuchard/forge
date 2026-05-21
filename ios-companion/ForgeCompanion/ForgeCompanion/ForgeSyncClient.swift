@@ -218,6 +218,58 @@ struct ForgeSyncClient {
         let supportsCompression: Bool
         let acceptedFamilies: [String]
         let receivedChunkIds: [String]
+        let receivedChunkIdSet: Set<String>
+
+        enum CodingKeys: String, CodingKey {
+            case syncSessionId
+            case schemaVersion
+            case chunkTargetBytes
+            case chunkMaxBytes
+            case chunkPayloadEncoding
+            case acceptedPayloadEncodings
+            case supportsCompression
+            case acceptedFamilies
+            case receivedChunkIds
+        }
+
+        init(
+            syncSessionId: String,
+            schemaVersion: String,
+            chunkTargetBytes: Int,
+            chunkMaxBytes: Int,
+            chunkPayloadEncoding: String?,
+            acceptedPayloadEncodings: [String]?,
+            supportsCompression: Bool,
+            acceptedFamilies: [String],
+            receivedChunkIds: [String]
+        ) {
+            self.syncSessionId = syncSessionId
+            self.schemaVersion = schemaVersion
+            self.chunkTargetBytes = chunkTargetBytes
+            self.chunkMaxBytes = chunkMaxBytes
+            self.chunkPayloadEncoding = chunkPayloadEncoding
+            self.acceptedPayloadEncodings = acceptedPayloadEncodings
+            self.supportsCompression = supportsCompression
+            self.acceptedFamilies = acceptedFamilies
+            self.receivedChunkIds = receivedChunkIds
+            self.receivedChunkIdSet = Set(receivedChunkIds)
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            let receivedChunkIds = try container.decode([String].self, forKey: .receivedChunkIds)
+            self.init(
+                syncSessionId: try container.decode(String.self, forKey: .syncSessionId),
+                schemaVersion: try container.decode(String.self, forKey: .schemaVersion),
+                chunkTargetBytes: try container.decode(Int.self, forKey: .chunkTargetBytes),
+                chunkMaxBytes: try container.decode(Int.self, forKey: .chunkMaxBytes),
+                chunkPayloadEncoding: try container.decodeIfPresent(String.self, forKey: .chunkPayloadEncoding),
+                acceptedPayloadEncodings: try container.decodeIfPresent([String].self, forKey: .acceptedPayloadEncodings),
+                supportsCompression: try container.decode(Bool.self, forKey: .supportsCompression),
+                acceptedFamilies: try container.decode([String].self, forKey: .acceptedFamilies),
+                receivedChunkIds: receivedChunkIds
+            )
+        }
 
         var supportsByteStablePayloadEncoding: Bool {
             chunkPayloadEncoding == "payload_json_base64" ||
@@ -268,15 +320,20 @@ struct ForgeSyncClient {
         let family: String
         let recordCount: Int
         let byteCount: Int
+        let compressedByteCount: Int?
         let checksumSha256: String
-        let payloadJsonBase64: String
+        let payloadJsonDeflateBase64: String?
+        let payloadJsonBase64: String?
     }
 
     struct HealthSyncChunkWirePayload {
         let payloadData: Data
+        let compressedPayloadData: Data?
         let payloadJsonBase64: String
+        let payloadJsonDeflateBase64: String?
         let checksumSha256: String
         let byteCount: Int
+        let compressedByteCount: Int?
     }
 
     private struct HealthSyncSessionCompleteRequest: Encodable {
@@ -970,6 +1027,23 @@ struct ForgeSyncClient {
     ) async throws -> Int {
         var sequence = startingSequence
         let targetBytes = effectiveHealthSyncChunkTarget(uploadSession: uploadSession, pairing: pairing)
+        var currentEntries: [WorkoutTimeSeriesChunkPayload.Workout] = []
+        var currentRecordCount = 0
+
+        func flushCurrent() async throws {
+            guard currentEntries.isEmpty == false else { return }
+            sequence = try await uploadHealthSyncChunk(
+                uploadSession: uploadSession,
+                pairing: pairing,
+                sequence: sequence,
+                family: "workout_time_series",
+                recordCount: currentRecordCount,
+                payload: WorkoutTimeSeriesChunkPayload(workoutTimeSeries: currentEntries)
+            )
+            currentEntries = []
+            currentRecordCount = 0
+        }
+
         for workout in workouts {
             var current: [CompanionSyncPayload.WorkoutTimeSeriesSample] = []
             for sample in workout.timeSeriesSamples {
@@ -980,38 +1054,39 @@ struct ForgeSyncClient {
                     ]
                 )
                 if current.isEmpty == false && encodedByteCount(candidatePayload) > targetBytes {
-                    sequence = try await uploadHealthSyncChunk(
-                        uploadSession: uploadSession,
-                        pairing: pairing,
-                        sequence: sequence,
-                        family: "workout_time_series",
-                        recordCount: current.count,
-                        payload: WorkoutTimeSeriesChunkPayload(
-                            workoutTimeSeries: [
-                                .init(externalUid: workout.externalUid, samples: current)
-                            ]
-                        )
+                    let entry = WorkoutTimeSeriesChunkPayload.Workout(
+                        externalUid: workout.externalUid,
+                        samples: current
                     )
+                    let candidateEntries = currentEntries + [entry]
+                    if currentEntries.isEmpty == false &&
+                        encodedByteCount(WorkoutTimeSeriesChunkPayload(workoutTimeSeries: candidateEntries)) > targetBytes
+                    {
+                        try await flushCurrent()
+                    }
+                    currentEntries.append(entry)
+                    currentRecordCount += entry.samples.count
                     current = [sample]
                 } else {
                     current = candidate
                 }
             }
             if current.isEmpty == false {
-                sequence = try await uploadHealthSyncChunk(
-                    uploadSession: uploadSession,
-                    pairing: pairing,
-                    sequence: sequence,
-                    family: "workout_time_series",
-                    recordCount: current.count,
-                    payload: WorkoutTimeSeriesChunkPayload(
-                        workoutTimeSeries: [
-                            .init(externalUid: workout.externalUid, samples: current)
-                        ]
-                    )
+                let entry = WorkoutTimeSeriesChunkPayload.Workout(
+                    externalUid: workout.externalUid,
+                    samples: current
                 )
+                let candidateEntries = currentEntries + [entry]
+                if currentEntries.isEmpty == false &&
+                    encodedByteCount(WorkoutTimeSeriesChunkPayload(workoutTimeSeries: candidateEntries)) > targetBytes
+                {
+                    try await flushCurrent()
+                }
+                currentEntries.append(entry)
+                currentRecordCount += entry.samples.count
             }
         }
+        try await flushCurrent()
         return sequence
     }
 
@@ -1023,6 +1098,23 @@ struct ForgeSyncClient {
     ) async throws -> Int {
         var sequence = startingSequence
         let targetBytes = effectiveHealthSyncChunkTarget(uploadSession: uploadSession, pairing: pairing)
+        var currentEntries: [WorkoutRoutesChunkPayload.Workout] = []
+        var currentRecordCount = 0
+
+        func flushCurrent() async throws {
+            guard currentEntries.isEmpty == false else { return }
+            sequence = try await uploadHealthSyncChunk(
+                uploadSession: uploadSession,
+                pairing: pairing,
+                sequence: sequence,
+                family: "workout_routes",
+                recordCount: currentRecordCount,
+                payload: WorkoutRoutesChunkPayload(workoutRoutes: currentEntries)
+            )
+            currentEntries = []
+            currentRecordCount = 0
+        }
+
         for workout in workouts {
             var current: [CompanionSyncPayload.WorkoutRoutePoint] = []
             for point in workout.routePoints {
@@ -1033,38 +1125,39 @@ struct ForgeSyncClient {
                     ]
                 )
                 if current.isEmpty == false && encodedByteCount(candidatePayload) > targetBytes {
-                    sequence = try await uploadHealthSyncChunk(
-                        uploadSession: uploadSession,
-                        pairing: pairing,
-                        sequence: sequence,
-                        family: "workout_routes",
-                        recordCount: current.count,
-                        payload: WorkoutRoutesChunkPayload(
-                            workoutRoutes: [
-                                .init(externalUid: workout.externalUid, routePoints: current)
-                            ]
-                        )
+                    let entry = WorkoutRoutesChunkPayload.Workout(
+                        externalUid: workout.externalUid,
+                        routePoints: current
                     )
+                    let candidateEntries = currentEntries + [entry]
+                    if currentEntries.isEmpty == false &&
+                        encodedByteCount(WorkoutRoutesChunkPayload(workoutRoutes: candidateEntries)) > targetBytes
+                    {
+                        try await flushCurrent()
+                    }
+                    currentEntries.append(entry)
+                    currentRecordCount += entry.routePoints.count
                     current = [point]
                 } else {
                     current = candidate
                 }
             }
             if current.isEmpty == false {
-                sequence = try await uploadHealthSyncChunk(
-                    uploadSession: uploadSession,
-                    pairing: pairing,
-                    sequence: sequence,
-                    family: "workout_routes",
-                    recordCount: current.count,
-                    payload: WorkoutRoutesChunkPayload(
-                        workoutRoutes: [
-                            .init(externalUid: workout.externalUid, routePoints: current)
-                        ]
-                    )
+                let entry = WorkoutRoutesChunkPayload.Workout(
+                    externalUid: workout.externalUid,
+                    routePoints: current
                 )
+                let candidateEntries = currentEntries + [entry]
+                if currentEntries.isEmpty == false &&
+                    encodedByteCount(WorkoutRoutesChunkPayload(workoutRoutes: candidateEntries)) > targetBytes
+                {
+                    try await flushCurrent()
+                }
+                currentEntries.append(entry)
+                currentRecordCount += entry.routePoints.count
             }
         }
+        try await flushCurrent()
         return sequence
     }
 
@@ -1084,17 +1177,20 @@ struct ForgeSyncClient {
             return sequence
         }
         let chunkId = "\(uploadSession.syncSessionId)-\(String(format: "%06d", sequence))-\(family)"
-        if uploadSession.receivedChunkIds.contains(chunkId) {
+        if uploadSession.receivedChunkIdSet.contains(chunkId) {
             companionDebugLog(
                 "ForgeSyncClient",
                 "uploadHealthSyncChunk skipped previously accepted family=\(family) sequence=\(sequence) chunkId=\(chunkId)"
             )
             return sequence + 1
         }
-        let wirePayload = try Self.healthSyncChunkWirePayload(payload)
+        let wirePayload = try Self.healthSyncChunkWirePayload(
+            payload,
+            compress: uploadSession.supportsCompression
+        )
         companionDebugLog(
             "ForgeSyncClient",
-            "uploadHealthSyncChunk prepared family=\(family) sequence=\(sequence) chunkId=\(chunkId) records=\(recordCount) bytes=\(wirePayload.byteCount) checksumPrefix=\(String(wirePayload.checksumSha256.prefix(12))) transport=\(pairing.transport?.protocolName ?? "urlsession")"
+            "uploadHealthSyncChunk prepared family=\(family) sequence=\(sequence) chunkId=\(chunkId) records=\(recordCount) bytes=\(wirePayload.byteCount) compressedBytes=\(wirePayload.compressedByteCount ?? 0) checksumPrefix=\(String(wirePayload.checksumSha256.prefix(12))) transport=\(pairing.transport?.protocolName ?? "urlsession")"
         )
         let envelope: HealthSyncChunkEnvelope
         do {
@@ -1107,8 +1203,10 @@ struct ForgeSyncClient {
                     family: family,
                     recordCount: recordCount,
                     byteCount: wirePayload.byteCount,
+                    compressedByteCount: wirePayload.compressedByteCount,
                     checksumSha256: wirePayload.checksumSha256,
-                    payloadJsonBase64: wirePayload.payloadJsonBase64
+                    payloadJsonDeflateBase64: wirePayload.payloadJsonDeflateBase64,
+                    payloadJsonBase64: wirePayload.payloadJsonDeflateBase64 == nil ? wirePayload.payloadJsonBase64 : nil
                 ),
                 transport: pairing.transport
             )
@@ -1128,7 +1226,7 @@ struct ForgeSyncClient {
         }
         companionDebugLog(
             "ForgeSyncClient",
-            "uploadHealthSyncChunk accepted family=\(family) sequence=\(sequence) records=\(recordCount) bytes=\(wirePayload.byteCount) duplicate=\(envelope.chunk.duplicate) received=\(envelope.chunk.receivedCount)"
+            "uploadHealthSyncChunk accepted family=\(family) sequence=\(sequence) records=\(recordCount) bytes=\(wirePayload.byteCount) compressedBytes=\(wirePayload.compressedByteCount ?? 0) duplicate=\(envelope.chunk.duplicate) received=\(envelope.chunk.receivedCount)"
         )
         return sequence + 1
     }
@@ -1186,13 +1284,24 @@ struct ForgeSyncClient {
         try healthSyncChunkWirePayload(payload)
     }
 
-    private static func healthSyncChunkWirePayload(_ payload: some Encodable) throws -> HealthSyncChunkWirePayload {
+    static func compressedHealthSyncChunkWirePayloadForTesting(_ payload: some Encodable) throws -> HealthSyncChunkWirePayload {
+        try healthSyncChunkWirePayload(payload, compress: true)
+    }
+
+    private static func healthSyncChunkWirePayload(
+        _ payload: some Encodable,
+        compress: Bool = false
+    ) throws -> HealthSyncChunkWirePayload {
         let payloadData = try JSONEncoder().encode(payload)
+        let compressedData = compress ? try? (payloadData as NSData).compressed(using: .zlib) as Data : nil
         return HealthSyncChunkWirePayload(
             payloadData: payloadData,
+            compressedPayloadData: compressedData,
             payloadJsonBase64: payloadData.base64EncodedString(),
+            payloadJsonDeflateBase64: compressedData?.base64EncodedString(),
             checksumSha256: sha256Hex(payloadData),
-            byteCount: payloadData.count
+            byteCount: payloadData.count,
+            compressedByteCount: compressedData?.count
         )
     }
 
