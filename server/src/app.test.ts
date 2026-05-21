@@ -5,6 +5,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { deflateSync } from "node:zlib";
 import { formatLocalDateKey } from "../../src/lib/date-keys.js";
 import { buildServer } from "./app.js";
 import { closeDatabase, configureDatabase, getDatabase } from "./db.js";
@@ -93,6 +94,18 @@ function healthChunkPayloadJsonBase64(value: unknown) {
     byteCount: payloadBuffer.length,
     checksumSha256: createHash("sha256").update(payloadBuffer).digest("hex"),
     payloadJsonBase64: payloadBuffer.toString("base64")
+  };
+}
+
+function healthChunkPayloadJsonDeflateBase64(value: unknown) {
+  const payloadJson = JSON.stringify(value);
+  const payloadBuffer = Buffer.from(payloadJson, "utf8");
+  const compressedBuffer = deflateSync(payloadBuffer);
+  return {
+    byteCount: payloadBuffer.length,
+    compressedByteCount: compressedBuffer.length,
+    checksumSha256: createHash("sha256").update(payloadBuffer).digest("hex"),
+    payloadJsonDeflateBase64: compressedBuffer.toString("base64")
   };
 }
 
@@ -2937,11 +2950,15 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
         chunkTargetBytes: number;
         chunkPayloadEncoding: string;
         acceptedPayloadEncodings: string[];
+        supportsCompression: boolean;
       };
     };
     assert.equal(startPayload.upload.chunkPayloadEncoding, "payload_json_base64");
+    assert.ok(startPayload.upload.chunkTargetBytes >= 12_000_000);
+    assert.equal(startPayload.upload.supportsCompression, true);
     assert.deepEqual(startPayload.upload.acceptedPayloadEncodings, [
       "payload_json_base64",
+      "payload_json_deflate_base64",
       "legacy_payload_object"
     ]);
     const syncSessionId = startPayload.upload.syncSessionId;
@@ -3014,6 +3031,14 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
     });
     assert.equal(summaryResponse.statusCode, 200);
     assert.equal((summaryResponse.json() as { chunk: { duplicate: boolean } }).chunk.duplicate, false);
+    const progressiveWorkout = getDatabase()
+      .prepare(
+        `SELECT external_uid
+         FROM health_workout_sessions
+         WHERE external_uid = ?`
+      )
+      .get(workoutSummary.externalUid) as { external_uid: string } | undefined;
+    assert.equal(progressiveWorkout?.external_uid, workoutSummary.externalUid);
 
     const resumeResponse = await app.inject({
       method: "POST",
@@ -3093,7 +3118,7 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
       url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/chunks`,
       payload: {
         ...summaryChunk,
-        checksumSha256: "different-checksum"
+        checksumSha256: "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
       }
     });
     assert.equal(conflictResponse.statusCode, 409);
@@ -3114,7 +3139,7 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
           JSON.stringify({ vitals: { daySummaries: [] } }),
           "utf8"
         ),
-        checksumSha256: "wrong-payload-checksum",
+        checksumSha256: "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
         payload: { vitals: { daySummaries: [] } }
       }
     });
@@ -3146,6 +3171,32 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
       payload: byteStableChunk
     });
     assert.equal(byteStableResponse.statusCode, 200, byteStableResponse.body);
+
+    const compressedVitalsPayload = {
+      vitals: {
+        daySummaries: [],
+        metadata: {
+          repeated: "heart-rate-sample|".repeat(4_000)
+        }
+      }
+    };
+    const compressedChunk = {
+      chunkId: "chunk-compressed-vitals",
+      sequence: 2,
+      family: "vitals",
+      recordCount: 0,
+      ...healthChunkPayloadJsonDeflateBase64(compressedVitalsPayload)
+    };
+    assert.ok(
+      compressedChunk.compressedByteCount < compressedChunk.byteCount,
+      "fixture should prove compression is reducing transfer bytes"
+    );
+    const compressedResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/chunks`,
+      payload: compressedChunk
+    });
+    assert.equal(compressedResponse.statusCode, 200, compressedResponse.body);
 
     const byteStableDuplicateResponse = await app.inject({
       method: "POST",
@@ -3198,6 +3249,46 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
       "chunk-byte-stable-bad-checksum"
     );
 
+    const byteStableByteMismatchResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/chunks`,
+      payload: {
+        ...healthChunkPayloadJsonBase64({ vitals: { daySummaries: [] } }),
+        chunkId: "chunk-byte-stable-byte-mismatch",
+        sequence: 1,
+        family: "vitals",
+        recordCount: 0,
+        byteCount: 1
+      }
+    });
+    assert.equal(byteStableByteMismatchResponse.statusCode, 409);
+    assert.equal(
+      (byteStableByteMismatchResponse.json() as { code: string; mode?: string }).code,
+      "chunk_byte_count_mismatch"
+    );
+    assert.equal(
+      (byteStableByteMismatchResponse.json() as { code: string; mode?: string }).mode,
+      "payload_json_base64"
+    );
+
+    const invalidChecksumResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/chunks`,
+      payload: {
+        ...healthChunkPayloadJsonBase64({ vitals: { daySummaries: [] } }),
+        chunkId: "chunk-invalid-checksum",
+        sequence: 1,
+        family: "vitals",
+        recordCount: 0,
+        checksumSha256: "not-a-sha256"
+      }
+    });
+    assert.equal(invalidChecksumResponse.statusCode, 400);
+    assert.equal(
+      (invalidChecksumResponse.json() as { code: string }).code,
+      "invalid_chunk_checksum"
+    );
+
     const malformedBase64Response = await app.inject({
       method: "POST",
       url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/chunks`,
@@ -3221,7 +3312,7 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
       vitals: {
         daySummaries: [],
         metadata: {
-          oversized: "x".repeat(1_010_000)
+          oversized: "x".repeat(24_010_000)
         }
       }
     });

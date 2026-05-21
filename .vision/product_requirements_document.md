@@ -227,6 +227,7 @@ Public docs, GitHub Pages docs, README, and agent-facing docs must all explain:
   - `canonicalKey`
   - `canonicalLabel`
 - Workout sync is raw-evidence-first. The companion and backend must preserve workout-associated HealthKit evidence locally before computing derived analytics. Preserved evidence includes heart-rate samples, supported workout quantity samples, route points, workout events, activity phases/components, source/device metadata, scalar summaries, and partial-permission quality flags.
+- Mobile HealthKit backfills must use resumable, byte-stable chunk uploads with large target sizes, optional deflate-compressed base64 wire payloads, and immediate workout-summary application so the user can see the workout count increase before the whole session completes.
 - Heart-rate zone analytics are computed by Forge, not assumed to exist as historical HealthKit zone totals. The default model is adaptive Heart Rate Reserve/Karvonen with resting HR, known or inferred max HR, optional physiology profile fields, confidence levels, and clear unavailable/low-confidence states when raw HR is missing.
 - The Sports web surface must expose both aggregate training intelligence and per-workout drill-down: zone mix, training load, HR coverage, resting HR/VO2max context, route availability, dense HR timelines with zone bands, route maps with explicit tile-source configuration, events, phases, metrics, and polished missing-data states.
 

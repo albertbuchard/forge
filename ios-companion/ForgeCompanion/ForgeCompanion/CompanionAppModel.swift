@@ -1282,7 +1282,7 @@ final class CompanionAppModel: ObservableObject {
             backgroundRefreshTask = .invalid
         }
         backgroundRefreshTask = UIApplication.shared.beginBackgroundTask(
-            withName: "ForgeCompanionRefresh"
+            withName: "ForgeCompanionSync"
         ) { [weak self] in
             guard let self else { return }
             companionDebugLog("CompanionAppModel", "background task expired reason=\(reason)")
@@ -1293,7 +1293,15 @@ final class CompanionAppModel: ObservableObject {
         }
         Task { [weak self] in
             guard let self else { return }
-            _ = await self.performBackgroundRefresh()
+            if let activeSyncTask = self.activeSyncTask {
+                companionDebugLog(
+                    "CompanionAppModel",
+                    "background task waiting for active sync reason=\(reason)"
+                )
+                _ = await activeSyncTask.value
+            } else {
+                _ = await self.performBackgroundRefresh()
+            }
             if self.backgroundRefreshTask != .invalid {
                 UIApplication.shared.endBackgroundTask(self.backgroundRefreshTask)
                 self.backgroundRefreshTask = .invalid
@@ -1676,7 +1684,7 @@ final class CompanionAppModel: ObservableObject {
                     healthKitAuthorized: healthAuthorizationGranted,
                     healthSyncEnabled: healthSyncEnabled,
                     lastSuccessfulSyncAt: workoutBackfillPlan.workoutCursorDate,
-                    batchSize: 10
+                    batchSize: 100
                 ) { [weak self] workouts, progress in
                     await MainActor.run {
                         self?.lastSyncMessage =

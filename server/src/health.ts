@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { inflateSync } from "node:zlib";
 import { z } from "zod";
 import { getDatabase, runInTransaction } from "./db.js";
 import { HttpError } from "./errors.js";
@@ -322,11 +323,13 @@ export const mobileHealthSyncSchema = z.object({
 });
 
 const HEALTH_MOBILE_SYNC_SCHEMA_VERSION = "healthkit-sync-v2";
-const HEALTH_MOBILE_SYNC_CHUNK_TARGET_BYTES = 512_000;
-const HEALTH_MOBILE_SYNC_CHUNK_MAX_BYTES = 1_000_000;
+const HEALTH_MOBILE_SYNC_CHUNK_TARGET_BYTES = 12_000_000;
+const HEALTH_MOBILE_SYNC_CHUNK_MAX_BYTES = 24_000_000;
 const HEALTH_MOBILE_SYNC_CHUNK_PAYLOAD_ENCODING = "payload_json_base64";
+const HEALTH_MOBILE_SYNC_COMPRESSED_CHUNK_PAYLOAD_ENCODING = "payload_json_deflate_base64";
 const HEALTH_MOBILE_SYNC_ACCEPTED_CHUNK_PAYLOAD_ENCODINGS = [
   HEALTH_MOBILE_SYNC_CHUNK_PAYLOAD_ENCODING,
+  HEALTH_MOBILE_SYNC_COMPRESSED_CHUNK_PAYLOAD_ENCODING,
   "legacy_payload_object"
 ] as const;
 const HEALTH_MOBILE_SYNC_SESSION_TTL_MS = 1000 * 60 * 60 * 24;
@@ -419,7 +422,9 @@ export const mobileHealthSyncChunkSchema = z.object({
   family: mobileHealthSyncFamilySchema,
   recordCount: z.number().int().nonnegative().default(0),
   byteCount: z.number().int().nonnegative().default(0),
+  compressedByteCount: z.number().int().nonnegative().optional(),
   checksumSha256: z.string().trim().min(1),
+  payloadJsonDeflateBase64: z.string().trim().min(1).optional(),
   payloadJsonBase64: z.string().trim().min(1).optional(),
   payload: mobileHealthSyncChunkPayloadSchema.default({})
 });
@@ -4223,6 +4228,18 @@ function chunkPayloadChecksum(payloadJson: string) {
   return createHash("sha256").update(payloadJson).digest("hex");
 }
 
+function normalizedChunkChecksum(checksum: string) {
+  const normalized = checksum.trim().toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(normalized)) {
+    throw new HttpError(
+      400,
+      "invalid_chunk_checksum",
+      "The HealthKit sync chunk checksum is invalid."
+    );
+  }
+  return normalized;
+}
+
 function parseBase64ChunkPayload(
   payloadJsonBase64: string,
   context: { syncSessionId: string; chunkId: string; family: MobileHealthSyncFamily }
@@ -4275,7 +4292,87 @@ function parseBase64ChunkPayload(
     payload: parsedPayload,
     payloadJson,
     byteCount: decoded.length,
+    compressedByteCount: undefined,
     mode: "payload_json_base64" as const
+  };
+}
+
+function parseDeflateBase64ChunkPayload(
+  payloadJsonDeflateBase64: string,
+  context: { syncSessionId: string; chunkId: string; family: MobileHealthSyncFamily }
+) {
+  const compactBase64 = payloadJsonDeflateBase64.replace(/\s/g, "");
+  if (
+    compactBase64.length === 0 ||
+    compactBase64.length % 4 === 1 ||
+    !/^[A-Za-z0-9+/]*={0,2}$/.test(compactBase64)
+  ) {
+    throw new HttpError(
+      400,
+      "invalid_chunk_payload",
+      "The HealthKit sync compressed payload encoding is invalid.",
+      { mode: HEALTH_MOBILE_SYNC_COMPRESSED_CHUNK_PAYLOAD_ENCODING }
+    );
+  }
+  const compressed = Buffer.from(compactBase64, "base64");
+  const recoded = compressed.toString("base64").replace(/=+$/g, "");
+  if (recoded !== compactBase64.replace(/=+$/g, "")) {
+    throw new HttpError(
+      400,
+      "invalid_chunk_payload",
+      "The HealthKit sync compressed payload encoding is invalid.",
+      { mode: HEALTH_MOBILE_SYNC_COMPRESSED_CHUNK_PAYLOAD_ENCODING }
+    );
+  }
+
+  let decoded: Buffer;
+  try {
+    decoded = inflateSync(compressed);
+  } catch (error) {
+    console.warn("[healthkit-sync] invalid compressed chunk payload", {
+      syncSessionId: context.syncSessionId,
+      chunkId: context.chunkId,
+      family: context.family,
+      mode: HEALTH_MOBILE_SYNC_COMPRESSED_CHUNK_PAYLOAD_ENCODING,
+      compressedBytes: compressed.length,
+      error: error instanceof Error ? error.message : String(error)
+    });
+    throw new HttpError(
+      400,
+      "invalid_chunk_payload",
+      "The HealthKit sync compressed payload cannot be decompressed.",
+      { mode: HEALTH_MOBILE_SYNC_COMPRESSED_CHUNK_PAYLOAD_ENCODING }
+    );
+  }
+
+  const payloadJson = decoded.toString("utf8");
+  let rawPayload: unknown;
+  try {
+    rawPayload = JSON.parse(payloadJson);
+  } catch (error) {
+    console.warn("[healthkit-sync] invalid compressed chunk JSON payload", {
+      syncSessionId: context.syncSessionId,
+      chunkId: context.chunkId,
+      family: context.family,
+      mode: HEALTH_MOBILE_SYNC_COMPRESSED_CHUNK_PAYLOAD_ENCODING,
+      bytes: decoded.length,
+      compressedBytes: compressed.length,
+      error: error instanceof Error ? error.message : String(error)
+    });
+    throw new HttpError(
+      400,
+      "invalid_chunk_payload",
+      "The HealthKit sync compressed payload is not valid JSON.",
+      { mode: HEALTH_MOBILE_SYNC_COMPRESSED_CHUNK_PAYLOAD_ENCODING }
+    );
+  }
+  const parsedPayload = mobileHealthSyncChunkPayloadSchema.parse(rawPayload);
+  return {
+    payload: parsedPayload,
+    payloadJson,
+    byteCount: decoded.length,
+    compressedByteCount: compressed.length,
+    mode: HEALTH_MOBILE_SYNC_COMPRESSED_CHUNK_PAYLOAD_ENCODING
   };
 }
 
@@ -4284,6 +4381,13 @@ function resolveChunkWirePayload(
   syncSessionId: string,
   rawPayloadJson?: string
 ) {
+  if (parsed.payloadJsonDeflateBase64) {
+    return parseDeflateBase64ChunkPayload(parsed.payloadJsonDeflateBase64, {
+      syncSessionId,
+      chunkId: parsed.chunkId,
+      family: parsed.family
+    });
+  }
   if (parsed.payloadJsonBase64) {
     return parseBase64ChunkPayload(parsed.payloadJsonBase64, {
       syncSessionId,
@@ -4296,6 +4400,7 @@ function resolveChunkWirePayload(
     payload: parsed.payload,
     payloadJson,
     byteCount: Buffer.byteLength(payloadJson, "utf8"),
+    compressedByteCount: undefined,
     mode: "legacy_payload_object" as const
   };
 }
@@ -4346,6 +4451,113 @@ function summarizeChunkPayload(
         hourlySegments: payload.screenTime?.hourlySegments.length ?? 0
       };
   }
+}
+
+function mobileSyncSessionPairing(session: MobileSyncSessionRow) {
+  const pairing = getDatabase()
+    .prepare(`SELECT * FROM companion_pairing_sessions WHERE id = ?`)
+    .get(session.pairing_session_id) as PairingSessionRow | undefined;
+  if (!pairing) {
+    throw new HttpError(404, "pairing_invalid", "The sync pairing no longer exists.");
+  }
+  return pairing;
+}
+
+function mobileSyncSessionMetadata(session: MobileSyncSessionRow) {
+  return safeJsonParse<{
+    sessionId?: string;
+    device?: z.infer<typeof mobileHealthSyncSchema>["device"];
+    permissions?: z.infer<typeof mobileHealthSyncSchema>["permissions"];
+    sourceStates?: z.infer<typeof mobileHealthSyncSchema>["sourceStates"];
+  }>(session.source_metadata_json, {});
+}
+
+function applyWorkoutSummaryChunkImmediately(
+  session: MobileSyncSessionRow,
+  workouts: z.infer<typeof mobileHealthSyncSchema>["workouts"]
+) {
+  if (workouts.length === 0) {
+    return;
+  }
+  const pairing = mobileSyncSessionPairing(session);
+  const metadata = mobileSyncSessionMetadata(session);
+  const device = metadata.device ?? {
+    name: pairing.device_name ?? "iPhone",
+    platform: pairing.platform ?? "ios",
+    appVersion: pairing.app_version ?? "",
+    sourceDevice: pairing.device_name ?? "iPhone"
+  };
+  runInTransaction(() => {
+    const now = nowIso();
+    const runId = `hir_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+    let createdCount = 0;
+    let updatedCount = 0;
+    let mergedCount = 0;
+    getDatabase()
+      .prepare(
+        `INSERT INTO health_import_runs (
+           id, pairing_session_id, user_id, source, source_device, status, payload_summary_json,
+           imported_count, created_count, updated_count, merged_count, imported_at, created_at, updated_at
+         )
+         VALUES (?, ?, ?, 'ios_companion', ?, 'running', '{}', 0, 0, 0, 0, ?, ?, ?)`
+      )
+      .run(runId, pairing.id, pairing.user_id, device.sourceDevice, now, now, now);
+
+    for (const workout of workouts) {
+      const result = insertOrUpdateWorkoutSession(pairing, workout);
+      if (result.mode === "created") {
+        createdCount += 1;
+      } else if (result.mode === "merged") {
+        mergedCount += 1;
+      } else {
+        updatedCount += 1;
+      }
+      summarizeUserHealthDay(pairing.user_id, dayKey(workout.startedAt));
+    }
+
+    getDatabase()
+      .prepare(
+        `UPDATE companion_pairing_sessions
+         SET status = 'healthy', device_name = ?, platform = ?, app_version = ?,
+             last_seen_at = ?, last_sync_at = ?, last_sync_error = NULL,
+             paired_at = COALESCE(paired_at, ?), updated_at = ?
+         WHERE id = ?`
+      )
+      .run(
+        device.name,
+        device.platform,
+        device.appVersion,
+        now,
+        now,
+        now,
+        now,
+        pairing.id
+      );
+
+    getDatabase()
+      .prepare(
+        `UPDATE health_import_runs
+         SET source_device = ?, status = 'completed', payload_summary_json = ?,
+             imported_count = ?, created_count = ?, updated_count = ?, merged_count = ?,
+             imported_at = ?, updated_at = ?
+         WHERE id = ?`
+      )
+      .run(
+        device.sourceDevice,
+        JSON.stringify({
+          progressiveChunk: true,
+          syncSessionId: session.id,
+          workouts: workouts.length
+        }),
+        workouts.length,
+        createdCount,
+        updatedCount,
+        mergedCount,
+        now,
+        now,
+        runId
+      );
+  });
 }
 
 function updateMobileSyncSessionProgress(syncSessionId: string) {
@@ -4427,7 +4639,7 @@ export function startMobileHealthSyncSession(
         chunkMaxBytes: HEALTH_MOBILE_SYNC_CHUNK_MAX_BYTES,
         chunkPayloadEncoding: HEALTH_MOBILE_SYNC_CHUNK_PAYLOAD_ENCODING,
         acceptedPayloadEncodings: HEALTH_MOBILE_SYNC_ACCEPTED_CHUNK_PAYLOAD_ENCODINGS,
-        supportsCompression: false,
+        supportsCompression: true,
         acceptedFamilies: safeJsonParse<MobileHealthSyncFamily[]>(
           existing.requested_families_json,
           parsed.requestedFamilies
@@ -4472,7 +4684,7 @@ export function startMobileHealthSyncSession(
     chunkMaxBytes: HEALTH_MOBILE_SYNC_CHUNK_MAX_BYTES,
     chunkPayloadEncoding: HEALTH_MOBILE_SYNC_CHUNK_PAYLOAD_ENCODING,
     acceptedPayloadEncodings: HEALTH_MOBILE_SYNC_ACCEPTED_CHUNK_PAYLOAD_ENCODINGS,
-    supportsCompression: false,
+    supportsCompression: true,
     acceptedFamilies: parsed.requestedFamilies,
     receivedChunkIds: [] as string[]
   };
@@ -4484,6 +4696,7 @@ export function ingestMobileHealthSyncChunk(
   rawPayloadJson?: string
 ) {
   const parsed = mobileHealthSyncChunkSchema.parse(payload);
+  const clientChecksum = normalizedChunkChecksum(parsed.checksumSha256);
   const session = ensureRunningMobileSyncSession(syncSessionId);
   const requestedFamilies = safeJsonParse<MobileHealthSyncFamily[]>(
     session.requested_families_json,
@@ -4507,7 +4720,7 @@ export function ingestMobileHealthSyncChunk(
     )
     .get(syncSessionId, parsed.chunkId) as MobileSyncChunkRow | undefined;
   if (existing) {
-    if (existing.checksum_sha256 !== parsed.checksumSha256) {
+    if (existing.checksum_sha256 !== clientChecksum) {
       throw new HttpError(
         409,
         "chunk_checksum_mismatch",
@@ -4537,14 +4750,64 @@ export function ingestMobileHealthSyncChunk(
       }
     );
   }
+  if (wirePayload.mode !== "legacy_payload_object" && parsed.byteCount !== actualByteCount) {
+    console.warn("[healthkit-sync] chunk byte count mismatch", {
+      syncSessionId,
+      chunkId: parsed.chunkId,
+      family: parsed.family,
+      mode: wirePayload.mode,
+      clientByteCount: parsed.byteCount,
+      actualByteCount
+    });
+    throw new HttpError(
+      409,
+      "chunk_byte_count_mismatch",
+      "The HealthKit sync chunk byte count does not match its decoded payload.",
+      {
+        syncSessionId,
+        chunkId: parsed.chunkId,
+        family: parsed.family,
+        actualBytes: actualByteCount,
+        clientBytes: parsed.byteCount,
+        mode: wirePayload.mode
+      }
+    );
+  }
+  if (
+    wirePayload.compressedByteCount !== undefined &&
+    parsed.compressedByteCount !== undefined &&
+    parsed.compressedByteCount !== wirePayload.compressedByteCount
+  ) {
+    console.warn("[healthkit-sync] chunk compressed byte count mismatch", {
+      syncSessionId,
+      chunkId: parsed.chunkId,
+      family: parsed.family,
+      mode: wirePayload.mode,
+      clientCompressedByteCount: parsed.compressedByteCount,
+      actualCompressedByteCount: wirePayload.compressedByteCount
+    });
+    throw new HttpError(
+      409,
+      "chunk_compressed_byte_count_mismatch",
+      "The HealthKit sync chunk compressed byte count does not match its decoded payload.",
+      {
+        syncSessionId,
+        chunkId: parsed.chunkId,
+        family: parsed.family,
+        actualCompressedBytes: wirePayload.compressedByteCount,
+        clientCompressedBytes: parsed.compressedByteCount,
+        mode: wirePayload.mode
+      }
+    );
+  }
   const serverChecksum = chunkPayloadChecksum(payloadJson);
-  if (parsed.checksumSha256 !== serverChecksum) {
+  if (clientChecksum !== serverChecksum) {
     console.warn("[healthkit-sync] chunk checksum mismatch", {
       syncSessionId,
       chunkId: parsed.chunkId,
       family: parsed.family,
       mode: wirePayload.mode,
-      clientChecksum: parsed.checksumSha256.slice(0, 12),
+      clientChecksum: clientChecksum.slice(0, 12),
       serverChecksum: serverChecksum.slice(0, 12),
       clientByteCount: parsed.byteCount,
       actualByteCount
@@ -4559,7 +4822,7 @@ export function ingestMobileHealthSyncChunk(
         family: parsed.family,
         actualBytes: actualByteCount,
         clientBytes: parsed.byteCount,
-        clientChecksumPrefix: parsed.checksumSha256.slice(0, 12),
+        clientChecksumPrefix: clientChecksum.slice(0, 12),
         serverChecksumPrefix: serverChecksum.slice(0, 12),
         mode: wirePayload.mode
       }
@@ -4583,12 +4846,13 @@ export function ingestMobileHealthSyncChunk(
       parsed.family,
       serverChecksum,
       parsed.recordCount,
-      parsed.byteCount || actualByteCount,
+      actualByteCount,
       payloadJson,
       JSON.stringify({
         ...summarizeChunkPayload(parsed.family, wirePayload.payload),
         clientByteCount: parsed.byteCount,
         actualByteCount,
+        compressedByteCount: wirePayload.compressedByteCount ?? null,
         serverChecksum,
         mode: wirePayload.mode
       }),
@@ -4597,6 +4861,9 @@ export function ingestMobileHealthSyncChunk(
       now,
       now
     );
+  if (parsed.family === "workout_summaries") {
+    applyWorkoutSummaryChunkImmediately(session, wirePayload.payload.workouts ?? []);
+  }
   const progress = updateMobileSyncSessionProgress(syncSessionId);
   return {
     accepted: true,
