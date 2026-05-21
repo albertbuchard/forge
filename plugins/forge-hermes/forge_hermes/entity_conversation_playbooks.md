@@ -470,7 +470,7 @@ Useful calibration heuristics:
   once and then return to the one missing structural detail.
 - If the next question would only decorate the record and not change its usefulness,
   skip it.
-- If the next question would not change the API path, payload, wording, timing, or
+- If the next question would not change the API path, write shape, wording, timing, or
   useful links, skip it.
 
 ## Abstract And Reusable Record Moves
@@ -485,6 +485,7 @@ reusable records.
   retrieve later.
 - For collection records, ask what they are meant to help decide before you ask what
   belongs inside them.
+- For questionnaire instruments, ask what kind of honest moment or decision it should help someone answer before you ask for item wording, scale, or scoring.
 - For vocabulary records, ask what counts as inside versus outside the term before you
   settle the wording.
 - If the user already proposes a label, keep it provisional until the boundary and
@@ -1731,7 +1732,7 @@ Lane-to-route map:
   `DELETE /api/v1/workbench/flows/:id` for an existing saved flow
 - run a known flow:
   `/api/v1/workbench/flows/:id/run`
-- run from a payload-first contract:
+- run from a one-off input contract:
   `/api/v1/workbench/run`
 - send one follow-up message into a saved flow chat:
   `POST /api/v1/workbench/flows/:id/chat`
@@ -1758,7 +1759,7 @@ Direct action rules:
   inputs, use `GET /api/v1/workbench/catalog/boxes`. Do not blur those into one vague
   "catalog" read when the user needs a runnable flow versus an input-box contract.
 - If the user wants to execute a known saved flow, use `/api/v1/workbench/flows/:id/run`.
-- If the user wants payload-first execution without depending on a saved flow id, use
+- If the user wants one-off input execution without depending on a saved flow id, use
   `/api/v1/workbench/run`.
 - If the user wants to debug one failed execution, narrow whether they need the run
   detail, one node result, the latest node output, or the published output before you
@@ -1768,7 +1769,8 @@ Direct action rules:
 - If the user wants one node's latest successful output, do not browse old runs first
   unless they explicitly want historical debugging.
 - If the user wants to understand what inputs a flow can accept before editing or
-  running it, read the box catalog or flow detail before asking for a payload.
+  running it, read the box catalog or flow detail before asking for structured
+  input details.
 - For new flows, ask what the flow should reliably produce, what input contract it
   should accept, and what first node or box should anchor it. Do not start by asking
   for raw JSON.
@@ -1930,24 +1932,29 @@ Preferred opening question:
 
 ## Questionnaire Instrument
 
-Aim: clarify whether the user is authoring a reusable questionnaire and what the
-instrument is for.
+Aim: clarify whether the user is authoring a reusable questionnaire and what honest
+moment, pattern, or decision the instrument should help someone notice.
 
 Arc:
 
-1. Ask what the questionnaire is meant to measure or surface.
+1. Ask what honest moment, pattern, or decision the questionnaire should help someone
+   notice.
 2. Ask who it is for and when it should be used.
-3. Ask what kind of honest moment or decision it should help someone answer before
-   getting into item wording.
-4. Reflect the practical use case back in plain language.
-5. Ask what would make the instrument distinct instead of redundant if a near-duplicate
-   risk is visible.
-6. Move to draft creation once the purpose is clear.
+3. Ask what the respondent should understand after answering that they might otherwise
+   miss.
+4. Reflect the practical use case back in plain language before asking for item
+   wording.
+5. Ask what would make the instrument distinct instead of redundant if a
+   near-duplicate risk is visible.
+6. Ask about item shape, response scale, scoring, or provenance only after the purpose
+   and use context are steady.
+7. Move to draft creation once the purpose is clear.
 
 Helpful follow-up lanes:
 
 - what honest moment, decision, or review this instrument should support
 - who will answer it and under what circumstances
+- what the answers should help the respondent understand or choose
 - what would make the instrument distinct instead of redundant
 
 Route note:
@@ -1962,15 +1969,17 @@ Ready to act when:
 
 - the purpose is clear
 - the audience or use context is clear
+- the respondent-facing insight or decision is clear
 - the instrument is distinct enough to draft
 
 Preferred opening question:
 
-- "What would this questionnaire help someone notice or track?"
+- "What honest moment or decision should this questionnaire help someone notice or track?"
 
 ## Questionnaire Run
 
-Aim: clarify whether the user wants to start, continue, or complete one answer session.
+Aim: clarify whether the user wants to start, continue, review, or complete one answer
+session without turning the run into a mechanical form fill.
 
 Arc:
 
@@ -1978,13 +1987,16 @@ Arc:
 2. Ask which questionnaire or existing run this is about.
 3. If the user wants to continue or finish, ask what feels most stuck, unfinished, or
    important before asking for more content.
-4. If answering is still in progress, ask only for the next answer or note that matters.
+4. If the user is reviewing answers, ask what the run should help them understand
+   before proposing edits or completion.
+5. If answering is still in progress, ask only for the next answer or note that matters.
 
 Helpful follow-up lanes:
 
 - whether the job is to begin, resume, review, or complete
 - what questionnaire or run is in scope
 - what next answer, uncertainty, or note is actually blocking progress
+- what the completed run should help the user understand or decide
 
 Route note:
 
@@ -2001,7 +2013,7 @@ Ready to act when:
 
 Preferred opening question:
 
-- "Do you want to start, continue, review, or finish a questionnaire run?"
+- "What do you want from this questionnaire run right now: start, continue, review, or finish it?"
 
 ## Event Type
 
