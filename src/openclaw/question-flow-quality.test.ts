@@ -63,8 +63,8 @@ describe("question flow quality coverage", () => {
       ["Preference Catalog Item", /meaningfully worth comparing/i, /clear and fair/i],
       ["Preference Context", /treat your preferences differently here/i, /inside versus outside/i],
       ["Preference Item", /make clearer by saving this item/i, /favorite, veto, or compare-later/i],
-      ["Questionnaire Instrument", /help someone notice or track/i, /reusable questionnaire/i],
-      ["Questionnaire Run", /start, continue, review, or finish a questionnaire run/i, /next answer or note that matters/i]
+      ["Questionnaire Instrument", /honest moment or decision/i, /reusable questionnaire/i],
+      ["Questionnaire Run", /start, continue, review, or finish it/i, /next answer or note that matters/i]
     ] as const;
 
     for (const [section, opening, purpose] of scenarios) {
@@ -297,6 +297,12 @@ describe("question flow quality coverage", () => {
     );
     expect(entityPlaybook).toMatch(
       /what would make the instrument distinct instead of redundant/i
+    );
+    expect(entityPlaybook).toMatch(
+      /what the answers should help the respondent understand or choose/i
+    );
+    expect(entityPlaybook).toMatch(
+      /item shape, response scale, scoring, or provenance only after the purpose/i
     );
     expect(entityPlaybook).toMatch(/## Route posture checkpoint/i);
     expect(entityPlaybook).toMatch(

@@ -1,11 +1,41 @@
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { buildServer } from "../../server/src/app";
 
 const repoRoot = path.resolve(import.meta.dirname, "../..");
+const tempRoots: string[] = [];
+
+afterEach(() => {
+  while (tempRoots.length > 0) {
+    const root = tempRoots.pop();
+    if (root) {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
 
 function readRepoFile(relativePath: string) {
   return readFileSync(path.join(repoRoot, relativePath), "utf8");
+}
+
+async function loadOnboardingPayload() {
+  const dataRoot = mkdtempSync(path.join(os.tmpdir(), "forge-question-flow-"));
+  tempRoots.push(dataRoot);
+  const app = await buildServer({ dataRoot, taskRunWatchdog: false });
+  const response = await app.inject({
+    method: "GET",
+    url: "/api/v1/agents/onboarding"
+  });
+  expect(response.statusCode).toBe(200);
+  await app.close();
+  return response.json().onboarding as {
+    entityCatalog: Array<{ entityType: string }>;
+    entityRouteModel: {
+      specializedDomainSurfaces: Record<string, { routeKeys: string[] }>;
+    };
+  };
 }
 
 const entityPlaybook = readRepoFile(
@@ -232,6 +262,50 @@ describe("question flow simulation cycles", () => {
     "Emotion Definition": "batch"
   };
 
+  const liveCatalogFlowSectionByEntityType = {
+    goal: "Goal",
+    project: "Project",
+    strategy: "Strategy",
+    task: "Task",
+    habit: "Habit",
+    tag: "Tag",
+    note: "Note",
+    insight: "Insight",
+    calendar_event: "Calendar Event",
+    work_block_template: "Work Block Template",
+    task_timebox: "Task Timebox",
+    task_run: "Task Run",
+    work_adjustment: "Work Adjustment",
+    self_observation: "Self Observation",
+    sleep_session: "Sleep Session",
+    workout_session: "Workout Session",
+    sleep_overview: "Sleep Overview",
+    sports_overview: "Sports Overview",
+    calendar_connection: "Calendar Connection",
+    wiki_page: "Wiki Page",
+    preference_catalog: "Preference Catalog",
+    preference_catalog_item: "Preference Catalog Item",
+    preference_context: "Preference Context",
+    preference_item: "Preference Item",
+    preference_judgment: "Preference Judgment",
+    preference_signal: "Preference Signal",
+    questionnaire_instrument: "Questionnaire Instrument",
+    questionnaire_run: "Questionnaire Run",
+    movement: "Movement",
+    life_force: "Life Force",
+    workbench: "Workbench",
+    psyche_value: "Value",
+    behavior_pattern: "Behavior Pattern",
+    behavior: "Behavior",
+    belief_entry: "Belief",
+    mode_profile: "Mode Profile",
+    mode_guide_session: "Mode Guide Session",
+    flashcard: "Flashcard",
+    trigger_report: "Trigger Report",
+    event_type: "Event Type",
+    emotion_definition: "Emotion Definition"
+  } as const;
+
   const requiredRouteMatrixEntityTypes = [
     "goal",
     "project",
@@ -409,6 +483,63 @@ describe("question flow simulation cycles", () => {
         sectionSlice,
         `${section} should have therapeutic guidance`
       ).toMatch(/Aim:|Arc:/);
+    }
+  });
+
+  it("cycle 3 retest: simulated scenarios stay synchronized with live onboarding", async () => {
+    const onboarding = await loadOnboardingPayload();
+    const liveCatalogEntityTypes = onboarding.entityCatalog
+      .map((entry) => entry.entityType)
+      .sort();
+    const coveredCatalogEntityTypes = Object.keys(
+      liveCatalogFlowSectionByEntityType
+    ).sort();
+
+    expect(coveredCatalogEntityTypes).toEqual(liveCatalogEntityTypes);
+
+    const routeMatrix = getSectionSlice(
+      entityPlaybook,
+      "Full Route Posture Matrix"
+    );
+
+    for (const [entityType, section] of Object.entries(
+      liveCatalogFlowSectionByEntityType
+    )) {
+      expect(
+        simulatedUserScenarios[
+          section as keyof typeof simulatedUserScenarios
+        ],
+        `${entityType} should have a simulated user scenario`
+      ).toBeTruthy();
+      expect(
+        routeMatrix,
+        `${entityType} should be present in the route posture matrix`
+      ).toMatch(new RegExp(`\\\`${escapeRegExp(entityType)}\\\``));
+    }
+
+    const surfaceToScenarioName = {
+      movement: "Movement",
+      lifeForce: "Life Force",
+      life_force: "Life Force",
+      workbench: "Workbench"
+    } as const;
+
+    for (const [surfaceKey, scenarioName] of Object.entries(
+      surfaceToScenarioName
+    )) {
+      const liveRouteKeys =
+        onboarding.entityRouteModel.specializedDomainSurfaces[surfaceKey]
+          ?.routeKeys ?? [];
+      const simulatedRouteKeys = Object.keys(
+        specializedSurfaceRouteScenarios[
+          scenarioName as keyof typeof specializedSurfaceRouteScenarios
+        ]
+      );
+
+      expect(
+        [...simulatedRouteKeys].sort(),
+        `${surfaceKey} route-key scenarios should match onboarding`
+      ).toEqual([...liveRouteKeys].sort());
     }
   });
 
@@ -734,6 +865,9 @@ describe("question flow simulation cycles", () => {
     expect(entityPlaybook).toMatch(
       /creating or editing a flow[\s\S]*stable inputs[\s\S]*expected public output/i
     );
+    expect(entityPlaybook).toMatch(/run from a one-off input contract/i);
+    expect(entityPlaybook).toMatch(/structured\s+input details/i);
+    expect(getSectionSlice(entityPlaybook, "Workbench")).not.toMatch(/\bpayload\b/i);
     expect(entityPlaybook).toMatch(
       /delete or archive a flow[\s\S]*future run, published output, or public contract/i
     );

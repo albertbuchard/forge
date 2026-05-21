@@ -1004,8 +1004,20 @@ describe("forge onboarding contract", () => {
       playbookByFocus.get("questionnaire_instrument")?.askSequence.join(" ")
     ).toMatch(/batch CRUD[\s\S]*clone, draft, and publish actions/i);
     expect(
+      playbookByFocus.get("questionnaire_instrument")?.openingQuestion
+    ).toMatch(/honest moment or decision/i);
+    expect(
+      playbookByFocus.get("questionnaire_instrument")?.askSequence.join(" ")
+    ).toMatch(/respondent should understand[\s\S]*item shape, response scale, scoring, or provenance/i);
+    expect(
       playbookByFocus.get("questionnaire_run")?.askSequence.join(" ")
     ).toMatch(/dedicated questionnaire run start, read, update, and complete routes/i);
+    expect(playbookByFocus.get("questionnaire_run")?.openingQuestion).toMatch(
+      /start, continue, review, or finish it/i
+    );
+    expect(
+      playbookByFocus.get("questionnaire_run")?.askSequence.join(" ")
+    ).toMatch(/reviewing answers[\s\S]*help them understand/i);
 
     expect(playbookByFocus.get("movement")?.askSequence.join(" ")).toMatch(
       /day, month, all-time, timeline, places, trip-detail,[\s\S]*selection route/i

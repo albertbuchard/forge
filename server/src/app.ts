@@ -3668,7 +3668,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
     searchHints: [
       "Clarify whether the user wants flow discovery, editing, execution, published output, run inspection, or node-level output before choosing the route.",
       "Distinguish flow contract, published output, run history, latest-node-output, and chat follow-up questions before reaching for a route.",
-      "If the user is still deciding how to run or edit a flow, read flow detail or the box catalog before asking them for payload structure."
+      "If the user is still deciding how to run or edit a flow, read flow detail or the box catalog before asking them for structured input details."
     ],
     fieldGuide: []
   }),
@@ -3746,7 +3746,7 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
   "Do not minimize functional analysis, trigger chains, behavior patterns, modes, beliefs, or schema themes. After at least one concrete example is clear, offer one careful interpretive hypothesis when it would help the user understand what the reaction may be protecting, predicting, relieving, or costing.",
   "Phrase Psyche interpretive hypotheses as collaborative and testable, not as verdicts. Ask whether the hypothesis lands or needs correction before turning it into a saved belief, pattern, mode, trigger report, or note.",
   "Once the Movement, Life Force, or Workbench job is clear, speak in product nouns such as timeline, overlay, weekday template, published output, run detail, or node result instead of generic record language.",
-  "If the next answer would not change the route, wording, timing, or write payload in a meaningful way, stop asking and act.",
+  "If the next answer would not change the route, wording, timing, or write shape in a meaningful way, stop asking and act.",
   "Before saving, briefly summarize the working formulation in the user's own language when that would reduce ambiguity.",
   "Once the record is clear enough to name, stop exploring broadly and ask only for the last structural detail that still matters.",
   "If the record is already clear enough to save, save it instead of performing a ceremonial extra question.",
@@ -3757,7 +3757,7 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
   "When the user already named a precise correction or review target, do not widen back out into a meta lane question. Confirm only the missing route-selecting detail and then act.",
   "Once the route family is clear, say it plainly enough that another agent could follow the same path without guessing.",
   "For Movement specifically, treat missing-data corrections as user-defined overlay boxes unless the user is editing an already-recorded stay or trip. When the user already gave a clear instruction like 'that missing block was home', act after only the last ambiguity is resolved.",
-  "For action workflows such as task_run, work_adjustment, questionnaire_run, preference_judgment, preference_signal, and self_observation, keep the question focused on the missing action payload and do not downgrade the request into generic batch CRUD.",
+  "For action workflows such as task_run, work_adjustment, questionnaire_run, preference_judgment, preference_signal, and self_observation, keep the question focused on the missing action detail and do not downgrade the request into generic batch CRUD.",
   "For read-model-only health surfaces such as sleep_overview and sports_overview, use the dedicated overview reads first when the user wants review, pattern interpretation, recovery context, or training-load context. Move to sleep_session or workout_session writes only after one specific stored session needs enrichment.",
   "For normal stored Preferences and questionnaire records, use batch CRUD by default; switch to dedicated action routes only for judgments, signals, run answers, clone/draft/publish lifecycle, or visual comparison gameplay.",
   "When the user wants to remember a book, article, paper, source, concept, person, conversation, project reference, recurring explanation, or personal manual, consider wiki_page before note or self_observation.",
@@ -4177,15 +4177,16 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
   {
     focus: "questionnaire_instrument",
     openingQuestion:
-      "What would this questionnaire help someone notice or track?",
+      "What honest moment or decision should this questionnaire help someone notice or track?",
     coachingGoal:
-      "Clarify whether the user is authoring a reusable questionnaire and what the instrument is for.",
+      "Clarify whether the user is authoring a reusable questionnaire and what honest moment, pattern, or decision the instrument should help someone notice.",
     askSequence: [
-      "Ask what the questionnaire is meant to measure or surface.",
+      "Ask what honest moment, pattern, or decision the questionnaire should help someone notice.",
       "Ask who it is for and when it should be used.",
-      "Ask what kind of honest moment or decision it should help someone answer before getting into item wording.",
-      "Reflect the practical use case back in plain language.",
+      "Ask what the respondent should understand after answering that they might otherwise miss.",
+      "Reflect the practical use case back in plain language before asking for item wording.",
       "Ask what would make the instrument distinct instead of redundant if a near-duplicate risk is visible.",
+      "Ask about item shape, response scale, scoring, or provenance only after the purpose and use context are steady.",
       "Use batch CRUD for ordinary questionnaire instrument create or update work; use clone, draft, and publish actions only for version lifecycle.",
       "Move to draft creation once the purpose is clear."
     ]
@@ -4193,13 +4194,14 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
   {
     focus: "questionnaire_run",
     openingQuestion:
-      "Do you want to start, continue, review, or finish a questionnaire run?",
+      "What do you want from this questionnaire run right now: start, continue, review, or finish it?",
     coachingGoal:
-      "Clarify whether the user wants to start, continue, or complete one answer session.",
+      "Clarify whether the user wants to start, continue, review, or complete one answer session without turning the run into a mechanical form fill.",
     askSequence: [
       "Ask what the user wants from the run right now: start, continue, review, or finish.",
       "Ask which questionnaire or existing run this is about.",
       "If the user wants to continue or finish, ask what feels most stuck, unfinished, or important before asking for more content.",
+      "If the user is reviewing answers, ask what the run should help them understand before proposing edits or completion.",
       "Use the dedicated questionnaire run start, read, update, and complete routes instead of generic entity CRUD.",
       "If answering is still in progress, ask only for the next answer or note that matters."
     ]
@@ -4269,7 +4271,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
       "If the user wants to send a follow-up into a saved flow chat, confirm the saved flow and what the message should accomplish instead of treating it as a new run or note.",
       "If the user already named the flow and action clearly, skip the meta lane question and ask only for the missing run, node, or output scope.",
       "If the user wants a stable public input contract or published output, prefer those dedicated reads instead of detouring through run history first.",
-      "If the user is still shaping a payload or edit, prefer flow detail or box catalog reads before asking for structured inputs.",
+      "If the user is still shaping one-off inputs or an edit, prefer flow detail or box catalog reads before asking for structured inputs.",
       "If the user is debugging one failed run, ask whether the useful artifact is the run summary, one node result, the latest node output, or the published output before you start asking for edits.",
       "Prefer flow detail or published-output reads for stable contracts, and use run or node-result routes only when the user is asking about execution history or debugging.",
       "Route to the dedicated workbench route family once the execution lane is clear."
@@ -5486,7 +5488,7 @@ function buildAgentOnboardingPayload(request: {
       movement:
         "Forge Movement is the first-class mobility surface. It is a timeline of stays and trips: stays capture time spent in the same place, and trips capture travel between places. Use it for time-in-place questions, travel-history review, specific stay or trip edits, selected-span aggregates, known places, and links to other Forge records rather than pretending stays and trips are normal batch CRUD entities.",
       lifeForce:
-        "Life Force is Forge's energy-budget and fatigue model. Read it through the dedicated life-force payload and update it through focused profile, weekday-template, and fatigue-signal routes rather than generic entity CRUD.",
+        "Life Force is Forge's energy-budget and fatigue model. Read it through the dedicated life-force state and update it through focused profile, weekday-template, and fatigue-signal routes rather than generic entity CRUD.",
       workbench:
         "Workbench is Forge's graph-flow execution system. Treat flows, runs, published outputs, node results, and latest-node-output reads as a dedicated API family instead of a normal entity-batch surface.",
       psyche:
@@ -5801,7 +5803,7 @@ function buildAgentOnboardingPayload(request: {
           notes: [
             "Life Force is a focused domain surface, not a batch CRUD entity type.",
             "Route-selection questions are internal. User-facing questions should ask whether this is a current read, durable assumption, repeated weekday rhythm, or right-now state instead of reciting overview/profile/template/signal route keys.",
-            "Use GET /api/v1/life-force for the current overview payload with stats, drains, recommendations, and current-curve state.",
+            "Use GET /api/v1/life-force for the current overview state with stats, drains, recommendations, and current-curve state.",
             "Patch the profile only for durable personal settings, update weekday templates only for the curve itself, and post fatigue signals for real-time tired or recovered observations.",
             "If the user says something like 'I always dip on Tuesdays after lunch', treat that as a weekday-template change rather than a one-off fatigue signal.",
             "If the user is asking what changed after a profile, template, or fatigue write, read the overview back so the effect stays visible.",
@@ -5837,7 +5839,7 @@ function buildAgentOnboardingPayload(request: {
             "This `life_force` key exists so agents can look up the specialized route family by the entity catalog name without guessing that the canonical surface key is `lifeForce`.",
             "Life Force is a focused domain surface, not a batch CRUD entity type.",
             "Route-selection questions are internal. User-facing questions should ask whether this is a current read, durable assumption, repeated weekday rhythm, or right-now state instead of reciting overview/profile/template/signal route keys.",
-            "Use GET /api/v1/life-force for the current overview payload with stats, drains, recommendations, and current-curve state.",
+            "Use GET /api/v1/life-force for the current overview state with stats, drains, recommendations, and current-curve state.",
             "Patch the profile only for durable personal settings, update weekday templates only for the curve itself, and post fatigue signals for real-time tired or recovered observations.",
             "If the user says something like 'I always dip on Tuesdays after lunch', treat that as a weekday-template change rather than a one-off fatigue signal.",
             "If the user is asking what changed after a profile, template, or fatigue write, read the overview back so the effect stays visible.",
@@ -5920,8 +5922,8 @@ function buildAgentOnboardingPayload(request: {
             "Workbench is a dedicated execution surface, not a batch CRUD entity family.",
             "Route-selection questions are internal. User-facing questions should ask whether the user needs the saved flow, its input contract, one run, one node, or the public result instead of reciting Workbench route keys.",
             "Use the flow routes when the agent needs stable public input contracts, published outputs, node-level results, or reusable execution history.",
-            "If the user is still figuring out inputs or editable structure, read flow detail or box catalog before asking them to author a payload from memory.",
-            "For flow creation, clarify what the flow should reliably produce, which input contract it should accept, and which first node or box anchors the flow before asking for structured payload details.",
+            "If the user is still figuring out inputs or editable structure, read flow detail or box catalog before asking them to reconstruct structured inputs from memory.",
+            "For flow creation, clarify what the flow should reliably produce, which input contract it should accept, and which first node or box anchors the flow before asking for structured input details.",
             "For flow edits, ask what behavior should change while preserving the public contract unless the user explicitly wants the contract changed.",
             "For flow deletion, confirm the saved flow and whether published outputs or run history need preservation elsewhere before using the delete route.",
             "For saved flow chat follow-ups, use POST /api/v1/workbench/flows/:id/chat only when the user wants to continue a flow-specific conversation. Do not turn that into a new run, note, or generic entity update unless the user asks.",

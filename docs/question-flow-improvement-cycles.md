@@ -1,10 +1,96 @@
 # Forge Question Flow Improvement Cycles
 
-Latest run date: 2026-05-19
+Latest run date: 2026-05-21
 
 This report records the three-cycle evaluation for Forge agent question flows. The
 same full flow set was tested in each cycle so improvements were kept only where they
 helped the entity or specialized surface.
+
+## 2026-05-21 Automation Pass
+
+Setup verification:
+
+- No previous automation memory file existed for
+  `improvement-of-question-flows-in-forge`.
+- Confirmed the OpenClaw and Hermes Forge configs still point at
+  `/Users/omarclaw/Documents/aurel-monorepo/data/forge`. No data root was changed,
+  merged, deleted, or overwritten.
+- Built the repo-local OpenClaw plugin with `npm run build:openclaw-plugin`.
+- Built the Hermes packaged runtime with
+  `node plugins/forge-hermes/scripts/build-package-runtime.mjs`.
+- Reinstalled OpenClaw from `./openclaw-plugin` with the forced local install path,
+  enabled `forge-openclaw-plugin`, and restarted the OpenClaw gateway.
+- Reinstalled Hermes editable from `./plugins/forge-hermes` and verified
+  `forge-hermes-plugin 0.2.79` imports from the repo-local editable package.
+- Verified `openclaw forge health`, `openclaw forge route-check`, live OpenAPI, live
+  onboarding, and the Forge web app at `http://127.0.0.1:4317/forge/`.
+- Live OpenAPI reports version `3.1.0` with 178 paths. Live onboarding reports 41
+  entity catalog entries, 28 batch-CRUD entities, shared batch routes for ordinary
+  stored entities, and dedicated route keys for Movement, Life Force, the
+  `life_force` alias, and Workbench.
+- Movement exposes the dedicated day, month, all-time, timeline, places, trip detail,
+  selection, settings, overlay, and repair lanes. Life Force exposes overview,
+  profile, weekday-template, and fatigue-signal lanes. Workbench exposes flow
+  catalog/detail/CRUD, execution, run history, published output, node result,
+  latest-node-output, box catalog, one-off input execution, and saved-flow chat lanes.
+
+Every cycle retested the full stored-entity and domain set: goal, project, strategy,
+task, habit, tag, note, insight, task_run, work_adjustment, calendar_event,
+work_block_template, task_timebox, calendar_connection, preference_catalog,
+preference_catalog_item, preference_context, preference_item, preference_judgment,
+preference_signal, questionnaire_instrument, questionnaire_run, self_observation,
+sleep_session, workout_session, wiki_page, flashcard, all psychologically meaningful
+Psyche entities, Movement, Life Force, Workbench, and the read-only operator,
+calendar, sleep, and sports overview surfaces. Scenarios covered adding, updating,
+reviewing, navigating, and route-selecting each entity or surface, with Psyche
+evaluated for therapist-like active listening and specialized surfaces evaluated for
+exact API posture.
+
+Cycle 1 tested every entity and specialized lane against the existing playbooks,
+onboarding payload, and live OpenAPI route model. Strengths held: Psyche remained
+example-first and hypothesis-capable, normal stored records stayed batch-first, and
+Movement/Life Force/Workbench used dedicated route families. The weakness was
+Workbench wording: a route-key-internal concept, `runByPayload`, still encouraged
+some user-facing "payload" language. The change kept the route key intact but changed
+agent-facing prose to "one-off input contract", "structured input details", and
+"write shape". Retest showed Workbench remained route-clear while no longer leaking
+payload wording to the user, so the change was kept.
+
+Cycle 2 retested the same full set with emphasis on questionnaire and reflection
+flows. Psyche and planning flows stayed strong, but `questionnaire_instrument` and
+`questionnaire_run` still sounded too close to form authoring when compared with the
+active-listening bar. The change made questionnaire instruments start from the honest
+moment, pattern, or decision the instrument should help someone notice, then defer
+item shape, scale, scoring, and provenance until purpose and use context are steady.
+Questionnaire runs now ask whether the user wants to start, continue, review, or
+finish, and only ask for the next answer or note that matters once the run's job is
+clear. Retest caught two wording-line issues in the quality assertions; those were
+fixed without weakening the intended behavior, and the change was kept.
+
+Cycle 3 retested all flows again with emphasis on automation freshness. The remaining
+risk was that the simulation matrix could drift behind live onboarding as Forge adds
+or renames entities and specialized route lanes. The change added a live-onboarding
+synchronization test that checks every live entity catalog entry has a simulated user
+scenario and route-posture coverage, and checks Movement, Life Force, and Workbench
+route keys against the specialized-surface scenarios. Retest passed, so the automation
+coverage improvement was kept. No entity-specific wording was reverted in this cycle.
+
+Final verification for this pass:
+
+- `npm exec -- vitest run src/openclaw/question-flow-quality.test.ts
+  src/openclaw/question-flow-simulation-cycles.test.ts
+  src/openclaw/onboarding-contract.test.ts src/openclaw/skill-playbook-parity.test.ts
+  src/openclaw/parity.test.ts` passed: 5 files, 39 tests.
+- `npx tsc --noEmit` passed.
+- `npm run check:openclaw-plugin` passed: 4 files, 29 tests.
+- OpenClaw plugin runtime reports version `0.2.79`, source
+  `~/Documents/aurel-monorepo/projects/forge/openclaw-plugin/dist/openclaw/index.js`,
+  and all expected Forge tools.
+- `openclaw forge route-check` reports no missing plugin routes, no missing OpenAPI
+  routes, and no unexpected mirrors.
+- The OpenClaw config still reports a duplicate plugin-id warning resolved in favor
+  of the explicit config-selected repo-local plugin. This is a known environment
+  warning, not a contract failure.
 
 ## 2026-05-19 Automation Pass
 
