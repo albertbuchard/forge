@@ -303,6 +303,16 @@ Important iOS rule:
 - 2026-05-22: Forge Companion `ios-testflight-v1.0.48` shipped through GitHub
   Actions run `26258880832` and distributed `1.0.48 (26)` to Internal testers.
   Do not re-tag the same TestFlight version just to repair plugin releases.
+- 2026-05-22: Public plugin release `0.2.81` shipped from this public Forge repo
+  after the HealthKit compressed-chunk server audit. `hermes-v0.2.81` published
+  `forge-hermes-plugin==0.2.81` from GitHub Actions run `26315978932`; `v0.2.81`
+  published `forge-openclaw-plugin@0.2.81` from run `26316264957` and
+  `forge-memory@0.2.81` from run `26316264949`. Registry checks confirmed all
+  three latest versions at `0.2.81`.
+- Current non-blocking workflow cleanup: GitHub Actions annotates
+  `actions/upload-artifact@v4` as a Node.js 20 action. GitHub will force Node 24
+  defaults starting 2026-06-02, so update the artifact action path before that
+  becomes noisy or risky.
 
 ## What CI Actually Runs
 
