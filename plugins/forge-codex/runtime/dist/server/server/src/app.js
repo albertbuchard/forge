@@ -4762,7 +4762,7 @@ function buildAgentOnboardingPayload(request) {
                     notes: [
                         "Life Force is a focused domain surface, not a batch CRUD entity type.",
                         "Route-selection questions are internal. User-facing questions should ask whether this is a current read, durable assumption, repeated weekday rhythm, or right-now state instead of reciting overview/profile/template/signal route keys.",
-                        "Use GET /api/v1/life-force for the current overview state with stats, drains, recommendations, and current-curve state.",
+                        "Use GET /api/v1/life-force for the current overview payload with stats, drains, recommendations, and current-curve state.",
                         "Patch the profile only for durable personal settings, update weekday templates only for the curve itself, and post fatigue signals for real-time tired or recovered observations.",
                         "If the user says something like 'I always dip on Tuesdays after lunch', treat that as a weekday-template change rather than a one-off fatigue signal.",
                         "If the user is asking what changed after a profile, template, or fatigue write, read the overview back so the effect stays visible.",
@@ -4797,7 +4797,7 @@ function buildAgentOnboardingPayload(request) {
                         "This `life_force` key exists so agents can look up the specialized route family by the entity catalog name without guessing that the canonical surface key is `lifeForce`.",
                         "Life Force is a focused domain surface, not a batch CRUD entity type.",
                         "Route-selection questions are internal. User-facing questions should ask whether this is a current read, durable assumption, repeated weekday rhythm, or right-now state instead of reciting overview/profile/template/signal route keys.",
-                        "Use GET /api/v1/life-force for the current overview state with stats, drains, recommendations, and current-curve state.",
+                        "Use GET /api/v1/life-force for the current overview payload with stats, drains, recommendations, and current-curve state.",
                         "Patch the profile only for durable personal settings, update weekday templates only for the curve itself, and post fatigue signals for real-time tired or recovered observations.",
                         "If the user says something like 'I always dip on Tuesdays after lunch', treat that as a weekday-template change rather than a one-off fatigue signal.",
                         "If the user is asking what changed after a profile, template, or fatigue write, read the overview back so the effect stays visible.",
@@ -7670,7 +7670,7 @@ export async function buildServer(options = {}) {
     app.post("/api/v1/mobile/healthkit/sync-sessions", async (request) => ({
         upload: startMobileHealthSyncSession(mobileHealthSyncSessionStartSchema.parse(request.body ?? {}))
     }));
-    app.post("/api/v1/mobile/healthkit/sync-sessions/:id/chunks", { bodyLimit: 1_600_000 }, async (request) => {
+    app.post("/api/v1/mobile/healthkit/sync-sessions/:id/chunks", { bodyLimit: 40_000_000 }, async (request) => {
         const { id } = request.params;
         const rawPayloadJson = JSON.stringify((request.body ?? {}).payload ?? {});
         return {
