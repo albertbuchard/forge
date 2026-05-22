@@ -380,6 +380,28 @@ When an iOS release tag lands on a `main` commit, the workflow:
 5. Watch the GitHub Actions workflow
 6. Confirm TestFlight upload or App Store submission in App Store Connect
 
+## Recent Verified Releases
+
+### 0.2.82 HealthKit raw-deflate compatibility
+
+- Fix commit: `8219cd0` (`Fix raw deflate HealthKit chunks`)
+- Hermes release commit/tag: `98cb7d1`, `hermes-v0.2.82`
+- OpenClaw and Forge Memory release commit/tag: `87f905b`, `v0.2.82`
+- GitHub Actions:
+  - `26317293766` published `forge-hermes-plugin==0.2.82`
+  - `26317382762` published `forge-openclaw-plugin@0.2.82`
+  - `26317382763` published `forge-memory@0.2.82`
+- Registry verification confirmed npm latest `0.2.82` for OpenClaw and Forge
+  Memory, and PyPI latest `0.2.82` for Hermes.
+
+HealthKit compression note: Forge Companion's `NSData.compressed(using: .zlib)`
+payloads are raw DEFLATE streams in practice. The server must accept both
+zlib-wrapped DEFLATE and raw DEFLATE for `payload_json_deflate_base64`, while
+preserving the decoded-size limit so compressed chunks cannot inflate past
+`HEALTH_MOBILE_SYNC_CHUNK_MAX_BYTES`. The screenshot symptom for this bug was a
+`sleep_nights` chunk failing with `invalid_chunk_payload` and
+`The HealthKit sync compressed payload cannot be decompressed`.
+
 ## Fallback Local No-Prompt Mode
 
 The recommended path is CI publishing. If you must publish locally without repeated
