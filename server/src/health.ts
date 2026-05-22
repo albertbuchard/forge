@@ -4327,8 +4327,26 @@ function parseDeflateBase64ChunkPayload(
 
   let decoded: Buffer;
   try {
-    decoded = inflateSync(compressed);
+    decoded = inflateSync(compressed, {
+      maxOutputLength: HEALTH_MOBILE_SYNC_CHUNK_MAX_BYTES + 1
+    });
   } catch (error) {
+    const errorCode =
+      typeof error === "object" && error !== null && "code" in error
+        ? (error as { code?: unknown }).code
+        : undefined;
+    if (errorCode === "ERR_BUFFER_TOO_LARGE") {
+      throw new HttpError(
+        413,
+        "chunk_too_large",
+        "The HealthKit sync compressed chunk expands beyond the maximum decoded size.",
+        {
+          maxBytes: HEALTH_MOBILE_SYNC_CHUNK_MAX_BYTES,
+          compressedBytes: compressed.length,
+          mode: HEALTH_MOBILE_SYNC_COMPRESSED_CHUNK_PAYLOAD_ENCODING
+        }
+      );
+    }
     console.warn("[healthkit-sync] invalid compressed chunk payload", {
       syncSessionId: context.syncSessionId,
       chunkId: context.chunkId,
