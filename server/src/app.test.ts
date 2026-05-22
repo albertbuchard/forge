@@ -3333,6 +3333,27 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
     assert.equal(oversizedResponse.statusCode, 413);
     assert.equal((oversizedResponse.json() as { code: string }).code, "chunk_too_large");
 
+    const oversizedCompressedBuffer = deflateSync(oversizedPayloadBuffer);
+    const oversizedCompressedResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/chunks`,
+      payload: {
+        chunkId: "chunk-oversized-compressed",
+        sequence: 1,
+        family: "vitals",
+        recordCount: 0,
+        byteCount: oversizedPayloadBuffer.length,
+        compressedByteCount: oversizedCompressedBuffer.length,
+        checksumSha256: createHash("sha256").update(oversizedPayloadBuffer).digest("hex"),
+        payloadJsonDeflateBase64: oversizedCompressedBuffer.toString("base64")
+      }
+    });
+    assert.equal(oversizedCompressedResponse.statusCode, 413);
+    assert.equal(
+      (oversizedCompressedResponse.json() as { code: string }).code,
+      "chunk_too_large"
+    );
+
     const timeSeriesPayload = {
       workoutTimeSeries: [
         {
