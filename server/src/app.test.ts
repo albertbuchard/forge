@@ -5,7 +5,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { deflateSync } from "node:zlib";
+import { deflateRawSync, deflateSync } from "node:zlib";
 import { formatLocalDateKey } from "../../src/lib/date-keys.js";
 import { buildServer } from "./app.js";
 import { closeDatabase, configureDatabase, getDatabase } from "./db.js";
@@ -101,6 +101,18 @@ function healthChunkPayloadJsonDeflateBase64(value: unknown) {
   const payloadJson = JSON.stringify(value);
   const payloadBuffer = Buffer.from(payloadJson, "utf8");
   const compressedBuffer = deflateSync(payloadBuffer);
+  return {
+    byteCount: payloadBuffer.length,
+    compressedByteCount: compressedBuffer.length,
+    checksumSha256: createHash("sha256").update(payloadBuffer).digest("hex"),
+    payloadJsonDeflateBase64: compressedBuffer.toString("base64")
+  };
+}
+
+function healthChunkPayloadJsonRawDeflateBase64(value: unknown) {
+  const payloadJson = JSON.stringify(value);
+  const payloadBuffer = Buffer.from(payloadJson, "utf8");
+  const compressedBuffer = deflateRawSync(payloadBuffer);
   return {
     byteCount: payloadBuffer.length,
     compressedByteCount: compressedBuffer.length,
@@ -2934,6 +2946,7 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
           }
         },
         requestedFamilies: [
+          "sleep_nights",
           "workout_summaries",
           "workout_time_series",
           "workout_routes",
@@ -3197,6 +3210,44 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
       payload: compressedChunk
     });
     assert.equal(compressedResponse.statusCode, 200, compressedResponse.body);
+
+    const rawDeflateSleepPayload = {
+      sleepNights: [
+        {
+          externalUid: "night_raw_deflate_2026_04_07",
+          startedAt: "2026-04-06T22:45:00.000Z",
+          endedAt: "2026-04-07T06:30:00.000Z",
+          sourceTimezone: "Europe/Zurich",
+          localDateKey: "2026-04-07",
+          timeInBedSeconds: 27_900,
+          asleepSeconds: 25_800,
+          awakeSeconds: 2_100,
+          rawSegmentCount: 2,
+          stageBreakdown: [
+            { stage: "core", seconds: 15_000 },
+            { stage: "rem", seconds: 6_000 },
+            { stage: "deep", seconds: 4_800 }
+          ],
+          recoveryMetrics: {},
+          sourceMetrics: {},
+          links: [],
+          annotations: {}
+        }
+      ]
+    };
+    const rawDeflateSleepChunk = {
+      chunkId: "chunk-raw-deflate-sleep-nights",
+      sequence: 3,
+      family: "sleep_nights",
+      recordCount: 1,
+      ...healthChunkPayloadJsonRawDeflateBase64(rawDeflateSleepPayload)
+    };
+    const rawDeflateSleepResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/chunks`,
+      payload: rawDeflateSleepChunk
+    });
+    assert.equal(rawDeflateSleepResponse.statusCode, 200, rawDeflateSleepResponse.body);
 
     const byteStableDuplicateResponse = await app.inject({
       method: "POST",
