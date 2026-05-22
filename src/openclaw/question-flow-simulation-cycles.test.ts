@@ -980,7 +980,10 @@ describe("question flow simulation cycles", () => {
       /Use allTime for whole-history aggregates[\s\S]*selection for a bounded selected-span aggregate[\s\S]*tripDetail/i
     );
     expect(onboardingSource).toMatch(
-      /movementSelection[\s\S]*"routeKey":"selection"[\s\S]*"placeIds"/
+      /movementSelection[\s\S]*"routeKey":"selection"[\s\S]*"body"[\s\S]*"placeIds"/
+    );
+    expect(onboardingSource).not.toMatch(
+      /movementSelection:\s*\n\s*'\{"routeKey":"selection","query"/
     );
     expect(onboardingSource).toMatch(
       /movementTripDetail[\s\S]*"routeKey":"tripDetail"[\s\S]*"id":"trip_123"/

@@ -109,7 +109,7 @@ Concrete route-key examples for internal use:
 - Movement timeline read:
   `{"routeKey":"timeline","query":{"from":"2026-05-01T00:00:00.000Z","to":"2026-05-06T23:59:59.999Z","userIds":["user_operator"]}}`
 - Movement selection aggregate:
-  `{"routeKey":"selection","query":{"from":"2026-05-01T00:00:00.000Z","to":"2026-05-14T23:59:59.999Z","placeIds":["place_home"],"userIds":["user_operator"]}}`
+  `{"routeKey":"selection","body":{"from":"2026-05-01T00:00:00.000Z","to":"2026-05-14T23:59:59.999Z","placeIds":["place_home"],"userIds":["user_operator"]}}`
 - Movement trip detail:
   `{"routeKey":"tripDetail","pathParams":{"id":"trip_123"}}`
 - Movement settings read:

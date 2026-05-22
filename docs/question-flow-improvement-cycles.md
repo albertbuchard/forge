@@ -1,10 +1,80 @@
 # Forge Question Flow Improvement Cycles
 
-Latest run date: 2026-05-21
+Latest run date: 2026-05-22
 
 This report records the three-cycle evaluation for Forge agent question flows. The
 same full flow set was tested in each cycle so improvements were kept only where they
 helped the entity or specialized surface.
+
+## 2026-05-22 Automation Pass
+
+Setup verification:
+
+- Read the existing automation memory and confirmed the previous run already covered
+  41 live entity catalog entries and dedicated Movement, Life Force, `life_force`,
+  and Workbench route keys.
+- Confirmed the OpenClaw and Hermes Forge configs still point at
+  `/Users/omarclaw/Documents/aurel-monorepo/data/forge`. Live Node file handles also
+  showed `/Users/omarclaw/Documents/aurel-monorepo/data/forge/forge.sqlite` open. No
+  Forge data root was moved, merged, deleted, or overwritten.
+- Built the repo-local OpenClaw plugin and Hermes packaged runtime with
+  `node plugins/forge-hermes/scripts/build-package-runtime.mjs`.
+- Reinstalled OpenClaw from `./openclaw-plugin`, enabled `forge-openclaw-plugin`, and
+  restarted the OpenClaw gateway. The current OpenClaw build does not support
+  `--force` with `--link`, so the install replaced the package from the local folder
+  while the config-selected repo-local source path remained active.
+- Reinstalled Hermes editable from `./plugins/forge-hermes`, restarted the Hermes
+  gateway, and verified `forge-hermes-plugin 0.2.80` imports from the repo-local
+  editable package.
+- Verified `openclaw forge health`, `openclaw forge route-check`, live onboarding,
+  live OpenAPI, and the Forge web app runtime. Live OpenAPI reports `3.1.0` with 178
+  paths. Live onboarding reports 41 entity catalog entries, 28 batch-CRUD entities,
+  and dedicated route keys for Movement, Life Force, the `life_force` alias, and
+  Workbench.
+- The known OpenClaw duplicate plugin-id warning remains; OpenClaw resolves it in
+  favor of the explicit config-selected repo-local plugin.
+
+Every cycle retested the full stored-entity and domain set: goal, project, strategy,
+task, habit, tag, note, insight, task_run, work_adjustment, calendar_event,
+work_block_template, task_timebox, calendar_connection, preference_catalog,
+preference_catalog_item, preference_context, preference_item, preference_judgment,
+preference_signal, questionnaire_instrument, questionnaire_run, self_observation,
+sleep_session, workout_session, wiki_page, flashcard, every psychologically
+meaningful Psyche entity, Movement, Life Force, Workbench, and the read-only
+operator, calendar, sleep, and sports overview surfaces. Specialized-surface
+sub-scenarios covered every Movement, Life Force, and Workbench route lane published
+by live onboarding.
+
+Cycle 1 tested all flows and route examples against live onboarding and OpenAPI.
+Question quality remained strong, but the Movement `selection` route example was an
+API contract bug: the route is `POST /api/v1/movement/selection`, while onboarding
+and bundled skills showed selected-span data in `query`. The change moved that
+example to `body` in live onboarding plus the OpenClaw, Hermes, and Codex skill
+copies, and added assertions rejecting the old query shape. Full retest passed, so
+the change was kept.
+
+Cycle 2 retested the full set with emphasis on Workbench. The route model exposed
+`chatFlow`, and the Markdown playbook handled saved-flow chat follow-ups, but the live
+onboarding Workbench ask sequence did not name that lane early enough. The change
+added "follow-up message in a saved flow chat" to the Workbench onboarding sequence
+and locked it with an onboarding contract assertion. Retest passed, so no wording was
+reverted.
+
+Cycle 3 retested every flow again with emphasis on automation freshness. The
+remaining weakness was that the previous tests would catch the Movement selection
+example only through specific string checks, not through a general route-method
+shape rule. The change added a contract test that parses every specialized route-key
+example, finds the matching live `methodRoutes` entry, and requires POST/PATCH/PUT
+examples to put mutation or aggregate-read data in `body` while GET examples avoid
+body data. Retest passed with 40 focused tests, so the automation improvement was
+kept.
+
+Final verification for this pass:
+
+- `npm exec -- vitest run src/openclaw/question-flow-quality.test.ts
+  src/openclaw/question-flow-simulation-cycles.test.ts
+  src/openclaw/onboarding-contract.test.ts src/openclaw/skill-playbook-parity.test.ts
+  src/openclaw/parity.test.ts` passed: 5 files, 40 tests.
 
 ## 2026-05-21 Automation Pass
 
