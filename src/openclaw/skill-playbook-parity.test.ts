@@ -134,7 +134,10 @@ describe("forge skill playbook parity", () => {
       expect(skill).toMatch(/Concrete route-key examples for internal use/i);
       expect(skill).toMatch(/Movement all-time read[\s\S]*"routeKey":"allTime"/i);
       expect(skill).toMatch(/Movement timeline read[\s\S]*"routeKey":"timeline"/i);
-      expect(skill).toMatch(/Movement selection aggregate[\s\S]*"routeKey":"selection"/i);
+      expect(skill).toMatch(/Movement selection aggregate[\s\S]*"routeKey":"selection"[\s\S]*"body"[\s\S]*"placeIds"/i);
+      expect(skill).not.toMatch(
+        /Movement selection aggregate:\s*\n\s*`\{"routeKey":"selection","query"/i
+      );
       expect(skill).toMatch(/Movement trip detail[\s\S]*"routeKey":"tripDetail"/i);
       expect(skill).toMatch(/Movement settings read[\s\S]*"routeKey":"settings"/i);
       expect(skill).toMatch(/Movement settings update[\s\S]*"routeKey":"settingsUpdate"/i);

@@ -4261,7 +4261,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
       "Clarify whether the user wants flow discovery, editing, execution, run history, published outputs, or node-level inspection before using the dedicated workbench route family.",
     askSequence: [
       "Ask what they are trying to learn, repair, publish, or run through Workbench before you narrow to flow discovery, editing, execution, or results.",
-      "Ask whether the job is flow discovery, one flow edit, execution, run history, published output, node-level inspection, or latest-node-output lookup.",
+      "Ask whether the job is flow discovery, one flow edit, execution, run history, published output, node-level inspection, latest-node-output lookup, or a follow-up message in a saved flow chat.",
       "Treat saved-flow catalog, box catalog, run history, run detail, node result, latest node output, and published output as internal read lanes. With the user, ask whether they need the saved flow, its input contract, one run, one node, or the public result instead of listing route keys.",
       "Use listFlows for the saved flow catalog and boxCatalog for available input-box contracts; do not collapse both into a vague catalog read.",
       "Ask which flow, slug, run, or node the request is about.",
@@ -6219,7 +6219,7 @@ function buildAgentOnboardingPayload(request: {
         movementTimeline:
           '{"routeKey":"timeline","query":{"from":"2026-05-01T00:00:00.000Z","to":"2026-05-06T23:59:59.999Z","userIds":["user_operator"]}}',
         movementSelection:
-          '{"routeKey":"selection","query":{"from":"2026-05-01T00:00:00.000Z","to":"2026-05-14T23:59:59.999Z","placeIds":["place_home"],"userIds":["user_operator"]}}',
+          '{"routeKey":"selection","body":{"from":"2026-05-01T00:00:00.000Z","to":"2026-05-14T23:59:59.999Z","placeIds":["place_home"],"userIds":["user_operator"]}}',
         movementTripDetail:
           '{"routeKey":"tripDetail","pathParams":{"id":"trip_123"}}',
         movementSettings:

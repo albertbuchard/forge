@@ -780,11 +780,19 @@ describe("forge onboarding contract", () => {
     expect(onboarding.mutationGuidance.specializedRouteToolExample).toMatch(
       /weekdayTemplate[\s\S]*monday/i
     );
-    expect(onboarding.mutationGuidance.specializedRouteToolExamples).toEqual(
+    const specializedExamples =
+      onboarding.mutationGuidance.specializedRouteToolExamples as Record<
+        string,
+        string
+      >;
+
+    expect(specializedExamples).toEqual(
       expect.objectContaining({
         movementAllTime: expect.stringMatching(/routeKey[\s\S]*allTime/),
         movementTimeline: expect.stringMatching(/routeKey[\s\S]*timeline/),
-        movementSelection: expect.stringMatching(/routeKey[\s\S]*selection/),
+        movementSelection: expect.stringMatching(
+          /routeKey[\s\S]*selection[\s\S]*body[\s\S]*placeIds/
+        ),
         movementTripDetail: expect.stringMatching(/routeKey[\s\S]*tripDetail/),
         movementSettings: expect.stringMatching(/routeKey[\s\S]*settings/),
         movementSettingsUpdate: expect.stringMatching(
@@ -837,6 +845,56 @@ describe("forge onboarding contract", () => {
         )
       })
     );
+    expect(specializedExamples.movementSelection).not.toMatch(/"query"/);
+  });
+
+  it("keeps specialized route examples aligned with their HTTP method shape", async () => {
+    const onboarding = await loadOnboardingPayload();
+    const specializedExamples =
+      onboarding.mutationGuidance.specializedRouteToolExamples as Record<
+        string,
+        string
+      >;
+    const surfaces = onboarding.entityRouteModel.specializedDomainSurfaces;
+
+    for (const [exampleName, exampleJson] of Object.entries(
+      specializedExamples
+    )) {
+      const example = JSON.parse(exampleJson) as {
+        routeKey: string;
+        query?: unknown;
+        body?: unknown;
+      };
+      const methodRoute = Object.values(surfaces)
+        .map((surface) => surface.methodRoutes[example.routeKey])
+        .find(Boolean);
+
+      expect(
+        methodRoute,
+        `${exampleName} should map to a live route key`
+      ).toBeTruthy();
+      if (!methodRoute) {
+        continue;
+      }
+
+      const method = methodRoute.split(" ")[0];
+      if (["POST", "PATCH", "PUT"].includes(method)) {
+        expect(
+          example.body,
+          `${exampleName} should pass POST/PATCH/PUT data in body`
+        ).toBeDefined();
+        expect(
+          example.query,
+          `${exampleName} should not put POST/PATCH/PUT data in query`
+        ).toBeUndefined();
+      }
+      if (method === "GET") {
+        expect(
+          example.body,
+          `${exampleName} GET should not send body`
+        ).toBeUndefined();
+      }
+    }
   });
 
   it("keeps specialized and Psyche playbooks explicit about active listening and route narrowing", async () => {
@@ -1061,6 +1119,9 @@ describe("forge onboarding contract", () => {
     );
     expect(playbookByFocus.get("workbench")?.askSequence.join(" ")).toMatch(
       /run summary, one node result, the latest node output, or the published output/i
+    );
+    expect(playbookByFocus.get("workbench")?.askSequence.join(" ")).toMatch(
+      /follow-up message in a saved flow chat[\s\S]*not treating it as a new run or note|saved flow[\s\S]*message should accomplish[\s\S]*new run or note/i
     );
 
     expect(psycheByFocus.get("psyche_value")?.askSequence.join(" ")).toMatch(
