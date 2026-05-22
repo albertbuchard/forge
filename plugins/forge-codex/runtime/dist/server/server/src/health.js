@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { inflateSync } from "node:zlib";
+import { inflateRawSync, inflateSync } from "node:zlib";
 import { z } from "zod";
 import { getDatabase, runInTransaction } from "./db.js";
 import { HttpError } from "./errors.js";
@@ -2754,9 +2754,7 @@ function parseDeflateBase64ChunkPayload(payloadJsonDeflateBase64, context) {
     }
     let decoded;
     try {
-        decoded = inflateSync(compressed, {
-            maxOutputLength: HEALTH_MOBILE_SYNC_CHUNK_MAX_BYTES + 1
-        });
+        decoded = inflateHealthSyncChunkPayload(compressed);
     }
     catch (error) {
         const errorCode = typeof error === "object" && error !== null && "code" in error
@@ -2804,6 +2802,21 @@ function parseDeflateBase64ChunkPayload(payloadJsonDeflateBase64, context) {
         compressedByteCount: compressed.length,
         mode: HEALTH_MOBILE_SYNC_COMPRESSED_CHUNK_PAYLOAD_ENCODING
     };
+}
+function inflateHealthSyncChunkPayload(compressed) {
+    const options = { maxOutputLength: HEALTH_MOBILE_SYNC_CHUNK_MAX_BYTES + 1 };
+    try {
+        return inflateSync(compressed, options);
+    }
+    catch (error) {
+        const errorCode = typeof error === "object" && error !== null && "code" in error
+            ? error.code
+            : undefined;
+        if (errorCode === "ERR_BUFFER_TOO_LARGE") {
+            throw error;
+        }
+        return inflateRawSync(compressed, options);
+    }
 }
 function resolveChunkWirePayload(parsed, syncSessionId, rawPayloadJson) {
     if (parsed.payloadJsonDeflateBase64) {
