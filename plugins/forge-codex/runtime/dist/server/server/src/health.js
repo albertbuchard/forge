@@ -901,10 +901,13 @@ function mapSleepRawLog(row) {
         createdAt: row.created_at
     };
 }
-function mapWorkoutSession(row) {
+function mapWorkoutSession(row, options = {}) {
     const provenance = safeJsonParse(row.provenance_json, {});
     const derived = safeJsonParse(row.derived_json, {});
-    const analytics = getStoredWorkoutAnalytics(row);
+    const includeAnalytics = options.includeAnalytics ?? true;
+    const analytics = includeAnalytics
+        ? getStoredWorkoutAnalytics(row)
+        : undefined;
     const presentation = buildWorkoutSessionPresentation({
         source: row.source,
         sourceType: row.source_type,
@@ -950,7 +953,7 @@ function mapWorkoutSession(row) {
         annotations: safeJsonParse(row.annotations_json, {}),
         provenance,
         derived,
-        analytics,
+        ...(analytics ? { analytics } : {}),
         generatedFromHabitId: row.generated_from_habit_id,
         generatedFromCheckInId: row.generated_from_check_in_id,
         reconciliationStatus: row.reconciliation_status,
@@ -1151,7 +1154,7 @@ export function listSleepSessions(userIds) {
     return listSleepRows(userIds).map(mapSleepSession);
 }
 export function listWorkoutSessions(userIds) {
-    return listWorkoutRows(userIds).map(mapWorkoutSession);
+    return listWorkoutRows(userIds).map((row) => mapWorkoutSession(row));
 }
 export function getSleepSessionById(sleepId) {
     ensureLegacyAppleSleepHistoryRepaired();
@@ -2928,7 +2931,7 @@ function mobileSyncSessionPairing(session) {
 function mobileSyncSessionMetadata(session) {
     return safeJsonParse(session.source_metadata_json, {});
 }
-function applyWorkoutSummaryChunkImmediately(session, workouts) {
+function applyWorkoutChunkImmediately(session, family, workouts) {
     if (workouts.length === 0) {
         return;
     }
@@ -2982,6 +2985,7 @@ function applyWorkoutSummaryChunkImmediately(session, workouts) {
             .run(device.sourceDevice, JSON.stringify({
             progressiveChunk: true,
             syncSessionId: session.id,
+            family,
             workouts: workouts.length
         }), workouts.length, createdCount, updatedCount, mergedCount, now, now, runId);
     });
@@ -3201,8 +3205,9 @@ export function ingestMobileHealthSyncChunk(syncSessionId, payload, rawPayloadJs
         serverChecksum,
         mode: wirePayload.mode
     }), now, now, now, now);
-    if (parsed.family === "workout_summaries") {
-        applyWorkoutSummaryChunkImmediately(session, wirePayload.payload.workouts ?? []);
+    if (parsed.family === "workout_summaries" ||
+        parsed.family === "workout_archive") {
+        applyWorkoutChunkImmediately(session, parsed.family, wirePayload.payload.workouts ?? []);
     }
     const progress = updateMobileSyncSessionProgress(syncSessionId);
     return {
@@ -3669,7 +3674,7 @@ export function getCompanionOverview(userIds) {
            WHERE user_id IN (${userIds.map(() => "?").join(",")})`
         : `SELECT COUNT(*) AS count FROM health_sleep_raw_logs`)
         .get(...(userIds ?? []));
-    const workouts = listWorkoutRows(userIds).map(mapWorkoutSession);
+    const workouts = listWorkoutRows(userIds).map((row) => mapWorkoutSession(row));
     const vitalsRows = listDailySummaryRows("vitals", userIds);
     const vitalsMetricEntries = vitalsRows.reduce((sum, row) => {
         const metrics = safeJsonParse(row.metrics_json, {});
@@ -3897,9 +3902,17 @@ function buildFitnessVitalsTrend(rows) {
     }));
 }
 export function getFitnessViewData(userIds) {
-    const workouts = listWorkoutRows(userIds).map(mapWorkoutSession);
+    const workoutRows = listWorkoutRows(userIds);
+    const recent = workoutRows
+        .slice(0, 40)
+        .map((row) => mapWorkoutSession(row, { includeAnalytics: true }));
+    const browserSessions = workoutRows
+        .slice(0, 2000)
+        .map((row, index) => mapWorkoutSession(row, { includeAnalytics: index < 40 }));
+    const analysisSessions = workoutRows
+        .slice(0, 500)
+        .map((row) => mapWorkoutSession(row, { includeAnalytics: true }));
     const vitalsTrend = buildFitnessVitalsTrend(listDailySummaryRows("vitals", userIds));
-    const recent = workouts.slice(0, 40);
     const weekly = recent.filter((session) => Date.now() - Date.parse(session.startedAt) <= 7 * 24 * 60 * 60 * 1000);
     const weeklyVolumeSeconds = weekly.reduce((sum, session) => sum + session.durationSeconds, 0);
     const exerciseMinutes = weekly.reduce((sum, session) => sum + (session.exerciseMinutes ?? session.durationSeconds / 60), 0);
@@ -4012,8 +4025,8 @@ export function getFitnessViewData(userIds) {
             energyKcal: metrics.energyKcal
         })),
         vitalsTrend,
-        analysisSessions: workouts,
-        sessions: recent
+        analysisSessions,
+        sessions: browserSessions
     };
 }
 function averageNullable(values) {
