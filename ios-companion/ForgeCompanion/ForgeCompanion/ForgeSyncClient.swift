@@ -376,6 +376,10 @@ struct ForgeSyncClient {
         let workouts: [CompanionSyncPayload.WorkoutSession]
     }
 
+    private struct WorkoutArchiveChunkPayload: Encodable {
+        let workouts: [CompanionSyncPayload.WorkoutSession]
+    }
+
     private struct WorkoutTimeSeriesChunkPayload: Encodable {
         struct Workout: Encodable {
             let externalUid: String
@@ -686,6 +690,7 @@ struct ForgeSyncClient {
             "sleep_segments",
             "sleep_raw_records",
             "workout_summaries",
+            "workout_archive",
             "workout_time_series",
             "workout_routes",
             "workout_tombstones",
@@ -827,6 +832,41 @@ struct ForgeSyncClient {
             onChunkUploaded: onChunkUploaded
         )
         return sequence
+    }
+
+    func uploadWorkoutArchiveHealthSyncChunks(
+        workouts: [CompanionSyncPayload.WorkoutSession],
+        uploadSession: HealthSyncUploadSession,
+        pairing: PairingPayload,
+        startingSequence: Int,
+        onChunkUploaded: HealthSyncChunkUploadHandler? = nil
+    ) async throws -> Int {
+        guard workouts.isEmpty == false else {
+            return startingSequence
+        }
+        guard uploadSession.acceptedFamilies.contains("workout_archive") else {
+            companionDebugLog(
+                "ForgeSyncClient",
+                "uploadWorkoutArchiveHealthSyncChunks fallback unsupported family=workout_archive uploadSession=\(uploadSession.syncSessionId)"
+            )
+            return try await uploadWorkoutHealthSyncChunks(
+                workouts: workouts,
+                uploadSession: uploadSession,
+                pairing: pairing,
+                startingSequence: startingSequence,
+                onChunkUploaded: onChunkUploaded
+            )
+        }
+        return try await uploadArrayHealthSyncChunks(
+            records: workouts,
+            uploadSession: uploadSession,
+            pairing: pairing,
+            family: "workout_archive",
+            startingSequence: startingSequence,
+            onChunkUploaded: onChunkUploaded
+        ) { records in
+            WorkoutArchiveChunkPayload(workouts: records)
+        }
     }
 
     func completeHealthSyncSession(

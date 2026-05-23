@@ -653,11 +653,13 @@ final class CompanionAppModel: ObservableObject {
             try? await Task.sleep(for: .milliseconds(350))
             await refreshHealthAccessStatus()
             refreshSyncState()
-            lastSyncMessage = healthAccessStatus == .fullAccess
-                ? "Health access granted"
-                : healthAccessStatus == .customAccess
-                    ? "Health access is partial"
-                    : "Health access not set"
+            if syncState != .syncing && activeSyncTask == nil {
+                lastSyncMessage = healthAccessStatus == .fullAccess
+                    ? "Health access granted"
+                    : healthAccessStatus == .customAccess
+                        ? "Health access is partial"
+                        : "Health access not set"
+            }
             if healthAccessStatus != .notSet {
                 healthPermissionPromptDeferred = false
                 UserDefaults.standard.set(false, forKey: StorageKeys.deferredHealthPrompt)
@@ -1715,10 +1717,12 @@ final class CompanionAppModel: ObservableObject {
                             self?.lastSyncMessage =
                                 "Uploading workouts \(progress.uploadedWorkouts) found so far"
                         }
-                        self?.lastHealthSyncChunkFamily = "workouts"
+                        self?.lastHealthSyncChunkFamily = session.acceptedFamilies.contains("workout_archive")
+                            ? "workout_archive"
+                            : "workouts"
                         self?.lastHealthSyncPayloadBytes = try? JSONEncoder().encode(workouts).count
                     }
-                    sequence = try await syncClient.uploadWorkoutHealthSyncChunks(
+                    sequence = try await syncClient.uploadWorkoutArchiveHealthSyncChunks(
                         workouts: workouts,
                         uploadSession: session,
                         pairing: pairing,
@@ -1746,17 +1750,22 @@ final class CompanionAppModel: ObservableObject {
             }
 
             lastSyncMessage = "Finalizing in Forge"
+            var expectedCounts = [
+                "sleep_nights": buildResult.payload.sleepNights.count,
+                "sleep_segments": buildResult.payload.sleepSegments.count,
+                "sleep_raw_records": buildResult.payload.sleepRawRecords.count
+            ]
+            if session.acceptedFamilies.contains("workout_archive") {
+                expectedCounts["workout_archive"] = workoutStats.workouts
+            } else {
+                expectedCounts["workout_summaries"] = workoutStats.workouts
+                expectedCounts["workout_time_series"] = workoutStats.rawTimeSeriesDatapoints
+                expectedCounts["workout_routes"] = workoutStats.routePoints
+            }
             let receipt = try await syncClient.completeHealthSyncSession(
                 uploadSession: session,
                 pairing: pairing,
-                expectedCounts: [
-                    "workout_summaries": workoutStats.workouts,
-                    "workout_time_series": workoutStats.rawTimeSeriesDatapoints,
-                    "workout_routes": workoutStats.routePoints,
-                    "sleep_nights": buildResult.payload.sleepNights.count,
-                    "sleep_segments": buildResult.payload.sleepSegments.count,
-                    "sleep_raw_records": buildResult.payload.sleepRawRecords.count
-                ]
+                expectedCounts: expectedCounts
             )
             activeHealthSyncSessionId = nil
             UserDefaults.standard.removeObject(forKey: StorageKeys.activeHealthSyncSessionId)

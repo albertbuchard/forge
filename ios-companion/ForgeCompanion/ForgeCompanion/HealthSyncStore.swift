@@ -648,7 +648,7 @@ actor HealthSyncStore {
             return try await streamWorkoutSessionBatchesByWindow(
                 startDate: workoutStartDate,
                 endDate: endDate,
-                batchSize: min(max(1, batchSize), 25),
+                batchSize: min(max(1, batchSize), 8),
                 onBatch: onBatch
             )
         }

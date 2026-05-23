@@ -3546,6 +3546,144 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
   }
 });
 
+test("mobile health chunked sync accepts compressed workout archive chunks", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-health-workout-archive-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const pairingResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: { userId: "user_operator" }
+    });
+    assert.equal(pairingResponse.statusCode, 201);
+    const qrPayload = (
+      pairingResponse.json() as {
+        qrPayload: { sessionId: string; pairingToken: string };
+      }
+    ).qrPayload;
+
+    const startResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync-sessions",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        device: {
+          name: "Omar iPhone",
+          platform: "ios",
+          appVersion: "1.0",
+          sourceDevice: "iPhone"
+        },
+        permissions: {
+          healthKitAuthorized: true,
+          backgroundRefreshEnabled: true,
+          motionReady: false,
+          locationReady: false,
+          screenTimeReady: false
+        },
+        requestedFamilies: ["workout_archive"]
+      }
+    });
+    assert.equal(startResponse.statusCode, 200);
+    const upload = (startResponse.json() as {
+      upload: { syncSessionId: string; acceptedFamilies: string[] };
+    }).upload;
+    assert.ok(upload.acceptedFamilies.includes("workout_archive"));
+
+    const archivePayload = {
+      workouts: [
+        {
+          externalUid: "hk-workout-archive-1",
+          workoutType: "running",
+          startedAt: "2026-04-07T07:15:00.000Z",
+          endedAt: "2026-04-07T08:00:00.000Z",
+          activeEnergyKcal: 320,
+          totalEnergyKcal: 360,
+          distanceMeters: 6400,
+          stepCount: 7200,
+          exerciseMinutes: 45,
+          averageHeartRate: 142,
+          maxHeartRate: 171,
+          sourceDevice: "Apple Watch",
+          sourceSystem: "apple_health",
+          timeSeriesSamples: [
+            {
+              sourceSampleUid: "archive-hr-1",
+              seriesIndex: 0,
+              metricKey: "heart_rate",
+              label: "Heart Rate",
+              category: "heart",
+              unit: "count/min",
+              value: 142,
+              startedAt: "2026-04-07T07:20:00.000Z",
+              endedAt: "2026-04-07T07:20:05.000Z",
+              sourceDevice: "Apple Watch"
+            }
+          ],
+          routePoints: [
+            {
+              sourceRouteUid: "archive-route-1",
+              pointIndex: 0,
+              recordedAt: "2026-04-07T07:20:00.000Z",
+              latitude: 46.2044,
+              longitude: 6.1432
+            }
+          ],
+          links: [],
+          annotations: {}
+        }
+      ]
+    };
+    const compressedPayload = healthChunkPayloadJsonDeflateBase64(archivePayload);
+    const chunkResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/mobile/healthkit/sync-sessions/${upload.syncSessionId}/chunks`,
+      payload: {
+        chunkId: "chunk-workout-archive-1",
+        sequence: 0,
+        family: "workout_archive",
+        recordCount: 1,
+        ...compressedPayload
+      }
+    });
+    assert.equal(chunkResponse.statusCode, 200, chunkResponse.body);
+
+    const completeResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/mobile/healthkit/sync-sessions/${upload.syncSessionId}/complete`,
+      payload: {
+        expectedCounts: { workout_archive: 1 }
+      }
+    });
+    assert.equal(completeResponse.statusCode, 200, completeResponse.body);
+
+    const fitnessResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/health/fitness"
+    });
+    assert.equal(fitnessResponse.statusCode, 200);
+    const session = (
+      fitnessResponse.json() as {
+        fitness: {
+          sessions: Array<{ analytics?: { dataQuality: { heartRateSampleCount: number }; routeSummary: { pointCount: number } } }>;
+        };
+      }
+    ).fitness.sessions[0];
+    assert.equal(session?.analytics?.dataQuality.heartRateSampleCount, 1);
+    assert.equal(session?.analytics?.routeSummary.pointCount, 1);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("mobile health chunked sync rejects incomplete expected counts without advancing pairing sync state", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-health-incomplete-chunked-"));
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
