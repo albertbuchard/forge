@@ -85,10 +85,15 @@ actor HealthSyncStore {
         let value: Double
     }
 
+    struct WorkoutEvidenceBundle {
+        let timeSeriesByWorkoutUid: [String: [CompanionSyncPayload.WorkoutTimeSeriesSample]]
+        let routePointsByWorkoutUid: [String: [CompanionSyncPayload.WorkoutRoutePoint]]
+    }
+
     private let store = HKHealthStore()
     private let syncWindowDays = 21
     private let incrementalLookbackHours = 72
-    private let fullWorkoutBackfillBatchSize = 24
+    private let fullWorkoutBackfillBatchSize = 20
     private let workoutMappingConcurrencyLimit = 4
     private let sleepSessionGap: TimeInterval = 4 * 60 * 60
     private let sleepInferenceGap: TimeInterval = 15 * 60
@@ -650,7 +655,7 @@ actor HealthSyncStore {
             return try await streamWorkoutSessionBatchesByWindow(
                 startDate: workoutStartDate,
                 endDate: endDate,
-                batchSize: max(fullWorkoutBackfillBatchSize, batchSize),
+                batchSize: min(max(1, batchSize), fullWorkoutBackfillBatchSize),
                 onBatch: onBatch
             )
         }
@@ -994,30 +999,24 @@ actor HealthSyncStore {
         guard workouts.isEmpty == false else {
             return []
         }
-        let limit = max(1, concurrencyLimit)
-        var mapped: [CompanionSyncPayload.WorkoutSession] = []
-        mapped.reserveCapacity(workouts.count)
-        var index = 0
-        while index < workouts.count {
-            let upperBound = min(workouts.count, index + limit)
-            let window = Array(workouts[index..<upperBound])
-            let windowSessions = try await withThrowingTaskGroup(of: CompanionSyncPayload.WorkoutSession.self) { group in
-                for workout in window {
-                    group.addTask {
-                        try await self.mapWorkoutSession(workout)
-                    }
-                }
-
-                var sessions: [CompanionSyncPayload.WorkoutSession] = []
-                for try await session in group {
-                    sessions.append(session)
-                }
-                return sessions
-            }
-            mapped.append(contentsOf: windowSessions)
-            index = upperBound
+        companionDebugLog(
+            "HealthSyncStore",
+            "mapWorkoutSessionsBulk start workouts=\(workouts.count) concurrencyHint=\(concurrencyLimit)"
+        )
+        let summaries = workouts.map(mapWorkoutSummary)
+        let evidence = try await fetchWorkoutEvidenceForBatch(workouts)
+        let sessions = summaries.map { summary in
+            workoutSessionWithEvidence(
+                summary,
+                timeSeriesSamples: evidence.timeSeriesByWorkoutUid[summary.externalUid] ?? [],
+                routePoints: evidence.routePointsByWorkoutUid[summary.externalUid] ?? []
+            )
         }
-        return mapped
+        companionDebugLog(
+            "HealthSyncStore",
+            "mapWorkoutSessionsBulk success workouts=\(sessions.count) samples=\(sessions.reduce(0) { $0 + $1.timeSeriesSamples.count }) routePoints=\(sessions.reduce(0) { $0 + $1.routePoints.count })"
+        )
+        return sessions
     }
 
     private func fetchVitalsPayload(
@@ -1092,51 +1091,12 @@ actor HealthSyncStore {
         return .init(daySummaries: daySummaries)
     }
 
-    private func mapWorkoutSession(_ workout: HKWorkout) async throws -> CompanionSyncPayload.WorkoutSession {
+    private func mapWorkoutSummary(_ workout: HKWorkout) -> CompanionSyncPayload.WorkoutSession {
         companionDebugLog(
             "HealthSyncStore",
-            "mapWorkoutSession start id=\(workout.uuid.uuidString.lowercased()) type=\(workout.workoutActivityType.rawValue)"
+            "mapWorkoutSummary id=\(workout.uuid.uuidString.lowercased()) type=\(workout.workoutActivityType.rawValue)"
         )
         let activityDescriptor = workoutActivityDescriptor(for: workout.workoutActivityType)
-        async let averageHeartRate = quantityStatistic(
-            identifier: .heartRate,
-            unit: HKUnit.count().unitDivided(by: .minute()),
-            startDate: workout.startDate,
-            endDate: workout.endDate,
-            option: .discreteAverage
-        )
-        async let maxHeartRate = quantityStatistic(
-            identifier: .heartRate,
-            unit: HKUnit.count().unitDivided(by: .minute()),
-            startDate: workout.startDate,
-            endDate: workout.endDate,
-            option: .discreteMax
-        )
-        async let minHeartRate = quantityStatistic(
-            identifier: .heartRate,
-            unit: HKUnit.count().unitDivided(by: .minute()),
-            startDate: workout.startDate,
-            endDate: workout.endDate,
-            option: .discreteMin
-        )
-        async let stepCount = quantityStatistic(
-            identifier: .stepCount,
-            unit: HKUnit.count(),
-            startDate: workout.startDate,
-            endDate: workout.endDate,
-            option: .cumulativeSum
-        )
-        async let activeEnergy = quantityStatistic(
-            identifier: .activeEnergyBurned,
-            unit: HKUnit.kilocalorie(),
-            startDate: workout.startDate,
-            endDate: workout.endDate,
-            option: .cumulativeSum
-        )
-        async let heartRateSamples = fetchWorkoutHeartRateSamples(workout)
-        async let workoutMetricSamples = fetchWorkoutMetricSamples(workout)
-        async let routePoints = fetchWorkoutRoutePoints(workout)
-
         let totalEnergy = safeDoubleValue(
             workout.totalEnergyBurned,
             for: .kilocalorie(),
@@ -1150,35 +1110,16 @@ actor HealthSyncStore {
         let sourceDevice = workout.device?.name ?? workout.sourceRevision.source.name
         let sourceBundleIdentifier = workout.sourceRevision.source.bundleIdentifier
         let sourceProductType = workout.sourceRevision.productType
-        let resolvedStepCount = try await stepCount
-        let resolvedAverageHeartRate = try await averageHeartRate
-        let resolvedMaxHeartRate = try await maxHeartRate
-        let resolvedMinHeartRate = try await minHeartRate
-        let resolvedActiveEnergy = try await activeEnergy
-        let resolvedHeartRateSamples = try await heartRateSamples
-        let resolvedWorkoutMetricSamples = try await workoutMetricSamples
-        let resolvedRoutePoints = try await routePoints
-        let resolvedTimeSeriesSamples = (
-            resolvedHeartRateSamples + resolvedWorkoutMetricSamples
-        ).sorted { left, right in
-            left.startedAt == right.startedAt
-                ? left.metricKey < right.metricKey
-                : left.startedAt < right.startedAt
-        }
         let metadataProjection = serializeWorkoutMetadata(workout.metadata ?? [:])
-        let captureFlags = workoutCaptureFlags(
-            heartRateSamples: resolvedHeartRateSamples,
-            routePoints: resolvedRoutePoints
-        )
         let details = CompanionSyncPayload.WorkoutDetails(
             sourceSystem: "apple_health",
             metrics: buildWorkoutMetrics(
                 workout: workout,
-                averageHeartRate: resolvedAverageHeartRate,
-                maxHeartRate: resolvedMaxHeartRate,
-                minHeartRate: resolvedMinHeartRate,
-                stepCount: resolvedStepCount,
-                activeEnergyKcal: resolvedActiveEnergy,
+                averageHeartRate: nil,
+                maxHeartRate: nil,
+                minHeartRate: nil,
+                stepCount: nil,
+                activeEnergyKcal: totalEnergy,
                 totalEnergyKcal: totalEnergy,
                 distanceMeters: distance,
                 metadataMetrics: metadataProjection.metrics
@@ -1198,32 +1139,29 @@ actor HealthSyncStore {
             details: details,
             startedAt: isoString(workout.startDate),
             endedAt: isoString(workout.endDate),
-            activeEnergyKcal: resolvedActiveEnergy,
+            activeEnergyKcal: totalEnergy,
             totalEnergyKcal: totalEnergy,
             distanceMeters: distance,
-            stepCount: resolvedStepCount.map { Int($0.rounded()) },
+            stepCount: nil,
             exerciseMinutes: workout.duration / 60,
-            averageHeartRate: resolvedAverageHeartRate,
-            maxHeartRate: resolvedMaxHeartRate,
+            averageHeartRate: nil,
+            maxHeartRate: nil,
             sourceDevice: sourceDevice,
-            timeSeriesSamples: resolvedTimeSeriesSamples,
-            routePoints: resolvedRoutePoints,
+            timeSeriesSamples: [],
+            routePoints: [],
             captureQuality: .init(
-                status: captureFlags.status,
-                flags: captureFlags.flags,
-                heartRateSamples: resolvedHeartRateSamples.count,
-                routePoints: resolvedRoutePoints.count,
-                associatedSampleQueryUsed: captureFlags.associatedSampleQueryUsed,
-                fallbackTimeWindowUsed: captureFlags.fallbackTimeWindowUsed,
+                status: "summary_exported",
+                flags: ["server_side_evidence_derivation"],
+                heartRateSamples: 0,
+                routePoints: 0,
+                associatedSampleQueryUsed: false,
+                fallbackTimeWindowUsed: false,
                 condensedSeriesExpanded: false
             ),
             syncCursor: [
                 "workoutImportedAt": .string(isoString(Date())),
-                "rawEvidenceVersion": .string("healthkit-workout-evidence-v2"),
-                "timeSeriesSampleCount": .number(Double(resolvedTimeSeriesSamples.count)),
-                "metricFamilyCount": .number(
-                    Double(Set(resolvedTimeSeriesSamples.map(\.metricKey)).count)
-                )
+                "rawEvidenceVersion": .string("healthkit-workout-raw-bulk-v3"),
+                "phoneMappingMode": .string("summary_plus_bulk_evidence")
             ],
             links: [],
             annotations: .init(
@@ -1236,11 +1174,392 @@ actor HealthSyncStore {
                 tags: []
             )
         )
+        return session
+    }
+
+    private func workoutSessionWithEvidence(
+        _ session: CompanionSyncPayload.WorkoutSession,
+        timeSeriesSamples: [CompanionSyncPayload.WorkoutTimeSeriesSample],
+        routePoints: [CompanionSyncPayload.WorkoutRoutePoint]
+    ) -> CompanionSyncPayload.WorkoutSession {
+        let sortedSamples = timeSeriesSamples.sorted { left, right in
+            left.startedAt == right.startedAt
+                ? left.metricKey < right.metricKey
+                : left.startedAt < right.startedAt
+        }
+        let sortedRoutePoints = routePoints.sorted { left, right in
+            if left.recordedAt == right.recordedAt {
+                return left.pointIndex < right.pointIndex
+            }
+            return left.recordedAt < right.recordedAt
+        }
+        let heartRateSamples = sortedSamples.filter { $0.metricKey == "heart_rate" }
+        let captureFlags = workoutCaptureFlags(
+            heartRateSamples: heartRateSamples,
+            routePoints: sortedRoutePoints
+        )
+        var syncCursor = session.syncCursor
+        syncCursor["timeSeriesSampleCount"] = .number(Double(sortedSamples.count))
+        syncCursor["metricFamilyCount"] = .number(Double(Set(sortedSamples.map(\.metricKey)).count))
+        syncCursor["routePointCount"] = .number(Double(sortedRoutePoints.count))
+        return CompanionSyncPayload.WorkoutSession(
+            externalUid: session.externalUid,
+            workoutType: session.workoutType,
+            sourceSystem: session.sourceSystem,
+            sourceBundleIdentifier: session.sourceBundleIdentifier,
+            sourceProductType: session.sourceProductType,
+            activity: session.activity,
+            details: session.details,
+            startedAt: session.startedAt,
+            endedAt: session.endedAt,
+            activeEnergyKcal: session.activeEnergyKcal,
+            totalEnergyKcal: session.totalEnergyKcal,
+            distanceMeters: session.distanceMeters,
+            stepCount: session.stepCount,
+            exerciseMinutes: session.exerciseMinutes,
+            averageHeartRate: session.averageHeartRate,
+            maxHeartRate: session.maxHeartRate,
+            sourceDevice: session.sourceDevice,
+            timeSeriesSamples: sortedSamples,
+            routePoints: sortedRoutePoints,
+            captureQuality: .init(
+                status: captureFlags.status,
+                flags: captureFlags.flags,
+                heartRateSamples: heartRateSamples.count,
+                routePoints: sortedRoutePoints.count,
+                associatedSampleQueryUsed: false,
+                fallbackTimeWindowUsed: captureFlags.fallbackTimeWindowUsed,
+                condensedSeriesExpanded: false
+            ),
+            syncCursor: syncCursor,
+            links: session.links,
+            annotations: session.annotations
+        )
+    }
+
+    private func fetchWorkoutEvidenceForBatch(_ workouts: [HKWorkout]) async throws -> WorkoutEvidenceBundle {
+        guard workouts.isEmpty == false else {
+            return WorkoutEvidenceBundle(timeSeriesByWorkoutUid: [:], routePointsByWorkoutUid: [:])
+        }
+        let startDate = workouts.map(\.startDate).min() ?? Date()
+        let endDate = workouts.map(\.endDate).max() ?? Date()
         companionDebugLog(
             "HealthSyncStore",
-            "mapWorkoutSession success id=\(session.externalUid) type=\(session.workoutType) steps=\(session.stepCount.map(String.init) ?? "nil")"
+            "fetchWorkoutEvidenceForBatch start workouts=\(workouts.count) start=\(isoString(startDate)) end=\(isoString(endDate))"
         )
-        return session
+        async let heartRateSamples = fetchWorkoutHeartRateSamplesByDateRange(
+            startDate: startDate,
+            endDate: endDate,
+            workouts: workouts
+        )
+        async let metricSamples = fetchWorkoutMetricSamplesByDateRange(
+            startDate: startDate,
+            endDate: endDate,
+            workouts: workouts
+        )
+        async let routePoints = fetchWorkoutRoutePointsByDateRange(
+            startDate: startDate,
+            endDate: endDate,
+            workouts: workouts
+        )
+        let resolvedHeartRateSamples = try await heartRateSamples
+        let resolvedMetricSamples = try await metricSamples
+        let allSamples = resolvedHeartRateSamples + resolvedMetricSamples
+        let resolvedRoutePoints = try await routePoints
+        let groupedSamples = Dictionary(grouping: allSamples) { sample in
+            if case let .string(workoutUid)? = sample.metadata["workoutUid"] {
+                return workoutUid
+            }
+            return ""
+        }.filter { $0.key.isEmpty == false }
+        let groupedRoutePoints = Dictionary(grouping: resolvedRoutePoints) { point in
+            if case let .string(workoutUid)? = point.provenance["workoutUid"] {
+                return workoutUid
+            }
+            return ""
+        }.filter { $0.key.isEmpty == false }
+        companionDebugLog(
+            "HealthSyncStore",
+            "fetchWorkoutEvidenceForBatch success samples=\(allSamples.count) routePoints=\(resolvedRoutePoints.count)"
+        )
+        return WorkoutEvidenceBundle(
+            timeSeriesByWorkoutUid: groupedSamples,
+            routePointsByWorkoutUid: groupedRoutePoints
+        )
+    }
+
+    private func fetchWorkoutHeartRateSamplesByDateRange(
+        startDate: Date,
+        endDate: Date,
+        workouts: [HKWorkout]
+    ) async throws -> [CompanionSyncPayload.WorkoutTimeSeriesSample] {
+        guard let heartRateType = HKQuantityType.quantityType(forIdentifier: .heartRate) else {
+            return []
+        }
+        return try await queryWorkoutHeartRateSamplesByDateRange(
+            type: heartRateType,
+            startDate: startDate,
+            endDate: endDate,
+            workouts: workouts
+        )
+    }
+
+    private func queryWorkoutHeartRateSamplesByDateRange(
+        type: HKQuantityType,
+        startDate: Date,
+        endDate: Date,
+        workouts: [HKWorkout]
+    ) async throws -> [CompanionSyncPayload.WorkoutTimeSeriesSample] {
+        try await withCheckedThrowingContinuation { continuation in
+            let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: [])
+            let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+            let query = HKSampleQuery(
+                sampleType: type,
+                predicate: predicate,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: [sort]
+            ) { _, samples, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                var seriesIndexesByWorkoutUid: [String: Int] = [:]
+                let mapped = (samples as? [HKQuantitySample] ?? []).compactMap {
+                    sample -> CompanionSyncPayload.WorkoutTimeSeriesSample? in
+                    guard let workoutUid = self.bestWorkoutUid(
+                        forSampleStart: sample.startDate,
+                        endDate: sample.endDate,
+                        workouts: workouts
+                    ) else {
+                        return nil
+                    }
+                    let bpm = self.safeDoubleValue(
+                        sample.quantity,
+                        for: HKUnit.count().unitDivided(by: .minute()),
+                        context: "workout.raw_hr.bulk_window"
+                    )
+                    guard let bpm else {
+                        return nil
+                    }
+                    let seriesIndex = seriesIndexesByWorkoutUid[workoutUid, default: 0]
+                    seriesIndexesByWorkoutUid[workoutUid] = seriesIndex + 1
+                    let sourceDevice = sample.device?.name ?? sample.sourceRevision.source.name
+                    return CompanionSyncPayload.WorkoutTimeSeriesSample(
+                        sourceSampleUid: sample.uuid.uuidString.lowercased(),
+                        seriesIndex: seriesIndex,
+                        metricKey: "heart_rate",
+                        label: "Heart rate",
+                        category: "cardio",
+                        unit: "bpm",
+                        value: bpm,
+                        startedAt: Self.isoStringNonisolated(sample.startDate),
+                        endedAt: Self.isoStringNonisolated(sample.endDate),
+                        sourceDevice: sourceDevice,
+                        sourceBundleIdentifier: sample.sourceRevision.source.bundleIdentifier,
+                        sourceProductType: sample.sourceRevision.productType,
+                        captureMethod: "bulk_time_window",
+                        qualityFlags: ["bulk_time_window_correlated"],
+                        metadata: [
+                            "workoutUid": .string(workoutUid)
+                        ],
+                        provenance: [
+                            "sourceSystem": .string("apple_health"),
+                            "quantityIdentifier": .string(HKQuantityTypeIdentifier.heartRate.rawValue)
+                        ]
+                    )
+                }
+                continuation.resume(returning: mapped)
+            }
+            self.store.execute(query)
+        }
+    }
+
+    private func fetchWorkoutMetricSamplesByDateRange(
+        startDate: Date,
+        endDate: Date,
+        workouts: [HKWorkout]
+    ) async throws -> [CompanionSyncPayload.WorkoutTimeSeriesSample] {
+        var samples: [CompanionSyncPayload.WorkoutTimeSeriesSample] = []
+        for definition in workoutQuantityDefinitions {
+            guard let quantityType = HKQuantityType.quantityType(forIdentifier: definition.identifier) else {
+                continue
+            }
+            samples.append(
+                contentsOf: try await queryWorkoutQuantitySamplesByDateRange(
+                    type: quantityType,
+                    definition: definition,
+                    startDate: startDate,
+                    endDate: endDate,
+                    workouts: workouts
+                )
+            )
+        }
+        return samples
+    }
+
+    private func queryWorkoutQuantitySamplesByDateRange(
+        type: HKQuantityType,
+        definition: WorkoutQuantityDefinition,
+        startDate: Date,
+        endDate: Date,
+        workouts: [HKWorkout]
+    ) async throws -> [CompanionSyncPayload.WorkoutTimeSeriesSample] {
+        try await withCheckedThrowingContinuation {
+            (continuation: CheckedContinuation<[CompanionSyncPayload.WorkoutTimeSeriesSample], Error>) in
+            let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: [])
+            let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+            let query = HKSampleQuery(
+                sampleType: type,
+                predicate: predicate,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: [sort]
+            ) { _, samples, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                var seriesIndexesByWorkoutUid: [String: Int] = [:]
+                let mapped = (samples as? [HKQuantitySample] ?? []).compactMap {
+                    sample -> CompanionSyncPayload.WorkoutTimeSeriesSample? in
+                    guard let workoutUid = self.bestWorkoutUid(
+                        forSampleStart: sample.startDate,
+                        endDate: sample.endDate,
+                        workouts: workouts
+                    ) else {
+                        return nil
+                    }
+                    let value = self.safeDoubleValue(
+                        sample.quantity,
+                        for: definition.unit,
+                        context: "workout.raw_metric.\(definition.key).bulk_window"
+                    )
+                    guard let value else {
+                        return nil
+                    }
+                    let seriesIndex = seriesIndexesByWorkoutUid[workoutUid, default: 0]
+                    seriesIndexesByWorkoutUid[workoutUid] = seriesIndex + 1
+                    let sourceDevice = sample.device?.name ?? sample.sourceRevision.source.name
+                    return CompanionSyncPayload.WorkoutTimeSeriesSample(
+                        sourceSampleUid: sample.uuid.uuidString.lowercased(),
+                        seriesIndex: seriesIndex,
+                        metricKey: definition.key,
+                        label: definition.label,
+                        category: definition.category,
+                        unit: definition.displayUnit,
+                        value: value,
+                        startedAt: Self.isoStringNonisolated(sample.startDate),
+                        endedAt: Self.isoStringNonisolated(sample.endDate),
+                        sourceDevice: sourceDevice,
+                        sourceBundleIdentifier: sample.sourceRevision.source.bundleIdentifier,
+                        sourceProductType: sample.sourceRevision.productType,
+                        captureMethod: "bulk_time_window",
+                        qualityFlags: ["bulk_time_window_correlated"],
+                        metadata: [
+                            "workoutUid": .string(workoutUid)
+                        ],
+                        provenance: [
+                            "sourceSystem": .string("apple_health"),
+                            "quantityIdentifier": .string(definition.identifier.rawValue)
+                        ]
+                    )
+                }
+                continuation.resume(returning: mapped)
+            }
+            self.store.execute(query)
+        }
+    }
+
+    private func fetchWorkoutRoutePointsByDateRange(
+        startDate: Date,
+        endDate: Date,
+        workouts: [HKWorkout]
+    ) async throws -> [CompanionSyncPayload.WorkoutRoutePoint] {
+        let routeType = HKSeriesType.workoutRoute()
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: [])
+        let routes: [HKWorkoutRoute] = try await withCheckedThrowingContinuation {
+            (continuation: CheckedContinuation<[HKWorkoutRoute], Error>) in
+            let query = HKSampleQuery(
+                sampleType: routeType,
+                predicate: predicate,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: [
+                    NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+                ]
+            ) { _, samples, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                continuation.resume(returning: samples as? [HKWorkoutRoute] ?? [])
+            }
+            self.store.execute(query)
+        }
+        var points: [CompanionSyncPayload.WorkoutRoutePoint] = []
+        var pointIndexesByWorkoutUid: [String: Int] = [:]
+        for route in routes {
+            guard let workoutUid = bestWorkoutUid(
+                forSampleStart: route.startDate,
+                endDate: route.endDate,
+                workouts: workouts
+            ) else {
+                continue
+            }
+            let locations = try await queryRouteLocations(route)
+            let routeUid = route.uuid.uuidString.lowercased()
+            for location in locations {
+                let pointIndex = pointIndexesByWorkoutUid[workoutUid, default: 0]
+                pointIndexesByWorkoutUid[workoutUid] = pointIndex + 1
+                points.append(
+                    CompanionSyncPayload.WorkoutRoutePoint(
+                        sourceRouteUid: routeUid,
+                        pointIndex: pointIndex,
+                        recordedAt: isoString(location.timestamp),
+                        latitude: location.coordinate.latitude,
+                        longitude: location.coordinate.longitude,
+                        altitudeMeters: location.verticalAccuracy >= 0 ? location.altitude : nil,
+                        horizontalAccuracyMeters: location.horizontalAccuracy >= 0
+                            ? location.horizontalAccuracy
+                            : nil,
+                        verticalAccuracyMeters: location.verticalAccuracy >= 0
+                            ? location.verticalAccuracy
+                            : nil,
+                        speedMps: location.speed >= 0 ? location.speed : nil,
+                        courseDegrees: location.course >= 0 ? location.course : nil,
+                        metadata: [:],
+                        provenance: [
+                            "sourceSystem": .string("apple_health"),
+                            "workoutUid": .string(workoutUid),
+                            "captureMethod": .string("bulk_route_window")
+                        ]
+                    )
+                )
+            }
+        }
+        return points
+    }
+
+    private nonisolated func bestWorkoutUid(
+        forSampleStart startDate: Date,
+        endDate: Date,
+        workouts: [HKWorkout]
+    ) -> String? {
+        var bestWorkout: HKWorkout?
+        var bestOverlap: TimeInterval = 0
+        for workout in workouts {
+            let overlapStart = max(startDate, workout.startDate)
+            let overlapEnd = min(endDate, workout.endDate)
+            let overlap = overlapEnd.timeIntervalSince(overlapStart)
+            if overlap > bestOverlap {
+                bestOverlap = overlap
+                bestWorkout = workout
+            }
+        }
+        if let bestWorkout, bestOverlap > 0 {
+            return bestWorkout.uuid.uuidString.lowercased()
+        }
+        return workouts.first { workout in
+            startDate >= workout.startDate && startDate <= workout.endDate
+        }?.uuid.uuidString.lowercased()
     }
 
     private func fetchWorkoutHeartRateSamples(
