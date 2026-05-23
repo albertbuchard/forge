@@ -276,6 +276,7 @@ const mobileHealthSyncFamilySchema = z.enum([
     "sleep_segments",
     "sleep_raw_records",
     "workout_summaries",
+    "workout_archive",
     "workout_time_series",
     "workout_routes",
     "workout_tombstones",
@@ -2852,6 +2853,12 @@ function summarizeChunkPayload(family, payload) {
             return { sleepRawRecords: payload.sleepRawRecords?.length ?? 0 };
         case "workout_summaries":
             return { workouts: payload.workouts?.length ?? 0 };
+        case "workout_archive":
+            return {
+                workouts: payload.workouts?.length ?? 0,
+                samples: payload.workouts?.reduce((sum, workout) => sum + workout.timeSeriesSamples.length, 0) ?? 0,
+                routePoints: payload.workouts?.reduce((sum, workout) => sum + workout.routePoints.length, 0) ?? 0
+            };
         case "workout_time_series":
             return {
                 workouts: payload.workoutTimeSeries?.length ?? 0,
