@@ -1,11 +1,12 @@
-Forge Companion 1.0.50 fixes HealthKit workout backfill getting trapped on the
-old slow upload path.
+Forge Companion 1.0.51 improves large HealthKit workout backfills.
 
-If the phone resumes a stale sync session that does not support compressed
-workout archives, Forge now discards that stale session and starts a fresh one
-instead of falling back to separate summary, time-series, and route uploads.
+Workout archive chunks are now processed by Forge as they arrive, so synced
+workouts can appear in the Sports browser before the full upload session
+finishes.
 
-Workout backfills now send much larger batches, map more workouts in parallel,
-and keep the compressed archive path as the required upload mode for workout
-history. The app also registers a background processing task with network
-connectivity so iOS has the correct long-running background contract for sync.
+The Sports browser now receives a lightweight workout list instead of being
+limited to the 40-row analytics summary window.
+
+Background sync scheduling now logs whether iOS accepted the refresh and
+processing requests, and unfinished HealthKit upload sessions are prioritized
+for resume when iOS grants background execution.

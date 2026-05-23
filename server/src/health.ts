@@ -1480,13 +1480,19 @@ type MappedSleepSession = ReturnType<typeof mapSleepSession>;
 type MappedSleepSegment = ReturnType<typeof mapSleepSegment>;
 type MappedSleepSourceRecord = ReturnType<typeof mapSleepSourceRecord>;
 
-function mapWorkoutSession(row: WorkoutSessionRow) {
+function mapWorkoutSession(
+  row: WorkoutSessionRow,
+  options: { includeAnalytics?: boolean } = {}
+) {
   const provenance = safeJsonParse<Record<string, unknown>>(
     row.provenance_json,
     {}
   );
   const derived = safeJsonParse<Record<string, unknown>>(row.derived_json, {});
-  const analytics = getStoredWorkoutAnalytics(row);
+  const includeAnalytics = options.includeAnalytics ?? true;
+  const analytics = includeAnalytics
+    ? getStoredWorkoutAnalytics(row)
+    : undefined;
   const presentation = buildWorkoutSessionPresentation({
     source: row.source,
     sourceType: row.source_type,
@@ -1535,7 +1541,7 @@ function mapWorkoutSession(row: WorkoutSessionRow) {
     annotations: safeJsonParse(row.annotations_json, {}),
     provenance,
     derived,
-    analytics,
+    ...(analytics ? { analytics } : {}),
     generatedFromHabitId: row.generated_from_habit_id,
     generatedFromCheckInId: row.generated_from_check_in_id,
     reconciliationStatus: row.reconciliation_status,
@@ -1786,7 +1792,7 @@ export function listSleepSessions(userIds?: string[]) {
 }
 
 export function listWorkoutSessions(userIds?: string[]) {
-  return listWorkoutRows(userIds).map(mapWorkoutSession);
+  return listWorkoutRows(userIds).map((row) => mapWorkoutSession(row));
 }
 
 export function getSleepSessionById(sleepId: string) {
@@ -4685,8 +4691,9 @@ function mobileSyncSessionMetadata(session: MobileSyncSessionRow) {
   }>(session.source_metadata_json, {});
 }
 
-function applyWorkoutSummaryChunkImmediately(
+function applyWorkoutChunkImmediately(
   session: MobileSyncSessionRow,
+  family: "workout_summaries" | "workout_archive",
   workouts: z.infer<typeof mobileHealthSyncSchema>["workouts"]
 ) {
   if (workouts.length === 0) {
@@ -4768,6 +4775,7 @@ function applyWorkoutSummaryChunkImmediately(
         JSON.stringify({
           progressiveChunk: true,
           syncSessionId: session.id,
+          family,
           workouts: workouts.length
         }),
         workouts.length,
@@ -5111,9 +5119,13 @@ export function ingestMobileHealthSyncChunk(
       now,
       now
     );
-  if (parsed.family === "workout_summaries") {
-    applyWorkoutSummaryChunkImmediately(
+  if (
+    parsed.family === "workout_summaries" ||
+    parsed.family === "workout_archive"
+  ) {
+    applyWorkoutChunkImmediately(
       session,
+      parsed.family,
       wirePayload.payload.workouts ?? []
     );
   }
@@ -5769,7 +5781,9 @@ export function getCompanionOverview(userIds?: string[]) {
         : `SELECT COUNT(*) AS count FROM health_sleep_raw_logs`
     )
     .get(...(userIds ?? [])) as { count: number };
-  const workouts = listWorkoutRows(userIds).map(mapWorkoutSession);
+  const workouts = listWorkoutRows(userIds).map((row) =>
+    mapWorkoutSession(row)
+  );
   const vitalsRows = listDailySummaryRows("vitals", userIds);
   const vitalsMetricEntries = vitalsRows.reduce((sum, row) => {
     const metrics = safeJsonParse<Record<string, unknown>>(
@@ -6112,11 +6126,21 @@ function buildFitnessVitalsTrend(rows: DailySummaryRow[]) {
 }
 
 export function getFitnessViewData(userIds?: string[]) {
-  const workouts = listWorkoutRows(userIds).map(mapWorkoutSession);
+  const workoutRows = listWorkoutRows(userIds);
+  const recent = workoutRows
+    .slice(0, 40)
+    .map((row) => mapWorkoutSession(row, { includeAnalytics: true }));
+  const browserSessions = workoutRows
+    .slice(0, 2000)
+    .map((row, index) =>
+      mapWorkoutSession(row, { includeAnalytics: index < 40 })
+    );
+  const analysisSessions = workoutRows
+    .slice(0, 500)
+    .map((row) => mapWorkoutSession(row, { includeAnalytics: true }));
   const vitalsTrend = buildFitnessVitalsTrend(
     listDailySummaryRows("vitals", userIds)
   );
-  const recent = workouts.slice(0, 40);
   const weekly = recent.filter(
     (session) =>
       Date.now() - Date.parse(session.startedAt) <= 7 * 24 * 60 * 60 * 1000
@@ -6304,8 +6328,8 @@ export function getFitnessViewData(userIds?: string[]) {
       energyKcal: metrics.energyKcal
     })),
     vitalsTrend,
-    analysisSessions: workouts,
-    sessions: recent
+    analysisSessions,
+    sessions: browserSessions
   };
 }
 
