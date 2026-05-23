@@ -402,6 +402,26 @@ preserving the decoded-size limit so compressed chunks cannot inflate past
 `sleep_nights` chunk failing with `invalid_chunk_payload` and
 `The HealthKit sync compressed payload cannot be decompressed`.
 
+### 0.2.85 progressive HealthKit archive visibility
+
+- Fix commit: `b5a6c5c` (`Fix progressive HealthKit archive visibility`)
+- Release commit/tag: `b9197eb`, `v0.2.85`, `hermes-v0.2.85`,
+  `ios-testflight-v1.0.51`
+- GitHub Actions:
+  - `26345638737` published `forge-openclaw-plugin@0.2.85`
+  - `26345638738` published `forge-memory@0.2.85`
+  - `26345657938` published `forge-hermes-plugin==0.2.85`
+  - `26345660863` uploaded Forge Companion TestFlight `1.0.51 (26)` and
+    distributed it to Internal testers
+- Registry verification confirmed npm latest `0.2.85` for OpenClaw and Forge
+  Memory, and PyPI version `0.2.85` for Hermes.
+
+HealthKit progressive visibility note: `workout_archive` chunks must be ingested
+as they arrive, not only at `/complete`. The Sports browser should receive a
+lightweight long session list while analytics-heavy payloads stay bounded, so the
+web app is not capped at 40 visible workouts and does not ship heavy analytics
+for every historical session.
+
 ## Fallback Local No-Prompt Mode
 
 The recommended path is CI publishing. If you must publish locally without repeated
