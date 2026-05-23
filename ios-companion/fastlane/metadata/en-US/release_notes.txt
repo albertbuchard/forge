@@ -1,13 +1,13 @@
-Forge Companion 1.0.48 makes large HealthKit backfills use far fewer
-transfers and keeps active uploads alive when the app moves to the background.
+Forge Companion 1.0.48 makes large HealthKit backfills start uploading sooner
+and shows live transfer speed while the sync is running.
 
-Workout time-series and route data are now packed into larger byte-stable
-chunks instead of one tiny upload per workout, and Forge accepts compressed
-chunk payloads so large heart-rate backfills transfer less data.
+Workout history is now scanned recent-first in smaller HealthKit windows, so a
+full backfill no longer has to count every old workout before the first upload
+can begin.
 
-Manual syncs now hold the active sync task during the iOS background window,
-while scheduled app-refresh and processing tasks continue to resume accepted
-chunks when iOS grants background time.
+The sync panel now reports current speed, average speed, accepted chunks,
+uploaded bytes, and time since the last Forge acknowledgement. This makes slow
+or stalled transfers visible without opening the logs.
 
-The sync screen still shows live upload counts, payload size, current transfer
-family, and copyable logs so stalled or slow syncs are diagnosable.
+Large workout payloads still use byte-stable chunking, compression, resume
+support, and copyable logs for diagnosis.

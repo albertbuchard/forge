@@ -13,7 +13,9 @@ actor HealthSyncStore {
         let batchIndex: Int
         let totalBatches: Int
         let uploadedWorkouts: Int
-        let totalWorkouts: Int
+        let totalWorkouts: Int?
+        let discoveredWorkouts: Int
+        let isScanningComplete: Bool
     }
 
     struct WorkoutStreamResult {
@@ -637,10 +639,20 @@ actor HealthSyncStore {
             )
         }
 
+        let isFullBackfill = lastSuccessfulSyncAt == nil
         companionDebugLog(
             "HealthSyncStore",
-            "streamWorkoutSessionBatches start start=\(isoString(workoutStartDate)) end=\(isoString(endDate)) batchSize=\(batchSize)"
+            "streamWorkoutSessionBatches start start=\(isoString(workoutStartDate)) end=\(isoString(endDate)) batchSize=\(batchSize) fullBackfill=\(isFullBackfill)"
         )
+        if isFullBackfill {
+            return try await streamWorkoutSessionBatchesByWindow(
+                startDate: workoutStartDate,
+                endDate: endDate,
+                batchSize: min(max(1, batchSize), 25),
+                onBatch: onBatch
+            )
+        }
+
         let workouts = try await queryWorkouts(startDate: workoutStartDate, endDate: endDate)
             .sorted { $0.startDate > $1.startDate }
         guard workouts.isEmpty == false else {
@@ -664,7 +676,9 @@ actor HealthSyncStore {
                     batchIndex: batchIndex + 1,
                     totalBatches: totalBatches,
                     uploadedWorkouts: uploadedWorkouts,
-                    totalWorkouts: workouts.count
+                    totalWorkouts: workouts.count,
+                    discoveredWorkouts: workouts.count,
+                    isScanningComplete: true
                 )
             )
             companionDebugLog(
@@ -673,6 +687,95 @@ actor HealthSyncStore {
             )
         }
         return WorkoutStreamResult(totalWorkouts: workouts.count, healthDataDeferred: false)
+    }
+
+    private func streamWorkoutSessionBatchesByWindow(
+        startDate: Date,
+        endDate: Date,
+        batchSize: Int,
+        onBatch: @escaping ([CompanionSyncPayload.WorkoutSession], WorkoutBatchProgress) async throws -> Void
+    ) async throws -> WorkoutStreamResult {
+        let windows = Self.workoutStreamingWindows(startDate: startDate, endDate: endDate)
+        guard windows.isEmpty == false else {
+            companionDebugLog("HealthSyncStore", "streamWorkoutSessionBatchesByWindow no windows")
+            return WorkoutStreamResult(totalWorkouts: 0, healthDataDeferred: false)
+        }
+
+        let boundedBatchSize = max(1, batchSize)
+        var seenWorkoutIds = Set<UUID>()
+        var discoveredWorkouts = 0
+        var uploadedWorkouts = 0
+        var batchIndex = 0
+
+        for (windowIndex, window) in windows.enumerated() {
+            try Task.checkCancellation()
+            let windowWorkouts = try await queryWorkouts(startDate: window.start, endDate: window.end)
+                .sorted { $0.startDate > $1.startDate }
+                .filter { workout in
+                    seenWorkoutIds.insert(workout.uuid).inserted
+                }
+            discoveredWorkouts += windowWorkouts.count
+            companionDebugLog(
+                "HealthSyncStore",
+                "streamWorkoutSessionBatchesByWindow scanned window=\(windowIndex + 1)/\(windows.count) start=\(isoString(window.start)) end=\(isoString(window.end)) workouts=\(windowWorkouts.count) discovered=\(discoveredWorkouts)"
+            )
+
+            var lowerBound = 0
+            while lowerBound < windowWorkouts.count {
+                try Task.checkCancellation()
+                let upperBound = min(windowWorkouts.count, lowerBound + boundedBatchSize)
+                let batchWorkouts = Array(windowWorkouts[lowerBound..<upperBound])
+                let sessions = try await mapWorkoutSessionsBounded(batchWorkouts)
+                    .sorted { $0.startedAt > $1.startedAt }
+                uploadedWorkouts += sessions.count
+                batchIndex += 1
+                try await onBatch(
+                    sessions,
+                    WorkoutBatchProgress(
+                        batchIndex: batchIndex,
+                        totalBatches: 0,
+                        uploadedWorkouts: uploadedWorkouts,
+                        totalWorkouts: nil,
+                        discoveredWorkouts: discoveredWorkouts,
+                        isScanningComplete: windowIndex == windows.count - 1 && upperBound == windowWorkouts.count
+                    )
+                )
+                companionDebugLog(
+                    "HealthSyncStore",
+                    "streamWorkoutSessionBatchesByWindow uploaded batch=\(batchIndex) mapped=\(sessions.count) uploaded=\(uploadedWorkouts) discovered=\(discoveredWorkouts)"
+                )
+                lowerBound = upperBound
+            }
+        }
+
+        return WorkoutStreamResult(totalWorkouts: uploadedWorkouts, healthDataDeferred: false)
+    }
+
+    static func workoutStreamingWindows(
+        startDate: Date,
+        endDate: Date,
+        calendar: Calendar = .current
+    ) -> [DateInterval] {
+        guard startDate < endDate else {
+            return []
+        }
+        var windows: [DateInterval] = []
+        var cursorEnd = endDate
+        let recentBoundary = calendar.date(byAdding: .day, value: -180, to: endDate)
+            ?? endDate.addingTimeInterval(-180 * 24 * 60 * 60)
+
+        while cursorEnd > startDate {
+            let windowDays = cursorEnd > recentBoundary ? 30 : 365
+            let proposedStart = calendar.date(byAdding: .day, value: -windowDays, to: cursorEnd)
+                ?? cursorEnd.addingTimeInterval(-Double(windowDays) * 24 * 60 * 60)
+            let cursorStart = max(startDate, proposedStart)
+            guard cursorStart < cursorEnd else {
+                break
+            }
+            windows.append(DateInterval(start: cursorStart, end: cursorEnd))
+            cursorEnd = cursorStart
+        }
+        return windows
     }
 
     private func isProtectedDataAvailable() async -> Bool {

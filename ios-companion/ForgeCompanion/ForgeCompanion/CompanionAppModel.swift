@@ -365,6 +365,7 @@ final class CompanionAppModel: ObservableObject {
     @Published var healthSyncChunkTargetBytes: Int?
     @Published var healthSyncChunkMaxBytes: Int?
     @Published var healthSyncLegacyFallbackReason: String?
+    @Published var healthSyncTransferStats: SyncTransferStats?
     @Published var healthSyncEnabled = true {
         didSet {
             UserDefaults.standard.set(healthSyncEnabled, forKey: StorageKeys.healthSyncEnabled)
@@ -439,6 +440,16 @@ final class CompanionAppModel: ObservableObject {
     private var remoteSourceReconciliationTask: Task<Void, Never>?
     private var activeSyncTask: Task<Bool, Never>?
     private var maintenanceTask: Task<Void, Never>?
+    private var healthSyncTransferTickerTask: Task<Void, Never>?
+    private var healthSyncTransferStartedAt: Date?
+    private var healthSyncTransferLastSnapshotAt: Date?
+    private var healthSyncTransferLastSnapshotBytes = 0
+    private var healthSyncTransferBytesSent = 0
+    private var healthSyncTransferCurrentBytesPerSecond = 0.0
+    private var healthSyncTransferUploadedChunks = 0
+    private var healthSyncTransferUploadedRecords = 0
+    private var healthSyncTransferSkippedChunks = 0
+    private var healthSyncTransferLastChunkAt: Date?
     private var backgroundRefreshTask: UIBackgroundTaskIdentifier = .invalid
     private var pendingRemoteSourceReconciliation: Set<CompanionSourceKey> = []
     private var lastAutoSyncAttemptAt: Date?
@@ -1632,6 +1643,12 @@ final class CompanionAppModel: ObservableObject {
             )
             uploadSession = session
             activeHealthSyncSessionId = session.syncSessionId
+            startHealthSyncTransferTelemetry()
+            let onChunkUploaded: ForgeSyncClient.HealthSyncChunkUploadHandler = { [weak self] event in
+                await MainActor.run {
+                    self?.recordHealthSyncChunkUpload(event)
+                }
+            }
             UserDefaults.standard.set(
                 session.syncSessionId,
                 forKey: StorageKeys.activeHealthSyncSessionId
@@ -1668,7 +1685,8 @@ final class CompanionAppModel: ObservableObject {
                 payload: buildResult.payload,
                 uploadSession: session,
                 pairing: pairing,
-                startingSequence: sequence
+                startingSequence: sequence,
+                onChunkUploaded: onChunkUploaded
             )
             lastHealthSyncChunkId = "\(session.syncSessionId)-\(String(format: "%06d", max(0, sequence - 1)))"
 
@@ -1687,8 +1705,16 @@ final class CompanionAppModel: ObservableObject {
                     batchSize: 100
                 ) { [weak self] workouts, progress in
                     await MainActor.run {
-                        self?.lastSyncMessage =
-                            "Uploading workouts \(progress.uploadedWorkouts)/\(progress.totalWorkouts)"
+                        if let totalWorkouts = progress.totalWorkouts {
+                            self?.lastSyncMessage =
+                                "Uploading workouts \(progress.uploadedWorkouts)/\(totalWorkouts)"
+                        } else if progress.isScanningComplete {
+                            self?.lastSyncMessage =
+                                "Uploading workouts \(progress.uploadedWorkouts)"
+                        } else {
+                            self?.lastSyncMessage =
+                                "Uploading workouts \(progress.uploadedWorkouts) found so far"
+                        }
                         self?.lastHealthSyncChunkFamily = "workouts"
                         self?.lastHealthSyncPayloadBytes = try? JSONEncoder().encode(workouts).count
                     }
@@ -1696,7 +1722,8 @@ final class CompanionAppModel: ObservableObject {
                         workouts: workouts,
                         uploadSession: session,
                         pairing: pairing,
-                        startingSequence: sequence
+                        startingSequence: sequence,
+                        onChunkUploaded: onChunkUploaded
                     )
                     let batchStats = Self.workoutUploadStats(for: workouts)
                     await MainActor.run {
@@ -1733,6 +1760,7 @@ final class CompanionAppModel: ObservableObject {
             )
             activeHealthSyncSessionId = nil
             UserDefaults.standard.removeObject(forKey: StorageKeys.activeHealthSyncSessionId)
+            stopHealthSyncTransferTelemetry()
             return HealthSyncRunResult(
                 receipt: receipt,
                 payloadSummary: payloadSummary,
@@ -1762,8 +1790,90 @@ final class CompanionAppModel: ObservableObject {
                     lastSyncMessage = "Forge will resume from the last accepted chunk"
                 }
             }
+            stopHealthSyncTransferTelemetry()
             throw error
         }
+    }
+
+    private func startHealthSyncTransferTelemetry() {
+        healthSyncTransferTickerTask?.cancel()
+        let now = Date()
+        healthSyncTransferStartedAt = now
+        healthSyncTransferLastSnapshotAt = now
+        healthSyncTransferLastSnapshotBytes = 0
+        healthSyncTransferBytesSent = 0
+        healthSyncTransferCurrentBytesPerSecond = 0
+        healthSyncTransferUploadedChunks = 0
+        healthSyncTransferUploadedRecords = 0
+        healthSyncTransferSkippedChunks = 0
+        healthSyncTransferLastChunkAt = nil
+        publishHealthSyncTransferStats(now: now)
+        healthSyncTransferTickerTask = Task { [weak self] in
+            while Task.isCancelled == false {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                await MainActor.run {
+                    self?.refreshHealthSyncTransferSpeed()
+                }
+            }
+        }
+    }
+
+    private func stopHealthSyncTransferTelemetry() {
+        healthSyncTransferTickerTask?.cancel()
+        healthSyncTransferTickerTask = nil
+        refreshHealthSyncTransferSpeed()
+    }
+
+    private func recordHealthSyncChunkUpload(_ event: ForgeSyncClient.HealthSyncChunkUploadEvent) {
+        if healthSyncTransferStartedAt == nil {
+            startHealthSyncTransferTelemetry()
+        }
+        lastHealthSyncChunkId = event.chunkId
+        lastHealthSyncChunkFamily = event.family
+        lastHealthSyncPayloadBytes = event.transferByteCount
+        if event.skipped {
+            healthSyncTransferSkippedChunks += 1
+        } else {
+            healthSyncTransferBytesSent += event.transferByteCount
+            healthSyncTransferUploadedChunks += 1
+            healthSyncTransferUploadedRecords += event.recordCount
+            healthSyncTransferLastChunkAt = Date()
+        }
+        publishHealthSyncTransferStats(now: Date())
+    }
+
+    private func refreshHealthSyncTransferSpeed() {
+        guard let startedAt = healthSyncTransferStartedAt else {
+            return
+        }
+        let now = Date()
+        let previousAt = healthSyncTransferLastSnapshotAt ?? startedAt
+        let elapsed = max(now.timeIntervalSince(previousAt), 0.001)
+        let byteDelta = max(0, healthSyncTransferBytesSent - healthSyncTransferLastSnapshotBytes)
+        healthSyncTransferCurrentBytesPerSecond = Double(byteDelta) / elapsed
+        healthSyncTransferLastSnapshotAt = now
+        healthSyncTransferLastSnapshotBytes = healthSyncTransferBytesSent
+        publishHealthSyncTransferStats(now: now)
+    }
+
+    private func publishHealthSyncTransferStats(now: Date) {
+        guard let startedAt = healthSyncTransferStartedAt else {
+            healthSyncTransferStats = nil
+            return
+        }
+        let totalElapsed = max(now.timeIntervalSince(startedAt), 0.001)
+        let secondsSinceLastChunk = healthSyncTransferLastChunkAt.map {
+            max(0, Int(now.timeIntervalSince($0).rounded(.down)))
+        }
+        healthSyncTransferStats = SyncTransferStats(
+            totalBytesSent: healthSyncTransferBytesSent,
+            currentBytesPerSecond: healthSyncTransferCurrentBytesPerSecond,
+            averageBytesPerSecond: Double(healthSyncTransferBytesSent) / totalElapsed,
+            uploadedChunks: healthSyncTransferUploadedChunks,
+            uploadedRecords: healthSyncTransferUploadedRecords,
+            skippedChunks: healthSyncTransferSkippedChunks,
+            secondsSinceLastChunk: secondsSinceLastChunk
+        )
     }
 
     private func applyHealthSyncChunkErrorDiagnostics(_ error: Error) {
@@ -2071,7 +2181,8 @@ final class CompanionAppModel: ObservableObject {
             payloadSummary: latestSyncPayloadSummary,
             lastChunkFamily: lastHealthSyncChunkFamily,
             lastPayloadBytes: lastHealthSyncPayloadBytes,
-            activeSessionId: activeHealthSyncSessionId
+            activeSessionId: activeHealthSyncSessionId,
+            transferStats: healthSyncTransferStats
         )
     }
 

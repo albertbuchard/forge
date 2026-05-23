@@ -3034,7 +3034,16 @@ final class ForgeCompanionTests: XCTestCase {
             payloadSummary: payloadSummary,
             lastChunkFamily: "workout_time_series",
             lastPayloadBytes: 1536,
-            activeSessionId: "hms_abcdefghijklmnopqrstuvwxyz"
+            activeSessionId: "hms_abcdefghijklmnopqrstuvwxyz",
+            transferStats: SyncTransferStats(
+                totalBytesSent: 2_097_152,
+                currentBytesPerSecond: 524_288,
+                averageBytesPerSecond: 262_144,
+                uploadedChunks: 8,
+                uploadedRecords: 512,
+                skippedChunks: 1,
+                secondsSinceLastChunk: 4
+            )
         )
 
         XCTAssertEqual(status.headline, "Uploading workouts 5/7")
@@ -3043,8 +3052,32 @@ final class ForgeCompanionTests: XCTestCase {
             "42 raw sleep, 18 segments, 2 nights, 7 workouts, 128 HR samples, 6 trips"
         )
         XCTAssertTrue(status.transferSummary.contains("workout time series"))
-        XCTAssertTrue(status.transferSummary.contains("1.5 KB"))
+        XCTAssertTrue(status.transferSummary.contains("2.0 MB sent"))
         XCTAssertTrue(status.transferSummary.contains("session"))
+        XCTAssertTrue(status.speedSummary?.contains("512.0 KB/s now") == true)
+        XCTAssertTrue(status.speedSummary?.contains("256.0 KB/s avg") == true)
+        XCTAssertTrue(status.speedSummary?.contains("4s since ack") == true)
+    }
+
+    func testWorkoutStreamingWindowsScanRecentHistoryFirstWithoutOneHugeQuery() {
+        let startDate = makeDate("2024-01-01T00:00:00.000Z")
+        let endDate = makeDate("2026-05-20T12:00:00.000Z")
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+
+        let windows = HealthSyncStore.workoutStreamingWindows(
+            startDate: startDate,
+            endDate: endDate,
+            calendar: calendar
+        )
+
+        XCTAssertFalse(windows.isEmpty)
+        XCTAssertEqual(windows.first?.end, endDate)
+        XCTAssertLessThanOrEqual(windows.first?.duration ?? .greatestFiniteMagnitude, 31 * 24 * 60 * 60)
+        XCTAssertEqual(windows.last?.start, startDate)
+        for index in 1..<windows.count {
+            XCTAssertEqual(windows[index - 1].start, windows[index].end)
+        }
     }
 
     func testCompanionDebugLogPlainTextExportUsesChronologicalLines() {
