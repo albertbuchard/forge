@@ -1,13 +1,14 @@
-Forge Companion 1.0.48 makes large HealthKit backfills start uploading sooner
-and shows live transfer speed while the sync is running.
+Forge Companion 1.0.49 changes HealthKit workout history sync to use a
+compressed workout archive path when the paired Forge runtime supports it.
 
-Workout history is now scanned recent-first in smaller HealthKit windows, so a
-full backfill no longer has to count every old workout before the first upload
-can begin.
+Workout batches are sent as deflated archive chunks that contain the full
+workout objects, including samples and routes. Forge stores those chunks and
+then imports them on the server side, instead of making the phone split each
+batch into separate summary, time-series, and route uploads.
 
-The sync panel now reports current speed, average speed, accepted chunks,
-uploaded bytes, and time since the last Forge acknowledgement. This makes slow
-or stalled transfers visible without opening the logs.
+The sync panel keeps the active transfer state visible during a sync and avoids
+replacing it with stale Health permission text while upload work is still
+running.
 
-Large workout payloads still use byte-stable chunking, compression, resume
-support, and copyable logs for diagnosis.
+Older Forge runtimes remain supported through the previous chunk families until
+the server plugin has been updated.
