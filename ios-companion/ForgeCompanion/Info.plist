@@ -5,6 +5,7 @@
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
 		<string>com.albertbuchard.ForgeCompanion.health-sync</string>
+		<string>com.albertbuchard.ForgeCompanion.health-sync.processing</string>
 	</array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
@@ -79,6 +80,7 @@
 	<array>
 		<string>fetch</string>
 		<string>location</string>
+		<string>processing</string>
 	</array>
 	<key>UIRequiresFullScreen</key>
 	<true/>

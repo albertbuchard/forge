@@ -1,14 +1,11 @@
-Forge Companion 1.0.49 changes HealthKit workout history sync to use a
-compressed workout archive path when the paired Forge runtime supports it.
+Forge Companion 1.0.50 fixes HealthKit workout backfill getting trapped on the
+old slow upload path.
 
-Workout batches are sent as deflated archive chunks that contain the full
-workout objects, including samples and routes. Forge stores those chunks and
-then imports them on the server side, instead of making the phone split each
-batch into separate summary, time-series, and route uploads.
+If the phone resumes a stale sync session that does not support compressed
+workout archives, Forge now discards that stale session and starts a fresh one
+instead of falling back to separate summary, time-series, and route uploads.
 
-The sync panel keeps the active transfer state visible during a sync and avoids
-replacing it with stale Health permission text while upload work is still
-running.
-
-Older Forge runtimes remain supported through the previous chunk families until
-the server plugin has been updated.
+Workout backfills now send much larger batches, map more workouts in parallel,
+and keep the compressed archive path as the required upload mode for workout
+history. The app also registers a background processing task with network
+connectivity so iOS has the correct long-running background contract for sync.

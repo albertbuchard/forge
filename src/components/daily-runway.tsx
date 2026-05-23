@@ -1,5 +1,6 @@
 import { ArrowRight, CheckCheck, Crosshair, Play, ShieldAlert } from "lucide-react";
 import type { KeyboardEvent } from "react";
+import { Link } from "react-router-dom";
 import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,10 @@ import type { Goal, NotesSummaryByEntity, Tag, Task, TaskStatus } from "@/lib/ty
 
 function getGoalTitle(task: Task, goals: Goal[], fallback: string) {
   return goals.find((goal) => goal.id === task.goalId)?.title ?? fallback;
+}
+
+function getTaskGoal(task: Task, goals: Goal[]) {
+  return goals.find((goal) => goal.id === task.goalId) ?? null;
 }
 
 function getTaskTags(task: Task, tags: Tag[]) {
@@ -86,6 +91,7 @@ export function DailyRunway({
           {tasks.map((task, index) => {
             const nextAction = getNextAction(task, nextActionLabels);
             const taskTags = getTaskTags(task, tags).slice(0, 2);
+            const goal = getTaskGoal(task, goals);
             const isSelected = selectedTaskId === task.id;
             const noteCount = getEntityNotesSummary(notesSummaryByEntity, "task", task.id).count;
 
@@ -109,11 +115,42 @@ export function DailyRunway({
                       {t("common.dailyRunway.runwayItem", { index: index + 1 })}
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <EntityBadge kind="goal" label={getGoalTitle(task, goals, t("common.dailyRunway.unassigned"))} compact gradient={false} />
+                      {goal ? (
+                        <Link
+                          to={`/goals/${goal.id}`}
+                          className="min-w-0 max-w-full transition hover:opacity-85"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <EntityBadge
+                            kind="goal"
+                            label={goal.title}
+                            compact
+                            gradient={false}
+                          />
+                        </Link>
+                      ) : (
+                        <EntityBadge
+                          kind="goal"
+                          label={t("common.dailyRunway.unassigned")}
+                          compact
+                          gradient={false}
+                        />
+                      )}
                       {task.time.activeRunCount > 0 ? <Badge className="bg-emerald-500/12 text-emerald-200">Live</Badge> : null}
                     </div>
                     <div className="mt-2">
-                      <EntityName kind="task" label={task.title} variant="heading" size="md" />
+                      <Link
+                        to={`/tasks/${task.id}`}
+                        className="block min-w-0 max-w-full transition hover:opacity-85"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <EntityName
+                          kind="task"
+                          label={task.title}
+                          variant="heading"
+                          size="md"
+                        />
+                      </Link>
                     </div>
                     <p className="mt-2 text-sm leading-6 text-white/60">{task.description || t("common.dailyRunway.noNote")}</p>
                   </div>
@@ -175,22 +212,29 @@ export function DailyRunway({
                 <Badge className="bg-white/[0.08] text-white/65">{bucket.tasks.length}</Badge>
               </div>
               <div className="mt-3 grid gap-2">
-                {bucket.tasks.slice(0, 3).map((task) => (
-                  <button
-                    key={task.id}
-                    type="button"
-                    className="flex min-w-0 items-center justify-between gap-3 overflow-hidden rounded-[16px] bg-white/[0.03] px-3 py-3 text-left transition hover:bg-white/[0.06]"
-                    onClick={() => onSelectTask(task.id)}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <EntityName kind="task" label={task.title} className="max-w-full" labelClassName="[overflow-wrap:anywhere]" />
-                      <div className="mt-2">
-                        <EntityBadge kind="goal" label={getGoalTitle(task, goals, t("common.dailyRunway.unassigned"))} compact gradient={false} />
+                {bucket.tasks.slice(0, 3).map((task) => {
+                  const goal = getTaskGoal(task, goals);
+                  return (
+                    <Link
+                      key={task.id}
+                      to={`/tasks/${task.id}`}
+                      className="flex min-w-0 items-center justify-between gap-3 overflow-hidden rounded-[16px] bg-white/[0.03] px-3 py-3 text-left transition hover:bg-white/[0.06]"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <EntityName kind="task" label={task.title} className="max-w-full" labelClassName="[overflow-wrap:anywhere]" />
+                        <div className="mt-2">
+                          <EntityBadge
+                            kind="goal"
+                            label={goal?.title ?? t("common.dailyRunway.unassigned")}
+                            compact
+                            gradient={false}
+                          />
+                        </div>
                       </div>
-                    </div>
-                    <ArrowRight className="size-4 shrink-0 text-white/35" />
-                  </button>
-                ))}
+                      <ArrowRight className="size-4 shrink-0 text-white/35" />
+                    </Link>
+                  );
+                })}
                 {bucket.tasks.length === 0 ? <div className="text-sm text-white/42">{t("common.dailyRunway.emptyBucket")}</div> : null}
               </div>
             </div>
