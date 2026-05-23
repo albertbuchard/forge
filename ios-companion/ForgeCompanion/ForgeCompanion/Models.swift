@@ -802,6 +802,16 @@ struct SyncPayloadSummary: Codable {
     }
 }
 
+struct SyncTransferStats: Equatable {
+    let totalBytesSent: Int
+    let currentBytesPerSecond: Double
+    let averageBytesPerSecond: Double
+    let uploadedChunks: Int
+    let uploadedRecords: Int
+    let skippedChunks: Int
+    let secondsSinceLastChunk: Int?
+}
+
 struct CompanionSyncUploadStatus {
     let isSyncing: Bool
     let message: String?
@@ -809,6 +819,7 @@ struct CompanionSyncUploadStatus {
     let lastChunkFamily: String?
     let lastPayloadBytes: Int?
     let activeSessionId: String?
+    let transferStats: SyncTransferStats?
 
     var headline: String {
         guard isSyncing else {
@@ -840,13 +851,34 @@ struct CompanionSyncUploadStatus {
         if let lastChunkFamily, lastChunkFamily.isEmpty == false {
             parts.append(lastChunkFamily.replacingOccurrences(of: "_", with: " "))
         }
-        if let lastPayloadBytes {
+        if let transferStats {
+            parts.append("\(Self.formatBytes(transferStats.totalBytesSent)) sent")
+        } else if let lastPayloadBytes {
             parts.append(Self.formatBytes(lastPayloadBytes))
         }
         if let activeSessionId, activeSessionId.isEmpty == false {
             parts.append("session \(Self.shortSessionId(activeSessionId))")
         }
         return parts.isEmpty ? "Waiting for the first upload chunk" : parts.joined(separator: " • ")
+    }
+
+    var speedSummary: String? {
+        guard let transferStats else {
+            return nil
+        }
+        var parts = [
+            "\(Self.formatBytes(Int(transferStats.currentBytesPerSecond)))/s now",
+            "\(Self.formatBytes(Int(transferStats.averageBytesPerSecond)))/s avg",
+            "\(transferStats.uploadedChunks) chunks"
+        ]
+        if transferStats.skippedChunks > 0 {
+            parts.append("\(transferStats.skippedChunks) resumed")
+        }
+        if let secondsSinceLastChunk = transferStats.secondsSinceLastChunk,
+           secondsSinceLastChunk >= 3 {
+            parts.append("\(secondsSinceLastChunk)s since ack")
+        }
+        return parts.joined(separator: " • ")
     }
 
     private static func shortSessionId(_ value: String) -> String {

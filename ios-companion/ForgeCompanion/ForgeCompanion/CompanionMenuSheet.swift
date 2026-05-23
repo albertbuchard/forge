@@ -368,6 +368,9 @@ struct CompanionSettingsSheet: View {
             }
 
             detailRow(syncInFlight ? "Uploading" : "Prepared", value: status.uploadSummary)
+            if let speedSummary = status.speedSummary {
+                detailRow("Speed", value: speedSummary)
+            }
             detailRow("Transfer", value: status.transferSummary)
         }
         .padding(12)
