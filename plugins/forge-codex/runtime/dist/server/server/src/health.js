@@ -2990,6 +2990,53 @@ function applyWorkoutChunkImmediately(session, family, workouts) {
         }), workouts.length, createdCount, updatedCount, mergedCount, now, now, runId);
     });
 }
+function applyWorkoutEvidenceChunkImmediately(session, payload) {
+    const timeSeries = payload.workoutTimeSeries ?? [];
+    const routes = payload.workoutRoutes ?? [];
+    if (timeSeries.length === 0 && routes.length === 0) {
+        return;
+    }
+    const pairing = mobileSyncSessionPairing(session);
+    runInTransaction(() => {
+        const rowsToRecompute = new Map();
+        for (const entry of timeSeries) {
+            const row = getDatabase()
+                .prepare(`SELECT *
+           FROM health_workout_sessions
+           WHERE user_id = ? AND source = 'apple_health' AND external_uid = ?`)
+                .get(pairing.user_id, entry.externalUid);
+            if (!row || entry.samples.length === 0) {
+                continue;
+            }
+            upsertWorkoutTimeSeries({
+                workoutId: row.id,
+                userId: pairing.user_id,
+                samples: entry.samples
+            });
+            rowsToRecompute.set(row.id, row);
+        }
+        for (const entry of routes) {
+            const row = getDatabase()
+                .prepare(`SELECT *
+           FROM health_workout_sessions
+           WHERE user_id = ? AND source = 'apple_health' AND external_uid = ?`)
+                .get(pairing.user_id, entry.externalUid);
+            if (!row || entry.routePoints.length === 0) {
+                continue;
+            }
+            upsertWorkoutRoutePoints({
+                workoutId: row.id,
+                userId: pairing.user_id,
+                points: entry.routePoints
+            });
+            rowsToRecompute.set(row.id, row);
+        }
+        for (const row of rowsToRecompute.values()) {
+            recomputeAndStoreWorkoutAnalytics(row);
+            summarizeUserHealthDay(pairing.user_id, dayKey(row.started_at));
+        }
+    });
+}
 function updateMobileSyncSessionProgress(syncSessionId) {
     const chunks = getDatabase()
         .prepare(`SELECT family, record_count, byte_count
@@ -3208,6 +3255,10 @@ export function ingestMobileHealthSyncChunk(syncSessionId, payload, rawPayloadJs
     if (parsed.family === "workout_summaries" ||
         parsed.family === "workout_archive") {
         applyWorkoutChunkImmediately(session, parsed.family, wirePayload.payload.workouts ?? []);
+    }
+    else if (parsed.family === "workout_time_series" ||
+        parsed.family === "workout_routes") {
+        applyWorkoutEvidenceChunkImmediately(session, wirePayload.payload);
     }
     const progress = updateMobileSyncSessionProgress(syncSessionId);
     return {
