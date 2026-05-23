@@ -1738,12 +1738,10 @@ final class CompanionAppModel: ObservableObject {
                             self?.lastSyncMessage =
                                 "Uploading workouts \(progress.uploadedWorkouts) found so far"
                         }
-                        self?.lastHealthSyncChunkFamily = session.acceptedFamilies.contains("workout_archive")
-                            ? "workout_archive"
-                            : "workouts"
+                        self?.lastHealthSyncChunkFamily = "workout_summaries"
                         self?.lastHealthSyncPayloadBytes = try? JSONEncoder().encode(workouts).count
                     }
-                    sequence = try await syncClient.uploadWorkoutArchiveHealthSyncChunks(
+                    sequence = try await syncClient.uploadWorkoutHealthSyncChunks(
                         workouts: workouts,
                         uploadSession: session,
                         pairing: pairing,
@@ -1776,13 +1774,9 @@ final class CompanionAppModel: ObservableObject {
                 "sleep_segments": buildResult.payload.sleepSegments.count,
                 "sleep_raw_records": buildResult.payload.sleepRawRecords.count
             ]
-            if session.acceptedFamilies.contains("workout_archive") {
-                expectedCounts["workout_archive"] = workoutStats.workouts
-            } else {
-                expectedCounts["workout_summaries"] = workoutStats.workouts
-                expectedCounts["workout_time_series"] = workoutStats.rawTimeSeriesDatapoints
-                expectedCounts["workout_routes"] = workoutStats.routePoints
-            }
+            expectedCounts["workout_summaries"] = workoutStats.workouts
+            expectedCounts["workout_time_series"] = workoutStats.rawTimeSeriesDatapoints
+            expectedCounts["workout_routes"] = workoutStats.routePoints
             let receipt = try await syncClient.completeHealthSyncSession(
                 uploadSession: session,
                 pairing: pairing,

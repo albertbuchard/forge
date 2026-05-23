@@ -3592,6 +3592,31 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
       assert.equal(response.statusCode, 200, response.body);
     }
 
+    const progressiveFitnessResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/health/fitness"
+    });
+    assert.equal(progressiveFitnessResponse.statusCode, 200);
+    const progressiveSession = (
+      progressiveFitnessResponse.json() as {
+        fitness: {
+          sessions: Array<{
+            id: string;
+            analytics?: {
+              dataQuality: { heartRateSampleCount: number };
+              routeSummary: { pointCount: number };
+            };
+          }>;
+        };
+      }
+    ).fitness.sessions[0];
+    assert.ok(progressiveSession);
+    assert.equal(
+      progressiveSession.analytics?.dataQuality.heartRateSampleCount,
+      2
+    );
+    assert.equal(progressiveSession.analytics?.routeSummary.pointCount, 2);
+
     const completeResponse = await app.inject({
       method: "POST",
       url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/complete`,
