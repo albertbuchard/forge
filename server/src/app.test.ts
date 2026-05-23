@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { access, chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  chmod,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile
+} from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
@@ -74,10 +81,13 @@ type SharedMovementFixtureScenario = {
 };
 
 async function loadSharedMovementFixture(id: string) {
-  const fixturePath = new URL("../../test-fixtures/movement-canonical-box-fixtures.json", import.meta.url);
-  const parsed = JSON.parse(
-    await readFile(fixturePath, "utf8")
-  ) as { scenarios: SharedMovementFixtureScenario[] };
+  const fixturePath = new URL(
+    "../../test-fixtures/movement-canonical-box-fixtures.json",
+    import.meta.url
+  );
+  const parsed = JSON.parse(await readFile(fixturePath, "utf8")) as {
+    scenarios: SharedMovementFixtureScenario[];
+  };
   const scenario = parsed.scenarios.find((entry) => entry.id === id);
   assert.ok(scenario, `Missing shared movement fixture: ${id}`);
   return scenario!;
@@ -123,7 +133,9 @@ function healthChunkPayloadJsonRawDeflateBase64(value: unknown) {
 
 test("companion pairing defaults to Iroh transport", async () => {
   const originalIrohBin = process.env.FORGE_COMPANION_IROH_BIN;
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-companion-iroh-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-companion-iroh-")
+  );
   const fakeIrohBin = path.join(rootDir, "fake-forge-companion-iroh.sh");
   await writeFile(
     fakeIrohBin,
@@ -182,11 +194,17 @@ while true; do sleep 1; done
     assert.equal(payload.qrPayload.transport.protocol, "iroh");
     assert.equal(payload.qrPayload.transport.provider, "forge-companion-iroh");
     assert.equal(payload.qrPayload.transport.nodeId, "fakednodeid");
-    assert.equal(payload.qrPayload.transport.relay, "https://relay.example.com");
+    assert.equal(
+      payload.qrPayload.transport.relay,
+      "https://relay.example.com"
+    );
     assert.equal(payload.qrPayload.transport.alpn, "forge-companion/1");
     assert.equal(payload.qrPayload.transport.agent, "forge");
     assert.equal(payload.qrPayload.transport.pairPayload.v, 1);
-    assert.equal(payload.qrPayload.transport.pairPayload.node_id, "fakednodeid");
+    assert.equal(
+      payload.qrPayload.transport.pairPayload.node_id,
+      "fakednodeid"
+    );
     assert.equal(payload.qrPayload.transport.pairPayload.token, "hosttoken");
   } finally {
     await app.close();
@@ -201,7 +219,9 @@ while true; do sleep 1; done
 });
 
 test("companion pairing keeps manual HTTP available as an explicit transport", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-companion-manual-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-companion-manual-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
@@ -373,7 +393,9 @@ test("companion pairings collapse stale duplicates and support bulk revoke", asy
 });
 
 test("verified companion pairings are promoted to a long-lived device session", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-companion-long-lived-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-companion-long-lived-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
@@ -429,7 +451,10 @@ test("verified companion pairings are promoted to a long-lived device session", 
 
     assert.ok(verifiedRow);
     assert.equal(verifiedRow?.status, "paired");
-    assert.ok(Date.parse(verifiedRow!.expires_at) > pendingExpiry + 365 * 24 * 60 * 60 * 1000);
+    assert.ok(
+      Date.parse(verifiedRow!.expires_at) >
+        pendingExpiry + 365 * 24 * 60 * 60 * 1000
+    );
   } finally {
     await app.close();
     await rm(rootDir, { recursive: true, force: true });
@@ -437,7 +462,9 @@ test("verified companion pairings are promoted to a long-lived device session", 
 });
 
 test("companion pairing heartbeat refreshes last seen and preserves the stored device session", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-companion-heartbeat-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-companion-heartbeat-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
@@ -1707,9 +1734,8 @@ test("managed tokens apply default scoped reads to operator context and overview
       }
     });
     assert.equal(tokenResponse.statusCode, 201);
-    const token = (
-      tokenResponse.json() as { token: { token: string } }
-    ).token.token;
+    const token = (tokenResponse.json() as { token: { token: string } }).token
+      .token;
 
     const scopedContextResponse = await app.inject({
       method: "GET",
@@ -2771,7 +2797,10 @@ test("mobile health sync exposes structured apple health workout descriptors and
             };
             analytics?: {
               confidence: string;
-              dataQuality: { heartRateSampleCount: number; sampleCoverage: number };
+              dataQuality: {
+                heartRateSampleCount: number;
+                sampleCoverage: number;
+              };
               routeSummary: { hasRoute: boolean; pointCount: number };
               zoneDurations: Array<{ key: string; seconds: number }>;
             };
@@ -2806,7 +2835,9 @@ test("mobile health sync exposes structured apple health workout descriptors and
       ["pause"]
     );
     assert.deepEqual(
-      session.details?.components.map((component) => component.activity.canonicalLabel),
+      session.details?.components.map(
+        (component) => component.activity.canonicalLabel
+      ),
       ["Cooldown"]
     );
     assert.equal(session.analytics?.confidence, "medium");
@@ -2832,7 +2863,14 @@ test("mobile health sync exposes structured apple health workout descriptors and
     assert.equal(detail.analytics.confidence, "medium");
     assert.deepEqual(
       detail.evidence.timeSeries.map((sample) => sample.metricKey).sort(),
-      ["heart_rate", "heart_rate", "heart_rate", "heart_rate", "heart_rate", "running_power"]
+      [
+        "heart_rate",
+        "heart_rate",
+        "heart_rate",
+        "heart_rate",
+        "heart_rate",
+        "running_power"
+      ]
     );
     assert.equal(detail.evidence.routePoints.length, 2);
   } finally {
@@ -2843,7 +2881,9 @@ test("mobile health sync exposes structured apple health workout descriptors and
 });
 
 test("mobile health sync returns typed payload-too-large errors for oversized legacy uploads", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-health-too-large-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-health-too-large-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
@@ -2874,7 +2914,9 @@ test("mobile health sync returns typed payload-too-large errors for oversized le
 });
 
 test("mobile health chunked sync assembles workout summaries, HR samples, and routes", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-health-chunked-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-health-chunked-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
@@ -2966,7 +3008,10 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
         supportsCompression: boolean;
       };
     };
-    assert.equal(startPayload.upload.chunkPayloadEncoding, "payload_json_base64");
+    assert.equal(
+      startPayload.upload.chunkPayloadEncoding,
+      "payload_json_base64"
+    );
     assert.ok(startPayload.upload.chunkTargetBytes >= 12_000_000);
     assert.equal(startPayload.upload.supportsCompression, true);
     assert.deepEqual(startPayload.upload.acceptedPayloadEncodings, [
@@ -3043,7 +3088,11 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
       payload: summaryChunk
     });
     assert.equal(summaryResponse.statusCode, 200);
-    assert.equal((summaryResponse.json() as { chunk: { duplicate: boolean } }).chunk.duplicate, false);
+    assert.equal(
+      (summaryResponse.json() as { chunk: { duplicate: boolean } }).chunk
+        .duplicate,
+      false
+    );
     const progressiveWorkout = getDatabase()
       .prepare(
         `SELECT external_uid
@@ -3116,7 +3165,9 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
       upload: { syncSessionId: string; receivedChunkIds: string[] };
     };
     assert.equal(resumedUpload.upload.syncSessionId, syncSessionId);
-    assert.deepEqual(resumedUpload.upload.receivedChunkIds, ["chunk-summary-1"]);
+    assert.deepEqual(resumedUpload.upload.receivedChunkIds, [
+      "chunk-summary-1"
+    ]);
 
     const duplicateResponse = await app.inject({
       method: "POST",
@@ -3124,14 +3175,19 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
       payload: summaryChunk
     });
     assert.equal(duplicateResponse.statusCode, 200);
-    assert.equal((duplicateResponse.json() as { chunk: { duplicate: boolean } }).chunk.duplicate, true);
+    assert.equal(
+      (duplicateResponse.json() as { chunk: { duplicate: boolean } }).chunk
+        .duplicate,
+      true
+    );
 
     const conflictResponse = await app.inject({
       method: "POST",
       url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/chunks`,
       payload: {
         ...summaryChunk,
-        checksumSha256: "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        checksumSha256:
+          "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
       }
     });
     assert.equal(conflictResponse.statusCode, 409);
@@ -3152,7 +3208,8 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
           JSON.stringify({ vitals: { daySummaries: [] } }),
           "utf8"
         ),
-        checksumSha256: "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        checksumSha256:
+          "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
         payload: { vitals: { daySummaries: [] } }
       }
     });
@@ -3247,7 +3304,11 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
       url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/chunks`,
       payload: rawDeflateSleepChunk
     });
-    assert.equal(rawDeflateSleepResponse.statusCode, 200, rawDeflateSleepResponse.body);
+    assert.equal(
+      rawDeflateSleepResponse.statusCode,
+      200,
+      rawDeflateSleepResponse.body
+    );
 
     const byteStableDuplicateResponse = await app.inject({
       method: "POST",
@@ -3256,7 +3317,8 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
     });
     assert.equal(byteStableDuplicateResponse.statusCode, 200);
     assert.equal(
-      (byteStableDuplicateResponse.json() as { chunk: { duplicate: boolean } }).chunk.duplicate,
+      (byteStableDuplicateResponse.json() as { chunk: { duplicate: boolean } })
+        .chunk.duplicate,
       true
     );
 
@@ -3271,11 +3333,13 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
     });
     assert.equal(byteStableBadChecksumResponse.statusCode, 409);
     assert.equal(
-      (byteStableBadChecksumResponse.json() as { code: string; mode?: string }).code,
+      (byteStableBadChecksumResponse.json() as { code: string; mode?: string })
+        .code,
       "chunk_checksum_mismatch"
     );
     assert.equal(
-      (byteStableBadChecksumResponse.json() as { code: string; mode?: string }).mode,
+      (byteStableBadChecksumResponse.json() as { code: string; mode?: string })
+        .mode,
       "payload_json_base64"
     );
     const checksumDiagnostic = getDatabase()
@@ -3288,7 +3352,9 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
       )
       .get() as { details_json: string } | undefined;
     assert.ok(checksumDiagnostic);
-    const checksumDiagnosticDetails = JSON.parse(checksumDiagnostic.details_json) as {
+    const checksumDiagnosticDetails = JSON.parse(
+      checksumDiagnostic.details_json
+    ) as {
       error?: { details?: { mode?: string; chunkId?: string } };
     };
     assert.equal(
@@ -3314,11 +3380,13 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
     });
     assert.equal(byteStableByteMismatchResponse.statusCode, 409);
     assert.equal(
-      (byteStableByteMismatchResponse.json() as { code: string; mode?: string }).code,
+      (byteStableByteMismatchResponse.json() as { code: string; mode?: string })
+        .code,
       "chunk_byte_count_mismatch"
     );
     assert.equal(
-      (byteStableByteMismatchResponse.json() as { code: string; mode?: string }).mode,
+      (byteStableByteMismatchResponse.json() as { code: string; mode?: string })
+        .mode,
       "payload_json_base64"
     );
 
@@ -3377,12 +3445,17 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
         family: "vitals",
         recordCount: 0,
         byteCount: oversizedPayloadBuffer.length,
-        checksumSha256: createHash("sha256").update(oversizedPayloadBuffer).digest("hex"),
+        checksumSha256: createHash("sha256")
+          .update(oversizedPayloadBuffer)
+          .digest("hex"),
         payloadJsonBase64: oversizedPayloadBuffer.toString("base64")
       }
     });
     assert.equal(oversizedResponse.statusCode, 413);
-    assert.equal((oversizedResponse.json() as { code: string }).code, "chunk_too_large");
+    assert.equal(
+      (oversizedResponse.json() as { code: string }).code,
+      "chunk_too_large"
+    );
 
     const oversizedCompressedBuffer = deflateSync(oversizedPayloadBuffer);
     const oversizedCompressedResponse = await app.inject({
@@ -3395,7 +3468,9 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
         recordCount: 0,
         byteCount: oversizedPayloadBuffer.length,
         compressedByteCount: oversizedCompressedBuffer.length,
-        checksumSha256: createHash("sha256").update(oversizedPayloadBuffer).digest("hex"),
+        checksumSha256: createHash("sha256")
+          .update(oversizedPayloadBuffer)
+          .digest("hex"),
         payloadJsonDeflateBase64: oversizedCompressedBuffer.toString("base64")
       }
     });
@@ -3491,8 +3566,14 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
       ["workout_time_series", timeSeriesPayload],
       ["workout_routes", routePayload],
       ["vitals", { vitals: { daySummaries: [] } }],
-      ["movement", { movement: { settings: {}, knownPlaces: [], stays: [], trips: [] } }],
-      ["screen_time", { screenTime: { settings: {}, daySummaries: [], hourlySegments: [] } }]
+      [
+        "movement",
+        { movement: { settings: {}, knownPlaces: [], stays: [], trips: [] } }
+      ],
+      [
+        "screen_time",
+        { screenTime: { settings: {}, daySummaries: [], hourlySegments: [] } }
+      ]
     ].entries()) {
       const chunkPayload = {
         chunkId: `chunk-${family}`,
@@ -3521,7 +3602,9 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
       }
     });
     assert.equal(completeResponse.statusCode, 200);
-    const receipt = completeResponse.json() as { sync: { imported: { workouts: number } } };
+    const receipt = completeResponse.json() as {
+      sync: { imported: { workouts: number } };
+    };
     assert.equal(receipt.sync.imported.workouts, 1);
 
     const fitnessResponse = await app.inject({
@@ -3532,7 +3615,13 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
     const session = (
       fitnessResponse.json() as {
         fitness: {
-          sessions: Array<{ id: string; analytics?: { dataQuality: { heartRateSampleCount: number }; routeSummary: { pointCount: number } } }>;
+          sessions: Array<{
+            id: string;
+            analytics?: {
+              dataQuality: { heartRateSampleCount: number };
+              routeSummary: { pointCount: number };
+            };
+          }>;
         };
       }
     ).fitness.sessions[0];
@@ -3547,7 +3636,9 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
 });
 
 test("mobile health chunked sync accepts compressed workout archive chunks", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-health-workout-archive-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-health-workout-archive-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
@@ -3591,9 +3682,11 @@ test("mobile health chunked sync accepts compressed workout archive chunks", asy
       }
     });
     assert.equal(startResponse.statusCode, 200);
-    const upload = (startResponse.json() as {
-      upload: { syncSessionId: string; acceptedFamilies: string[] };
-    }).upload;
+    const upload = (
+      startResponse.json() as {
+        upload: { syncSessionId: string; acceptedFamilies: string[] };
+      }
+    ).upload;
     assert.ok(upload.acceptedFamilies.includes("workout_archive"));
 
     const archivePayload = {
@@ -3640,7 +3733,8 @@ test("mobile health chunked sync accepts compressed workout archive chunks", asy
         }
       ]
     };
-    const compressedPayload = healthChunkPayloadJsonDeflateBase64(archivePayload);
+    const compressedPayload =
+      healthChunkPayloadJsonDeflateBase64(archivePayload);
     const chunkResponse = await app.inject({
       method: "POST",
       url: `/api/v1/mobile/healthkit/sync-sessions/${upload.syncSessionId}/chunks`,
@@ -3671,7 +3765,12 @@ test("mobile health chunked sync accepts compressed workout archive chunks", asy
     const session = (
       fitnessResponse.json() as {
         fitness: {
-          sessions: Array<{ analytics?: { dataQuality: { heartRateSampleCount: number }; routeSummary: { pointCount: number } } }>;
+          sessions: Array<{
+            analytics?: {
+              dataQuality: { heartRateSampleCount: number };
+              routeSummary: { pointCount: number };
+            };
+          }>;
         };
       }
     ).fitness.sessions[0];
@@ -3684,8 +3783,110 @@ test("mobile health chunked sync accepts compressed workout archive chunks", asy
   }
 });
 
+test("mobile health chunked sync does not resume stale sessions missing requested families", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-health-resume-families-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const pairingResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: { userId: "user_operator" }
+    });
+    assert.equal(pairingResponse.statusCode, 201);
+    const qrPayload = (
+      pairingResponse.json() as {
+        qrPayload: { sessionId: string; pairingToken: string };
+      }
+    ).qrPayload;
+    const sharedPayload = {
+      sessionId: qrPayload.sessionId,
+      pairingToken: qrPayload.pairingToken,
+      device: {
+        name: "Omar iPhone",
+        platform: "ios",
+        appVersion: "1.0",
+        sourceDevice: "iPhone"
+      },
+      permissions: {
+        healthKitAuthorized: true,
+        backgroundRefreshEnabled: true,
+        motionReady: false,
+        locationReady: false,
+        screenTimeReady: false
+      }
+    };
+
+    const oldStartResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync-sessions",
+      payload: {
+        ...sharedPayload,
+        requestedFamilies: [
+          "workout_summaries",
+          "workout_time_series",
+          "workout_routes"
+        ]
+      }
+    });
+    assert.equal(oldStartResponse.statusCode, 200, oldStartResponse.body);
+    const oldUpload = (
+      oldStartResponse.json() as {
+        upload: { syncSessionId: string; acceptedFamilies: string[] };
+      }
+    ).upload;
+    assert.ok(!oldUpload.acceptedFamilies.includes("workout_archive"));
+
+    const resumeResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync-sessions",
+      payload: {
+        ...sharedPayload,
+        requestedFamilies: [
+          "workout_summaries",
+          "workout_archive",
+          "workout_time_series",
+          "workout_routes"
+        ],
+        metadata: { resumeSyncSessionId: oldUpload.syncSessionId }
+      }
+    });
+    assert.equal(resumeResponse.statusCode, 200, resumeResponse.body);
+    const resumedUpload = (
+      resumeResponse.json() as {
+        upload: {
+          syncSessionId: string;
+          acceptedFamilies: string[];
+          receivedChunkIds: string[];
+        };
+      }
+    ).upload;
+    assert.notEqual(resumedUpload.syncSessionId, oldUpload.syncSessionId);
+    assert.ok(resumedUpload.acceptedFamilies.includes("workout_archive"));
+    assert.deepEqual(resumedUpload.receivedChunkIds, []);
+
+    const oldSession = getDatabase()
+      .prepare(`SELECT status FROM health_mobile_sync_sessions WHERE id = ?`)
+      .get(oldUpload.syncSessionId) as { status: string };
+    assert.equal(oldSession.status, "aborted");
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("mobile health chunked sync rejects incomplete expected counts without advancing pairing sync state", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-health-incomplete-chunked-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-health-incomplete-chunked-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
@@ -4202,9 +4403,7 @@ test("mobile health sync stores canonical sleep nights with raw segments and exp
     assert.equal(sleep.calendarDays.length, 1);
     assert.equal(sleep.calendarDays[0]?.dateKey, "2026-04-05");
     assert.equal(sleep.calendarDays[0]?.hasRawSegments, true);
-    assert.ok(
-      (sleep.latestNight?.weeklyAverageSleepSeconds ?? 0) > 0
-    );
+    assert.ok((sleep.latestNight?.weeklyAverageSleepSeconds ?? 0) > 0);
     assert.ok(
       sleep.latestNight?.stageBreakdown.some(
         (stage) => stage.stage === "deep" && stage.percentage > 0
@@ -4229,14 +4428,20 @@ test("mobile health sync stores canonical sleep nights with raw segments and exp
         sourceValue: number | null;
         qualityKind: string;
       }>;
-      sourceRecords: Array<{ rawStage: string; rawValue: number | null; qualityKind: string }>;
+      sourceRecords: Array<{
+        rawStage: string;
+        rawValue: number | null;
+        qualityKind: string;
+      }>;
       auditLogs: Array<unknown>;
     };
     assert.equal(rawDetail.sleep.id, sleep.sessions[0]?.id);
     assert.equal(rawDetail.rawDataStatus, "provider_raw");
     assert.equal(rawDetail.phaseTimeline.hasSleepStageData, true);
     assert.deepEqual(
-      rawDetail.phaseTimeline.blocks.map((block) => `${block.lane}:${block.stage}`),
+      rawDetail.phaseTimeline.blocks.map(
+        (block) => `${block.lane}:${block.stage}`
+      ),
       ["in_bed:in_bed", "sleep:core", "sleep:deep", "sleep:rem"]
     );
     assert.equal(rawDetail.segments.length, 4);
@@ -4386,8 +4591,16 @@ test("sleep view collapses duplicate localDateKey nights into one calendar day a
     const sleep = (
       sleepResponse.json() as {
         sleep: {
-          latestNight: { sleepId: string; dateKey: string; asleepSeconds: number } | null;
-          calendarDays: Array<{ sleepId: string; dateKey: string; sleepHours: number }>;
+          latestNight: {
+            sleepId: string;
+            dateKey: string;
+            asleepSeconds: number;
+          } | null;
+          calendarDays: Array<{
+            sleepId: string;
+            dateKey: string;
+            sleepHours: number;
+          }>;
           sessions: Array<{ id: string }>;
         };
       }
@@ -4479,7 +4692,8 @@ test("historical repaired sleep nights expose historical raw data, normalized se
         session.localDateKey === "2026-04-15"
     );
     assert.ok(repairedSession);
-    const runtimeTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    const runtimeTimeZone =
+      Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
     if (runtimeTimeZone !== "UTC") {
       assert.equal(repairedSession.sourceTimezone, runtimeTimeZone);
     }
@@ -4498,7 +4712,9 @@ test("historical repaired sleep nights expose historical raw data, normalized se
     assert.equal(rawDetail.rawDataStatus, "historical_raw");
     assert.equal(rawDetail.segments.length, 2);
     assert.ok(
-      rawDetail.segments.every((segment) => segment.qualityKind === "historical_import")
+      rawDetail.segments.every(
+        (segment) => segment.qualityKind === "historical_import"
+      )
     );
     assert.equal(rawDetail.sourceRecords.length, 2);
     assert.ok(
@@ -4674,7 +4890,11 @@ test("provider-backed sleep import replaces reconstructed historical nights for 
     const sleep = (
       sleepResponse.json() as {
         sleep: {
-          sessions: Array<{ id: string; sourceType: string; localDateKey: string }>;
+          sessions: Array<{
+            id: string;
+            sourceType: string;
+            localDateKey: string;
+          }>;
         };
       }
     ).sleep;
@@ -4694,7 +4914,9 @@ test("provider-backed sleep import replaces reconstructed historical nights for 
     assert.equal(rawDetail.rawDataStatus, "provider_raw");
     assert.equal(rawDetail.sourceRecords.length, 2);
     assert.ok(
-      rawDetail.sourceRecords.every((record) => record.qualityKind === "provider_native")
+      rawDetail.sourceRecords.every(
+        (record) => record.qualityKind === "provider_native"
+      )
     );
   } finally {
     await app.close();
@@ -4704,7 +4926,9 @@ test("provider-backed sleep import replaces reconstructed historical nights for 
 });
 
 test("mobile health sync accepts waiting_for_snapshot screen time capture state", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-screen-time-waiting-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-screen-time-waiting-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
@@ -5580,9 +5804,15 @@ test("movement sync stores places, stays, trips, and serves the movement workspa
         longitude: number;
       } | null;
     };
-    assert.equal(patchedMobileStay.place?.externalUid, createdMobilePlace.externalUid);
+    assert.equal(
+      patchedMobileStay.place?.externalUid,
+      createdMobilePlace.externalUid
+    );
     assert.equal(patchedMobileStay.place?.label, "Champel Station");
-    assert.equal(patchedMobileStay.place?.metadata.distributionSampleCount, "2");
+    assert.equal(
+      patchedMobileStay.place?.metadata.distributionSampleCount,
+      "2"
+    );
     assert.ok((patchedMobileStay.place?.latitude ?? 0) > 46.19);
     assert.ok((patchedMobileStay.place?.longitude ?? 0) > 6.15);
 
@@ -5655,7 +5885,9 @@ test("movement sync stores places, stays, trips, and serves the movement workspa
       }
     ).movement.projectedBoxes;
     assert.equal(
-      projectedBoxesAfterDelete.some((segment) => segment.id === createdUserBox.id),
+      projectedBoxesAfterDelete.some(
+        (segment) => segment.id === createdUserBox.id
+      ),
       false
     );
   } finally {
@@ -5942,7 +6174,8 @@ test("movement timeline hides overlapping stays and trips and flags them invalid
       healedTimeline.movement.segments.some(
         (segment) =>
           segment.kind === "stay" &&
-          (segment.origin === "repaired_gap" || segment.sourceKind === "user_defined")
+          (segment.origin === "repaired_gap" ||
+            segment.sourceKind === "user_defined")
       )
     );
   } finally {
@@ -6786,7 +7019,8 @@ test("movement day and timeline classify short gaps into repaired stays, repaire
         .every(
           (segment) =>
             Math.round(
-              (Date.parse(segment.endedAt) - Date.parse(segment.startedAt)) / 1000
+              (Date.parse(segment.endedAt) - Date.parse(segment.startedAt)) /
+                1000
             ) >=
             60 * 60
         )
@@ -6985,7 +7219,9 @@ test("movement timeline makes long overnight gaps explicit instead of leaving bl
         }>;
       };
     };
-    const expected = await loadSharedMovementFixture("overnight_gap_before_move");
+    const expected = await loadSharedMovementFixture(
+      "overnight_gap_before_move"
+    );
     const relevant = [...timeline.movement.segments]
       .sort((left, right) => left.startedAt.localeCompare(right.startedAt))
       .filter(
@@ -7143,7 +7379,9 @@ test("user-defined movement boxes override automatic boxes without mutating raw 
     assert.equal(createdBox.box.boxId, createdBox.box.id);
     assert.ok(createdBox.box.laneSide.length > 0);
 
-    const expected = await loadSharedMovementFixture("user_defined_missing_override");
+    const expected = await loadSharedMovementFixture(
+      "user_defined_missing_override"
+    );
 
     const dayResponse = await app.inject({
       method: "GET",
@@ -7197,12 +7435,10 @@ test("user-defined movement boxes override automatic boxes without mutating raw 
     const userMissing = day.movement.segments.find(
       (segment) =>
         segment.id === "user_missing_override_fixture" ||
-        (
-          segment.sourceKind === "user_defined" &&
+        (segment.sourceKind === "user_defined" &&
           segment.kind === "missing" &&
           segment.startedAt === "2026-04-05T08:30:00.000Z" &&
-          segment.endedAt === "2026-04-05T09:00:00.000Z"
-        )
+          segment.endedAt === "2026-04-05T09:00:00.000Z")
     );
     assert.ok(userMissing);
     assert.equal(userMissing?.origin, "user_invalidated");
@@ -7248,7 +7484,8 @@ test("movement user-box preflight and save allow overlapping manual boxes with l
       }
     });
     assert.equal(firstCreate.statusCode, 201);
-    const firstBoxId = (firstCreate.json() as { box: { boxId: string } }).box.boxId;
+    const firstBoxId = (firstCreate.json() as { box: { boxId: string } }).box
+      .boxId;
 
     const preflight = await app.inject({
       method: "POST",
@@ -7310,7 +7547,8 @@ test("movement user-box preflight and save allow overlapping manual boxes with l
     };
 
     const visibleFirstBoxFragments = timeline.movement.segments.filter(
-      (segment) => segment.sourceKind === "user_defined" && segment.boxId === firstBoxId
+      (segment) =>
+        segment.sourceKind === "user_defined" && segment.boxId === firstBoxId
     );
     assert.equal(visibleFirstBoxFragments.length, 2);
     assert.deepEqual(
@@ -7538,7 +7776,10 @@ test("watch bootstrap serves compact habit state and watch habit check-ins prese
       (habit) => habit.id === positiveHabitId
     );
     assert.equal(positiveWatchHabit?.last7History.at(-1)?.current, true);
-    assert.equal(positiveWatchHabit?.last7History.at(-1)?.periodKey, currentDateKey);
+    assert.equal(
+      positiveWatchHabit?.last7History.at(-1)?.periodKey,
+      currentDateKey
+    );
     assert.equal(positiveWatchHabit?.last7History.at(-1)?.state, "aligned");
 
     const negativeCheckInResponse = await app.inject({
@@ -8605,7 +8846,10 @@ test("macOS local connection replacement rehomes Forge-owned references and bloc
          WHERE id = ?`
       )
       .get("conn_google_old") as { config_json: string };
-    const oldConfig = JSON.parse(oldConnectionRow.config_json) as Record<string, unknown>;
+    const oldConfig = JSON.parse(oldConnectionRow.config_json) as Record<
+      string,
+      unknown
+    >;
     assert.equal(oldConfig.replacedByConnectionId, createdConnection.id);
 
     const newForgeCalendar = database
@@ -8664,11 +8908,15 @@ test("macOS local connection replacement rehomes Forge-owned references and bloc
       listResponse.json() as { connections: Array<{ id: string }> }
     ).connections;
     assert.equal(
-      listedConnections.some((connection) => connection.id === "conn_google_old"),
+      listedConnections.some(
+        (connection) => connection.id === "conn_google_old"
+      ),
       false
     );
     assert.equal(
-      listedConnections.some((connection) => connection.id === createdConnection.id),
+      listedConnections.some(
+        (connection) => connection.id === createdConnection.id
+      ),
       true
     );
 
@@ -8801,7 +9049,13 @@ test("new writable connections can reuse the existing shared Forge write target 
 
     assert.equal(createResponse.statusCode, 201);
     const createdConnection = (
-      createResponse.json() as { connection: { id: string; provider: string; forgeCalendarId: string | null } }
+      createResponse.json() as {
+        connection: {
+          id: string;
+          provider: string;
+          forgeCalendarId: string | null;
+        };
+      }
     ).connection;
     assert.equal(createdConnection.provider, "macos_local");
     assert.equal(createdConnection.forgeCalendarId, null);
@@ -8816,7 +9070,10 @@ test("new writable connections can reuse the existing shared Forge write target 
       config_json: string;
       forge_calendar_id: string | null;
     };
-    const createdConfig = JSON.parse(createdRow.config_json) as Record<string, unknown>;
+    const createdConfig = JSON.parse(createdRow.config_json) as Record<
+      string,
+      unknown
+    >;
     assert.equal(createdConfig.forgeCalendarUrl, null);
     assert.equal(createdRow.forge_calendar_id, null);
 
@@ -9866,9 +10123,7 @@ test("command-center context exposes derived achievements and milestone rewards"
 });
 
 test("gamification streak counts created Forge entities as XP activity with a next-day grace window", async () => {
-  const rootDir = await mkdtemp(
-    path.join(os.tmpdir(), "forge-entity-streak-")
-  );
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-entity-streak-"));
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
@@ -10081,7 +10336,9 @@ test("openapi document exposes schema-backed versioned contracts", async () => {
     assert.ok(body.paths?.["/api/v1/habits/{id}"]);
     assert.ok(body.paths?.["/api/v1/habits/{id}/check-ins"]);
     assert.ok(body.paths?.["/api/v1/habits/{id}/check-ins/{dateKey}"]);
-    const habitCheckInOperation = body.paths?.["/api/v1/habits/{id}/check-ins"] as
+    const habitCheckInOperation = body.paths?.[
+      "/api/v1/habits/{id}/check-ins"
+    ] as
       | {
           post?: {
             requestBody?: {
@@ -10097,7 +10354,8 @@ test("openapi document exposes schema-backed versioned contracts", async () => {
         ?.schema?.$ref,
       "#/components/schemas/HabitCheckInInput"
     );
-    const habitCheckInInputSchema = body.components?.schemas?.HabitCheckInInput as
+    const habitCheckInInputSchema = body.components?.schemas
+      ?.HabitCheckInInput as
       | { properties?: Record<string, { description?: string }> }
       | undefined;
     assert.match(
@@ -17439,7 +17697,7 @@ test("settings and local agent token management persist through the versioned AP
     assert.equal(
       (
         onboardingViaToken.json() as {
-        onboarding: {
+          onboarding: {
             effectiveBootstrapPolicy: { mode: string; tasksLimit: number };
             effectiveScopePolicy: {
               userIds: string[];
@@ -17959,10 +18217,7 @@ test("settings and local agent token management persist through the versioned AP
       (entity) => entity.entityType === "life_force"
     );
     assert.ok(lifeForceEntity);
-    assert.equal(
-      lifeForceEntity.classification,
-      "specialized_domain_surface"
-    );
+    assert.equal(lifeForceEntity.classification, "specialized_domain_surface");
     assert.equal(
       lifeForceEntity.preferredMutationTool,
       "forge_call_life_force_route"
@@ -18119,7 +18374,9 @@ test("settings and local agent token management persist through the versioned AP
       "/api/v1/movement/user-boxes/preflight"
     );
     assert.ok(
-      movementSurface.notes.some((note) => /batch CRUD entity family/i.test(note))
+      movementSurface.notes.some((note) =>
+        /batch CRUD entity family/i.test(note)
+      )
     );
     const movementPlaybook =
       onboardingBody.onboarding.entityConversationPlaybooks.find(
@@ -18146,7 +18403,9 @@ test("settings and local agent token management persist through the versioned AP
       "/api/v1/life-force/templates/:weekday"
     );
     assert.ok(
-      lifeForceSurface.notes.some((note) => /current overview payload/i.test(note))
+      lifeForceSurface.notes.some((note) =>
+        /current overview payload/i.test(note)
+      )
     );
     const lifeForcePlaybook =
       onboardingBody.onboarding.entityConversationPlaybooks.find(
@@ -18199,9 +18458,10 @@ test("settings and local agent token management persist through the versioned AP
       "operator_context",
       "calendar_overview"
     ]) {
-      const playbook = onboardingBody.onboarding.entityConversationPlaybooks.find(
-        (entry) => entry.focus === focus
-      );
+      const playbook =
+        onboardingBody.onboarding.entityConversationPlaybooks.find(
+          (entry) => entry.focus === focus
+        );
       assert.ok(playbook, `${focus} playbook should be published`);
       assert.ok(
         playbook.askSequence.some((step) =>
@@ -19455,7 +19715,9 @@ test("agent runtime sessions register, heartbeat, and expose reconnect history",
       actions: Array<{ actionType: string; title: string }>;
     };
     assert.ok(
-      historyBody.events.some((event) => event.eventType === "reconnect_requested")
+      historyBody.events.some(
+        (event) => event.eventType === "reconnect_requested"
+      )
     );
     assert.ok(
       historyBody.actions.some(
@@ -19562,11 +19824,18 @@ test("singleton codex runtime sessions supersede older bridges and ignore stale 
     });
     assert.equal(staleDisconnect.statusCode, 200);
     const staleDisconnectBody = staleDisconnect.json() as {
-      session: { status: string; endedAt: string | null; externalSessionId: string | null };
+      session: {
+        status: string;
+        endedAt: string | null;
+        externalSessionId: string | null;
+      };
     };
     assert.equal(staleDisconnectBody.session.status, "connected");
     assert.equal(staleDisconnectBody.session.endedAt, null);
-    assert.equal(staleDisconnectBody.session.externalSessionId, "codex-instance-b");
+    assert.equal(
+      staleDisconnectBody.session.externalSessionId,
+      "codex-instance-b"
+    );
 
     const historyResponse = await app.inject({
       method: "GET",
@@ -19580,7 +19849,9 @@ test("singleton codex runtime sessions supersede older bridges and ignore stale 
       events: Array<{ eventType: string }>;
     };
     assert.ok(
-      historyBody.events.some((event) => event.eventType === "session_registered")
+      historyBody.events.some(
+        (event) => event.eventType === "session_registered"
+      )
     );
   } finally {
     await app.close();

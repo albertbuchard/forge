@@ -725,7 +725,7 @@ struct ForgeSyncClient {
         )
         companionDebugLog(
             "ForgeSyncClient",
-            "startHealthSyncSession success uploadSession=\(envelope.upload.syncSessionId) target=\(envelope.upload.chunkTargetBytes) max=\(envelope.upload.chunkMaxBytes) payloadEncoding=\(envelope.upload.chunkPayloadEncoding ?? "missing")"
+            "startHealthSyncSession success uploadSession=\(envelope.upload.syncSessionId) target=\(envelope.upload.chunkTargetBytes) max=\(envelope.upload.chunkMaxBytes) payloadEncoding=\(envelope.upload.chunkPayloadEncoding ?? "missing") acceptedFamilies=\(envelope.upload.acceptedFamilies.joined(separator: ","))"
         )
         guard envelope.upload.supportsByteStablePayloadEncoding else {
             companionDebugLog(
@@ -738,6 +738,36 @@ struct ForgeSyncClient {
                 userInfo: [
                     NSLocalizedDescriptionKey: "Forge runtime needs an update or restart before HealthKit chunk sync.",
                     NSLocalizedFailureReasonErrorKey: "healthkit_chunk_protocol_unsupported"
+                ]
+            )
+        }
+        let missingFamilies = requestedFamilies.filter { envelope.upload.acceptedFamilies.contains($0) == false }
+        if missingFamilies.isEmpty == false {
+            if resumeSyncSessionId != nil {
+                companionDebugLog(
+                    "ForgeSyncClient",
+                    "startHealthSyncSession stale resumed uploadSession=\(envelope.upload.syncSessionId) missingFamilies=\(missingFamilies.joined(separator: ",")); aborting and starting fresh"
+                )
+                await abortHealthSyncSession(uploadSession: envelope.upload, pairing: pairing)
+                return try await startHealthSyncSession(
+                    pairing: pairing,
+                    permissions: permissions,
+                    sourceStates: sourceStates,
+                    resumeSyncSessionId: nil,
+                    requestedFamilies: requestedFamilies
+                )
+            }
+            companionDebugLog(
+                "ForgeSyncClient",
+                "startHealthSyncSession rejected runtime missingFamilies=\(missingFamilies.joined(separator: ",")) uploadSession=\(envelope.upload.syncSessionId)"
+            )
+            throw NSError(
+                domain: "ForgeSyncClient",
+                code: 426,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Forge runtime needs an update or restart before HealthKit archive sync.",
+                    NSLocalizedFailureReasonErrorKey: "healthkit_sync_family_unsupported",
+                    "ForgeHealthSyncMissingFamilies": missingFamilies.joined(separator: ",")
                 ]
             )
         }
@@ -847,14 +877,15 @@ struct ForgeSyncClient {
         guard uploadSession.acceptedFamilies.contains("workout_archive") else {
             companionDebugLog(
                 "ForgeSyncClient",
-                "uploadWorkoutArchiveHealthSyncChunks fallback unsupported family=workout_archive uploadSession=\(uploadSession.syncSessionId)"
+                "uploadWorkoutArchiveHealthSyncChunks rejected unsupported family=workout_archive uploadSession=\(uploadSession.syncSessionId)"
             )
-            return try await uploadWorkoutHealthSyncChunks(
-                workouts: workouts,
-                uploadSession: uploadSession,
-                pairing: pairing,
-                startingSequence: startingSequence,
-                onChunkUploaded: onChunkUploaded
+            throw NSError(
+                domain: "ForgeSyncClient",
+                code: 426,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Forge runtime needs an update or restart before workout archive sync.",
+                    NSLocalizedFailureReasonErrorKey: "healthkit_workout_archive_unsupported"
+                ]
             )
         }
         return try await uploadArrayHealthSyncChunks(

@@ -38,11 +38,11 @@ export function AmbientActivityPill({
         tone="subtle"
         className={active ? "opacity-100" : "opacity-45"}
       />
-      <div className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap">
-        <span className="type-label text-white/56">
+      <div className="inline-flex min-w-0 max-w-full items-center gap-2 whitespace-nowrap">
+        <span className="type-label hidden text-white/56 sm:inline">
           {t("common.labels.backgroundActivity")}
         </span>
-        <span className="text-white/30">•</span>
+        <span className="hidden text-white/30 sm:inline">•</span>
         <span className="truncate text-sm text-white/80">{label}</span>
       </div>
     </motion.button>

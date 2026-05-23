@@ -88,6 +88,8 @@ actor HealthSyncStore {
     private let store = HKHealthStore()
     private let syncWindowDays = 21
     private let incrementalLookbackHours = 72
+    private let fullWorkoutBackfillBatchSize = 24
+    private let workoutMappingConcurrencyLimit = 4
     private let sleepSessionGap: TimeInterval = 4 * 60 * 60
     private let sleepInferenceGap: TimeInterval = 15 * 60
     private let isoFormatter: ISO8601DateFormatter = {
@@ -648,7 +650,7 @@ actor HealthSyncStore {
             return try await streamWorkoutSessionBatchesByWindow(
                 startDate: workoutStartDate,
                 endDate: endDate,
-                batchSize: min(max(1, batchSize), 8),
+                batchSize: max(fullWorkoutBackfillBatchSize, batchSize),
                 onBatch: onBatch
             )
         }
@@ -667,7 +669,10 @@ actor HealthSyncStore {
             let lowerBound = batchIndex * boundedBatchSize
             let upperBound = min(workouts.count, lowerBound + boundedBatchSize)
             let batchWorkouts = Array(workouts[lowerBound..<upperBound])
-            let sessions = try await mapWorkoutSessionsBounded(batchWorkouts)
+            let sessions = try await mapWorkoutSessionsBounded(
+                batchWorkouts,
+                concurrencyLimit: workoutMappingConcurrencyLimit
+            )
                 .sorted { $0.startedAt > $1.startedAt }
             uploadedWorkouts += sessions.count
             try await onBatch(
@@ -725,7 +730,10 @@ actor HealthSyncStore {
                 try Task.checkCancellation()
                 let upperBound = min(windowWorkouts.count, lowerBound + boundedBatchSize)
                 let batchWorkouts = Array(windowWorkouts[lowerBound..<upperBound])
-                let sessions = try await mapWorkoutSessionsBounded(batchWorkouts)
+                let sessions = try await mapWorkoutSessionsBounded(
+                    batchWorkouts,
+                    concurrencyLimit: workoutMappingConcurrencyLimit
+                )
                     .sorted { $0.startedAt > $1.startedAt }
                 uploadedWorkouts += sessions.count
                 batchIndex += 1
@@ -981,7 +989,7 @@ actor HealthSyncStore {
 
     private func mapWorkoutSessionsBounded(
         _ workouts: [HKWorkout],
-        concurrencyLimit: Int = 2
+        concurrencyLimit: Int = 4
     ) async throws -> [CompanionSyncPayload.WorkoutSession] {
         guard workouts.isEmpty == false else {
             return []
