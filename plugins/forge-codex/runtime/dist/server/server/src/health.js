@@ -41,7 +41,12 @@ const generatedHealthEventTemplateSchema = z.object({
     enabled: z.boolean().default(false),
     workoutType: z.string().trim().min(1).default("workout"),
     title: z.string().trim().default(""),
-    durationMinutes: z.number().int().positive().max(24 * 60).default(45),
+    durationMinutes: z
+        .number()
+        .int()
+        .positive()
+        .max(24 * 60)
+        .default(45),
     xpReward: z.number().int().min(0).max(500).default(0),
     tags: z.array(z.string().trim()).default([]),
     links: z.array(healthLinkSchema).default([]),
@@ -110,7 +115,12 @@ const companionSourceStatesSchema = z.object({
 export const createCompanionPairingSessionSchema = z.object({
     label: z.string().trim().default("Forge Companion"),
     userId: z.string().trim().nullable().optional(),
-    expiresInMinutes: z.coerce.number().int().min(5).max(24 * 60).default(30),
+    expiresInMinutes: z.coerce
+        .number()
+        .int()
+        .min(5)
+        .max(24 * 60)
+        .default(30),
     transportMode: z
         .enum(["iroh", "manual-http"])
         .default("iroh")
@@ -221,7 +231,11 @@ export const mobileHealthSyncSchema = z.object({
         endedAt: z.string().datetime(),
         sourceTimezone: z.string().trim().min(1).default("UTC"),
         localDateKey: z.string().trim().min(1),
-        providerRecordType: z.string().trim().min(1).default("healthkit_sleep_sample"),
+        providerRecordType: z
+            .string()
+            .trim()
+            .min(1)
+            .default("healthkit_sleep_sample"),
         rawStage: z.string().trim().min(1),
         rawValue: z.number().int().nullable().optional(),
         payload: z.record(z.string(), z.unknown()).default({}),
@@ -294,14 +308,13 @@ export const mobileHealthSyncSessionStartSchema = mobileHealthSyncSchema
     sourceStates: true
 })
     .extend({
-    schemaVersion: z
-        .string()
-        .trim()
-        .default(HEALTH_MOBILE_SYNC_SCHEMA_VERSION),
+    schemaVersion: z.string().trim().default(HEALTH_MOBILE_SYNC_SCHEMA_VERSION),
     requestedFamilies: z
         .array(mobileHealthSyncFamilySchema)
         .default(defaultMobileHealthSyncFamilies),
-    expectedCounts: z.record(z.string(), z.number().int().nonnegative()).default({}),
+    expectedCounts: z
+        .record(z.string(), z.number().int().nonnegative())
+        .default({}),
     metadata: z.record(z.string(), z.unknown()).default({})
 });
 const workoutTimeSeriesChunkPayloadSchema = z.object({
@@ -355,7 +368,9 @@ export const mobileHealthSyncChunkSchema = z.object({
 });
 export const mobileHealthSyncSessionCompleteSchema = z.object({
     finalCursor: z.record(z.string(), z.unknown()).default({}),
-    expectedCounts: z.record(z.string(), z.number().int().nonnegative()).default({})
+    expectedCounts: z
+        .record(z.string(), z.number().int().nonnegative())
+        .default({})
 });
 export const verifyCompanionPairingSchema = z.object({
     sessionId: z.string().trim().min(1),
@@ -535,9 +550,9 @@ function upsertPairingSourceState(pairing, source, patch) {
             ...patch.metadata
         }
         : safeJsonParse(current.metadata_json, {});
-    const nextDesiredEnabled = patch.desiredEnabled ?? (current.desired_enabled === 1);
-    const nextAppliedEnabled = patch.appliedEnabled ?? (current.applied_enabled === 1);
-    const nextSyncEligible = patch.syncEligible ?? (current.sync_eligible === 1);
+    const nextDesiredEnabled = patch.desiredEnabled ?? current.desired_enabled === 1;
+    const nextAppliedEnabled = patch.appliedEnabled ?? current.applied_enabled === 1;
+    const nextSyncEligible = patch.syncEligible ?? current.sync_eligible === 1;
     const nextUpdatedAt = nowIso();
     getDatabase()
         .prepare(`UPDATE companion_pairing_source_states
@@ -681,9 +696,7 @@ function computeSleepDerivedMetrics(input) {
     })
         .reduce((total, stage) => total + stage.seconds, 0);
     const restorativeShare = input.asleepSeconds > 0 ? restorativeSeconds / input.asleepSeconds : 0;
-    const sleepDebtHours = input.asleepSeconds > 0
-        ? Math.max(0, 8 - input.asleepSeconds / 3600)
-        : 8;
+    const sleepDebtHours = input.asleepSeconds > 0 ? Math.max(0, 8 - input.asleepSeconds / 3600) : 8;
     return {
         durationHours: round(input.asleepSeconds / 3600, 2),
         efficiency: round(efficiency, 3),
@@ -1113,7 +1126,10 @@ function inferHistoricalRawStage(payload) {
     return "asleep_unspecified";
 }
 function inferHistoricalSleepBucket(stage) {
-    const normalized = stage.trim().toLowerCase().replace(/[\s-]+/g, "_");
+    const normalized = stage
+        .trim()
+        .toLowerCase()
+        .replace(/[\s-]+/g, "_");
     if (normalized.includes("bed")) {
         return "in_bed";
     }
@@ -1155,22 +1171,24 @@ function sleepHasReflection(session) {
         tags.length > 0);
 }
 function sleepEfficiency(session) {
-    return typeof session.derived.efficiency === "number"
+    return typeof session.derived.efficiency ===
+        "number"
         ? session.derived.efficiency
         : session.timeInBedSeconds > 0
             ? session.asleepSeconds / session.timeInBedSeconds
             : 0;
 }
 function sleepRestorativeShare(session) {
-    return typeof session.derived.restorativeShare ===
-        "number"
+    return typeof session.derived
+        .restorativeShare === "number"
         ? session.derived.restorativeShare
         : 0;
 }
 function sleepRecoveryState(session) {
     return typeof session.derived.recoveryState ===
         "string"
-        ? (session.derived.recoveryState || null)
+        ? session.derived.recoveryState ||
+            null
         : null;
 }
 function sleepQualitativeState(session) {
@@ -1211,7 +1229,9 @@ function sleepStageShare(session) {
     return session.stageBreakdown.map((stage) => ({
         stage: stage.stage,
         seconds: stage.seconds,
-        percentage: session.asleepSeconds > 0 ? round(stage.seconds / session.asleepSeconds, 3) : 0
+        percentage: session.asleepSeconds > 0
+            ? round(stage.seconds / session.asleepSeconds, 3)
+            : 0
     }));
 }
 function buildSleepSurfaceNight(session, baselineAverageSleepSeconds) {
@@ -1239,8 +1259,8 @@ function buildSleepSurfaceNight(session, baselineAverageSleepSeconds) {
         hasRawSegments: session.rawSegmentCount > 0,
         qualitySummary: typeof session.annotations.qualitySummary ===
             "string"
-            ? (session.annotations.qualitySummary ||
-                null)
+            ? session.annotations
+                .qualitySummary || null
             : null,
         stageBreakdown: sleepStageShare(session)
     };
@@ -1289,7 +1309,10 @@ function pickDisplaySleepSessions(sessions) {
     return [...byDateKey.values()].sort((left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt));
 }
 function normalizeTimelineStage(stage, bucket) {
-    const normalized = stage.trim().toLowerCase().replace(/[\s-]+/g, "_");
+    const normalized = stage
+        .trim()
+        .toLowerCase()
+        .replace(/[\s-]+/g, "_");
     if (bucket === "in_bed" || normalized.includes("bed")) {
         return "in_bed";
     }
@@ -1560,8 +1583,7 @@ export function revokeCompanionPairingSession(pairingSessionId, activity) {
 }
 export function revokeAllCompanionPairingSessions(input, activity) {
     const parsed = revokeAllCompanionPairingSessionsSchema.parse(input ?? {});
-    const rows = listPairingRows(parsed.userIds.length > 0 ? parsed.userIds : undefined)
-        .filter((row) => parsed.includeRevoked || row.status !== "revoked");
+    const rows = listPairingRows(parsed.userIds.length > 0 ? parsed.userIds : undefined).filter((row) => parsed.includeRevoked || row.status !== "revoked");
     const sessions = revokePairingRows(rows, {
         actor: activity?.actor ?? null,
         source: activity?.source ?? "ui",
@@ -1794,7 +1816,8 @@ function normalizeSleepSegmentInput(input) {
     return {
         ...input,
         sourceTimezone,
-        localDateKey: input.localDateKey || localDateKeyForTimezone(input.endedAt, sourceTimezone)
+        localDateKey: input.localDateKey ||
+            localDateKeyForTimezone(input.endedAt, sourceTimezone)
     };
 }
 function normalizeSleepRawRecordInput(input) {
@@ -1802,7 +1825,8 @@ function normalizeSleepRawRecordInput(input) {
     return {
         ...input,
         sourceTimezone,
-        localDateKey: input.localDateKey || localDateKeyForTimezone(input.endedAt, sourceTimezone)
+        localDateKey: input.localDateKey ||
+            localDateKeyForTimezone(input.endedAt, sourceTimezone)
     };
 }
 function listNormalizedSleepNights(payload) {
@@ -2018,8 +2042,7 @@ function upsertVitalDaySummary(userId, input) {
 }
 function summarizeUserHealthDay(userId, dateKeyValue) {
     const sleeps = listSleepRows([userId]).filter((row) => sleepSessionDateKey(row) === dateKeyValue ||
-        localDateKeyForTimezone(row.started_at, resolveTimeZone(row.source_timezone)) ===
-            dateKeyValue);
+        localDateKeyForTimezone(row.started_at, resolveTimeZone(row.source_timezone)) === dateKeyValue);
     const workouts = listWorkoutRows([userId]).filter((row) => dayKey(row.started_at) === dateKeyValue);
     const totalSleepSeconds = sleeps.reduce((sum, row) => sum + row.asleep_seconds, 0);
     const totalWorkoutSeconds = workouts.reduce((sum, row) => sum + row.duration_seconds, 0);
@@ -2147,12 +2170,16 @@ function insertOrUpdateWorkoutSession(pairing, input) {
                 (typeof existingProvenance.sourceProductType === "string"
                     ? existingProvenance.sourceProductType
                     : null),
-            activity: input.activity ?? existingDerived.activity ?? existingProvenance.activity,
+            activity: input.activity ??
+                existingDerived.activity ??
+                existingProvenance.activity,
             details: input.details ?? existingDerived.details ?? existingProvenance.details
         });
         const mergedLinks = mergeHealthLinks(existingLinks, input.links, annotations.links);
         const mergedTags = mergeStringLists(existingTags, annotations.tags);
-        const nextSubjectiveEffort = matchedGenerated.subjective_effort ?? annotations.subjectiveEffort ?? null;
+        const nextSubjectiveEffort = matchedGenerated.subjective_effort ??
+            annotations.subjectiveEffort ??
+            null;
         const nextMoodBefore = matchedGenerated.mood_before || annotations.moodBefore;
         const nextMoodAfter = matchedGenerated.mood_after || annotations.moodAfter;
         const nextMeaningText = matchedGenerated.meaning_text || annotations.meaningText;
@@ -2201,7 +2228,8 @@ function insertOrUpdateWorkoutSession(pairing, input) {
         }), matchedGenerated.generated_from_habit_id ? "merged" : "standalone", now, matchedGenerated.id);
         persistWorkoutEvidenceForInput(matchedGenerated.id, pairing.user_id, input);
         return {
-            mode: matchedGenerated.generated_from_habit_id || matchedGenerated.source !== "apple_health"
+            mode: matchedGenerated.generated_from_habit_id ||
+                matchedGenerated.source !== "apple_health"
                 ? "merged"
                 : "updated",
             id: matchedGenerated.id
@@ -2364,13 +2392,14 @@ function backfillHistoricalSleepEvidence() {
              )
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
                     .run(sourceRecordId, rawLog.import_run_id, rawLog.pairing_session_id, session.id, rawLog.user_id, "apple_health", "historical_import_interval", rawLog.external_uid ?? rawLog.id, session.source_device, sourceTimezone, localDateKey, rawLog.started_at ?? session.started_at, rawLog.ended_at ?? session.ended_at, inferHistoricalRawStage(payload), null, "historical_import", JSON.stringify(payload), JSON.stringify({
-                    ...(safeJsonParse(rawLog.metadata_json, {})),
+                    ...safeJsonParse(rawLog.metadata_json, {}),
                     migratedFromRawLogId: rawLog.id
                 }), rawLog.created_at);
             }
         }
         if (existingSegmentCount.count === 0 && rawLogs.length > 0) {
-            const authoritativeLogs = selectAuthoritativeSleepRows(rawLogs.filter((row) => typeof row.started_at === "string" && typeof row.ended_at === "string"));
+            const authoritativeLogs = selectAuthoritativeSleepRows(rawLogs.filter((row) => typeof row.started_at === "string" &&
+                typeof row.ended_at === "string"));
             for (const rawLog of authoritativeLogs) {
                 const payload = safeJsonParse(rawLog.payload_json, {});
                 const inferredStage = inferHistoricalRawStage(payload);
@@ -2499,7 +2528,9 @@ function ensureLegacyAppleSleepHistoryRepaired() {
                 for (const cluster of clusters) {
                     const rowsForNight = selectAuthoritativeSleepRows(cluster);
                     const startedAt = rowsForNight[0].started_at;
-                    const endedAt = rowsForNight.reduce((latest, row) => Date.parse(row.ended_at) > Date.parse(latest) ? row.ended_at : latest, rowsForNight[0].ended_at);
+                    const endedAt = rowsForNight.reduce((latest, row) => Date.parse(row.ended_at) > Date.parse(latest)
+                        ? row.ended_at
+                        : latest, rowsForNight[0].ended_at);
                     const sourceTimezone = inferHistoricalSleepTimeZone(cluster.map((row) => row.source_timezone));
                     const localDateKey = localDateKeyForTimezone(endedAt, sourceTimezone);
                     const asleepSeconds = unionDurationSeconds(rowsForNight.map((row) => ({
@@ -2999,24 +3030,34 @@ export function startMobileHealthSyncSession(payload) {
         if (existing &&
             existing.pairing_session_id === pairing.id &&
             existing.status === "running") {
-            const receivedChunkIds = getDatabase()
-                .prepare(`SELECT chunk_id
-           FROM health_mobile_sync_chunks
-           WHERE sync_session_id = ?
-           ORDER BY sequence ASC`)
-                .all(resumeSyncSessionId)
-                .map((row) => row.chunk_id);
-            return {
-                syncSessionId: resumeSyncSessionId,
-                schemaVersion: HEALTH_MOBILE_SYNC_SCHEMA_VERSION,
-                chunkTargetBytes: HEALTH_MOBILE_SYNC_CHUNK_TARGET_BYTES,
-                chunkMaxBytes: HEALTH_MOBILE_SYNC_CHUNK_MAX_BYTES,
-                chunkPayloadEncoding: HEALTH_MOBILE_SYNC_CHUNK_PAYLOAD_ENCODING,
-                acceptedPayloadEncodings: HEALTH_MOBILE_SYNC_ACCEPTED_CHUNK_PAYLOAD_ENCODINGS,
-                supportsCompression: true,
-                acceptedFamilies: safeJsonParse(existing.requested_families_json, parsed.requestedFamilies),
-                receivedChunkIds
-            };
+            const existingFamilies = safeJsonParse(existing.requested_families_json, []);
+            const canResume = existing.schema_version === HEALTH_MOBILE_SYNC_SCHEMA_VERSION &&
+                parsed.requestedFamilies.every((family) => existingFamilies.includes(family));
+            if (canResume) {
+                const receivedChunkIds = getDatabase()
+                    .prepare(`SELECT chunk_id
+             FROM health_mobile_sync_chunks
+             WHERE sync_session_id = ?
+             ORDER BY sequence ASC`)
+                    .all(resumeSyncSessionId)
+                    .map((row) => row.chunk_id);
+                return {
+                    syncSessionId: resumeSyncSessionId,
+                    schemaVersion: HEALTH_MOBILE_SYNC_SCHEMA_VERSION,
+                    chunkTargetBytes: HEALTH_MOBILE_SYNC_CHUNK_TARGET_BYTES,
+                    chunkMaxBytes: HEALTH_MOBILE_SYNC_CHUNK_MAX_BYTES,
+                    chunkPayloadEncoding: HEALTH_MOBILE_SYNC_CHUNK_PAYLOAD_ENCODING,
+                    acceptedPayloadEncodings: HEALTH_MOBILE_SYNC_ACCEPTED_CHUNK_PAYLOAD_ENCODINGS,
+                    supportsCompression: true,
+                    acceptedFamilies: existingFamilies,
+                    receivedChunkIds
+                };
+            }
+            getDatabase()
+                .prepare(`UPDATE health_mobile_sync_sessions
+           SET status = 'aborted', aborted_at = ?, updated_at = ?
+           WHERE id = ?`)
+                .run(nowIso(), nowIso(), existing.id);
         }
     }
     const now = nowIso();
@@ -3082,7 +3123,8 @@ export function ingestMobileHealthSyncChunk(syncSessionId, payload, rawPayloadJs
             actualBytes: actualByteCount
         });
     }
-    if (wirePayload.mode !== "legacy_payload_object" && parsed.byteCount !== actualByteCount) {
+    if (wirePayload.mode !== "legacy_payload_object" &&
+        parsed.byteCount !== actualByteCount) {
         console.warn("[healthkit-sync] chunk byte count mismatch", {
             syncSessionId,
             chunkId: parsed.chunkId,
@@ -3478,7 +3520,8 @@ export function ingestMobileHealthSync(payload) {
         for (const sleep of normalizedSleepNights) {
             const targetSessionId = sleepSessionsByLocalDate
                 .get(sleep.localDateKey)
-                ?.find((session) => session.startedAt === sleep.startedAt && session.endedAt === sleep.endedAt)?.id ?? null;
+                ?.find((session) => session.startedAt === sleep.startedAt &&
+                session.endedAt === sleep.endedAt)?.id ?? null;
             if (targetSessionId) {
                 replaceHistoricalSleepSessionsForDate(pairing.user_id, sleep.localDateKey, targetSessionId);
             }
@@ -3566,7 +3609,9 @@ export function ingestMobileHealthSync(payload) {
                 screenTimeDaySummaries: parsed.screenTime.daySummaries.length,
                 screenTimeHourlySegments: parsed.screenTime.hourlySegments.length,
                 createdCount: createdCount + movementSync.createdCount,
-                updatedCount: updatedCount + movementSync.updatedCount + screenTimeSync.updatedCount,
+                updatedCount: updatedCount +
+                    movementSync.updatedCount +
+                    screenTimeSync.updatedCount,
                 mergedCount
             }
         });
@@ -3582,8 +3627,12 @@ export function ingestMobileHealthSync(payload) {
                 workouts: parsed.workouts.length,
                 vitalsDaySummaries: parsed.vitals.daySummaries.length,
                 vitalsMetricEntries: vitalMetricEntries,
-                createdCount: createdCount + movementSync.createdCount + screenTimeSync.createdCount,
-                updatedCount: updatedCount + movementSync.updatedCount + screenTimeSync.updatedCount,
+                createdCount: createdCount +
+                    movementSync.createdCount +
+                    screenTimeSync.createdCount,
+                updatedCount: updatedCount +
+                    movementSync.updatedCount +
+                    screenTimeSync.updatedCount,
                 mergedCount,
                 movementStays: parsed.movement.stays.length,
                 movementTrips: parsed.movement.trips.length,
@@ -3677,10 +3726,12 @@ export function getCompanionOverview(userIds) {
                 return (session.links.length > 0 ||
                     (typeof annotations.qualitySummary === "string" &&
                         annotations.qualitySummary.length > 0) ||
-                    (typeof annotations.notes === "string" && annotations.notes.length > 0) ||
+                    (typeof annotations.notes === "string" &&
+                        annotations.notes.length > 0) ||
                     tags.length > 0);
             }).length,
-            linkedWorkouts: workouts.filter((session) => session.links.length > 0).length,
+            linkedWorkouts: workouts.filter((session) => session.links.length > 0)
+                .length,
             habitGeneratedWorkouts: workouts.filter((session) => session.sourceType === "habit_generated").length,
             reconciledWorkouts: workouts.filter((session) => session.reconciliationStatus === "merged").length,
             vitalsDaySummaries: vitalsRows.length,
@@ -3740,9 +3791,9 @@ export function getSleepViewData(userIds) {
                     ? session.asleepSeconds / session.timeInBedSeconds
                     : 0)), 2),
             averageRestorativeShare: round(average(weekly.map((session) => sleepRestorativeShare(session))), 2),
-            reflectiveNightCount: weekly.filter((session) => sleepHasReflection(session))
+            reflectiveNightCount: weekly.filter((session) => sleepHasReflection(session)).length,
+            linkedNightCount: weekly.filter((session) => session.links.length > 0)
                 .length,
-            linkedNightCount: weekly.filter((session) => session.links.length > 0).length,
             averageBedtimeConsistencyMinutes: Math.round(average(weekly
                 .map((session) => session.bedtimeConsistencyMinutes)
                 .filter((value) => value !== null))),
@@ -3771,8 +3822,10 @@ export function getSleepViewData(userIds) {
             .map((session) => ({
             id: session.id,
             dateKey: session.localDateKey,
-            onsetHour: getTimeZoneParts(session.startedAt, session.sourceTimezone).hour,
-            wakeHour: getTimeZoneParts(session.endedAt, session.sourceTimezone).hour,
+            onsetHour: getTimeZoneParts(session.startedAt, session.sourceTimezone)
+                .hour,
+            wakeHour: getTimeZoneParts(session.endedAt, session.sourceTimezone)
+                .hour,
             sleepHours: Number((session.asleepSeconds / 3600).toFixed(2))
         }))
             .reverse(),
@@ -3914,14 +3967,14 @@ export function getFitnessViewData(userIds) {
             averageEffort: round(average(recent
                 .map((session) => session.subjectiveEffort)
                 .filter((value) => value !== null)), 1),
-            linkedSessionCount: recent.filter((session) => session.links.length > 0).length,
+            linkedSessionCount: recent.filter((session) => session.links.length > 0)
+                .length,
             plannedSessionCount: recent.filter((session) => session.plannedContext.trim().length > 0).length,
             importedSessionCount: recent.filter((session) => session.source === "apple_health").length,
             habitGeneratedSessionCount: recent.filter((session) => session.sourceType === "habit_generated").length,
             reconciledSessionCount: recent.filter((session) => session.reconciliationStatus === "merged").length,
             topWorkoutType: orderedWorkoutTypes[0]?.[0] ?? null,
-            topWorkoutTypeLabel: recent.find((session) => session.workoutType === orderedWorkoutTypes[0]?.[0])
-                ?.workoutTypeLabel ?? null,
+            topWorkoutTypeLabel: recent.find((session) => session.workoutType === orderedWorkoutTypes[0]?.[0])?.workoutTypeLabel ?? null,
             streakDays: Array.from(new Set(weekly.map((session) => dayKey(session.startedAt)))).length,
             averageHeartRateCoverage: heartRateCoverageCount > 0
                 ? Number((heartRateCoverageSum / heartRateCoverageCount).toFixed(3))
@@ -3942,17 +3995,16 @@ export function getFitnessViewData(userIds) {
             energyKcal: Math.round(session.totalEnergyKcal ?? session.activeEnergyKcal ?? 0),
             zoneDurations: session.analytics
                 ?.zoneDurations ?? [],
-            trainingLoad: (session.analytics
-                ?.load?.trimp ?? null),
-            heartRateCoverage: (session.analytics?.dataQuality?.sampleCoverage ?? 0)
+            trainingLoad: session.analytics?.load?.trimp ?? null,
+            heartRateCoverage: session.analytics?.dataQuality?.sampleCoverage ?? 0
         }))
             .reverse(),
         typeBreakdown: orderedWorkoutTypes.map(([workoutType, metrics]) => ({
             workoutType,
-            workoutTypeLabel: recent.find((session) => session.workoutType === workoutType)?.workoutTypeLabel ??
-                workoutType,
-            activityFamily: recent.find((session) => session.workoutType === workoutType)?.activityFamily ??
-                "other",
+            workoutTypeLabel: recent.find((session) => session.workoutType === workoutType)
+                ?.workoutTypeLabel ?? workoutType,
+            activityFamily: recent.find((session) => session.workoutType === workoutType)
+                ?.activityFamily ?? "other",
             activityFamilyLabel: recent.find((session) => session.workoutType === workoutType)
                 ?.activityFamilyLabel ?? "Other",
             sessionCount: metrics.sessionCount,
@@ -3970,7 +4022,9 @@ function averageNullable(values) {
 }
 function sumNullable(values) {
     const present = values.filter((value) => value != null);
-    return present.length > 0 ? present.reduce((sum, value) => sum + value, 0) : null;
+    return present.length > 0
+        ? present.reduce((sum, value) => sum + value, 0)
+        : null;
 }
 function maxNullable(values) {
     const present = values.filter((value) => value != null);
@@ -4047,7 +4101,9 @@ export function getVitalsViewData(userIds) {
         }))
             .filter((value) => value != null);
         const baselineValues = recentValues.slice(Math.max(0, recentValues.length - 8), recentValues.length - 1);
-        const baselineValue = baselineValues.length > 0 ? average(baselineValues) : recentValues.at(-2) ?? null;
+        const baselineValue = baselineValues.length > 0
+            ? average(baselineValues)
+            : (recentValues.at(-2) ?? null);
         const latestValue = latestDay
             ? vitalMetricPrimaryValue({
                 aggregation: bucket.aggregation,
@@ -4063,9 +4119,13 @@ export function getVitalsViewData(userIds) {
             category: bucket.category,
             unit: bucket.displayUnit,
             aggregation: bucket.aggregation,
-            latestValue: latestValue == null ? null : round(latestValue, bucket.aggregation === "cumulative" ? 0 : 1),
+            latestValue: latestValue == null
+                ? null
+                : round(latestValue, bucket.aggregation === "cumulative" ? 0 : 1),
             latestDateKey: latestDay?.dateKey ?? null,
-            baselineValue: baselineValue == null ? null : round(baselineValue, bucket.aggregation === "cumulative" ? 0 : 1),
+            baselineValue: baselineValue == null
+                ? null
+                : round(baselineValue, bucket.aggregation === "cumulative" ? 0 : 1),
             deltaValue: latestValue != null && baselineValue != null
                 ? round(latestValue - baselineValue, bucket.aggregation === "cumulative" ? 0 : 1)
                 : null,
@@ -4079,7 +4139,9 @@ export function getVitalsViewData(userIds) {
         }
         return left.category.localeCompare(right.category);
     });
-    const categoryBreakdown = [...new Set(metrics.map((metric) => metric.category))]
+    const categoryBreakdown = [
+        ...new Set(metrics.map((metric) => metric.category))
+    ]
         .map((category) => {
         const categoryMetrics = metrics.filter((metric) => metric.category === category);
         return {
@@ -4094,8 +4156,7 @@ export function getVitalsViewData(userIds) {
             trackedDays: dayCount,
             metricCount: metrics.length,
             latestDateKey: rows[0]?.date_key ?? null,
-            latestMetricCount: metrics.filter((metric) => metric.latestDateKey === (rows[0]?.date_key ?? null))
-                .length,
+            latestMetricCount: metrics.filter((metric) => metric.latestDateKey === (rows[0]?.date_key ?? null)).length,
             categoryBreakdown
         },
         metrics
@@ -4147,7 +4208,8 @@ export function createSleepSession(input, activity) {
          provenance_json, derived_json, created_at, updated_at
        )
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(id, externalUid, null, userId, parsed.source, parsed.sourceType, parsed.sourceDevice, sourceTimezone, parsed.localDateKey ?? localDateKeyForTimezone(parsed.endedAt, sourceTimezone), parsed.startedAt, parsed.endedAt, timeInBedSeconds, asleepSeconds, awakeSeconds, sleepScore, timingMetrics.regularityScore, timingMetrics.bedtimeConsistencyMinutes, timingMetrics.wakeConsistencyMinutes, parsed.rawSegmentCount, JSON.stringify(parsed.stageBreakdown), JSON.stringify(parsed.recoveryMetrics), JSON.stringify(parsed.sourceMetrics), JSON.stringify(parsed.links), JSON.stringify(annotations), JSON.stringify({
+        .run(id, externalUid, null, userId, parsed.source, parsed.sourceType, parsed.sourceDevice, sourceTimezone, parsed.localDateKey ??
+        localDateKeyForTimezone(parsed.endedAt, sourceTimezone), parsed.startedAt, parsed.endedAt, timeInBedSeconds, asleepSeconds, awakeSeconds, sleepScore, timingMetrics.regularityScore, timingMetrics.bedtimeConsistencyMinutes, timingMetrics.wakeConsistencyMinutes, parsed.rawSegmentCount, JSON.stringify(parsed.stageBreakdown), JSON.stringify(parsed.recoveryMetrics), JSON.stringify(parsed.sourceMetrics), JSON.stringify(parsed.links), JSON.stringify(annotations), JSON.stringify({
         manualEntry: true,
         entryMode: "local",
         source: parsed.source,
@@ -4157,7 +4219,8 @@ export function createSleepSession(input, activity) {
         createdAt: now,
         ...parsed.provenance
     }), JSON.stringify(derived), now, now);
-    summarizeUserHealthDay(userId, parsed.localDateKey ?? localDateKeyForTimezone(parsed.endedAt, sourceTimezone));
+    summarizeUserHealthDay(userId, parsed.localDateKey ??
+        localDateKeyForTimezone(parsed.endedAt, sourceTimezone));
     recordActivityEvent({
         entityType: "sleep_session",
         entityId: id,
@@ -4374,9 +4437,7 @@ export function updateWorkoutSession(workoutId, patch, activity) {
         ? durationSecondsBetween(startedAt, endedAt)
         : current.duration_seconds;
     const currentAnnotations = safeJsonParse(current.annotations_json, {});
-    const tags = parsed.tags ??
-        safeJsonParse(current.tags_json, []) ??
-        [];
+    const tags = parsed.tags ?? safeJsonParse(current.tags_json, []) ?? [];
     const links = parsed.links ??
         safeJsonParse(current.links_json, []);
     const annotations = {
@@ -4512,7 +4573,9 @@ export function updateWorkoutMetadata(workoutId, patch, activity) {
         ...(parsed.subjectiveEffort !== undefined
             ? { subjectiveEffort: parsed.subjectiveEffort }
             : {}),
-        ...(parsed.moodBefore !== undefined ? { moodBefore: parsed.moodBefore } : {}),
+        ...(parsed.moodBefore !== undefined
+            ? { moodBefore: parsed.moodBefore }
+            : {}),
         ...(parsed.moodAfter !== undefined ? { moodAfter: parsed.moodAfter } : {}),
         ...(parsed.meaningText !== undefined
             ? { meaningText: parsed.meaningText }
