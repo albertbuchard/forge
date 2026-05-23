@@ -3689,9 +3689,7 @@ test("mobile health chunked sync accepts compressed workout archive chunks", asy
     ).upload;
     assert.ok(upload.acceptedFamilies.includes("workout_archive"));
 
-    const archivePayload = {
-      workouts: [
-        {
+    const archiveWorkout = {
           externalUid: "hk-workout-archive-1",
           workoutType: "running",
           startedAt: "2026-04-07T07:15:00.000Z",
@@ -3730,7 +3728,20 @@ test("mobile health chunked sync accepts compressed workout archive chunks", asy
           ],
           links: [],
           annotations: {}
-        }
+    };
+    const archivePayload = {
+      workouts: [
+        archiveWorkout,
+        ...Array.from({ length: 44 }, (_, index) => ({
+          ...archiveWorkout,
+          externalUid: `hk-workout-archive-extra-${index + 1}`,
+          startedAt: new Date(
+            Date.UTC(2026, 3, 8 + index, 7, 15)
+          ).toISOString(),
+          endedAt: new Date(Date.UTC(2026, 3, 8 + index, 8)).toISOString(),
+          timeSeriesSamples: [],
+          routePoints: []
+        }))
       ]
     };
     const compressedPayload =
@@ -3742,17 +3753,36 @@ test("mobile health chunked sync accepts compressed workout archive chunks", asy
         chunkId: "chunk-workout-archive-1",
         sequence: 0,
         family: "workout_archive",
-        recordCount: 1,
+        recordCount: archivePayload.workouts.length,
         ...compressedPayload
       }
     });
     assert.equal(chunkResponse.statusCode, 200, chunkResponse.body);
 
+    const progressiveFitnessResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/health/fitness"
+    });
+    assert.equal(progressiveFitnessResponse.statusCode, 200);
+    const progressiveFitness = (
+      progressiveFitnessResponse.json() as {
+        fitness: {
+          sessions: Array<{ externalUid: string }>;
+        };
+      }
+    ).fitness;
+    assert.equal(progressiveFitness.sessions.length, 45);
+    assert.ok(
+      progressiveFitness.sessions.some(
+        (session) => session.externalUid === archiveWorkout.externalUid
+      )
+    );
+
     const completeResponse = await app.inject({
       method: "POST",
       url: `/api/v1/mobile/healthkit/sync-sessions/${upload.syncSessionId}/complete`,
       payload: {
-        expectedCounts: { workout_archive: 1 }
+        expectedCounts: { workout_archive: archivePayload.workouts.length }
       }
     });
     assert.equal(completeResponse.statusCode, 200, completeResponse.body);
@@ -3766,6 +3796,10 @@ test("mobile health chunked sync accepts compressed workout archive chunks", asy
       fitnessResponse.json() as {
         fitness: {
           sessions: Array<{
+            externalUid: string;
+          }>;
+          analysisSessions: Array<{
+            externalUid: string;
             analytics?: {
               dataQuality: { heartRateSampleCount: number };
               routeSummary: { pointCount: number };
@@ -3773,7 +3807,9 @@ test("mobile health chunked sync accepts compressed workout archive chunks", asy
           }>;
         };
       }
-    ).fitness.sessions[0];
+    ).fitness.analysisSessions.find(
+      (candidate) => candidate.externalUid === archiveWorkout.externalUid
+    );
     assert.equal(session?.analytics?.dataQuality.heartRateSampleCount, 1);
     assert.equal(session?.analytics?.routeSummary.pointCount, 1);
   } finally {

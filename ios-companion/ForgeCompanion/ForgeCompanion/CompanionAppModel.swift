@@ -796,7 +796,10 @@ final class CompanionAppModel: ObservableObject {
         guard pairing != nil else {
             return
         }
-        backgroundScheduler.schedule()
+        backgroundScheduler.schedule(
+            activeSync: activeSyncTask != nil || activeHealthSyncSessionId != nil,
+            reason: "scene background"
+        )
         beginBackgroundRefreshWindow(reason: "scene background")
     }
 
@@ -1140,16 +1143,29 @@ final class CompanionAppModel: ObservableObject {
 
     private func performBackgroundRefresh() async -> Bool {
         companionDebugLog("CompanionAppModel", "performBackgroundRefresh start")
+        if let activeSyncTask {
+            companionDebugLog("CompanionAppModel", "performBackgroundRefresh joining active foreground sync")
+            let syncSucceeded = await activeSyncTask.value
+            backgroundScheduler.schedule(
+                activeSync: activeHealthSyncSessionId != nil,
+                reason: "background joined active sync"
+            )
+            return syncSucceeded
+        }
+        let hasUnfinishedHealthSyncSession = activeHealthSyncSessionId?.isEmpty == false
         let heartbeatSucceeded = await performMaintenanceHeartbeat(
             reason: "background refresh",
             force: true
         )
         let syncSucceeded = await performAutomaticSyncIfNeededReturningResult(
-            reason: "background refresh",
-            minimumInterval: AutoSyncPolicy.maintenanceSyncMinimumInterval,
-            force: false
+            reason: hasUnfinishedHealthSyncSession ? "background resume unfinished health sync" : "background refresh",
+            minimumInterval: hasUnfinishedHealthSyncSession ? 0 : AutoSyncPolicy.maintenanceSyncMinimumInterval,
+            force: hasUnfinishedHealthSyncSession
         )
-        backgroundScheduler.schedule()
+        backgroundScheduler.schedule(
+            activeSync: activeHealthSyncSessionId != nil,
+            reason: "background refresh complete"
+        )
         return heartbeatSucceeded || syncSucceeded
     }
 
@@ -1290,6 +1306,10 @@ final class CompanionAppModel: ObservableObject {
     }
 
     private func beginBackgroundRefreshWindow(reason: String) {
+        backgroundScheduler.schedule(
+            activeSync: activeSyncTask != nil || activeHealthSyncSessionId != nil,
+            reason: reason
+        )
         if backgroundRefreshTask != .invalid {
             UIApplication.shared.endBackgroundTask(backgroundRefreshTask)
             backgroundRefreshTask = .invalid
@@ -1645,6 +1665,7 @@ final class CompanionAppModel: ObservableObject {
             )
             uploadSession = session
             activeHealthSyncSessionId = session.syncSessionId
+            backgroundScheduler.schedule(activeSync: true, reason: "health sync started")
             startHealthSyncTransferTelemetry()
             let onChunkUploaded: ForgeSyncClient.HealthSyncChunkUploadHandler = { [weak self] event in
                 await MainActor.run {
@@ -1769,6 +1790,7 @@ final class CompanionAppModel: ObservableObject {
             )
             activeHealthSyncSessionId = nil
             UserDefaults.standard.removeObject(forKey: StorageKeys.activeHealthSyncSessionId)
+            backgroundScheduler.schedule(activeSync: false, reason: "health sync completed")
             stopHealthSyncTransferTelemetry()
             return HealthSyncRunResult(
                 receipt: receipt,
@@ -1796,6 +1818,7 @@ final class CompanionAppModel: ObservableObject {
                         uploadSession.syncSessionId,
                         forKey: StorageKeys.activeHealthSyncSessionId
                     )
+                    backgroundScheduler.schedule(activeSync: true, reason: "health sync resumable after error")
                     lastSyncMessage = "Forge will resume from the last accepted chunk"
                 }
             }

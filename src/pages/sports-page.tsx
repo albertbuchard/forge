@@ -1117,7 +1117,7 @@ export function SportsPage() {
       ...zones
     };
   });
-  const scatterData = sessions.map((session) => ({
+  const scatterData = analysisSessions.map((session) => ({
     duration: Math.round(session.durationSeconds / 60),
     intensity: Math.round(((session.analytics?.load?.intensity ?? 0) * 100)),
     load: session.analytics?.load?.trimp ?? 0,
