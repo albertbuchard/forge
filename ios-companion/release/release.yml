@@ -6,7 +6,7 @@ app:
     - com.albertbuchard.ForgeCompanion.watchkitapp.ForgeWatch
 
 version:
-  marketing: "1.0.58"
+  marketing: "1.0.59"
 
 release:
   default_mode: testflight
@@ -14,6 +14,7 @@ release:
   automatic_release: true
   notify_external_testers: false
   testflight_groups: []
+  skip_testflight_submission: true
 
 metadata:
   default_locale: en-US

@@ -1,4 +1,4 @@
-Forge Companion 1.0.58 fixes the one-time historical workout import stall during sync.
+Forge Companion 1.0.59 fixes the one-time historical workout import stall during sync.
 
 The app now counts the full workout library first, reports the total immediately,
 then reads HealthKit workout evidence in smaller internal slices so uploads start
@@ -11,6 +11,6 @@ resumed chunks, and remaining workout count.
 Workout summaries still upload separately from raw HR, metric, and route evidence,
 so Forge can show workout sessions and apply arriving evidence progressively.
 
-This TestFlight build uploads without automatic external group distribution, avoiding
-App Store Connect submission-limit failures while keeping build processing and
-changelog verification in CI.
+This TestFlight build uploads without automatic external group distribution. CI
+now explicitly skips beta review submission while keeping build processing and
+changelog verification.

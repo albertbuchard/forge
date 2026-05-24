@@ -57,12 +57,16 @@ platform :ios do
       marketing_version: config.dig(:version, :marketing).to_s,
       bump_build_number: false
     )
+    testflight_groups = Array(config.dig(:release, :testflight_groups))
+      .map { |group| group.to_s.strip }
+      .reject(&:empty?)
     upload_to_testflight(
       api_key: api_key,
       ipa: ipa_path,
       changelog: release_notes_text(config),
-      groups: Array(config.dig(:release, :testflight_groups)),
+      groups: testflight_groups.empty? ? nil : testflight_groups,
       notify_external_testers: config.dig(:release, :notify_external_testers) == true,
+      skip_submission: config.dig(:release, :skip_testflight_submission) == true,
       skip_waiting_for_build_processing: config.dig(:release, :skip_waiting_for_build_processing) == true
     )
     write_release_summary(

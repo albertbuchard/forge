@@ -289,6 +289,11 @@ Before tagging:
 3. replace any metadata placeholders if still present
 4. commit and push to `main`
 
+For upload/process/changelog-only TestFlight builds, keep
+`release.skip_testflight_submission: true` and `release.testflight_groups: []`.
+That avoids external beta review submission while still uploading the IPA and
+waiting long enough to attach the changelog.
+
 Then tag:
 
 ```bash
