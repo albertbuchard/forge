@@ -812,16 +812,57 @@ struct SyncTransferStats: Equatable {
     let secondsSinceLastChunk: Int?
 }
 
+enum CompanionSyncMode: Equatable {
+    case normal
+    case historicalWorkoutImport
+}
+
+struct HistoricalWorkoutImportStatus: Equatable {
+    var indexedWorkouts: Int
+    var totalWorkouts: Int?
+    var uploadedWorkoutSummaries: Int
+    var uploadedTimeSeriesSamples: Int
+    var uploadedRoutePoints: Int
+    var targetHeartRateSamples: Int
+    var targetTimeSeriesSamples: Int
+    var targetRoutePoints: Int
+    var uploadedChunks: Int
+    var resumedChunks: Int
+
+    var remainingWorkouts: Int? {
+        guard let totalWorkouts else {
+            return nil
+        }
+        return max(0, totalWorkouts - uploadedWorkoutSummaries)
+    }
+
+    var progressFraction: Double {
+        guard let totalWorkouts, totalWorkouts > 0 else {
+            return uploadedWorkoutSummaries > 0 ? 1 : 0
+        }
+        return min(1, max(0, Double(uploadedWorkoutSummaries) / Double(totalWorkouts)))
+    }
+}
+
 struct CompanionSyncUploadStatus {
     let isSyncing: Bool
+    let syncMode: CompanionSyncMode
     let message: String?
     let payloadSummary: SyncPayloadSummary?
     let lastChunkFamily: String?
     let lastPayloadBytes: Int?
     let activeSessionId: String?
     let transferStats: SyncTransferStats?
+    let historicalWorkoutImport: HistoricalWorkoutImportStatus?
+
+    var isHistoricalWorkoutImport: Bool {
+        syncMode == .historicalWorkoutImport
+    }
 
     var headline: String {
+        if isHistoricalWorkoutImport {
+            return isSyncing ? "Historical workout import" : "Historical workout import ready"
+        }
         guard isSyncing else {
             return "Ready for the next sync"
         }
