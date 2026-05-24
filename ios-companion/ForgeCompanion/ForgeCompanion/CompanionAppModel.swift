@@ -1758,64 +1758,79 @@ final class CompanionAppModel: ObservableObject {
                     healthKitAuthorized: healthAuthorizationGranted,
                     healthSyncEnabled: healthSyncEnabled,
                     lastSuccessfulSyncAt: workoutBackfillPlan.workoutCursorDate,
-                    batchSize: Int.max
-                ) { [weak self] workouts, progress in
-                    let batchStats = Self.workoutUploadStats(for: workouts)
-                    await MainActor.run {
-                        if let totalWorkouts = progress.totalWorkouts {
-                            self?.lastSyncMessage =
-                                workoutBackfillPlan.requiresBackfill
-                                    ? "Uploading historical workouts \(progress.uploadedWorkouts)/\(totalWorkouts)"
-                                    : "Uploading workouts \(progress.uploadedWorkouts)/\(totalWorkouts)"
-                        } else if progress.isScanningComplete {
-                            self?.lastSyncMessage =
-                                workoutBackfillPlan.requiresBackfill
-                                    ? "Uploading historical workouts \(progress.uploadedWorkouts)"
-                                    : "Uploading workouts \(progress.uploadedWorkouts)"
-                        } else {
-                            self?.lastSyncMessage =
-                                workoutBackfillPlan.requiresBackfill
-                                    ? "Indexing historical workouts \(progress.uploadedWorkouts) found so far"
-                                    : "Uploading workouts \(progress.uploadedWorkouts) found so far"
+                    batchSize: Int.max,
+                    onProgress: { [weak self] progress in
+                        guard workoutBackfillPlan.requiresBackfill else {
+                            return
                         }
-                        if workoutBackfillPlan.requiresBackfill {
+                        await MainActor.run {
+                            self?.lastSyncMessage =
+                                "Preparing \(progress.totalWorkouts ?? progress.discoveredWorkouts) historical workouts"
                             self?.updateHistoricalWorkoutImportStatus { status in
                                 status.indexedWorkouts = progress.uploadedWorkouts
                                 if let totalWorkouts = progress.totalWorkouts {
                                     status.totalWorkouts = totalWorkouts
                                 }
-                                status.targetHeartRateSamples += batchStats.rawHeartRateDatapoints
-                                status.targetTimeSeriesSamples += batchStats.rawTimeSeriesDatapoints
-                                status.targetRoutePoints += batchStats.routePoints
                             }
                         }
-                        self?.lastHealthSyncChunkFamily = "workout_summaries"
-                        self?.lastHealthSyncPayloadBytes = try? JSONEncoder().encode(workouts).count
-                    }
-                    sequence = try await syncClient.uploadWorkoutHealthSyncChunks(
-                        workouts: workouts,
-                        uploadSession: session,
-                        pairing: pairing,
-                        startingSequence: sequence,
-                        onChunkUploaded: onChunkUploaded
-                    )
-                    await MainActor.run {
-                        workoutStats.workouts += batchStats.workouts
-                        workoutStats.workoutsWithAverageHeartRate += batchStats.workoutsWithAverageHeartRate
-                        workoutStats.workoutsWithMaxHeartRate += batchStats.workoutsWithMaxHeartRate
-                        workoutStats.workoutsWithStepCount += batchStats.workoutsWithStepCount
-                        workoutStats.rawHeartRateDatapoints += batchStats.rawHeartRateDatapoints
-                        workoutStats.rawTimeSeriesDatapoints += batchStats.rawTimeSeriesDatapoints
-                        workoutStats.routePoints += batchStats.routePoints
-                        payloadSummary = self?.buildPayloadSummary(
-                            from: buildResult.payload,
-                            workoutStats: workoutStats
-                        ) ?? payloadSummary
-                        self?.latestSyncPayloadSummary = payloadSummary
-                        self?.lastHealthSyncChunkId =
-                            "\(session.syncSessionId)-\(String(format: "%06d", max(0, sequence - 1)))"
-                    }
-                }
+                    },
+                    onBatch: { [weak self] workouts, progress in
+                        let batchStats = Self.workoutUploadStats(for: workouts)
+                        await MainActor.run {
+                            if let totalWorkouts = progress.totalWorkouts {
+                                self?.lastSyncMessage =
+                                    workoutBackfillPlan.requiresBackfill
+                                        ? "Uploading historical workouts \(progress.uploadedWorkouts)/\(totalWorkouts)"
+                                        : "Uploading workouts \(progress.uploadedWorkouts)/\(totalWorkouts)"
+                            } else if progress.isScanningComplete {
+                                self?.lastSyncMessage =
+                                    workoutBackfillPlan.requiresBackfill
+                                        ? "Uploading historical workouts \(progress.uploadedWorkouts)"
+                                        : "Uploading workouts \(progress.uploadedWorkouts)"
+                            } else {
+                                self?.lastSyncMessage =
+                                    workoutBackfillPlan.requiresBackfill
+                                        ? "Indexing historical workouts \(progress.uploadedWorkouts) found so far"
+                                        : "Uploading workouts \(progress.uploadedWorkouts) found so far"
+                            }
+                            if workoutBackfillPlan.requiresBackfill {
+                                self?.updateHistoricalWorkoutImportStatus { status in
+                                    status.indexedWorkouts = progress.uploadedWorkouts
+                                    if let totalWorkouts = progress.totalWorkouts {
+                                        status.totalWorkouts = totalWorkouts
+                                    }
+                                    status.targetHeartRateSamples += batchStats.rawHeartRateDatapoints
+                                    status.targetTimeSeriesSamples += batchStats.rawTimeSeriesDatapoints
+                                    status.targetRoutePoints += batchStats.routePoints
+                                }
+                            }
+                            self?.lastHealthSyncChunkFamily = "workout_summaries"
+                            self?.lastHealthSyncPayloadBytes = try? JSONEncoder().encode(workouts).count
+                        }
+                        sequence = try await syncClient.uploadWorkoutHealthSyncChunks(
+                            workouts: workouts,
+                            uploadSession: session,
+                            pairing: pairing,
+                            startingSequence: sequence,
+                            onChunkUploaded: onChunkUploaded
+                        )
+                        await MainActor.run {
+                            workoutStats.workouts += batchStats.workouts
+                            workoutStats.workoutsWithAverageHeartRate += batchStats.workoutsWithAverageHeartRate
+                            workoutStats.workoutsWithMaxHeartRate += batchStats.workoutsWithMaxHeartRate
+                            workoutStats.workoutsWithStepCount += batchStats.workoutsWithStepCount
+                            workoutStats.rawHeartRateDatapoints += batchStats.rawHeartRateDatapoints
+                            workoutStats.rawTimeSeriesDatapoints += batchStats.rawTimeSeriesDatapoints
+                            workoutStats.routePoints += batchStats.routePoints
+                            payloadSummary = self?.buildPayloadSummary(
+                                from: buildResult.payload,
+                                workoutStats: workoutStats
+                            ) ?? payloadSummary
+                            self?.latestSyncPayloadSummary = payloadSummary
+                            self?.lastHealthSyncChunkId =
+                                "\(session.syncSessionId)-\(String(format: "%06d", max(0, sequence - 1)))"
+                        }
+                    })
                 if workoutStreamResult.healthDataDeferred {
                     healthDataDeferred = true
                 }
