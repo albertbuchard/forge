@@ -1,13 +1,13 @@
-Forge Companion 1.0.54 increases full-history workout backfill batches so large libraries move through Forge in far fewer passes.
+Forge Companion 1.0.55 removes the iOS workout-count split during full-history backfill.
 
 Workout summaries now upload separately from raw HR, metric, and route evidence,
 so Forge can show workout sessions and apply arriving evidence progressively
 instead of waiting for the whole sync session to complete.
 
-Workout evidence collection still uses bulk HealthKit range reads for each batch
-instead of doing a full per-workout mapping pass on the phone. Full-history
-backfills now process up to 100 workouts per batch while keeping raw HR,
-metric, and route uploads intact.
+Workout evidence collection still uses bulk HealthKit range reads instead of
+doing a full per-workout mapping pass on the phone. Full-history backfills now
+load the full workout set together while keeping raw HR, metric, and route
+uploads intact.
 
 Forge also processes workout time-series and route chunks as soon as they arrive,
 so backend analytics can update during the upload rather than only after finalization.

@@ -93,7 +93,6 @@ actor HealthSyncStore {
     private let store = HKHealthStore()
     private let syncWindowDays = 21
     private let incrementalLookbackHours = 72
-    private let fullWorkoutBackfillBatchSize = 100
     private let workoutMappingConcurrencyLimit = 4
     private let sleepSessionGap: TimeInterval = 4 * 60 * 60
     private let sleepInferenceGap: TimeInterval = 15 * 60
@@ -647,22 +646,11 @@ actor HealthSyncStore {
         }
 
         let isFullBackfill = lastSuccessfulSyncAt == nil
-        let effectiveBatchSize = isFullBackfill
-            ? min(max(1, batchSize), fullWorkoutBackfillBatchSize)
-            : max(1, batchSize)
+        let effectiveBatchSize = max(1, batchSize)
         companionDebugLog(
             "HealthSyncStore",
             "streamWorkoutSessionBatches start start=\(isoString(workoutStartDate)) end=\(isoString(endDate)) batchSize=\(effectiveBatchSize) requestedBatchSize=\(batchSize) fullBackfill=\(isFullBackfill)"
         )
-        if isFullBackfill {
-            return try await streamWorkoutSessionBatchesByWindow(
-                startDate: workoutStartDate,
-                endDate: endDate,
-                batchSize: effectiveBatchSize,
-                onBatch: onBatch
-            )
-        }
-
         let workouts = try await queryWorkouts(startDate: workoutStartDate, endDate: endDate)
             .sorted { $0.startDate > $1.startDate }
         guard workouts.isEmpty == false else {
