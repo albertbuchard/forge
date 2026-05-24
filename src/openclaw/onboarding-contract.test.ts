@@ -1029,6 +1029,15 @@ describe("forge onboarding contract", () => {
     expect(onboarding.conversationRules.join(" ")).toMatch(
       /collaborative and testable[\s\S]*not as verdicts/i
     );
+    expect(onboarding.interactionGuidance.followUpQuestionRule).toMatch(
+      /After a substantive answer[\s\S]*exactly one next lane[\s\S]*stop asking/i
+    );
+    expect(onboarding.interactionGuidance.antiDriftRule).toMatch(
+      /Avoid vague reflective filler[\s\S]*surface, CRUD, payload[\s\S]*product nouns/i
+    );
+    expect(onboarding.interactionGuidance.antiDriftRule).toMatch(
+      /belief[\s\S]*pattern[\s\S]*timeline[\s\S]*weekday template[\s\S]*published output/i
+    );
     expect(onboarding.conversationRules.join(" ")).toMatch(
       /book, article, paper, source, concept, person, conversation, project reference/i
     );
@@ -1139,6 +1148,32 @@ describe("forge onboarding contract", () => {
     expect(psycheByFocus.get("behavior_pattern")?.notes.join(" ")).toMatch(
       /tentative functional-analysis hypothesis/i
     );
+    for (const focus of [
+      "psyche_value",
+      "behavior_pattern",
+      "behavior",
+      "belief_entry",
+      "mode_profile",
+      "mode_guide_session",
+      "flashcard",
+      "trigger_report",
+      "event_type",
+      "emotion_definition"
+    ] as const) {
+      const guidance = [
+        ...(psycheByFocus.get(focus)?.askSequence ?? []),
+        ...(psycheByFocus.get(focus)?.notes ?? [])
+      ].join(" ");
+      expect(guidance, `${focus} should publish hypothesis guidance`).toMatch(
+        /hypothes/i
+      );
+    }
+    expect(psycheByFocus.get("psyche_value")?.notes.join(" ")).toMatch(
+      /pain, longing, or value conflict/i
+    );
+    expect(psycheByFocus.get("behavior")?.notes.join(" ")).toMatch(
+      /immediate problem the behavior solves/i
+    );
     expect(psycheByFocus.get("belief_entry")?.notes.join(" ")).toMatch(
       /rule or prediction[\s\S]*invite correction/i
     );
@@ -1154,6 +1189,12 @@ describe("forge onboarding contract", () => {
     expect(psycheByFocus.get("mode_guide_session")?.notes.join(" ")).toMatch(
       /exploration worksheet|interpretations tentative/i
     );
+    expect(psycheByFocus.get("mode_guide_session")?.notes.join(" ")).toMatch(
+      /trying to stop, force, prevent, or secure/i
+    );
+    expect(psycheByFocus.get("flashcard")?.notes.join(" ")).toMatch(
+      /card needs to meet in the hard moment/i
+    );
     expect(psycheByFocus.get("trigger_report")?.askSequence.join(" ")).toMatch(
       /felt stake[\s\S]*situation, emotion, meaning, behavior, and consequence/i
     );
@@ -1163,9 +1204,15 @@ describe("forge onboarding contract", () => {
     expect(psycheByFocus.get("event_type")?.askSequence.join(" ")).toMatch(
       /repeated emotional or relational stake/i
     );
+    expect(psycheByFocus.get("event_type")?.notes.join(" ")).toMatch(
+      /future reports need this event type to preserve/i
+    );
     expect(
       psycheByFocus.get("emotion_definition")?.askSequence.join(" ")
     ).toMatch(/felt signature/i);
+    expect(psycheByFocus.get("emotion_definition")?.notes.join(" ")).toMatch(
+      /warns about, protects, demands, or longs for/i
+    );
 
     expect(playbookByFocus.get("event_type")?.coachingGoal).toMatch(
       /Psyche-quality questioning[\s\S]*cold taxonomy/i
@@ -1295,18 +1342,22 @@ describe("forge onboarding contract", () => {
     expect(interactionGuidanceSchema).toEqual(
       expect.objectContaining({
         additionalProperties: false,
-        required: expect.arrayContaining([
-          "specializedSurfaceRule",
-          "reviewShortcutRule",
-          "readModelWriteRule"
-        ]),
-        properties: expect.objectContaining({
-          specializedSurfaceRule: { type: "string" },
-          reviewShortcutRule: { type: "string" },
-          readModelWriteRule: { type: "string" }
+          required: expect.arrayContaining([
+            "specializedSurfaceRule",
+            "reviewShortcutRule",
+            "readModelWriteRule",
+            "followUpQuestionRule",
+            "antiDriftRule"
+          ]),
+          properties: expect.objectContaining({
+            specializedSurfaceRule: { type: "string" },
+            reviewShortcutRule: { type: "string" },
+            readModelWriteRule: { type: "string" },
+            followUpQuestionRule: { type: "string" },
+            antiDriftRule: { type: "string" }
+          })
         })
-      })
-    );
+      );
     expect(mutationGuidanceSchema).toEqual(
       expect.objectContaining({
         additionalProperties: false,

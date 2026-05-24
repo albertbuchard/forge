@@ -1,10 +1,128 @@
 # Forge Question Flow Improvement Cycles
 
-Latest run date: 2026-05-22
+Latest run date: 2026-05-24
 
 This report records the three-cycle evaluation for Forge agent question flows. The
 same full flow set was tested in each cycle so improvements were kept only where they
 helped the entity or specialized surface.
+
+## 2026-05-24 Automation Pass
+
+Setup verification:
+
+- Confirmed the Forge worktree was on `main` before edits.
+- Built the repo-local OpenClaw plugin with `npm run build:openclaw-plugin`.
+- Refreshed the existing repo-local OpenClaw path install. OpenClaw rejected
+  `--force` with `--link`, so `openclaw plugins update forge-openclaw-plugin` was
+  used for the path-tracked plugin, then the plugin was enabled and the gateway was
+  restarted.
+- Built the Hermes packaged runtime with
+  `node ./plugins/forge-hermes/scripts/build-package-runtime.mjs` and reinstalled
+  Hermes editable from `./plugins/forge-hermes`.
+- Verified `forge-hermes-plugin 0.2.88` imports from the repo-local editable package
+  and OpenClaw loads version `0.2.88` from
+  `~/Documents/aurel-monorepo/projects/forge/openclaw-plugin/dist/openclaw/index.js`.
+- Verified Forge health at `http://127.0.0.1:4317/api/v1/health`, OpenClaw
+  `forge health`, OpenClaw `forge doctor`, OpenClaw `forge route-check`, live
+  onboarding, and live OpenAPI. The known duplicate plugin-id warning remains and is
+  resolved by OpenClaw in favor of the explicit config-selected repo-local plugin.
+- Verified OpenClaw and Hermes configs still point at
+  `/Users/omarclaw/Documents/aurel-monorepo/data/forge`. No data root was changed,
+  moved, merged, deleted, or overwritten.
+- Live onboarding reported 41 live entity catalog entries and dedicated specialized
+  route-key/method maps for Movement, Life Force, the `life_force` alias, and
+  Workbench. Live OpenAPI reported 178 paths, including shared batch entity routes,
+  Movement day/month/all-time/timeline/places/trip/detail/selection/settings/repair
+  routes, Life Force overview/profile/weekday-template/fatigue-signal routes, and
+  Workbench flow catalog/detail/CRUD/execution/history/output/node routes.
+
+Every cycle retested the full stored-entity and domain set: goal, project, strategy,
+task, habit, tag, note, insight, task_run, work_adjustment, calendar_event,
+work_block_template, task_timebox, calendar_connection, preference_catalog,
+preference_catalog_item, preference_context, preference_item, preference_judgment,
+preference_signal, questionnaire_instrument, questionnaire_run, self_observation,
+sleep_session, workout_session, wiki_page, movement, life_force, workbench,
+psyche_value, behavior_pattern, behavior, belief_entry, mode_profile,
+mode_guide_session, flashcard, trigger_report, event_type, emotion_definition, plus
+the read-only operator, calendar, sleep, and sports overview surfaces. Specialized
+route-lane scenarios covered every live Movement, Life Force, and Workbench route key.
+
+Cycle 1 tested all entity flows and specialized lanes against the installed local
+plugins, live onboarding, OpenAPI, and the focused question-flow suite. Strengths:
+normal stored records stayed batch-first, Movement/Life Force/Workbench stayed on
+dedicated route families, and Psyche still started from lived experience rather than
+fields. Weakness: the contract described good opening questions and route posture, but
+was less explicit about the second turn after the user answered. That could let an
+agent drift into another broad opener, a schema-field checklist, vague reflective
+phrasing, or user-facing route language.
+
+What changed in Cycle 1:
+
+- Added `followUpQuestionRule` to live onboarding `interactionGuidance`: after a
+  substantive answer, say what became clearer, choose one next lane, ask only the
+  smallest decision-relevant question, and stop asking when nothing would change.
+- Added `antiDriftRule` to live onboarding `interactionGuidance`: avoid vague
+  reflective filler and route nouns such as surface, CRUD, payload, mutation path, or
+  endpoint; use product nouns such as belief, pattern, wiki page, timeline, overlay,
+  weekday template, flow, run, node result, or published output.
+- Updated the shared OpenClaw/Hermes/Codex playbooks with matching second-turn
+  discipline for non-Psyche and Psyche flows.
+- Updated the TypeScript onboarding type, OpenAPI schema, and contract tests so the
+  new guidance is visible to new agents through the live API.
+
+What happened after retesting Cycle 1:
+
+- The first retest exposed only a line-wrapping mismatch in a regex assertion around
+  `record shape`; the assertion was corrected.
+- The full focused suite then passed across all tested entity flows and specialized
+  route lanes, so the Cycle 1 change was kept.
+
+Cycle 2 retested the same complete flow set with extra attention to Psyche. Strengths:
+the Markdown Psyche playbook already had a strong hypothesis map, and behavior
+patterns, beliefs, modes, and trigger reports already published good live hypothesis
+guidance. Weakness: the live onboarding playbooks were uneven. Some Psyche records
+published concrete hypothesis guidance, while `psyche_value`, `behavior`, `flashcard`,
+`event_type`, and `emotion_definition` leaned too much on the general rules. That
+made a new agent more likely to keep reflecting instead of offering a useful,
+testable interpretation once a concrete example was clear.
+
+What changed in Cycle 2:
+
+- Added entity-specific live hypothesis guidance for values, behaviors,
+  mode-guide sessions, flashcards, event types, and emotion definitions.
+- Locked the contract so every Psyche onboarding playbook includes hypothesis guidance
+  while still requiring a concrete example before interpretation.
+- Kept Psyche API posture unchanged: all Psyche records, including flashcards,
+  event types, and emotion definitions, remain normal stored entities for shared
+  batch CRUD after formulation and consent.
+
+What happened after retesting Cycle 2:
+
+- The full focused suite passed with the new hypothesis guidance.
+- No entity got worse, so the Cycle 2 live-onboarding changes were kept.
+
+Cycle 3 retested every flow again with emphasis on durable automation freshness. The
+remaining weakness was process-level: this report was not checked by the simulation
+suite, so a future automation pass could improve behavior without leaving a current
+full-cycle record. The change made the durable report itself part of the Cycle 3
+simulation retest.
+
+What changed in Cycle 3:
+
+- Added a simulation assertion that requires this report to name the latest run date,
+  41 live entity catalog entries, all major entity families, Movement/Life Force/
+  Workbench, the Cycle 1 `followUpQuestionRule` and `antiDriftRule` changes, the
+  Cycle 2 hypothesis guidance change for every Psyche entity, and the Cycle 3 durable
+  report plus rebuild posture.
+- Updated this report with the setup verification, tested flow set, findings, changes,
+  and retest result for all three cycles.
+
+What happened after retesting Cycle 3:
+
+- The full focused suite passed after the report update.
+- The adapters were rebuilt again after source changes, Hermes was reinstalled
+  editable, OpenClaw was re-enabled/restarted from the repo-local path, and live
+  Forge health/onboarding/OpenAPI/route-check were reverified.
 
 ## 2026-05-22 Automation Pass
 

@@ -85,6 +85,16 @@ describe("question flow quality coverage", () => {
       /After each substantive answer, briefly say what is becoming clearer/i
     );
     expect(entityPlaybook).toMatch(/## Turn shapes/i);
+    expect(entityPlaybook).toMatch(/## Second-turn discipline/i);
+    expect(entityPlaybook).toMatch(
+      /After the user answers the opening question[\s\S]*choose exactly one next lane/i
+    );
+    expect(entityPlaybook).toMatch(
+      /record\s+shape, route choice, useful wording, timing, or links/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Replace "that sounds\s+important"[\s\S]*surface,[\s\S]*CRUD,[\s\S]*payload/i
+    );
     expect(entityPlaybook).toMatch(/Middle turn:/i);
     expect(entityPlaybook).toMatch(/Closing turn:/i);
     expect(entityPlaybook).toMatch(/One focused question is the default/i);
@@ -455,6 +465,16 @@ describe("question flow quality coverage", () => {
       /Save through shared batch entity routes only after the user accepts the working\s+wording/i
     );
     expect(psychePlaybook).toMatch(/## Therapeutic turn shapes/i);
+    expect(psychePlaybook).toMatch(/## Second-turn therapeutic discipline/i);
+    expect(psychePlaybook).toMatch(
+      /After the user's first real answer[\s\S]*choose one next lane/i
+    );
+    expect(psychePlaybook).toMatch(
+      /interpretive hypothesis[\s\S]*protecting, predicting, relieving, or\s+costing/i
+    );
+    expect(psychePlaybook).toMatch(
+      /accepted formulation is already accurate enough to save[\s\S]*stop deepening/i
+    );
     expect(psychePlaybook).toMatch(/## Name, Define, Connect/i);
     expect(psychePlaybook).toMatch(/Do not make the user prove the experience/i);
     expect(psychePlaybook).toMatch(

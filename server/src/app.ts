@@ -4348,6 +4348,7 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
       "Use an ACT-style values clarification stance: values are directions to live toward, not boxes to complete.",
       "Ask one or two questions at a time, reflect back the user's language, and only then move toward naming committed actions or linked work items.",
       "Reflect the pain, longing, or importance that makes the value alive before narrowing to action.",
+      "Once one ordinary moment is clear, offer one tentative hypothesis about the pain, longing, or value conflict that makes this value alive now, then ask whether it lands before turning it into action wording.",
       "If the user says they want to understand it first, start with one orienting question before offering a formulation or save suggestion."
     ]
   },
@@ -4438,7 +4439,8 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
       "When the behavior clearly belongs inside a larger loop, suggest linking or also mapping the related behavior_pattern.",
       "If the user asks for understanding before storage, ask about the recent example and function of the move before classifying it.",
       "Ask what the move is trying to do for the user before moving into replacement planning.",
-      "Name the immediate protective job before discussing costs or alternatives."
+      "Name the immediate protective job before discussing costs or alternatives.",
+      "Once one example is clear, offer one tentative hypothesis about the immediate problem the behavior solves, the cue or urge that pulls it online, and the cost it creates later."
     ]
   },
   {
@@ -4562,7 +4564,8 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
     notes: [
       "A mode_guide_session is the exploration worksheet, not the final identity claim.",
       "Store the user's answers faithfully and keep interpretations tentative unless the user wants a durable mode_profile.",
-      "Use candidate mode interpretations as testable hypotheses tied to the user's answers, not as certain labels."
+      "Use candidate mode interpretations as testable hypotheses tied to the user's answers, not as certain labels.",
+      "After enough answers are visible, offer one hypothesis about what the active part is trying to stop, force, prevent, or secure before proposing any durable mode label."
     ]
   },
   {
@@ -4611,6 +4614,7 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
       "Use shared batch entity routes for flashcard create, update, delete, restore, and search.",
       "When the user says they feel an urge or trigger, search flashcards by triggerSentence, triggerSituation, tags, message, and linked Psyche records before creating a new card.",
       "When showing a card, display or quote the message first, then add brief grounding, urge-surfing, cognitive defusion, schema-mode, or values-based coaching around it.",
+      "If the cue, urge sentence, mode, belief, or value pivot is clear, offer one hypothesis about what the card needs to meet in the hard moment before polishing its final wording.",
       "Do not make the user fill styling fields before the therapeutic sentence is clear."
     ]
   },
@@ -4695,7 +4699,8 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
     notes: [
       "event_type is a Psyche taxonomy record, but it still needs active listening because it names emotionally meaningful episodes.",
       "Do not open with pure label wording unless the lived category and boundary are already clear.",
-      "Offer a candidate label after the repeated moment is understood, and keep the user's wording when it already fits."
+      "Offer a candidate label after the repeated moment is understood, and keep the user's wording when it already fits.",
+      "Once one recurring example is clear, offer one hypothesis about the repeated emotional or relational stake that future reports need this event type to preserve."
     ]
   },
   {
@@ -4731,6 +4736,7 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
     notes: [
       "emotion_definition is a Psyche taxonomy record, not a generic dictionary entry.",
       "Start from the lived feeling before asking for category or browsing fields.",
+      "Once the lived signature is visible, offer one hypothesis about what the emotion warns about, protects, demands, or longs for before saving the reusable definition.",
       "If the user already gives a good label, reflect the felt signature and ask only for the one boundary or definition detail that still matters."
     ]
   }
@@ -6175,6 +6181,10 @@ function buildAgentOnboardingPayload(request: {
         "Self-observation is note-backed and should be written through observed notes with frontmatter.observedAt only when a lightweight episode observation is the right container. Do not use it as the default bucket for Psyche material: prefer trigger_report for one emotionally meaningful episode, behavior_pattern for functional analysis of a recurring loop, behavior for one repeated move, belief_entry for a core sentence, mode_guide_session or mode_profile for a central part-state, and wiki_page for durable memory such as books, articles, concepts, sources, or personal manuals. Sleep and workout sessions stay on batch CRUD by default; use the reflective review helpers only when enriching one already-known record after review.",
       psycheOpeningQuestionRule:
         "Prefer a concrete opening question tied to the entity: ask when the value mattered, what happened the last time the pattern appeared, what cue or body signal came first before the behavior, what the belief starts saying about self or outcome, what feels most at risk inside the mode, what the part is trying to get the user to do or stop doing, or where the shift began in the incident. Reflect briefly before the question, choose one follow-up lane at a time, say what is becoming clearer before the next deeper question, and if several Psyche entities are visible hold the adjacent ones lightly until the main container is clear.",
+      followUpQuestionRule:
+        "After a substantive answer, do not restart the opener or jump to the next schema field. First say what became clearer in concrete language, then choose exactly one next lane: wording, boundary, placement, timing, route scope, link, hypothesis, or write confirmation. Ask the smallest question that would change the record shape, route choice, useful wording, timing, or links. If nothing decision-relevant would change, stop asking, summarize the working record, and act with consent.",
+      antiDriftRule:
+        "Avoid vague reflective filler and internal route language. Replace phrases like 'that sounds important' with the specific stake you heard, and replace API nouns like surface, CRUD, payload, mutation path, or endpoint with user-facing product nouns such as belief, pattern, note, wiki page, timeline, overlay, weekday template, flow, run, node result, or published output. If a question would only decorate the intake, skip it.",
       duplicateCheckRoute: "/api/v1/entities/search",
       uiSuggestionRule:
         "offer_visual_ui_when_review_or_editing_would_be_easier",

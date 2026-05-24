@@ -370,6 +370,23 @@ Closing turn:
 - ask whether it feels true enough to save or needs one correction
 - if the user says yes, move to the write instead of reopening the intake
 
+## Second-turn discipline
+
+After the user answers the opening question, do not restart the opener and do not
+jump to the next schema field. First say what became clearer in concrete language,
+then choose exactly one next lane: wording, boundary, placement, timing, route scope,
+link, hypothesis, or write confirmation.
+
+The second question should be the smallest question that would change the record
+shape, route choice, useful wording, timing, or links. If no answer would change one
+of those things, stop asking, summarize the working record, and act with consent.
+
+Do not drift into vague reflection or internal route language. Replace "that sounds
+important" with the specific stake you heard, and replace API words such as surface,
+CRUD, payload, mutation path, or endpoint with product nouns the user recognizes:
+belief, pattern, note, wiki page, timeline, overlay, weekday template, flow, run,
+node result, or published output.
+
 ## Steering moves
 
 Use these small moves to keep the intake natural and intentional.

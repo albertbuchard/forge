@@ -4119,11 +4119,13 @@ export interface AgentOnboardingPayload {
     psycheExplorationRule: string;
     specializedSurfaceRule: string;
     reviewShortcutRule: string;
-    readModelWriteRule: string;
-    psycheOpeningQuestionRule: string;
-    duplicateCheckRoute: string;
-    uiSuggestionRule: string;
-    browserFallbackRule: string;
+      readModelWriteRule: string;
+      psycheOpeningQuestionRule: string;
+      followUpQuestionRule: string;
+      antiDriftRule: string;
+      duplicateCheckRoute: string;
+      uiSuggestionRule: string;
+      browserFallbackRule: string;
     writeConsentRule: string;
   };
   mutationGuidance: {
