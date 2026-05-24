@@ -1099,36 +1099,21 @@ struct ForgeSyncClient {
             return startingSequence
         }
         var sequence = startingSequence
-        let targetBytes = effectiveHealthSyncChunkTarget(uploadSession: uploadSession, pairing: pairing)
-        var current: [CompanionSyncPayload.WorkoutSession] = []
-        for workout in workouts {
-            let candidate = current + [workout]
-            let candidatePayload = WorkoutSummariesChunkPayload(workouts: candidate)
-            if current.isEmpty == false && encodedByteCount(candidatePayload) > targetBytes {
-                sequence = try await uploadHealthSyncChunk(
-                    uploadSession: uploadSession,
-                    pairing: pairing,
-                    sequence: sequence,
-                    family: "workout_summaries",
-                    recordCount: current.count,
-                    payload: WorkoutSummariesChunkPayload(workouts: current),
-                    onChunkUploaded: onChunkUploaded
-                )
-                current = [workout]
-            } else {
-                current = candidate
-            }
-        }
-        if current.isEmpty == false {
+        let recordLimit = workoutSummaryChunkRecordLimit(uploadSession: uploadSession, pairing: pairing)
+        var lowerBound = 0
+        while lowerBound < workouts.count {
+            let upperBound = min(workouts.count, lowerBound + recordLimit)
+            let records = Array(workouts[lowerBound..<upperBound])
             sequence = try await uploadHealthSyncChunk(
                 uploadSession: uploadSession,
                 pairing: pairing,
                 sequence: sequence,
                 family: "workout_summaries",
-                recordCount: current.count,
-                payload: WorkoutSummariesChunkPayload(workouts: current),
+                recordCount: records.count,
+                payload: WorkoutSummariesChunkPayload(workouts: records),
                 onChunkUploaded: onChunkUploaded
             )
+            lowerBound = upperBound
         }
         return sequence
     }
@@ -1141,7 +1126,7 @@ struct ForgeSyncClient {
         onChunkUploaded: HealthSyncChunkUploadHandler?
     ) async throws -> Int {
         var sequence = startingSequence
-        let targetBytes = effectiveHealthSyncChunkTarget(uploadSession: uploadSession, pairing: pairing)
+        let recordLimit = workoutTimeSeriesChunkRecordLimit(uploadSession: uploadSession, pairing: pairing)
         var currentEntries: [WorkoutTimeSeriesChunkPayload.Workout] = []
         var currentRecordCount = 0
 
@@ -1161,45 +1146,21 @@ struct ForgeSyncClient {
         }
 
         for workout in workouts {
-            var current: [CompanionSyncPayload.WorkoutTimeSeriesSample] = []
-            for sample in workout.timeSeriesSamples {
-                let candidate = current + [sample]
-                let candidatePayload = WorkoutTimeSeriesChunkPayload(
-                    workoutTimeSeries: [
-                        .init(externalUid: workout.externalUid, samples: candidate)
-                    ]
-                )
-                if current.isEmpty == false && encodedByteCount(candidatePayload) > targetBytes {
-                    let entry = WorkoutTimeSeriesChunkPayload.Workout(
-                        externalUid: workout.externalUid,
-                        samples: current
-                    )
-                    let candidateEntries = currentEntries + [entry]
-                    if currentEntries.isEmpty == false &&
-                        encodedByteCount(WorkoutTimeSeriesChunkPayload(workoutTimeSeries: candidateEntries)) > targetBytes
-                    {
-                        try await flushCurrent()
-                    }
-                    currentEntries.append(entry)
-                    currentRecordCount += entry.samples.count
-                    current = [sample]
-                } else {
-                    current = candidate
-                }
-            }
-            if current.isEmpty == false {
-                let entry = WorkoutTimeSeriesChunkPayload.Workout(
-                    externalUid: workout.externalUid,
-                    samples: current
-                )
-                let candidateEntries = currentEntries + [entry]
-                if currentEntries.isEmpty == false &&
-                    encodedByteCount(WorkoutTimeSeriesChunkPayload(workoutTimeSeries: candidateEntries)) > targetBytes
-                {
+            var lowerBound = 0
+            while lowerBound < workout.timeSeriesSamples.count {
+                if currentRecordCount >= recordLimit {
                     try await flushCurrent()
                 }
+                let remainingCapacity = max(1, recordLimit - currentRecordCount)
+                let upperBound = min(workout.timeSeriesSamples.count, lowerBound + remainingCapacity)
+                let samples = Array(workout.timeSeriesSamples[lowerBound..<upperBound])
+                let entry = WorkoutTimeSeriesChunkPayload.Workout(
+                    externalUid: workout.externalUid,
+                    samples: samples
+                )
                 currentEntries.append(entry)
                 currentRecordCount += entry.samples.count
+                lowerBound = upperBound
             }
         }
         try await flushCurrent()
@@ -1214,7 +1175,7 @@ struct ForgeSyncClient {
         onChunkUploaded: HealthSyncChunkUploadHandler?
     ) async throws -> Int {
         var sequence = startingSequence
-        let targetBytes = effectiveHealthSyncChunkTarget(uploadSession: uploadSession, pairing: pairing)
+        let recordLimit = workoutRouteChunkRecordLimit(uploadSession: uploadSession, pairing: pairing)
         var currentEntries: [WorkoutRoutesChunkPayload.Workout] = []
         var currentRecordCount = 0
 
@@ -1234,49 +1195,76 @@ struct ForgeSyncClient {
         }
 
         for workout in workouts {
-            var current: [CompanionSyncPayload.WorkoutRoutePoint] = []
-            for point in workout.routePoints {
-                let candidate = current + [point]
-                let candidatePayload = WorkoutRoutesChunkPayload(
-                    workoutRoutes: [
-                        .init(externalUid: workout.externalUid, routePoints: candidate)
-                    ]
-                )
-                if current.isEmpty == false && encodedByteCount(candidatePayload) > targetBytes {
-                    let entry = WorkoutRoutesChunkPayload.Workout(
-                        externalUid: workout.externalUid,
-                        routePoints: current
-                    )
-                    let candidateEntries = currentEntries + [entry]
-                    if currentEntries.isEmpty == false &&
-                        encodedByteCount(WorkoutRoutesChunkPayload(workoutRoutes: candidateEntries)) > targetBytes
-                    {
-                        try await flushCurrent()
-                    }
-                    currentEntries.append(entry)
-                    currentRecordCount += entry.routePoints.count
-                    current = [point]
-                } else {
-                    current = candidate
-                }
-            }
-            if current.isEmpty == false {
-                let entry = WorkoutRoutesChunkPayload.Workout(
-                    externalUid: workout.externalUid,
-                    routePoints: current
-                )
-                let candidateEntries = currentEntries + [entry]
-                if currentEntries.isEmpty == false &&
-                    encodedByteCount(WorkoutRoutesChunkPayload(workoutRoutes: candidateEntries)) > targetBytes
-                {
+            var lowerBound = 0
+            while lowerBound < workout.routePoints.count {
+                if currentRecordCount >= recordLimit {
                     try await flushCurrent()
                 }
+                let remainingCapacity = max(1, recordLimit - currentRecordCount)
+                let upperBound = min(workout.routePoints.count, lowerBound + remainingCapacity)
+                let routePoints = Array(workout.routePoints[lowerBound..<upperBound])
+                let entry = WorkoutRoutesChunkPayload.Workout(
+                    externalUid: workout.externalUid,
+                    routePoints: routePoints
+                )
                 currentEntries.append(entry)
                 currentRecordCount += entry.routePoints.count
+                lowerBound = upperBound
             }
         }
         try await flushCurrent()
         return sequence
+    }
+
+    private func workoutSummaryChunkRecordLimit(
+        uploadSession: HealthSyncUploadSession,
+        pairing: PairingPayload
+    ) -> Int {
+        chunkRecordLimit(
+            uploadSession: uploadSession,
+            pairing: pairing,
+            estimatedBytesPerRecord: 4_000,
+            minimum: 20,
+            maximum: 250
+        )
+    }
+
+    private func workoutTimeSeriesChunkRecordLimit(
+        uploadSession: HealthSyncUploadSession,
+        pairing: PairingPayload
+    ) -> Int {
+        chunkRecordLimit(
+            uploadSession: uploadSession,
+            pairing: pairing,
+            estimatedBytesPerRecord: 800,
+            minimum: 500,
+            maximum: 12_000
+        )
+    }
+
+    private func workoutRouteChunkRecordLimit(
+        uploadSession: HealthSyncUploadSession,
+        pairing: PairingPayload
+    ) -> Int {
+        chunkRecordLimit(
+            uploadSession: uploadSession,
+            pairing: pairing,
+            estimatedBytesPerRecord: 700,
+            minimum: 500,
+            maximum: 15_000
+        )
+    }
+
+    private func chunkRecordLimit(
+        uploadSession: HealthSyncUploadSession,
+        pairing: PairingPayload,
+        estimatedBytesPerRecord: Int,
+        minimum: Int,
+        maximum: Int
+    ) -> Int {
+        let targetBytes = effectiveHealthSyncChunkTarget(uploadSession: uploadSession, pairing: pairing)
+        let estimatedLimit = targetBytes / max(1, estimatedBytesPerRecord)
+        return min(maximum, max(minimum, estimatedLimit))
     }
 
     private func uploadHealthSyncChunk<Payload: Encodable>(
