@@ -647,15 +647,18 @@ actor HealthSyncStore {
         }
 
         let isFullBackfill = lastSuccessfulSyncAt == nil
+        let effectiveBatchSize = isFullBackfill
+            ? min(max(1, batchSize), fullWorkoutBackfillBatchSize)
+            : max(1, batchSize)
         companionDebugLog(
             "HealthSyncStore",
-            "streamWorkoutSessionBatches start start=\(isoString(workoutStartDate)) end=\(isoString(endDate)) batchSize=\(batchSize) fullBackfill=\(isFullBackfill)"
+            "streamWorkoutSessionBatches start start=\(isoString(workoutStartDate)) end=\(isoString(endDate)) batchSize=\(effectiveBatchSize) requestedBatchSize=\(batchSize) fullBackfill=\(isFullBackfill)"
         )
         if isFullBackfill {
             return try await streamWorkoutSessionBatchesByWindow(
                 startDate: workoutStartDate,
                 endDate: endDate,
-                batchSize: min(max(1, batchSize), fullWorkoutBackfillBatchSize),
+                batchSize: effectiveBatchSize,
                 onBatch: onBatch
             )
         }
@@ -667,7 +670,7 @@ actor HealthSyncStore {
             return WorkoutStreamResult(totalWorkouts: 0, healthDataDeferred: false)
         }
 
-        let boundedBatchSize = max(1, batchSize)
+        let boundedBatchSize = effectiveBatchSize
         let totalBatches = Int(ceil(Double(workouts.count) / Double(boundedBatchSize)))
         var uploadedWorkouts = 0
         for batchIndex in 0..<totalBatches {
@@ -1092,10 +1095,6 @@ actor HealthSyncStore {
     }
 
     private func mapWorkoutSummary(_ workout: HKWorkout) -> CompanionSyncPayload.WorkoutSession {
-        companionDebugLog(
-            "HealthSyncStore",
-            "mapWorkoutSummary id=\(workout.uuid.uuidString.lowercased()) type=\(workout.workoutActivityType.rawValue)"
-        )
         let activityDescriptor = workoutActivityDescriptor(for: workout.workoutActivityType)
         let totalEnergy = safeDoubleValue(
             workout.totalEnergyBurned,
@@ -2191,10 +2190,12 @@ actor HealthSyncStore {
             return nil
         }
         guard quantity.is(compatibleWith: unit) else {
-            companionDebugLog(
-                "HealthSyncStore",
-                "skipping incompatible quantity conversion context=\(context) targetUnit=\(unit) quantity=\(quantity)"
-            )
+            if context.hasPrefix("workout.metadata.") == false {
+                companionDebugLog(
+                    "HealthSyncStore",
+                    "skipping incompatible quantity conversion context=\(context) targetUnit=\(unit) quantity=\(quantity)"
+                )
+            }
             return nil
         }
         return quantity.doubleValue(for: unit)

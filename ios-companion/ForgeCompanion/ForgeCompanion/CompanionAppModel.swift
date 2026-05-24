@@ -1206,6 +1206,13 @@ final class CompanionAppModel: ObservableObject {
         deferredStartupRefreshTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             guard let self, Task.isCancelled == false else { return }
+            guard self.activeSyncTask == nil && self.syncState != .syncing else {
+                companionDebugLog(
+                    "CompanionAppModel",
+                    "deferred startup refresh skipped because health sync is active"
+                )
+                return
+            }
             companionDebugLog("CompanionAppModel", "deferred startup refresh begin")
             _ = await self.ensureActivePairingIfPossible(reason: "startup-deferred")
             await self.refreshMovementBootstrap()
@@ -1273,6 +1280,13 @@ final class CompanionAppModel: ObservableObject {
     private func performMaintenanceHeartbeat(reason: String, force: Bool) async -> Bool {
         guard pairing != nil else {
             return false
+        }
+        if activeSyncTask != nil || syncState == .syncing {
+            companionDebugLog(
+                "CompanionAppModel",
+                "performMaintenanceHeartbeat skipped reason=\(reason) activeSync=true"
+            )
+            return true
         }
         if force == false,
            let lastHeartbeatAt,
@@ -1721,7 +1735,7 @@ final class CompanionAppModel: ObservableObject {
                     "CompanionAppModel",
                     "workout chunk sync mode=\(workoutBackfillPlan.requiresBackfill ? "all-history-backfill" : "incremental") cursor=\(workoutBackfillPlan.workoutCursorDate?.description ?? "nil")"
                 )
-                _ = try await healthStore.streamWorkoutSessionBatches(
+                let workoutStreamResult = try await healthStore.streamWorkoutSessionBatches(
                     healthKitAuthorized: healthAuthorizationGranted,
                     healthSyncEnabled: healthSyncEnabled,
                     lastSuccessfulSyncAt: workoutBackfillPlan.workoutCursorDate,
@@ -1766,6 +1780,18 @@ final class CompanionAppModel: ObservableObject {
                             "\(session.syncSessionId)-\(String(format: "%06d", max(0, sequence - 1)))"
                     }
                 }
+                if workoutStreamResult.healthDataDeferred {
+                    healthDataDeferred = true
+                }
+            }
+
+            if healthDataDeferred {
+                companionDebugLog(
+                    "CompanionAppModel",
+                    "health sync deferred before completion because protected HealthKit data is unavailable"
+                )
+                lastSyncMessage = "Waiting for device unlock to read HealthKit again"
+                throw Self.protectedHealthDataInaccessibleError()
             }
 
             lastSyncMessage = "Finalizing in Forge"
@@ -1936,6 +1962,16 @@ final class CompanionAppModel: ObservableObject {
                 nsError.localizedDescription.contains("chunk_checksum_mismatch") ||
                 failureReason?.contains("chunk_checksum_mismatch") == true
             )
+    }
+
+    private static func protectedHealthDataInaccessibleError() -> NSError {
+        NSError(
+            domain: "CompanionAppModel",
+            code: 2,
+            userInfo: [
+                NSLocalizedDescriptionKey: "Protected health data is inaccessible"
+            ]
+        )
     }
 
     private func currentHealthSyncPermissions(
