@@ -94,6 +94,7 @@ actor HealthSyncStore {
     private let syncWindowDays = 21
     private let incrementalLookbackHours = 72
     private let workoutMappingConcurrencyLimit = 4
+    private let historicalWorkoutEvidenceBatchSize = 64
     private let sleepSessionGap: TimeInterval = 4 * 60 * 60
     private let sleepInferenceGap: TimeInterval = 15 * 60
     private let isoFormatter: ISO8601DateFormatter = {
@@ -624,6 +625,7 @@ actor HealthSyncStore {
         healthSyncEnabled: Bool,
         lastSuccessfulSyncAt: Date?,
         batchSize: Int = 100,
+        onProgress: ((WorkoutBatchProgress) async -> Void)? = nil,
         onBatch: @escaping ([CompanionSyncPayload.WorkoutSession], WorkoutBatchProgress) async throws -> Void
     ) async throws -> WorkoutStreamResult {
         let endDate = Date()
@@ -646,13 +648,26 @@ actor HealthSyncStore {
         }
 
         let isFullBackfill = lastSuccessfulSyncAt == nil
-        let effectiveBatchSize = max(1, batchSize)
+        let requestedBatchSize = max(1, batchSize)
+        let effectiveBatchSize = isFullBackfill
+            ? min(requestedBatchSize, historicalWorkoutEvidenceBatchSize)
+            : requestedBatchSize
         companionDebugLog(
             "HealthSyncStore",
             "streamWorkoutSessionBatches start start=\(isoString(workoutStartDate)) end=\(isoString(endDate)) batchSize=\(effectiveBatchSize) requestedBatchSize=\(batchSize) fullBackfill=\(isFullBackfill)"
         )
         let workouts = try await queryWorkouts(startDate: workoutStartDate, endDate: endDate)
             .sorted { $0.startDate > $1.startDate }
+        await onProgress?(
+            WorkoutBatchProgress(
+                batchIndex: 0,
+                totalBatches: workouts.isEmpty ? 0 : Int(ceil(Double(workouts.count) / Double(effectiveBatchSize))),
+                uploadedWorkouts: 0,
+                totalWorkouts: workouts.count,
+                discoveredWorkouts: workouts.count,
+                isScanningComplete: true
+            )
+        )
         guard workouts.isEmpty == false else {
             companionDebugLog("HealthSyncStore", "streamWorkoutSessionBatches no workouts")
             return WorkoutStreamResult(totalWorkouts: 0, healthDataDeferred: false)

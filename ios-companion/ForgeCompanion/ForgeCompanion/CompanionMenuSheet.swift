@@ -410,10 +410,10 @@ struct CompanionSettingsSheet: View {
                 .frame(width: 30, height: 30)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Historical import")
+                    Text("Workout history import")
                         .font(.system(size: 14, weight: .bold, design: .rounded))
                         .foregroundStyle(CompanionStyle.textPrimary)
-                    Text(syncInFlight ? "One-time workout backfill in progress" : "One-time workout backfill")
+                    Text(syncInFlight ? "One-time backfill in progress" : "One-time backfill")
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
                         .foregroundStyle(CompanionStyle.textMuted)
                 }
@@ -545,7 +545,7 @@ struct CompanionSettingsSheet: View {
             return "Counting workouts"
         }
         if let total = progress.totalWorkouts {
-            return "\(formatCount(total)) workouts"
+            return "\(formatCount(total)) total workouts"
         }
         return "\(formatCount(progress.indexedWorkouts)) found so far"
     }
