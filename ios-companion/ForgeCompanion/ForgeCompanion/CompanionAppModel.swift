@@ -1739,7 +1739,7 @@ final class CompanionAppModel: ObservableObject {
                     healthKitAuthorized: healthAuthorizationGranted,
                     healthSyncEnabled: healthSyncEnabled,
                     lastSuccessfulSyncAt: workoutBackfillPlan.workoutCursorDate,
-                    batchSize: 100
+                    batchSize: Int.max
                 ) { [weak self] workouts, progress in
                     await MainActor.run {
                         if let totalWorkouts = progress.totalWorkouts {
