@@ -366,6 +366,8 @@ final class CompanionAppModel: ObservableObject {
     @Published var healthSyncChunkMaxBytes: Int?
     @Published var healthSyncLegacyFallbackReason: String?
     @Published var healthSyncTransferStats: SyncTransferStats?
+    @Published var activeSyncMode: CompanionSyncMode = .normal
+    @Published var historicalWorkoutImportStatus: HistoricalWorkoutImportStatus?
     @Published var healthSyncEnabled = true {
         didSet {
             UserDefaults.standard.set(healthSyncEnabled, forKey: StorageKeys.healthSyncEnabled)
@@ -1667,9 +1669,26 @@ final class CompanionAppModel: ObservableObject {
             lastSuccessfulSyncAt: lastSuccessfulSyncAt,
             workoutBackfillCompletedAt: workoutBackfillCompletedAt
         )
+        activeSyncMode = workoutBackfillPlan.requiresBackfill ? .historicalWorkoutImport : .normal
+        historicalWorkoutImportStatus = workoutBackfillPlan.requiresBackfill
+            ? HistoricalWorkoutImportStatus(
+                indexedWorkouts: 0,
+                totalWorkouts: nil,
+                uploadedWorkoutSummaries: 0,
+                uploadedTimeSeriesSamples: 0,
+                uploadedRoutePoints: 0,
+                targetHeartRateSamples: 0,
+                targetTimeSeriesSamples: 0,
+                targetRoutePoints: 0,
+                uploadedChunks: 0,
+                resumedChunks: 0
+            )
+            : nil
 
         do {
-            lastSyncMessage = "Starting Forge sync"
+            lastSyncMessage = workoutBackfillPlan.requiresBackfill
+                ? "Starting one-time workout history import"
+                : "Starting Forge sync"
             healthSyncLegacyFallbackReason = nil
             let session = try await syncClient.startHealthSyncSession(
                 pairing: pairing,
@@ -1729,7 +1748,7 @@ final class CompanionAppModel: ObservableObject {
 
             if healthDataDeferred == false {
                 lastSyncMessage = workoutBackfillPlan.requiresBackfill
-                    ? "Uploading all workout history"
+                    ? "Uploading workout history"
                     : "Uploading workouts"
                 companionDebugLog(
                     "CompanionAppModel",
@@ -1741,16 +1760,34 @@ final class CompanionAppModel: ObservableObject {
                     lastSuccessfulSyncAt: workoutBackfillPlan.workoutCursorDate,
                     batchSize: Int.max
                 ) { [weak self] workouts, progress in
+                    let batchStats = Self.workoutUploadStats(for: workouts)
                     await MainActor.run {
                         if let totalWorkouts = progress.totalWorkouts {
                             self?.lastSyncMessage =
-                                "Uploading workouts \(progress.uploadedWorkouts)/\(totalWorkouts)"
+                                workoutBackfillPlan.requiresBackfill
+                                    ? "Uploading historical workouts \(progress.uploadedWorkouts)/\(totalWorkouts)"
+                                    : "Uploading workouts \(progress.uploadedWorkouts)/\(totalWorkouts)"
                         } else if progress.isScanningComplete {
                             self?.lastSyncMessage =
-                                "Uploading workouts \(progress.uploadedWorkouts)"
+                                workoutBackfillPlan.requiresBackfill
+                                    ? "Uploading historical workouts \(progress.uploadedWorkouts)"
+                                    : "Uploading workouts \(progress.uploadedWorkouts)"
                         } else {
                             self?.lastSyncMessage =
-                                "Uploading workouts \(progress.uploadedWorkouts) found so far"
+                                workoutBackfillPlan.requiresBackfill
+                                    ? "Indexing historical workouts \(progress.uploadedWorkouts) found so far"
+                                    : "Uploading workouts \(progress.uploadedWorkouts) found so far"
+                        }
+                        if workoutBackfillPlan.requiresBackfill {
+                            self?.updateHistoricalWorkoutImportStatus { status in
+                                status.indexedWorkouts = progress.uploadedWorkouts
+                                if let totalWorkouts = progress.totalWorkouts {
+                                    status.totalWorkouts = totalWorkouts
+                                }
+                                status.targetHeartRateSamples += batchStats.rawHeartRateDatapoints
+                                status.targetTimeSeriesSamples += batchStats.rawTimeSeriesDatapoints
+                                status.targetRoutePoints += batchStats.routePoints
+                            }
                         }
                         self?.lastHealthSyncChunkFamily = "workout_summaries"
                         self?.lastHealthSyncPayloadBytes = try? JSONEncoder().encode(workouts).count
@@ -1762,7 +1799,6 @@ final class CompanionAppModel: ObservableObject {
                         startingSequence: sequence,
                         onChunkUploaded: onChunkUploaded
                     )
-                    let batchStats = Self.workoutUploadStats(for: workouts)
                     await MainActor.run {
                         workoutStats.workouts += batchStats.workouts
                         workoutStats.workoutsWithAverageHeartRate += batchStats.workoutsWithAverageHeartRate
@@ -1883,6 +1919,7 @@ final class CompanionAppModel: ObservableObject {
         lastHealthSyncChunkId = event.chunkId
         lastHealthSyncChunkFamily = event.family
         lastHealthSyncPayloadBytes = event.transferByteCount
+        recordHistoricalWorkoutImportChunk(event)
         if event.skipped {
             healthSyncTransferSkippedChunks += 1
         } else {
@@ -1892,6 +1929,55 @@ final class CompanionAppModel: ObservableObject {
             healthSyncTransferLastChunkAt = Date()
         }
         publishHealthSyncTransferStats(now: Date())
+    }
+
+    private func updateHistoricalWorkoutImportStatus(
+        _ update: (inout HistoricalWorkoutImportStatus) -> Void
+    ) {
+        var status = historicalWorkoutImportStatus ?? HistoricalWorkoutImportStatus(
+            indexedWorkouts: 0,
+            totalWorkouts: nil,
+            uploadedWorkoutSummaries: 0,
+            uploadedTimeSeriesSamples: 0,
+            uploadedRoutePoints: 0,
+            targetHeartRateSamples: 0,
+            targetTimeSeriesSamples: 0,
+            targetRoutePoints: 0,
+            uploadedChunks: 0,
+            resumedChunks: 0
+        )
+        update(&status)
+        historicalWorkoutImportStatus = status
+    }
+
+    private func recordHistoricalWorkoutImportChunk(
+        _ event: ForgeSyncClient.HealthSyncChunkUploadEvent
+    ) {
+        guard activeSyncMode == .historicalWorkoutImport else {
+            return
+        }
+        guard event.family == "workout_summaries" ||
+            event.family == "workout_time_series" ||
+            event.family == "workout_routes" else {
+            return
+        }
+        updateHistoricalWorkoutImportStatus { status in
+            if event.skipped {
+                status.resumedChunks += 1
+            } else {
+                status.uploadedChunks += 1
+            }
+            switch event.family {
+            case "workout_summaries":
+                status.uploadedWorkoutSummaries += event.recordCount
+            case "workout_time_series":
+                status.uploadedTimeSeriesSamples += event.recordCount
+            case "workout_routes":
+                status.uploadedRoutePoints += event.recordCount
+            default:
+                break
+            }
+        }
     }
 
     private func refreshHealthSyncTransferSpeed() {
@@ -2239,12 +2325,14 @@ final class CompanionAppModel: ObservableObject {
     var syncUploadStatus: CompanionSyncUploadStatus {
         CompanionSyncUploadStatus(
             isSyncing: syncState == .syncing || activeSyncTask != nil,
+            syncMode: activeSyncMode,
             message: lastSyncMessage,
             payloadSummary: latestSyncPayloadSummary,
             lastChunkFamily: lastHealthSyncChunkFamily,
             lastPayloadBytes: lastHealthSyncPayloadBytes,
             activeSessionId: activeHealthSyncSessionId,
-            transferStats: healthSyncTransferStats
+            transferStats: healthSyncTransferStats,
+            historicalWorkoutImport: historicalWorkoutImportStatus
         )
     }
 
