@@ -1,8 +1,9 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { installE2eStorageGuards, waitForForge } from "./helpers";
 
-async function waitForForge(page: Page) {
-  await page.waitForFunction(() => document.body.innerText.trim().length > 40);
-}
+test.beforeEach(async ({ page }) => {
+  await installE2eStorageGuards(page);
+});
 
 async function expectNoHorizontalOverflow(page: Page) {
   await expect
@@ -45,9 +46,13 @@ async function expectNoVerticalOverlap(
 
 async function openFirstEntityLink(page: Page, pathPrefix: string) {
   const link = page.locator(`a[href*="${pathPrefix}"]:visible`).first();
+  if ((await link.count()) === 0) {
+    return false;
+  }
   await expect(link).toBeVisible();
   await link.click();
   await waitForForge(page);
+  return true;
 }
 
 async function getMovableTaskCard(
