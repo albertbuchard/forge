@@ -93,7 +93,7 @@ actor HealthSyncStore {
     private let store = HKHealthStore()
     private let syncWindowDays = 21
     private let incrementalLookbackHours = 72
-    private let fullWorkoutBackfillBatchSize = 20
+    private let fullWorkoutBackfillBatchSize = 100
     private let workoutMappingConcurrencyLimit = 4
     private let sleepSessionGap: TimeInterval = 4 * 60 * 60
     private let sleepInferenceGap: TimeInterval = 15 * 60
