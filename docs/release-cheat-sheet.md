@@ -209,6 +209,16 @@ Run these from `/Users/omarclaw/Documents/aurel-monorepo/projects/forge`.
 
 ### OpenClaw
 
+If Hermes is already ahead of OpenClaw/Forge Memory, release Hermes first to the
+next shared version, then release OpenClaw/Forge Memory to that exact same version.
+The OpenClaw release script also rewrites shared Forge plugin version surfaces, so
+the correct alignment order is:
+
+```bash
+FORGE_RELEASE_MODE=prepare ./scripts/release-forge-hermes-plugin.sh patch
+FORGE_RELEASE_MODE=prepare ./scripts/release-forge-openclaw-plugin.sh <same-version>
+```
+
 Patch release:
 
 ```bash
@@ -265,6 +275,12 @@ What happens next:
 - GitHub Actions publishes `forge-hermes-plugin` to PyPI from that tag
 
 ### iOS TestFlight
+
+Do not run Fastlane manually as the normal release command. The operator process is
+tag-driven GitHub Actions from the public nested Forge repo: update metadata, commit
+to `main`, push `main`, push the `ios-testflight-v<marketing-version>` tag, and
+watch the `Release Forge Companion iOS` workflow. The workflow implementation may
+call the iOS release script internally, but the release action is the tag.
 
 Before tagging:
 
@@ -379,6 +395,10 @@ When an iOS release tag lands on a `main` commit, the workflow:
 4. Push the correct iOS tag
 5. Watch the GitHub Actions workflow
 6. Confirm TestFlight upload or App Store submission in App Store Connect
+
+Normal iOS release commands must be limited to git operations and GitHub Actions
+inspection. Local `./ios-companion/scripts/publish-forge-companion.sh testflight`
+is a fallback only, not the standard release process.
 
 ## Recent Verified Releases
 
