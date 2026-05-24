@@ -1061,4 +1061,30 @@ describe("question flow simulation cycles", () => {
       /saved flow chat follow-ups[\s\S]*POST \/api\/v1\/workbench\/flows\/:id\/chat[\s\S]*new run, note, or generic entity update/i
     );
   });
+
+  it("cycle 3 report retest: durable automation report covers this full run", () => {
+    const report = readRepoFile("docs/question-flow-improvement-cycles.md");
+    const latestRun = getSectionSlice(report, "2026-05-24 Automation Pass");
+
+    expect(report).toMatch(/Latest run date: 2026-05-24/);
+    expect(latestRun).toMatch(/41 live entity catalog entries/i);
+    expect(latestRun).toMatch(
+      /goal, project, strategy,\s+task, habit, tag, note, insight, task_run, work_adjustment/i
+    );
+    expect(latestRun).toMatch(
+      /preference_catalog,\s+preference_catalog_item, preference_context, preference_item, preference_judgment,\s+preference_signal/i
+    );
+    expect(latestRun).toMatch(
+      /psyche_value, behavior_pattern, behavior, belief_entry, mode_profile,\s+mode_guide_session, flashcard, trigger_report, event_type, emotion_definition/i
+    );
+    expect(latestRun).toMatch(/Movement[\s\S]*Life Force[\s\S]*Workbench/i);
+    expect(latestRun).toMatch(
+      /Cycle 1[\s\S]*followUpQuestionRule[\s\S]*antiDriftRule/i
+    );
+    expect(latestRun).toMatch(
+      /Cycle 2[\s\S]*hypothesis guidance[\s\S]*every Psyche/i
+    );
+    expect(latestRun).toMatch(/Cycle 3[\s\S]*durable report[\s\S]*rebuild/i);
+    expect(latestRun).toMatch(/What happened after retesting/i);
+  });
 });

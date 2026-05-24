@@ -339,6 +339,23 @@ Closing turn:
   linked
 - if the user says it lands, move toward the write instead of reopening exploration
 
+## Second-turn therapeutic discipline
+
+After the user's first real answer, do not simply ask another broad origin question
+and do not move into repair because the schema has optional fields left. Briefly name
+the emotional center, function, danger, or value conflict that became clearer, then
+choose one next lane: situation, sequence, meaning, protection, cost, longing,
+naming, hypothesis, link, or save confirmation.
+
+When one concrete example is already clear, a useful second or third turn can be a
+careful interpretive hypothesis rather than another request for raw material. The
+hypothesis should name what the response may be protecting, predicting, relieving, or
+costing, then ask whether that lands or needs correction.
+
+If the accepted formulation is already accurate enough to save, stop deepening. Ask
+one accuracy question, preserve the user's wording, and write through the shared
+batch entity route after consent.
+
 ## Name, Define, Connect
 
 Use this checkpoint once the material is coherent enough.
