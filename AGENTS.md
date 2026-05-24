@@ -8,6 +8,17 @@ This file governs the `projects/forge` subtree and supplements the root `AGENTS.
 
 All Forge work must happen on `main` unless Albert explicitly asks for a different branch.
 Do not create, switch to, or keep working on feature branches by default.
+Before any Forge commit, verify `git branch --show-current` returns `main`.
+
+## Parent monorepo mirror rule
+
+The Forge repository is the source of truth for files under `projects/forge`.
+The parent monorepo may mirror Forge files, but parent merge resolution is not authoritative for Forge source.
+
+- Do not let a parent-monorepo checkout, merge, or conflict resolution downgrade Forge files.
+- If parent and Forge disagree, inspect Forge `main` first and restore from the Forge repository's `HEAD`.
+- Before staging Forge release metadata, run `scripts/audit-release-guard.sh`.
+- The local Forge pre-commit hook also runs the release guard. It fails if the working or staged iOS marketing version is older than the latest `ios-testflight-v*` tag.
 
 ## OpenClaw plugin rule
 
