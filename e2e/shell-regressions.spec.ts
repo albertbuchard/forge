@@ -1,8 +1,9 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { installE2eStorageGuards, waitForForge } from "./helpers";
 
-async function waitForForge(page: Page) {
-  await page.waitForFunction(() => document.body.innerText.trim().length > 40);
-}
+test.beforeEach(async ({ page }) => {
+  await installE2eStorageGuards(page);
+});
 
 test("desktop shell keeps the current route visible until next-route data is ready", async ({
   page
@@ -20,7 +21,7 @@ test("desktop shell keeps the current route visible until next-route data is rea
   const header = page.locator("header.sticky").first();
   await expect(header).toContainText("Overview");
 
-  await page.getByRole("link", { name: /^Movement$/ }).first().click();
+  await page.locator('a[href="/forge/movement"]').first().click();
 
   await page.waitForTimeout(250);
   await expect(header).toContainText("Overview");

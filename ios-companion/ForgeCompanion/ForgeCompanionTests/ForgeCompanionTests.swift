@@ -3030,6 +3030,7 @@ final class ForgeCompanionTests: XCTestCase {
 
         let status = CompanionSyncUploadStatus(
             isSyncing: true,
+            syncMode: .normal,
             message: "Uploading workouts 5/7",
             payloadSummary: payloadSummary,
             lastChunkFamily: "workout_time_series",
@@ -3043,7 +3044,8 @@ final class ForgeCompanionTests: XCTestCase {
                 uploadedRecords: 512,
                 skippedChunks: 1,
                 secondsSinceLastChunk: 4
-            )
+            ),
+            historicalWorkoutImport: nil
         )
 
         XCTAssertEqual(status.headline, "Uploading workouts 5/7")

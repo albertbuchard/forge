@@ -1,5 +1,12 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const configuredE2ePort = Number.parseInt(process.env.FORGE_E2E_PORT ?? "", 10);
+const e2ePort =
+  Number.isInteger(configuredE2ePort) && configuredE2ePort > 0
+    ? configuredE2ePort
+    : 4317;
+const e2eBaseUrl = `http://127.0.0.1:${e2ePort}/forge/`;
+
 export default defineConfig({
   testDir: "./e2e",
   timeout: 30_000,
@@ -11,7 +18,7 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : [["list"]],
   use: {
-    baseURL: "http://127.0.0.1:4317/forge/",
+    baseURL: e2eBaseUrl,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "retain-on-failure"
@@ -27,9 +34,9 @@ export default defineConfig({
     }
   ],
   webServer: {
-    command: "npm run build && node --import tsx server/src/e2e-server.ts",
-    port: 4317,
+    command: `npm run build && PORT=${e2ePort} node --import tsx server/src/e2e-server.ts`,
+    port: e2ePort,
     timeout: 120_000,
-    reuseExistingServer: !process.env.CI
+    reuseExistingServer: e2ePort === 4317 && !process.env.CI
   }
 });

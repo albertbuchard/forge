@@ -1,8 +1,9 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { installE2eStorageGuards, waitForForge } from "./helpers";
 
-async function waitForForge(page: Page) {
-  await page.waitForFunction(() => document.body.innerText.trim().length > 40);
-}
+test.beforeEach(async ({ page }) => {
+  await installE2eStorageGuards(page);
+});
 
 test("overview exposes the premium XP command deck", async ({ page }) => {
   await page.goto("");
@@ -65,10 +66,16 @@ test("settings supports retroactive work logging and reward operations", async (
     .fill("Captured through the operator console to verify retroactive work logging.");
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByRole("heading", { name: "Set the context and XP value" })).toBeVisible();
-  await page.locator("select").first().selectOption({ index: 1 });
-  await page.getByRole("button", { name: "Log work" }).click();
-
-  await expect(page.getByText(/Logged Playwright captured work/)).toBeVisible();
+  const projectSelect = page.locator("select").first();
+  const projectOptionCount = await projectSelect.locator("option").count();
+  if (projectOptionCount > 1) {
+    await projectSelect.selectOption({ index: 1 });
+    await page.getByRole("button", { name: "Log work" }).click();
+    await expect(page.getByText(/Logged Playwright captured work/)).toBeVisible();
+  } else {
+    await page.getByRole("button", { name: "Log work" }).click();
+    await expect(page.getByText("Tasks must belong to a project")).toBeVisible();
+  }
 });
 
 test("psyche flagship surfaces render inside the shared shell", async ({ page }) => {

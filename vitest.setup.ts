@@ -1,5 +1,43 @@
 import "@testing-library/jest-dom/vitest";
 
+class MemoryStorage implements Storage {
+  private values = new Map<string, string>();
+
+  get length() {
+    return this.values.size;
+  }
+
+  clear() {
+    this.values.clear();
+  }
+
+  getItem(key: string) {
+    return this.values.get(key) ?? null;
+  }
+
+  key(index: number) {
+    return Array.from(this.values.keys())[index] ?? null;
+  }
+
+  removeItem(key: string) {
+    this.values.delete(key);
+  }
+
+  setItem(key: string, value: string) {
+    this.values.set(key, String(value));
+  }
+}
+
+for (const storageKey of ["localStorage", "sessionStorage"] as const) {
+  if (!(storageKey in globalThis) || globalThis[storageKey] == null) {
+    Object.defineProperty(globalThis, storageKey, {
+      value: new MemoryStorage(),
+      writable: true,
+      configurable: true
+    });
+  }
+}
+
 class MockWebGLRenderingContext {}
 class MockWebGL2RenderingContext extends MockWebGLRenderingContext {}
 

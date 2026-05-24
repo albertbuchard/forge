@@ -13,6 +13,7 @@ const {
   listBehaviorsMock,
   listBehaviorPatternsMock,
   listBeliefsMock,
+  listFlashcardsMock,
   listModesMock,
   listNotesMock,
   listPsycheValuesMock,
@@ -26,6 +27,7 @@ const {
   listBehaviorsMock: vi.fn(),
   listBehaviorPatternsMock: vi.fn(),
   listBeliefsMock: vi.fn(),
+  listFlashcardsMock: vi.fn(),
   listModesMock: vi.fn(),
   listNotesMock: vi.fn(),
   listPsycheValuesMock: vi.fn(),
@@ -41,6 +43,7 @@ vi.mock("@/lib/api", () => ({
   listBehaviors: listBehaviorsMock,
   listBehaviorPatterns: listBehaviorPatternsMock,
   listBeliefs: listBeliefsMock,
+  listFlashcards: listFlashcardsMock,
   listModes: listModesMock,
   listNotes: listNotesMock,
   listPsycheValues: listPsycheValuesMock,
@@ -137,6 +140,7 @@ describe("NotesPage", () => {
     listBehaviorPatternsMock.mockResolvedValue({ patterns: [] });
     listBehaviorsMock.mockResolvedValue({ behaviors: [] });
     listBeliefsMock.mockResolvedValue({ beliefs: [] });
+    listFlashcardsMock.mockResolvedValue({ flashcards: [] });
     listModesMock.mockResolvedValue({ modes: [] });
     listTriggerReportsMock.mockResolvedValue({ reports: [] });
     listNotesMock.mockResolvedValue({
