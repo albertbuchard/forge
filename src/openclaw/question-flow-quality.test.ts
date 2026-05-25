@@ -34,7 +34,7 @@ describe("question flow quality coverage", () => {
       ["Goal", /keep hold of here/i, /why it matters now/i],
       ["Project", /make true in your life or work/i, /bounded workstream/i],
       ["Strategy", /actually trying to arrive at/i, /major phases/i],
-      ["Task", /next concrete move here/i, /actionable move/i],
+      ["Task", /next concrete move here/i, /one-session work item/i],
       ["Habit", /strengthen or interrupt/i, /honest check-in/i],
       ["Tag", /help you notice or find again later/i, /inside versus outside/i],
       ["Note", /worth preserving in a note/i, /durable or temporary/i],

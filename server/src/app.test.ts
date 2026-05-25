@@ -3002,12 +3002,21 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
     const startPayload = startResponse.json() as {
       upload: {
         syncSessionId: string;
+        status: string;
         chunkTargetBytes: number;
         chunkPayloadEncoding: string;
         acceptedPayloadEncodings: string[];
         supportsCompression: boolean;
+        progress: {
+          chunkCount: number;
+          receivedBytes: number;
+          receivedCounts: Record<string, number>;
+          byteTotals: Record<string, number>;
+        };
       };
     };
+    assert.equal(startPayload.upload.status, "running");
+    assert.equal(startPayload.upload.progress.chunkCount, 0);
     assert.equal(
       startPayload.upload.chunkPayloadEncoding,
       "payload_json_base64"
@@ -3093,6 +3102,19 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
         .duplicate,
       false
     );
+    const summaryChunkReceipt = summaryResponse.json() as {
+      chunk: {
+        progress: {
+          chunkCount: number;
+          receivedCounts: Record<string, number>;
+        };
+      };
+    };
+    assert.equal(summaryChunkReceipt.chunk.progress.chunkCount, 1);
+    assert.equal(
+      summaryChunkReceipt.chunk.progress.receivedCounts.workout_summaries,
+      1
+    );
     const progressiveWorkout = getDatabase()
       .prepare(
         `SELECT external_uid
@@ -3162,12 +3184,48 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
     });
     assert.equal(resumeResponse.statusCode, 200);
     const resumedUpload = resumeResponse.json() as {
-      upload: { syncSessionId: string; receivedChunkIds: string[] };
+      upload: {
+        syncSessionId: string;
+        receivedChunkIds: string[];
+        progress: {
+          chunkCount: number;
+          receivedCounts: Record<string, number>;
+        };
+      };
     };
     assert.equal(resumedUpload.upload.syncSessionId, syncSessionId);
     assert.deepEqual(resumedUpload.upload.receivedChunkIds, [
       "chunk-summary-1"
     ]);
+    assert.equal(resumedUpload.upload.progress.chunkCount, 1);
+    assert.equal(
+      resumedUpload.upload.progress.receivedCounts.workout_summaries,
+      1
+    );
+
+    const statusResponse = await app.inject({
+      method: "GET",
+      url:
+        `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}` +
+        `?sessionId=${encodeURIComponent(qrPayload.sessionId)}` +
+        `&pairingToken=${encodeURIComponent(qrPayload.pairingToken)}`
+    });
+    assert.equal(statusResponse.statusCode, 200, statusResponse.body);
+    const statusPayload = statusResponse.json() as {
+      upload: {
+        status: string;
+        receivedChunkIds: string[];
+        progress: {
+          chunkCount: number;
+          receivedCounts: Record<string, number>;
+        };
+      };
+    };
+    assert.equal(statusPayload.upload.status, "running");
+    assert.deepEqual(statusPayload.upload.receivedChunkIds, [
+      "chunk-summary-1"
+    ]);
+    assert.equal(statusPayload.upload.progress.chunkCount, 1);
 
     const duplicateResponse = await app.inject({
       method: "POST",

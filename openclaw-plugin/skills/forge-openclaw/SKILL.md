@@ -145,6 +145,8 @@ Concrete route-key examples for internal use:
   `{"routeKey":"latestNodeOutput","pathParams":{"id":"flow_research_digest","nodeId":"node_summary"}}`
 - Workbench run execution:
   `{"routeKey":"runFlow","pathParams":{"id":"flow_research_digest"},"body":{"input":{"topic":"question flow quality"}}}`
+- Workbench one-off input execution:
+  `{"routeKey":"runByPayload","body":{"flow":{"title":"One-off digest","nodes":[]},"input":{"topic":"question flow quality"}}}`
 - Workbench flow chat follow-up:
   `{"routeKey":"chatFlow","pathParams":{"id":"flow_research_digest"},"body":{"message":"Refine the summary around API route risks and keep the published output stable."}}`
 
@@ -349,7 +351,8 @@ Only ask if missing or unclear:
 `project`
 Use for a bounded workstream under a goal.
 Minimum field: `title`
-Usually useful: `goalId`, `description`, `status`
+Usually useful: `goalId`, `description`, `productRequirementsDocument`,
+`status`, `workflowStatus`, `userId`, `assigneeUserIds`, `schedulingRules`
 Only ask if missing or unclear:
 
 1. What should this project be called?
@@ -357,14 +360,18 @@ Only ask if missing or unclear:
 3. What outcome should it produce?
 
 `task`
-Use for one concrete action or deliverable.
+Use for one concrete work item; the same stored family carries `issue`, `task`, and
+`subtask` levels.
 Minimum field: `title`
-Usually useful: `projectId`, `goalId`, `priority`, `dueDate`, `status`, `owner`
+Usually useful: `level`, `projectId`, `parentWorkItemId`, `aiInstructions`,
+`executionMode`, `acceptanceCriteria`, `priority`, `dueDate`, `status`, `userId`,
+`assigneeUserIds`
 Only ask if missing or unclear:
 
 1. What is the task in one concrete sentence?
-2. Should it live under an existing goal or project?
-3. Does it need a due date, priority, or owner?
+2. Is this an issue, one-session task, or subtask?
+3. Should it live under a project, issue, parent task, or intentional inbox?
+4. Does it need agent instructions, acceptance criteria, a due date, priority, owner, or assignees?
 
 `habit`
 Use for a recurring commitment or recurring slip with explicit cadence and XP consequences.

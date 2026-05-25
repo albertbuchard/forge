@@ -3003,6 +3003,29 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(incrementalSync.workoutCursorDate, legacySyncDate)
     }
 
+    func testActiveHealthSyncCheckpointPersistsFrozenWindowAndProgress() throws {
+        let windowEnd = makeDate("2026-05-25T20:19:12.377Z")
+        let checkpoint = ActiveHealthSyncCheckpoint(
+            syncSessionId: "hms_resume",
+            schemaVersion: "healthkit-sync-v2",
+            requestedFamilies: ["sleep_nights", "workout_routes"],
+            createdAt: makeDate("2026-05-25T20:18:59.000Z"),
+            windowEnd: windowEnd,
+            requiresWorkoutBackfill: true,
+            lastReceivedChunkCount: 18,
+            lastReceivedBytes: 42_000_000
+        )
+
+        let encoded = try JSONEncoder().encode(checkpoint)
+        let decoded = try JSONDecoder().decode(ActiveHealthSyncCheckpoint.self, from: encoded)
+
+        XCTAssertEqual(decoded, checkpoint)
+        XCTAssertEqual(decoded.resumeSessionId, "hms_resume")
+        XCTAssertEqual(decoded.windowEnd, windowEnd)
+        XCTAssertTrue(decoded.requiresWorkoutBackfill)
+        XCTAssertEqual(decoded.lastReceivedChunkCount, 18)
+    }
+
     func testSyncUploadStatusExplainsCurrentCountsAndTransferChunk() {
         let payloadSummary = SyncPayloadSummary(
             builtAt: makeDate("2026-05-20T08:00:00.000Z"),

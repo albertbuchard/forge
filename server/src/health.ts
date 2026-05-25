@@ -4358,6 +4358,81 @@ function readMobileSyncSession(syncSessionId: string) {
     .get(syncSessionId) as MobileSyncSessionRow | undefined;
 }
 
+function mobileSyncSessionProgress(syncSessionId: string) {
+  const chunks = getDatabase()
+    .prepare(
+      `SELECT family, record_count, byte_count
+       FROM health_mobile_sync_chunks
+       WHERE sync_session_id = ?`
+    )
+    .all(syncSessionId) as Array<{
+    family: MobileHealthSyncFamily;
+    record_count: number;
+    byte_count: number;
+  }>;
+  const receivedCounts: Record<string, number> = {};
+  const byteTotals: Record<string, number> = {};
+  for (const chunk of chunks) {
+    receivedCounts[chunk.family] =
+      (receivedCounts[chunk.family] ?? 0) + chunk.record_count;
+    byteTotals[chunk.family] =
+      (byteTotals[chunk.family] ?? 0) + chunk.byte_count;
+  }
+  return {
+    receivedCounts,
+    byteTotals,
+    chunkCount: chunks.length,
+    receivedBytes: chunks.reduce((sum, chunk) => sum + chunk.byte_count, 0)
+  };
+}
+
+function mobileSyncSessionUploadPayload(
+  session: MobileSyncSessionRow,
+  receivedChunkIds: string[]
+) {
+  return {
+    syncSessionId: session.id,
+    schemaVersion: HEALTH_MOBILE_SYNC_SCHEMA_VERSION,
+    status: session.status,
+    chunkTargetBytes: HEALTH_MOBILE_SYNC_CHUNK_TARGET_BYTES,
+    chunkMaxBytes: HEALTH_MOBILE_SYNC_CHUNK_MAX_BYTES,
+    chunkPayloadEncoding: HEALTH_MOBILE_SYNC_CHUNK_PAYLOAD_ENCODING,
+    acceptedPayloadEncodings: HEALTH_MOBILE_SYNC_ACCEPTED_CHUNK_PAYLOAD_ENCODINGS,
+    supportsCompression: true,
+    acceptedFamilies: safeJsonParse<MobileHealthSyncFamily[]>(
+      session.requested_families_json,
+      []
+    ),
+    receivedChunkIds,
+    progress: mobileSyncSessionProgress(session.id)
+  };
+}
+
+export function getMobileHealthSyncSessionStatus(
+  syncSessionId: string,
+  payload: { sessionId: string; pairingToken: string }
+) {
+  const pairing = requireValidPairing(payload.sessionId, payload.pairingToken);
+  const session = readMobileSyncSession(syncSessionId);
+  if (!session || session.pairing_session_id !== pairing.id) {
+    throw new HttpError(
+      404,
+      "sync_session_not_found",
+      "The HealthKit sync session does not exist."
+    );
+  }
+  const receivedChunkIds = getDatabase()
+    .prepare(
+      `SELECT chunk_id
+       FROM health_mobile_sync_chunks
+       WHERE sync_session_id = ?
+       ORDER BY sequence ASC`
+    )
+    .all(syncSessionId)
+    .map((row) => (row as { chunk_id: string }).chunk_id);
+  return mobileSyncSessionUploadPayload(session, receivedChunkIds);
+}
+
 function ensureRunningMobileSyncSession(syncSessionId: string) {
   expireStaleMobileSyncSessions();
   const session = readMobileSyncSession(syncSessionId);
@@ -4849,25 +4924,7 @@ function applyWorkoutEvidenceChunkImmediately(
 }
 
 function updateMobileSyncSessionProgress(syncSessionId: string) {
-  const chunks = getDatabase()
-    .prepare(
-      `SELECT family, record_count, byte_count
-       FROM health_mobile_sync_chunks
-       WHERE sync_session_id = ?`
-    )
-    .all(syncSessionId) as Array<{
-    family: MobileHealthSyncFamily;
-    record_count: number;
-    byte_count: number;
-  }>;
-  const receivedCounts: Record<string, number> = {};
-  const byteTotals: Record<string, number> = {};
-  for (const chunk of chunks) {
-    receivedCounts[chunk.family] =
-      (receivedCounts[chunk.family] ?? 0) + chunk.record_count;
-    byteTotals[chunk.family] =
-      (byteTotals[chunk.family] ?? 0) + chunk.byte_count;
-  }
+  const progress = mobileSyncSessionProgress(syncSessionId);
   getDatabase()
     .prepare(
       `UPDATE health_mobile_sync_sessions
@@ -4875,17 +4932,12 @@ function updateMobileSyncSessionProgress(syncSessionId: string) {
        WHERE id = ?`
     )
     .run(
-      JSON.stringify(receivedCounts),
-      JSON.stringify(byteTotals),
+      JSON.stringify(progress.receivedCounts),
+      JSON.stringify(progress.byteTotals),
       nowIso(),
       syncSessionId
     );
-  return {
-    receivedCounts,
-    byteTotals,
-    chunkCount: chunks.length,
-    receivedBytes: chunks.reduce((sum, chunk) => sum + chunk.byte_count, 0)
-  };
+  return progress;
 }
 
 export function startMobileHealthSyncSession(
@@ -4935,18 +4987,7 @@ export function startMobileHealthSyncSession(
           )
           .all(resumeSyncSessionId)
           .map((row) => (row as { chunk_id: string }).chunk_id);
-        return {
-          syncSessionId: resumeSyncSessionId,
-          schemaVersion: HEALTH_MOBILE_SYNC_SCHEMA_VERSION,
-          chunkTargetBytes: HEALTH_MOBILE_SYNC_CHUNK_TARGET_BYTES,
-          chunkMaxBytes: HEALTH_MOBILE_SYNC_CHUNK_MAX_BYTES,
-          chunkPayloadEncoding: HEALTH_MOBILE_SYNC_CHUNK_PAYLOAD_ENCODING,
-          acceptedPayloadEncodings:
-            HEALTH_MOBILE_SYNC_ACCEPTED_CHUNK_PAYLOAD_ENCODINGS,
-          supportsCompression: true,
-          acceptedFamilies: existingFamilies,
-          receivedChunkIds
-        };
+        return mobileSyncSessionUploadPayload(existing, receivedChunkIds);
       }
       getDatabase()
         .prepare(
@@ -4986,18 +5027,15 @@ export function startMobileHealthSyncSession(
       now,
       now
     );
-  return {
-    syncSessionId,
-    schemaVersion: HEALTH_MOBILE_SYNC_SCHEMA_VERSION,
-    chunkTargetBytes: HEALTH_MOBILE_SYNC_CHUNK_TARGET_BYTES,
-    chunkMaxBytes: HEALTH_MOBILE_SYNC_CHUNK_MAX_BYTES,
-    chunkPayloadEncoding: HEALTH_MOBILE_SYNC_CHUNK_PAYLOAD_ENCODING,
-    acceptedPayloadEncodings:
-      HEALTH_MOBILE_SYNC_ACCEPTED_CHUNK_PAYLOAD_ENCODINGS,
-    supportsCompression: true,
-    acceptedFamilies: parsed.requestedFamilies,
-    receivedChunkIds: [] as string[]
-  };
+  const session = readMobileSyncSession(syncSessionId);
+  if (!session) {
+    throw new HttpError(
+      500,
+      "sync_session_not_found",
+      "The HealthKit sync session could not be created."
+    );
+  }
+  return mobileSyncSessionUploadPayload(session, []);
 }
 
 export function ingestMobileHealthSyncChunk(

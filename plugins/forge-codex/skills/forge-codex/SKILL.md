@@ -104,6 +104,8 @@ Concrete route-key examples for internal use:
   `{"routeKey":"latestNodeOutput","pathParams":{"id":"flow_research_digest","nodeId":"node_summary"}}`
 - Workbench run execution:
   `{"routeKey":"runFlow","pathParams":{"id":"flow_research_digest"},"body":{"input":{"topic":"question flow quality"}}}`
+- Workbench one-off input execution:
+  `{"routeKey":"runByPayload","body":{"flow":{"title":"One-off digest","nodes":[]},"input":{"topic":"question flow quality"}}}`
 - Workbench flow chat follow-up:
   `{"routeKey":"chatFlow","pathParams":{"id":"flow_research_digest"},"body":{"message":"Refine the summary around API route risks and keep the published output stable."}}`
 

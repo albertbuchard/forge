@@ -533,9 +533,10 @@ actor HealthSyncStore {
         sourceStates: CompanionSyncPayload.SourceStates,
         movementPayload: CompanionSyncPayload.MovementPayload,
         screenTimePayload: CompanionSyncPayload.ScreenTimePayload,
+        syncWindowEnd: Date? = nil,
         includeWorkouts: Bool = true
     ) async throws -> BuildSyncPayloadResult {
-        let endDate = Date()
+        let endDate = syncWindowEnd ?? Date()
         let fullWindowStart = Calendar.current.date(byAdding: .day, value: -syncWindowDays, to: endDate)
             ?? endDate.addingTimeInterval(-Double(syncWindowDays) * 24 * 60 * 60)
         let incrementalStart = lastSuccessfulSyncAt?.addingTimeInterval(-Double(incrementalLookbackHours) * 60 * 60)
@@ -624,11 +625,12 @@ actor HealthSyncStore {
         healthKitAuthorized: Bool,
         healthSyncEnabled: Bool,
         lastSuccessfulSyncAt: Date?,
+        syncWindowEnd: Date? = nil,
         batchSize: Int = 100,
         onProgress: ((WorkoutBatchProgress) async -> Void)? = nil,
         onBatch: @escaping ([CompanionSyncPayload.WorkoutSession], WorkoutBatchProgress) async throws -> Void
     ) async throws -> WorkoutStreamResult {
-        let endDate = Date()
+        let endDate = syncWindowEnd ?? Date()
         let fullWindowStart = Calendar.current.date(byAdding: .day, value: -syncWindowDays, to: endDate)
             ?? endDate.addingTimeInterval(-Double(syncWindowDays) * 24 * 60 * 60)
         let incrementalStart = lastSuccessfulSyncAt?.addingTimeInterval(-Double(incrementalLookbackHours) * 60 * 60)

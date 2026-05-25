@@ -707,17 +707,23 @@ Arc:
 1. Ask what this piece of work is trying to make true.
 2. Reflect the emerging boundary so the user can hear what is in scope.
 3. Ask what outcome would make it feel real or complete for now.
-4. Ask what belongs inside the boundary and what can stay out if the scope still
+4. Ask what belongs in the project PRD or brief when the user is shaping delivery
+   rather than only naming a project.
+5. Ask what belongs inside the boundary and what can stay out if the scope still
    feels muddy.
-5. Ask which goal it belongs under.
-6. Land on a working name once the scope is clear.
-7. Clarify status, owner, and notes only after the scope is clear.
+6. Ask which goal it belongs under.
+7. Land on a working name once the scope is clear.
+8. Clarify lifecycle status, workflow lane, owner, human/bot assignees, scheduling
+   rules, and notes only after the scope is clear.
 
 Helpful follow-up lanes:
 
 - what concrete outcome would make this project complete enough
+- what should go into the PRD or brief
 - what belongs inside the boundary and what does not
 - which goal gives the project meaning
+- whether one owner or several human/bot assignees need to be explicit
+- whether scheduling rules or a board workflow lane matter now
 
 Ready to save when:
 
@@ -761,26 +767,37 @@ Preferred opening question:
 
 ## Task
 
-Aim: identify the next concrete move, not just capture a vague obligation.
+Aim: identify the next concrete one-session work item and place it correctly in the
+issue/task/subtask hierarchy when that hierarchy matters.
 
 Arc:
 
 1. Ask what the next concrete action is.
-2. Ask where it belongs: project, goal, both, or standalone.
-3. Ask what would make it easier to do: due date, priority, owner, or one line of
-   context.
+2. Ask whether it is an issue, one-session task, or subtask only when the level is
+   not already obvious.
+3. Ask where it belongs in the hierarchy: project for an issue, issue for a task, or
+   parent task for a subtask. Use goal or standalone only when the user is
+   intentionally outside the PM hierarchy.
+4. Capture the execution contract in `aiInstructions` when the work is meant for an
+   AI or agent session.
+5. Ask what would make it easier to do: due date, priority, owner, human/bot
+   assignees, acceptance criteria, or one line of context.
 
 Helpful follow-up lanes:
 
 - turn vague intent into an actionable verb
-- identify parent project or goal
-- capture the one timing or priority detail that will actually help
+- decide whether the work item is an issue, task, or subtask
+- identify parent project, issue, or task
+- capture the one-session execution contract in `aiInstructions`
+- decide whether one owner or several human/bot assignees need to be explicit
+- capture the one timing, priority, or acceptance detail that will actually help
 
 Ready to save when:
 
 - the task is phrased as an actionable move
-- placement is clear enough
-- any crucial timing or priority is captured
+- the level is clear enough: issue, task, or subtask
+- placement is clear enough: project, issue, parent task, or intentional inbox
+- any crucial timing, acceptance criteria, or execution instruction is captured
 
 Preferred opening question:
 
@@ -1777,7 +1794,8 @@ Direct action rules:
   "catalog" read when the user needs a runnable flow versus an input-box contract.
 - If the user wants to execute a known saved flow, use `/api/v1/workbench/flows/:id/run`.
 - If the user wants one-off input execution without depending on a saved flow id, use
-  `/api/v1/workbench/run`.
+  `POST /api/v1/workbench/run` through the dedicated one-off execution lane and keep
+  the user-facing question about the one-off input contract.
 - If the user wants to debug one failed execution, narrow whether they need the run
   detail, one node result, the latest node output, or the published output before you
   ask for flow changes.

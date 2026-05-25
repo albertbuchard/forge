@@ -66,7 +66,7 @@ import { registerWebRoutes } from "./web.js";
 import { createManagerRuntime } from "./managers/runtime.js";
 import { isManagerError } from "./managers/type-guards.js";
 import { buildCompanionPairingTransport, getCompanionIrohStatus, stopCompanionIroh } from "./services/companion-iroh.js";
-import { createCompanionPairingSession, createCompanionPairingSessionSchema, createSleepSession, createSleepSessionSchema, createWorkoutSession, createWorkoutSessionSchema, deleteSleepSession, deleteWorkoutSession, getCompanionPairingSessionById, getCompanionOverview, getFitnessViewData, getSleepSessionById, getSleepSessionDetailById, getSleepTimelineOverlaysForRange, getSleepViewData, getVitalsViewData, getHealthZoneProfileForUser, getWorkoutSessionById, getWorkoutSessionDetailById, heartbeatCompanionPairing, heartbeatCompanionPairingSchema, healthZoneProfilePatchSchema, abortMobileHealthSyncSession, completeMobileHealthSyncSession, ingestMobileHealthSync, ingestMobileHealthSyncChunk, mobileHealthSyncChunkSchema, mobileHealthSyncSessionCompleteSchema, mobileHealthSyncSessionStartSchema, mobileHealthSyncSchema, patchHealthZoneProfileForUser, patchCompanionPairingSourceState, patchCompanionPairingSourceStateSchema, companionSourceKeySchema, requireValidPairing, startMobileHealthSyncSession, revokeAllCompanionPairingSessions, revokeAllCompanionPairingSessionsSchema, revokeCompanionPairingSession, updateMobileCompanionSourceState, updateMobileCompanionSourceStateSchema, verifyCompanionPairing, verifyCompanionPairingSchema, updateSleepMetadata, updateSleepMetadataSchema, updateWorkoutMetadata, updateWorkoutMetadataSchema } from "./health.js";
+import { createCompanionPairingSession, createCompanionPairingSessionSchema, createSleepSession, createSleepSessionSchema, createWorkoutSession, createWorkoutSessionSchema, deleteSleepSession, deleteWorkoutSession, getCompanionPairingSessionById, getCompanionOverview, getFitnessViewData, getSleepSessionById, getSleepSessionDetailById, getSleepTimelineOverlaysForRange, getSleepViewData, getVitalsViewData, getHealthZoneProfileForUser, getMobileHealthSyncSessionStatus, getWorkoutSessionById, getWorkoutSessionDetailById, heartbeatCompanionPairing, heartbeatCompanionPairingSchema, healthZoneProfilePatchSchema, abortMobileHealthSyncSession, completeMobileHealthSyncSession, ingestMobileHealthSync, ingestMobileHealthSyncChunk, mobileHealthSyncChunkSchema, mobileHealthSyncSessionCompleteSchema, mobileHealthSyncSessionStartSchema, mobileHealthSyncSchema, patchHealthZoneProfileForUser, patchCompanionPairingSourceState, patchCompanionPairingSourceStateSchema, companionSourceKeySchema, requireValidPairing, startMobileHealthSyncSession, revokeAllCompanionPairingSessions, revokeAllCompanionPairingSessionsSchema, revokeCompanionPairingSession, updateMobileCompanionSourceState, updateMobileCompanionSourceStateSchema, verifyCompanionPairing, verifyCompanionPairingSchema, updateSleepMetadata, updateSleepMetadataSchema, updateWorkoutMetadata, updateWorkoutMetadataSchema } from "./health.js";
 import { analyzeMovementUserBoxPreflight, createMovementUserBox, createMovementPlace, deleteMovementUserBox, getMovementAllTimeSummary, getMovementBoxDetail, getMovementDayDetail, getMovementMobileBootstrap, getMovementTimeline, getMovementSelectionAggregate, getMovementSettings, getMovementTripDetail, getMovementMonthSummary, invalidateAutomaticMovementBox, listMovementPlaces, movementAutomaticBoxInvalidateSchema, movementMobileBootstrapSchema, movementMobilePlaceMutationSchema, movementMobileStayPatchSchema, movementMobileUserBoxCreateSchema, movementMobileUserBoxPreflightSchema, movementMobileUserBoxPatchSchema, movementMobileAutomaticBoxInvalidateSchema, movementMobileTimelineSchema, movementPlaceMutationSchema, movementPlacePatchSchema, movementSelectionAggregateSchema, movementStayPatchSchema, movementTripPatchSchema, movementUserBoxCreateSchema, movementUserBoxPreflightSchema, movementUserBoxPatchSchema, movementSettingsPatchSchema, movementTimelineQuerySchema, movementTripPointPatchSchema, deleteMovementStay, deleteMovementTrip, deleteMovementTripPoint, updateMovementPlace, updateMovementSettings, updateMovementStay, updateMovementTrip, updateMovementUserBox, updateMovementTripPoint, resolveMovementTimelineSegmentForBox } from "./movement.js";
 import { getScreenTimeAllTimeSummary, getScreenTimeDayDetail, getScreenTimeMonthSummary, getScreenTimeSettings, screenTimeSettingsPatchSchema, updateScreenTimeSettings } from "./screen-time.js";
 import { assertWatchReady, buildWatchBootstrap, ingestWatchCaptureBatch, mobileWatchBootstrapSchema, mobileWatchCaptureBatchSchema, mobileWatchHabitCheckInSchema } from "./watch-mobile.js";
@@ -279,6 +279,8 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
         relationshipRules: [
             "Every project belongs to a goal through goalId.",
             "Tasks can link to a project through projectId.",
+            "Projects can have one owner through userId plus one or more human or bot assignees through assigneeUserIds.",
+            "Projects are PRD-backed initiatives: productRequirementsDocument stores the project brief and workflowStatus stores the board lane separately from lifecycle status.",
             "Projects inherit strategic meaning from their parent goal."
         ],
         searchHints: [
@@ -316,12 +318,40 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
                 defaultValue: "active"
             },
             {
+                name: "workflowStatus",
+                type: "backlog|focus|in_progress|blocked|done",
+                required: false,
+                description: "Board workflow lane. Keep this separate from lifecycle status.",
+                enumValues: ["backlog", "focus", "in_progress", "blocked", "done"],
+                defaultValue: "backlog"
+            },
+            {
                 name: "userId",
                 type: "string|null",
                 required: false,
                 description: "Owning human or bot user id. Omit it to use Forge's default owner.",
                 defaultValue: null,
                 nullable: true
+            },
+            {
+                name: "assigneeUserIds",
+                type: "string[]",
+                required: false,
+                description: "Human or bot user ids assigned to collaborate on the project.",
+                defaultValue: []
+            },
+            {
+                name: "productRequirementsDocument",
+                type: "string",
+                required: false,
+                description: "Project PRD or brief: outcome, scope, constraints, and acceptance direction.",
+                defaultValue: ""
+            },
+            {
+                name: "schedulingRules",
+                type: "CalendarSchedulingRules",
+                required: false,
+                description: "Optional calendar/work-block rules that govern when this project may be scheduled."
             },
             {
                 name: "targetPoints",
@@ -431,19 +461,24 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
     },
     {
         entityType: "task",
-        purpose: "A concrete actionable work item. Tasks are what the user actually does.",
+        purpose: "A concrete actionable work item. The same stored family carries issue, task, and subtask levels; tasks are the one-session execution layer.",
         minimumCreateFields: ["title"],
         relationshipRules: [
-            "A task can link to a goal, a project, both, or neither.",
+            "Use level=issue for vertical slices under a project, level=task for one focused AI or human work session, and level=subtask for lightweight child steps.",
+            "In hierarchy-aware Forge PM, issues live directly under projects, tasks live under issues, and subtasks live under tasks.",
+            "Legacy or inbox tasks may still link to a goal, project, both, or neither when the hierarchy is intentionally absent.",
+            "When placement matters, ask for the project, issue, or parent task that changes the hierarchy instead of asking a flat parent question.",
+            "Work items can have one owner through userId plus one or more human or bot assignees through assigneeUserIds.",
             "Live work is tracked by task runs, not by task status alone.",
             "A task status of in_progress does not guarantee a live active run."
         ],
         searchHints: [
             "Search by title before creating a duplicate task.",
-            "Use linkedTo filters when you know the parent goal or project."
+            "Use linkedTo filters when you know the parent goal, project, issue, task, or subtask.",
+            "Use level and parentWorkItemId filters when the user is navigating the issue/task/subtask hierarchy."
         ],
         examples: [
-            '{"title":"Write the plugin release notes","projectId":"project_forge_plugin_launch","status":"focus","priority":"high"}'
+            '{"title":"Add route-key example coverage","level":"task","projectId":"project_forge_plugin_launch","parentWorkItemId":"issue_question_flow_contract","aiInstructions":"Update the onboarding contract and tests so Workbench one-off execution has a route-key example.","status":"focus","priority":"high"}'
         ],
         fieldGuide: [
             {
@@ -458,6 +493,14 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
                 required: false,
                 description: "Markdown context, constraints, or acceptance notes.",
                 defaultValue: ""
+            },
+            {
+                name: "level",
+                type: "issue|task|subtask",
+                required: false,
+                description: "Work-item level. Use issue for vertical slices, task for one focused execution session, and subtask for lightweight child steps.",
+                enumValues: ["issue", "task", "subtask"],
+                defaultValue: "task"
             },
             {
                 name: "status",
@@ -491,6 +534,13 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
                 nullable: true
             },
             {
+                name: "assigneeUserIds",
+                type: "string[]",
+                required: false,
+                description: "Human or bot user ids assigned to collaborate on this issue, task, or subtask.",
+                defaultValue: []
+            },
+            {
                 name: "goalId",
                 type: "string|null",
                 required: false,
@@ -503,6 +553,52 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
                 type: "string|null",
                 required: false,
                 description: "Linked project id.",
+                defaultValue: null,
+                nullable: true
+            },
+            {
+                name: "parentWorkItemId",
+                type: "string|null",
+                required: false,
+                description: "Parent issue id for level=task or parent task id for level=subtask. Issues should sit directly under projectId.",
+                defaultValue: null,
+                nullable: true
+            },
+            {
+                name: "aiInstructions",
+                type: "string",
+                required: false,
+                description: "Execution instructions for the agent or human doing the one-session task.",
+                defaultValue: ""
+            },
+            {
+                name: "executionMode",
+                type: "afk|hitl|null",
+                required: false,
+                description: "Whether the issue or task is intended for autonomous work or human-in-the-loop work.",
+                enumValues: ["afk", "hitl"],
+                defaultValue: null,
+                nullable: true
+            },
+            {
+                name: "acceptanceCriteria",
+                type: "string[]",
+                required: false,
+                description: "Structured success criteria, usually Given/When/Then for issues or concrete done checks for tasks.",
+                defaultValue: []
+            },
+            {
+                name: "blockerLinks",
+                type: "Array<{ entityType, entityId, label? }>",
+                required: false,
+                description: "Optional blockers linked to Forge entities that make the work unable to proceed.",
+                defaultValue: []
+            },
+            {
+                name: "completionReport",
+                type: "{ modifiedFiles: string[], workSummary: string, linkedGitRefIds: string[] }|null",
+                required: false,
+                description: "Closeout report for completed work items, especially tasks finished by agents.",
                 defaultValue: null,
                 nullable: true
             },
@@ -3007,10 +3103,11 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
             "Ask what this piece of work is trying to make true.",
             "Reflect the emerging boundary so the user can hear what is in scope.",
             "Ask what outcome would make the project feel real or complete for now.",
+            "Ask what belongs in the project PRD or brief when the user is shaping delivery rather than only naming a project.",
             "Ask what belongs inside the boundary and what can stay out if the scope still feels muddy.",
             "Ask which goal it belongs under.",
             "Land on a working name once the scope is clear.",
-            "Clarify status, owner, and notes only after the scope is clear."
+            "Clarify lifecycle status, workflow lane, owner, human/bot assignees, scheduling rules, and notes only after the scope is clear."
         ]
     },
     {
@@ -3028,11 +3125,13 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     {
         focus: "task",
         openingQuestion: "What is the next concrete move here?",
-        coachingGoal: "Identify the next concrete move, not just capture a vague obligation.",
+        coachingGoal: "Identify the next concrete one-session work item and place it in the issue/task/subtask hierarchy when that hierarchy matters.",
         askSequence: [
             "Ask what the next concrete action is.",
-            "Ask where it belongs: project, goal, both, or standalone.",
-            "Ask what would make it easier to do: due date, priority, owner, or brief context."
+            "Ask whether this is an issue, one-session task, or subtask only when the level is not already obvious.",
+            "Ask where it belongs in the hierarchy: project for an issue, issue for a task, or parent task for a subtask. Use goal or standalone only when the user is intentionally outside the PM hierarchy.",
+            "Capture the execution contract in aiInstructions when the task is for an agent session.",
+            "Ask what would make it easier to do: due date, priority, owner, human/bot assignees, acceptance criteria, or brief context."
         ]
     },
     {
@@ -4507,11 +4606,13 @@ function buildAgentOnboardingPayload(request) {
         entityConversationPlaybooks: AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS.map(enrichConversationPlaybookWithRouteInfo),
         relationshipModel: [
             "Every Forge record belongs to one typed user owner: either human or bot.",
+            "Projects and work items can also carry assigneeUserIds for one or more human or bot collaborators; ownership and assignment are separate.",
             "Read routes may scope to one user with userId or to several users with repeated userIds.",
             "Ownership and linkage are separate: a human-owned project can link to bot-owned tasks, strategies, notes, or insights.",
             "Goals are the top-level strategic layer.",
             "Projects belong to one goal through goalId.",
-            "Tasks can belong to a goal, a project, both, or neither.",
+            "The task entity is the stored work-item family for issue, task, and subtask levels.",
+            "Hierarchy-aware PM should place issues under projects, tasks under issues, and subtasks under tasks; standalone or goal-linked tasks are legacy/inbox escape hatches rather than the default planning path.",
             "Strategies can target one or many goals or projects while sequencing project and task nodes through a directed acyclic graph.",
             "A strategy remains editable until it is locked. Once locked, the plan becomes a contract and graph-shape edits should stop until the strategy is explicitly unlocked.",
             "Habits are recurring records that can connect directly to goals, projects, tasks, and durable Psyche entities.",
@@ -5169,6 +5270,7 @@ function buildAgentOnboardingPayload(request) {
                 workbenchPublishedOutput: '{"routeKey":"publishedOutput","pathParams":{"id":"flow_research_digest"}}',
                 workbenchLatestNodeOutput: '{"routeKey":"latestNodeOutput","pathParams":{"id":"flow_research_digest","nodeId":"node_summary"}}',
                 workbenchRunFlow: '{"routeKey":"runFlow","pathParams":{"id":"flow_research_digest"},"body":{"input":{"topic":"question flow quality"}}}',
+                workbenchRunByPayload: '{"routeKey":"runByPayload","body":{"flow":{"title":"One-off digest","nodes":[]},"input":{"topic":"question flow quality"}}}',
                 workbenchChatFlow: '{"routeKey":"chatFlow","pathParams":{"id":"flow_research_digest"},"body":{"message":"Refine the summary around API route risks and keep the published output stable."}}'
             }
         }
@@ -7678,6 +7780,18 @@ export async function buildServer(options = {}) {
     app.post("/api/v1/mobile/healthkit/sync-sessions", async (request) => ({
         upload: startMobileHealthSyncSession(mobileHealthSyncSessionStartSchema.parse(request.body ?? {}))
     }));
+    app.get("/api/v1/mobile/healthkit/sync-sessions/:id", async (request) => {
+        const { id } = request.params;
+        const query = z
+            .object({
+            sessionId: z.string().trim().min(1),
+            pairingToken: z.string().trim().min(1)
+        })
+            .parse(request.query ?? {});
+        return {
+            upload: getMobileHealthSyncSessionStatus(id, query)
+        };
+    });
     app.post("/api/v1/mobile/healthkit/sync-sessions/:id/chunks", { bodyLimit: 40_000_000 }, async (request) => {
         const { id } = request.params;
         const rawPayloadJson = JSON.stringify((request.body ?? {}).payload ?? {});

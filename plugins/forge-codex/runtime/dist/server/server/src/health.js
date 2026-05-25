@@ -2714,6 +2714,57 @@ function readMobileSyncSession(syncSessionId) {
         .prepare(`SELECT * FROM health_mobile_sync_sessions WHERE id = ?`)
         .get(syncSessionId);
 }
+function mobileSyncSessionProgress(syncSessionId) {
+    const chunks = getDatabase()
+        .prepare(`SELECT family, record_count, byte_count
+       FROM health_mobile_sync_chunks
+       WHERE sync_session_id = ?`)
+        .all(syncSessionId);
+    const receivedCounts = {};
+    const byteTotals = {};
+    for (const chunk of chunks) {
+        receivedCounts[chunk.family] =
+            (receivedCounts[chunk.family] ?? 0) + chunk.record_count;
+        byteTotals[chunk.family] =
+            (byteTotals[chunk.family] ?? 0) + chunk.byte_count;
+    }
+    return {
+        receivedCounts,
+        byteTotals,
+        chunkCount: chunks.length,
+        receivedBytes: chunks.reduce((sum, chunk) => sum + chunk.byte_count, 0)
+    };
+}
+function mobileSyncSessionUploadPayload(session, receivedChunkIds) {
+    return {
+        syncSessionId: session.id,
+        schemaVersion: HEALTH_MOBILE_SYNC_SCHEMA_VERSION,
+        status: session.status,
+        chunkTargetBytes: HEALTH_MOBILE_SYNC_CHUNK_TARGET_BYTES,
+        chunkMaxBytes: HEALTH_MOBILE_SYNC_CHUNK_MAX_BYTES,
+        chunkPayloadEncoding: HEALTH_MOBILE_SYNC_CHUNK_PAYLOAD_ENCODING,
+        acceptedPayloadEncodings: HEALTH_MOBILE_SYNC_ACCEPTED_CHUNK_PAYLOAD_ENCODINGS,
+        supportsCompression: true,
+        acceptedFamilies: safeJsonParse(session.requested_families_json, []),
+        receivedChunkIds,
+        progress: mobileSyncSessionProgress(session.id)
+    };
+}
+export function getMobileHealthSyncSessionStatus(syncSessionId, payload) {
+    const pairing = requireValidPairing(payload.sessionId, payload.pairingToken);
+    const session = readMobileSyncSession(syncSessionId);
+    if (!session || session.pairing_session_id !== pairing.id) {
+        throw new HttpError(404, "sync_session_not_found", "The HealthKit sync session does not exist.");
+    }
+    const receivedChunkIds = getDatabase()
+        .prepare(`SELECT chunk_id
+       FROM health_mobile_sync_chunks
+       WHERE sync_session_id = ?
+       ORDER BY sequence ASC`)
+        .all(syncSessionId)
+        .map((row) => row.chunk_id);
+    return mobileSyncSessionUploadPayload(session, receivedChunkIds);
+}
 function ensureRunningMobileSyncSession(syncSessionId) {
     expireStaleMobileSyncSessions();
     const session = readMobileSyncSession(syncSessionId);
@@ -3038,30 +3089,13 @@ function applyWorkoutEvidenceChunkImmediately(session, payload) {
     });
 }
 function updateMobileSyncSessionProgress(syncSessionId) {
-    const chunks = getDatabase()
-        .prepare(`SELECT family, record_count, byte_count
-       FROM health_mobile_sync_chunks
-       WHERE sync_session_id = ?`)
-        .all(syncSessionId);
-    const receivedCounts = {};
-    const byteTotals = {};
-    for (const chunk of chunks) {
-        receivedCounts[chunk.family] =
-            (receivedCounts[chunk.family] ?? 0) + chunk.record_count;
-        byteTotals[chunk.family] =
-            (byteTotals[chunk.family] ?? 0) + chunk.byte_count;
-    }
+    const progress = mobileSyncSessionProgress(syncSessionId);
     getDatabase()
         .prepare(`UPDATE health_mobile_sync_sessions
        SET received_counts_json = ?, byte_totals_json = ?, updated_at = ?
        WHERE id = ?`)
-        .run(JSON.stringify(receivedCounts), JSON.stringify(byteTotals), nowIso(), syncSessionId);
-    return {
-        receivedCounts,
-        byteTotals,
-        chunkCount: chunks.length,
-        receivedBytes: chunks.reduce((sum, chunk) => sum + chunk.byte_count, 0)
-    };
+        .run(JSON.stringify(progress.receivedCounts), JSON.stringify(progress.byteTotals), nowIso(), syncSessionId);
+    return progress;
 }
 export function startMobileHealthSyncSession(payload) {
     const parsed = mobileHealthSyncSessionStartSchema.parse(payload);
@@ -3092,17 +3126,7 @@ export function startMobileHealthSyncSession(payload) {
              ORDER BY sequence ASC`)
                     .all(resumeSyncSessionId)
                     .map((row) => row.chunk_id);
-                return {
-                    syncSessionId: resumeSyncSessionId,
-                    schemaVersion: HEALTH_MOBILE_SYNC_SCHEMA_VERSION,
-                    chunkTargetBytes: HEALTH_MOBILE_SYNC_CHUNK_TARGET_BYTES,
-                    chunkMaxBytes: HEALTH_MOBILE_SYNC_CHUNK_MAX_BYTES,
-                    chunkPayloadEncoding: HEALTH_MOBILE_SYNC_CHUNK_PAYLOAD_ENCODING,
-                    acceptedPayloadEncodings: HEALTH_MOBILE_SYNC_ACCEPTED_CHUNK_PAYLOAD_ENCODINGS,
-                    supportsCompression: true,
-                    acceptedFamilies: existingFamilies,
-                    receivedChunkIds
-                };
+                return mobileSyncSessionUploadPayload(existing, receivedChunkIds);
             }
             getDatabase()
                 .prepare(`UPDATE health_mobile_sync_sessions
@@ -3127,17 +3151,11 @@ export function startMobileHealthSyncSession(payload) {
         sourceStates: parsed.sourceStates,
         metadata: parsed.metadata
     }), JSON.stringify(parsed.expectedCounts), now, now, now);
-    return {
-        syncSessionId,
-        schemaVersion: HEALTH_MOBILE_SYNC_SCHEMA_VERSION,
-        chunkTargetBytes: HEALTH_MOBILE_SYNC_CHUNK_TARGET_BYTES,
-        chunkMaxBytes: HEALTH_MOBILE_SYNC_CHUNK_MAX_BYTES,
-        chunkPayloadEncoding: HEALTH_MOBILE_SYNC_CHUNK_PAYLOAD_ENCODING,
-        acceptedPayloadEncodings: HEALTH_MOBILE_SYNC_ACCEPTED_CHUNK_PAYLOAD_ENCODINGS,
-        supportsCompression: true,
-        acceptedFamilies: parsed.requestedFamilies,
-        receivedChunkIds: []
-    };
+    const session = readMobileSyncSession(syncSessionId);
+    if (!session) {
+        throw new HttpError(500, "sync_session_not_found", "The HealthKit sync session could not be created.");
+    }
+    return mobileSyncSessionUploadPayload(session, []);
 }
 export function ingestMobileHealthSyncChunk(syncSessionId, payload, rawPayloadJson) {
     const parsed = mobileHealthSyncChunkSchema.parse(payload);

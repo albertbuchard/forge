@@ -264,6 +264,21 @@ struct WorkoutBackfillSyncPlan {
     }
 }
 
+struct ActiveHealthSyncCheckpoint: Codable, Equatable {
+    let syncSessionId: String
+    let schemaVersion: String
+    let requestedFamilies: [String]
+    let createdAt: Date
+    let windowEnd: Date
+    let requiresWorkoutBackfill: Bool
+    var lastReceivedChunkCount: Int
+    var lastReceivedBytes: Int
+
+    var resumeSessionId: String {
+        syncSessionId
+    }
+}
+
 @MainActor
 final class CompanionAppModel: ObservableObject {
     private enum AutoSyncPolicy {
@@ -331,6 +346,7 @@ final class CompanionAppModel: ObservableObject {
         static let deferredHealthPrompt = "forge_companion_deferred_health_prompt"
         static let movementPromptDeferred = "forge_companion_deferred_movement_prompt"
         static let activeHealthSyncSessionId = "forge_companion_active_health_sync_session_id"
+        static let activeHealthSyncCheckpoint = "forge_companion_active_health_sync_checkpoint"
     }
 
     @Published var pairing: PairingPayload? {
@@ -359,6 +375,7 @@ final class CompanionAppModel: ObservableObject {
     @Published var latestSyncReport: SyncReport?
     @Published var latestSyncPayloadSummary: SyncPayloadSummary?
     @Published var activeHealthSyncSessionId: String?
+    private var activeHealthSyncCheckpoint: ActiveHealthSyncCheckpoint?
     @Published var lastHealthSyncChunkId: String?
     @Published var lastHealthSyncChunkFamily: String?
     @Published var lastHealthSyncPayloadBytes: Int?
@@ -630,6 +647,7 @@ final class CompanionAppModel: ObservableObject {
         UserDefaults.standard.removeObject(forKey: StorageKeys.pairingPayload)
         UserDefaults.standard.removeObject(forKey: StorageKeys.deferredHealthPrompt)
         UserDefaults.standard.removeObject(forKey: StorageKeys.workoutBackfillCompletedAt)
+        clearActiveHealthSyncCheckpoint()
         workoutBackfillCompletedAt = nil
         Task {
             await refreshWatchBootstrap(reason: "disconnect")
@@ -1013,9 +1031,17 @@ final class CompanionAppModel: ObservableObject {
         {
             latestSyncPayloadSummary = summary
         }
-        activeHealthSyncSessionId = UserDefaults.standard.string(
-            forKey: StorageKeys.activeHealthSyncSessionId
-        )
+        if
+            let data = UserDefaults.standard.data(forKey: StorageKeys.activeHealthSyncCheckpoint),
+            let checkpoint = try? JSONDecoder().decode(ActiveHealthSyncCheckpoint.self, from: data)
+        {
+            activeHealthSyncCheckpoint = checkpoint
+            activeHealthSyncSessionId = checkpoint.syncSessionId
+        } else {
+            activeHealthSyncSessionId = UserDefaults.standard.string(
+                forKey: StorageKeys.activeHealthSyncSessionId
+            )
+        }
 
         healthPermissionPromptDeferred = UserDefaults.standard.bool(
             forKey: StorageKeys.deferredHealthPrompt
@@ -1053,6 +1079,38 @@ final class CompanionAppModel: ObservableObject {
             "CompanionAppModel",
             "workout raw backfill completed at \(date)"
         )
+    }
+
+    private func persistActiveHealthSyncCheckpoint(_ checkpoint: ActiveHealthSyncCheckpoint) {
+        activeHealthSyncCheckpoint = checkpoint
+        activeHealthSyncSessionId = checkpoint.syncSessionId
+        if let data = try? JSONEncoder().encode(checkpoint) {
+            UserDefaults.standard.set(data, forKey: StorageKeys.activeHealthSyncCheckpoint)
+        }
+        UserDefaults.standard.set(
+            checkpoint.syncSessionId,
+            forKey: StorageKeys.activeHealthSyncSessionId
+        )
+    }
+
+    private func clearActiveHealthSyncCheckpoint() {
+        activeHealthSyncCheckpoint = nil
+        activeHealthSyncSessionId = nil
+        UserDefaults.standard.removeObject(forKey: StorageKeys.activeHealthSyncCheckpoint)
+        UserDefaults.standard.removeObject(forKey: StorageKeys.activeHealthSyncSessionId)
+    }
+
+    private func updateActiveHealthSyncCheckpointProgress(chunkCount: Int?, receivedBytes: Int?) {
+        guard var checkpoint = activeHealthSyncCheckpoint else {
+            return
+        }
+        if let chunkCount {
+            checkpoint.lastReceivedChunkCount = chunkCount
+        }
+        if let receivedBytes {
+            checkpoint.lastReceivedBytes = receivedBytes
+        }
+        persistActiveHealthSyncCheckpoint(checkpoint)
     }
 
     private func configureScreenshotScenario(_ scenario: CompanionScreenshotScenario) {
@@ -1669,6 +1727,9 @@ final class CompanionAppModel: ObservableObject {
             lastSuccessfulSyncAt: lastSuccessfulSyncAt,
             workoutBackfillCompletedAt: workoutBackfillCompletedAt
         )
+        let restoredCheckpoint = activeHealthSyncCheckpoint
+        let syncWindowEnd = restoredCheckpoint?.windowEnd ?? Date()
+        let resumeSyncSessionId = restoredCheckpoint?.resumeSessionId ?? activeHealthSyncSessionId
         activeSyncMode = workoutBackfillPlan.requiresBackfill ? .historicalWorkoutImport : .normal
         historicalWorkoutImportStatus = workoutBackfillPlan.requiresBackfill
             ? HistoricalWorkoutImportStatus(
@@ -1694,10 +1755,22 @@ final class CompanionAppModel: ObservableObject {
                 pairing: pairing,
                 permissions: permissions,
                 sourceStates: sourceStates,
-                resumeSyncSessionId: activeHealthSyncSessionId
+                resumeSyncSessionId: resumeSyncSessionId
             )
             uploadSession = session
-            activeHealthSyncSessionId = session.syncSessionId
+            let checkpoint = ActiveHealthSyncCheckpoint(
+                syncSessionId: session.syncSessionId,
+                schemaVersion: session.schemaVersion,
+                requestedFamilies: session.acceptedFamilies,
+                createdAt: restoredCheckpoint?.syncSessionId == session.syncSessionId
+                    ? restoredCheckpoint?.createdAt ?? Date()
+                    : Date(),
+                windowEnd: syncWindowEnd,
+                requiresWorkoutBackfill: workoutBackfillPlan.requiresBackfill,
+                lastReceivedChunkCount: session.progress?.chunkCount ?? session.receivedChunkIds.count,
+                lastReceivedBytes: session.progress?.receivedBytes ?? 0
+            )
+            persistActiveHealthSyncCheckpoint(checkpoint)
             backgroundScheduler.schedule(activeSync: true, reason: "health sync started")
             startHealthSyncTransferTelemetry()
             let onChunkUploaded: ForgeSyncClient.HealthSyncChunkUploadHandler = { [weak self] event in
@@ -1705,10 +1778,6 @@ final class CompanionAppModel: ObservableObject {
                     self?.recordHealthSyncChunkUpload(event)
                 }
             }
-            UserDefaults.standard.set(
-                session.syncSessionId,
-                forKey: StorageKeys.activeHealthSyncSessionId
-            )
             healthSyncChunkTargetBytes = session.chunkTargetBytes
             healthSyncChunkMaxBytes = session.chunkMaxBytes
             if session.receivedChunkIds.isEmpty == false {
@@ -1725,6 +1794,7 @@ final class CompanionAppModel: ObservableObject {
                 sourceStates: sourceStates,
                 movementPayload: movementPayload,
                 screenTimePayload: screenTimePayload,
+                syncWindowEnd: syncWindowEnd,
                 includeWorkouts: false
             )
             healthDataDeferred = buildResult.healthDataDeferred
@@ -1758,6 +1828,7 @@ final class CompanionAppModel: ObservableObject {
                     healthKitAuthorized: healthAuthorizationGranted,
                     healthSyncEnabled: healthSyncEnabled,
                     lastSuccessfulSyncAt: workoutBackfillPlan.workoutCursorDate,
+                    syncWindowEnd: syncWindowEnd,
                     batchSize: Int.max,
                     onProgress: { [weak self] progress in
                         guard workoutBackfillPlan.requiresBackfill else {
@@ -1859,8 +1930,7 @@ final class CompanionAppModel: ObservableObject {
                 pairing: pairing,
                 expectedCounts: expectedCounts
             )
-            activeHealthSyncSessionId = nil
-            UserDefaults.standard.removeObject(forKey: StorageKeys.activeHealthSyncSessionId)
+            clearActiveHealthSyncCheckpoint()
             backgroundScheduler.schedule(activeSync: false, reason: "health sync completed")
             stopHealthSyncTransferTelemetry()
             return HealthSyncRunResult(
@@ -1872,23 +1942,30 @@ final class CompanionAppModel: ObservableObject {
         } catch {
             applyHealthSyncChunkErrorDiagnostics(error)
             if Self.isHealthSyncChunkProtocolUnsupported(error) {
-                activeHealthSyncSessionId = nil
-                UserDefaults.standard.removeObject(forKey: StorageKeys.activeHealthSyncSessionId)
+                clearActiveHealthSyncCheckpoint()
                 lastSyncMessage = "Forge needs a runtime restart before HealthKit chunk sync."
                 healthSyncLegacyFallbackReason = "The Forge runtime did not advertise byte-stable chunk support"
             } else if let uploadSession {
                 if Self.isHealthSyncChunkChecksumMismatch(error) {
                     await syncClient.abortHealthSyncSession(uploadSession: uploadSession, pairing: pairing)
-                    activeHealthSyncSessionId = nil
-                    UserDefaults.standard.removeObject(forKey: StorageKeys.activeHealthSyncSessionId)
+                    clearActiveHealthSyncCheckpoint()
                     lastSyncMessage = "Forge rejected a corrupted chunk. Retry starts a clean sync session."
                     healthSyncLegacyFallbackReason = "Last upload session was reset after a chunk checksum mismatch"
                 } else {
-                    activeHealthSyncSessionId = uploadSession.syncSessionId
-                    UserDefaults.standard.set(
-                        uploadSession.syncSessionId,
-                        forKey: StorageKeys.activeHealthSyncSessionId
-                    )
+                    if activeHealthSyncCheckpoint == nil {
+                        persistActiveHealthSyncCheckpoint(
+                            ActiveHealthSyncCheckpoint(
+                                syncSessionId: uploadSession.syncSessionId,
+                                schemaVersion: uploadSession.schemaVersion,
+                                requestedFamilies: uploadSession.acceptedFamilies,
+                                createdAt: Date(),
+                                windowEnd: syncWindowEnd,
+                                requiresWorkoutBackfill: workoutBackfillPlan.requiresBackfill,
+                                lastReceivedChunkCount: uploadSession.progress?.chunkCount ?? uploadSession.receivedChunkIds.count,
+                                lastReceivedBytes: uploadSession.progress?.receivedBytes ?? 0
+                            )
+                        )
+                    }
                     backgroundScheduler.schedule(activeSync: true, reason: "health sync resumable after error")
                     lastSyncMessage = "Forge will resume from the last accepted chunk"
                 }
@@ -1934,6 +2011,10 @@ final class CompanionAppModel: ObservableObject {
         lastHealthSyncChunkId = event.chunkId
         lastHealthSyncChunkFamily = event.family
         lastHealthSyncPayloadBytes = event.transferByteCount
+        updateActiveHealthSyncCheckpointProgress(
+            chunkCount: event.receivedCount,
+            receivedBytes: event.receivedBytes
+        )
         recordHistoricalWorkoutImportChunk(event)
         if event.skipped {
             healthSyncTransferSkippedChunks += 1

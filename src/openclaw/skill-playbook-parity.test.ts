@@ -157,6 +157,7 @@ describe("forge skill playbook parity", () => {
       expect(skill).toMatch(/Workbench published output[\s\S]*"routeKey":"publishedOutput"/i);
       expect(skill).toMatch(/Workbench latest node output[\s\S]*"routeKey":"latestNodeOutput"/i);
       expect(skill).toMatch(/Workbench run execution[\s\S]*"routeKey":"runFlow"/i);
+      expect(skill).toMatch(/Workbench one-off input execution[\s\S]*"routeKey":"runByPayload"/i);
       expect(skill).toMatch(/Workbench flow chat follow-up[\s\S]*"routeKey":"chatFlow"/i);
       expect(skill).toMatch(/stable input contract[\s\S]*intended\s+published output[\s\S]*smallest structural change/i);
       expect(skill).toMatch(/deletion[\s\S]*published outputs or run\s+history need preservation/i);
@@ -171,6 +172,11 @@ describe("forge skill playbook parity", () => {
     expect(openclawSkill).toMatch(/work_adjustment/i);
     expect(openclawSkill).toMatch(/Minimum-field checkpoint, not a question script/i);
     expect(openclawSkill).toMatch(/Only ask if missing or unclear/i);
+    expect(openclawSkill).toMatch(/assigneeUserIds/);
+    expect(openclawSkill).toMatch(/issue, one-session task, or subtask/i);
+    expect(openclawSkill).toMatch(/productRequirementsDocument/);
+    expect(openclawSkill).toMatch(/workflowStatus/);
+    expect(openclawSkill).toMatch(/schedulingRules/);
     expect(openclawSkill).not.toMatch(/Use this intake map when the user agrees/i);
     expect(openclawSkill).not.toMatch(/\n\s*Ask:\n/);
 
