@@ -32,6 +32,53 @@ const HTTP_METHODS = new Set([
   "head"
 ]);
 
+const mobileHealthSyncProgressSchema = {
+  type: "object",
+  required: [
+    "chunkCount",
+    "receivedBytes",
+    "receivedCounts",
+    "byteTotals",
+    "affectedWorkoutIds"
+  ],
+  properties: {
+    chunkCount: { type: "number" },
+    receivedBytes: { type: "number" },
+    receivedCounts: { type: "object", additionalProperties: { type: "number" } },
+    byteTotals: { type: "object", additionalProperties: { type: "number" } },
+    affectedWorkoutIds: arrayOf({ type: "string" })
+  }
+};
+
+const mobileHealthSyncUploadSchema = {
+  type: "object",
+  required: [
+    "syncSessionId",
+    "schemaVersion",
+    "status",
+    "targetChunkBytes",
+    "maxChunkBytes",
+    "payloadEncodings",
+    "acceptedFamilies",
+    "receivedChunkIds",
+    "progress"
+  ],
+  properties: {
+    syncSessionId: { type: "string" },
+    schemaVersion: { type: "string" },
+    status: {
+      type: "string",
+      enum: ["running", "completed", "failed", "aborted"]
+    },
+    targetChunkBytes: { type: "number" },
+    maxChunkBytes: { type: "number" },
+    payloadEncodings: arrayOf({ type: "string" }),
+    acceptedFamilies: arrayOf({ type: "string" }),
+    receivedChunkIds: arrayOf({ type: "string" }),
+    progress: mobileHealthSyncProgressSchema
+  }
+};
+
 const CALENDAR_PROVIDER_VALUES = [
   "google",
   "apple",
@@ -5467,6 +5514,156 @@ export function buildOpenApiDocument() {
                 }
               },
               "Forge health payload"
+            )
+          }
+        }
+      },
+      "/api/v1/mobile/healthkit/sync-sessions": {
+        post: {
+          summary:
+            "Start or resume a resumable mobile HealthKit upload session",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["sessionId", "pairingToken", "schemaVersion"],
+                  properties: {
+                    sessionId: { type: "string" },
+                    pairingToken: { type: "string" },
+                    schemaVersion: { type: "string" },
+                    resumeSyncSessionId: nullable({ type: "string" }),
+                    requestedFamilies: arrayOf({ type: "string" }),
+                    sourceStates: arrayOf({
+                      type: "object",
+                      additionalProperties: true
+                    }),
+                    device: {
+                      type: "object",
+                      additionalProperties: true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["upload"],
+                properties: {
+                  upload: mobileHealthSyncUploadSchema
+                }
+              },
+              "Accepted upload session plus received chunk progress"
+            )
+          }
+        }
+      },
+      "/api/v1/mobile/healthkit/sync-sessions/{id}": {
+        get: {
+          summary:
+            "Inspect a mobile HealthKit upload session and accepted chunk progress",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            },
+            {
+              name: "sessionId",
+              in: "query",
+              required: true,
+              schema: { type: "string" }
+            },
+            {
+              name: "pairingToken",
+              in: "query",
+              required: true,
+              schema: { type: "string" }
+            }
+          ],
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["upload"],
+                properties: {
+                  upload: mobileHealthSyncUploadSchema
+                }
+              },
+              "Upload session status and accepted chunk progress"
+            )
+          }
+        }
+      },
+      "/api/v1/mobile/healthkit/sync-sessions/{id}/chunks": {
+        post: {
+          summary:
+            "Upload one idempotent HealthKit chunk into a resumable session",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: [
+                    "sessionId",
+                    "pairingToken",
+                    "chunkId",
+                    "family",
+                    "sequence",
+                    "records",
+                    "byteCount",
+                    "checksum"
+                  ],
+                  properties: {
+                    sessionId: { type: "string" },
+                    pairingToken: { type: "string" },
+                    chunkId: { type: "string" },
+                    family: { type: "string" },
+                    sequence: { type: "number" },
+                    records: { type: "number" },
+                    byteCount: { type: "number" },
+                    checksum: { type: "string" },
+                    compression: nullable({ type: "string" }),
+                    payloadEncoding: nullable({ type: "string" }),
+                    payload: {}
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["chunk"],
+                properties: {
+                  chunk: {
+                    type: "object",
+                    additionalProperties: true,
+                    required: ["accepted", "duplicate", "progress"],
+                    properties: {
+                      accepted: { type: "boolean" },
+                      duplicate: { type: "boolean" },
+                      progress: mobileHealthSyncProgressSchema
+                    }
+                  }
+                }
+              },
+              "Chunk receipt with duplicate detection and aggregate progress"
             )
           }
         }

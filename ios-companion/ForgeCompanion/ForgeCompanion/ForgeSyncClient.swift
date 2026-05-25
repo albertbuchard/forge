@@ -211,6 +211,7 @@ struct ForgeSyncClient {
     struct HealthSyncUploadSession: Decodable {
         let syncSessionId: String
         let schemaVersion: String
+        let status: String?
         let chunkTargetBytes: Int
         let chunkMaxBytes: Int
         let chunkPayloadEncoding: String?
@@ -219,10 +220,12 @@ struct ForgeSyncClient {
         let acceptedFamilies: [String]
         let receivedChunkIds: [String]
         let receivedChunkIdSet: Set<String>
+        let progress: HealthSyncChunkProgress?
 
         enum CodingKeys: String, CodingKey {
             case syncSessionId
             case schemaVersion
+            case status
             case chunkTargetBytes
             case chunkMaxBytes
             case chunkPayloadEncoding
@@ -230,21 +233,25 @@ struct ForgeSyncClient {
             case supportsCompression
             case acceptedFamilies
             case receivedChunkIds
+            case progress
         }
 
         init(
             syncSessionId: String,
             schemaVersion: String,
+            status: String? = nil,
             chunkTargetBytes: Int,
             chunkMaxBytes: Int,
             chunkPayloadEncoding: String?,
             acceptedPayloadEncodings: [String]?,
             supportsCompression: Bool,
             acceptedFamilies: [String],
-            receivedChunkIds: [String]
+            receivedChunkIds: [String],
+            progress: HealthSyncChunkProgress? = nil
         ) {
             self.syncSessionId = syncSessionId
             self.schemaVersion = schemaVersion
+            self.status = status
             self.chunkTargetBytes = chunkTargetBytes
             self.chunkMaxBytes = chunkMaxBytes
             self.chunkPayloadEncoding = chunkPayloadEncoding
@@ -253,6 +260,7 @@ struct ForgeSyncClient {
             self.acceptedFamilies = acceptedFamilies
             self.receivedChunkIds = receivedChunkIds
             self.receivedChunkIdSet = Set(receivedChunkIds)
+            self.progress = progress
         }
 
         init(from decoder: Decoder) throws {
@@ -261,13 +269,15 @@ struct ForgeSyncClient {
             self.init(
                 syncSessionId: try container.decode(String.self, forKey: .syncSessionId),
                 schemaVersion: try container.decode(String.self, forKey: .schemaVersion),
+                status: try container.decodeIfPresent(String.self, forKey: .status),
                 chunkTargetBytes: try container.decode(Int.self, forKey: .chunkTargetBytes),
                 chunkMaxBytes: try container.decode(Int.self, forKey: .chunkMaxBytes),
                 chunkPayloadEncoding: try container.decodeIfPresent(String.self, forKey: .chunkPayloadEncoding),
                 acceptedPayloadEncodings: try container.decodeIfPresent([String].self, forKey: .acceptedPayloadEncodings),
                 supportsCompression: try container.decode(Bool.self, forKey: .supportsCompression),
                 acceptedFamilies: try container.decode([String].self, forKey: .acceptedFamilies),
-                receivedChunkIds: receivedChunkIds
+                receivedChunkIds: receivedChunkIds,
+                progress: try container.decodeIfPresent(HealthSyncChunkProgress.self, forKey: .progress)
             )
         }
 
@@ -1404,7 +1414,10 @@ struct ForgeSyncClient {
         if pairing.transport?.isIrohTransport == true {
             return max(64_000, Int(Double(protocolTarget) * 0.65))
         }
-        return max(64_000, protocolTarget)
+        // Tailscale/HTTP intermediaries have shown 502s on large route chunks well
+        // below the advertised server body limit. Keep foreground HTTP chunks small
+        // enough that retries are cheap and proxy buffers stay out of the path.
+        return max(256_000, min(protocolTarget, 900_000))
     }
 
     private func encodedByteCount(_ value: some Encodable) -> Int {

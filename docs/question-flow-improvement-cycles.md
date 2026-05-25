@@ -1,10 +1,139 @@
 # Forge Question Flow Improvement Cycles
 
-Latest run date: 2026-05-24
+Latest run date: 2026-05-25
 
 This report records the three-cycle evaluation for Forge agent question flows. The
 same full flow set was tested in each cycle so improvements were kept only where they
 helped the entity or specialized surface.
+
+## 2026-05-25 Automation Pass
+
+Setup verification:
+
+- Confirmed the Forge worktree was on `main` before edits.
+- Confirmed OpenClaw and Hermes configs still point at
+  `/Users/omarclaw/Documents/aurel-monorepo/data/forge`; the active listener on
+  port 4317 had `/Users/omarclaw/Documents/aurel-monorepo/data/forge/forge.sqlite`
+  open. No data root was changed, moved, merged, deleted, or overwritten.
+- Built and reinstalled both repo-local plugins before the evaluation cycles:
+  `npm run build:openclaw-plugin`, `openclaw plugins install --force
+  --dangerously-force-unsafe-install ./openclaw-plugin`, gateway enable/restart,
+  `node ./plugins/forge-hermes/scripts/build-package-runtime.mjs`, and Hermes
+  editable reinstall from `./plugins/forge-hermes`.
+- Verified OpenClaw loads `forge-openclaw-plugin` version `0.2.88` from
+  `~/Documents/aurel-monorepo/projects/forge/openclaw-plugin/dist/openclaw/index.js`
+  and Hermes imports version `0.2.88` from the repo-local editable package. The known
+  duplicate plugin-id warning remains and is resolved by OpenClaw in favor of the
+  explicit config-selected repo-local plugin.
+- Verified live Forge health, OpenClaw `forge health`, OpenClaw `forge route-check`,
+  live onboarding at `/api/v1/agents/onboarding`, live OpenAPI, Tailscale Serve, and
+  Tailscale Funnel status. Route-check reported no missing plugin routes, no missing
+  OpenAPI routes, and no unexpected mirrors.
+- Live onboarding and OpenAPI still publish batch routes for normal stored entities
+  and dedicated specialized route families for Movement, Life Force, and Workbench.
+  Live OpenAPI reported 178 paths, including shared entity create/search/update/delete
+  routes, Movement day/month/all-time/timeline/places/trip/detail/selection/settings
+  and repair routes, Life Force overview/profile/weekday-template/fatigue-signal
+  routes, and Workbench flow catalog/detail/CRUD/execution/history/output/node and
+  one-off execution routes.
+
+Every cycle retested the full stored-entity and domain set: goal, project, strategy,
+task, habit, tag, note, insight, task_run, work_adjustment, calendar_event,
+work_block_template, task_timebox, calendar_connection, preference_catalog,
+preference_catalog_item, preference_context, preference_item, preference_judgment,
+preference_signal, questionnaire_instrument, questionnaire_run, self_observation,
+sleep_session, workout_session, wiki_page, movement, life_force, workbench,
+psyche_value, behavior_pattern, behavior, belief_entry, mode_profile,
+mode_guide_session, flashcard, trigger_report, event_type, emotion_definition, plus
+the read-only operator, calendar, sleep, and sports overview surfaces. Specialized
+surface scenarios covered Movement day/month/all-time/timeline/places/trip
+detail/selection aggregates/repair actions, Life Force overview/profile updates/
+weekday templates/fatigue signals, and Workbench flow catalog/flow CRUD/execution/run
+history/published outputs/node results/latest node outputs/one-off input execution.
+
+Cycle 1 tested all entity flows and specialized lanes after reinstalling both local
+plugins. Strengths: Psyche stayed example-first and interpretive, normal stored
+records stayed batch-first, and Movement/Life Force/Workbench stayed on dedicated
+route families. Weaknesses: the task guidance still treated `task` as a generic
+project/goal/standalone record instead of the actual work-item family of issue,
+one-session task, and subtask. That made the question flow under-ask about hierarchy,
+AI handoff instructions, acceptance criteria, and whether the item belonged under a
+project, issue, or parent task. Workbench also exposed saved-flow execution and
+history well, but lacked a clear one-off input execution example for
+`POST /api/v1/workbench/run`, which could make agents guess or use generic entity
+CRUD for a transient flow run.
+
+What changed in Cycle 1:
+
+- Updated live task catalog purpose, relationship rules, field guide, and
+  conversation playbook to distinguish issue, one-session task, and subtask; ask for
+  project/issue/parent-task placement only when unclear; and gather `aiInstructions`,
+  `executionMode`, `acceptanceCriteria`, owner, and assignees only when needed.
+- Updated the shared OpenClaw/Hermes/Codex playbooks and skill guidance with the same
+  task hierarchy and AI-session handoff language.
+- Added a Workbench `runByPayload` internal route-key example using `body.input` for
+  one-off input execution through the dedicated Workbench family instead of batch
+  CRUD or vague route guesses.
+
+What happened after retesting Cycle 1:
+
+- The first retest caught user-facing "payload" wording in the Workbench playbook.
+  That was changed to "dedicated one-off execution lane" while keeping the internal
+  route-key example precise.
+- The focused suite then passed across all tested entity flows and specialized route
+  lanes, so the Cycle 1 changes were kept.
+
+Cycle 2 retested the same complete flow set with emphasis on project and task
+collaboration. Strengths: the new task hierarchy improved question sequencing and
+Workbench one-off execution no longer fell back to batch CRUD. Weakness: project and
+work-item onboarding did not expose `assigneeUserIds` clearly enough. That meant an
+agent could ask only for a single owner and miss the practical question of which
+humans or bots should be assigned, especially for collaborative or automation-guided
+work.
+
+What changed in Cycle 2:
+
+- Added `assigneeUserIds` to project and task field guides and relationship rules in
+  live onboarding.
+- Updated project and task playbooks to ask about human or bot assignees only after
+  scope, hierarchy, and ownership are clear.
+- Added tests so future agents see assignees as a first-class relationship without
+  turning every intake into a mechanical assignment form.
+
+What happened after retesting Cycle 2:
+
+- The focused suite passed with the assignee guidance.
+- No Psyche or specialized-surface flow got broader or more robotic, so the Cycle 2
+  changes were kept.
+
+Cycle 3 retested every flow again with emphasis on project management precision.
+Strengths: question flows were now clearer for task hierarchy and assignees, and API
+posture stayed aligned. Remaining weakness: `project` guidance still hid newer
+project-management fields that matter when an agent is helping create or update a
+serious project: `productRequirementsDocument`, `workflowStatus`, and
+`schedulingRules`. Without those fields, agents could create thin projects while
+missing the brief/PRD, workflow lane, or scheduling policy that should shape later
+work.
+
+What changed in Cycle 3:
+
+- Added project relationship and field guidance for PRD-backed projects,
+  `productRequirementsDocument`, `workflowStatus`, and `schedulingRules`.
+- Updated project conversation playbooks across OpenClaw, Hermes, and Codex to ask
+  for the product brief or PRD, workflow lane, scheduling rules, and assignees only
+  after the basic project purpose is clear.
+- Extended onboarding, playbook parity, and simulation tests so the durable contract
+  covers task hierarchy, Workbench one-off execution, project/work-item assignees,
+  project PRD/brief, workflow lane, and scheduling rules.
+
+What happened after retesting Cycle 3:
+
+- The focused question-flow and contract suite passed after the report and test
+  updates.
+- `npx tsc --noEmit` passed.
+- Both adapters were rebuilt, OpenClaw was reinstalled/enabled/restarted from the
+  repo-local path, Hermes was reinstalled editable/restarted, live Forge
+  health/onboarding/OpenAPI/route-check were reverified, and all changes were kept.
 
 ## 2026-05-24 Automation Pass
 

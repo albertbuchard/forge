@@ -427,6 +427,19 @@ describe("question flow simulation cycles", () => {
     expect(entityPlaybook).toMatch(
       /Do not ask for separate user-story references/i
     );
+    expect(getSectionSlice(entityPlaybook, "Task")).toMatch(
+      /issue, one-session task, or subtask/i
+    );
+    expect(getSectionSlice(entityPlaybook, "Task")).toMatch(
+      /project for an issue, issue for a task, or\s+parent task for a subtask/i
+    );
+    expect(getSectionSlice(entityPlaybook, "Task")).toMatch(/aiInstructions/);
+    expect(getSectionSlice(entityPlaybook, "Project")).toMatch(/human\/bot assignees/i);
+    expect(getSectionSlice(entityPlaybook, "Task")).toMatch(/human\/bot assignees/i);
+    expect(getSectionSlice(entityPlaybook, "Project")).toMatch(/project PRD or brief/i);
+    expect(getSectionSlice(entityPlaybook, "Project")).toMatch(
+      /workflow lane[\s\S]*scheduling\s+rules|scheduling\s+rules[\s\S]*workflow lane/i
+    );
     expect(entityPlaybook).toMatch(/do not widen[\s\S]*meta lane question/i);
     expect(entityPlaybook).toMatch(
       /another agent could follow[\s\S]*without guessing/i
@@ -1055,6 +1068,9 @@ describe("question flow simulation cycles", () => {
       /workbenchRunFlow[\s\S]*"routeKey":"runFlow"[\s\S]*"pathParams"/
     );
     expect(onboardingSource).toMatch(
+      /workbenchRunByPayload[\s\S]*"routeKey":"runByPayload"[\s\S]*"body"[\s\S]*"input"/
+    );
+    expect(onboardingSource).toMatch(
       /workbenchChatFlow[\s\S]*"routeKey":"chatFlow"[\s\S]*"message"/
     );
     expect(onboardingSource).toMatch(
@@ -1064,10 +1080,11 @@ describe("question flow simulation cycles", () => {
 
   it("cycle 3 report retest: durable automation report covers this full run", () => {
     const report = readRepoFile("docs/question-flow-improvement-cycles.md");
-    const latestRun = getSectionSlice(report, "2026-05-24 Automation Pass");
+    const latestRun = getSectionSlice(report, "2026-05-25 Automation Pass");
 
-    expect(report).toMatch(/Latest run date: 2026-05-24/);
-    expect(latestRun).toMatch(/41 live entity catalog entries/i);
+    expect(report).toMatch(/Latest run date: 2026-05-25/);
+    expect(latestRun).toMatch(/reinstalled both repo-local plugins/i);
+    expect(latestRun).toMatch(/178 paths/i);
     expect(latestRun).toMatch(
       /goal, project, strategy,\s+task, habit, tag, note, insight, task_run, work_adjustment/i
     );
@@ -1079,12 +1096,15 @@ describe("question flow simulation cycles", () => {
     );
     expect(latestRun).toMatch(/Movement[\s\S]*Life Force[\s\S]*Workbench/i);
     expect(latestRun).toMatch(
-      /Cycle 1[\s\S]*followUpQuestionRule[\s\S]*antiDriftRule/i
+      /Cycle 1[\s\S]*issue, one-session task, and subtask[\s\S]*runByPayload/i
     );
     expect(latestRun).toMatch(
-      /Cycle 2[\s\S]*hypothesis guidance[\s\S]*every Psyche/i
+      /Cycle 2[\s\S]*assigneeUserIds[\s\S]*human or bot assignees/i
     );
-    expect(latestRun).toMatch(/Cycle 3[\s\S]*durable report[\s\S]*rebuild/i);
+    expect(latestRun).toMatch(
+      /Cycle 3[\s\S]*productRequirementsDocument[\s\S]*workflowStatus[\s\S]*schedulingRules/i
+    );
+    expect(latestRun).toMatch(/health\/onboarding\/OpenAPI\/route-check/i);
     expect(latestRun).toMatch(/What happened after retesting/i);
   });
 });

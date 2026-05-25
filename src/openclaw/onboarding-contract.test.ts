@@ -52,6 +52,9 @@ async function loadOnboardingPayload() {
     entityCatalog: Array<{
       entityType: string;
       classification: string;
+      purpose?: string;
+      relationshipRules?: string[];
+      fieldGuide?: Array<{ name: string; description?: string }>;
       preferredMutationPath: string | null;
       preferredReadPath: string | null;
       preferredMutationTool?: string | null;
@@ -212,6 +215,59 @@ describe("forge onboarding contract", () => {
         entityTypes.has(entityType),
         `${entityType} should be published`
       ).toBe(true);
+    }
+    const taskCatalog = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "task"
+    );
+    const projectCatalog = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "project"
+    );
+    expect(projectCatalog?.relationshipRules?.join(" ")).toMatch(
+      /owner[\s\S]*assigneeUserIds/i
+    );
+    expect(projectCatalog?.relationshipRules?.join(" ")).toMatch(
+      /PRD-backed[\s\S]*productRequirementsDocument[\s\S]*workflowStatus/i
+    );
+    const projectFields = new Set(
+      projectCatalog?.fieldGuide?.map((field) => field.name) ?? []
+    );
+    for (const field of [
+      "assigneeUserIds",
+      "workflowStatus",
+      "productRequirementsDocument",
+      "schedulingRules"
+    ]) {
+      expect(
+        projectFields.has(field),
+        `project field ${field} should be published`
+      ).toBe(true);
+    }
+    expect(taskCatalog?.purpose).toMatch(/issue, task, and subtask/i);
+    expect(taskCatalog?.relationshipRules?.join(" ")).toMatch(
+      /issues live directly under projects[\s\S]*tasks live under issues[\s\S]*subtasks live under tasks/i
+    );
+    expect(taskCatalog?.relationshipRules?.join(" ")).toMatch(
+      /Legacy or inbox tasks/i
+    );
+    expect(taskCatalog?.relationshipRules?.join(" ")).toMatch(
+      /owner[\s\S]*assigneeUserIds/i
+    );
+    const taskFields = new Set(
+      taskCatalog?.fieldGuide?.map((field) => field.name) ?? []
+    );
+    for (const field of [
+      "level",
+      "parentWorkItemId",
+      "assigneeUserIds",
+      "aiInstructions",
+      "executionMode",
+      "acceptanceCriteria",
+      "blockerLinks",
+      "completionReport"
+    ]) {
+      expect(taskFields.has(field), `task field ${field} should be published`).toBe(
+        true
+      );
     }
     expect(onboarding.psycheSubmoduleModel.flashcard).toMatch(
       /therapeutic reminder card/i
@@ -840,6 +896,9 @@ describe("forge onboarding contract", () => {
         workbenchRunFlow: expect.stringMatching(
           /routeKey[\s\S]*runFlow[\s\S]*pathParams/
         ),
+        workbenchRunByPayload: expect.stringMatching(
+          /routeKey[\s\S]*runByPayload[\s\S]*body[\s\S]*input/
+        ),
         workbenchChatFlow: expect.stringMatching(
           /routeKey[\s\S]*chatFlow[\s\S]*message/
         )
@@ -945,6 +1004,17 @@ describe("forge onboarding contract", () => {
       expect.objectContaining({
         routePosture: "action_workflow_entity",
         apiAccessHint: expect.stringMatching(/forge_start_task_run/)
+      })
+    );
+    expect(playbookByFocus.get("task")).toEqual(
+      expect.objectContaining({
+        routePosture: "batch_crud_entity",
+        coachingGoal: expect.stringMatching(/one-session work item/i),
+        askSequence: expect.arrayContaining([
+          expect.stringMatching(/issue, one-session task, or subtask/i),
+          expect.stringMatching(/project for an issue, issue for a task/i),
+          expect.stringMatching(/aiInstructions/i)
+        ])
       })
     );
     expect(playbookByFocus.get("self_observation")).toEqual(
