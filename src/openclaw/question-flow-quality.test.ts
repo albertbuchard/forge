@@ -188,6 +188,12 @@ describe("question flow quality coverage", () => {
       /repeatable day-shape such as "Mondays crash after lunch"[\s\S]*weekday-template question/i
     );
     expect(entityPlaybook).toMatch(
+      /planning decision[\s\S]*workload[\s\S]*recovery[\s\S]*timebox/i
+    );
+    expect(entityPlaybook).toMatch(
+      /only needs an explanation or planning read[\s\S]*overview first/i
+    );
+    expect(entityPlaybook).toMatch(
       /overview route key is `overview`[\s\S]*GET \/api\/v1\/life-force[\s\S]*Do not invent `\/api\/v1\/life-force\/overview`/i
     );
     expect(entityPlaybook).toMatch(/debugging one failed run|debug one failed execution/i);
@@ -201,6 +207,12 @@ describe("question flow quality coverage", () => {
       /For new flows,[\s\S]*what the flow should reliably produce[\s\S]*input contract[\s\S]*first node or box/i
     );
     expect(entityPlaybook).toMatch(
+      /one-off execution[\s\S]*temporary[\s\S]*durable[\s\S]*POST \/api\/v1\/workbench\/run/i
+    );
+    expect(entityPlaybook).toMatch(
+      /do not create a saved flow unless the user wants reuse/i
+    );
+    expect(entityPlaybook).toMatch(
       /For flow edits,[\s\S]*what behavior should change[\s\S]*public contract stays\s+stable/i
     );
     expect(entityPlaybook).toMatch(
@@ -211,6 +223,12 @@ describe("question flow quality coverage", () => {
     );
     expect(entityPlaybook).toMatch(
       /settings as a separate movement lane[\s\S]*passive capture[\s\S]*publish mode[\s\S]*retention/i
+    );
+    expect(entityPlaybook).toMatch(
+      /place creation or cleanup[\s\S]*label[\s\S]*boundary[\s\S]*future use/i
+    );
+    expect(entityPlaybook).toMatch(
+      /dedicated place routes[\s\S]*not a tag or batch entity write/i
     );
     expect(entityPlaybook).toMatch(/GET \/api\/v1\/movement\/settings/);
     expect(entityPlaybook).toMatch(/PATCH \/api\/v1\/movement\/settings/);

@@ -33,7 +33,14 @@ async function loadOnboardingPayload() {
   return response.json().onboarding as {
     entityCatalog: Array<{ entityType: string }>;
     entityRouteModel: {
-      specializedDomainSurfaces: Record<string, { routeKeys: string[] }>;
+      specializedDomainSurfaces: Record<
+        string,
+        {
+          routeKeys: string[];
+          routeSelectionQuestions?: string[];
+          notes?: string[];
+        }
+      >;
     };
   };
 }
@@ -554,6 +561,39 @@ describe("question flow simulation cycles", () => {
         `${surfaceKey} route-key scenarios should match onboarding`
       ).toEqual([...liveRouteKeys].sort());
     }
+  });
+
+  it("cycle 3 retest: live specialized-surface guidance stays specific enough to prevent route guessing", async () => {
+    const onboarding = await loadOnboardingPayload();
+    const movement =
+      onboarding.entityRouteModel.specializedDomainSurfaces.movement;
+    const lifeForce =
+      onboarding.entityRouteModel.specializedDomainSurfaces.lifeForce;
+    const lifeForceAlias =
+      onboarding.entityRouteModel.specializedDomainSurfaces.life_force;
+    const workbench =
+      onboarding.entityRouteModel.specializedDomainSurfaces.workbench;
+
+    expect(movement.routeSelectionQuestions?.join(" ")).toMatch(
+      /known-place creation or cleanup[\s\S]*label[\s\S]*boundary[\s\S]*future-use/i
+    );
+    expect(movement.notes?.join(" ")).toMatch(
+      /POST \/api\/v1\/movement\/places[\s\S]*PATCH \/api\/v1\/movement\/places\/:id[\s\S]*generic entity writes/i
+    );
+    for (const surface of [lifeForce, lifeForceAlias]) {
+      expect(surface.routeSelectionQuestions?.join(" ")).toMatch(
+        /planning decision[\s\S]*workload[\s\S]*recovery[\s\S]*timeboxes/i
+      );
+      expect(surface.notes?.join(" ")).toMatch(
+        /only needs an explanation or planning read[\s\S]*overview first/i
+      );
+    }
+    expect(workbench.routeSelectionQuestions?.join(" ")).toMatch(
+      /saved flow[\s\S]*one-off input run[\s\S]*reusable/i
+    );
+    expect(workbench.notes?.join(" ")).toMatch(
+      /one-off execution[\s\S]*do not create a saved flow unless the user wants reuse[\s\S]*POST \/api\/v1\/workbench\/run/i
+    );
   });
 
   it("uses explicit specialized route-lane scenarios in every cycle", () => {
@@ -1080,11 +1120,11 @@ describe("question flow simulation cycles", () => {
 
   it("cycle 3 report retest: durable automation report covers this full run", () => {
     const report = readRepoFile("docs/question-flow-improvement-cycles.md");
-    const latestRun = getSectionSlice(report, "2026-05-25 Automation Pass");
+    const latestRun = getSectionSlice(report, "2026-05-26 Automation Pass");
 
-    expect(report).toMatch(/Latest run date: 2026-05-25/);
-    expect(latestRun).toMatch(/reinstalled both repo-local plugins/i);
-    expect(latestRun).toMatch(/178 paths/i);
+    expect(report).toMatch(/Latest run date: 2026-05-26/);
+    expect(latestRun).toMatch(/OpenClaw config and Hermes config/i);
+    expect(latestRun).toMatch(/forge-hermes-plugin 0\.2\.91/i);
     expect(latestRun).toMatch(
       /goal, project, strategy,\s+task, habit, tag, note, insight, task_run, work_adjustment/i
     );
@@ -1096,15 +1136,15 @@ describe("question flow simulation cycles", () => {
     );
     expect(latestRun).toMatch(/Movement[\s\S]*Life Force[\s\S]*Workbench/i);
     expect(latestRun).toMatch(
-      /Cycle 1[\s\S]*issue, one-session task, and subtask[\s\S]*runByPayload/i
+      /Cycle 1[\s\S]*known-place creation and cleanup[\s\S]*place-label\/boundary\/future-use/i
     );
     expect(latestRun).toMatch(
-      /Cycle 2[\s\S]*assigneeUserIds[\s\S]*human or bot assignees/i
+      /Cycle 2[\s\S]*planning decision[\s\S]*overview-first/i
     );
     expect(latestRun).toMatch(
-      /Cycle 3[\s\S]*productRequirementsDocument[\s\S]*workflowStatus[\s\S]*schedulingRules/i
+      /Cycle 3[\s\S]*one-time\s+input run[\s\S]*POST \/api\/v1\/workbench\/run/i
     );
-    expect(latestRun).toMatch(/health\/onboarding\/OpenAPI\/route-check/i);
+    expect(latestRun).toMatch(/live-onboarding regression coverage/i);
     expect(latestRun).toMatch(/What happened after retesting/i);
   });
 });

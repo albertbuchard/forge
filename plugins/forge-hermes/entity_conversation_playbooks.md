@@ -1537,9 +1537,9 @@ Preferred opening question:
 ## Movement
 
 Aim: clarify whether the user wants to understand time in place, review travel
-behavior, add or update a stay or trip, inspect one place, change movement operating
-settings, or link movement context to another Forge record before choosing the
-dedicated route family.
+behavior, add or update a stay or trip, create or clean up a known place, change
+movement operating settings, or link movement context to another Forge record before
+choosing the dedicated route family.
 
 Arc:
 
@@ -1548,17 +1548,19 @@ Arc:
 2. Ask whether the user is trying to query behavior, add something manually, update
    an existing movement item, or link movement to another Forge entity.
 3. Ask whether the focus is a stay, a trip, a place, a timeline window, or a selected span.
-4. Ask for the time window, place, or movement item that makes the question concrete.
-5. Ask what they are trying to notice, preserve, or answer through that movement context.
-6. If the user is changing movement operating behavior, ask whether the change is
+4. If this is place creation or cleanup, ask what label, boundary, and future use
+   should make the place recognizable later.
+5. Ask for the time window, place, or movement item that makes the question concrete.
+6. Ask what they are trying to notice, preserve, or answer through that movement context.
+7. If the user is changing movement operating behavior, ask whether the change is
    about passive tracking, publish mode, retention, or companion readiness.
-7. Choose the dedicated day, month, all-time, timeline, places, trip-detail,
+8. Choose the dedicated day, month, all-time, timeline, places, trip-detail,
    selection, or settings route once the question shape is clear.
-8. If the truth of one uncertain span is still unclear, read the timeline or saved-box
+9. If the truth of one uncertain span is still unclear, read the timeline or saved-box
    detail before you mutate it.
-9. Skip the meta lane question when the user already named the exact correction or
+10. Skip the meta lane question when the user already named the exact correction or
    review target and only one ambiguity remains.
-10. Use the dedicated movement route once you know whether the user needs timeline
+11. Use the dedicated movement route once you know whether the user needs timeline
    review, overlay, place or trip detail, selection summary, settings, or repair.
 
 Direct action rules:
@@ -1591,12 +1593,17 @@ Direct action rules:
   interval or place if that is still ambiguous, then act.
 - When you do act on a concrete missing-gap correction, create the overlay and read
   the relevant timeline back instead of leaving the correction ungrounded.
+- For known-place creation or cleanup, ask what the place should be called, what
+  counts inside its boundary, and how future movement reads should use it. Use the
+  dedicated place routes, not a tag or batch entity write.
 
 Helpful follow-up lanes:
 
 - whether the user wants time-in-place, travel history, one specific stay or trip, a
   place summary, or a link
 - what time window, place, stay, trip, or selection is in scope
+- what label, boundary, or future-use distinction makes a known place worth saving or
+  renaming
 - whether the question is behavioral, such as time at home, travel frequency, or place
   distribution, versus an edit
 - whether the edit is a missing-gap overlay versus a true recorded stay/trip patch
@@ -1649,7 +1656,8 @@ Preferred opening question:
 ## Life Force
 
 Aim: clarify whether the user wants to review current energy state, change durable
-profile assumptions, edit weekday curves, or log a real-time fatigue signal.
+profile assumptions, edit weekday curves, log a real-time fatigue signal, or make a
+planning decision based on the energy model.
 
 Arc:
 
@@ -1657,22 +1665,25 @@ Arc:
    you reduce it to one life-force lane.
 2. Ask whether the job is overview, profile change, weekday-template change, or fatigue signaling.
 3. Ask what part of the current energy picture feels most important or inaccurate.
-4. Ask what should stay true if they are changing profile or template assumptions.
-5. Ask whether the user is describing a stable weekly shape or just how today feels
+4. Ask what planning decision should change if the model is corrected: workload,
+   recovery, timeboxing, meeting load, or task choice.
+5. Ask what should stay true if they are changing profile or template assumptions.
+6. Ask whether the user is describing a stable weekly shape or just how today feels
    when the lane is still blurred.
-6. If the user describes a repeatable day-shape such as "Mondays crash after lunch",
+7. If the user describes a repeatable day-shape such as "Mondays crash after lunch",
    treat that as a weekday-template question before you reach for profile or
    fatigue-signal routes.
-7. If the user already named the life-force lane clearly, skip the meta lane question
+8. If the user already named the life-force lane clearly, skip the meta lane question
    and ask only for the specific weekday, profile field, or signal that still matters.
-8. If the user wants to see what changed after a write, read the overview back instead
+9. If the user wants to see what changed after a write, read the overview back instead
    of leaving the result implicit.
-9. Route to the dedicated life-force path once the lane is clear.
+10. Route to the dedicated life-force path once the lane is clear.
 
 Helpful follow-up lanes:
 
 - whether the user wants explanation, editing, or signaling
 - what part of the energy model feels off or useful
+- what planning decision the overview or correction should change
 - what durable assumption versus real-time state is being changed
 - whether the user is describing a stable weekly shape or just how today feels
 
@@ -1704,6 +1715,11 @@ Direct action rules:
   instead of treating it as a one-off right-now feeling.
 - If the user is describing how one weekday should usually feel, update that weekday
   template instead of editing the profile.
+- If the user only needs an explanation or planning read, use the overview first and
+  do not turn the conversation into a profile or template mutation.
+- For profile or weekday-template edits, ask what future planning behavior should
+  change, such as workload, recovery time, timeboxes, meeting load, or task choice,
+  so the write is not just a more polished description.
 - If the user says something like "I always dip on Tuesdays after lunch", treat that
   as a weekday-template edit, not as a one-off fatigue signal.
 - If the user is describing right-now depletion or recovery, post a fatigue signal and
@@ -1737,18 +1753,20 @@ Arc:
 5. If the user is creating or editing a flow, clarify the flow's job, stable inputs,
    expected public output, and the smallest structural change before asking for node
    details.
-6. If the user wants to delete or archive a flow, ask which saved flow is affected
+6. If the user wants one-off execution, clarify whether this should stay a one-time
+   input run or become a reusable saved flow before creating anything durable.
+7. If the user wants to delete or archive a flow, ask which saved flow is affected
    and what future run, published output, or public contract should no longer exist.
-7. If the user wants to continue a saved flow chat, ask which flow should receive the
+8. If the user wants to continue a saved flow chat, ask which flow should receive the
    follow-up and what the message should accomplish.
-8. If the user already named the flow and action clearly, skip the meta lane
+9. If the user already named the flow and action clearly, skip the meta lane
    question and ask only for the missing run, node, or output scope.
-9. If the user wants a stable public input contract or published output, prefer those
+10. If the user wants a stable public input contract or published output, prefer those
    dedicated reads instead of detouring through run history first.
-10. If the user is debugging one failed run, ask whether the useful artifact is the run
+11. If the user is debugging one failed run, ask whether the useful artifact is the run
    summary, one node result, the latest node output, or the published output before
    you start asking for edits.
-11. Route to the dedicated workbench route family once the execution lane is clear.
+12. Route to the dedicated workbench route family once the execution lane is clear.
 
 Helpful follow-up lanes:
 
@@ -1756,6 +1774,7 @@ Helpful follow-up lanes:
 - what exact flow or run is in scope
 - whether they need whole-flow output or node-level detail
 - whether they need a public input contract or a published output instead of a debug trace
+- whether a requested execution should remain one-off or become a reusable saved flow
 
 Lane-to-route map:
 
@@ -1796,6 +1815,9 @@ Direct action rules:
 - If the user wants one-off input execution without depending on a saved flow id, use
   `POST /api/v1/workbench/run` through the dedicated one-off execution lane and keep
   the user-facing question about the one-off input contract.
+- For one-off execution, do not create a saved flow unless the user wants reuse. Ask
+  whether the input contract should be temporary or durable, then route to
+  `POST /api/v1/workbench/run` for the temporary case.
 - If the user wants to debug one failed execution, narrow whether they need the run
   detail, one node result, the latest node output, or the published output before you
   ask for flow changes.

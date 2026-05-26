@@ -1,10 +1,144 @@
 # Forge Question Flow Improvement Cycles
 
-Latest run date: 2026-05-25
+Latest run date: 2026-05-26
 
 This report records the three-cycle evaluation for Forge agent question flows. The
 same full flow set was tested in each cycle so improvements were kept only where they
 helped the entity or specialized surface.
+
+## 2026-05-26 Automation Pass
+
+Setup verification:
+
+- Confirmed the Forge worktree was on `main` before plugin work and edits.
+- No prior automation memory existed for
+  `improvement-of-question-flows-in-forge`.
+- Confirmed OpenClaw config and Hermes config both point at
+  `/Users/omarclaw/Documents/aurel-monorepo/data/forge`, and the live Forge process
+  on `127.0.0.1:4317` had
+  `/Users/omarclaw/Documents/aurel-monorepo/data/forge/forge.sqlite` open. No data
+  root was changed, moved, merged, deleted, or overwritten.
+- Built the repo-local OpenClaw plugin with `npm run build:openclaw-plugin`.
+  OpenClaw rejected a duplicate path install without force and rejects `--force` with
+  `--link`, so the path-tracked plugin was refreshed through
+  `openclaw plugins update forge-openclaw-plugin --dangerously-force-unsafe-install`,
+  then enabled and the gateway was restarted.
+- Reinstalled Hermes from the local plugin folder with
+  `~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade --editable
+  ./plugins/forge-hermes`, which installed `forge-hermes-plugin 0.2.91` from the
+  repo-local editable package.
+- Verified OpenClaw loads `forge-openclaw-plugin 0.2.91` from
+  `~/Documents/aurel-monorepo/projects/forge/openclaw-plugin/dist/openclaw/index.js`
+  and exposes the route-key tools `forge_call_movement_route`,
+  `forge_call_life_force_route`, and `forge_call_workbench_route`. The known
+  duplicate plugin-id warning remains and is resolved by OpenClaw in favor of the
+  explicit config-selected repo-local plugin.
+- Final gateway verification found a separate OpenClaw LaunchAgent issue: the service
+  stayed loaded but repeatedly restarted before `127.0.0.1:18789` became reachable,
+  with logs showing `signal SIGTERM received` shortly after `starting HTTP server`.
+  The Forge backend on `127.0.0.1:4317`, the repo-local plugin inspection, and the
+  live Forge onboarding/OpenAPI checks all remained healthy; the gateway bind loop is
+  an operational follow-up rather than a question-flow contract regression.
+- Verified live Forge health, OpenClaw `forge health`, live onboarding at
+  `/api/v1/agents/onboarding`, and live OpenAPI. Live onboarding published the
+  current entity catalog plus dedicated Movement, Life Force/`life_force`, and
+  Workbench route-key maps. Live OpenAPI exposed Movement, Life Force, and Workbench
+  route families separately from shared batch CRUD.
+
+Every cycle retested the full stored-entity and domain set: goal, project, strategy,
+task, habit, tag, note, insight, task_run, work_adjustment, calendar_event,
+work_block_template, task_timebox, calendar_connection, preference_catalog,
+preference_catalog_item, preference_context, preference_item, preference_judgment,
+preference_signal, questionnaire_instrument, questionnaire_run, self_observation,
+sleep_session, workout_session, wiki_page, movement, life_force, workbench,
+psyche_value, behavior_pattern, behavior, belief_entry, mode_profile,
+mode_guide_session, flashcard, trigger_report, event_type, emotion_definition, plus
+the read-only operator, calendar, sleep, and sports overview surfaces. The simulated
+scenarios covered adding, updating, reviewing, navigating, or acting on each flow,
+including Movement day/month/all-time/timeline/places/trip detail/selection/settings
+and repair routes, Life Force overview/profile/weekday-template/fatigue-signal
+routes, and Workbench flow catalog/detail/CRUD/execution/run history/published
+output/node/latest-node-output/one-off execution/chat routes.
+
+Cycle 1 tested all entity flows and specialized lanes after the local plugin
+reinstall. Strengths: Psyche remained example-first and hypothesis-capable; ordinary
+stored records stayed batch-first; Movement, Life Force, and Workbench used dedicated
+route-key families instead of generic CRUD. Weakness: Movement had correct
+`placeCreate` and `placeUpdate` routes, but the conversation guidance did not say
+enough about how to ask for a known place's label, boundary, and future use. That
+could make agents treat a place cleanup like a tag, raw route action, or generic
+entity write.
+
+What changed in Cycle 1:
+
+- Updated the Movement playbook to cover known-place creation and cleanup as a
+  first-class lane.
+- Added guidance to ask what the place should be called, what counts inside its
+  boundary, and how future movement reads should use it before calling the dedicated
+  place route.
+- Updated live onboarding Movement search hints, route-selection questions, and notes
+  with the same place-route guidance.
+- Added focused regression coverage for the new place-label/boundary/future-use
+  wording and the rule that known places use dedicated place routes, not tags or batch
+  entity writes.
+
+What happened after retesting Cycle 1:
+
+- The first retest caught an over-specific assertion that expected the word `label`
+  inside one direct-action bullet; the guidance existed across the Movement arc and
+  action rules. The assertion was corrected to match the actual text shape.
+- The full focused suite then passed across all tested entity flows and specialized
+  route lanes, so the Cycle 1 Movement change was kept.
+
+Cycle 2 retested the same complete flow set with emphasis on Life Force. Strengths:
+the contract already separated overview, profile, weekday template, and fatigue
+signal routes, including the `lifeForce` and `life_force` aliases. Weakness: durable
+Life Force edits could still become a polished description of energy rather than a
+useful model change. Agents needed stronger guidance to ask what planning decision
+should change, such as workload, recovery time, timeboxes, meeting load, or task
+choice.
+
+What changed in Cycle 2:
+
+- Updated the Life Force playbook to ask what planning decision the overview or
+  correction should change before profile or weekday-template writes.
+- Added a rule to use the overview first when the user only needs explanation or
+  planning read, instead of mutating profile/template state.
+- Updated both live onboarding keys, `lifeForce` and `life_force`, with matching
+  route-selection questions and notes.
+- Added regression coverage for planning-decision language and overview-first
+  behavior.
+
+What happened after retesting Cycle 2:
+
+- The full focused suite passed. The change improved Life Force specificity without
+  making normal records or Psyche flows more verbose, so it was kept.
+
+Cycle 3 retested every flow again with emphasis on Workbench. Strengths: Workbench
+already distinguished saved flows, flow CRUD, run history, node results, published
+outputs, latest node output, saved-flow chat, and one-off execution. Weakness:
+one-off execution still needed a clearer question-flow guard so agents do not create a
+saved reusable flow when the user only wants a temporary input run.
+
+What changed in Cycle 3:
+
+- Updated the Workbench playbook to ask whether execution should remain a one-time
+  input run or become a reusable saved flow before creating anything durable.
+- Added a direct rule that one-off execution should use
+  `POST /api/v1/workbench/run` and must not create a saved flow unless the user wants
+  reuse.
+- Updated live onboarding Workbench search hints, route-selection questions, and
+  notes with the same saved-flow versus one-off distinction.
+- Added live-onboarding regression coverage proving Movement place guidance, Life
+  Force planning-decision guidance, and Workbench one-off execution guidance are
+  present in the server contract, not only in Markdown playbooks.
+
+What happened after retesting Cycle 3:
+
+- The focused question-flow and live contract suite passed with 18 tests.
+- No changes were reverted. Remaining work is mostly qualitative: periodically run
+  live agent conversations against real user utterances to catch phrasing that still
+  feels too generic despite the contract-level guards.
 
 ## 2026-05-25 Automation Pass
 
