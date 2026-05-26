@@ -2960,6 +2960,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
         ],
         searchHints: [
             "Clarify whether the user wants a behavioral query, one trip or place, a missing-gap overlay, a manual add or update, or a link before choosing the route.",
+            "For known-place creation or cleanup, ask what label, boundary, and future use should make the place recognizable before calling the dedicated place route.",
             "If the user already named a concrete missing span, confirm only the remaining time or place ambiguity, then use the movement overlay route and read the timeline back.",
             "If the user wants to revise or remove an already-saved correction, identify whether it is a user-defined box, automatic box, recorded stay, recorded trip, or trip point before choosing the repair or delete route."
         ],
@@ -2975,6 +2976,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
         ],
         searchHints: [
             "Clarify whether the user wants explanation, durable model changes, or a real-time tired or recovered signal before choosing the route.",
+            "For profile or weekday-template edits, ask what future planning behavior should change, such as workload, recovery time, timeboxes, meeting load, or task choice.",
             "Separate durable profile assumptions, weekday-template edits, and right-now fatigue signals before choosing the mutation path.",
             "When the user is trying to understand the practical result of a change, read the overview again after the write instead of stopping at the mutation response."
         ],
@@ -2990,6 +2992,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
         ],
         searchHints: [
             "Clarify whether the user wants flow discovery, editing, execution, published output, run inspection, or node-level output before choosing the route.",
+            "For one-off execution, ask whether the input contract should stay temporary or become a reusable saved flow before creating anything durable.",
             "Distinguish flow contract, published output, run history, latest-node-output, and chat follow-up questions before reaching for a route.",
             "If the user is still deciding how to run or edit a flow, read flow detail or the box catalog before asking them for structured input details."
         ],
@@ -4776,6 +4779,7 @@ function buildAgentOnboardingPayload(request) {
                     ],
                     routeSelectionQuestions: [
                         "Is the user asking for a day, month, all-time, timeline, place, trip detail, selected-span, or settings answer?",
+                        "If this is known-place creation or cleanup, what label, boundary, or future-use distinction is still missing?",
                         "Is this a missing-gap overlay, a saved-overlay repair, or an edit to one already-recorded stay, trip, or trip point?",
                         "If this is about operating behavior, is the change about passive tracking, publish mode, retention, or companion readiness?",
                         "If the target is already known, what one time, place, or saved-object detail is still missing before acting?"
@@ -4837,6 +4841,7 @@ function buildAgentOnboardingPayload(request) {
                         "Route-selection questions are internal. User-facing questions should ask for the useful time window, place, selected span, stay, or trip instead of reciting day/month/all-time/timeline/selection route keys.",
                         "Use /api/v1/movement/day, /month, /all-time, /timeline, or /selection when the user wants behavioral answers such as how long they stayed at home, when they traveled, which places dominated a period, or what happened across a selected span.",
                         "Use GET /api/v1/movement/settings and PATCH /api/v1/movement/settings when the user wants to inspect or change passive capture, publish mode, retention mode, or companion readiness. Do not route settings changes through stays, trips, places, or batch CRUD.",
+                        "For known-place creation or cleanup, ask for the place label, boundary, and future use, then use POST /api/v1/movement/places or PATCH /api/v1/movement/places/:id instead of tags or generic entity writes.",
                         "Use the movement write routes when the user wants to add a place or manual overlay, update a specific stay or trip, repair one recorded movement span, or attach movement context to another Forge record. If the user is filling a missing-data gap, the usual write path is a user-defined overlay box rather than a raw stay or trip patch.",
                         "If the user is revising or removing an existing correction, first identify whether the saved object is a user-defined box, automatic box, recorded stay, recorded trip, or trip point so the repair or delete path stays truthful.",
                         "For an explicit statement like 'that missing block was me staying home', do not reopen broad intake. Preflight only if timing overlap is unclear, then create a user-defined `stay` box for that interval and read the updated timeline back."
@@ -4849,6 +4854,7 @@ function buildAgentOnboardingPayload(request) {
                     routeKeys: ["overview", "profile", "weekdayTemplate", "fatigueSignal"],
                     routeSelectionQuestions: [
                         "Is the user trying to understand the overview, change durable profile assumptions, change a weekday curve, or log a right-now fatigue signal?",
+                        "What planning decision should the overview or correction change: workload, recovery, timeboxes, meetings, or task choice?",
                         "Are they describing a repeatable weekly shape or a one-off current state?",
                         "If the lane is already clear, what one weekday, profile field, or signal detail is still missing?"
                     ],
@@ -4871,6 +4877,8 @@ function buildAgentOnboardingPayload(request) {
                         "Route-selection questions are internal. User-facing questions should ask whether this is a current read, durable assumption, repeated weekday rhythm, or right-now state instead of reciting overview/profile/template/signal route keys.",
                         "Use GET /api/v1/life-force for the current overview payload with stats, drains, recommendations, and current-curve state.",
                         "Patch the profile only for durable personal settings, update weekday templates only for the curve itself, and post fatigue signals for real-time tired or recovered observations.",
+                        "If the user only needs an explanation or planning read, use the overview first and do not turn the conversation into a profile or template mutation.",
+                        "For profile or weekday-template edits, ask what future planning behavior should change, such as workload, recovery time, timeboxes, meeting load, or task choice, so the write is not just a nicer description.",
                         "If the user says something like 'I always dip on Tuesdays after lunch', treat that as a weekday-template change rather than a one-off fatigue signal.",
                         "If the user is asking what changed after a profile, template, or fatigue write, read the overview back so the effect stays visible.",
                         "If the user already knows they want a profile change, weekday-template edit, or right-now fatigue signal, skip the broad lane question and ask only for the missing weekday, profile field, or signal detail."
@@ -4883,6 +4891,7 @@ function buildAgentOnboardingPayload(request) {
                     routeKeys: ["overview", "profile", "weekdayTemplate", "fatigueSignal"],
                     routeSelectionQuestions: [
                         "Is the user trying to understand the overview, change durable profile assumptions, change a weekday curve, or log a right-now fatigue signal?",
+                        "What planning decision should the overview or correction change: workload, recovery, timeboxes, meetings, or task choice?",
                         "Are they describing a repeatable weekly shape or a one-off current state?",
                         "If the lane is already clear, what one weekday, profile field, or signal detail is still missing?"
                     ],
@@ -4906,6 +4915,8 @@ function buildAgentOnboardingPayload(request) {
                         "Route-selection questions are internal. User-facing questions should ask whether this is a current read, durable assumption, repeated weekday rhythm, or right-now state instead of reciting overview/profile/template/signal route keys.",
                         "Use GET /api/v1/life-force for the current overview payload with stats, drains, recommendations, and current-curve state.",
                         "Patch the profile only for durable personal settings, update weekday templates only for the curve itself, and post fatigue signals for real-time tired or recovered observations.",
+                        "If the user only needs an explanation or planning read, use the overview first and do not turn the conversation into a profile or template mutation.",
+                        "For profile or weekday-template edits, ask what future planning behavior should change, such as workload, recovery time, timeboxes, meeting load, or task choice, so the write is not just a nicer description.",
                         "If the user says something like 'I always dip on Tuesdays after lunch', treat that as a weekday-template change rather than a one-off fatigue signal.",
                         "If the user is asking what changed after a profile, template, or fatigue write, read the overview back so the effect stays visible.",
                         "If the user already knows they want a profile change, weekday-template edit, or right-now fatigue signal, skip the broad lane question and ask only for the missing weekday, profile field, or signal detail."
@@ -4935,6 +4946,7 @@ function buildAgentOnboardingPayload(request) {
                     ],
                     routeSelectionQuestions: [
                         "Is the job flow discovery, flow creation, flow editing, flow deletion, execution, run history, published output, run detail, node result, latest node output, or flow chat follow-up?",
+                        "If this is execution, is it a known saved flow, a one-off input run, or a flow that should become reusable?",
                         "Does the user need a stable public contract or one execution artifact?",
                         "For flow CRUD, what stable input contract, expected output, or lifecycle effect must stay true?",
                         "For flow chat follow-up, which saved flow should receive the message and what should the message accomplish?",
@@ -4984,6 +4996,7 @@ function buildAgentOnboardingPayload(request) {
                         "Use the flow routes when the agent needs stable public input contracts, published outputs, node-level results, or reusable execution history.",
                         "If the user is still figuring out inputs or editable structure, read flow detail or box catalog before asking them to reconstruct structured inputs from memory.",
                         "For flow creation, clarify what the flow should reliably produce, which input contract it should accept, and which first node or box anchors the flow before asking for structured input details.",
+                        "For one-off execution, do not create a saved flow unless the user wants reuse. Ask whether the input contract should stay temporary or become durable, then use POST /api/v1/workbench/run for the temporary case.",
                         "For flow edits, ask what behavior should change while preserving the public contract unless the user explicitly wants the contract changed.",
                         "For flow deletion, confirm the saved flow and whether published outputs or run history need preservation elsewhere before using the delete route.",
                         "For saved flow chat follow-ups, use POST /api/v1/workbench/flows/:id/chat only when the user wants to continue a flow-specific conversation. Do not turn that into a new run, note, or generic entity update unless the user asks.",
