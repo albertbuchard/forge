@@ -1,15 +1,18 @@
-Forge Companion 1.0.61 fixes repeated historical workout uploads after backgrounding.
+Forge Companion 1.0.62 makes HealthKit resume decisions backend-authoritative.
 
-Health sync checkpoints now remember completed workout batches, so resuming the
-same Forge upload session skips workouts that were already fully accepted instead
-of rebuilding their heart-rate samples and routes from HealthKit again.
+The iOS app now refreshes the Forge sync session status before base uploads and
+before every workout batch, then skips only chunks the backend reports as already
+accepted.
 
-Large HealthKit chunks now use iOS background URLSession file uploads on HTTP
-pairings, which is Apple’s supported path for uploads that need to survive app
-suspension.
+Workout summary, time-series, and route chunk ids are stable across restarts and
+no longer depend on the sequence number remaining after a local checkpoint.
 
-HTTP workout and route chunks are smaller to avoid proxy 502 failures while still
-letting Forge skip accepted chunks by stable chunk id.
+The local completed-workout checkpoint is no longer used to decide what should be
+skipped; the backend’s accepted chunk list is the source of truth.
+
+Workout chunks are queued through iOS background URLSession uploads by mapped
+batch, so accepted chunks can continue to land while the app is suspended and are
+reconciled from backend status after relaunch.
 
 This TestFlight build keeps beta review submission disabled while CI uploads the
 IPA, waits for processing, and attaches this changelog.
