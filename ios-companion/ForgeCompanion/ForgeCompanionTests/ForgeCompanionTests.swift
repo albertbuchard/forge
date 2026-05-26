@@ -2985,6 +2985,33 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertFalse(staleRuntime.supportsByteStablePayloadEncoding)
     }
 
+    func testWorkoutChunkIdDoesNotDependOnResumeSequenceOffset() {
+        let uploadSession = ForgeSyncClient.HealthSyncUploadSession(
+            syncSessionId: "hms_resume",
+            schemaVersion: "healthkit-sync-v2",
+            chunkTargetBytes: 512_000,
+            chunkMaxBytes: 1_000_000,
+            chunkPayloadEncoding: "payload_json_base64",
+            acceptedPayloadEncodings: ["payload_json_base64"],
+            supportsCompression: true,
+            acceptedFamilies: ["workout_routes"],
+            receivedChunkIds: []
+        )
+        let chunkId = ForgeSyncClient.workoutChunkId(
+            uploadSession: uploadSession,
+            batchKey: "64-deadbeef",
+            family: "workout_routes",
+            partIndex: 7
+        )
+
+        XCTAssertEqual(
+            chunkId,
+            "hms_resume-workouts-64-deadbeef-workout_routes-0007"
+        )
+        XCTAssertFalse(chunkId.contains("000111"))
+        XCTAssertFalse(chunkId.contains("000276"))
+    }
+
     func testWorkoutBackfillPlanIgnoresGenericSyncCursorUntilRawWorkoutBackfillCompletes() {
         let legacySyncDate = makeDate("2026-05-18T08:00:00.000Z")
 
