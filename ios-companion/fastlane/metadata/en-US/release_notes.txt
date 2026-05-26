@@ -1,16 +1,15 @@
-Forge Companion 1.0.59 fixes the one-time historical workout import stall during sync.
+Forge Companion 1.0.60 hardens interrupted HealthKit sync and historical workout upload.
 
-The app now counts the full workout library first, reports the total immediately,
-then reads HealthKit workout evidence in smaller internal slices so uploads start
-moving again without capping the historical import.
+The app now preserves accepted chunk progress across retries, freezes retry windows
+only when Forge resumes the same upload session, and starts a fresh window when
+Forge replaces an expired session.
 
-Historical workout import now has its own progress panel with found workouts,
-uploaded workouts, HR and metric evidence, route points, transfer speed,
-resumed chunks, and remaining workout count.
+Large movement, workout metric, and route uploads continue in byte-stable chunks so
+Forge can skip previously accepted chunks instead of re-uploading the whole import.
 
-Workout summaries still upload separately from raw HR, metric, and route evidence,
-so Forge can show workout sessions and apply arriving evidence progressively.
+The runtime contract now reports mobile sync progress with fields that match the
+actual server payload, keeping generated clients and diagnostics aligned.
 
 This TestFlight build uploads without automatic external group distribution. CI
-now explicitly skips beta review submission while keeping build processing and
+continues to skip beta review submission while keeping build processing and
 changelog verification.
