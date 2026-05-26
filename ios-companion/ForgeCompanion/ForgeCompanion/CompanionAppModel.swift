@@ -265,6 +265,19 @@ struct WorkoutBackfillSyncPlan {
 }
 
 struct ActiveHealthSyncCheckpoint: Codable, Equatable {
+    private enum CodingKeys: String, CodingKey {
+        case syncSessionId
+        case schemaVersion
+        case requestedFamilies
+        case createdAt
+        case windowEnd
+        case requiresWorkoutBackfill
+        case lastReceivedChunkCount
+        case lastReceivedBytes
+        case completedWorkoutExternalUids
+        case clientChunkingVersion
+    }
+
     let syncSessionId: String
     let schemaVersion: String
     let requestedFamilies: [String]
@@ -273,9 +286,57 @@ struct ActiveHealthSyncCheckpoint: Codable, Equatable {
     let requiresWorkoutBackfill: Bool
     var lastReceivedChunkCount: Int
     var lastReceivedBytes: Int
+    var completedWorkoutExternalUids: [String]
+    let clientChunkingVersion: String
 
     var resumeSessionId: String {
         syncSessionId
+    }
+
+    init(
+        syncSessionId: String,
+        schemaVersion: String,
+        requestedFamilies: [String],
+        createdAt: Date,
+        windowEnd: Date,
+        requiresWorkoutBackfill: Bool,
+        lastReceivedChunkCount: Int,
+        lastReceivedBytes: Int,
+        completedWorkoutExternalUids: [String] = [],
+        clientChunkingVersion: String = ForgeSyncClient.legacyHTTPHealthSyncChunkingVersion
+    ) {
+        self.syncSessionId = syncSessionId
+        self.schemaVersion = schemaVersion
+        self.requestedFamilies = requestedFamilies
+        self.createdAt = createdAt
+        self.windowEnd = windowEnd
+        self.requiresWorkoutBackfill = requiresWorkoutBackfill
+        self.lastReceivedChunkCount = lastReceivedChunkCount
+        self.lastReceivedBytes = lastReceivedBytes
+        self.completedWorkoutExternalUids = Array(Set(completedWorkoutExternalUids)).sorted()
+        self.clientChunkingVersion = clientChunkingVersion
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            syncSessionId: try container.decode(String.self, forKey: .syncSessionId),
+            schemaVersion: try container.decode(String.self, forKey: .schemaVersion),
+            requestedFamilies: try container.decode([String].self, forKey: .requestedFamilies),
+            createdAt: try container.decode(Date.self, forKey: .createdAt),
+            windowEnd: try container.decode(Date.self, forKey: .windowEnd),
+            requiresWorkoutBackfill: try container.decode(Bool.self, forKey: .requiresWorkoutBackfill),
+            lastReceivedChunkCount: try container.decode(Int.self, forKey: .lastReceivedChunkCount),
+            lastReceivedBytes: try container.decode(Int.self, forKey: .lastReceivedBytes),
+            completedWorkoutExternalUids: try container.decodeIfPresent(
+                [String].self,
+                forKey: .completedWorkoutExternalUids
+            ) ?? [],
+            clientChunkingVersion: try container.decodeIfPresent(
+                String.self,
+                forKey: .clientChunkingVersion
+            ) ?? ForgeSyncClient.legacyHTTPHealthSyncChunkingVersion
+        )
     }
 }
 
@@ -1113,6 +1174,24 @@ final class CompanionAppModel: ObservableObject {
         persistActiveHealthSyncCheckpoint(checkpoint)
     }
 
+    private func markActiveHealthSyncWorkoutBatchCompleted(
+        _ workouts: [CompanionSyncPayload.WorkoutSession]
+    ) {
+        guard workouts.isEmpty == false, var checkpoint = activeHealthSyncCheckpoint else {
+            return
+        }
+        var completed = Set(checkpoint.completedWorkoutExternalUids)
+        for workout in workouts {
+            completed.insert(workout.externalUid)
+        }
+        checkpoint.completedWorkoutExternalUids = completed.sorted()
+        persistActiveHealthSyncCheckpoint(checkpoint)
+        companionDebugLog(
+            "CompanionAppModel",
+            "health sync checkpoint completed workout ids=\(workouts.count) totalCompleted=\(checkpoint.completedWorkoutExternalUids.count)"
+        )
+    }
+
     private func configureScreenshotScenario(_ scenario: CompanionScreenshotScenario) {
         discoveredServers = CompanionScreenshotFixtures.discoveredServers()
         discoveredTailscaleDevices = CompanionScreenshotFixtures.tailscaleDevices()
@@ -1728,8 +1807,18 @@ final class CompanionAppModel: ObservableObject {
             workoutBackfillCompletedAt: workoutBackfillCompletedAt
         )
         let restoredCheckpoint = activeHealthSyncCheckpoint
-        var syncWindowEnd = restoredCheckpoint?.windowEnd ?? Date()
-        let resumeSyncSessionId = restoredCheckpoint?.resumeSessionId ?? activeHealthSyncSessionId
+        let clientChunkingVersion = ForgeSyncClient.healthSyncChunkingVersion(for: pairing)
+        let resumableCheckpoint = restoredCheckpoint?.clientChunkingVersion == clientChunkingVersion
+            ? restoredCheckpoint
+            : nil
+        if let restoredCheckpoint, resumableCheckpoint == nil {
+            companionDebugLog(
+                "CompanionAppModel",
+                "discarding active health sync checkpoint session=\(restoredCheckpoint.syncSessionId) chunkingVersion=\(restoredCheckpoint.clientChunkingVersion) currentChunkingVersion=\(clientChunkingVersion)"
+            )
+        }
+        var syncWindowEnd = resumableCheckpoint?.windowEnd ?? Date()
+        let resumeSyncSessionId = resumableCheckpoint?.resumeSessionId
         activeSyncMode = workoutBackfillPlan.requiresBackfill ? .historicalWorkoutImport : .normal
         historicalWorkoutImportStatus = workoutBackfillPlan.requiresBackfill
             ? HistoricalWorkoutImportStatus(
@@ -1758,21 +1847,26 @@ final class CompanionAppModel: ObservableObject {
                 resumeSyncSessionId: resumeSyncSessionId
             )
             uploadSession = session
-            let resumedRestoredCheckpoint = restoredCheckpoint?.syncSessionId == session.syncSessionId
+            let resumedRestoredCheckpoint = resumableCheckpoint?.syncSessionId == session.syncSessionId
             if resumedRestoredCheckpoint == false {
                 syncWindowEnd = Date()
             }
+            let completedWorkoutExternalUids = resumedRestoredCheckpoint
+                ? resumableCheckpoint?.completedWorkoutExternalUids ?? []
+                : []
             let checkpoint = ActiveHealthSyncCheckpoint(
                 syncSessionId: session.syncSessionId,
                 schemaVersion: session.schemaVersion,
                 requestedFamilies: session.acceptedFamilies,
                 createdAt: resumedRestoredCheckpoint
-                    ? restoredCheckpoint?.createdAt ?? Date()
+                    ? resumableCheckpoint?.createdAt ?? Date()
                     : Date(),
                 windowEnd: syncWindowEnd,
                 requiresWorkoutBackfill: workoutBackfillPlan.requiresBackfill,
                 lastReceivedChunkCount: session.progress?.chunkCount ?? session.receivedChunkIds.count,
-                lastReceivedBytes: session.progress?.receivedBytes ?? 0
+                lastReceivedBytes: session.progress?.receivedBytes ?? 0,
+                completedWorkoutExternalUids: completedWorkoutExternalUids,
+                clientChunkingVersion: clientChunkingVersion
             )
             persistActiveHealthSyncCheckpoint(checkpoint)
             backgroundScheduler.schedule(activeSync: true, reason: "health sync started")
@@ -1834,6 +1928,7 @@ final class CompanionAppModel: ObservableObject {
                     lastSuccessfulSyncAt: workoutBackfillPlan.workoutCursorDate,
                     syncWindowEnd: syncWindowEnd,
                     batchSize: Int.max,
+                    alreadyUploadedWorkoutExternalUids: Set(completedWorkoutExternalUids),
                     onProgress: { [weak self] progress in
                         guard workoutBackfillPlan.requiresBackfill else {
                             return
@@ -1889,6 +1984,9 @@ final class CompanionAppModel: ObservableObject {
                             startingSequence: sequence,
                             onChunkUploaded: onChunkUploaded
                         )
+                        await MainActor.run {
+                            self?.markActiveHealthSyncWorkoutBatchCompleted(workouts)
+                        }
                         await MainActor.run {
                             workoutStats.workouts += batchStats.workouts
                             workoutStats.workoutsWithAverageHeartRate += batchStats.workoutsWithAverageHeartRate
@@ -1966,7 +2064,8 @@ final class CompanionAppModel: ObservableObject {
                                 windowEnd: syncWindowEnd,
                                 requiresWorkoutBackfill: workoutBackfillPlan.requiresBackfill,
                                 lastReceivedChunkCount: uploadSession.progress?.chunkCount ?? uploadSession.receivedChunkIds.count,
-                                lastReceivedBytes: uploadSession.progress?.receivedBytes ?? 0
+                                lastReceivedBytes: uploadSession.progress?.receivedBytes ?? 0,
+                                clientChunkingVersion: clientChunkingVersion
                             )
                         )
                     }
