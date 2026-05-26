@@ -3024,6 +3024,47 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(decoded.windowEnd, windowEnd)
         XCTAssertTrue(decoded.requiresWorkoutBackfill)
         XCTAssertEqual(decoded.lastReceivedChunkCount, 18)
+        XCTAssertEqual(decoded.completedWorkoutExternalUids, [])
+        XCTAssertEqual(decoded.clientChunkingVersion, ForgeSyncClient.legacyHTTPHealthSyncChunkingVersion)
+    }
+
+    func testActiveHealthSyncCheckpointPersistsCompletedWorkoutIdsAndChunkingVersion() throws {
+        let checkpoint = ActiveHealthSyncCheckpoint(
+            syncSessionId: "hms_resume",
+            schemaVersion: "healthkit-sync-v2",
+            requestedFamilies: ["workout_summaries"],
+            createdAt: makeDate("2026-05-25T20:18:59.000Z"),
+            windowEnd: makeDate("2026-05-25T20:19:12.377Z"),
+            requiresWorkoutBackfill: true,
+            lastReceivedChunkCount: 9,
+            lastReceivedBytes: 12_000_000,
+            completedWorkoutExternalUids: ["workout-b", "workout-a", "workout-a"],
+            clientChunkingVersion: ForgeSyncClient.httpBackgroundHealthSyncChunkingVersion
+        )
+
+        let encoded = try JSONEncoder().encode(checkpoint)
+        let decoded = try JSONDecoder().decode(ActiveHealthSyncCheckpoint.self, from: encoded)
+
+        XCTAssertEqual(decoded.completedWorkoutExternalUids, ["workout-a", "workout-b"])
+        XCTAssertEqual(decoded.clientChunkingVersion, ForgeSyncClient.httpBackgroundHealthSyncChunkingVersion)
+        XCTAssertEqual(decoded, checkpoint)
+    }
+
+    func testHealthSyncChunkingVersionMatchesTransport() {
+        let urlSessionPayload = PairingPayload(
+            kind: "pairing",
+            apiBaseUrl: "https://forge.example/api/v1",
+            uiBaseUrl: "https://forge.example/forge/",
+            sessionId: "pair_urlsession",
+            pairingToken: "token",
+            expiresAt: "2099-01-01T00:00:00Z",
+            capabilities: []
+        )
+
+        XCTAssertEqual(
+            ForgeSyncClient.healthSyncChunkingVersion(for: urlSessionPayload),
+            ForgeSyncClient.httpBackgroundHealthSyncChunkingVersion
+        )
     }
 
     func testSyncUploadStatusExplainsCurrentCountsAndTransferChunk() {

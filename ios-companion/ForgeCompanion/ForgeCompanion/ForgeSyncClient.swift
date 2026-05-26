@@ -142,8 +142,154 @@ enum ForgeIrohTransportClient {
     }
 }
 
+final class ForgeBackgroundUploadCoordinator: NSObject, URLSessionDataDelegate {
+    static let shared = ForgeBackgroundUploadCoordinator()
+    static let sessionIdentifier = "com.albertbuchard.ForgeCompanion.healthkit.uploads"
+
+    private struct PendingUpload {
+        var data = Data()
+        var response: URLResponse?
+        let fileURL: URL
+        let continuation: CheckedContinuation<(Data, URLResponse), Error>
+    }
+
+    private let lock = NSLock()
+    private var pendingUploads: [Int: PendingUpload] = [:]
+    private var backgroundCompletionHandlers: [String: () -> Void] = [:]
+
+    private lazy var session: URLSession = {
+        let configuration = URLSessionConfiguration.background(withIdentifier: Self.sessionIdentifier)
+        configuration.sessionSendsLaunchEvents = true
+        configuration.isDiscretionary = false
+        configuration.waitsForConnectivity = true
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.timeoutIntervalForRequest = 60
+        configuration.timeoutIntervalForResource = 60 * 60
+        configuration.httpMaximumConnectionsPerHost = 1
+        return URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
+    }()
+
+    private override init() {
+        super.init()
+    }
+
+    func upload(request: URLRequest, body: Data) async throws -> (Data, URLResponse) {
+        var uploadRequest = request
+        uploadRequest.httpBody = nil
+        uploadRequest.setValue("\(body.count)", forHTTPHeaderField: "Content-Length")
+        let fileURL = try writeUploadBody(body)
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let task = session.uploadTask(with: uploadRequest, fromFile: fileURL)
+                lock.lock()
+                pendingUploads[task.taskIdentifier] = PendingUpload(
+                    fileURL: fileURL,
+                    continuation: continuation
+                )
+                lock.unlock()
+                task.resume()
+            }
+        } onCancel: {
+            try? FileManager.default.removeItem(at: fileURL)
+        }
+    }
+
+    func setBackgroundEventsCompletionHandler(
+        _ completionHandler: @escaping () -> Void,
+        for identifier: String
+    ) {
+        lock.lock()
+        backgroundCompletionHandlers[identifier] = completionHandler
+        lock.unlock()
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        dataTask: URLSessionDataTask,
+        didReceive response: URLResponse,
+        completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
+    ) {
+        lock.lock()
+        if var pending = pendingUploads[dataTask.taskIdentifier] {
+            pending.response = response
+            pendingUploads[dataTask.taskIdentifier] = pending
+        }
+        lock.unlock()
+        completionHandler(.allow)
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        dataTask: URLSessionDataTask,
+        didReceive data: Data
+    ) {
+        lock.lock()
+        if var pending = pendingUploads[dataTask.taskIdentifier] {
+            pending.data.append(data)
+            pendingUploads[dataTask.taskIdentifier] = pending
+        }
+        lock.unlock()
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        didCompleteWithError error: Error?
+    ) {
+        lock.lock()
+        let pending = pendingUploads.removeValue(forKey: task.taskIdentifier)
+        lock.unlock()
+        guard let pending else {
+            return
+        }
+        try? FileManager.default.removeItem(at: pending.fileURL)
+        if let error {
+            pending.continuation.resume(throwing: error)
+            return
+        }
+        guard let response = pending.response ?? task.response else {
+            pending.continuation.resume(throwing: URLError(.badServerResponse))
+            return
+        }
+        pending.continuation.resume(returning: (pending.data, response))
+    }
+
+    func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
+        let handler: (() -> Void)?
+        lock.lock()
+        handler = backgroundCompletionHandlers.removeValue(forKey: session.configuration.identifier ?? "")
+        lock.unlock()
+        DispatchQueue.main.async {
+            handler?()
+        }
+    }
+
+    private func writeUploadBody(_ body: Data) throws -> URL {
+        let directory = FileManager.default
+            .urls(for: .cachesDirectory, in: .userDomainMask)
+            .first?
+            .appendingPathComponent("ForgeBackgroundHealthUploads", isDirectory: true)
+            ?? FileManager.default.temporaryDirectory
+                .appendingPathComponent("ForgeBackgroundHealthUploads", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let fileURL = directory.appendingPathComponent("\(UUID().uuidString).json")
+        try body.write(to: fileURL, options: [.atomic])
+        return fileURL
+    }
+}
+
 struct ForgeSyncClient {
     static let movementTimelineServerCompatibleLimit = 120
+    static let legacyHTTPHealthSyncChunkingVersion = "http-v1"
+    static let httpBackgroundHealthSyncChunkingVersion = "http-background-v2"
+    static let irohHealthSyncChunkingVersion = "iroh-v1"
+
+    static func healthSyncChunkingVersion(for pairing: PairingPayload) -> String {
+        if pairing.transport?.isIrohTransport == true {
+            return irohHealthSyncChunkingVersion
+        }
+        return httpBackgroundHealthSyncChunkingVersion
+    }
 
     private static let bootstrapSession: URLSession = {
         let configuration = URLSessionConfiguration.default
@@ -728,6 +874,7 @@ struct ForgeSyncClient {
                 metadata: [
                     "clientMode": "chunked",
                     "clientPlatform": "ios",
+                    "clientChunkingVersion": Self.healthSyncChunkingVersion(for: pairing),
                     "resumeSyncSessionId": resumeSyncSessionId ?? ""
                 ]
             ),
@@ -1339,7 +1486,8 @@ struct ForgeSyncClient {
                     payloadJsonDeflateBase64: wirePayload.payloadJsonDeflateBase64,
                     payloadJsonBase64: wirePayload.payloadJsonDeflateBase64 == nil ? wirePayload.payloadJsonBase64 : nil
                 ),
-                transport: pairing.transport
+                transport: pairing.transport,
+                useBackgroundUpload: true
             )
         } catch {
             companionDebugLog(
@@ -1415,9 +1563,9 @@ struct ForgeSyncClient {
             return max(64_000, Int(Double(protocolTarget) * 0.65))
         }
         // Tailscale/HTTP intermediaries have shown 502s on large route chunks well
-        // below the advertised server body limit. Keep foreground HTTP chunks small
-        // enough that retries are cheap and proxy buffers stay out of the path.
-        return max(256_000, min(protocolTarget, 900_000))
+        // below the advertised server body limit. The HTTP request body carries a
+        // base64 JSON envelope, so keep raw chunks comfortably under proxy limits.
+        return max(128_000, min(protocolTarget, 500_000))
     }
 
     private func encodedByteCount(_ value: some Encodable) -> Int {
@@ -1871,7 +2019,8 @@ struct ForgeSyncClient {
         method: String = "POST",
         body: Body,
         session: URLSession? = nil,
-        transport: PairingTransport? = nil
+        transport: PairingTransport? = nil,
+        useBackgroundUpload: Bool = false
     ) async throws -> Response {
         guard let url = URL(string: "\(apiBaseUrl)\(path)") else {
             companionDebugLog(
@@ -1894,7 +2043,7 @@ struct ForgeSyncClient {
 
         companionDebugLog(
             "ForgeSyncClient",
-            "sendRequest start method=\(method) url=\(url.absoluteString) bodyBytes=\(requestBody?.count ?? 0) transport=\(transport?.protocolName ?? "urlsession")"
+            "sendRequest start method=\(method) url=\(url.absoluteString) bodyBytes=\(requestBody?.count ?? 0) transport=\(useBackgroundUpload && transport?.isIrohTransport != true ? "urlsession-background" : transport?.protocolName ?? "urlsession")"
         )
         let data: Data
         let httpResponse: HTTPURLResponse
@@ -1924,7 +2073,15 @@ struct ForgeSyncClient {
             }
             request.httpBody = requestBody
             request.timeoutInterval = 20
-            let (urlSessionData, response) = try await (session ?? Self.bootstrapSession).data(for: request)
+            let (urlSessionData, response): (Data, URLResponse)
+            if useBackgroundUpload, method == "POST", let requestBody {
+                (urlSessionData, response) = try await ForgeBackgroundUploadCoordinator.shared.upload(
+                    request: request,
+                    body: requestBody
+                )
+            } else {
+                (urlSessionData, response) = try await (session ?? Self.bootstrapSession).data(for: request)
+            }
             guard let urlSessionResponse = response as? HTTPURLResponse else {
                 companionDebugLog("ForgeSyncClient", "sendRequest badServerResponse url=\(url.absoluteString)")
                 throw URLError(.badServerResponse)

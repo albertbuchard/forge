@@ -627,6 +627,7 @@ actor HealthSyncStore {
         lastSuccessfulSyncAt: Date?,
         syncWindowEnd: Date? = nil,
         batchSize: Int = 100,
+        alreadyUploadedWorkoutExternalUids: Set<String> = [],
         onProgress: ((WorkoutBatchProgress) async -> Void)? = nil,
         onBatch: @escaping ([CompanionSyncPayload.WorkoutSession], WorkoutBatchProgress) async throws -> Void
     ) async throws -> WorkoutStreamResult {
@@ -658,26 +659,40 @@ actor HealthSyncStore {
             "HealthSyncStore",
             "streamWorkoutSessionBatches start start=\(isoString(workoutStartDate)) end=\(isoString(endDate)) batchSize=\(effectiveBatchSize) requestedBatchSize=\(batchSize) fullBackfill=\(isFullBackfill)"
         )
-        let workouts = try await queryWorkouts(startDate: workoutStartDate, endDate: endDate)
+        let allWorkouts = try await queryWorkouts(startDate: workoutStartDate, endDate: endDate)
             .sorted { $0.startDate > $1.startDate }
+        let completedWorkoutIds = Set(alreadyUploadedWorkoutExternalUids.map { $0.lowercased() })
+        let workouts = completedWorkoutIds.isEmpty
+            ? allWorkouts
+            : allWorkouts.filter { completedWorkoutIds.contains($0.uuid.uuidString.lowercased()) == false }
+        let skippedWorkouts = allWorkouts.count - workouts.count
+        if skippedWorkouts > 0 {
+            companionDebugLog(
+                "HealthSyncStore",
+                "streamWorkoutSessionBatches skipping completed workouts=\(skippedWorkouts) pending=\(workouts.count) total=\(allWorkouts.count)"
+            )
+        }
         await onProgress?(
             WorkoutBatchProgress(
                 batchIndex: 0,
                 totalBatches: workouts.isEmpty ? 0 : Int(ceil(Double(workouts.count) / Double(effectiveBatchSize))),
-                uploadedWorkouts: 0,
-                totalWorkouts: workouts.count,
-                discoveredWorkouts: workouts.count,
+                uploadedWorkouts: skippedWorkouts,
+                totalWorkouts: allWorkouts.count,
+                discoveredWorkouts: allWorkouts.count,
                 isScanningComplete: true
             )
         )
         guard workouts.isEmpty == false else {
-            companionDebugLog("HealthSyncStore", "streamWorkoutSessionBatches no workouts")
-            return WorkoutStreamResult(totalWorkouts: 0, healthDataDeferred: false)
+            companionDebugLog(
+                "HealthSyncStore",
+                "streamWorkoutSessionBatches no pending workouts total=\(allWorkouts.count) skipped=\(skippedWorkouts)"
+            )
+            return WorkoutStreamResult(totalWorkouts: allWorkouts.count, healthDataDeferred: false)
         }
 
         let boundedBatchSize = effectiveBatchSize
         let totalBatches = Int(ceil(Double(workouts.count) / Double(boundedBatchSize)))
-        var uploadedWorkouts = 0
+        var uploadedWorkouts = skippedWorkouts
         for batchIndex in 0..<totalBatches {
             let lowerBound = batchIndex * boundedBatchSize
             let upperBound = min(workouts.count, lowerBound + boundedBatchSize)
@@ -694,17 +709,17 @@ actor HealthSyncStore {
                     batchIndex: batchIndex + 1,
                     totalBatches: totalBatches,
                     uploadedWorkouts: uploadedWorkouts,
-                    totalWorkouts: workouts.count,
-                    discoveredWorkouts: workouts.count,
+                    totalWorkouts: allWorkouts.count,
+                    discoveredWorkouts: allWorkouts.count,
                     isScanningComplete: true
                 )
             )
             companionDebugLog(
                 "HealthSyncStore",
-                "streamWorkoutSessionBatches uploaded batch=\(batchIndex + 1)/\(totalBatches) mapped=\(sessions.count) uploaded=\(uploadedWorkouts)/\(workouts.count)"
+                "streamWorkoutSessionBatches uploaded batch=\(batchIndex + 1)/\(totalBatches) mapped=\(sessions.count) uploaded=\(uploadedWorkouts)/\(allWorkouts.count)"
             )
         }
-        return WorkoutStreamResult(totalWorkouts: workouts.count, healthDataDeferred: false)
+        return WorkoutStreamResult(totalWorkouts: allWorkouts.count, healthDataDeferred: false)
     }
 
     private func streamWorkoutSessionBatchesByWindow(
