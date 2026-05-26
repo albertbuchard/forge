@@ -1728,7 +1728,7 @@ final class CompanionAppModel: ObservableObject {
             workoutBackfillCompletedAt: workoutBackfillCompletedAt
         )
         let restoredCheckpoint = activeHealthSyncCheckpoint
-        let syncWindowEnd = restoredCheckpoint?.windowEnd ?? Date()
+        var syncWindowEnd = restoredCheckpoint?.windowEnd ?? Date()
         let resumeSyncSessionId = restoredCheckpoint?.resumeSessionId ?? activeHealthSyncSessionId
         activeSyncMode = workoutBackfillPlan.requiresBackfill ? .historicalWorkoutImport : .normal
         historicalWorkoutImportStatus = workoutBackfillPlan.requiresBackfill
@@ -1758,11 +1758,15 @@ final class CompanionAppModel: ObservableObject {
                 resumeSyncSessionId: resumeSyncSessionId
             )
             uploadSession = session
+            let resumedRestoredCheckpoint = restoredCheckpoint?.syncSessionId == session.syncSessionId
+            if resumedRestoredCheckpoint == false {
+                syncWindowEnd = Date()
+            }
             let checkpoint = ActiveHealthSyncCheckpoint(
                 syncSessionId: session.syncSessionId,
                 schemaVersion: session.schemaVersion,
                 requestedFamilies: session.acceptedFamilies,
-                createdAt: restoredCheckpoint?.syncSessionId == session.syncSessionId
+                createdAt: resumedRestoredCheckpoint
                     ? restoredCheckpoint?.createdAt ?? Date()
                     : Date(),
                 windowEnd: syncWindowEnd,
