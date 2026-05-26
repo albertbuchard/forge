@@ -34,15 +34,13 @@ const mobileHealthSyncProgressSchema = {
         "chunkCount",
         "receivedBytes",
         "receivedCounts",
-        "byteTotals",
-        "affectedWorkoutIds"
+        "byteTotals"
     ],
     properties: {
         chunkCount: { type: "number" },
         receivedBytes: { type: "number" },
         receivedCounts: { type: "object", additionalProperties: { type: "number" } },
-        byteTotals: { type: "object", additionalProperties: { type: "number" } },
-        affectedWorkoutIds: arrayOf({ type: "string" })
+        byteTotals: { type: "object", additionalProperties: { type: "number" } }
     }
 };
 const mobileHealthSyncUploadSchema = {
