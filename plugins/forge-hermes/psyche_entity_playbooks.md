@@ -251,6 +251,41 @@ short, tentative, and correctable.
   episode, or durable wiki explanation. Do not flatten schema work into a loose
   self-observation.
 
+## Entity Contrast Check
+
+Use this when the user's material could fit several Psyche records. Do not ask the
+user to choose from a taxonomy menu before you have reflected what the material is
+doing.
+
+- Choose `trigger_report` when the important thing is one charged episode and the
+  useful record is the sequence of situation, feeling, meaning, action, and
+  consequence.
+- Choose `behavior_pattern` when the same cue -> body/emotion -> meaning ->
+  behavior/urge -> payoff -> cost loop repeats across situations and needs a
+  functional analysis.
+- Choose `behavior` when one recurring move is the main object, even if the wider
+  loop is not mapped yet.
+- Choose `belief_entry` when the live center is a sentence, rule, prediction, or
+  self/other/world assumption.
+- Choose `mode_profile` when a recurring part-state has a stable voice, posture,
+  job, fear, or burden.
+- Choose `mode_guide_session` when the user is inside the reaction and needs guided
+  present-moment exploration before a durable mode, belief, or pattern is clear.
+- Choose `event_type` or `emotion_definition` when the reusable category or feeling
+  label will make future trigger reports more precise.
+
+If two containers are genuinely plausible, say the distinction in plain language
+after a reflection. For example: "We could save this as the episode if the meeting
+itself is what matters, or as the recurring loop if this same freeze-and-overwork
+sequence keeps happening. Which would help you more right now?" Ask that only after
+the lived example is clear enough that the choice is meaningful.
+
+After one concrete example is visible, it is often helpful to offer one careful
+hypothesis before the contrast question: what the reaction may be protecting, what it
+predicts, what short-term relief it creates, and what it costs. If the user corrects
+the hypothesis, revise it once and then choose the record shape from the corrected
+meaning.
+
 ## Therapeutic Direction Check
 
 Before each follow-up, quickly decide what therapeutic job the next question should do.

@@ -3058,22 +3058,59 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertFalse(chunkId.contains("000276"))
     }
 
-    func testWorkoutBackfillPlanIgnoresGenericSyncCursorUntilRawWorkoutBackfillCompletes() {
-        let legacySyncDate = makeDate("2026-05-18T08:00:00.000Z")
-
-        let firstRawEvidenceSync = WorkoutBackfillSyncPlan(
-            lastSuccessfulSyncAt: legacySyncDate,
-            workoutBackfillCompletedAt: nil
+    func testBaseHealthChunkIdIncludesPayloadChecksumForSafeResume() {
+        let uploadSession = ForgeSyncClient.HealthSyncUploadSession(
+            syncSessionId: "hms_resume",
+            schemaVersion: "healthkit-sync-v2",
+            chunkTargetBytes: 512_000,
+            chunkMaxBytes: 1_000_000,
+            chunkPayloadEncoding: "payload_json_base64",
+            acceptedPayloadEncodings: ["payload_json_base64"],
+            supportsCompression: true,
+            acceptedFamilies: ["sleep_nights"],
+            receivedChunkIds: []
         )
-        XCTAssertTrue(firstRawEvidenceSync.requiresBackfill)
-        XCTAssertNil(firstRawEvidenceSync.workoutCursorDate)
 
-        let incrementalSync = WorkoutBackfillSyncPlan(
-            lastSuccessfulSyncAt: legacySyncDate,
-            workoutBackfillCompletedAt: makeDate("2026-05-19T08:00:00.000Z")
+        let emptyChunkId = ForgeSyncClient.healthSyncContentAddressedChunkId(
+            uploadSession: uploadSession,
+            sequence: 0,
+            family: "sleep_nights",
+            checksumSha256: String(repeating: "a", count: 64)
         )
-        XCTAssertFalse(incrementalSync.requiresBackfill)
-        XCTAssertEqual(incrementalSync.workoutCursorDate, legacySyncDate)
+        let realChunkId = ForgeSyncClient.healthSyncContentAddressedChunkId(
+            uploadSession: uploadSession,
+            sequence: 0,
+            family: "sleep_nights",
+            checksumSha256: String(repeating: "b", count: 64)
+        )
+
+        XCTAssertEqual(emptyChunkId, "hms_resume-000000-sleep_nights-aaaaaaaaaaaaaaaaaaaa")
+        XCTAssertEqual(realChunkId, "hms_resume-000000-sleep_nights-bbbbbbbbbbbbbbbbbbbb")
+        XCTAssertNotEqual(emptyChunkId, realChunkId)
+    }
+
+    func testHistoricalWorkoutBatchRangesStartSmallThenKeepPipelineFed() {
+        let ranges = HealthSyncStore.workoutBatchRanges(
+            totalCount: 1_077,
+            firstBatchSize: 8,
+            regularBatchSize: 32
+        )
+
+        XCTAssertEqual(ranges.count, 35)
+        XCTAssertEqual(ranges.first, 0..<8)
+        XCTAssertEqual(ranges.dropFirst().first, 8..<40)
+        XCTAssertEqual(ranges.last, 1_064..<1_077)
+        XCTAssertTrue(ranges.dropFirst().dropLast().allSatisfy { $0.count == 32 })
+    }
+
+    func testHistoricalWorkoutBatchRangesClampInvalidSizes() {
+        let ranges = HealthSyncStore.workoutBatchRanges(
+            totalCount: 3,
+            firstBatchSize: 0,
+            regularBatchSize: 0
+        )
+
+        XCTAssertEqual(ranges, [0..<1, 1..<2, 2..<3])
     }
 
     func testHealthSyncLifecyclePolicyWaitsThroughNormalUploadGaps() {

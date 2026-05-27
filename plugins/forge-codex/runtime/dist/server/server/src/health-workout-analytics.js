@@ -365,9 +365,15 @@ export function upsertWorkoutTimeSeries(input) {
        quality_flags_json, metadata_json, provenance_json, created_at, updated_at
      )
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(workout_id, metric_key, source_sample_uid, series_index)
-     DO UPDATE SET value = excluded.value, started_at = excluded.started_at,
+     ON CONFLICT(workout_id, metric_key, source_sample_uid)
+     DO UPDATE SET series_index = excluded.series_index,
+       value = excluded.value, started_at = excluded.started_at,
        ended_at = excluded.ended_at, source_device = excluded.source_device,
+       label = excluded.label,
+       category = excluded.category,
+       unit = excluded.unit,
+       source_bundle_identifier = excluded.source_bundle_identifier,
+       source_product_type = excluded.source_product_type,
        capture_method = excluded.capture_method,
        quality_flags_json = excluded.quality_flags_json,
        metadata_json = excluded.metadata_json,

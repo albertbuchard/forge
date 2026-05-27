@@ -99,8 +99,9 @@ actor HealthSyncStore {
     private let syncWindowDays = 21
     private let incrementalLookbackHours = 72
     private let workoutMappingConcurrencyLimit = 4
-    private let historicalWorkoutEvidenceBatchSize = 16
-    private let historicalWorkoutBatchPrefetchLimit = 1
+    private let historicalWorkoutFirstEvidenceBatchSize = 8
+    private let historicalWorkoutEvidenceBatchSize = 32
+    private let historicalWorkoutBatchPrefetchLimit = 10
     private let sleepSessionGap: TimeInterval = 4 * 60 * 60
     private let sleepInferenceGap: TimeInterval = 15 * 60
     private let isoFormatter: ISO8601DateFormatter = {
@@ -633,6 +634,7 @@ actor HealthSyncStore {
         lastSuccessfulSyncAt: Date?,
         syncWindowEnd: Date? = nil,
         batchSize: Int = 100,
+        historicalBackfill: Bool = false,
         alreadyUploadedWorkoutExternalUids: Set<String> = [],
         onProgress: ((WorkoutBatchProgress) async -> Void)? = nil,
         onBatch: @escaping ([CompanionSyncPayload.WorkoutSession], WorkoutBatchProgress) async throws -> Void
@@ -642,7 +644,7 @@ actor HealthSyncStore {
             ?? endDate.addingTimeInterval(-Double(syncWindowDays) * 24 * 60 * 60)
         let incrementalStart = lastSuccessfulSyncAt?.addingTimeInterval(-Double(incrementalLookbackHours) * 60 * 60)
         let startDate = max(fullWindowStart, incrementalStart ?? fullWindowStart)
-        let workoutStartDate = lastSuccessfulSyncAt == nil ? Date(timeIntervalSince1970: 0) : startDate
+        let workoutStartDate = historicalBackfill ? Date(timeIntervalSince1970: 0) : startDate
         let protectedDataAvailable = await isProtectedDataAvailable()
         let canReadHealthData = healthSyncEnabled && healthKitAuthorized && protectedDataAvailable
         guard canReadHealthData else {
@@ -656,7 +658,7 @@ actor HealthSyncStore {
             )
         }
 
-        let isFullBackfill = lastSuccessfulSyncAt == nil
+        let isFullBackfill = historicalBackfill
         let requestedBatchSize = max(1, batchSize)
         let effectiveBatchSize = isFullBackfill
             ? min(requestedBatchSize, historicalWorkoutEvidenceBatchSize)
@@ -678,17 +680,17 @@ actor HealthSyncStore {
                 "streamWorkoutSessionBatches skipping completed workouts=\(skippedWorkouts) pending=\(workouts.count) total=\(allWorkouts.count)"
             )
         }
-        await onProgress?(
-            WorkoutBatchProgress(
-                batchIndex: 0,
-                totalBatches: workouts.isEmpty ? 0 : Int(ceil(Double(workouts.count) / Double(effectiveBatchSize))),
-                uploadedWorkouts: skippedWorkouts,
-                totalWorkouts: allWorkouts.count,
-                discoveredWorkouts: allWorkouts.count,
-                isScanningComplete: true
-            )
-        )
         guard workouts.isEmpty == false else {
+            await onProgress?(
+                WorkoutBatchProgress(
+                    batchIndex: 0,
+                    totalBatches: 0,
+                    uploadedWorkouts: skippedWorkouts,
+                    totalWorkouts: allWorkouts.count,
+                    discoveredWorkouts: allWorkouts.count,
+                    isScanningComplete: true
+                )
+            )
             companionDebugLog(
                 "HealthSyncStore",
                 "streamWorkoutSessionBatches no pending workouts total=\(allWorkouts.count) skipped=\(skippedWorkouts)"
@@ -697,13 +699,32 @@ actor HealthSyncStore {
         }
 
         let boundedBatchSize = effectiveBatchSize
-        let totalBatches = Int(ceil(Double(workouts.count) / Double(boundedBatchSize)))
+        let batchRanges = Self.workoutBatchRanges(
+            totalCount: workouts.count,
+            firstBatchSize: isFullBackfill ? historicalWorkoutFirstEvidenceBatchSize : boundedBatchSize,
+            regularBatchSize: boundedBatchSize
+        )
+        let totalBatches = batchRanges.count
         var uploadedWorkouts = skippedWorkouts
         let prefetchLimit = max(1, min(historicalWorkoutBatchPrefetchLimit, totalBatches))
         let mappingConcurrencyLimit = workoutMappingConcurrencyLimit
         var nextBatchToSchedule = 0
         var nextBatchToDeliver = 0
         var mappedBatches: [Int: MappedWorkoutBatch] = [:]
+        await onProgress?(
+            WorkoutBatchProgress(
+                batchIndex: 0,
+                totalBatches: totalBatches,
+                uploadedWorkouts: skippedWorkouts,
+                totalWorkouts: allWorkouts.count,
+                discoveredWorkouts: allWorkouts.count,
+                isScanningComplete: true
+            )
+        )
+        companionDebugLog(
+            "HealthSyncStore",
+            "streamWorkoutSessionBatches pipeline batches=\(totalBatches) firstBatchSize=\(batchRanges.first?.count ?? 0) regularBatchSize=\(boundedBatchSize) prefetchLimit=\(prefetchLimit)"
+        )
 
         try await withThrowingTaskGroup(of: MappedWorkoutBatch.self) { group in
             func scheduleNextBatch() {
@@ -711,10 +732,13 @@ actor HealthSyncStore {
                     return
                 }
                 let batchIndex = nextBatchToSchedule
-                let lowerBound = batchIndex * boundedBatchSize
-                let upperBound = min(workouts.count, lowerBound + boundedBatchSize)
-                let batchWorkouts = Array(workouts[lowerBound..<upperBound])
+                let batchRange = batchRanges[batchIndex]
+                let batchWorkouts = Array(workouts[batchRange])
                 nextBatchToSchedule += 1
+                companionDebugLog(
+                    "HealthSyncStore",
+                    "streamWorkoutSessionBatches schedule batch=\(batchIndex + 1)/\(totalBatches) workouts=\(batchWorkouts.count) pendingPrefetch=\(nextBatchToSchedule - nextBatchToDeliver)"
+                )
                 group.addTask {
                     try Task.checkCancellation()
                     let sessions = try await self.mapWorkoutSessionsBounded(
@@ -765,6 +789,30 @@ actor HealthSyncStore {
             }
         }
         return WorkoutStreamResult(totalWorkouts: allWorkouts.count, healthDataDeferred: false)
+    }
+
+    nonisolated static func workoutBatchRanges(
+        totalCount: Int,
+        firstBatchSize: Int,
+        regularBatchSize: Int
+    ) -> [Range<Int>] {
+        guard totalCount > 0 else {
+            return []
+        }
+        let safeFirstBatchSize = max(1, firstBatchSize)
+        let safeRegularBatchSize = max(1, regularBatchSize)
+        var ranges: [Range<Int>] = []
+        var lowerBound = 0
+        var nextBatchSize = safeFirstBatchSize
+        while lowerBound < totalCount {
+            let remainingCount = totalCount - lowerBound
+            let batchCount = min(nextBatchSize, remainingCount)
+            let upperBound = lowerBound + batchCount
+            ranges.append(lowerBound..<upperBound)
+            lowerBound = upperBound
+            nextBatchSize = safeRegularBatchSize
+        }
+        return ranges
     }
 
     private func streamWorkoutSessionBatchesByWindow(

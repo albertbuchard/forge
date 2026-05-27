@@ -3850,6 +3850,8 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
   "For direct update or review requests, the next question should usually narrow the saved object, timeframe, or route family instead of reopening the whole meaning-making arc.",
   "For updates, start with the smallest thing that now feels wrong, newly true, or newly visible rather than restarting the whole story.",
   "For review requests, ask what practical question the user wants the read to answer before you ask for more scope.",
+  "Treat userId, owner, and human/bot assignees as accountability and scope, not as opening form fields. Ask whose record or owner scope matters only when it changes visibility, review results, collaboration, automation behavior, or later filtering.",
+  "For read and overview requests, ask for human or bot user scope only when the answer would meaningfully differ across owners; otherwise keep the next question focused on the user's practical question.",
   "The opening question should help the user understand what they are actually trying to save, decide, review, or change, not make them perform the schema out loud.",
   "If the user already named the exact correction in usable language, confirm only the missing scope, timing, or route-selecting detail that still matters, then act.",
   "Keep API and architecture nouns out of user-facing questions unless the user asks about implementation. Do not ask the user about surfaces, route families, CRUD, payloads, mutation paths, or read paths; ask about the human object such as a wiki page, note, trigger report, behavior pattern, belief, mode, movement timeline, energy model, weekday pattern, flow, run, or node result.",
@@ -6363,10 +6365,18 @@ function buildAgentOnboardingPayload(request: {
           '{"routeKey":"settings","query":{"userIds":["user_operator"]}}',
         movementSettingsUpdate:
           '{"routeKey":"settingsUpdate","body":{"trackingEnabled":true,"publishMode":"draft_review","retentionMode":"aggregates_only"}}',
+        movementPlaceCreate:
+          '{"routeKey":"placeCreate","body":{"label":"Home","centerLat":46.2044,"centerLon":6.1432,"radiusMeters":120,"userId":"user_operator","note":"Primary home boundary for future time-in-place reads."}}',
+        movementPlaceUpdate:
+          '{"routeKey":"placeUpdate","pathParams":{"id":"place_home"},"body":{"label":"Home office","radiusMeters":90,"note":"Tighten the boundary so clinic visits do not count as home."}}',
         movementMissingStayPreflight:
           '{"routeKey":"userBoxPreflight","body":{"kind":"stay","startedAt":"2026-05-06T13:00:00.000Z","endedAt":"2026-05-06T15:00:00.000Z","placeLabel":"Home","userId":"user_operator"}}',
         movementMissingStayCreate:
           '{"routeKey":"userBoxCreate","body":{"kind":"stay","startedAt":"2026-05-06T13:00:00.000Z","endedAt":"2026-05-06T15:00:00.000Z","placeLabel":"Home","userId":"user_operator","note":"Manual correction after reviewing the timeline."}}',
+        movementUserBoxUpdate:
+          '{"routeKey":"userBoxUpdate","pathParams":{"id":"box_manual_123"},"body":{"endedAt":"2026-05-06T15:30:00.000Z","note":"Extended after checking the timeline detail."}}',
+        movementUserBoxDelete:
+          '{"routeKey":"userBoxDelete","pathParams":{"id":"box_manual_123"}}',
         lifeForceOverview:
           '{"routeKey":"overview"}',
         lifeForceProfile:
@@ -6387,6 +6397,10 @@ function buildAgentOnboardingPayload(request: {
           '{"routeKey":"deleteFlow","pathParams":{"id":"flow_research_digest"}}',
         workbenchRunDetail:
           '{"routeKey":"runDetail","pathParams":{"id":"flow_research_digest","runId":"run_123"}}',
+        workbenchRunNodes:
+          '{"routeKey":"runNodes","pathParams":{"id":"flow_research_digest","runId":"run_123"}}',
+        workbenchNodeResult:
+          '{"routeKey":"nodeResult","pathParams":{"id":"flow_research_digest","runId":"run_123","nodeId":"node_summary"}}',
         workbenchPublishedOutput:
           '{"routeKey":"publishedOutput","pathParams":{"id":"flow_research_digest"}}',
         workbenchLatestNodeOutput:

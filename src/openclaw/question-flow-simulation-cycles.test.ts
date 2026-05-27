@@ -744,6 +744,28 @@ describe("question flow simulation cycles", () => {
     }
   });
 
+  it("cycle 1 retest: Psyche flows contrast nearby containers before saving", () => {
+    const contrast = getSectionSlice(psychePlaybook, "Entity Contrast Check");
+
+    expect(contrast).toMatch(/Do not ask the\s+user to choose from a taxonomy menu/i);
+    expect(contrast).toMatch(
+      /trigger_report[\s\S]*one charged episode[\s\S]*situation, feeling, meaning, action, and\s+consequence/i
+    );
+    expect(contrast).toMatch(
+      /behavior_pattern[\s\S]*cue -> body\/emotion -> meaning ->\s+behavior\/urge -> payoff -> cost/i
+    );
+    expect(contrast).toMatch(/behavior[\s\S]*one recurring move/i);
+    expect(contrast).toMatch(/belief_entry[\s\S]*sentence, rule, prediction/i);
+    expect(contrast).toMatch(/mode_profile[\s\S]*recurring part-state/i);
+    expect(contrast).toMatch(/mode_guide_session[\s\S]*inside the reaction/i);
+    expect(contrast).toMatch(
+      /event_type[\s\S]*emotion_definition[\s\S]*future trigger reports/i
+    );
+    expect(contrast).toMatch(
+      /one careful\s+hypothesis[\s\S]*protecting[\s\S]*predicts[\s\S]*relief[\s\S]*costs/i
+    );
+  });
+
   it("cycle 2: all flows keep a guided reflective stance, with stronger therapist-like pacing for Psyche", () => {
     expect(entityPlaybook).toMatch(/feels important to keep true/i);
     expect(entityPlaybook).toMatch(/Close cleanly/i);
@@ -997,6 +1019,7 @@ describe("question flow simulation cycles", () => {
   it("cycle 3: specialized route examples cover Movement, Life Force, and Workbench without guessing", () => {
     const onboardingSource = readRepoFile("server/src/app.ts");
     const typeSource = readRepoFile("src/lib/types.ts");
+    const skillSource = readRepoFile("skills/forge-openclaw/SKILL.md");
 
     expect(onboardingSource).toMatch(/specializedRouteToolExamples:/);
     expect(onboardingSource).toMatch(/operator_context:\s*"\/api\/v1\/operator\/context"/);
@@ -1048,7 +1071,19 @@ describe("question flow simulation cycles", () => {
       /movementSettingsUpdate[\s\S]*"routeKey":"settingsUpdate"[\s\S]*"publishMode":"draft_review"/
     );
     expect(onboardingSource).toMatch(
+      /movementPlaceCreate[\s\S]*"routeKey":"placeCreate"[\s\S]*"label":"Home"/
+    );
+    expect(onboardingSource).toMatch(
+      /movementPlaceUpdate[\s\S]*"routeKey":"placeUpdate"[\s\S]*"pathParams"[\s\S]*"id":"place_home"/
+    );
+    expect(onboardingSource).toMatch(
       /movementMissingStayPreflight[\s\S]*"routeKey":"userBoxPreflight"[\s\S]*"startedAt"[\s\S]*"placeLabel"/
+    );
+    expect(onboardingSource).toMatch(
+      /movementUserBoxUpdate[\s\S]*"routeKey":"userBoxUpdate"[\s\S]*"pathParams"[\s\S]*"id":"box_manual_123"/
+    );
+    expect(onboardingSource).toMatch(
+      /movementUserBoxDelete[\s\S]*"routeKey":"userBoxDelete"[\s\S]*"pathParams"[\s\S]*"id":"box_manual_123"/
     );
     expect(onboardingSource).toMatch(
       /lifeForceOverview[\s\S]*"routeKey":"overview"/
@@ -1099,6 +1134,12 @@ describe("question flow simulation cycles", () => {
       /workbenchRunDetail[\s\S]*"routeKey":"runDetail"[\s\S]*"runId"/
     );
     expect(onboardingSource).toMatch(
+      /workbenchRunNodes[\s\S]*"routeKey":"runNodes"[\s\S]*"runId"/
+    );
+    expect(onboardingSource).toMatch(
+      /workbenchNodeResult[\s\S]*"routeKey":"nodeResult"[\s\S]*"nodeId"/
+    );
+    expect(onboardingSource).toMatch(
       /workbenchPublishedOutput[\s\S]*"routeKey":"publishedOutput"/
     );
     expect(onboardingSource).toMatch(
@@ -1113,6 +1154,18 @@ describe("question flow simulation cycles", () => {
     expect(onboardingSource).toMatch(
       /workbenchChatFlow[\s\S]*"routeKey":"chatFlow"[\s\S]*"message"/
     );
+    expect(skillSource).toMatch(
+      /Movement known-place creation[\s\S]*"routeKey":"placeCreate"/
+    );
+    expect(skillSource).toMatch(
+      /Movement saved-overlay delete[\s\S]*"routeKey":"userBoxDelete"/
+    );
+    expect(skillSource).toMatch(
+      /Workbench run nodes[\s\S]*"routeKey":"runNodes"/
+    );
+    expect(skillSource).toMatch(
+      /Workbench node result[\s\S]*"routeKey":"nodeResult"/
+    );
     expect(onboardingSource).toMatch(
       /saved flow chat follow-ups[\s\S]*POST \/api\/v1\/workbench\/flows\/:id\/chat[\s\S]*new run, note, or generic entity update/i
     );
@@ -1120,11 +1173,11 @@ describe("question flow simulation cycles", () => {
 
   it("cycle 3 report retest: durable automation report covers this full run", () => {
     const report = readRepoFile("docs/question-flow-improvement-cycles.md");
-    const latestRun = getSectionSlice(report, "2026-05-26 Automation Pass");
+    const latestRun = getSectionSlice(report, "2026-05-27 Automation Pass");
 
-    expect(report).toMatch(/Latest run date: 2026-05-26/);
-    expect(latestRun).toMatch(/OpenClaw config and Hermes config/i);
-    expect(latestRun).toMatch(/forge-hermes-plugin 0\.2\.91/i);
+    expect(report).toMatch(/Latest run date: 2026-05-27/);
+    expect(latestRun).toMatch(/OpenClaw and Hermes configs/i);
+    expect(latestRun).toMatch(/forge-hermes-plugin 0\.2\.92/i);
     expect(latestRun).toMatch(
       /goal, project, strategy,\s+task, habit, tag, note, insight, task_run, work_adjustment/i
     );
@@ -1136,15 +1189,15 @@ describe("question flow simulation cycles", () => {
     );
     expect(latestRun).toMatch(/Movement[\s\S]*Life Force[\s\S]*Workbench/i);
     expect(latestRun).toMatch(
-      /Cycle 1[\s\S]*known-place creation and cleanup[\s\S]*place-label\/boundary\/future-use/i
+      /Cycle 1[\s\S]*Entity Contrast Check[\s\S]*trigger_report[\s\S]*behavior_pattern/i
     );
     expect(latestRun).toMatch(
-      /Cycle 2[\s\S]*planning decision[\s\S]*overview-first/i
+      /Cycle 2[\s\S]*Owner And User-Scope Checkpoint[\s\S]*human\/bot/i
     );
     expect(latestRun).toMatch(
-      /Cycle 3[\s\S]*one-time\s+input run[\s\S]*POST \/api\/v1\/workbench\/run/i
+      /Cycle 3[\s\S]*Movement `placeCreate`[\s\S]*Workbench `runNodes`/i
     );
-    expect(latestRun).toMatch(/live-onboarding regression coverage/i);
+    expect(latestRun).toMatch(/20 tests/i);
     expect(latestRun).toMatch(/What happened after retesting/i);
   });
 });

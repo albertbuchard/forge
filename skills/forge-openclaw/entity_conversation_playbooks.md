@@ -204,6 +204,25 @@ When placement matters, prefer one hierarchy-aware linking question that can
 select or create the right goal, project, issue, or parent work item from the
 same search-first flow.
 
+## Owner And User-Scope Checkpoint
+
+Most normal stored Forge entities can carry `userId`, and many planning records can
+also carry human or bot assignees. Treat ownership as accountability and useful
+visibility, not as the first field in the form.
+
+- Do not open with "who owns this?" unless the user is explicitly delegating,
+  comparing human and bot work, or creating a record for someone else.
+- Ask whose human or bot record it is only when ownership changes accountability,
+  visibility, review scope, automation behavior, or later filtering.
+- For collaborative planning records, ask about assignees only after the outcome,
+  hierarchy placement, and owner are clear enough.
+- For reviews and overviews, ask which user or owner scope matters only when the
+  answer would change across humans or bots.
+- If the user's wording already names the owner or bot actor, use that as the
+  `userId` direction internally and ask only for any ambiguity that remains.
+- When owner scope is irrelevant, stay with the entity's meaning, timing, route, or
+  links instead of adding an administrative question.
+
 ## Operation lane checkpoint
 
 Use this before you choose an API path or ask for more structure.
