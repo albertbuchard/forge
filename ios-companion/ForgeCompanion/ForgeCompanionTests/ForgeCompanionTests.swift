@@ -3097,11 +3097,10 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(decoded.windowEnd, windowEnd)
         XCTAssertTrue(decoded.requiresWorkoutBackfill)
         XCTAssertEqual(decoded.lastReceivedChunkCount, 18)
-        XCTAssertEqual(decoded.completedWorkoutExternalUids, [])
         XCTAssertEqual(decoded.clientChunkingVersion, ForgeSyncClient.legacyHTTPHealthSyncChunkingVersion)
     }
 
-    func testActiveHealthSyncCheckpointPersistsCompletedWorkoutIdsAndChunkingVersion() throws {
+    func testActiveHealthSyncCheckpointIgnoresLegacyCompletedWorkoutIds() throws {
         let checkpoint = ActiveHealthSyncCheckpoint(
             syncSessionId: "hms_resume",
             schemaVersion: "healthkit-sync-v2",
@@ -3111,16 +3110,22 @@ final class ForgeCompanionTests: XCTestCase {
             requiresWorkoutBackfill: true,
             lastReceivedChunkCount: 9,
             lastReceivedBytes: 12_000_000,
-            completedWorkoutExternalUids: ["workout-b", "workout-a", "workout-a"],
             clientChunkingVersion: ForgeSyncClient.httpBackgroundHealthSyncChunkingVersion
         )
+        var checkpointObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(checkpoint)) as? [String: Any]
+        )
+        checkpointObject["completedWorkoutExternalUids"] = ["workout-b", "workout-a", "workout-a"]
+        let checkpointJSON = try JSONSerialization.data(withJSONObject: checkpointObject)
 
-        let encoded = try JSONEncoder().encode(checkpoint)
-        let decoded = try JSONDecoder().decode(ActiveHealthSyncCheckpoint.self, from: encoded)
+        let decoded = try JSONDecoder().decode(
+            ActiveHealthSyncCheckpoint.self,
+            from: checkpointJSON
+        )
+        let reencoded = String(data: try JSONEncoder().encode(decoded), encoding: .utf8) ?? ""
 
-        XCTAssertEqual(decoded.completedWorkoutExternalUids, ["workout-a", "workout-b"])
-        XCTAssertEqual(decoded.clientChunkingVersion, ForgeSyncClient.httpBackgroundHealthSyncChunkingVersion)
         XCTAssertEqual(decoded, checkpoint)
+        XCTAssertFalse(reencoded.contains("completedWorkoutExternalUids"))
     }
 
     func testHealthSyncChunkingVersionMatchesTransport() {
