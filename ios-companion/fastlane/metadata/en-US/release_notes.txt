@@ -1,22 +1,17 @@
-Forge Companion 1.0.64 makes HealthKit workout backfill resume from Forge's
-actual backend state.
+Forge Companion 1.0.65 fixes the HealthKit workout import getting stuck after a
+background expiration or stalled route upload.
 
-The backend now returns the workout external IDs that already have complete
-summary, time-series, and route evidence. The iOS app seeds its historical
-workout progress from that backend count, so a phone with 1,000 workouts and
-800 already stored in Forge starts at 800/1,000 with 200 left, not 0/1,000.
+When iOS locks protected HealthKit data, the app now pauses the unfinished
+import and waits for unlock instead of repeatedly starting a sync that cannot
+read workouts.
 
-Already-uploaded decisions no longer depend on a local iOS completed-workout
-checkpoint. Forge only marks a workout skippable when the backend has the
-expected evidence rows, and incomplete summary-only imports are retried.
+When iOS expires the background task, the active sync is cancelled cleanly and
+Forge resumes from the last accepted backend chunk on the next run.
 
-Historical workout batches are now mapped with a bounded prefetch queue, so
-HealthKit evidence gathering can run ahead while uploads preserve deterministic
-chunk order.
+Workout evidence uploads now use smaller batches and ordered chunk uploads, so
+one failing route chunk stops immediately instead of leaving dozens of
+background URLSession uploads queued behind a dead task.
 
-Background upload sessions now use the backend-workout-state chunking version
-and allow two concurrent background connections to reduce stalls without losing
-ordered resume semantics.
-
-This TestFlight build keeps beta review submission disabled while CI uploads the
-IPA, waits for processing, and attaches this changelog.
+The upload watchdog now detects a sync with no accepted chunk for five minutes,
+clears the spinner, and leaves the manual Sync button able to restart from the
+backend checkpoint.

@@ -344,6 +344,30 @@ final class CompanionAppModel: ObservableObject {
         static let pairingMinimumInterval: TimeInterval = 15
     }
 
+    enum HealthSyncLifecyclePolicy {
+        static let stalledAckInterval: TimeInterval = 5 * 60
+
+        static func stallReason(
+            startedAt: Date?,
+            lastChunkAt: Date?,
+            uploadedChunks: Int,
+            now: Date
+        ) -> String? {
+            if let lastChunkAt {
+                let elapsed = now.timeIntervalSince(lastChunkAt)
+                if elapsed >= stalledAckInterval {
+                    return "no accepted health sync chunk for \(Int(elapsed.rounded(.down)))s"
+                }
+            } else if uploadedChunks == 0, let startedAt {
+                let elapsed = now.timeIntervalSince(startedAt)
+                if elapsed >= stalledAckInterval {
+                    return "no health sync upload acknowledgement within \(Int(elapsed.rounded(.down)))s"
+                }
+            }
+            return nil
+        }
+    }
+
     private struct SimulatorPairingResponse: Decodable {
         let qrPayload: PairingPayload
     }
@@ -524,6 +548,7 @@ final class CompanionAppModel: ObservableObject {
     private var deferredStartupRefreshTask: Task<Void, Never>?
     private var remoteSourceReconciliationTask: Task<Void, Never>?
     private var activeSyncTask: Task<Bool, Never>?
+    private var activeSyncTaskId: UUID?
     private var maintenanceTask: Task<Void, Never>?
     private var healthSyncTransferTickerTask: Task<Void, Never>?
     private var healthSyncTransferStartedAt: Date?
@@ -615,11 +640,18 @@ final class CompanionAppModel: ObservableObject {
         watchSessionManager.activate()
         restorePairing()
         restoreCachedState()
-        backgroundScheduler.register { [weak self] in
-            guard let self else { return false }
-            companionDebugLog("CompanionAppModel", "background refresh closure invoked")
-            return await self.performBackgroundRefresh()
-        }
+        backgroundScheduler.register(
+            onRefresh: { [weak self] in
+                guard let self else { return false }
+                companionDebugLog("CompanionAppModel", "background refresh closure invoked")
+                return await self.performBackgroundRefresh()
+            },
+            onExpiration: { [weak self] in
+                Task { @MainActor [weak self] in
+                    self?.handleBackgroundSyncExpiration(reason: "system background task expired")
+                }
+            }
+        )
         if pairing != nil {
             companionDebugLog("CompanionAppModel", "init scheduling background refresh because pairing exists")
             backgroundScheduler.schedule()
@@ -866,6 +898,7 @@ final class CompanionAppModel: ObservableObject {
         companionDebugLog("CompanionAppModel", "handleAppDidBecomeActive")
         screenTimeStore.handleAppDidBecomeActive()
         startMaintenanceLoop(reason: "app became active")
+        cancelActiveSyncIfStalled(now: Date(), reason: "app became active")
         Task {
             await performMaintenanceHeartbeat(reason: "app became active", force: true)
         }
@@ -1267,9 +1300,18 @@ final class CompanionAppModel: ObservableObject {
         companionDebugLog("CompanionAppModel", "refreshSyncState -> \(syncState.rawValue)")
     }
 
+    private var protectedHealthDataCurrentlyUnavailable: Bool {
+        healthSyncEnabled &&
+            healthAuthorizationGranted &&
+            UIApplication.shared.isProtectedDataAvailable == false
+    }
+
     private func performBackgroundRefresh() async -> Bool {
         companionDebugLog("CompanionAppModel", "performBackgroundRefresh start")
         if let activeSyncTask {
+            if cancelActiveSyncIfStalled(now: Date(), reason: "background refresh") {
+                return false
+            }
             companionDebugLog("CompanionAppModel", "performBackgroundRefresh joining active foreground sync")
             let syncSucceeded = await activeSyncTask.value
             backgroundScheduler.schedule(
@@ -1283,6 +1325,20 @@ final class CompanionAppModel: ObservableObject {
             reason: "background refresh",
             force: true
         )
+        if hasUnfinishedHealthSyncSession && protectedHealthDataCurrentlyUnavailable {
+            lastSyncMessage = "Waiting for device unlock to read HealthKit again"
+            latestError = nil
+            refreshSyncState()
+            backgroundScheduler.schedule(
+                activeSync: false,
+                reason: "background health sync waiting for unlock"
+            )
+            companionDebugLog(
+                "CompanionAppModel",
+                "performBackgroundRefresh deferred unfinished health sync until protected data is available"
+            )
+            return heartbeatSucceeded
+        }
         let syncSucceeded = await performAutomaticSyncIfNeededReturningResult(
             reason: hasUnfinishedHealthSyncSession ? "background resume unfinished health sync" : "background refresh",
             minimumInterval: hasUnfinishedHealthSyncSession ? 0 : AutoSyncPolicy.maintenanceSyncMinimumInterval,
@@ -1459,6 +1515,9 @@ final class CompanionAppModel: ObservableObject {
         ) { [weak self] in
             guard let self else { return }
             companionDebugLog("CompanionAppModel", "background task expired reason=\(reason)")
+            Task { @MainActor [weak self] in
+                self?.handleBackgroundSyncExpiration(reason: "foreground background task expired: \(reason)")
+            }
             if self.backgroundRefreshTask != .invalid {
                 UIApplication.shared.endBackgroundTask(self.backgroundRefreshTask)
                 self.backgroundRefreshTask = .invalid
@@ -1638,24 +1697,84 @@ final class CompanionAppModel: ObservableObject {
 
     private func performSync(trigger: String) async -> Bool {
         if let activeSyncTask {
-            companionDebugLog(
-                "CompanionAppModel",
-                "performSync join existing trigger=\(trigger)"
-            )
-            return await activeSyncTask.value
+            if cancelActiveSyncIfStalled(now: Date(), reason: "performSync \(trigger)") {
+                companionDebugLog(
+                    "CompanionAppModel",
+                    "performSync cancelled stalled active sync before trigger=\(trigger)"
+                )
+            } else {
+                companionDebugLog(
+                    "CompanionAppModel",
+                    "performSync join existing trigger=\(trigger)"
+                )
+                return await activeSyncTask.value
+            }
         }
 
-        let task = Task { @MainActor [weak self] in
+        let taskId = UUID()
+        let task = Task { @MainActor [weak self, taskId] in
             guard let self else {
                 return false
             }
             defer {
-                self.activeSyncTask = nil
+                if self.activeSyncTaskId == taskId {
+                    self.activeSyncTask = nil
+                    self.activeSyncTaskId = nil
+                }
             }
             return await self.runSync(trigger: trigger)
         }
         activeSyncTask = task
+        activeSyncTaskId = taskId
         return await task.value
+    }
+
+    @discardableResult
+    private func cancelActiveSyncIfStalled(now: Date, reason: String) -> Bool {
+        guard activeSyncTask != nil else {
+            return false
+        }
+        guard let stallReason = HealthSyncLifecyclePolicy.stallReason(
+            startedAt: healthSyncTransferStartedAt,
+            lastChunkAt: healthSyncTransferLastChunkAt,
+            uploadedChunks: healthSyncTransferUploadedChunks,
+            now: now
+        ) else {
+            return false
+        }
+        return cancelActiveSync(
+            reason: "\(reason): \(stallReason)",
+            userMessage: "Sync paused after a stalled upload. Forge will resume from the last accepted chunk."
+        )
+    }
+
+    private func handleBackgroundSyncExpiration(reason: String) {
+        cancelActiveSync(
+            reason: reason,
+            userMessage: "Sync paused in the background. Forge will resume from the last accepted chunk."
+        )
+    }
+
+    @discardableResult
+    private func cancelActiveSync(reason: String, userMessage: String) -> Bool {
+        guard let task = activeSyncTask else {
+            return false
+        }
+        companionDebugLog("CompanionAppModel", "cancelActiveSync reason=\(reason)")
+        task.cancel()
+        activeSyncTask = nil
+        activeSyncTaskId = nil
+        lastSyncMessage = userMessage
+        latestError = nil
+        if syncState == .syncing {
+            refreshSyncState()
+        }
+        stopHealthSyncTransferTelemetry()
+        backgroundScheduler.schedule(
+            activeSync: activeHealthSyncSessionId != nil && protectedHealthDataCurrentlyUnavailable == false,
+            reason: "active health sync cancelled"
+        )
+        return true
     }
 
     private func runSync(trigger: String) async -> Bool {
@@ -1737,7 +1856,7 @@ final class CompanionAppModel: ObservableObject {
                 return false
             }
             let nsError = error as NSError
-            if nsError.localizedDescription == "Protected health data is inaccessible" {
+            if Self.isProtectedHealthDataInaccessible(error) {
                 companionDebugLog(
                     "CompanionAppModel",
                     "performSync deferred trigger=\(trigger) because protected data is inaccessible"
@@ -2058,6 +2177,12 @@ final class CompanionAppModel: ObservableObject {
                 clearActiveHealthSyncCheckpoint()
                 lastSyncMessage = "Forge needs a runtime restart before HealthKit chunk sync."
                 healthSyncLegacyFallbackReason = "The Forge runtime did not advertise byte-stable chunk support"
+            } else if Self.isProtectedHealthDataInaccessible(error) {
+                backgroundScheduler.schedule(
+                    activeSync: false,
+                    reason: "health sync deferred until protected data is available"
+                )
+                lastSyncMessage = "Waiting for device unlock to read HealthKit again"
             } else if let uploadSession = recoveryContext.uploadSession {
                 if Self.isHealthSyncChunkChecksumMismatch(error) {
                     await syncClient.abortHealthSyncSession(uploadSession: uploadSession, pairing: pairing)
@@ -2259,6 +2384,7 @@ final class CompanionAppModel: ObservableObject {
         healthSyncTransferLastSnapshotAt = now
         healthSyncTransferLastSnapshotBytes = healthSyncTransferBytesSent
         publishHealthSyncTransferStats(now: now)
+        cancelActiveSyncIfStalled(now: now, reason: "health sync transfer watchdog")
     }
 
     private func publishHealthSyncTransferStats(now: Date) {
@@ -2315,6 +2441,10 @@ final class CompanionAppModel: ObservableObject {
                 nsError.localizedDescription.contains("chunk_checksum_mismatch") ||
                 failureReason?.contains("chunk_checksum_mismatch") == true
             )
+    }
+
+    private static func isProtectedHealthDataInaccessible(_ error: Error) -> Bool {
+        (error as NSError).localizedDescription == "Protected health data is inaccessible"
     }
 
     private static func protectedHealthDataInaccessibleError() -> NSError {

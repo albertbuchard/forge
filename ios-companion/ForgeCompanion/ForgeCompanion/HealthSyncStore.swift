@@ -99,8 +99,8 @@ actor HealthSyncStore {
     private let syncWindowDays = 21
     private let incrementalLookbackHours = 72
     private let workoutMappingConcurrencyLimit = 4
-    private let historicalWorkoutEvidenceBatchSize = 64
-    private let historicalWorkoutBatchPrefetchLimit = 3
+    private let historicalWorkoutEvidenceBatchSize = 16
+    private let historicalWorkoutBatchPrefetchLimit = 1
     private let sleepSessionGap: TimeInterval = 4 * 60 * 60
     private let sleepInferenceGap: TimeInterval = 15 * 60
     private let isoFormatter: ISO8601DateFormatter = {
@@ -716,6 +716,7 @@ actor HealthSyncStore {
                 let batchWorkouts = Array(workouts[lowerBound..<upperBound])
                 nextBatchToSchedule += 1
                 group.addTask {
+                    try Task.checkCancellation()
                     let sessions = try await self.mapWorkoutSessionsBounded(
                         batchWorkouts,
                         concurrencyLimit: mappingConcurrencyLimit
@@ -730,6 +731,7 @@ actor HealthSyncStore {
             }
 
             while nextBatchToDeliver < totalBatches {
+                try Task.checkCancellation()
                 if let mappedBatch = mappedBatches.removeValue(forKey: nextBatchToDeliver) {
                     uploadedWorkouts += mappedBatch.sessions.count
                     try await onBatch(
