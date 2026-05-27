@@ -3076,6 +3076,50 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(incrementalSync.workoutCursorDate, legacySyncDate)
     }
 
+    func testHealthSyncLifecyclePolicyWaitsThroughNormalUploadGaps() {
+        let startedAt = makeDate("2026-05-27T09:40:00.000Z")
+        let lastChunkAt = makeDate("2026-05-27T09:43:30.000Z")
+        let now = makeDate("2026-05-27T09:44:00.000Z")
+
+        let reason = CompanionAppModel.HealthSyncLifecyclePolicy.stallReason(
+            startedAt: startedAt,
+            lastChunkAt: lastChunkAt,
+            uploadedChunks: 12,
+            now: now
+        )
+
+        XCTAssertNil(reason)
+    }
+
+    func testHealthSyncLifecyclePolicyFlagsStalledAcceptedChunkWindow() {
+        let startedAt = makeDate("2026-05-27T09:40:00.000Z")
+        let lastChunkAt = makeDate("2026-05-27T09:41:00.000Z")
+        let now = makeDate("2026-05-27T09:46:30.000Z")
+
+        let reason = CompanionAppModel.HealthSyncLifecyclePolicy.stallReason(
+            startedAt: startedAt,
+            lastChunkAt: lastChunkAt,
+            uploadedChunks: 12,
+            now: now
+        )
+
+        XCTAssertEqual(reason, "no accepted health sync chunk for 330s")
+    }
+
+    func testHealthSyncLifecyclePolicyFlagsNoInitialAcknowledgement() {
+        let startedAt = makeDate("2026-05-27T09:40:00.000Z")
+        let now = makeDate("2026-05-27T09:45:05.000Z")
+
+        let reason = CompanionAppModel.HealthSyncLifecyclePolicy.stallReason(
+            startedAt: startedAt,
+            lastChunkAt: nil,
+            uploadedChunks: 0,
+            now: now
+        )
+
+        XCTAssertEqual(reason, "no health sync upload acknowledgement within 305s")
+    }
+
     func testActiveHealthSyncCheckpointPersistsFrozenWindowAndProgress() throws {
         let windowEnd = makeDate("2026-05-25T20:19:12.377Z")
         let checkpoint = ActiveHealthSyncCheckpoint(

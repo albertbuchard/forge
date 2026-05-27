@@ -6,7 +6,30 @@ final class CompanionBackgroundScheduler {
     private let refreshTaskIdentifier = "com.albertbuchard.ForgeCompanion.health-sync"
     private let processingTaskIdentifier = "com.albertbuchard.ForgeCompanion.health-sync.processing"
 
-    func register(onRefresh: @escaping @Sendable () async -> Bool) {
+    private final class RefreshTaskBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var task: Task<Void, Never>?
+
+        func set(_ task: Task<Void, Never>) {
+            lock.lock()
+            self.task = task
+            lock.unlock()
+        }
+
+        func cancel() {
+            let current: Task<Void, Never>?
+            lock.lock()
+            current = task
+            task = nil
+            lock.unlock()
+            current?.cancel()
+        }
+    }
+
+    func register(
+        onRefresh: @escaping @Sendable () async -> Bool,
+        onExpiration: @escaping @Sendable () -> Void
+    ) {
 #if targetEnvironment(simulator)
         return
 #else
@@ -20,7 +43,7 @@ final class CompanionBackgroundScheduler {
                 task.setTaskCompleted(success: false)
                 return
             }
-            self.run(task: refreshTask, onRefresh: onRefresh)
+            self.run(task: refreshTask, onRefresh: onRefresh, onExpiration: onExpiration)
         }
         BGTaskScheduler.shared.register(forTaskWithIdentifier: processingTaskIdentifier, using: nil) { [weak self] task in
             guard let self else {
@@ -32,7 +55,7 @@ final class CompanionBackgroundScheduler {
                 task.setTaskCompleted(success: false)
                 return
             }
-            self.run(task: processingTask, onRefresh: onRefresh)
+            self.run(task: processingTask, onRefresh: onRefresh, onExpiration: onExpiration)
         }
 #endif
     }
@@ -76,28 +99,47 @@ final class CompanionBackgroundScheduler {
 
     private func run(
         task: BGTask,
-        onRefresh: @escaping @Sendable () async -> Bool
+        onRefresh: @escaping @Sendable () async -> Bool,
+        onExpiration: @escaping @Sendable () -> Void
     ) {
+        let refreshTaskBox = RefreshTaskBox()
         task.expirationHandler = {
             companionDebugLog(
                 "CompanionBackgroundScheduler",
                 "task expired identifier=\(task.identifier)"
             )
+            onExpiration()
+            refreshTaskBox.cancel()
             task.setTaskCompleted(success: false)
         }
 
-        Task { [onRefresh] in
+        let refreshTask = Task { [onRefresh] in
             companionDebugLog(
                 "CompanionBackgroundScheduler",
                 "task started identifier=\(task.identifier)"
             )
+            guard Task.isCancelled == false else {
+                companionDebugLog(
+                    "CompanionBackgroundScheduler",
+                    "task cancelled before refresh identifier=\(task.identifier)"
+                )
+                return
+            }
             let success = await onRefresh()
+            guard Task.isCancelled == false else {
+                companionDebugLog(
+                    "CompanionBackgroundScheduler",
+                    "task cancelled after expiration identifier=\(task.identifier)"
+                )
+                return
+            }
             companionDebugLog(
                 "CompanionBackgroundScheduler",
                 "task completed identifier=\(task.identifier) success=\(success)"
             )
             task.setTaskCompleted(success: success)
         }
+        refreshTaskBox.set(refreshTask)
     }
 #endif
 }
