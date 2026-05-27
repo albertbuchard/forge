@@ -1204,6 +1204,9 @@ struct ForgeSyncClient {
         makePayload: ([Record]) -> Payload
     ) async throws -> Int {
         var sequence = startingSequence
+        guard records.isEmpty == false else {
+            return sequence
+        }
         let targetBytes = effectiveHealthSyncChunkTarget(uploadSession: uploadSession, pairing: pairing)
         var current: [Record] = []
         for record in records {
@@ -1579,6 +1582,15 @@ struct ForgeSyncClient {
         "\(uploadSession.syncSessionId)-workouts-\(batchKey)-\(family)-\(String(format: "%04d", partIndex))"
     }
 
+    static func healthSyncContentAddressedChunkId(
+        uploadSession: HealthSyncUploadSession,
+        sequence: Int,
+        family: String,
+        checksumSha256: String
+    ) -> String {
+        "\(uploadSession.syncSessionId)-\(String(format: "%06d", sequence))-\(family)-\(String(checksumSha256.prefix(20)))"
+    }
+
     private static func queryComponent(_ value: String) -> String {
         var allowed = CharacterSet.urlQueryAllowed
         allowed.remove(charactersIn: "&+=?")
@@ -1603,7 +1615,16 @@ struct ForgeSyncClient {
             )
             return sequence
         }
-        let effectiveChunkId = chunkId ?? "\(uploadSession.syncSessionId)-\(String(format: "%06d", sequence))-\(family)"
+        let wirePayload = try Self.healthSyncChunkWirePayload(
+            payload,
+            compress: uploadSession.supportsCompression
+        )
+        let effectiveChunkId = chunkId ?? Self.healthSyncContentAddressedChunkId(
+            uploadSession: uploadSession,
+            sequence: sequence,
+            family: family,
+            checksumSha256: wirePayload.checksumSha256
+        )
         if uploadSession.receivedChunkIdSet.contains(effectiveChunkId) {
             companionDebugLog(
                 "ForgeSyncClient",
@@ -1625,10 +1646,6 @@ struct ForgeSyncClient {
             )
             return sequence + 1
         }
-        let wirePayload = try Self.healthSyncChunkWirePayload(
-            payload,
-            compress: uploadSession.supportsCompression
-        )
         companionDebugLog(
             "ForgeSyncClient",
             "uploadHealthSyncChunk prepared family=\(family) sequence=\(sequence) chunkId=\(effectiveChunkId) records=\(recordCount) bytes=\(wirePayload.byteCount) compressedBytes=\(wirePayload.compressedByteCount ?? 0) checksumPrefix=\(String(wirePayload.checksumSha256.prefix(12))) transport=\(pairing.transport?.protocolName ?? "urlsession")"

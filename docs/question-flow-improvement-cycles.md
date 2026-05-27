@@ -1,10 +1,132 @@
 # Forge Question Flow Improvement Cycles
 
-Latest run date: 2026-05-26
+Latest run date: 2026-05-27
 
 This report records the three-cycle evaluation for Forge agent question flows. The
 same full flow set was tested in each cycle so improvements were kept only where they
 helped the entity or specialized surface.
+
+## 2026-05-27 Automation Pass
+
+Setup verification:
+
+- Confirmed the Forge worktree was on `main` before plugin work and edits.
+- No prior automation memory file existed for
+  `improvement-of-question-flows-in-forge`; this run creates it after completion.
+- Confirmed OpenClaw and Hermes configs both point at
+  `/Users/omarclaw/Documents/aurel-monorepo/data/forge`. The live Forge process on
+  `127.0.0.1:4317` had
+  `/Users/omarclaw/Documents/aurel-monorepo/data/forge/forge.sqlite` open. No Forge
+  data root was changed, moved, merged, deleted, or overwritten.
+- Built the repo-local OpenClaw plugin with `npm run build:openclaw-plugin` and built
+  the Hermes packaged runtime with `node ./plugins/forge-hermes/scripts/build-package-runtime.mjs`.
+- Reinstalled OpenClaw from the local plugin folder. OpenClaw would have removed the
+  data-root config on uninstall, so the stale installed extension directory was moved
+  aside and the repo-local linked plugin was installed with
+  `openclaw plugins install --link --dangerously-force-unsafe-install ./openclaw-plugin`.
+  The plugin was then enabled and the gateway restarted.
+- Reinstalled Hermes from the local plugin folder with
+  `~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade --editable
+  ./plugins/forge-hermes`, which installed `forge-hermes-plugin 0.2.92` from the
+  repo-local editable package.
+- Verified OpenClaw loads `forge-openclaw-plugin 0.2.92` from
+  `~/Documents/aurel-monorepo/projects/forge/openclaw-plugin/dist/openclaw/index.js`
+  and exposes `forge_call_movement_route`, `forge_call_life_force_route`, and
+  `forge_call_workbench_route`. The known duplicate plugin-id warning remains, with
+  OpenClaw resolving it in favor of the explicit config-selected repo-local plugin.
+- Verified Hermes imports `forge-hermes-plugin 0.2.92` from the local editable path
+  and exposes 63 Forge tools, including the Movement, Life Force, and Workbench
+  route-key tools.
+- Verified live Forge health, OpenClaw `forge health`, live onboarding at
+  `/api/v1/agents/onboarding`, and live OpenAPI. Live onboarding published 41 entity
+  and domain catalog entries plus dedicated Movement, Life Force/`life_force`, and
+  Workbench route-key maps. Live OpenAPI exposed 181 paths, including five shared
+  batch entity routes, 16 Movement routes, four Life Force routes, and 13 Workbench
+  routes.
+
+Every cycle retested the full stored-entity and domain set: goal, project, strategy,
+task, habit, tag, note, insight, task_run, work_adjustment, calendar_event,
+work_block_template, task_timebox, calendar_connection, preference_catalog,
+preference_catalog_item, preference_context, preference_item, preference_judgment,
+preference_signal, questionnaire_instrument, questionnaire_run, self_observation,
+sleep_session, workout_session, wiki_page, movement, life_force, workbench,
+psyche_value, behavior_pattern, behavior, belief_entry, mode_profile,
+mode_guide_session, flashcard, trigger_report, event_type, emotion_definition, plus
+operator, calendar, sleep, and sports overview read models. Specialized route
+scenarios covered Movement day/month/all-time/timeline/places/box detail/trip
+detail/selection/settings/place CRUD/manual overlays/repair/delete actions, Life
+Force overview/profile/weekday-template/fatigue-signal routes, and Workbench flow
+catalog/detail/CRUD/execution/run history/run nodes/node result/published output/
+latest node output/one-off execution/chat routes.
+
+Cycle 1 tested all entity flows and specialized lanes with emphasis on Psyche.
+Strengths: existing Psyche flows were already example-first, hypothesis-capable, and
+batch-CRUD-correct after consent. Weakness: when one user utterance exposed several
+Psyche containers at once, an agent could still ask the user to choose the entity type
+too early instead of explaining the lived difference between one episode, one
+recurring loop, one move, one belief sentence, one active mode, and one reusable
+future label.
+
+What changed in Cycle 1:
+
+- Added a Psyche "Entity Contrast Check" to the shared OpenClaw/Hermes playbooks.
+- Added guidance to reflect the lived difference before asking a container question,
+  and to offer one careful hypothesis after one concrete example is visible.
+- Updated the OpenClaw and Hermes bundled skill copies.
+- Added regression coverage that checks the contrast for `trigger_report`,
+  `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`,
+  `mode_guide_session`, `event_type`, and `emotion_definition`.
+
+What happened after retesting Cycle 1:
+
+- The full focused suite passed across every entity and specialized surface.
+- No Psyche flow became more form-like, and no normal entity route posture changed, so
+  the Cycle 1 change was kept.
+
+Cycle 2 retested the same full flow set with emphasis on multi-user and collaboration
+scope. Strengths: the skill already documented `userId`, owners, and bot/human
+assignment. Weakness: the question-flow playbooks did not explicitly say when to ask
+for owner or user scope, so an agent could either skip an important human/bot owner
+or ask "who owns this?" as a mechanical first field on ordinary records.
+
+What changed in Cycle 2:
+
+- Added an "Owner And User-Scope Checkpoint" to the entity conversation playbook.
+- Updated live onboarding conversation rules so `userId`, owner, and human/bot
+  assignees are treated as accountability and scope, not opening form fields.
+- Updated OpenClaw and Hermes skill guidance to ask owner/user scope only when it
+  changes visibility, review results, collaboration, automation behavior, or later
+  filtering.
+- Added regression coverage for late, purposeful owner/user-scope questioning.
+
+What happened after retesting Cycle 2:
+
+- The full focused suite passed again.
+- The change improved multi-user clarity without making non-Psyche flows more
+  administrative, so it was kept.
+
+Cycle 3 retested every flow again with emphasis on specialized API paths. Strengths:
+Movement, Life Force, and Workbench already had dedicated route families, method maps,
+and route-key tools. Weakness: onboarding and skills had examples for the most common
+specialized routes, but still lacked explicit examples for Movement known-place
+create/update, saved-overlay update/delete, and Workbench run-node/node-result reads.
+That left a route-key gap for new agents even though the method routes were present.
+
+What changed in Cycle 3:
+
+- Added live onboarding route-key examples for Movement `placeCreate`, `placeUpdate`,
+  `userBoxUpdate`, and `userBoxDelete`.
+- Added live onboarding route-key examples for Workbench `runNodes` and `nodeResult`.
+- Added matching internal examples or route hints in OpenClaw and Hermes skill files.
+- Added regression coverage proving the new examples are present in both the server
+  onboarding source and the source skill.
+
+What happened after retesting Cycle 3:
+
+- The full focused suite passed with 20 tests.
+- No changes were reverted. Remaining work is qualitative: periodically run real
+  OpenClaw/Hermes conversations against user utterances that combine Psyche meaning,
+  ownership ambiguity, and specialized Movement/Life Force/Workbench actions.
 
 ## 2026-05-26 Automation Pass
 

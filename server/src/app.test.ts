@@ -2880,6 +2880,153 @@ test("mobile health sync exposes structured apple health workout descriptors and
   }
 });
 
+test("mobile health sync deduplicates workout samples by HealthKit sample uid", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-mobile-health-sample-dedupe-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: false });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const pairingResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: {
+        userId: "user_operator"
+      }
+    });
+    assert.equal(pairingResponse.statusCode, 201);
+    const qrPayload = (
+      pairingResponse.json() as {
+        qrPayload: {
+          sessionId: string;
+          pairingToken: string;
+        };
+      }
+    ).qrPayload;
+
+    const syncResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        device: {
+          name: "Omar iPhone",
+          platform: "ios",
+          appVersion: "1.0",
+          sourceDevice: "iPhone"
+        },
+        permissions: {
+          healthKitAuthorized: true,
+          backgroundRefreshEnabled: true,
+          motionReady: false,
+          locationReady: false,
+          screenTimeReady: false
+        },
+        sleepSessions: [],
+        workouts: [
+          {
+            externalUid: "hk-workout-sample-dedupe",
+            workoutType: "running",
+            startedAt: "2026-04-07T07:15:00.000Z",
+            endedAt: "2026-04-07T08:00:00.000Z",
+            activeEnergyKcal: 320,
+            totalEnergyKcal: 360,
+            distanceMeters: 6400,
+            stepCount: 7200,
+            exerciseMinutes: 45,
+            averageHeartRate: 142,
+            maxHeartRate: 171,
+            sourceDevice: "Apple Watch",
+            sourceSystem: "apple_health",
+            timeSeriesSamples: [
+              {
+                sourceSampleUid: "dedupe-hr-sample-1",
+                seriesIndex: 0,
+                metricKey: "heart_rate",
+                label: "Heart Rate",
+                category: "heart",
+                unit: "count/min",
+                value: 141,
+                startedAt: "2026-04-07T07:20:00.000Z",
+                endedAt: "2026-04-07T07:20:05.000Z",
+                sourceDevice: "Apple Watch",
+                captureMethod: "associated_workout",
+                qualityFlags: [],
+                metadata: {},
+                provenance: {
+                  sourceSystem: "apple_health"
+                }
+              },
+              {
+                sourceSampleUid: "dedupe-hr-sample-1",
+                seriesIndex: 1,
+                metricKey: "heart_rate",
+                label: "Heart Rate",
+                category: "heart",
+                unit: "count/min",
+                value: 142,
+                startedAt: "2026-04-07T07:20:05.000Z",
+                endedAt: "2026-04-07T07:20:10.000Z",
+                sourceDevice: "Apple Watch",
+                captureMethod: "bulk_time_window",
+                qualityFlags: ["replayed"],
+                metadata: {
+                  replay: true
+                },
+                provenance: {
+                  sourceSystem: "apple_health"
+                }
+              }
+            ],
+            routePoints: [],
+            links: [],
+            annotations: {}
+          }
+        ],
+        vitals: {
+          daySummaries: []
+        }
+      }
+    });
+    assert.equal(syncResponse.statusCode, 200, syncResponse.body);
+
+    const rows = getDatabase()
+      .prepare(
+        `SELECT series_index, value, capture_method, quality_flags_json, metadata_json
+         FROM health_workout_time_series
+         WHERE source_sample_uid = ?
+         ORDER BY rowid`
+      )
+      .all("dedupe-hr-sample-1") as Array<{
+      series_index: number;
+      value: number;
+      capture_method: string;
+      quality_flags_json: string;
+      metadata_json: string;
+    }>;
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]?.series_index, 1);
+    assert.equal(rows[0]?.value, 142);
+    assert.equal(rows[0]?.capture_method, "bulk_time_window");
+    assert.deepEqual(JSON.parse(rows[0]?.quality_flags_json ?? "[]"), [
+      "replayed"
+    ]);
+    assert.deepEqual(JSON.parse(rows[0]?.metadata_json ?? "{}"), {
+      replay: true
+    });
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("mobile health sync returns typed payload-too-large errors for oversized legacy uploads", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-health-too-large-")
@@ -4222,6 +4369,154 @@ test("mobile health chunked sync rejects incomplete expected counts without adva
     };
     assert.equal(pairing.last_sync_at, null);
     assert.match(pairing.last_sync_error ?? "", /missing required chunks/i);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("mobile health chunked sync can recover when an empty resumed chunk is replaced by a content-addressed chunk", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-health-content-addressed-resume-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const pairingResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: {
+        userId: "user_operator"
+      }
+    });
+    assert.equal(pairingResponse.statusCode, 201);
+    const qrPayload = (
+      pairingResponse.json() as {
+        qrPayload: {
+          sessionId: string;
+          pairingToken: string;
+        };
+      }
+    ).qrPayload;
+
+    const sharedStartPayload = {
+      sessionId: qrPayload.sessionId,
+      pairingToken: qrPayload.pairingToken,
+      device: {
+        name: "Omar iPhone",
+        platform: "ios",
+        appVersion: "1.0",
+        sourceDevice: "iPhone"
+      },
+      permissions: {
+        healthKitAuthorized: true,
+        backgroundRefreshEnabled: true,
+        motionReady: false,
+        locationReady: false,
+        screenTimeReady: false
+      },
+      requestedFamilies: ["sleep_nights"]
+    };
+    const startResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync-sessions",
+      payload: sharedStartPayload
+    });
+    assert.equal(startResponse.statusCode, 200, startResponse.body);
+    const syncSessionId = (
+      startResponse.json() as { upload: { syncSessionId: string } }
+    ).upload.syncSessionId;
+
+    const emptyPayload = { sleepNights: [] };
+    const oldStyleEmptyChunkId = `${syncSessionId}-000000-sleep_nights`;
+    const emptyResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/chunks`,
+      payload: {
+        chunkId: oldStyleEmptyChunkId,
+        sequence: 0,
+        family: "sleep_nights",
+        recordCount: 0,
+        byteCount: Buffer.byteLength(JSON.stringify(emptyPayload), "utf8"),
+        checksumSha256: sha256Json(emptyPayload),
+        payload: emptyPayload
+      }
+    });
+    assert.equal(emptyResponse.statusCode, 200, emptyResponse.body);
+
+    const resumeResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync-sessions",
+      payload: {
+        ...sharedStartPayload,
+        metadata: {
+          resumeSyncSessionId: syncSessionId
+        }
+      }
+    });
+    assert.equal(resumeResponse.statusCode, 200, resumeResponse.body);
+    assert.deepEqual(
+      (resumeResponse.json() as { upload: { receivedChunkIds: string[] } })
+        .upload.receivedChunkIds,
+      [oldStyleEmptyChunkId]
+    );
+
+    const realPayload = {
+      sleepNights: [
+        {
+          externalUid: "night_content_addressed_resume",
+          startedAt: "2026-05-26T22:10:00.000Z",
+          endedAt: "2026-05-27T06:30:00.000Z",
+          sourceTimezone: "Europe/Zurich",
+          localDateKey: "2026-05-27",
+          timeInBedSeconds: 30_000,
+          asleepSeconds: 27_600,
+          awakeSeconds: 2_400,
+          rawSegmentCount: 3,
+          stageBreakdown: [
+            { stage: "core", seconds: 16_000 },
+            { stage: "rem", seconds: 7_000 },
+            { stage: "deep", seconds: 4_600 }
+          ],
+          recoveryMetrics: {},
+          sourceMetrics: {},
+          links: [],
+          annotations: {}
+        }
+      ]
+    };
+    const realChecksum = sha256Json(realPayload);
+    const realChunkResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/chunks`,
+      payload: {
+        chunkId: `${syncSessionId}-000000-sleep_nights-${realChecksum.slice(0, 20)}`,
+        sequence: 0,
+        family: "sleep_nights",
+        recordCount: 1,
+        byteCount: Buffer.byteLength(JSON.stringify(realPayload), "utf8"),
+        checksumSha256: realChecksum,
+        payload: realPayload
+      }
+    });
+    assert.equal(realChunkResponse.statusCode, 200, realChunkResponse.body);
+
+    const completeResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/complete`,
+      payload: {
+        expectedCounts: {
+          sleep_nights: 1
+        }
+      }
+    });
+    assert.equal(completeResponse.statusCode, 200, completeResponse.body);
   } finally {
     await app.close();
     closeDatabase();

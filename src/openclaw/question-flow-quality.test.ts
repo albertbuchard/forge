@@ -415,6 +415,37 @@ describe("question flow quality coverage", () => {
     );
   });
 
+  it("keeps owner and user-scope questions late, purposeful, and multi-user aware", () => {
+    const skill = readRepoFile("skills/forge-openclaw/SKILL.md");
+    const onboardingSource = readRepoFile("server/src/app.ts");
+
+    expect(entityPlaybook).toMatch(/## Owner And User-Scope Checkpoint/);
+    expect(entityPlaybook).toMatch(
+      /Most normal stored Forge entities can carry `userId`[\s\S]*human or bot assignees/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Do not open with "who owns this\?"[\s\S]*explicitly delegating/i
+    );
+    expect(entityPlaybook).toMatch(
+      /ownership changes accountability,\s+visibility,\s+review scope,\s+automation behavior,\s+or later filtering/i
+    );
+    expect(entityPlaybook).toMatch(
+      /For reviews and overviews,[\s\S]*user or owner scope[\s\S]*answer would change across humans or bots/i
+    );
+    expect(entityPlaybook).toMatch(
+      /When owner scope is irrelevant,[\s\S]*meaning,\s+timing,\s+route,\s+or\s+links/i
+    );
+    expect(skill).toMatch(
+      /Treat `userId` and human\/bot assignees as accountability and scope/i
+    );
+    expect(onboardingSource).toMatch(
+      /Treat userId, owner, and human\/bot assignees as accountability and scope/i
+    );
+    expect(onboardingSource).toMatch(
+      /For read and overview requests,[\s\S]*human or bot user scope[\s\S]*differ across owners/i
+    );
+  });
+
   it("covers every Psyche entity flow with example-first therapist-like questioning", () => {
     const scenarios = [
       ["Value", /pull or absence of this value/i, /ordinary behavior would show the value/i],

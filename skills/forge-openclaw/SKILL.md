@@ -116,9 +116,17 @@ Concrete route-key examples for internal use:
   `{"routeKey":"settings","query":{"userIds":["user_operator"]}}`
 - Movement settings update:
   `{"routeKey":"settingsUpdate","body":{"trackingEnabled":true,"publishMode":"draft_review","retentionMode":"aggregates_only"}}`
+- Movement known-place creation:
+  `{"routeKey":"placeCreate","body":{"label":"Home","centerLat":46.2044,"centerLon":6.1432,"radiusMeters":120,"userId":"user_operator","note":"Primary home boundary for future time-in-place reads."}}`
+- Movement known-place update:
+  `{"routeKey":"placeUpdate","pathParams":{"id":"place_home"},"body":{"label":"Home office","radiusMeters":90,"note":"Tighten the boundary so clinic visits do not count as home."}}`
 - Movement missing-stay correction:
   first `{"routeKey":"userBoxPreflight","body":{"kind":"stay","startedAt":"2026-05-06T13:00:00.000Z","endedAt":"2026-05-06T15:00:00.000Z","placeLabel":"Home","userId":"user_operator"}}`,
   then `{"routeKey":"userBoxCreate","body":{"kind":"stay","startedAt":"2026-05-06T13:00:00.000Z","endedAt":"2026-05-06T15:00:00.000Z","placeLabel":"Home","userId":"user_operator","note":"Manual correction after reviewing the timeline."}}`
+- Movement saved-overlay update:
+  `{"routeKey":"userBoxUpdate","pathParams":{"id":"box_manual_123"},"body":{"endedAt":"2026-05-06T15:30:00.000Z","note":"Extended after checking the timeline detail."}}`
+- Movement saved-overlay delete:
+  `{"routeKey":"userBoxDelete","pathParams":{"id":"box_manual_123"}}`
 - Life Force overview:
   `{"routeKey":"overview"}`
 - Life Force profile edit:
@@ -139,6 +147,10 @@ Concrete route-key examples for internal use:
   `{"routeKey":"deleteFlow","pathParams":{"id":"flow_research_digest"}}`
 - Workbench run detail:
   `{"routeKey":"runDetail","pathParams":{"id":"flow_research_digest","runId":"run_123"}}`
+- Workbench run nodes:
+  `{"routeKey":"runNodes","pathParams":{"id":"flow_research_digest","runId":"run_123"}}`
+- Workbench node result:
+  `{"routeKey":"nodeResult","pathParams":{"id":"flow_research_digest","runId":"run_123","nodeId":"node_summary"}}`
 - Workbench published output:
   `{"routeKey":"publishedOutput","pathParams":{"id":"flow_research_digest"}}`
 - Workbench latest node output:
@@ -224,6 +236,7 @@ Entity conversation rule:
   before you reopen create or update intake.
 - When updating an entity, start with what is changing, what should stay true, and what prompted the update now.
 - When enough is clear, briefly summarize what you heard in the user's own language before asking for the last missing structural detail.
+- Treat `userId` and human/bot assignees as accountability and scope, not as opening form fields. Ask whose human or bot record it is only when ownership changes visibility, review scope, collaboration, automation behavior, or later filtering; for read requests, ask user scope only when the answer would differ across owners.
 - The quick intake prompts later in this file are fallback checkpoints, not a script to read aloud.
 
 Forge data location rule:
@@ -249,6 +262,7 @@ Psyche interview rule:
 - After the first real answer, choose one follow-up lane at a time: situation, sequence, meaning, protection, cost, longing/value, or tentative name.
 - Do not minimize functional analysis, trigger chains, behavior patterns, modes, beliefs, or schema themes. Once at least one concrete example is clear, offer one careful interpretive hypothesis when it would help the user understand the function, protection, cost, belief, mode, or schema theme.
 - Phrase interpretive hypotheses as collaborative and testable, not as verdicts. A good hypothesis says what the reaction may be protecting, predicting, relieving, or costing, then asks whether that lands or needs correction.
+- If several Psyche containers are plausible, do not ask the user to choose from a taxonomy menu first. Reflect the lived difference, offer one careful hypothesis when a concrete example is visible, then distinguish the options in plain language: one episode as a `trigger_report`, a recurring loop as a `behavior_pattern`, one repeated move as `behavior`, one sentence as `belief_entry`, a part-state as `mode_profile` or `mode_guide_session`, or reusable future-labeling as `event_type` or `emotion_definition`.
 - For Psyche updates, start with what feels newly true, newly visible, or newly inaccurate, then ask what should stay true before changing the formulation.
 - If a fresh episode is what made a Psyche update visible, anchor in that episode before renaming the durable belief, pattern, mode, or value.
 - If the user says they want help understanding a Psyche issue before saving it, ask one orienting question first instead of jumping straight into a full interpretation, diagnosis-like label, save suggestion, replacement belief, or suggested title.
