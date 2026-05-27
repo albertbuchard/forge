@@ -1,4 +1,4 @@
-Forge Companion 1.0.63 makes HealthKit workout backfill resume from Forge's
+Forge Companion 1.0.64 makes HealthKit workout backfill resume from Forge's
 actual backend state.
 
 The backend now returns the workout external IDs that already have complete

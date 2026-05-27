@@ -274,7 +274,6 @@ struct ActiveHealthSyncCheckpoint: Codable, Equatable {
         case requiresWorkoutBackfill
         case lastReceivedChunkCount
         case lastReceivedBytes
-        case completedWorkoutExternalUids
         case clientChunkingVersion
     }
 
@@ -286,9 +285,6 @@ struct ActiveHealthSyncCheckpoint: Codable, Equatable {
     let requiresWorkoutBackfill: Bool
     var lastReceivedChunkCount: Int
     var lastReceivedBytes: Int
-    // Kept for decoding older checkpoints. Current resume decisions come from
-    // the backend session status and its received chunk ids.
-    var completedWorkoutExternalUids: [String]
     let clientChunkingVersion: String
 
     var resumeSessionId: String {
@@ -304,7 +300,6 @@ struct ActiveHealthSyncCheckpoint: Codable, Equatable {
         requiresWorkoutBackfill: Bool,
         lastReceivedChunkCount: Int,
         lastReceivedBytes: Int,
-        completedWorkoutExternalUids: [String] = [],
         clientChunkingVersion: String = ForgeSyncClient.legacyHTTPHealthSyncChunkingVersion
     ) {
         self.syncSessionId = syncSessionId
@@ -315,7 +310,6 @@ struct ActiveHealthSyncCheckpoint: Codable, Equatable {
         self.requiresWorkoutBackfill = requiresWorkoutBackfill
         self.lastReceivedChunkCount = lastReceivedChunkCount
         self.lastReceivedBytes = lastReceivedBytes
-        self.completedWorkoutExternalUids = Array(Set(completedWorkoutExternalUids)).sorted()
         self.clientChunkingVersion = clientChunkingVersion
     }
 
@@ -330,10 +324,6 @@ struct ActiveHealthSyncCheckpoint: Codable, Equatable {
             requiresWorkoutBackfill: try container.decode(Bool.self, forKey: .requiresWorkoutBackfill),
             lastReceivedChunkCount: try container.decode(Int.self, forKey: .lastReceivedChunkCount),
             lastReceivedBytes: try container.decode(Int.self, forKey: .lastReceivedBytes),
-            completedWorkoutExternalUids: try container.decodeIfPresent(
-                [String].self,
-                forKey: .completedWorkoutExternalUids
-            ) ?? [],
             clientChunkingVersion: try container.decodeIfPresent(
                 String.self,
                 forKey: .clientChunkingVersion
@@ -373,11 +363,24 @@ final class CompanionAppModel: ObservableObject {
         var routePoints = 0
     }
 
+    private struct BackendWorkoutImportSnapshot {
+        let uploadedWorkoutExternalUids: Set<String>
+        let uploadedWorkoutCount: Int
+        let existingWorkoutCount: Int
+        let incompleteWorkoutCount: Int
+        let timeSeriesSampleCount: Int
+        let routePointCount: Int
+    }
+
     private struct HealthSyncRunResult {
         let receipt: SyncReceipt
         let payloadSummary: SyncPayloadSummary
         let healthDataDeferred: Bool
         let completedWorkoutBackfill: Bool
+    }
+
+    private final class HealthSyncUploadRecoveryContext {
+        var uploadSession: ForgeSyncClient.HealthSyncUploadSession?
     }
 
     private enum SimulatorLocalForge {
@@ -1782,7 +1785,7 @@ final class CompanionAppModel: ObservableObject {
         )
         let sourceStates = currentSourceStates
         let syncClient = self.syncClient
-        var uploadSession: ForgeSyncClient.HealthSyncUploadSession?
+        let recoveryContext = HealthSyncUploadRecoveryContext()
         var sequence = 0
         var workoutStats = WorkoutUploadStats()
         var healthDataDeferred = false
@@ -1830,45 +1833,14 @@ final class CompanionAppModel: ObservableObject {
                 sourceStates: sourceStates,
                 resumeSyncSessionId: resumeSyncSessionId
             )
-            uploadSession = session
-            var backendUploadedWorkoutExternalUids = Set(
-                session.workoutImportState?.alreadyUploadedWorkoutExternalUids.map { $0.lowercased() } ?? []
+            recoveryContext.uploadSession = session
+            let initialBackendWorkoutSnapshot = Self.backendWorkoutImportSnapshot(from: session)
+            var backendUploadedWorkoutExternalUids = initialBackendWorkoutSnapshot.uploadedWorkoutExternalUids
+            applyBackendWorkoutImportSnapshot(
+                initialBackendWorkoutSnapshot,
+                requiresBackfill: workoutBackfillPlan.requiresBackfill,
+                announceProgress: true
             )
-            let initialBackendUploadedWorkoutCount =
-                session.workoutImportState?.alreadyUploadedWorkoutCount ?? backendUploadedWorkoutExternalUids.count
-            if workoutBackfillPlan.requiresBackfill {
-                updateHistoricalWorkoutImportStatus { status in
-                    status.indexedWorkouts = max(status.indexedWorkouts, initialBackendUploadedWorkoutCount)
-                    status.uploadedWorkoutSummaries = max(
-                        status.uploadedWorkoutSummaries,
-                        initialBackendUploadedWorkoutCount
-                    )
-                    status.uploadedTimeSeriesSamples = max(
-                        status.uploadedTimeSeriesSamples,
-                        session.workoutImportState?.timeSeriesSampleCount ?? 0
-                    )
-                    status.uploadedRoutePoints = max(
-                        status.uploadedRoutePoints,
-                        session.workoutImportState?.routePointCount ?? 0
-                    )
-                    status.targetTimeSeriesSamples = max(
-                        status.targetTimeSeriesSamples,
-                        session.workoutImportState?.timeSeriesSampleCount ?? 0
-                    )
-                    status.targetRoutePoints = max(
-                        status.targetRoutePoints,
-                        session.workoutImportState?.routePointCount ?? 0
-                    )
-                }
-                if initialBackendUploadedWorkoutCount > 0 {
-                    lastSyncMessage =
-                        "Forge already has \(initialBackendUploadedWorkoutCount) workouts; checking HealthKit for the rest"
-                }
-                companionDebugLog(
-                    "CompanionAppModel",
-                    "health sync backend workout state uploaded=\(initialBackendUploadedWorkoutCount) existing=\(session.workoutImportState?.existingWorkoutCount ?? initialBackendUploadedWorkoutCount) incomplete=\(session.workoutImportState?.incompleteWorkoutCount ?? 0)"
-                )
-            }
             let resumedRestoredCheckpoint = resumableCheckpoint?.syncSessionId == session.syncSessionId
             if resumedRestoredCheckpoint == false {
                 syncWindowEnd = Date()
@@ -1884,7 +1856,6 @@ final class CompanionAppModel: ObservableObject {
                 requiresWorkoutBackfill: workoutBackfillPlan.requiresBackfill,
                 lastReceivedChunkCount: session.progress?.chunkCount ?? session.receivedChunkIds.count,
                 lastReceivedBytes: session.progress?.receivedBytes ?? 0,
-                completedWorkoutExternalUids: [],
                 clientChunkingVersion: clientChunkingVersion
             )
             persistActiveHealthSyncCheckpoint(checkpoint)
@@ -1928,10 +1899,14 @@ final class CompanionAppModel: ObservableObject {
                 uploadSession: session,
                 pairing: pairing
             )
-            uploadSession = session
+            recoveryContext.uploadSession = session
             if let workoutImportState = session.workoutImportState {
-                backendUploadedWorkoutExternalUids = Set(
-                    workoutImportState.alreadyUploadedWorkoutExternalUids.map { $0.lowercased() }
+                let refreshedBackendWorkoutSnapshot = Self.backendWorkoutImportSnapshot(from: workoutImportState)
+                backendUploadedWorkoutExternalUids = refreshedBackendWorkoutSnapshot.uploadedWorkoutExternalUids
+                applyBackendWorkoutImportSnapshot(
+                    refreshedBackendWorkoutSnapshot,
+                    requiresBackfill: workoutBackfillPlan.requiresBackfill,
+                    announceProgress: false
                 )
             }
             sequence = try await syncClient.uploadBaseHealthSyncChunks(
@@ -2015,7 +1990,7 @@ final class CompanionAppModel: ObservableObject {
                             pairing: pairing
                         )
                         session = refreshedSession
-                        uploadSession = refreshedSession
+                        recoveryContext.uploadSession = refreshedSession
                         sequence = try await syncClient.uploadWorkoutHealthSyncChunks(
                             workouts: workouts,
                             uploadSession: refreshedSession,
@@ -2083,7 +2058,7 @@ final class CompanionAppModel: ObservableObject {
                 clearActiveHealthSyncCheckpoint()
                 lastSyncMessage = "Forge needs a runtime restart before HealthKit chunk sync."
                 healthSyncLegacyFallbackReason = "The Forge runtime did not advertise byte-stable chunk support"
-            } else if let uploadSession {
+            } else if let uploadSession = recoveryContext.uploadSession {
                 if Self.isHealthSyncChunkChecksumMismatch(error) {
                     await syncClient.abortHealthSyncSession(uploadSession: uploadSession, pairing: pairing)
                     clearActiveHealthSyncCheckpoint()
@@ -2112,6 +2087,63 @@ final class CompanionAppModel: ObservableObject {
             stopHealthSyncTransferTelemetry()
             throw error
         }
+    }
+
+    private static func backendWorkoutImportSnapshot(
+        from session: ForgeSyncClient.HealthSyncUploadSession
+    ) -> BackendWorkoutImportSnapshot {
+        backendWorkoutImportSnapshot(from: session.workoutImportState)
+    }
+
+    private static func backendWorkoutImportSnapshot(
+        from state: ForgeSyncClient.HealthSyncWorkoutImportState?
+    ) -> BackendWorkoutImportSnapshot {
+        let uploadedWorkoutExternalUids = Set(
+            state?.alreadyUploadedWorkoutExternalUids.map { $0.lowercased() } ?? []
+        )
+        return BackendWorkoutImportSnapshot(
+            uploadedWorkoutExternalUids: uploadedWorkoutExternalUids,
+            uploadedWorkoutCount: state?.alreadyUploadedWorkoutCount ?? uploadedWorkoutExternalUids.count,
+            existingWorkoutCount: state?.existingWorkoutCount ?? uploadedWorkoutExternalUids.count,
+            incompleteWorkoutCount: state?.incompleteWorkoutCount ?? 0,
+            timeSeriesSampleCount: state?.timeSeriesSampleCount ?? 0,
+            routePointCount: state?.routePointCount ?? 0
+        )
+    }
+
+    private func applyBackendWorkoutImportSnapshot(
+        _ snapshot: BackendWorkoutImportSnapshot,
+        requiresBackfill: Bool,
+        announceProgress: Bool
+    ) {
+        guard requiresBackfill else {
+            return
+        }
+        updateHistoricalWorkoutImportStatus { status in
+            status.indexedWorkouts = max(status.indexedWorkouts, snapshot.uploadedWorkoutCount)
+            status.uploadedWorkoutSummaries = max(
+                status.uploadedWorkoutSummaries,
+                snapshot.uploadedWorkoutCount
+            )
+            status.uploadedTimeSeriesSamples = max(
+                status.uploadedTimeSeriesSamples,
+                snapshot.timeSeriesSampleCount
+            )
+            status.uploadedRoutePoints = max(status.uploadedRoutePoints, snapshot.routePointCount)
+            status.targetTimeSeriesSamples = max(
+                status.targetTimeSeriesSamples,
+                snapshot.timeSeriesSampleCount
+            )
+            status.targetRoutePoints = max(status.targetRoutePoints, snapshot.routePointCount)
+        }
+        if announceProgress && snapshot.uploadedWorkoutCount > 0 {
+            lastSyncMessage =
+                "Forge already has \(snapshot.uploadedWorkoutCount) workouts; checking HealthKit for the rest"
+        }
+        companionDebugLog(
+            "CompanionAppModel",
+            "health sync backend workout state uploaded=\(snapshot.uploadedWorkoutCount) existing=\(snapshot.existingWorkoutCount) incomplete=\(snapshot.incompleteWorkoutCount)"
+        )
     }
 
     private func startHealthSyncTransferTelemetry() {
