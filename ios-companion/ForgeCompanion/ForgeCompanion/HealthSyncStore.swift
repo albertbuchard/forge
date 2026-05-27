@@ -23,6 +23,11 @@ actor HealthSyncStore {
         let healthDataDeferred: Bool
     }
 
+    private struct MappedWorkoutBatch {
+        let batchIndex: Int
+        let sessions: [CompanionSyncPayload.WorkoutSession]
+    }
+
     enum VitalAggregationKind: String {
         case discrete
         case cumulative
@@ -95,6 +100,7 @@ actor HealthSyncStore {
     private let incrementalLookbackHours = 72
     private let workoutMappingConcurrencyLimit = 4
     private let historicalWorkoutEvidenceBatchSize = 64
+    private let historicalWorkoutBatchPrefetchLimit = 3
     private let sleepSessionGap: TimeInterval = 4 * 60 * 60
     private let sleepInferenceGap: TimeInterval = 15 * 60
     private let isoFormatter: ISO8601DateFormatter = {
@@ -693,31 +699,68 @@ actor HealthSyncStore {
         let boundedBatchSize = effectiveBatchSize
         let totalBatches = Int(ceil(Double(workouts.count) / Double(boundedBatchSize)))
         var uploadedWorkouts = skippedWorkouts
-        for batchIndex in 0..<totalBatches {
-            let lowerBound = batchIndex * boundedBatchSize
-            let upperBound = min(workouts.count, lowerBound + boundedBatchSize)
-            let batchWorkouts = Array(workouts[lowerBound..<upperBound])
-            let sessions = try await mapWorkoutSessionsBounded(
-                batchWorkouts,
-                concurrencyLimit: workoutMappingConcurrencyLimit
-            )
-                .sorted { $0.startedAt > $1.startedAt }
-            uploadedWorkouts += sessions.count
-            try await onBatch(
-                sessions,
-                WorkoutBatchProgress(
-                    batchIndex: batchIndex + 1,
-                    totalBatches: totalBatches,
-                    uploadedWorkouts: uploadedWorkouts,
-                    totalWorkouts: allWorkouts.count,
-                    discoveredWorkouts: allWorkouts.count,
-                    isScanningComplete: true
+        let prefetchLimit = max(1, min(historicalWorkoutBatchPrefetchLimit, totalBatches))
+        let mappingConcurrencyLimit = workoutMappingConcurrencyLimit
+        var nextBatchToSchedule = 0
+        var nextBatchToDeliver = 0
+        var mappedBatches: [Int: MappedWorkoutBatch] = [:]
+
+        try await withThrowingTaskGroup(of: MappedWorkoutBatch.self) { group in
+            func scheduleNextBatch() {
+                guard nextBatchToSchedule < totalBatches else {
+                    return
+                }
+                let batchIndex = nextBatchToSchedule
+                let lowerBound = batchIndex * boundedBatchSize
+                let upperBound = min(workouts.count, lowerBound + boundedBatchSize)
+                let batchWorkouts = Array(workouts[lowerBound..<upperBound])
+                nextBatchToSchedule += 1
+                group.addTask {
+                    let sessions = try await self.mapWorkoutSessionsBounded(
+                        batchWorkouts,
+                        concurrencyLimit: mappingConcurrencyLimit
+                    )
+                        .sorted { $0.startedAt > $1.startedAt }
+                    return MappedWorkoutBatch(batchIndex: batchIndex, sessions: sessions)
+                }
+            }
+
+            for _ in 0..<prefetchLimit {
+                scheduleNextBatch()
+            }
+
+            while nextBatchToDeliver < totalBatches {
+                if let mappedBatch = mappedBatches.removeValue(forKey: nextBatchToDeliver) {
+                    uploadedWorkouts += mappedBatch.sessions.count
+                    try await onBatch(
+                        mappedBatch.sessions,
+                        WorkoutBatchProgress(
+                            batchIndex: mappedBatch.batchIndex + 1,
+                            totalBatches: totalBatches,
+                            uploadedWorkouts: uploadedWorkouts,
+                            totalWorkouts: allWorkouts.count,
+                            discoveredWorkouts: allWorkouts.count,
+                            isScanningComplete: true
+                        )
+                    )
+                    companionDebugLog(
+                        "HealthSyncStore",
+                        "streamWorkoutSessionBatches uploaded batch=\(mappedBatch.batchIndex + 1)/\(totalBatches) mapped=\(mappedBatch.sessions.count) uploaded=\(uploadedWorkouts)/\(allWorkouts.count) prefetchLimit=\(prefetchLimit)"
+                    )
+                    nextBatchToDeliver += 1
+                    scheduleNextBatch()
+                    continue
+                }
+
+                guard let mappedBatch = try await group.next() else {
+                    break
+                }
+                mappedBatches[mappedBatch.batchIndex] = mappedBatch
+                companionDebugLog(
+                    "HealthSyncStore",
+                    "streamWorkoutSessionBatches mapped batch=\(mappedBatch.batchIndex + 1)/\(totalBatches) records=\(mappedBatch.sessions.count)"
                 )
-            )
-            companionDebugLog(
-                "HealthSyncStore",
-                "streamWorkoutSessionBatches uploaded batch=\(batchIndex + 1)/\(totalBatches) mapped=\(sessions.count) uploaded=\(uploadedWorkouts)/\(allWorkouts.count)"
-            )
+            }
         }
         return WorkoutStreamResult(totalWorkouts: allWorkouts.count, healthDataDeferred: false)
     }

@@ -165,7 +165,7 @@ final class ForgeBackgroundUploadCoordinator: NSObject, URLSessionDataDelegate {
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.timeoutIntervalForRequest = 60
         configuration.timeoutIntervalForResource = 60 * 60
-        configuration.httpMaximumConnectionsPerHost = 1
+        configuration.httpMaximumConnectionsPerHost = 2
         return URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
     }()
 
@@ -285,8 +285,8 @@ final class ForgeBackgroundUploadCoordinator: NSObject, URLSessionDataDelegate {
 struct ForgeSyncClient {
     static let movementTimelineServerCompatibleLimit = 120
     static let legacyHTTPHealthSyncChunkingVersion = "http-v1"
-    static let httpBackgroundHealthSyncChunkingVersion = "http-background-v3-backend-authoritative"
-    static let irohHealthSyncChunkingVersion = "iroh-v2-backend-authoritative"
+    static let httpBackgroundHealthSyncChunkingVersion = "http-background-v4-backend-workout-state"
+    static let irohHealthSyncChunkingVersion = "iroh-v3-backend-workout-state"
 
     static func healthSyncChunkingVersion(for pairing: PairingPayload) -> String {
         if pairing.transport?.isIrohTransport == true {
@@ -358,6 +358,16 @@ struct ForgeSyncClient {
         let sync: SyncReceipt
     }
 
+    struct HealthSyncWorkoutImportState: Decodable {
+        let alreadyUploadedWorkoutExternalUids: [String]
+        let alreadyUploadedWorkoutCount: Int
+        let existingWorkoutCount: Int?
+        let incompleteWorkoutCount: Int?
+        let timeSeriesSampleCount: Int?
+        let routePointCount: Int?
+        let capturedAt: String?
+    }
+
     struct HealthSyncUploadSession: Decodable {
         let syncSessionId: String
         let schemaVersion: String
@@ -370,6 +380,7 @@ struct ForgeSyncClient {
         let acceptedFamilies: [String]
         let receivedChunkIds: [String]
         let receivedChunkIdSet: Set<String>
+        let workoutImportState: HealthSyncWorkoutImportState?
         let progress: HealthSyncChunkProgress?
 
         enum CodingKeys: String, CodingKey {
@@ -383,6 +394,7 @@ struct ForgeSyncClient {
             case supportsCompression
             case acceptedFamilies
             case receivedChunkIds
+            case workoutImportState
             case progress
         }
 
@@ -397,6 +409,7 @@ struct ForgeSyncClient {
             supportsCompression: Bool,
             acceptedFamilies: [String],
             receivedChunkIds: [String],
+            workoutImportState: HealthSyncWorkoutImportState? = nil,
             progress: HealthSyncChunkProgress? = nil
         ) {
             self.syncSessionId = syncSessionId
@@ -410,6 +423,7 @@ struct ForgeSyncClient {
             self.acceptedFamilies = acceptedFamilies
             self.receivedChunkIds = receivedChunkIds
             self.receivedChunkIdSet = Set(receivedChunkIds)
+            self.workoutImportState = workoutImportState
             self.progress = progress
         }
 
@@ -427,6 +441,10 @@ struct ForgeSyncClient {
                 supportsCompression: try container.decode(Bool.self, forKey: .supportsCompression),
                 acceptedFamilies: try container.decode([String].self, forKey: .acceptedFamilies),
                 receivedChunkIds: receivedChunkIds,
+                workoutImportState: try container.decodeIfPresent(
+                    HealthSyncWorkoutImportState.self,
+                    forKey: .workoutImportState
+                ),
                 progress: try container.decodeIfPresent(HealthSyncChunkProgress.self, forKey: .progress)
             )
         }

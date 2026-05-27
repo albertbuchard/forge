@@ -4386,6 +4386,129 @@ function mobileSyncSessionProgress(syncSessionId: string) {
   };
 }
 
+function finiteNumberFromUnknown(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function nestedRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function expectedWorkoutEvidenceCounts(derived: Record<string, unknown>) {
+  const syncCursor = nestedRecord(derived.syncCursor);
+  const captureQuality = nestedRecord(derived.captureQuality);
+  const syncTimeSeriesCount = finiteNumberFromUnknown(
+    syncCursor.timeSeriesSampleCount
+  );
+  const captureHeartRateCount = finiteNumberFromUnknown(
+    captureQuality.heartRateSamples
+  );
+  const syncRoutePointCount = finiteNumberFromUnknown(
+    syncCursor.routePointCount
+  );
+  const captureRoutePointCount = finiteNumberFromUnknown(
+    captureQuality.routePoints
+  );
+  const expectedTimeSeriesSamples = Math.max(
+    0,
+    Math.ceil(Math.max(syncTimeSeriesCount ?? 0, captureHeartRateCount ?? 0))
+  );
+  const expectedRoutePoints = Math.max(
+    0,
+    Math.ceil(Math.max(syncRoutePointCount ?? 0, captureRoutePointCount ?? 0))
+  );
+  return {
+    expectedTimeSeriesSamples,
+    expectedRoutePoints,
+    hasEvidenceMetadata:
+      syncTimeSeriesCount !== null ||
+      captureHeartRateCount !== null ||
+      syncRoutePointCount !== null ||
+      captureRoutePointCount !== null
+  };
+}
+
+function mobileHealthWorkoutImportState(userId: string) {
+  const rows = getDatabase()
+    .prepare(
+      `WITH time_series_counts AS (
+         SELECT workout_id, COUNT(*) AS time_series_count
+         FROM health_workout_time_series
+         GROUP BY workout_id
+       ),
+       route_counts AS (
+         SELECT workout_id, COUNT(*) AS route_point_count
+         FROM health_workout_routes
+         GROUP BY workout_id
+       )
+       SELECT
+         w.external_uid,
+         w.derived_json,
+         COALESCE(time_series_counts.time_series_count, 0) AS time_series_count,
+         COALESCE(route_counts.route_point_count, 0) AS route_point_count
+       FROM health_workout_sessions w
+       LEFT JOIN time_series_counts ON time_series_counts.workout_id = w.id
+       LEFT JOIN route_counts ON route_counts.workout_id = w.id
+       WHERE w.user_id = ?
+         AND w.source = 'apple_health'
+         AND w.external_uid IS NOT NULL
+         AND w.external_uid <> ''
+       ORDER BY w.started_at DESC`
+    )
+    .all(userId) as Array<{
+    external_uid: string;
+    derived_json: string;
+    time_series_count: number;
+    route_point_count: number;
+  }>;
+
+  const alreadyUploadedWorkoutExternalUids: string[] = [];
+  let incompleteWorkoutCount = 0;
+  let timeSeriesSampleCount = 0;
+  let routePointCount = 0;
+
+  for (const row of rows) {
+    const derived = safeJsonParse<Record<string, unknown>>(
+      row.derived_json,
+      {}
+    );
+    const evidenceCounts = expectedWorkoutEvidenceCounts(derived);
+    const actualTimeSeriesCount = Math.max(0, row.time_series_count ?? 0);
+    const actualRoutePointCount = Math.max(0, row.route_point_count ?? 0);
+    const evidenceComplete = evidenceCounts.hasEvidenceMetadata
+      ? actualTimeSeriesCount >= evidenceCounts.expectedTimeSeriesSamples &&
+        actualRoutePointCount >= evidenceCounts.expectedRoutePoints
+      : actualTimeSeriesCount + actualRoutePointCount > 0;
+
+    if (evidenceComplete) {
+      alreadyUploadedWorkoutExternalUids.push(row.external_uid.toLowerCase());
+      timeSeriesSampleCount += actualTimeSeriesCount;
+      routePointCount += actualRoutePointCount;
+    } else {
+      incompleteWorkoutCount += 1;
+    }
+  }
+
+  return {
+    alreadyUploadedWorkoutExternalUids,
+    alreadyUploadedWorkoutCount: alreadyUploadedWorkoutExternalUids.length,
+    existingWorkoutCount: rows.length,
+    incompleteWorkoutCount,
+    timeSeriesSampleCount,
+    routePointCount,
+    capturedAt: nowIso()
+  };
+}
+
 function mobileSyncSessionUploadPayload(
   session: MobileSyncSessionRow,
   receivedChunkIds: string[]
@@ -4397,13 +4520,15 @@ function mobileSyncSessionUploadPayload(
     chunkTargetBytes: HEALTH_MOBILE_SYNC_CHUNK_TARGET_BYTES,
     chunkMaxBytes: HEALTH_MOBILE_SYNC_CHUNK_MAX_BYTES,
     chunkPayloadEncoding: HEALTH_MOBILE_SYNC_CHUNK_PAYLOAD_ENCODING,
-    acceptedPayloadEncodings: HEALTH_MOBILE_SYNC_ACCEPTED_CHUNK_PAYLOAD_ENCODINGS,
+    acceptedPayloadEncodings:
+      HEALTH_MOBILE_SYNC_ACCEPTED_CHUNK_PAYLOAD_ENCODINGS,
     supportsCompression: true,
     acceptedFamilies: safeJsonParse<MobileHealthSyncFamily[]>(
       session.requested_families_json,
       []
     ),
     receivedChunkIds,
+    workoutImportState: mobileHealthWorkoutImportState(session.user_id),
     progress: mobileSyncSessionProgress(session.id)
   };
 }

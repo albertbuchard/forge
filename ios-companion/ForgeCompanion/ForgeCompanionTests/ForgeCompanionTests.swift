@@ -2985,6 +2985,52 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertFalse(staleRuntime.supportsByteStablePayloadEncoding)
     }
 
+    func testHealthSyncUploadSessionDecodesBackendWorkoutImportState() throws {
+        let payload = """
+        {
+          "syncSessionId": "hms_backend_state",
+          "schemaVersion": "healthkit-sync-v2",
+          "status": "running",
+          "chunkTargetBytes": 512000,
+          "chunkMaxBytes": 1000000,
+          "chunkPayloadEncoding": "payload_json_base64",
+          "acceptedPayloadEncodings": ["payload_json_base64"],
+          "supportsCompression": true,
+          "acceptedFamilies": ["workout_summaries", "workout_time_series", "workout_routes"],
+          "receivedChunkIds": ["chunk-1", "chunk-2"],
+          "workoutImportState": {
+            "alreadyUploadedWorkoutExternalUids": ["workout-a", "workout-b"],
+            "alreadyUploadedWorkoutCount": 2,
+            "existingWorkoutCount": 3,
+            "incompleteWorkoutCount": 1,
+            "timeSeriesSampleCount": 240,
+            "routePointCount": 40,
+            "capturedAt": "2026-05-26T19:02:54.205Z"
+          },
+          "progress": {
+            "chunkCount": 2,
+            "receivedBytes": 8192
+          }
+        }
+        """
+
+        let session = try JSONDecoder().decode(
+            ForgeSyncClient.HealthSyncUploadSession.self,
+            from: Data(payload.utf8)
+        )
+
+        XCTAssertEqual(session.receivedChunkIdSet, Set(["chunk-1", "chunk-2"]))
+        XCTAssertEqual(
+            session.workoutImportState?.alreadyUploadedWorkoutExternalUids,
+            ["workout-a", "workout-b"]
+        )
+        XCTAssertEqual(session.workoutImportState?.alreadyUploadedWorkoutCount, 2)
+        XCTAssertEqual(session.workoutImportState?.existingWorkoutCount, 3)
+        XCTAssertEqual(session.workoutImportState?.incompleteWorkoutCount, 1)
+        XCTAssertEqual(session.workoutImportState?.timeSeriesSampleCount, 240)
+        XCTAssertEqual(session.workoutImportState?.routePointCount, 40)
+    }
+
     func testWorkoutChunkIdDoesNotDependOnResumeSequenceOffset() {
         let uploadSession = ForgeSyncClient.HealthSyncUploadSession(
             syncSessionId: "hms_resume",
