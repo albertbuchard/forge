@@ -1831,6 +1831,44 @@ final class CompanionAppModel: ObservableObject {
                 resumeSyncSessionId: resumeSyncSessionId
             )
             uploadSession = session
+            var backendUploadedWorkoutExternalUids = Set(
+                session.workoutImportState?.alreadyUploadedWorkoutExternalUids.map { $0.lowercased() } ?? []
+            )
+            let initialBackendUploadedWorkoutCount =
+                session.workoutImportState?.alreadyUploadedWorkoutCount ?? backendUploadedWorkoutExternalUids.count
+            if workoutBackfillPlan.requiresBackfill {
+                updateHistoricalWorkoutImportStatus { status in
+                    status.indexedWorkouts = max(status.indexedWorkouts, initialBackendUploadedWorkoutCount)
+                    status.uploadedWorkoutSummaries = max(
+                        status.uploadedWorkoutSummaries,
+                        initialBackendUploadedWorkoutCount
+                    )
+                    status.uploadedTimeSeriesSamples = max(
+                        status.uploadedTimeSeriesSamples,
+                        session.workoutImportState?.timeSeriesSampleCount ?? 0
+                    )
+                    status.uploadedRoutePoints = max(
+                        status.uploadedRoutePoints,
+                        session.workoutImportState?.routePointCount ?? 0
+                    )
+                    status.targetTimeSeriesSamples = max(
+                        status.targetTimeSeriesSamples,
+                        session.workoutImportState?.timeSeriesSampleCount ?? 0
+                    )
+                    status.targetRoutePoints = max(
+                        status.targetRoutePoints,
+                        session.workoutImportState?.routePointCount ?? 0
+                    )
+                }
+                if initialBackendUploadedWorkoutCount > 0 {
+                    lastSyncMessage =
+                        "Forge already has \(initialBackendUploadedWorkoutCount) workouts; checking HealthKit for the rest"
+                }
+                companionDebugLog(
+                    "CompanionAppModel",
+                    "health sync backend workout state uploaded=\(initialBackendUploadedWorkoutCount) existing=\(session.workoutImportState?.existingWorkoutCount ?? initialBackendUploadedWorkoutCount) incomplete=\(session.workoutImportState?.incompleteWorkoutCount ?? 0)"
+                )
+            }
             let resumedRestoredCheckpoint = resumableCheckpoint?.syncSessionId == session.syncSessionId
             if resumedRestoredCheckpoint == false {
                 syncWindowEnd = Date()
@@ -1891,6 +1929,11 @@ final class CompanionAppModel: ObservableObject {
                 pairing: pairing
             )
             uploadSession = session
+            if let workoutImportState = session.workoutImportState {
+                backendUploadedWorkoutExternalUids = Set(
+                    workoutImportState.alreadyUploadedWorkoutExternalUids.map { $0.lowercased() }
+                )
+            }
             sequence = try await syncClient.uploadBaseHealthSyncChunks(
                 payload: buildResult.payload,
                 uploadSession: session,
@@ -1914,16 +1957,20 @@ final class CompanionAppModel: ObservableObject {
                     lastSuccessfulSyncAt: workoutBackfillPlan.workoutCursorDate,
                     syncWindowEnd: syncWindowEnd,
                     batchSize: Int.max,
-                    alreadyUploadedWorkoutExternalUids: [],
+                    alreadyUploadedWorkoutExternalUids: backendUploadedWorkoutExternalUids,
                     onProgress: { [weak self] progress in
                         guard workoutBackfillPlan.requiresBackfill else {
                             return
                         }
                         await MainActor.run {
                             self?.lastSyncMessage =
-                                "Preparing \(progress.totalWorkouts ?? progress.discoveredWorkouts) historical workouts"
+                                "Preparing \(progress.uploadedWorkouts)/\(progress.totalWorkouts ?? progress.discoveredWorkouts) historical workouts"
                             self?.updateHistoricalWorkoutImportStatus { status in
-                                status.indexedWorkouts = progress.uploadedWorkouts
+                                status.indexedWorkouts = max(status.indexedWorkouts, progress.uploadedWorkouts)
+                                status.uploadedWorkoutSummaries = max(
+                                    status.uploadedWorkoutSummaries,
+                                    progress.uploadedWorkouts
+                                )
                                 if let totalWorkouts = progress.totalWorkouts {
                                     status.totalWorkouts = totalWorkouts
                                 }
@@ -1951,7 +1998,7 @@ final class CompanionAppModel: ObservableObject {
                             }
                             if workoutBackfillPlan.requiresBackfill {
                                 self?.updateHistoricalWorkoutImportStatus { status in
-                                    status.indexedWorkouts = progress.uploadedWorkouts
+                                    status.indexedWorkouts = max(status.indexedWorkouts, progress.uploadedWorkouts)
                                     if let totalWorkouts = progress.totalWorkouts {
                                         status.totalWorkouts = totalWorkouts
                                     }

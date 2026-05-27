@@ -3007,6 +3007,12 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
         chunkPayloadEncoding: string;
         acceptedPayloadEncodings: string[];
         supportsCompression: boolean;
+        workoutImportState: {
+          alreadyUploadedWorkoutExternalUids: string[];
+          alreadyUploadedWorkoutCount: number;
+          existingWorkoutCount: number;
+          incompleteWorkoutCount: number;
+        };
         progress: {
           chunkCount: number;
           receivedBytes: number;
@@ -3028,6 +3034,22 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
       "payload_json_deflate_base64",
       "legacy_payload_object"
     ]);
+    assert.deepEqual(
+      startPayload.upload.workoutImportState.alreadyUploadedWorkoutExternalUids,
+      []
+    );
+    assert.equal(
+      startPayload.upload.workoutImportState.alreadyUploadedWorkoutCount,
+      0
+    );
+    assert.equal(
+      startPayload.upload.workoutImportState.existingWorkoutCount,
+      0
+    );
+    assert.equal(
+      startPayload.upload.workoutImportState.incompleteWorkoutCount,
+      0
+    );
     const syncSessionId = startPayload.upload.syncSessionId;
     assert.ok(syncSessionId);
 
@@ -3187,6 +3209,12 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
       upload: {
         syncSessionId: string;
         receivedChunkIds: string[];
+        workoutImportState: {
+          alreadyUploadedWorkoutExternalUids: string[];
+          alreadyUploadedWorkoutCount: number;
+          existingWorkoutCount: number;
+          incompleteWorkoutCount: number;
+        };
         progress: {
           chunkCount: number;
           receivedCounts: Record<string, number>;
@@ -3202,6 +3230,23 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
       resumedUpload.upload.progress.receivedCounts.workout_summaries,
       1
     );
+    assert.deepEqual(
+      resumedUpload.upload.workoutImportState
+        .alreadyUploadedWorkoutExternalUids,
+      []
+    );
+    assert.equal(
+      resumedUpload.upload.workoutImportState.alreadyUploadedWorkoutCount,
+      0
+    );
+    assert.equal(
+      resumedUpload.upload.workoutImportState.existingWorkoutCount,
+      1
+    );
+    assert.equal(
+      resumedUpload.upload.workoutImportState.incompleteWorkoutCount,
+      1
+    );
 
     const statusResponse = await app.inject({
       method: "GET",
@@ -3215,6 +3260,12 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
       upload: {
         status: string;
         receivedChunkIds: string[];
+        workoutImportState: {
+          alreadyUploadedWorkoutExternalUids: string[];
+          alreadyUploadedWorkoutCount: number;
+          existingWorkoutCount: number;
+          incompleteWorkoutCount: number;
+        };
         progress: {
           chunkCount: number;
           receivedCounts: Record<string, number>;
@@ -3226,6 +3277,19 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
       "chunk-summary-1"
     ]);
     assert.equal(statusPayload.upload.progress.chunkCount, 1);
+    assert.deepEqual(
+      statusPayload.upload.workoutImportState
+        .alreadyUploadedWorkoutExternalUids,
+      []
+    );
+    assert.equal(
+      statusPayload.upload.workoutImportState.existingWorkoutCount,
+      1
+    );
+    assert.equal(
+      statusPayload.upload.workoutImportState.incompleteWorkoutCount,
+      1
+    );
 
     const duplicateResponse = await app.inject({
       method: "POST",
@@ -3650,6 +3714,53 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
       assert.equal(response.statusCode, 200, response.body);
     }
 
+    const evidenceStatusResponse = await app.inject({
+      method: "GET",
+      url:
+        `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}` +
+        `?sessionId=${encodeURIComponent(qrPayload.sessionId)}` +
+        `&pairingToken=${encodeURIComponent(qrPayload.pairingToken)}`
+    });
+    assert.equal(
+      evidenceStatusResponse.statusCode,
+      200,
+      evidenceStatusResponse.body
+    );
+    const evidenceStatus = evidenceStatusResponse.json() as {
+      upload: {
+        workoutImportState: {
+          alreadyUploadedWorkoutExternalUids: string[];
+          alreadyUploadedWorkoutCount: number;
+          existingWorkoutCount: number;
+          incompleteWorkoutCount: number;
+          timeSeriesSampleCount: number;
+          routePointCount: number;
+        };
+      };
+    };
+    assert.deepEqual(
+      evidenceStatus.upload.workoutImportState
+        .alreadyUploadedWorkoutExternalUids,
+      ["hk-workout-chunked-1"]
+    );
+    assert.equal(
+      evidenceStatus.upload.workoutImportState.alreadyUploadedWorkoutCount,
+      1
+    );
+    assert.equal(
+      evidenceStatus.upload.workoutImportState.existingWorkoutCount,
+      1
+    );
+    assert.equal(
+      evidenceStatus.upload.workoutImportState.incompleteWorkoutCount,
+      0
+    );
+    assert.equal(
+      evidenceStatus.upload.workoutImportState.timeSeriesSampleCount,
+      2
+    );
+    assert.equal(evidenceStatus.upload.workoutImportState.routePointCount, 2);
+
     const progressiveFitnessResponse = await app.inject({
       method: "GET",
       url: "/api/v1/health/fitness"
@@ -3773,44 +3884,44 @@ test("mobile health chunked sync accepts compressed workout archive chunks", asy
     assert.ok(upload.acceptedFamilies.includes("workout_archive"));
 
     const archiveWorkout = {
-          externalUid: "hk-workout-archive-1",
-          workoutType: "running",
-          startedAt: "2026-04-07T07:15:00.000Z",
-          endedAt: "2026-04-07T08:00:00.000Z",
-          activeEnergyKcal: 320,
-          totalEnergyKcal: 360,
-          distanceMeters: 6400,
-          stepCount: 7200,
-          exerciseMinutes: 45,
-          averageHeartRate: 142,
-          maxHeartRate: 171,
-          sourceDevice: "Apple Watch",
-          sourceSystem: "apple_health",
-          timeSeriesSamples: [
-            {
-              sourceSampleUid: "archive-hr-1",
-              seriesIndex: 0,
-              metricKey: "heart_rate",
-              label: "Heart Rate",
-              category: "heart",
-              unit: "count/min",
-              value: 142,
-              startedAt: "2026-04-07T07:20:00.000Z",
-              endedAt: "2026-04-07T07:20:05.000Z",
-              sourceDevice: "Apple Watch"
-            }
-          ],
-          routePoints: [
-            {
-              sourceRouteUid: "archive-route-1",
-              pointIndex: 0,
-              recordedAt: "2026-04-07T07:20:00.000Z",
-              latitude: 46.2044,
-              longitude: 6.1432
-            }
-          ],
-          links: [],
-          annotations: {}
+      externalUid: "hk-workout-archive-1",
+      workoutType: "running",
+      startedAt: "2026-04-07T07:15:00.000Z",
+      endedAt: "2026-04-07T08:00:00.000Z",
+      activeEnergyKcal: 320,
+      totalEnergyKcal: 360,
+      distanceMeters: 6400,
+      stepCount: 7200,
+      exerciseMinutes: 45,
+      averageHeartRate: 142,
+      maxHeartRate: 171,
+      sourceDevice: "Apple Watch",
+      sourceSystem: "apple_health",
+      timeSeriesSamples: [
+        {
+          sourceSampleUid: "archive-hr-1",
+          seriesIndex: 0,
+          metricKey: "heart_rate",
+          label: "Heart Rate",
+          category: "heart",
+          unit: "count/min",
+          value: 142,
+          startedAt: "2026-04-07T07:20:00.000Z",
+          endedAt: "2026-04-07T07:20:05.000Z",
+          sourceDevice: "Apple Watch"
+        }
+      ],
+      routePoints: [
+        {
+          sourceRouteUid: "archive-route-1",
+          pointIndex: 0,
+          recordedAt: "2026-04-07T07:20:00.000Z",
+          latitude: 46.2044,
+          longitude: 6.1432
+        }
+      ],
+      links: [],
+      annotations: {}
     };
     const archivePayload = {
       workouts: [
