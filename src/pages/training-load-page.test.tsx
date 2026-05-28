@@ -49,8 +49,12 @@ vi.mock("@/lib/api", () => ({
 }));
 
 vi.mock("recharts", () => {
-  const Chart = ({ children }: { children?: ReactNode }) => <div>{children}</div>;
-  const Primitive = ({ children }: { children?: ReactNode }) => <div>{children}</div>;
+  const Chart = ({ children }: { children?: ReactNode }) => (
+    <div>{children}</div>
+  );
+  const Primitive = ({ children }: { children?: ReactNode }) => (
+    <div>{children}</div>
+  );
   return {
     Area: Primitive,
     AreaChart: Chart,
@@ -128,14 +132,50 @@ function createTrainingLoad(): TrainingLoadViewData {
       { key: "zone_5", label: "Zone 5", seconds: 1800, percentage: 0.15 }
     ],
     intensityDistribution: [
-      { key: "low", label: "Low / base", seconds: 5400, percentage: 0.3, targetRange: [0.7, 0.85] },
-      { key: "moderate", label: "Tempo / threshold", seconds: 7200, percentage: 0.4, targetRange: [0.05, 0.2] },
-      { key: "high", label: "Severe / HIIT", seconds: 5400, percentage: 0.3, targetRange: [0.08, 0.18] }
+      {
+        key: "low",
+        label: "Low / base",
+        seconds: 5400,
+        percentage: 0.3,
+        targetRange: [0.7, 0.85]
+      },
+      {
+        key: "moderate",
+        label: "Tempo / threshold",
+        seconds: 7200,
+        percentage: 0.4,
+        targetRange: [0.05, 0.2]
+      },
+      {
+        key: "high",
+        label: "Severe / HIIT",
+        seconds: 5400,
+        percentage: 0.3,
+        targetRange: [0.08, 0.18]
+      }
     ],
     recentIntensityDistribution: [
-      { key: "low", label: "Low / base", seconds: 3000, percentage: 0.25, targetRange: [0.7, 0.85] },
-      { key: "moderate", label: "Tempo / threshold", seconds: 4800, percentage: 0.4, targetRange: [0.05, 0.2] },
-      { key: "high", label: "Severe / HIIT", seconds: 4200, percentage: 0.35, targetRange: [0.08, 0.18] }
+      {
+        key: "low",
+        label: "Low / base",
+        seconds: 3000,
+        percentage: 0.25,
+        targetRange: [0.7, 0.85]
+      },
+      {
+        key: "moderate",
+        label: "Tempo / threshold",
+        seconds: 4800,
+        percentage: 0.4,
+        targetRange: [0.05, 0.2]
+      },
+      {
+        key: "high",
+        label: "Severe / HIIT",
+        seconds: 4200,
+        percentage: 0.35,
+        targetRange: [0.08, 0.18]
+      }
     ],
     dailyLoad: [
       {
@@ -213,7 +253,10 @@ function createTrainingLoad(): TrainingLoadViewData {
       lowIntensityTarget: "70-85% of total endurance time",
       moderateIntensityTarget: "5-20% depending on phase and sport specificity",
       highIntensityTarget: "8-18% unless in a short peaking block",
-      monitoringNotes: ["Use Forge TRIMP as a trend.", "Prefer easy base when hard work is already high."]
+      monitoringNotes: [
+        "Use Forge TRIMP as a trend.",
+        "Prefer easy base when hard work is already high."
+      ]
     }
   };
 }
