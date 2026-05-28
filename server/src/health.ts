@@ -4407,18 +4407,24 @@ function nestedRecord(value: unknown): Record<string, unknown> {
 function expectedWorkoutEvidenceCounts(derived: Record<string, unknown>) {
   const syncCursor = nestedRecord(derived.syncCursor);
   const captureQuality = nestedRecord(derived.captureQuality);
+  const captureQualityFlags = Array.isArray(captureQuality.flags)
+    ? captureQuality.flags.filter((flag): flag is string => typeof flag === "string")
+    : [];
+  const summaryOnlyExport =
+    captureQuality.status === "summary_exported" ||
+    captureQualityFlags.includes("server_side_evidence_derivation");
   const syncTimeSeriesCount = finiteNumberFromUnknown(
     syncCursor.timeSeriesSampleCount
   );
-  const captureHeartRateCount = finiteNumberFromUnknown(
-    captureQuality.heartRateSamples
-  );
+  const captureHeartRateCount = summaryOnlyExport
+    ? null
+    : finiteNumberFromUnknown(captureQuality.heartRateSamples);
   const syncRoutePointCount = finiteNumberFromUnknown(
     syncCursor.routePointCount
   );
-  const captureRoutePointCount = finiteNumberFromUnknown(
-    captureQuality.routePoints
-  );
+  const captureRoutePointCount = summaryOnlyExport
+    ? null
+    : finiteNumberFromUnknown(captureQuality.routePoints);
   const expectedTimeSeriesSamples = Math.max(
     0,
     Math.ceil(Math.max(syncTimeSeriesCount ?? 0, captureHeartRateCount ?? 0))

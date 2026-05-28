@@ -382,6 +382,7 @@ final class CompanionAppModel: ObservableObject {
         let uploadedWorkoutCount: Int
         let existingWorkoutCount: Int
         let incompleteWorkoutCount: Int
+        let heartRateSampleCount: Int
         let timeSeriesSampleCount: Int
         let routePointCount: Int
     }
@@ -391,6 +392,7 @@ final class CompanionAppModel: ObservableObject {
         let payloadSummary: SyncPayloadSummary
         let healthDataDeferred: Bool
         let completedWorkoutBackfill: Bool
+        let requiresWorkoutEvidenceReplay: Bool
     }
 
     private final class HealthSyncUploadRecoveryContext {
@@ -1861,7 +1863,8 @@ final class CompanionAppModel: ObservableObject {
             }
             startHistoricalWorkoutImportIfNeeded(
                 pairing: pairing,
-                trigger: "after \(trigger)"
+                trigger: "after \(trigger)",
+                forceEvidenceReplay: syncResult.requiresWorkoutEvidenceReplay
             )
             if syncResult.healthDataDeferred {
                 lastSyncMessage =
@@ -1931,8 +1934,18 @@ final class CompanionAppModel: ObservableObject {
 
     private func startHistoricalWorkoutImportIfNeeded(
         pairing: PairingPayload,
-        trigger: String
+        trigger: String,
+        forceEvidenceReplay: Bool = false
     ) {
+        if workoutBackfillCompletedAt != nil && forceEvidenceReplay {
+            companionDebugLog(
+                "CompanionAppModel",
+                "historical workout import replay forced by backend incomplete evidence trigger=\(trigger)"
+            )
+            UserDefaults.standard.removeObject(forKey: StorageKeys.workoutBackfillCompletedAt)
+            workoutBackfillCompletedAt = nil
+            lastSyncMessage = "Repairing historical workout heart-rate and route evidence"
+        }
         guard workoutBackfillCompletedAt == nil else {
             return
         }
@@ -2210,6 +2223,8 @@ final class CompanionAppModel: ObservableObject {
             recoveryContext.uploadSession = session
             let initialBackendWorkoutSnapshot = Self.backendWorkoutImportSnapshot(from: session)
             var backendUploadedWorkoutExternalUids = initialBackendWorkoutSnapshot.uploadedWorkoutExternalUids
+            var requiresWorkoutEvidenceReplay =
+                initialBackendWorkoutSnapshot.incompleteWorkoutCount > 0
             applyBackendWorkoutImportSnapshot(
                 initialBackendWorkoutSnapshot,
                 requiresBackfill: false,
@@ -2277,6 +2292,9 @@ final class CompanionAppModel: ObservableObject {
             if let workoutImportState = session.workoutImportState {
                 let refreshedBackendWorkoutSnapshot = Self.backendWorkoutImportSnapshot(from: workoutImportState)
                 backendUploadedWorkoutExternalUids = refreshedBackendWorkoutSnapshot.uploadedWorkoutExternalUids
+                requiresWorkoutEvidenceReplay =
+                    requiresWorkoutEvidenceReplay ||
+                    refreshedBackendWorkoutSnapshot.incompleteWorkoutCount > 0
                 applyBackendWorkoutImportSnapshot(
                     refreshedBackendWorkoutSnapshot,
                     requiresBackfill: false,
@@ -2388,7 +2406,8 @@ final class CompanionAppModel: ObservableObject {
                 receipt: receipt,
                 payloadSummary: payloadSummary,
                 healthDataDeferred: healthDataDeferred,
-                completedWorkoutBackfill: false
+                completedWorkoutBackfill: false,
+                requiresWorkoutEvidenceReplay: requiresWorkoutEvidenceReplay
             )
         } catch {
             applyHealthSyncChunkErrorDiagnostics(error)
@@ -2468,6 +2487,7 @@ final class CompanionAppModel: ObservableObject {
             uploadedWorkoutCount: state?.alreadyUploadedWorkoutCount ?? uploadedWorkoutExternalUids.count,
             existingWorkoutCount: state?.existingWorkoutCount ?? uploadedWorkoutExternalUids.count,
             incompleteWorkoutCount: state?.incompleteWorkoutCount ?? 0,
+            heartRateSampleCount: state?.heartRateSampleCount ?? 0,
             timeSeriesSampleCount: state?.timeSeriesSampleCount ?? 0,
             routePointCount: state?.routePointCount ?? 0
         )
@@ -2492,6 +2512,10 @@ final class CompanionAppModel: ObservableObject {
                 snapshot.timeSeriesSampleCount
             )
             status.uploadedRoutePoints = max(status.uploadedRoutePoints, snapshot.routePointCount)
+            status.targetHeartRateSamples = max(
+                status.targetHeartRateSamples,
+                snapshot.heartRateSampleCount
+            )
             status.targetTimeSeriesSamples = max(
                 status.targetTimeSeriesSamples,
                 snapshot.timeSeriesSampleCount
