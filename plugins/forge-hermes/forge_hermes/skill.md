@@ -9,7 +9,8 @@ Forge has four major stored-entity surfaces and three specialized domain surface
 The planning side covers goals, projects, strategies,
 tasks, habits, notes, calendar events, recurring work blocks, task timeboxes, live
 task runs, and agent-authored insights. The Health side covers sleep sessions,
-sports and workout sessions, companion pairing, and habit-generated workout records.
+sports and workout sessions, the read-only training-load surface for cardiovascular
+load and HR zone review, companion pairing, and habit-generated workout records.
 The Preferences side covers contextual taste modeling, pairwise comparisons, direct
 signals, editable concept libraries, and preference items. The Psyche side covers
 values, patterns, behaviors, beliefs, modes, guided mode sessions, flashcards,
@@ -273,7 +274,7 @@ For wiki-specific recall:
 - Batch CRUD entities: `goal`, `project`, `strategy`, `task`, `habit`, `tag`, `note`, `insight`, `calendar_event`, `work_block_template`, `task_timebox`, `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`, `mode_guide_session`, `flashcard`, `trigger_report`, `event_type`, `emotion_definition`, `preference_catalog`, `preference_catalog_item`, `preference_context`, `preference_item`, `questionnaire_instrument`, `sleep_session`, and `workout_session`.
 - Specialized CRUD entities: `wiki_page` and `calendar_connection`.
 - Action/workflow entities: `task_run`, `questionnaire_run`, preference game/judgment/signal flows, calendar connection sync/setup, self-observation review, work adjustments, and import/sync jobs.
-- Read-model-only surfaces: operator overview/context, sleep overview, sports overview, self-observation calendar, and calendar overview.
+- Read-model-only surfaces: operator overview/context, sleep overview, sports overview, training load, self-observation calendar, and calendar overview.
 - In `forge_get_agent_onboarding.entityRouteModel.readModelOnlySurfaces`, operator,
   calendar, self-observation, sleep, and sports read models are available under
   camelCase names and entity-style aliases where useful, including

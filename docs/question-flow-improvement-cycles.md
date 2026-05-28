@@ -1,10 +1,127 @@
 # Forge Question Flow Improvement Cycles
 
-Latest run date: 2026-05-27
+Latest run date: 2026-05-28
 
 This report records the three-cycle evaluation for Forge agent question flows. The
 same full flow set was tested in each cycle so improvements were kept only where they
 helped the entity or specialized surface.
+
+## 2026-05-28 Automation Pass
+
+Setup verification:
+
+- Confirmed the monorepo and Forge worktree were on `main` before plugin work and
+  edits.
+- No prior automation memory file existed for
+  `improvement-of-question-flows-in-forge` at the start of this run.
+- Confirmed OpenClaw config still points `forge-openclaw-plugin` at
+  `/Users/omarclaw/Documents/aurel-monorepo/data/forge` and the live process on
+  `127.0.0.1:4317` had
+  `/Users/omarclaw/Documents/aurel-monorepo/data/forge/forge.sqlite` open. No Forge
+  data root was changed, moved, merged, deleted, or overwritten.
+- Built the repo-local OpenClaw plugin with `npm run build:openclaw-plugin`, linked it
+  again with
+  `openclaw plugins install --link --dangerously-force-unsafe-install ./openclaw-plugin`,
+  and restarted the OpenClaw gateway. The known duplicate plugin-id warning remains,
+  and OpenClaw resolves it in favor of the config-selected repo-local plugin.
+- Built the Hermes packaged runtime with
+  `node ./plugins/forge-hermes/scripts/build-package-runtime.mjs` and reinstalled
+  Hermes editable from `./plugins/forge-hermes`.
+- Verified OpenClaw loads `forge-openclaw-plugin 0.2.94` from the repo-local
+  `openclaw-plugin/dist/openclaw/index.js`, with recorded install version `0.2.94`.
+- Verified Hermes imports `forge-hermes-plugin 0.2.95` from the repo-local editable
+  package.
+- Verified live Forge health, OpenClaw `forge health`, live onboarding, and live
+  OpenAPI. Live onboarding published 42 catalog entries, 38 non-Psyche conversation
+  playbooks, 10 Psyche playbooks, 23 Movement route keys, four Life Force route keys
+  under both `lifeForce` and `life_force`, and 16 Workbench route keys. Live OpenAPI
+  exposed 182 paths, including five shared batch entity routes, 16 Movement routes,
+  four Life Force routes, 13 Workbench routes, and `/api/v1/health/training-load`.
+
+Every cycle retested the full current flow set: goal, project, strategy, task, habit,
+tag, note, insight, task_run, work_adjustment, calendar_event, work_block_template,
+task_timebox, calendar_connection, preference_catalog, preference_catalog_item,
+preference_context, preference_item, preference_judgment, preference_signal,
+questionnaire_instrument, questionnaire_run, self_observation, sleep_session,
+sleep_overview, workout_session, sports_overview, training_load, wiki_page, movement,
+life_force, workbench, psyche_value, behavior_pattern, behavior, belief_entry,
+mode_profile, mode_guide_session, flashcard, trigger_report, event_type, and
+emotion_definition. Specialized route scenarios covered all live Movement keys
+including places, saved overlays, automatic-box repair, stays, trips, and trip points;
+all Life Force keys; and all Workbench catalog, CRUD, execution, run, node, published
+output, latest-output, one-off, and chat keys.
+
+Cycle 1 tested all entity and specialized-surface flows after the plugin refresh, with
+emphasis on whether the live catalog had drifted since the previous automation run.
+Strengths: the full simulation and onboarding contract suite already covered
+`training_load` as a read-model-only health surface, and the Movement, Life Force, and
+Workbench route-key maps matched live onboarding. Weakness: several top-level agent
+summaries still introduced Health as sleep/sports only, so a new agent could anchor on
+`sleep_session` and `workout_session` and miss the dedicated `training_load` read
+model before reaching the deeper route matrix.
+
+What changed in Cycle 1:
+
+- Added `training_load` to the OpenClaw skill frontmatter description.
+- Updated the OpenClaw, Hermes, Hermes packaged, and Codex skill summaries so Health
+  explicitly includes the read-only training-load surface for cardiovascular load and
+  HR zone review.
+- Updated the Hermes read-model-only surface summary to name training load beside
+  sleep, sports, self-observation, calendar, and operator reads.
+- Added regression assertions that lock this top-level training-load wording into the
+  agent-facing skills.
+
+What happened after retesting Cycle 1:
+
+- Re-ran the full question-flow simulation, onboarding contract, and skill parity
+  suite. All 33 focused tests passed.
+- The change improved first-pass API-path clarity for health review without changing
+  Psyche pacing or normal batch CRUD guidance, so it was kept.
+
+Cycle 2 retested the same full matrix with emphasis on API access and live contract
+truthfulness after the prompt-summary fix. Strengths: live onboarding still published
+batch CRUD as the default for normal stored entities, read-model-only posture for
+`training_load`, and dedicated route-key tools for Movement, Life Force, and
+Workbench. Weakness: this durable report still described the live catalog as 41
+entries and did not consistently name `training_load` in the current-cycle setup and
+flow coverage, which made the automation record less trustworthy than the live
+contract.
+
+What changed in Cycle 2:
+
+- Updated this report's latest run date, setup verification, live catalog counts, and
+  full flow inventory to match the current 42-entry onboarding catalog.
+- Added the current OpenClaw and Hermes local install versions and live OpenAPI path
+  counts to the setup record.
+- Kept the existing historical notes intact, including older passes that explain when
+  training-load coverage first entered the simulation matrix.
+
+What happened after retesting Cycle 2:
+
+- Re-ran the same focused suite. All 33 focused tests passed.
+- No route guidance changed during this documentation correction, and the report now
+  matches live onboarding/OpenAPI, so the update was kept.
+
+Cycle 3 retested every flow again with emphasis on regression risk across all agent
+surfaces. Strengths: Psyche flows remained active-listening and hypothesis-capable;
+non-Psyche flows stayed concise and missing-only; Movement, Life Force, and Workbench
+stayed specialized-route-first; `training_load` stayed a read-model-only surface that
+routes to `/api/v1/health/training-load` or `forge_get_training_load_overview`.
+Weakness: none found that warranted another behavior change in this cycle.
+
+What changed in Cycle 3:
+
+- No additional prompt, route, or OpenAPI changes were made. The Cycle 1 and Cycle 2
+  changes were kept as the final improvements for this pass.
+
+What happened after retesting Cycle 3:
+
+- Re-ran the focused question-flow/contract suite again after the final report update.
+  All 33 focused tests passed.
+- No changes were reverted. Remaining work is qualitative: run occasional real
+  OpenClaw, Hermes, and Codex conversations where a user combines Psyche meaning,
+  owner ambiguity, health training-load review, and specialized Movement/Life
+  Force/Workbench actions in one utterance.
 
 ## 2026-05-27 Automation Pass
 

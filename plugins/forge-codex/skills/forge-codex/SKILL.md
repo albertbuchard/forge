@@ -7,8 +7,9 @@ Forge has planning, health, preferences, Psyche, questionnaire, self-observation
 wiki surfaces, and specialized Movement, Life Force, and Workbench domain surfaces.
 The planning side covers goals, projects, strategies, tasks,
 habits, tags, notes, calendar events, recurring work blocks, task timeboxes, live
-task runs, and agent-authored insights. The health side covers `sleep_session` and
-`workout_session`. The preferences side covers `preference_catalog`,
+task runs, and agent-authored insights. The health side covers `sleep_session`,
+`workout_session`, and the read-only `training_load` surface for cardiovascular
+load and HR zone review. The preferences side covers `preference_catalog`,
 `preference_catalog_item`, `preference_context`, and `preference_item` plus the game,
 judgments, and signals. The Psyche side covers values, patterns, behaviors, beliefs,
 modes, guided mode sessions, flashcards, trigger reports, event types, reusable emotion
