@@ -22,6 +22,7 @@ provides_tools:
   - forge_ingest_wiki_source
   - forge_get_sleep_overview
   - forge_get_sports_overview
+  - forge_get_training_load_overview
   - forge_update_sleep_session
   - forge_update_workout_session
   - forge_get_preferences_workspace

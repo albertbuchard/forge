@@ -1063,13 +1063,11 @@ struct ForgeSyncClient {
     ) async throws -> Int {
         try Task.checkCancellation()
         var sequence = startingSequence
-        let batchKey = Self.workoutBatchChunkKey(workouts)
         let summaries = workouts.map(summaryOnlyWorkout)
         sequence = try await uploadChunkedWorkoutSummaries(
             summaries,
             uploadSession: uploadSession,
             pairing: pairing,
-            batchKey: batchKey,
             startingSequence: sequence,
             onChunkUploaded: onChunkUploaded
         )
@@ -1077,7 +1075,6 @@ struct ForgeSyncClient {
             workouts,
             uploadSession: uploadSession,
             pairing: pairing,
-            batchKey: batchKey,
             startingSequence: sequence,
             onChunkUploaded: onChunkUploaded
         )
@@ -1085,7 +1082,6 @@ struct ForgeSyncClient {
             workouts,
             uploadSession: uploadSession,
             pairing: pairing,
-            batchKey: batchKey,
             startingSequence: sequence,
             onChunkUploaded: onChunkUploaded
         )
@@ -1347,7 +1343,6 @@ struct ForgeSyncClient {
         _ workouts: [CompanionSyncPayload.WorkoutSession],
         uploadSession: HealthSyncUploadSession,
         pairing: PairingPayload,
-        batchKey: String,
         startingSequence: Int,
         onChunkUploaded: HealthSyncChunkUploadHandler?
     ) async throws -> Int {
@@ -1359,15 +1354,8 @@ struct ForgeSyncClient {
         var lowerBound = 0
         while lowerBound < workouts.count {
             try Task.checkCancellation()
-            let partIndex = lowerBound / recordLimit
             let upperBound = min(workouts.count, lowerBound + recordLimit)
             let records = Array(workouts[lowerBound..<upperBound])
-            let chunkId = Self.workoutChunkId(
-                uploadSession: uploadSession,
-                batchKey: batchKey,
-                family: "workout_summaries",
-                partIndex: partIndex
-            )
             sequence = try await uploadHealthSyncChunk(
                 uploadSession: uploadSession,
                 pairing: pairing,
@@ -1375,7 +1363,6 @@ struct ForgeSyncClient {
                 family: "workout_summaries",
                 recordCount: records.count,
                 payload: WorkoutSummariesChunkPayload(workouts: records),
-                chunkId: chunkId,
                 onChunkUploaded: onChunkUploaded
             )
             lowerBound = upperBound
@@ -1387,7 +1374,6 @@ struct ForgeSyncClient {
         _ workouts: [CompanionSyncPayload.WorkoutSession],
         uploadSession: HealthSyncUploadSession,
         pairing: PairingPayload,
-        batchKey: String,
         startingSequence: Int,
         onChunkUploaded: HealthSyncChunkUploadHandler?
     ) async throws -> Int {
@@ -1395,20 +1381,12 @@ struct ForgeSyncClient {
         let recordLimit = workoutTimeSeriesChunkRecordLimit(uploadSession: uploadSession, pairing: pairing)
         var currentEntries: [WorkoutTimeSeriesChunkPayload.Workout] = []
         var currentRecordCount = 0
-        var partIndex = 0
 
         func flushCurrent() async throws {
             guard currentEntries.isEmpty == false else { return }
             try Task.checkCancellation()
-            let uploadPartIndex = partIndex
             let entries = currentEntries
             let recordCount = currentRecordCount
-            let chunkId = Self.workoutChunkId(
-                uploadSession: uploadSession,
-                batchKey: batchKey,
-                family: "workout_time_series",
-                partIndex: uploadPartIndex
-            )
             sequence = try await uploadHealthSyncChunk(
                 uploadSession: uploadSession,
                 pairing: pairing,
@@ -1416,10 +1394,8 @@ struct ForgeSyncClient {
                 family: "workout_time_series",
                 recordCount: recordCount,
                 payload: WorkoutTimeSeriesChunkPayload(workoutTimeSeries: entries),
-                chunkId: chunkId,
                 onChunkUploaded: onChunkUploaded
             )
-            partIndex += 1
             currentEntries = []
             currentRecordCount = 0
         }
@@ -1451,7 +1427,6 @@ struct ForgeSyncClient {
         _ workouts: [CompanionSyncPayload.WorkoutSession],
         uploadSession: HealthSyncUploadSession,
         pairing: PairingPayload,
-        batchKey: String,
         startingSequence: Int,
         onChunkUploaded: HealthSyncChunkUploadHandler?
     ) async throws -> Int {
@@ -1459,20 +1434,12 @@ struct ForgeSyncClient {
         let recordLimit = workoutRouteChunkRecordLimit(uploadSession: uploadSession, pairing: pairing)
         var currentEntries: [WorkoutRoutesChunkPayload.Workout] = []
         var currentRecordCount = 0
-        var partIndex = 0
 
         func flushCurrent() async throws {
             guard currentEntries.isEmpty == false else { return }
             try Task.checkCancellation()
-            let uploadPartIndex = partIndex
             let entries = currentEntries
             let recordCount = currentRecordCount
-            let chunkId = Self.workoutChunkId(
-                uploadSession: uploadSession,
-                batchKey: batchKey,
-                family: "workout_routes",
-                partIndex: uploadPartIndex
-            )
             sequence = try await uploadHealthSyncChunk(
                 uploadSession: uploadSession,
                 pairing: pairing,
@@ -1480,10 +1447,8 @@ struct ForgeSyncClient {
                 family: "workout_routes",
                 recordCount: recordCount,
                 payload: WorkoutRoutesChunkPayload(workoutRoutes: entries),
-                chunkId: chunkId,
                 onChunkUploaded: onChunkUploaded
             )
-            partIndex += 1
             currentEntries = []
             currentRecordCount = 0
         }
@@ -1560,26 +1525,6 @@ struct ForgeSyncClient {
         let targetBytes = effectiveHealthSyncChunkTarget(uploadSession: uploadSession, pairing: pairing)
         let estimatedLimit = targetBytes / max(1, estimatedBytesPerRecord)
         return min(maximum, max(minimum, estimatedLimit))
-    }
-
-    static func workoutBatchChunkKey(_ workouts: [CompanionSyncPayload.WorkoutSession]) -> String {
-        let identity = workouts
-            .map { $0.externalUid.lowercased() }
-            .sorted()
-            .joined(separator: "\n")
-        let digest = SHA256.hash(data: Data(identity.utf8))
-            .map { String(format: "%02x", $0) }
-            .joined()
-        return "\(workouts.count)-\(String(digest.prefix(20)))"
-    }
-
-    static func workoutChunkId(
-        uploadSession: HealthSyncUploadSession,
-        batchKey: String,
-        family: String,
-        partIndex: Int
-    ) -> String {
-        "\(uploadSession.syncSessionId)-workouts-\(batchKey)-\(family)-\(String(format: "%04d", partIndex))"
     }
 
     static func healthSyncContentAddressedChunkId(

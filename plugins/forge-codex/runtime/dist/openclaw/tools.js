@@ -752,6 +752,13 @@ export function registerForgePluginTools(api, config) {
         parameters: scopedReadSchema,
         path: (params) => withUserIds("/api/v1/health/fitness", params.userIds)
     });
+    registerReadTool(api, config, {
+        name: "forge_get_training_load_overview",
+        label: "Forge Training Load Overview",
+        description: "Read the cardiovascular training-load surface with acute/chronic load, HR zone distribution, weekly intensity targets, and data-quality flags.",
+        parameters: scopedReadSchema,
+        path: (params) => withUserIds("/api/v1/health/training-load", params.userIds)
+    });
     api.registerTool({
         name: "forge_update_sleep_session",
         label: "Forge Update Sleep Session",

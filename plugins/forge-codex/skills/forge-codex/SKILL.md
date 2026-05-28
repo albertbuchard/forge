@@ -273,15 +273,15 @@ Surface rule:
    preferences game and judgment/signal tools, calendar sync/setup flows, work-log
    adjustments, and similar action-heavy operations.
 7. Read-model-only surfaces include operator overview/context, sleep overview,
-   sports overview, self-observation calendar, and calendar overview.
+   sports overview, training load, self-observation calendar, and calendar overview.
    In `forge_get_agent_onboarding.entityRouteModel.readModelOnlySurfaces`,
-   operator, calendar, self-observation, sleep, and sports read models are
+   operator, calendar, self-observation, sleep, sports, and training-load read models are
    available under camelCase names and entity-style aliases where useful,
    including `operatorOverview`, `operatorContext`, `calendarOverview`,
-   `sleepOverview`, `sportsOverview`, `operator_overview`, `operator_context`,
-   `calendar_overview`, `self_observation`, `sleep_overview`, and
-   `sports_overview`. Treat those as read-only overview surfaces, not batch CRUD
-   entities.
+   `sleepOverview`, `sportsOverview`, `trainingLoad`, `operator_overview`,
+   `operator_context`, `calendar_overview`, `self_observation`,
+   `sleep_overview`, `sports_overview`, and `training_load`. Treat those as
+   read-only overview surfaces, not batch CRUD entities.
    Use `forge_get_operator_overview` for broad Forge status,
    `forge_get_operator_context` for current work and risk, and
    `forge_get_calendar_overview` before calendar-aware planning or scheduling
@@ -298,8 +298,9 @@ Surface rule:
     truthful signed minute correction on an existing task or project.
 11. Use the dedicated Preferences action tools for `preference_judgment` and
     `preference_signal` rather than forcing those decisions through batch CRUD.
-12. Use `forge_get_sleep_overview` and `forge_get_sports_overview` for health read
-    models, and use `forge_update_sleep_session` and `forge_update_workout_session`
+12. Use `forge_get_sleep_overview`, `forge_get_sports_overview`, and
+    `forge_get_training_load_overview` for health read models, and use
+    `forge_update_sleep_session` and `forge_update_workout_session`
     only for reflective enrichment on one already-existing record. Ordinary
     `sleep_session` and `workout_session` CRUD belongs on the shared batch routes.
 13. Movement, Life Force, and Workbench are specialized Forge API surfaces rather

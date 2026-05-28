@@ -1825,6 +1825,122 @@ export interface FitnessViewData {
   sessions: WorkoutSessionRecord[];
 }
 
+export interface TrainingLoadViewData {
+  summary: {
+    sessionCount: number;
+    reliableSessionCount: number;
+    totalHours: number;
+    totalTrainingLoad: number;
+    acuteLoad7d: number;
+    chronicWeeklyLoad28d: number;
+    acuteChronicRatio: number | null;
+    monotony7d: number | null;
+    strain7d: number | null;
+    highIntensityMinutes7d: number;
+    thresholdMinutes7d: number;
+    easyMinutes7d: number;
+    hardDayCount7d: number;
+    averageHeartRateCoverage: number;
+    vo2MaxLatest: number | null;
+    vo2MaxDelta: number | null;
+    latestRestingHeartRate: number | null;
+    readiness:
+      | "productive"
+      | "underloaded"
+      | "overload_watch"
+      | "insufficient_data"
+      | string;
+  };
+  zoneTotals: WorkoutZoneDuration[];
+  recentZoneTotals: WorkoutZoneDuration[];
+  intensityDistribution: Array<{
+    key: string;
+    label: string;
+    seconds: number;
+    percentage: number;
+    targetRange: [number, number];
+  }>;
+  recentIntensityDistribution: Array<{
+    key: string;
+    label: string;
+    seconds: number;
+    percentage: number;
+    targetRange: [number, number];
+  }>;
+  dailyLoad: Array<{
+    dateKey: string;
+    sessionCount: number;
+    durationSeconds: number;
+    durationMinutes: number;
+    trainingLoad: number;
+    highIntensitySeconds: number;
+    highIntensityMinutes: number;
+    moderateIntensitySeconds: number;
+    moderateIntensityMinutes: number;
+    lowIntensitySeconds: number;
+    lowIntensityMinutes: number;
+  }>;
+  weeklyLoad: Array<{
+    weekKey: string;
+    startDate: string;
+    endDate: string;
+    sessionCount: number;
+    durationSeconds: number;
+    durationHours: number;
+    trainingLoad: number;
+    loadPerHour: number;
+    highIntensitySeconds: number;
+    highIntensityMinutes: number;
+    moderateIntensitySeconds: number;
+    lowIntensitySeconds: number;
+    lowPercentage: number;
+    moderatePercentage: number;
+    highPercentage: number;
+  }>;
+  activityBreakdown: Array<{
+    workoutType: string;
+    workoutTypeLabel: string;
+    activityFamily: string;
+    activityFamilyLabel: string;
+    sessionCount: number;
+    durationHours: number;
+    trainingLoad: number;
+    loadPerHour: number;
+    highPercentage: number;
+    averageHrCoverage: number;
+  }>;
+  vitalsTrend: Array<{
+    dateKey: string;
+    restingHeartRate: number | null;
+    vo2Max: number | null;
+  }>;
+  sessionSignals: Array<{
+    id: string;
+    dateKey: string;
+    startedAt: string;
+    workoutType: string;
+    workoutTypeLabel: string;
+    durationMinutes: number;
+    trainingLoad: number;
+    intensity: number | null;
+    averageHr: number | null;
+    maxHr: number | null;
+    highIntensityPercentage: number;
+    highIntensityMinutes: number;
+    heartRateCoverage: number;
+    heartRateSampleCount: number;
+    confidence: string;
+    detailRoute: string;
+  }>;
+  targetModel: {
+    model: string;
+    lowIntensityTarget: string;
+    moderateIntensityTarget: string;
+    highIntensityTarget: string;
+    monitoringNotes: string[];
+  };
+}
+
 export interface WorkoutSessionDetailPayload {
   workout: WorkoutSessionRecord;
   analytics: WorkoutAnalyticsRecord;
@@ -4056,6 +4172,7 @@ export interface AgentOnboardingPayload {
     weeklyReview: string;
     sleepOverview: string;
     sportsOverview: string;
+    trainingLoad: string;
     lifeForce: string;
     lifeForceProfile: string;
     lifeForceWeekdayTemplate: string;

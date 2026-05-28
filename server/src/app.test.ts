@@ -3976,6 +3976,187 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
   }
 });
 
+test("mobile health workout import state replays legacy workouts until evidence metadata exists", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-health-legacy-route-only-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const pairingResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: { userId: "user_operator" }
+    });
+    assert.equal(pairingResponse.statusCode, 201);
+    const qrPayload = (
+      pairingResponse.json() as {
+        qrPayload: { sessionId: string; pairingToken: string };
+      }
+    ).qrPayload;
+
+    const now = "2026-04-07T09:00:00.000Z";
+    const insertWorkout = getDatabase().prepare(
+      `INSERT INTO health_workout_sessions (
+         id, external_uid, pairing_session_id, user_id, source, source_type, workout_type, source_device,
+         started_at, ended_at, duration_seconds, active_energy_kcal, total_energy_kcal, distance_meters,
+         step_count, exercise_minutes, average_heart_rate, max_heart_rate, subjective_effort, mood_before,
+         mood_after, meaning_text, planned_context, social_context, links_json, tags_json, annotations_json,
+         provenance_json, derived_json, reconciliation_status, created_at, updated_at
+       )
+       VALUES (?, ?, ?, 'user_operator', 'apple_health', 'healthkit', 'kickboxing', 'Apple Watch',
+         ?, ?, 3600, NULL, NULL, NULL, NULL, 60, NULL, NULL, NULL, '', '', '', '', '',
+         '[]', '[]', '{}', '{}', ?, 'standalone', ?, ?)`
+    );
+    insertWorkout.run(
+      "workout_legacy_route_only",
+      "hk-legacy-route-only",
+      qrPayload.sessionId,
+      "2024-04-07T07:00:00.000Z",
+      "2024-04-07T08:00:00.000Z",
+      "{}",
+      now,
+      now
+    );
+    insertWorkout.run(
+      "workout_explicit_zero_hr",
+      "hk-explicit-zero-hr",
+      qrPayload.sessionId,
+      "2024-04-08T07:00:00.000Z",
+      "2024-04-08T08:00:00.000Z",
+      JSON.stringify({
+        captureQuality: { heartRateSamples: 0, routePoints: 2 },
+        syncCursor: { timeSeriesSampleCount: 0, routePointCount: 2 }
+      }),
+      now,
+      now
+    );
+    insertWorkout.run(
+      "workout_legacy_hr_and_route",
+      "hk-legacy-hr-and-route",
+      qrPayload.sessionId,
+      "2024-04-09T07:00:00.000Z",
+      "2024-04-09T08:00:00.000Z",
+      "{}",
+      now,
+      now
+    );
+
+    const insertRoutePoint = getDatabase().prepare(
+      `INSERT INTO health_workout_routes (
+         id, workout_id, user_id, source_route_uid, point_index, recorded_at,
+         latitude, longitude, altitude_meters, horizontal_accuracy_meters,
+         vertical_accuracy_meters, speed_mps, course_degrees, metadata_json,
+         provenance_json, created_at, updated_at
+       )
+       VALUES (?, ?, 'user_operator', ?, ?, ?, 46.2044, 6.1432, NULL, NULL,
+         NULL, NULL, NULL, '{}', '{}', ?, ?)`
+    );
+    for (const [workoutId, routeUid] of [
+      ["workout_legacy_route_only", "route-legacy"],
+      ["workout_explicit_zero_hr", "route-explicit"],
+      ["workout_legacy_hr_and_route", "route-legacy-hr"]
+    ] as const) {
+      insertRoutePoint.run(
+        `${workoutId}_route_0`,
+        workoutId,
+        routeUid,
+        0,
+        "2024-04-07T07:15:00.000Z",
+        now,
+        now
+      );
+      insertRoutePoint.run(
+        `${workoutId}_route_1`,
+        workoutId,
+        routeUid,
+        1,
+        "2024-04-07T07:30:00.000Z",
+        now,
+        now
+      );
+    }
+    getDatabase()
+      .prepare(
+        `INSERT INTO health_workout_time_series (
+           id, workout_id, user_id, source_sample_uid, series_index, metric_key,
+           label, category, unit, value, started_at, ended_at, source_device,
+           source_bundle_identifier, source_product_type, capture_method,
+           quality_flags_json, metadata_json, provenance_json, created_at, updated_at
+         )
+         VALUES (
+           'ts_legacy_hr_0', 'workout_legacy_hr_and_route', 'user_operator',
+           'hr-legacy-0', 0, 'heart_rate', 'Heart rate', 'cardio', 'bpm', 142,
+           '2024-04-09T07:15:00.000Z', '2024-04-09T07:15:00.000Z',
+           'Apple Watch', 'com.apple.health', 'Watch7,5', 'associated_workout',
+           '[]', '{}', '{}', ?, ?
+         )`
+      )
+      .run(now, now);
+
+    const startResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync-sessions",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        device: {
+          name: "Omar iPhone",
+          platform: "ios",
+          appVersion: "1.0",
+          sourceDevice: "iPhone"
+        },
+        permissions: {
+          healthKitAuthorized: true,
+          backgroundRefreshEnabled: true,
+          motionReady: false,
+          locationReady: false,
+          screenTimeReady: false
+        },
+        requestedFamilies: [
+          "workout_summaries",
+          "workout_time_series",
+          "workout_routes"
+        ]
+      }
+    });
+    assert.equal(startResponse.statusCode, 200, startResponse.body);
+    const upload = (
+      startResponse.json() as {
+        upload: {
+          workoutImportState: {
+            alreadyUploadedWorkoutExternalUids: string[];
+            alreadyUploadedWorkoutCount: number;
+            existingWorkoutCount: number;
+            incompleteWorkoutCount: number;
+            heartRateSampleCount: number;
+            routePointCount: number;
+          };
+        };
+      }
+    ).upload;
+
+    assert.deepEqual(
+      upload.workoutImportState.alreadyUploadedWorkoutExternalUids,
+      ["hk-explicit-zero-hr"]
+    );
+    assert.equal(upload.workoutImportState.alreadyUploadedWorkoutCount, 1);
+    assert.equal(upload.workoutImportState.existingWorkoutCount, 3);
+    assert.equal(upload.workoutImportState.incompleteWorkoutCount, 2);
+    assert.equal(upload.workoutImportState.heartRateSampleCount, 0);
+    assert.equal(upload.workoutImportState.routePointCount, 2);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("mobile health chunked sync accepts compressed workout archive chunks", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-health-workout-archive-")
@@ -19008,6 +19189,7 @@ test("settings and local agent token management persist through the versioned AP
         "forge_get_psyche_overview",
         "forge_get_sleep_overview",
         "forge_get_sports_overview",
+        "forge_get_training_load_overview",
         "forge_get_xp_metrics",
         "forge_get_weekly_review"
       ]
@@ -19031,6 +19213,7 @@ test("settings and local agent token management persist through the versioned AP
       [
         "forge_get_sleep_overview",
         "forge_get_sports_overview",
+        "forge_get_training_load_overview",
         "forge_update_sleep_session",
         "forge_update_workout_session"
       ]
