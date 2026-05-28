@@ -51,6 +51,7 @@
       "forge_get_self_observation_calendar",
       "forge_get_sleep_overview",
       "forge_get_sports_overview",
+      "forge_get_training_load_overview",
       "forge_get_ui_entrypoint",
       "forge_get_user_directory",
       "forge_get_weekly_review",

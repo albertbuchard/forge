@@ -57,6 +57,7 @@ export const FORGE_SUPPORTED_PLUGIN_API_ROUTES: ForgeSupportedPluginApiRoute[] =
     { method: "GET", path: "/api/v1/health/sleep", purpose: "health" },
     { method: "PATCH", path: "/api/v1/health/sleep/:id", purpose: "health" },
     { method: "GET", path: "/api/v1/health/fitness", purpose: "health" },
+    { method: "GET", path: "/api/v1/health/training-load", purpose: "health" },
     { method: "PATCH", path: "/api/v1/health/workouts/:id", purpose: "health" },
     { method: "GET", path: "/api/v1/movement/day", purpose: "movement" },
     { method: "GET", path: "/api/v1/movement/month", purpose: "movement" },

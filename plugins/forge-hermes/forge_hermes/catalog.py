@@ -232,6 +232,10 @@ def sports_overview_path(args: Dict[str, Any]) -> str:
     return with_query("/api/v1/health/fitness", args, ["userIds"])
 
 
+def training_load_overview_path(args: Dict[str, Any]) -> str:
+    return with_query("/api/v1/health/training-load", args, ["userIds"])
+
+
 def sync_calendar_connection_path(args: Dict[str, Any]) -> str:
     return f"/api/v1/calendar/connections/{args['connectionId']}/sync"
 
@@ -803,6 +807,13 @@ TOOL_CATALOG: List[ToolSpec] = [
         "parameters": scoped_read_schema(),
         "method": "GET",
         "path_builder": sports_overview_path,
+    },
+    {
+        "name": "forge_get_training_load_overview",
+        "description": "Read the cardiovascular training-load surface with acute/chronic load, HR zone distribution, weekly intensity targets, and data-quality flags.",
+        "parameters": scoped_read_schema(),
+        "method": "GET",
+        "path_builder": training_load_overview_path,
     },
     {
         "name": "forge_update_sleep_session",

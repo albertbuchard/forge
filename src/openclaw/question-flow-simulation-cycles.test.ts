@@ -104,6 +104,7 @@ describe("question flow simulation cycles", () => {
     "Workout Session",
     "Sleep Overview",
     "Sports Overview",
+    "Training Load",
     "Calendar Overview",
     "Calendar Connection",
     "Preference Judgment",
@@ -168,6 +169,8 @@ describe("question flow simulation cycles", () => {
       "Review recent nights to understand whether my recovery is actually improving.",
     "Sports Overview":
       "Review recent workouts to understand whether training load is helping or draining me.",
+    "Training Load":
+      "Review cardiovascular zones and acute load to decide whether to push or recover this week.",
     "Calendar Overview":
       "Review this week before deciding whether to create a timebox or event.",
     "Calendar Connection":
@@ -244,6 +247,7 @@ describe("question flow simulation cycles", () => {
     "Workout Session": "batch",
     "Sleep Overview": "readModel",
     "Sports Overview": "readModel",
+    "Training Load": "readModel",
     "Calendar Overview": "readModel",
     "Calendar Connection": "specializedCrud",
     "Preference Judgment": "action",
@@ -288,6 +292,7 @@ describe("question flow simulation cycles", () => {
     workout_session: "Workout Session",
     sleep_overview: "Sleep Overview",
     sports_overview: "Sports Overview",
+    training_load: "Training Load",
     calendar_connection: "Calendar Connection",
     wiki_page: "Wiki Page",
     preference_catalog: "Preference Catalog",
@@ -355,6 +360,7 @@ describe("question flow simulation cycles", () => {
     "self_observation",
     "sleep_overview",
     "sports_overview",
+    "training_load",
     "movement",
     "life_force",
     "workbench"

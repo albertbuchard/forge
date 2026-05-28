@@ -3165,6 +3165,7 @@ export function buildOpenApiDocument() {
             "notes",
             "sleep",
             "fitness",
+            "trainingLoad",
             "vitals",
             "lifeForce",
             "domains",
@@ -3227,6 +3228,11 @@ export function buildOpenApiDocument() {
                 type: "object",
                 additionalProperties: true,
                 description: "Compact sports summary with recent workout IDs and the full fitness route."
+            },
+            trainingLoad: {
+                type: "object",
+                additionalProperties: true,
+                description: "Compact cardiovascular training-load summary with acute/chronic load, intensity distribution, and the full training-load route."
             },
             vitals: {
                 type: "object",
@@ -5161,6 +5167,42 @@ export function buildOpenApiDocument() {
             sessions: arrayOf({ $ref: "#/components/schemas/WorkoutSession" })
         }
     };
+    const trainingLoadViewData = {
+        type: "object",
+        additionalProperties: false,
+        required: [
+            "summary",
+            "zoneTotals",
+            "recentZoneTotals",
+            "intensityDistribution",
+            "recentIntensityDistribution",
+            "dailyLoad",
+            "weeklyLoad",
+            "activityBreakdown",
+            "vitalsTrend",
+            "sessionSignals",
+            "targetModel"
+        ],
+        properties: {
+            summary: { type: "object", additionalProperties: true },
+            zoneTotals: arrayOf({ type: "object", additionalProperties: true }),
+            recentZoneTotals: arrayOf({ type: "object", additionalProperties: true }),
+            intensityDistribution: arrayOf({
+                type: "object",
+                additionalProperties: true
+            }),
+            recentIntensityDistribution: arrayOf({
+                type: "object",
+                additionalProperties: true
+            }),
+            dailyLoad: arrayOf({ type: "object", additionalProperties: true }),
+            weeklyLoad: arrayOf({ type: "object", additionalProperties: true }),
+            activityBreakdown: arrayOf({ type: "object", additionalProperties: true }),
+            vitalsTrend: arrayOf({ type: "object", additionalProperties: true }),
+            sessionSignals: arrayOf({ type: "object", additionalProperties: true }),
+            targetModel: { type: "object", additionalProperties: true }
+        }
+    };
     const document = {
         openapi: "3.1.0",
         info: {
@@ -5272,6 +5314,7 @@ export function buildOpenApiDocument() {
                 WorkoutSession: workoutSession,
                 SleepViewData: sleepViewData,
                 FitnessViewData: fitnessViewData,
+                TrainingLoadViewData: trainingLoadViewData,
                 PsycheMetricsViewData: psycheMetricsViewData,
                 PsycheOverviewPayload: psycheOverviewPayload,
                 Insight: insight,
@@ -5560,6 +5603,22 @@ export function buildOpenApiDocument() {
                                 fitness: { $ref: "#/components/schemas/FitnessViewData" }
                             }
                         }, "Fitness overview")
+                    }
+                }
+            },
+            "/api/v1/health/training-load": {
+                get: {
+                    summary: "Read the Forge cardiovascular training load and target overview surface",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["trainingLoad"],
+                            properties: {
+                                trainingLoad: {
+                                    $ref: "#/components/schemas/TrainingLoadViewData"
+                                }
+                            }
+                        }, "Training load overview")
                     }
                 }
             },

@@ -113,7 +113,7 @@ describe("forge skill playbook parity", () => {
       expect(skill).toMatch(/## Entity Route Posture/i);
       expect(skill).toMatch(/Batch CRUD is the default for normal stored entities/i);
       expect(skill).toMatch(/readModelOnlySurfaces/i);
-      expect(skill).toMatch(/sleepOverview[\s\S]*sportsOverview[\s\S]*sleep_overview[\s\S]*sports_overview/i);
+      expect(skill).toMatch(/sleepOverview[\s\S]*sportsOverview[\s\S]*trainingLoad[\s\S]*sleep_overview[\s\S]*sports_overview[\s\S]*training_load/i);
       expect(skill).toMatch(/operatorOverview[\s\S]*operatorContext[\s\S]*calendarOverview/i);
       expect(skill).toMatch(/operator_overview[\s\S]*operator_context[\s\S]*calendar_overview/i);
       expect(skill).toMatch(/read-only(?: overview)? surfaces[\s\S]*not batch CRUD\s+entities/i);
@@ -503,6 +503,7 @@ describe("forge skill playbook parity", () => {
         required: [
           /forge_get_sleep_overview/,
           /forge_get_sports_overview/,
+          /forge_get_training_load_overview/,
           /forge_update_sleep_session/,
           /forge_update_workout_session/,
           /batch routes for ordinary health-session CRUD|ordinary `sleep_session` and `workout_session` CRUD belongs on the shared batch routes/i,

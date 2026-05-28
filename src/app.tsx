@@ -59,6 +59,7 @@ import { SettingsUsersPage } from "@/pages/settings-users-page";
 import { RewardsPage } from "@/pages/rewards-page";
 import { SleepPage } from "@/pages/sleep-page";
 import { SportsPage } from "@/pages/sports-page";
+import { TrainingLoadPage } from "@/pages/training-load-page";
 import { WorkoutDetailPage } from "@/pages/workout-detail-page";
 import { TaskDetailPage } from "@/pages/task-detail-page";
 import { TodayPage } from "@/pages/today-page";
@@ -295,6 +296,15 @@ export function App() {
               "Workout Detail",
               "Raw workout evidence, heart-rate zones, and session context.",
               <WorkoutDetailPage />
+            )}
+          />
+          <Route
+            path="training-load"
+            element={surface(
+              "training-load-index",
+              "Training Load",
+              "Cardiovascular load, intensity distribution, and training targets.",
+              <TrainingLoadPage />
             )}
           />
           <Route

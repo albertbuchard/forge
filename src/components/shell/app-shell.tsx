@@ -52,6 +52,7 @@ import {
   LayoutDashboard,
   LayoutGrid,
   Map,
+  Gauge,
   HeartPulse,
   Network,
   Moon,
@@ -397,6 +398,14 @@ const PRIMARY_ROUTES: ShellRouteDefinition[] = [
     labelKey: "common.routeLabels.sports",
     detailKey: "common.routeDetails.sports",
     icon: Dumbbell
+  },
+  {
+    id: "training-load",
+    to: "/training-load",
+    label: "Training Load",
+    detail:
+      "Cardiovascular load, HR zone targets, acute/chronic stress, and adaptation signals",
+    icon: Gauge
   },
   {
     id: "vitals",

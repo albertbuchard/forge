@@ -176,6 +176,11 @@ export const FORGE_PLUGIN_ROUTE_GROUPS = [
         upstreamPath: "/api/v1/health/fitness",
         target: (_match, url) => passthroughSearch("/api/v1/health/fitness", url)
     }),
+    exact("/forge/v1/health/training-load", {
+        method: "GET",
+        upstreamPath: "/api/v1/health/training-load",
+        target: (_match, url) => passthroughSearch("/api/v1/health/training-load", url)
+    }),
     {
         path: "/forge/v1/movement",
         match: "prefix",

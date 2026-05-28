@@ -1734,6 +1734,12 @@ export function getFitnessView(userIds) {
     const suffix = search.size > 0 ? `?${search.toString()}` : "";
     return request(`/api/v1/health/fitness${suffix}`);
 }
+export function getTrainingLoadView(userIds) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(userIds));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/health/training-load${suffix}`);
+}
 export function getWorkoutDetail(workoutId, resolution = "adaptive") {
     const search = new URLSearchParams({ resolution });
     return request(`/api/v1/health/workouts/${workoutId}/detail?${search.toString()}`);

@@ -2490,6 +2490,7 @@
               "belief_entry",
               "mode_profile",
               "mode_guide_session",
+              "flashcard",
               "trigger_report",
               "note",
               "tag",
@@ -5063,6 +5064,7 @@
               "schemaCatalog",
               "modeProfile",
               "modeGuideSession",
+              "flashcard",
               "eventType",
               "emotionDefinition",
               "triggerReport"
@@ -5089,6 +5091,9 @@
               "modeGuideSession": {
                 "type": "string"
               },
+              "flashcard": {
+                "type": "string"
+              },
               "eventType": {
                 "type": "string"
               },
@@ -5109,6 +5114,7 @@
                 "focus",
                 "useWhen",
                 "coachingGoal",
+                "openingQuestion",
                 "askSequence",
                 "requiredForCreate",
                 "highValueOptionalFields",
@@ -5125,6 +5131,9 @@
                   "type": "string"
                 },
                 "coachingGoal": {
+                  "type": "string"
+                },
+                "openingQuestion": {
                   "type": "string"
                 },
                 "askSequence": {
@@ -5287,6 +5296,7 @@
                     "classification",
                     "aliases",
                     "summary",
+                    "routeKeys",
                     "methodRoutes",
                     "readRoutes",
                     "writeRoutes",
@@ -5308,6 +5318,12 @@
                     },
                     "summary": {
                       "type": "string"
+                    },
+                    "routeKeys": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     },
                     "methodRoutes": {
                       "type": "object",
@@ -5886,7 +5902,12 @@
               "saveSuggestionTone",
               "maxQuestionsPerTurn",
               "psycheExplorationRule",
+              "specializedSurfaceRule",
+              "reviewShortcutRule",
+              "readModelWriteRule",
               "psycheOpeningQuestionRule",
+              "followUpQuestionRule",
+              "antiDriftRule",
               "duplicateCheckRoute",
               "uiSuggestionRule",
               "browserFallbackRule",
@@ -5908,7 +5929,22 @@
               "psycheExplorationRule": {
                 "type": "string"
               },
+              "specializedSurfaceRule": {
+                "type": "string"
+              },
+              "reviewShortcutRule": {
+                "type": "string"
+              },
+              "readModelWriteRule": {
+                "type": "string"
+              },
               "psycheOpeningQuestionRule": {
+                "type": "string"
+              },
+              "followUpQuestionRule": {
+                "type": "string"
+              },
+              "antiDriftRule": {
                 "type": "string"
               },
               "duplicateCheckRoute": {
@@ -8639,6 +8675,447 @@
           }
         }
       },
+      "TrainingLoadViewData": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "summary",
+          "zoneTotals",
+          "recentZoneTotals",
+          "intensityDistribution",
+          "recentIntensityDistribution",
+          "dailyLoad",
+          "weeklyLoad",
+          "activityBreakdown",
+          "vitalsTrend",
+          "sessionSignals",
+          "targetModel"
+        ],
+        "properties": {
+          "summary": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "zoneTotals": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "recentZoneTotals": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "intensityDistribution": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "recentIntensityDistribution": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "dailyLoad": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "weeklyLoad": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "activityBreakdown": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "vitalsTrend": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "sessionSignals": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "targetModel": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "PsycheMetricsViewData": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "summary",
+          "context",
+          "metrics"
+        ],
+        "properties": {
+          "summary": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "hasData",
+              "trackedDays",
+              "metricCount",
+              "latestDateKey",
+              "latestMetricCount",
+              "categoryBreakdown"
+            ],
+            "properties": {
+              "hasData": {
+                "type": "boolean"
+              },
+              "trackedDays": {
+                "type": "integer"
+              },
+              "metricCount": {
+                "type": "integer"
+              },
+              "latestDateKey": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "latestMetricCount": {
+                "type": "integer"
+              },
+              "categoryBreakdown": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "category",
+                    "metricCount",
+                    "coverageDays"
+                  ],
+                  "properties": {
+                    "category": {
+                      "type": "string"
+                    },
+                    "metricCount": {
+                      "type": "integer"
+                    },
+                    "coverageDays": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "context": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "generatedAt",
+              "conversationsScanned",
+              "sourceCount",
+              "messagesScanned",
+              "messagesWithSwears",
+              "totalSwears",
+              "dailyAverage",
+              "weeklyAverage",
+              "sync"
+            ],
+            "properties": {
+              "generatedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "conversationsScanned": {
+                "type": "integer"
+              },
+              "sourceCount": {
+                "type": "integer"
+              },
+              "messagesScanned": {
+                "type": "integer"
+              },
+              "messagesWithSwears": {
+                "type": "integer"
+              },
+              "totalSwears": {
+                "type": "number"
+              },
+              "dailyAverage": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "rawSwearCount",
+                  "swearingMessagePercent"
+                ],
+                "properties": {
+                  "rawSwearCount": {
+                    "type": "number"
+                  },
+                  "swearingMessagePercent": {
+                    "type": "number"
+                  }
+                }
+              },
+              "weeklyAverage": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "rawSwearCount",
+                  "swearingMessagePercent"
+                ],
+                "properties": {
+                  "rawSwearCount": {
+                    "type": "number"
+                  },
+                  "swearingMessagePercent": {
+                    "type": "number"
+                  }
+                }
+              },
+              "sync": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "fullSyncCompletedAt",
+                  "lastDailySyncAt",
+                  "lastSyncedDateKey"
+                ],
+                "properties": {
+                  "fullSyncCompletedAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "lastDailySyncAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "lastSyncedDateKey": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "metrics": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "metric",
+                "label",
+                "category",
+                "unit",
+                "aggregation",
+                "latestValue",
+                "latestDateKey",
+                "baselineValue",
+                "deltaValue",
+                "coverageDays",
+                "days"
+              ],
+              "properties": {
+                "metric": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "category": {
+                  "type": "string"
+                },
+                "unit": {
+                  "type": "string"
+                },
+                "aggregation": {
+                  "type": "string",
+                  "enum": [
+                    "discrete",
+                    "cumulative"
+                  ]
+                },
+                "latestValue": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "latestDateKey": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "baselineValue": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "deltaValue": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "coverageDays": {
+                  "type": "integer"
+                },
+                "days": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "dateKey",
+                      "average",
+                      "minimum",
+                      "maximum",
+                      "latest",
+                      "total",
+                      "sampleCount",
+                      "latestSampleAt"
+                    ],
+                    "properties": {
+                      "dateKey": {
+                        "type": "string"
+                      },
+                      "average": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "minimum": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "maximum": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "latest": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "total": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "sampleCount": {
+                        "type": "integer"
+                      },
+                      "latestSampleAt": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       "PsycheOverviewPayload": {
         "type": "object",
         "additionalProperties": false,
@@ -8651,6 +9128,7 @@
           "beliefs",
           "modes",
           "schemaPressure",
+          "devrageMetric",
           "reports",
           "openInsights",
           "openNotes",
@@ -8713,6 +9191,168 @@
                 },
                 "activationCount": {
                   "type": "integer"
+                }
+              }
+            }
+          },
+          "devrageMetric": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "generatedAt",
+              "hasData",
+              "latestDateKey",
+              "rawSwearCount",
+              "swearingMessagePercent",
+              "conversationsScanned",
+              "messagesScanned",
+              "messagesWithSwears",
+              "dailyAverage",
+              "weeklyAverage",
+              "history",
+              "sync"
+            ],
+            "properties": {
+              "generatedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "hasData": {
+                "type": "boolean"
+              },
+              "latestDateKey": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "rawSwearCount": {
+                "type": "number"
+              },
+              "swearingMessagePercent": {
+                "type": "number"
+              },
+              "conversationsScanned": {
+                "type": "integer"
+              },
+              "messagesScanned": {
+                "type": "integer"
+              },
+              "messagesWithSwears": {
+                "type": "integer"
+              },
+              "dailyAverage": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "rawSwearCount",
+                  "swearingMessagePercent"
+                ],
+                "properties": {
+                  "rawSwearCount": {
+                    "type": "number"
+                  },
+                  "swearingMessagePercent": {
+                    "type": "number"
+                  }
+                }
+              },
+              "weeklyAverage": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "rawSwearCount",
+                  "swearingMessagePercent"
+                ],
+                "properties": {
+                  "rawSwearCount": {
+                    "type": "number"
+                  },
+                  "swearingMessagePercent": {
+                    "type": "number"
+                  }
+                }
+              },
+              "history": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "dateKey",
+                    "rawSwearCount",
+                    "swearingMessagePercent",
+                    "conversationsScanned",
+                    "messagesScanned",
+                    "messagesWithSwears"
+                  ],
+                  "properties": {
+                    "dateKey": {
+                      "type": "string"
+                    },
+                    "rawSwearCount": {
+                      "type": "number"
+                    },
+                    "swearingMessagePercent": {
+                      "type": "number"
+                    },
+                    "conversationsScanned": {
+                      "type": "integer"
+                    },
+                    "messagesScanned": {
+                      "type": "integer"
+                    },
+                    "messagesWithSwears": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              },
+              "sync": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "fullSyncCompletedAt",
+                  "lastDailySyncAt",
+                  "lastSyncedDateKey"
+                ],
+                "properties": {
+                  "fullSyncCompletedAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "lastDailySyncAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "lastSyncedDateKey": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
                 }
               }
             }
@@ -10164,6 +10804,7 @@
           "notes",
           "sleep",
           "fitness",
+          "trainingLoad",
           "vitals",
           "lifeForce",
           "domains",
@@ -10252,6 +10893,11 @@
             "type": "object",
             "additionalProperties": true,
             "description": "Compact sports summary with recent workout IDs and the full fitness route."
+          },
+          "trainingLoad": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Compact cardiovascular training-load summary with acute/chronic load, intensity distribution, and the full training-load route."
           },
           "vitals": {
             "type": "object",
@@ -10482,6 +11128,454 @@
         "operationId": "gethealth"
       }
     },
+    "/api/v1/mobile/healthkit/sync-sessions": {
+      "post": {
+        "summary": "Start or resume a resumable mobile HealthKit upload session",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "sessionId",
+                  "pairingToken",
+                  "schemaVersion"
+                ],
+                "properties": {
+                  "sessionId": {
+                    "type": "string"
+                  },
+                  "pairingToken": {
+                    "type": "string"
+                  },
+                  "schemaVersion": {
+                    "type": "string"
+                  },
+                  "resumeSyncSessionId": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "requestedFamilies": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "sourceStates": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  },
+                  "device": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Accepted upload session plus received chunk progress",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "upload"
+                  ],
+                  "properties": {
+                    "upload": {
+                      "type": "object",
+                      "required": [
+                        "syncSessionId",
+                        "schemaVersion",
+                        "status",
+                        "targetChunkBytes",
+                        "maxChunkBytes",
+                        "payloadEncodings",
+                        "acceptedFamilies",
+                        "receivedChunkIds",
+                        "progress"
+                      ],
+                      "properties": {
+                        "syncSessionId": {
+                          "type": "string"
+                        },
+                        "schemaVersion": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "running",
+                            "completed",
+                            "failed",
+                            "aborted"
+                          ]
+                        },
+                        "targetChunkBytes": {
+                          "type": "number"
+                        },
+                        "maxChunkBytes": {
+                          "type": "number"
+                        },
+                        "payloadEncodings": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "acceptedFamilies": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "receivedChunkIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "progress": {
+                          "type": "object",
+                          "required": [
+                            "chunkCount",
+                            "receivedBytes",
+                            "receivedCounts",
+                            "byteTotals"
+                          ],
+                          "properties": {
+                            "chunkCount": {
+                              "type": "number"
+                            },
+                            "receivedBytes": {
+                              "type": "number"
+                            },
+                            "receivedCounts": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "number"
+                              }
+                            },
+                            "byteTotals": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "number"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Health"
+        ],
+        "operationId": "postmobile_healthkit_sync_sessions"
+      }
+    },
+    "/api/v1/mobile/healthkit/sync-sessions/{id}": {
+      "get": {
+        "summary": "Inspect a mobile HealthKit upload session and accepted chunk progress",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sessionId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pairingToken",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Upload session status and accepted chunk progress",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "upload"
+                  ],
+                  "properties": {
+                    "upload": {
+                      "type": "object",
+                      "required": [
+                        "syncSessionId",
+                        "schemaVersion",
+                        "status",
+                        "targetChunkBytes",
+                        "maxChunkBytes",
+                        "payloadEncodings",
+                        "acceptedFamilies",
+                        "receivedChunkIds",
+                        "progress"
+                      ],
+                      "properties": {
+                        "syncSessionId": {
+                          "type": "string"
+                        },
+                        "schemaVersion": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "running",
+                            "completed",
+                            "failed",
+                            "aborted"
+                          ]
+                        },
+                        "targetChunkBytes": {
+                          "type": "number"
+                        },
+                        "maxChunkBytes": {
+                          "type": "number"
+                        },
+                        "payloadEncodings": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "acceptedFamilies": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "receivedChunkIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "progress": {
+                          "type": "object",
+                          "required": [
+                            "chunkCount",
+                            "receivedBytes",
+                            "receivedCounts",
+                            "byteTotals"
+                          ],
+                          "properties": {
+                            "chunkCount": {
+                              "type": "number"
+                            },
+                            "receivedBytes": {
+                              "type": "number"
+                            },
+                            "receivedCounts": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "number"
+                              }
+                            },
+                            "byteTotals": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "number"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Health"
+        ],
+        "operationId": "getmobile_healthkit_sync_sessions_id"
+      }
+    },
+    "/api/v1/mobile/healthkit/sync-sessions/{id}/chunks": {
+      "post": {
+        "summary": "Upload one idempotent HealthKit chunk into a resumable session",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "sessionId",
+                  "pairingToken",
+                  "chunkId",
+                  "family",
+                  "sequence",
+                  "records",
+                  "byteCount",
+                  "checksum"
+                ],
+                "properties": {
+                  "sessionId": {
+                    "type": "string"
+                  },
+                  "pairingToken": {
+                    "type": "string"
+                  },
+                  "chunkId": {
+                    "type": "string"
+                  },
+                  "family": {
+                    "type": "string"
+                  },
+                  "sequence": {
+                    "type": "number"
+                  },
+                  "records": {
+                    "type": "number"
+                  },
+                  "byteCount": {
+                    "type": "number"
+                  },
+                  "checksum": {
+                    "type": "string"
+                  },
+                  "compression": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "payloadEncoding": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "payload": {}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Chunk receipt with duplicate detection and aggregate progress",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "chunk"
+                  ],
+                  "properties": {
+                    "chunk": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "required": [
+                        "accepted",
+                        "duplicate",
+                        "progress"
+                      ],
+                      "properties": {
+                        "accepted": {
+                          "type": "boolean"
+                        },
+                        "duplicate": {
+                          "type": "boolean"
+                        },
+                        "progress": {
+                          "type": "object",
+                          "required": [
+                            "chunkCount",
+                            "receivedBytes",
+                            "receivedCounts",
+                            "byteTotals"
+                          ],
+                          "properties": {
+                            "chunkCount": {
+                              "type": "number"
+                            },
+                            "receivedBytes": {
+                              "type": "number"
+                            },
+                            "receivedCounts": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "number"
+                              }
+                            },
+                            "byteTotals": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "number"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Health"
+        ],
+        "operationId": "postmobile_healthkit_sync_sessions_id_chunks"
+      }
+    },
     "/api/v1/doctor": {
       "get": {
         "summary": "Run Forge Doctor diagnostics for runtime, settings, storage, entities, hierarchy, rewards, and fix proposals",
@@ -10655,6 +11749,35 @@
           "Health"
         ],
         "operationId": "gethealth_fitness"
+      }
+    },
+    "/api/v1/health/training-load": {
+      "get": {
+        "summary": "Read the Forge cardiovascular training load and target overview surface",
+        "responses": {
+          "200": {
+            "description": "Training load overview",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "trainingLoad"
+                  ],
+                  "properties": {
+                    "trainingLoad": {
+                      "$ref": "#/components/schemas/TrainingLoadViewData"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Health"
+        ],
+        "operationId": "gethealth_training_load"
       }
     },
     "/api/v1/health/workouts": {
@@ -14261,6 +15384,38 @@
           "Psyche"
         ],
         "operationId": "getpsyche_overview"
+      }
+    },
+    "/api/v1/psyche/metrics": {
+      "get": {
+        "summary": "Get daily Psyche metric history",
+        "responses": {
+          "200": {
+            "description": "Psyche metrics view",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "metrics"
+                  ],
+                  "properties": {
+                    "metrics": {
+                      "$ref": "#/components/schemas/PsycheMetricsViewData"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Psyche"
+        ],
+        "operationId": "getpsyche_metrics"
       }
     },
     "/api/v1/psyche/values": {

@@ -3031,7 +3031,7 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(session.workoutImportState?.routePointCount, 40)
     }
 
-    func testWorkoutChunkIdDoesNotDependOnResumeSequenceOffset() {
+    func testWorkoutHealthChunkIdsUsePayloadChecksumForSafeResume() {
         let uploadSession = ForgeSyncClient.HealthSyncUploadSession(
             syncSessionId: "hms_resume",
             schemaVersion: "healthkit-sync-v2",
@@ -3043,19 +3043,28 @@ final class ForgeCompanionTests: XCTestCase {
             acceptedFamilies: ["workout_routes"],
             receivedChunkIds: []
         )
-        let chunkId = ForgeSyncClient.workoutChunkId(
+        let emptyChunkId = ForgeSyncClient.healthSyncContentAddressedChunkId(
             uploadSession: uploadSession,
-            batchKey: "64-deadbeef",
+            sequence: 111,
             family: "workout_routes",
-            partIndex: 7
+            checksumSha256: String(repeating: "a", count: 64)
+        )
+        let realChunkId = ForgeSyncClient.healthSyncContentAddressedChunkId(
+            uploadSession: uploadSession,
+            sequence: 111,
+            family: "workout_routes",
+            checksumSha256: String(repeating: "b", count: 64)
         )
 
         XCTAssertEqual(
-            chunkId,
-            "hms_resume-workouts-64-deadbeef-workout_routes-0007"
+            emptyChunkId,
+            "hms_resume-000111-workout_routes-aaaaaaaaaaaaaaaaaaaa"
         )
-        XCTAssertFalse(chunkId.contains("000111"))
-        XCTAssertFalse(chunkId.contains("000276"))
+        XCTAssertEqual(
+            realChunkId,
+            "hms_resume-000111-workout_routes-bbbbbbbbbbbbbbbbbbbb"
+        )
+        XCTAssertNotEqual(emptyChunkId, realChunkId)
     }
 
     func testBaseHealthChunkIdIncludesPayloadChecksumForSafeResume() {

@@ -919,10 +919,11 @@ Setup verification:
 Cycle 1 tested every stored entity and specialized surface: planning and
 collaboration, calendar, preferences, questionnaires and reflection, health, wiki,
 every Psyche entity, Movement, Life Force, and Workbench. The suite passed, but the
-live catalog also contained read-model-only `sleep_overview` and `sports_overview`
-surfaces that were not explicitly represented in the simulation matrix. The change
-added Sleep Overview and Sports Overview playbook sections, scenarios, route posture
-coverage, and tests. Retest across the full suite passed, so the change was kept.
+live catalog also contained read-model-only `sleep_overview`, `sports_overview`,
+and later `training_load` surfaces that were not explicitly represented in the
+simulation matrix. The change added Sleep Overview, Sports Overview, and Training
+Load playbook sections, scenarios, route posture coverage, and tests. Retest across
+the full suite passed, so the change was kept.
 
 Cycle 2 retested the expanded full set with emphasis on API path clarity. The new
 health overview question flows were good, but live onboarding exposed the read model
@@ -1079,6 +1080,7 @@ Every cycle simulated creation, update, review, or navigation around these flows
 | workout_session | Link a hard workout to mood and recovery. |
 | sleep_overview | Review recent nights to understand whether recovery is improving. |
 | sports_overview | Review recent workouts to understand whether training load helps or drains. |
+| training_load | Review cardiovascular zones and acute load before deciding to push or recover. |
 | wiki_page | Create a durable research-method reference page. |
 | movement | Correct a missing movement span and review the timeline. |
 | life_force | Update the model for Monday post-lunch crashes. |

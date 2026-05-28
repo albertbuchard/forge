@@ -65,6 +65,14 @@ The sleep product should be night-first for normal use and evidence-first undern
 The default view must center the canonical overnight sleep session for each wake-date,
 with clear summary metrics, phase composition, timing, and weekly context.
 
+The training-load product should be a separate cardiovascular intelligence surface rather
+than an overloaded sports list. It uses the same provider-neutral health stack but answers
+adaptation questions directly: recent load versus chronic base, zone distribution, threshold
+exposure, VO2max and resting-HR context, sport contribution, and data-quality confidence.
+The `/training-load` view and `/api/v1/health/training-load` read model should feel like an
+elite-sport cockpit while staying local-first, legible on mobile, and honest about wearable
+heart-rate limitations.
+
 Under that canonical night model, Forge should preserve a three-layer sleep stack:
 
 1. raw provider records

@@ -33,6 +33,7 @@ import type {
   DiagnosticLogEntry,
   EventLogEntry,
   FitnessViewData,
+  TrainingLoadViewData,
   HealthZoneProfileRecord,
   GitHelperOverview,
   GitHelperSearchKind,
@@ -3328,6 +3329,15 @@ export function getFitnessView(userIds?: string[] | unknown) {
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
   return request<{ fitness: FitnessViewData }>(
     `/api/v1/health/fitness${suffix}`
+  );
+}
+
+export function getTrainingLoadView(userIds?: string[] | unknown) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ trainingLoad: TrainingLoadViewData }>(
+    `/api/v1/health/training-load${suffix}`
   );
 }
 

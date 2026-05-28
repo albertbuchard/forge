@@ -239,7 +239,7 @@ When Hermes is trying to find the right wiki record, use these search patterns:
 ## Preferred workflow
 
 1. Start with `forge_get_operator_overview`.
-2. Use `forge_get_operator_context`, `forge_get_current_work`, `forge_get_psyche_overview`, `forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_get_wiki_settings`, `forge_search_wiki`, or `forge_get_calendar_overview` when the request needs a more specific read model.
+2. Use `forge_get_operator_context`, `forge_get_current_work`, `forge_get_psyche_overview`, `forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_get_training_load_overview`, `forge_get_wiki_settings`, `forge_search_wiki`, or `forge_get_calendar_overview` when the request needs a more specific read model.
 3. Search before creating duplicates with `forge_search_entities`.
 4. Prefer the batch entity tools for normal stored-entity work. Batch CRUD is the default for simple entities, so do not build a huge one-route-per-entity mental model when the shared routes already fit:
    `forge_create_entities`, `forge_update_entities`, `forge_delete_entities`, `forge_restore_entities`.
@@ -247,7 +247,7 @@ When Hermes is trying to find the right wiki record, use these search patterns:
    `forge_get_wiki_settings`, `forge_list_wiki_pages`, `forge_get_wiki_page`, `forge_search_wiki`, `forge_upsert_wiki_page`, `forge_get_wiki_health`, `forge_sync_wiki_vault`, `forge_reindex_wiki_embeddings`, `forge_ingest_wiki_source`.
    `forge_ingest_wiki_source` queues background ingest work; when the user wants to review candidate pages or entities before publishing, hand off to the Forge UI instead of pretending Hermes already has an inline review tool.
 6. Use the health tools for sleep and sports review and reflective enrichment:
-   `forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_update_sleep_session`, `forge_update_workout_session`.
+   `forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_get_training_load_overview`, `forge_update_sleep_session`, `forge_update_workout_session`.
 7. Movement, Life Force, and Workbench are specialized Forge API surfaces rather than simple batch entities. When Hermes needs those domains, read `forge_get_agent_onboarding`, choose the route from `entityRouteModel.specializedDomainSurfaces`, and use `forge_call_movement_route`, `forge_call_life_force_route`, or `forge_call_workbench_route` when the route-key tools are available.
 8. Treat narrow calendar helpers as convenience helpers, not the default architecture:
    `forge_create_work_block_template` and `forge_create_task_timebox` are fine, but Hermes should still prefer the generic batch entity routes when practical.
@@ -280,8 +280,8 @@ For wiki-specific recall:
   `operatorOverview`, `operatorContext`, `calendarOverview`, `sleepOverview`,
   `sportsOverview`, `operator_overview`, `operator_context`,
   `calendar_overview`, `self_observation`, `sleep_overview`, and
-  `sports_overview`. Treat those as read-only overview surfaces, not batch CRUD
-  entities.
+  `sports_overview`, `trainingLoad`, and `training_load`. Treat those as
+  read-only overview surfaces, not batch CRUD entities.
 - Use `forge_get_operator_overview` for broad Forge status, `forge_get_operator_context`
   for current work and risk, and `forge_get_calendar_overview` before calendar-aware
   planning or scheduling mutations.
@@ -293,7 +293,7 @@ For wiki-specific recall:
 - `patch.checkIn` accepts `status` plus optional `dateKey`, `note`, and `description`; if `description` is provided, it replaces the habit's stored `description` in the same write.
 - Use the high-level batch routes for basic Preferences CRUD. `preference_catalog`, `preference_catalog_item`, `preference_context`, and `preference_item` should normally flow through `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`.
 - Use the high-level batch routes for basic questionnaire CRUD too. `questionnaire_instrument` should normally flow through `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`.
-- Use the high-level batch routes for ordinary health-session CRUD too. `sleep_session` and `workout_session` should normally flow through `forge_search_entities`, `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`. Keep `forge_get_sleep_overview` and `forge_get_sports_overview` for read models, and keep `forge_update_sleep_session` and `forge_update_workout_session` for reflective enrichment on one already-existing record.
+- Use the high-level batch routes for ordinary health-session CRUD too. `sleep_session` and `workout_session` should normally flow through `forge_search_entities`, `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`. Keep `forge_get_sleep_overview`, `forge_get_sports_overview`, and `forge_get_training_load_overview` for read models, and keep `forge_update_sleep_session` and `forge_update_workout_session` for reflective enrichment on one already-existing record.
 - Use the dedicated API families for Movement, Life Force, and Workbench. Those routes are published in `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces` and are the preferred contract for movement stays, trips, time-in-place and travel-behavior queries, life-force state, and workbench execution/result work. Prefer `forge_call_movement_route`, `forge_call_life_force_route`, or `forge_call_workbench_route` when those route-key tools are present.
 - When that onboarding payload includes `routeSelectionQuestions`, use them before improvising follow-up questions for Movement, Life Force, or Workbench.
 - After the lane is clear, talk in product nouns such as timeline, overlay, weekday
@@ -369,7 +369,7 @@ For wiki-specific recall:
 - The wiki is the durable long-form memory surface. Use it for canonical reference pages, ingest, backlink-aware recall, books, articles, sources, concepts, and personal manuals rather than overloading normal notes.
 - Self-observation is only for lightweight observed episode notes. When the user describes a psychological chain, map situation, cue, emotion/body, thought/meaning, behavior/urge, and consequence; use `trigger_report` for one meaningful episode, `behavior_pattern` for recurring-loop functional analysis, `behavior` for one repeated move, `belief_entry` for a core sentence, `mode_guide_session` or `mode_profile` for a part-state, `flashcard` for a rehearsable reminder during an urge or trigger, and `wiki_page` for durable memory. If a schema theme is visible, preserve it through the matching belief, pattern, mode, trigger report, flashcard, or wiki explanation instead of hiding it in self-observation.
 - If the user says they feel an urge or asks for help not doing something, search existing `flashcard` records first with `forge_search_entities` and `entityTypes: ["flashcard"]`. If a card matches, show the card message first, then add brief grounding, urge-surfing, cognitive defusion, schema/mode-aware reflection, or values-based support around it.
-- The UI route is `/sports`, but the backend overview route is `/api/v1/health/fitness`. Treat both as the same sports surface.
+- The UI route is `/sports`, but the backend overview route is `/api/v1/health/fitness`. Treat both as the same sports surface. The dedicated cardiovascular training-load surface is `/training-load` in the UI and `/api/v1/health/training-load` in the API.
 - Use `forge_update_sleep_session` and `forge_update_workout_session` only to enrich those records with reflective context, tags, and links. Normal stored-record CRUD for those entities belongs on the shared batch routes.
 - Ephemeral notes are appropriate for scratch memory, temporary handoffs, or “what just happened” captures that should disappear automatically later.
 - For every entity flow, ask only for what is missing or unclear instead of walking through the whole schema.

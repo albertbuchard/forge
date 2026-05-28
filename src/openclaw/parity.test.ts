@@ -34,6 +34,7 @@ describe("forge plugin route parity", () => {
     expect(report.mirrored).toContain("GET /api/v1/health/sleep");
     expect(report.mirrored).toContain("PATCH /api/v1/health/sleep/:id");
     expect(report.mirrored).toContain("GET /api/v1/health/fitness");
+    expect(report.mirrored).toContain("GET /api/v1/health/training-load");
     expect(report.mirrored).toContain("PATCH /api/v1/health/workouts/:id");
     expect(report.mirrored).toContain("GET /api/v1/movement/day");
     expect(report.mirrored).toContain("GET /api/v1/movement/boxes/:id");
@@ -115,6 +116,7 @@ describe("forge plugin route parity", () => {
     expect(supported.has("POST /api/v1/wiki/ingest-jobs")).toBe(true);
     expect(supported.has("GET /api/v1/health/sleep")).toBe(true);
     expect(supported.has("GET /api/v1/health/fitness")).toBe(true);
+    expect(supported.has("GET /api/v1/health/training-load")).toBe(true);
     expect(supported.has("GET /api/v1/movement/timeline")).toBe(true);
     expect(supported.has("GET /api/v1/movement/boxes/:id")).toBe(true);
     expect(supported.has("DELETE /api/v1/movement/user-boxes/:id")).toBe(true);

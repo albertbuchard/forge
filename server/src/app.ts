@@ -625,6 +625,7 @@ import {
   getSleepSessionDetailById,
   getSleepTimelineOverlaysForRange,
   getSleepViewData,
+  getTrainingLoadViewData,
   getVitalsViewData,
   getHealthZoneProfileForUser,
   getMobileHealthSyncSessionStatus,
@@ -2995,6 +2996,8 @@ function buildPreferredMutationPath(entityType: string) {
       return "Read-only surface. Use batch CRUD for sleep_session records or the review enrichment route for reflective notes.";
     case "sports_overview":
       return "Read-only surface. Use batch CRUD for workout_session records or the review enrichment route for reflective notes.";
+    case "training_load":
+      return "Read-only surface. Use it for cardiovascular load, HR zones, acute/chronic stress, VO2max context, and target analysis; use batch CRUD for underlying workout_session records.";
     default:
       return "Read-only surface.";
   }
@@ -3070,6 +3073,8 @@ function buildPreferredReadPath(entityType: string) {
       return "/api/v1/health/sleep";
     case "sports_overview":
       return "/api/v1/health/fitness";
+    case "training_load":
+      return "/api/v1/health/training-load";
     default:
       return null;
   }
@@ -3826,6 +3831,20 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       "Read this surface before suggesting workout reflections or recovery follow-up."
     ],
     fieldGuide: []
+  }),
+  enrichOnboardingEntityGuide({
+    entityType: "training_load",
+    purpose:
+      "The read-model cardiovascular training-load workspace for acute/chronic load, HR zone distribution, intensity targets, and VO2max context.",
+    minimumCreateFields: [],
+    relationshipRules: [
+      "Use this surface for review and interpretation.",
+      "Create, update, delete, or search the underlying workout_session records through batch CRUD by default."
+    ],
+    searchHints: [
+      "Read this surface before advising on high-intensity balance, recovery load, or cardiovascular training targets."
+    ],
+    fieldGuide: []
   })
 ] as const;
 
@@ -3872,7 +3891,7 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
   "Once the route family is clear, say it plainly enough that another agent could follow the same path without guessing.",
   "For Movement specifically, treat missing-data corrections as user-defined overlay boxes unless the user is editing an already-recorded stay or trip. When the user already gave a clear instruction like 'that missing block was home', act after only the last ambiguity is resolved.",
   "For action workflows such as task_run, work_adjustment, questionnaire_run, preference_judgment, preference_signal, and self_observation, keep the question focused on the missing action detail and do not downgrade the request into generic batch CRUD.",
-  "For read-model-only health surfaces such as sleep_overview and sports_overview, use the dedicated overview reads first when the user wants review, pattern interpretation, recovery context, or training-load context. Move to sleep_session or workout_session writes only after one specific stored session needs enrichment.",
+  "For read-model-only health surfaces such as sleep_overview, sports_overview, and training_load, use the dedicated overview reads first when the user wants review, pattern interpretation, recovery context, training-load context, or cardiovascular target analysis. Move to sleep_session or workout_session writes only after one specific stored session needs enrichment.",
   "For normal stored Preferences and questionnaire records, use batch CRUD by default; switch to dedicated action routes only for judgments, signals, run answers, clone/draft/publish lifecycle, or visual comparison gameplay.",
   "When the user wants to remember a book, article, paper, source, concept, person, conversation, project reference, recurring explanation, or personal manual, consider wiki_page before note or self_observation.",
   "For meaning-bearing updates, especially in Psyche, briefly say what feels newly true before you ask for the one structural detail that still changes the save."
@@ -4207,6 +4226,20 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
       "Ask which workout or date range matters only if the scope is not already clear.",
       "Use the dedicated sports overview read before asking the user to reconstruct metrics from memory.",
       "Reflect the decision the user is trying to make from the training picture.",
+      "Move to a workout_session write only when one specific workout needs reflective context, tags, notes, or links."
+    ]
+  },
+  {
+    focus: "training_load",
+    openingQuestion:
+      "What training decision should the load picture help with right now?",
+    coachingGoal:
+      "Review cardiovascular load, HR zones, acute/chronic stress, high-intensity pressure, VO2max context, and target distribution before suggesting training changes.",
+    askSequence: [
+      "Ask what decision the user wants from the load surface only if it is not already clear.",
+      "Use the dedicated training-load overview before asking the user to reconstruct workout metrics from memory.",
+      "Separate data-quality limits from true physiological interpretation.",
+      "Translate the load pattern into a concrete next training constraint or target.",
       "Move to a workout_session write only when one specific workout needs reflective context, tags, notes, or links."
     ]
   },
@@ -5164,6 +5197,21 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     example: '{"userIds":["user_operator"]}'
   },
   {
+    toolName: "forge_get_training_load_overview",
+    summary:
+      "Read the cardiovascular training-load surface with acute/chronic load, HR zone distribution, weekly intensity targets, and data-quality flags.",
+    whenToUse:
+      "Use when the operator wants to analyze training stress, zone balance, VO2max context, combat-sport load, or what to optimize next.",
+    inputShape: "{ userIds?: string[] }",
+    requiredFields: [],
+    notes: [
+      "The API path is /api/v1/health/training-load and the UI route is /training-load.",
+      "This is a read-model-only surface. Workout records remain ordinary workout_session entities for batch CRUD.",
+      "Forge uses HRR zone analytics and TRIMP-like internal load from stored workout evidence."
+    ],
+    example: '{"userIds":["user_operator"]}'
+  },
+  {
     toolName: "forge_update_sleep_session",
     summary:
       "Patch one sleep session with reflective notes, tags, or linked Forge context.",
@@ -6073,6 +6121,8 @@ function buildAgentOnboardingPayload(request: {
         sleep_overview: "/api/v1/health/sleep",
         sportsOverview: "/api/v1/health/fitness",
         sports_overview: "/api/v1/health/fitness",
+        trainingLoad: "/api/v1/health/training-load",
+        training_load: "/api/v1/health/training-load",
         selfObservation: "/api/v1/psyche/self-observation/calendar",
         self_observation: "/api/v1/psyche/self-observation/calendar",
         calendarOverview: "/api/v1/calendar/overview",
@@ -6188,6 +6238,7 @@ function buildAgentOnboardingPayload(request: {
       weeklyReview: "/api/v1/reviews/weekly",
       sleepOverview: "/api/v1/health/sleep",
       sportsOverview: "/api/v1/health/fitness",
+      trainingLoad: "/api/v1/health/training-load",
       lifeForce: "/api/v1/life-force",
       lifeForceProfile: "/api/v1/life-force/profile",
       lifeForceWeekdayTemplate: "/api/v1/life-force/templates/:weekday",
@@ -6242,6 +6293,7 @@ function buildAgentOnboardingPayload(request: {
         "forge_get_psyche_overview",
         "forge_get_sleep_overview",
         "forge_get_sports_overview",
+        "forge_get_training_load_overview",
         "forge_get_xp_metrics",
         "forge_get_weekly_review"
       ],
@@ -6272,6 +6324,7 @@ function buildAgentOnboardingPayload(request: {
       healthWorkflow: [
         "forge_get_sleep_overview",
         "forge_get_sports_overview",
+        "forge_get_training_load_overview",
         "forge_update_sleep_session",
         "forge_update_workout_session"
       ],
@@ -7641,6 +7694,19 @@ function compactFitness(fitness: ReturnType<typeof getFitnessViewData>) {
   };
 }
 
+function compactTrainingLoad(
+  trainingLoad: ReturnType<typeof getTrainingLoadViewData>
+) {
+  return {
+    summary: trainingLoad.summary,
+    intensityDistribution: trainingLoad.recentIntensityDistribution,
+    weeklyLoad: trainingLoad.weeklyLoad.slice(-8),
+    topActivities: trainingLoad.activityBreakdown.slice(0, 6),
+    targetModel: trainingLoad.targetModel,
+    detailRoute: "/api/v1/health/training-load"
+  };
+}
+
 function compactVitals(vitals: ReturnType<typeof getVitalsViewData>) {
   return {
     summary: vitals.summary,
@@ -7994,6 +8060,7 @@ function buildOperatorOverview(request: {
   );
   const sleep = compactSleep(getSleepViewData(userIds));
   const fitness = compactFitness(getFitnessViewData(userIds));
+  const trainingLoad = compactTrainingLoad(getTrainingLoadViewData(userIds));
   const vitals = compactVitals(getVitalsViewData(userIds));
   const lifeForce = compactLifeForce(buildLifeForcePayload(now, userIds));
   const psyche = canReadPsyche ? compactPsyche(getPsycheOverview(userIds)) : null;
@@ -8083,8 +8150,9 @@ function buildOperatorOverview(request: {
     calendar,
     notes,
     sleep,
-    fitness,
-    vitals,
+      fitness,
+      trainingLoad,
+      vitals,
     lifeForce,
     domains: listDomains().map((domain) => ({
       id: domain.id,
@@ -8964,6 +9032,11 @@ export async function buildServer(
   });
   app.get("/api/v1/health/fitness", async (request) => ({
     fitness: getFitnessViewData(
+      resolveScopedUserIds(request.query as Record<string, unknown>)
+    )
+  }));
+  app.get("/api/v1/health/training-load", async (request) => ({
+    trainingLoad: getTrainingLoadViewData(
       resolveScopedUserIds(request.query as Record<string, unknown>)
     )
   }));

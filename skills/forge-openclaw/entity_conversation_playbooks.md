@@ -257,10 +257,10 @@ Use this quick split before the conversation gets too detailed.
   the user is trying to do, then use the dedicated action tool or note-backed write
   model.
 - `operator_overview`, `operator_context`, `calendar_overview`, `sleep_overview`,
-  and `sports_overview` are read-model-only surfaces. Use them when the user wants
-  to understand current Forge state, work risk, calendar commitments, nights,
-  workouts, training load, recovery context, or health patterns before deciding
-  whether a stored entity needs creation or enrichment.
+  `sports_overview`, and `training_load` are read-model-only surfaces. Use them
+  when the user wants to understand current Forge state, work risk, calendar
+  commitments, nights, workouts, cardiovascular load, recovery context, or health
+  patterns before deciding whether a stored entity needs creation or enrichment.
 - Movement, Life Force, and Workbench are specialized domain areas. Use their
   dedicated route families for timelines and overlays, energy profile/templates and
   fatigue signals, and Workbench flow execution or result artifacts. When available,
@@ -332,9 +332,17 @@ still knowing the exact write/read family before it acts.
   score, stages, or recovery patterns before deciding whether a specific
   `sleep_session` needs reflective enrichment.
 - `sports_overview`: read-model-only health surface. Use the sports overview route or
-  `forge_get_sports_overview` when the user wants to review workouts, training load,
-  effort, type distribution, or recovery context before deciding whether a specific
-  `workout_session` needs reflective enrichment.
+  `forge_get_sports_overview` when the user wants to review workouts, effort, type
+  distribution, or recovery context before deciding whether a specific
+  `workout_session` needs reflective enrichment. Use
+  `forge_get_training_load_overview` or `/api/v1/health/training-load` for
+  cardiovascular load, HR zone balance, acute/chronic stress, VO2max context, or
+  training target questions.
+- `training_load`: read-model-only health surface. Use
+  `forge_get_training_load_overview` or `/api/v1/health/training-load` when the
+  user wants training-load trends, acute/chronic ratio, HR zone distribution,
+  threshold exposure, VO2max/resting-HR context, or optimization targets before
+  deciding whether a specific `workout_session` needs notes or links.
 - `movement`: specialized domain surface. Use the dedicated movement routes for day,
   month, all-time, timeline, places, trip detail, selection aggregates, manual
   overlays, and repair actions.
@@ -1360,14 +1368,15 @@ Preferred opening question:
 
 ## Sports Overview
 
-Aim: review workout and training-load context before deciding whether one workout
-needs a reflective update or recovery follow-up.
+Aim: review workout context before deciding whether one workout needs a
+reflective update, and route deeper cardiovascular load questions to the
+training-load read model.
 
 Arc:
 
 1. Ask what the user wants to understand from the sports picture: one workout, a
-   recent training trend, effort, volume, type mix, recovery, or links to mood and
-   goals.
+   recent training trend, effort, volume, type mix, recovery, zone balance, or
+   links to mood and goals.
 2. Read the sports overview before asking the user to reconstruct metrics from memory.
 3. Reflect the practical decision the review should support.
 4. Move to `workout_session` enrichment only when one specific workout needs context,
@@ -1382,8 +1391,12 @@ Helpful follow-up lanes:
 Route note:
 
 - `sports_overview` is a read-model-only surface. Use `forge_get_sports_overview` or
-  `/api/v1/health/fitness` for review. Do not create, update, or delete
+  `/api/v1/health/fitness` for session review. Do not create, update, or delete
   `sports_overview` through batch CRUD.
+- For cardiovascular load, HR zone distribution, acute/chronic load, VO2max
+  context, or training target questions, use `forge_get_training_load_overview`
+  or `/api/v1/health/training-load`. Treat `training_load` as read-model-only,
+  not a batch CRUD entity.
 - If the review reveals that one workout needs reflective context, switch to the
   stored `workout_session` batch route or reflective update helper for that known
   session.
@@ -1396,6 +1409,50 @@ Ready to review when:
 Preferred opening question:
 
 - "What are you trying to understand from your workout picture right now?"
+
+## Training Load
+
+Aim: review cardiovascular load and training targets before deciding whether one
+workout needs reflective enrichment or a recovery/target adjustment.
+
+Arc:
+
+1. Ask what practical decision the user wants to support: build aerobic base,
+   control overload risk, preserve hard-day quality, understand combat-sport
+   intensity, or compare recent load against chronic base.
+2. Read the training-load overview before asking the user to reconstruct zones,
+   VO2max, or recent hard sessions from memory.
+3. Reflect the load signal with explicit confidence: HR coverage, sensor limits,
+   recent sample count, and whether kickboxing/wrist HR may be noisy.
+4. Move to `workout_session` enrichment only when one specific workout needs
+   notes, tags, context, or links.
+
+Helpful follow-up lanes:
+
+- whether the question is adaptation, overload risk, zone target, VO2max trend,
+  sport contribution, or one recent session
+- which date range matters if the default 7-day and 28-day windows are not enough
+- whether the user is optimizing health, performance, recovery, or a specific
+  upcoming training block
+
+Route note:
+
+- `training_load` is a read-model-only surface. Use
+  `forge_get_training_load_overview` or `/api/v1/health/training-load` for
+  cardiovascular load, HR zone distribution, acute/chronic load, VO2max context,
+  and training target analysis. Do not create, update, or delete `training_load`
+  through batch CRUD.
+- If one workout needs subjective effort, meaning, social context, or links,
+  switch to the stored `workout_session` batch route or reflective update helper.
+
+Ready to review when:
+
+- the user's practical adaptation or recovery question is clear
+- the relevant time window or default 7-day/28-day comparison is acceptable
+
+Preferred opening question:
+
+- "What training-load decision are you trying to support right now?"
 
 ## Calendar Overview
 

@@ -199,14 +199,16 @@ Wiki navigation and search rule:
 Health rule:
 
 - Sleep and sports records are first-class health surfaces, not generic notes or tasks.
-- Use `forge_get_sleep_overview` and `forge_get_sports_overview` for review and trend reading.
+- Use `forge_get_sleep_overview`, `forge_get_sports_overview`, and
+  `forge_get_training_load_overview` for health review and trend reading.
 - In `forge_get_agent_onboarding.entityRouteModel.readModelOnlySurfaces`, operator,
-  calendar, self-observation, sleep, and sports read models are published with
+  calendar, self-observation, sleep, sports, and training-load read models are published with
   both camelCase names and entity-style aliases where useful, including
   `operatorOverview`, `operatorContext`, `calendarOverview`, `sleepOverview`,
-  `sportsOverview`, `operator_overview`, `operator_context`,
-  `calendar_overview`, `self_observation`, `sleep_overview`, and
-  `sports_overview`. Treat those as read-only surfaces, not batch CRUD entities.
+  `sportsOverview`, `trainingLoad`, `operator_overview`, `operator_context`,
+  `calendar_overview`, `self_observation`, `sleep_overview`,
+  `sports_overview`, and `training_load`. Treat those as read-only surfaces,
+  not batch CRUD entities.
 - Use `forge_get_operator_overview` for a broad Forge status read, `forge_get_operator_context`
   for current work and risk, and `forge_get_calendar_overview` before calendar-aware
   planning or scheduling mutations.
@@ -524,7 +526,7 @@ Use the wiki tools for SQLite-backed memory work:
 `forge_get_wiki_settings`, `forge_list_wiki_pages`, `forge_get_wiki_page`, `forge_search_wiki`, `forge_upsert_wiki_page`, `forge_get_wiki_health`, `forge_sync_wiki_vault`, `forge_reindex_wiki_embeddings`, `forge_ingest_wiki_source`
 
 Use the health tools for review and reflective enrichment, not as the default CRUD architecture:
-`forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_update_sleep_session`, `forge_update_workout_session`
+`forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_get_training_load_overview`, `forge_update_sleep_session`, `forge_update_workout_session`
 
 Use the dedicated domain routes for specialized surfaces that are not simple batch entities:
 
@@ -679,9 +681,10 @@ Use the health tools when the request is about sleep or sports review:
 
 - `forge_get_sleep_overview` to inspect recent nights, averages, regularity, stage breakdown, and linked reflective context
 - `forge_get_sports_overview` to inspect training volume, workout types, effort trends, habit-generated sessions, and linked context
+- `forge_get_training_load_overview` to inspect cardiovascular load, HR zone balance, acute/chronic stress, high-intensity pressure, VO2max context, and training target fit
 - `forge_update_sleep_session` to add sleep-quality notes, tags, or links back to Forge entities after review
 - `forge_update_workout_session` to add subjective effort, mood, meaning, tags, or links on one workout after review
-- remember that the UI route is `/sports` while the backend overview route is `/api/v1/health/fitness`
+- remember that the UI route is `/sports` while the backend overview route is `/api/v1/health/fitness`; the dedicated training-load UI is `/training-load` and its backend route is `/api/v1/health/training-load`
 
 Use these exact health batch payload shapes when the user is creating or editing the stored records themselves:
 
@@ -776,6 +779,7 @@ When the user asks which Forge tools are available, list exactly these tools:
 `forge_get_current_work`
 `forge_get_sleep_overview`
 `forge_get_sports_overview`
+`forge_get_training_load_overview`
 `forge_update_sleep_session`
 `forge_update_workout_session`
 `forge_get_preferences_workspace`
