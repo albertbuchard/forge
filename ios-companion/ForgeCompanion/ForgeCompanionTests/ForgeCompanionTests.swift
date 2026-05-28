@@ -3222,7 +3222,15 @@ final class ForgeCompanionTests: XCTestCase {
 
         XCTAssertEqual(
             ForgeSyncClient.healthSyncChunkingVersion(for: urlSessionPayload),
-            ForgeSyncClient.httpBackgroundHealthSyncChunkingVersion
+            "http-background-v6-content-addressed-base"
+        )
+        XCTAssertEqual(
+            ForgeSyncClient.httpBackgroundHealthSyncChunkingVersion,
+            "http-background-v6-content-addressed-base"
+        )
+        XCTAssertEqual(
+            ForgeSyncClient.irohHealthSyncChunkingVersion,
+            "iroh-v5-content-addressed-base"
         )
     }
 

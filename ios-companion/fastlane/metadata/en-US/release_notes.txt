@@ -1,17 +1,13 @@
-Forge Companion 1.0.65 fixes the HealthKit workout import getting stuck after a
-background expiration or stalled route upload.
+Forge Companion 1.0.66 fixes stale HealthKit chunk checkpoints that could keep
+automatic syncs cycling through cancelled attempts.
 
-When iOS locks protected HealthKit data, the app now pauses the unfinished
-import and waits for unlock instead of repeatedly starting a sync that cannot
-read workouts.
+The app now refuses to resume old base-health chunk checkpoints from previous
+builds, so protected-data-empty sleep chunks cannot block later real sleep data.
 
-When iOS expires the background task, the active sync is cancelled cleanly and
-Forge resumes from the last accepted backend chunk on the next run.
+If Forge reports missing required HealthKit chunks during finalization, the app
+now aborts that stale upload session and starts the next retry from a clean
+session instead of preserving the broken checkpoint.
 
-Workout evidence uploads now use smaller batches and ordered chunk uploads, so
-one failing route chunk stops immediately instead of leaving dozens of
-background URLSession uploads queued behind a dead task.
-
-The upload watchdog now detects a sync with no accepted chunk for five minutes,
-clears the spinner, and leaves the manual Sync button able to restart from the
-backend checkpoint.
+Base HealthKit chunks now use payload-addressed identities, preventing a real
+sleep, vitals, or movement chunk from being skipped because an earlier empty
+payload used the same sequence number.

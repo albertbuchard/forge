@@ -329,8 +329,8 @@ final class ForgeBackgroundUploadCoordinator: NSObject, URLSessionDataDelegate {
 struct ForgeSyncClient {
     static let movementTimelineServerCompatibleLimit = 120
     static let legacyHTTPHealthSyncChunkingVersion = "http-v1"
-    static let httpBackgroundHealthSyncChunkingVersion = "http-background-v5-stable-workout-resume"
-    static let irohHealthSyncChunkingVersion = "iroh-v4-stable-workout-resume"
+    static let httpBackgroundHealthSyncChunkingVersion = "http-background-v6-content-addressed-base"
+    static let irohHealthSyncChunkingVersion = "iroh-v5-content-addressed-base"
 
     static func healthSyncChunkingVersion(for pairing: PairingPayload) -> String {
         if pairing.transport?.isIrohTransport == true {
