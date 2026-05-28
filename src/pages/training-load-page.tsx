@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Area,
@@ -13,7 +14,6 @@ import {
   PolarGrid,
   Radar,
   RadarChart,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis
@@ -52,6 +52,41 @@ const ZONE_COLORS: Record<string, string> = {
 
 type TimeWindow = "recent" | "all";
 
+function ChartBox({
+  height,
+  children
+}: {
+  height: number;
+  children: (size: { width: number; height: number }) => ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [width, setWidth] = useState(0);
+
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) {
+      return;
+    }
+    const updateWidth = () => {
+      setWidth(Math.max(0, Math.floor(element.getBoundingClientRect().width)));
+    };
+    updateWidth();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateWidth);
+      return () => window.removeEventListener("resize", updateWidth);
+    }
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={ref} style={{ height }} className="min-w-0">
+      {width > 24 ? children({ width, height }) : null}
+    </div>
+  );
+}
+
 function pct(value: number | null | undefined, digits = 0) {
   if (value == null || Number.isNaN(value)) {
     return "n/a";
@@ -66,7 +101,9 @@ function numberLabel(value: number | null | undefined, digits = 0) {
   return value.toFixed(digits);
 }
 
-function readinessCopy(readiness: TrainingLoadViewData["summary"]["readiness"]) {
+function readinessCopy(
+  readiness: TrainingLoadViewData["summary"]["readiness"]
+) {
   switch (readiness) {
     case "productive":
       return {
@@ -163,9 +200,14 @@ function distributionChartData(
   }));
 }
 
-function zoneChartData(trainingLoad: TrainingLoadViewData, timeWindow: TimeWindow) {
+function zoneChartData(
+  trainingLoad: TrainingLoadViewData,
+  timeWindow: TimeWindow
+) {
   const zones =
-    timeWindow === "recent" ? trainingLoad.recentZoneTotals : trainingLoad.zoneTotals;
+    timeWindow === "recent"
+      ? trainingLoad.recentZoneTotals
+      : trainingLoad.zoneTotals;
   return zones.map((zone) => ({
     ...zone,
     minutes: Math.round(zone.seconds / 60),
@@ -179,13 +221,22 @@ function buildRadarData(trainingLoad: TrainingLoadViewData) {
   const acwrScore =
     summary.acuteChronicRatio == null
       ? 45
-      : Math.max(0, Math.min(100, 100 - Math.abs(summary.acuteChronicRatio - 1) * 80));
+      : Math.max(
+          0,
+          Math.min(100, 100 - Math.abs(summary.acuteChronicRatio - 1) * 80)
+        );
   return [
     { axis: "Load", value: Math.min(100, summary.acuteLoad7d / 3) },
     { axis: "Base", value: Math.min(100, summary.chronicWeeklyLoad28d / 3) },
     { axis: "Balance", value: acwrScore },
-    { axis: "Quality", value: Math.min(100, summary.averageHeartRateCoverage * 100) },
-    { axis: "High", value: Math.min(100, summary.highIntensityMinutes7d * 1.8) },
+    {
+      axis: "Quality",
+      value: Math.min(100, summary.averageHeartRateCoverage * 100)
+    },
+    {
+      axis: "High",
+      value: Math.min(100, summary.highIntensityMinutes7d * 1.8)
+    },
     {
       axis: "VO2",
       value:
@@ -218,12 +269,17 @@ function SessionSignalTable({
           >
             <div className="text-white/52">{session.dateKey.slice(5)}</div>
             <div className="min-w-0">
-              <div className="truncate text-white/86">{session.workoutTypeLabel}</div>
+              <div className="truncate text-white/86">
+                {session.workoutTypeLabel}
+              </div>
               <div className="mt-0.5 text-[10px] text-white/42">
-                {numberLabel(session.durationMinutes, 0)}m · {session.confidence}
+                {numberLabel(session.durationMinutes, 0)}m ·{" "}
+                {session.confidence}
               </div>
             </div>
-            <div className="text-white">{numberLabel(session.trainingLoad, 0)}</div>
+            <div className="text-white">
+              {numberLabel(session.trainingLoad, 0)}
+            </div>
             <div>{pct(session.highIntensityPercentage)}</div>
             <div>
               {session.averageHr ? Math.round(session.averageHr) : "n/a"}
@@ -245,11 +301,14 @@ export function TrainingLoadPage() {
 
   const trainingLoadQuery = useQuery({
     queryKey: ["forge-training-load", ...selectedUserIds],
-    queryFn: async () => (await getTrainingLoadView(selectedUserIds)).trainingLoad
+    queryFn: async () =>
+      (await getTrainingLoadView(selectedUserIds)).trainingLoad
   });
 
   const trainingLoad = trainingLoadQuery.data;
-  const readiness = readinessCopy(trainingLoad?.summary.readiness ?? "insufficient_data");
+  const readiness = readinessCopy(
+    trainingLoad?.summary.readiness ?? "insufficient_data"
+  );
   const weeklyChartData = useMemo(
     () => (trainingLoad ? buildWeeklyChartData(trainingLoad) : []),
     [trainingLoad]
@@ -288,8 +347,7 @@ export function TrainingLoadPage() {
       <ErrorState
         eyebrow="Training Load"
         error={
-          trainingLoadQuery.error ??
-          new Error("Training load data unavailable")
+          trainingLoadQuery.error ?? new Error("Training load data unavailable")
         }
         onRetry={() => void trainingLoadQuery.refetch()}
       />
@@ -319,18 +377,22 @@ export function TrainingLoadPage() {
         {metricTile({
           label: "Chronic base",
           value: numberLabel(summary.chronicWeeklyLoad28d, 0),
-          detail: "28-day average weekly load, used as the current base signal.",
+          detail:
+            "28-day average weekly load, used as the current base signal.",
           icon: RadioTower
         })}
         {metricTile({
           label: "ACWR",
           value: numberLabel(summary.acuteChronicRatio, 2),
-          detail: "Acute load divided by chronic weekly load. Useful as a flag, not a verdict.",
+          detail:
+            "Acute load divided by chronic weekly load. Useful as a flag, not a verdict.",
           icon: Activity
         })}
         {metricTile({
           label: "VO2 max",
-          value: summary.vo2MaxLatest ? numberLabel(summary.vo2MaxLatest, 1) : "n/a",
+          value: summary.vo2MaxLatest
+            ? numberLabel(summary.vo2MaxLatest, 1)
+            : "n/a",
           detail:
             summary.vo2MaxDelta == null
               ? "No delta available yet."
@@ -350,37 +412,96 @@ export function TrainingLoadPage() {
                 Load, hours, and high-intensity share over the last 26 weeks.
               </div>
               <div className="mt-1 text-[12px] leading-5 text-white/50">
-                Load is internal stress. Hours are volume. The red line shows how much of each week landed in Z4/Z5.
+                Load is internal stress. Hours are volume. The red line shows
+                how much of each week landed in Z4/Z5.
               </div>
             </div>
             <Badge tone="meta">TRIMP · HRR zones</Badge>
           </div>
-          <div className="mt-5 h-[340px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={weeklyChartData}>
-                <defs>
-                  <linearGradient id="trainingLoadFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#38bdf8" stopOpacity={0.38} />
-                    <stop offset="100%" stopColor="#38bdf8" stopOpacity={0.04} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
-                <XAxis dataKey="week" tick={{ fill: "rgba(255,255,255,0.54)", fontSize: 10 }} />
-                <YAxis yAxisId="load" tick={{ fill: "rgba(255,255,255,0.54)", fontSize: 10 }} width={42} />
-                <YAxis yAxisId="pct" orientation="right" domain={[0, 100]} tick={{ fill: "rgba(255,255,255,0.54)", fontSize: 10 }} width={38} />
-                <Tooltip
-                  contentStyle={{
-                    background: "rgba(6,10,18,0.96)",
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    borderRadius: 8,
-                    color: "white"
-                  }}
-                />
-                <Area yAxisId="load" type="monotone" dataKey="load" name="Training load" stroke="#38bdf8" fill="url(#trainingLoadFill)" strokeWidth={2} />
-                <Bar yAxisId="load" dataKey="hours" name="Hours" fill="#a78bfa" radius={[3, 3, 0, 0]} />
-                <Line yAxisId="pct" type="monotone" dataKey="high" name="Z4+Z5 %" stroke="#ef4444" strokeWidth={2.4} dot={{ r: 2 }} />
-              </ComposedChart>
-            </ResponsiveContainer>
+          <div className="mt-5">
+            <ChartBox height={340}>
+              {({ width, height }) => (
+                <ComposedChart
+                  data={weeklyChartData}
+                  width={width}
+                  height={height}
+                >
+                  <defs>
+                    <linearGradient
+                      id="trainingLoadFill"
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
+                      <stop
+                        offset="0%"
+                        stopColor="#38bdf8"
+                        stopOpacity={0.38}
+                      />
+                      <stop
+                        offset="100%"
+                        stopColor="#38bdf8"
+                        stopOpacity={0.04}
+                      />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid
+                    stroke="rgba(255,255,255,0.08)"
+                    vertical={false}
+                  />
+                  <XAxis
+                    dataKey="week"
+                    tick={{ fill: "rgba(255,255,255,0.54)", fontSize: 10 }}
+                  />
+                  <YAxis
+                    yAxisId="load"
+                    tick={{ fill: "rgba(255,255,255,0.54)", fontSize: 10 }}
+                    width={42}
+                  />
+                  <YAxis
+                    yAxisId="pct"
+                    orientation="right"
+                    domain={[0, 100]}
+                    tick={{ fill: "rgba(255,255,255,0.54)", fontSize: 10 }}
+                    width={38}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      background: "rgba(6,10,18,0.96)",
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      borderRadius: 8,
+                      color: "white"
+                    }}
+                  />
+                  <Area
+                    yAxisId="load"
+                    type="monotone"
+                    dataKey="load"
+                    name="Training load"
+                    stroke="#38bdf8"
+                    fill="url(#trainingLoadFill)"
+                    strokeWidth={2}
+                  />
+                  <Bar
+                    yAxisId="load"
+                    dataKey="hours"
+                    name="Hours"
+                    fill="#a78bfa"
+                    radius={[3, 3, 0, 0]}
+                  />
+                  <Line
+                    yAxisId="pct"
+                    type="monotone"
+                    dataKey="high"
+                    name="Z4+Z5 %"
+                    stroke="#ef4444"
+                    strokeWidth={2.4}
+                    dot={{ r: 2 }}
+                  />
+                </ComposedChart>
+              )}
+            </ChartBox>
           </div>
         </Card>
 
@@ -390,24 +511,35 @@ export function TrainingLoadPage() {
           </div>
           <div className="mt-2 text-lg text-white">Current signal balance</div>
           <div className="mt-1 text-[12px] leading-5 text-white/50">
-            A compact coach view: load, base, balance, data quality, high-intensity pressure, and VO2 movement.
+            A compact coach view: load, base, balance, data quality,
+            high-intensity pressure, and VO2 movement.
           </div>
-          <div className="mt-4 h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <RadarChart data={radarData}>
-                <PolarGrid stroke="rgba(255,255,255,0.12)" />
-                <PolarAngleAxis dataKey="axis" tick={{ fill: "rgba(255,255,255,0.64)", fontSize: 10 }} />
-                <Radar dataKey="value" stroke="#22c55e" fill="#22c55e" fillOpacity={0.24} />
-                <Tooltip
-                  contentStyle={{
-                    background: "rgba(6,10,18,0.96)",
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    borderRadius: 8,
-                    color: "white"
-                  }}
-                />
-              </RadarChart>
-            </ResponsiveContainer>
+          <div className="mt-4">
+            <ChartBox height={300}>
+              {({ width, height }) => (
+                <RadarChart data={radarData} width={width} height={height}>
+                  <PolarGrid stroke="rgba(255,255,255,0.12)" />
+                  <PolarAngleAxis
+                    dataKey="axis"
+                    tick={{ fill: "rgba(255,255,255,0.64)", fontSize: 10 }}
+                  />
+                  <Radar
+                    dataKey="value"
+                    stroke="#22c55e"
+                    fill="#22c55e"
+                    fillOpacity={0.24}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      background: "rgba(6,10,18,0.96)",
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      borderRadius: 8,
+                      color: "white"
+                    }}
+                  />
+                </RadarChart>
+              )}
+            </ChartBox>
           </div>
         </Card>
       </section>
@@ -419,7 +551,9 @@ export function TrainingLoadPage() {
               <div className="font-label text-[10px] uppercase tracking-[0.18em] text-white/45">
                 Intensity target
               </div>
-              <div className="mt-2 text-lg text-white">Distribution vs target bands</div>
+              <div className="mt-2 text-lg text-white">
+                Distribution vs target bands
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-1 rounded-[8px] border border-white/8 bg-white/[0.035] p-1">
               {[
@@ -447,7 +581,8 @@ export function TrainingLoadPage() {
                 <div className="flex items-center justify-between gap-3 text-[12px]">
                   <span className="text-white/74">{entry.label}</span>
                   <span className="text-white">
-                    {entry.percent}% · target {entry.targetLow}-{entry.targetHigh}%
+                    {entry.percent}% · target {entry.targetLow}-
+                    {entry.targetHigh}%
                   </span>
                 </div>
                 <div className="relative h-3 overflow-hidden rounded-full bg-white/[0.08]">
@@ -460,7 +595,10 @@ export function TrainingLoadPage() {
                   />
                   <div
                     className="relative h-full rounded-full"
-                    style={{ width: `${Math.max(1, entry.percent)}%`, background: entry.fill }}
+                    style={{
+                      width: `${Math.max(1, entry.percent)}%`,
+                      background: entry.fill
+                    }}
                   />
                 </div>
               </div>
@@ -481,33 +619,49 @@ export function TrainingLoadPage() {
             HR zones
           </div>
           <div className="mt-2 text-lg text-white">
-            Detailed zone distribution for {timeWindow === "recent" ? "the last 28 days" : "all available sessions"}.
+            Detailed zone distribution for{" "}
+            {timeWindow === "recent"
+              ? "the last 28 days"
+              : "all available sessions"}
+            .
           </div>
-          <div className="mt-4 h-[290px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={zoneData}>
-                <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
-                <XAxis dataKey="label" interval={0} tick={{ fill: "rgba(255,255,255,0.56)", fontSize: 10 }} />
-                <YAxis tick={{ fill: "rgba(255,255,255,0.56)", fontSize: 10 }} width={38} />
-                <Tooltip
-                  formatter={(value, name) => [
-                    name === "minutes" ? `${value} min` : `${value}%`,
-                    name
-                  ]}
-                  contentStyle={{
-                    background: "rgba(6,10,18,0.96)",
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    borderRadius: 8,
-                    color: "white"
-                  }}
-                />
-                <Bar dataKey="minutes" name="minutes" radius={[4, 4, 0, 0]}>
-                  {zoneData.map((entry) => (
-                    <Cell key={entry.key} fill={entry.fill} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="mt-4">
+            <ChartBox height={290}>
+              {({ width, height }) => (
+                <BarChart data={zoneData} width={width} height={height}>
+                  <CartesianGrid
+                    stroke="rgba(255,255,255,0.08)"
+                    vertical={false}
+                  />
+                  <XAxis
+                    dataKey="label"
+                    interval={0}
+                    tick={{ fill: "rgba(255,255,255,0.56)", fontSize: 10 }}
+                  />
+                  <YAxis
+                    tick={{ fill: "rgba(255,255,255,0.56)", fontSize: 10 }}
+                    width={38}
+                  />
+                  <Tooltip
+                    formatter={(value, name) => [
+                      name === "minutes" ? `${value} min` : `${value}%`,
+                      name
+                    ]}
+                    contentStyle={{
+                      background: "rgba(6,10,18,0.96)",
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      borderRadius: 8,
+                      color: "white"
+                    }}
+                  />
+                  <Bar dataKey="minutes" name="minutes" radius={[4, 4, 0, 0]}>
+                    {zoneData.map((entry) => (
+                      <Cell key={entry.key} fill={entry.fill} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              )}
+            </ChartBox>
           </div>
         </Card>
       </section>
@@ -520,27 +674,73 @@ export function TrainingLoadPage() {
           <div className="mt-2 text-lg text-white">
             Easy, threshold, and high-intensity minutes against daily load.
           </div>
-          <div className="mt-4 h-[310px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={dailyChartData}>
-                <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
-                <XAxis dataKey="date" tick={{ fill: "rgba(255,255,255,0.54)", fontSize: 10 }} />
-                <YAxis yAxisId="minutes" tick={{ fill: "rgba(255,255,255,0.54)", fontSize: 10 }} width={38} />
-                <YAxis yAxisId="load" orientation="right" tick={{ fill: "rgba(255,255,255,0.54)", fontSize: 10 }} width={38} />
-                <Tooltip
-                  contentStyle={{
-                    background: "rgba(6,10,18,0.96)",
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    borderRadius: 8,
-                    color: "white"
-                  }}
-                />
-                <Bar yAxisId="minutes" dataKey="low" stackId="zones" fill="#22c55e" name="low min" />
-                <Bar yAxisId="minutes" dataKey="moderate" stackId="zones" fill="#f59e0b" name="threshold min" />
-                <Bar yAxisId="minutes" dataKey="high" stackId="zones" fill="#ef4444" name="high min" />
-                <Line yAxisId="load" type="monotone" dataKey="load" stroke="#38bdf8" strokeWidth={2.2} dot={false} />
-              </ComposedChart>
-            </ResponsiveContainer>
+          <div className="mt-4">
+            <ChartBox height={310}>
+              {({ width, height }) => (
+                <ComposedChart
+                  data={dailyChartData}
+                  width={width}
+                  height={height}
+                >
+                  <CartesianGrid
+                    stroke="rgba(255,255,255,0.08)"
+                    vertical={false}
+                  />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fill: "rgba(255,255,255,0.54)", fontSize: 10 }}
+                  />
+                  <YAxis
+                    yAxisId="minutes"
+                    tick={{ fill: "rgba(255,255,255,0.54)", fontSize: 10 }}
+                    width={38}
+                  />
+                  <YAxis
+                    yAxisId="load"
+                    orientation="right"
+                    tick={{ fill: "rgba(255,255,255,0.54)", fontSize: 10 }}
+                    width={38}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      background: "rgba(6,10,18,0.96)",
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      borderRadius: 8,
+                      color: "white"
+                    }}
+                  />
+                  <Bar
+                    yAxisId="minutes"
+                    dataKey="low"
+                    stackId="zones"
+                    fill="#22c55e"
+                    name="low min"
+                  />
+                  <Bar
+                    yAxisId="minutes"
+                    dataKey="moderate"
+                    stackId="zones"
+                    fill="#f59e0b"
+                    name="threshold min"
+                  />
+                  <Bar
+                    yAxisId="minutes"
+                    dataKey="high"
+                    stackId="zones"
+                    fill="#ef4444"
+                    name="high min"
+                  />
+                  <Line
+                    yAxisId="load"
+                    type="monotone"
+                    dataKey="load"
+                    stroke="#38bdf8"
+                    strokeWidth={2.2}
+                    dot={false}
+                  />
+                </ComposedChart>
+              )}
+            </ChartBox>
           </div>
         </Card>
 
@@ -576,19 +776,26 @@ export function TrainingLoadPage() {
                     {activity.workoutTypeLabel}
                   </div>
                   <div className="mt-1 text-[11px] text-white/46">
-                    {activity.sessionCount} sessions · {activity.activityFamilyLabel}
+                    {activity.sessionCount} sessions ·{" "}
+                    {activity.activityFamilyLabel}
                   </div>
                 </div>
                 <div className="text-[12px] text-white/62">
-                  <span className="block text-white">{activity.durationHours}h</span>
+                  <span className="block text-white">
+                    {activity.durationHours}h
+                  </span>
                   volume
                 </div>
                 <div className="text-[12px] text-white/62">
-                  <span className="block text-white">{activity.trainingLoad}</span>
+                  <span className="block text-white">
+                    {activity.trainingLoad}
+                  </span>
                   load
                 </div>
                 <div className="text-[12px] text-white/62">
-                  <span className="block text-white">{pct(activity.highPercentage)}</span>
+                  <span className="block text-white">
+                    {pct(activity.highPercentage)}
+                  </span>
                   high
                 </div>
               </div>
@@ -605,20 +812,20 @@ export function TrainingLoadPage() {
           </div>
           <div className="mt-4 grid gap-3 text-[12px] leading-5 text-white/56">
             <p>
-              Forge is estimating training stress from heart-rate reserve zones and
-              a TRIMP-like load. This is good for trend decisions, but it is not a
-              substitute for lactate testing, gas exchange thresholds, or coach-led
-              periodization.
+              Forge is estimating training stress from heart-rate reserve zones
+              and a TRIMP-like load. This is good for trend decisions, but it is
+              not a substitute for lactate testing, gas exchange thresholds, or
+              coach-led periodization.
             </p>
             <p>
-              Combat sports add sensor noise: wrist HR can miss short spikes during
-              punching and clinch work. Treat high-intensity minutes as minimum
-              evidence when the session had a lot of arm motion.
+              Combat sports add sensor noise: wrist HR can miss short spikes
+              during punching and clinch work. Treat high-intensity minutes as
+              minimum evidence when the session had a lot of arm motion.
             </p>
             <p>
               The practical target is not maximum Z5. Keep hard combat sessions
-              meaningful, then add easy aerobic base when the high-intensity share is
-              already high.
+              meaningful, then add easy aerobic base when the high-intensity
+              share is already high.
             </p>
           </div>
         </Card>

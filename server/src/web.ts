@@ -400,6 +400,12 @@ async function proxyDevWebSocket(input: {
   });
 
   proxyRequest.on("upgrade", (response, proxySocket, proxyHead) => {
+    const closeBothSockets = () => {
+      proxySocket.destroy();
+      input.socket.destroy();
+    };
+    proxySocket.on("error", closeBothSockets);
+    input.socket.on("error", closeBothSockets);
     writeProxyUpgradeResponse(input.socket, response);
     if (proxyHead.length > 0) {
       input.socket.write(proxyHead);
