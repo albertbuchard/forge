@@ -407,6 +407,7 @@ struct ForgeSyncClient {
         let alreadyUploadedWorkoutCount: Int
         let existingWorkoutCount: Int?
         let incompleteWorkoutCount: Int?
+        let heartRateSampleCount: Int?
         let timeSeriesSampleCount: Int?
         let routePointCount: Int?
         let capturedAt: String?

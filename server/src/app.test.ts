@@ -4046,6 +4046,27 @@ test("mobile health workout import state replays legacy workouts until evidence 
       now,
       now
     );
+    insertWorkout.run(
+      "workout_summary_only",
+      "hk-summary-only",
+      qrPayload.sessionId,
+      "2024-04-10T07:00:00.000Z",
+      "2024-04-10T08:00:00.000Z",
+      JSON.stringify({
+        captureQuality: {
+          status: "summary_exported",
+          flags: ["server_side_evidence_derivation"],
+          heartRateSamples: 0,
+          routePoints: 0
+        },
+        syncCursor: {
+          rawEvidenceVersion: "healthkit-workout-raw-bulk-v3",
+          phoneMappingMode: "summary_plus_bulk_evidence"
+        }
+      }),
+      now,
+      now
+    );
 
     const insertRoutePoint = getDatabase().prepare(
       `INSERT INTO health_workout_routes (
@@ -4146,8 +4167,8 @@ test("mobile health workout import state replays legacy workouts until evidence 
       ["hk-explicit-zero-hr"]
     );
     assert.equal(upload.workoutImportState.alreadyUploadedWorkoutCount, 1);
-    assert.equal(upload.workoutImportState.existingWorkoutCount, 3);
-    assert.equal(upload.workoutImportState.incompleteWorkoutCount, 2);
+    assert.equal(upload.workoutImportState.existingWorkoutCount, 4);
+    assert.equal(upload.workoutImportState.incompleteWorkoutCount, 3);
     assert.equal(upload.workoutImportState.heartRateSampleCount, 0);
     assert.equal(upload.workoutImportState.routePointCount, 2);
   } finally {

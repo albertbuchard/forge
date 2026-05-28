@@ -1,11 +1,10 @@
-Forge Companion 1.0.67 backfills missing historical workout heart-rate and
-route evidence instead of treating a previously uploaded workout summary as
-complete evidence.
+Forge Companion 1.0.68 forces a historical workout evidence repair when Forge
+reports uploaded workout summaries with missing heart-rate or route evidence,
+even if the phone had previously marked the one-time backfill complete.
 
-Workout evidence chunks now use payload-addressed identities, so a prior empty
-or partial workout upload cannot block a later retry that includes the real
-heart-rate samples or route points.
+Forge now distinguishes summary-only historical rows from real zero-heart-rate
+route-only workouts, so old kickboxing summaries are replayed until raw evidence
+metadata confirms the heart-rate and route capture state.
 
-Forge now asks the app to replay legacy workouts until explicit evidence
-metadata confirms heart-rate and route capture, so opening the app should repair
-old kickboxing and workout evidence gaps during sync.
+Base HealthKit chunks use payload-addressed identities, so empty locked-device
+sleep/vitals chunks cannot block a later retry that includes the real data.

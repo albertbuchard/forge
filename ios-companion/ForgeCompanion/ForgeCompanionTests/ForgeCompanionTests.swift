@@ -3003,6 +3003,7 @@ final class ForgeCompanionTests: XCTestCase {
             "alreadyUploadedWorkoutCount": 2,
             "existingWorkoutCount": 3,
             "incompleteWorkoutCount": 1,
+            "heartRateSampleCount": 180,
             "timeSeriesSampleCount": 240,
             "routePointCount": 40,
             "capturedAt": "2026-05-26T19:02:54.205Z"
@@ -3027,6 +3028,7 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(session.workoutImportState?.alreadyUploadedWorkoutCount, 2)
         XCTAssertEqual(session.workoutImportState?.existingWorkoutCount, 3)
         XCTAssertEqual(session.workoutImportState?.incompleteWorkoutCount, 1)
+        XCTAssertEqual(session.workoutImportState?.heartRateSampleCount, 180)
         XCTAssertEqual(session.workoutImportState?.timeSeriesSampleCount, 240)
         XCTAssertEqual(session.workoutImportState?.routePointCount, 40)
     }
