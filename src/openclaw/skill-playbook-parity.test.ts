@@ -93,6 +93,8 @@ describe("forge skill playbook parity", () => {
     expect(openclawSkill).toMatch(/Self-observation/);
     expect(openclawSkill).toMatch(/sleep_session/i);
     expect(openclawSkill).toMatch(/workout_session/i);
+    expect(openclawSkill).toMatch(/description:[^\n]*training_load/i);
+    expect(openclawSkill).toMatch(/Health side covers[\s\S]*training-load surface/i);
     expect(openclawSkill).toMatch(/\/api\/v1\/movement/i);
     expect(openclawSkill).toMatch(/\/api\/v1\/life-force/i);
     expect(openclawSkill).toMatch(/\/api\/v1\/workbench/i);
@@ -182,6 +184,8 @@ describe("forge skill playbook parity", () => {
 
     expect(hermesSkill).toMatch(/high-level batch routes for basic Preferences CRUD/i);
     expect(hermesSkill).toMatch(/high-level batch routes for basic questionnaire CRUD/i);
+    expect(hermesSkill).toMatch(/Health side covers[\s\S]*training-load surface/i);
+    expect(hermesSkill).toMatch(/Read-model-only surfaces:[^\n]*training load/i);
     expect(hermesSkill).toMatch(/add, update, review, compare, navigate, link, or run/i);
     expect(hermesSkill).toMatch(/exact correction in usable language/i);
     expect(hermesSkill).toMatch(/stop asking and write/i);
@@ -197,6 +201,7 @@ describe("forge skill playbook parity", () => {
     expect(hermesSkill).toMatch(/preference_signal/i);
     expect(codexSkill).toMatch(/sleep_session/i);
     expect(codexSkill).toMatch(/workout_session/i);
+    expect(codexSkill).toMatch(/`training_load` surface/i);
     expect(codexSkill).toMatch(/add, update, review, compare, navigate, link, or run/i);
     expect(codexSkill).toMatch(/exact correction in usable language/i);
     expect(codexSkill).toMatch(/stop asking and write/i);

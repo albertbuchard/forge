@@ -1,13 +1,11 @@
-Forge Companion 1.0.66 fixes stale HealthKit chunk checkpoints that could keep
-automatic syncs cycling through cancelled attempts.
+Forge Companion 1.0.67 backfills missing historical workout heart-rate and
+route evidence instead of treating a previously uploaded workout summary as
+complete evidence.
 
-The app now refuses to resume old base-health chunk checkpoints from previous
-builds, so protected-data-empty sleep chunks cannot block later real sleep data.
+Workout evidence chunks now use payload-addressed identities, so a prior empty
+or partial workout upload cannot block a later retry that includes the real
+heart-rate samples or route points.
 
-If Forge reports missing required HealthKit chunks during finalization, the app
-now aborts that stale upload session and starts the next retry from a clean
-session instead of preserving the broken checkpoint.
-
-Base HealthKit chunks now use payload-addressed identities, preventing a real
-sleep, vitals, or movement chunk from being skipped because an earlier empty
-payload used the same sequence number.
+Forge now asks the app to replay legacy workouts until explicit evidence
+metadata confirms heart-rate and route capture, so opening the app should repair
+old kickboxing and workout evidence gaps during sync.
