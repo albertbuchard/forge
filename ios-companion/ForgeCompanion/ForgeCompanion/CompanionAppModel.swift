@@ -1903,11 +1903,13 @@ final class CompanionAppModel: ObservableObject {
                 return false
             }
             let failureReason = nsError.userInfo[NSLocalizedFailureReasonErrorKey] as? String
-            if Self.isHealthSyncChunkChecksumMismatch(error) {
-                let message = "Forge rejected a corrupted chunk. Retry starts a clean sync session."
+            if Self.isHealthSyncChunkChecksumMismatch(error) || Self.isHealthSyncMissingRequiredChunks(error) {
+                let message = Self.isHealthSyncMissingRequiredChunks(error)
+                    ? "Forge found a stale chunk checkpoint. Retry starts a clean sync session."
+                    : "Forge rejected a corrupted chunk. Retry starts a clean sync session."
                 companionDebugLog(
                     "CompanionAppModel",
-                    "performSync failed trigger=\(trigger) checksumMismatch description=\(nsError.localizedDescription) reason=\(failureReason ?? "nil")"
+                    "performSync failed trigger=\(trigger) resettableHealthSync description=\(nsError.localizedDescription) reason=\(failureReason ?? "nil")"
                 )
                 lastSyncMessage = message
                 latestError = message
@@ -2167,7 +2169,8 @@ final class CompanionAppModel: ObservableObject {
         pairing: PairingPayload,
         trigger: String,
         movementPayload: CompanionSyncPayload.MovementPayload,
-        screenTimePayload: CompanionSyncPayload.ScreenTimePayload
+        screenTimePayload: CompanionSyncPayload.ScreenTimePayload,
+        allowStaleCheckpointRetry: Bool = true
     ) async throws -> HealthSyncRunResult {
         let permissions = currentHealthSyncPermissions(
             movementPayload: movementPayload,
@@ -2400,11 +2403,29 @@ final class CompanionAppModel: ObservableObject {
                 )
                 lastSyncMessage = "Waiting for device unlock to read HealthKit again"
             } else if let uploadSession = recoveryContext.uploadSession {
-                if Self.isHealthSyncChunkChecksumMismatch(error) {
+                if Self.isHealthSyncChunkChecksumMismatch(error) || Self.isHealthSyncMissingRequiredChunks(error) {
                     await syncClient.abortHealthSyncSession(uploadSession: uploadSession, pairing: pairing)
                     clearActiveHealthSyncCheckpoint()
-                    lastSyncMessage = "Forge rejected a corrupted chunk. Retry starts a clean sync session."
-                    healthSyncLegacyFallbackReason = "Last upload session was reset after a chunk checksum mismatch"
+                    lastSyncMessage = Self.isHealthSyncMissingRequiredChunks(error)
+                        ? "Forge found a stale chunk checkpoint. Retry starts a clean sync session."
+                        : "Forge rejected a corrupted chunk. Retry starts a clean sync session."
+                    healthSyncLegacyFallbackReason = Self.isHealthSyncMissingRequiredChunks(error)
+                        ? "Last upload session was reset after Forge reported missing required chunks"
+                        : "Last upload session was reset after a chunk checksum mismatch"
+                    if Self.isHealthSyncMissingRequiredChunks(error), allowStaleCheckpointRetry {
+                        companionDebugLog(
+                            "CompanionAppModel",
+                            "retrying health sync from a clean session after missing required chunks"
+                        )
+                        stopHealthSyncTransferTelemetry()
+                        return try await runChunkedHealthSync(
+                            pairing: pairing,
+                            trigger: trigger,
+                            movementPayload: movementPayload,
+                            screenTimePayload: screenTimePayload,
+                            allowStaleCheckpointRetry: false
+                        )
+                    }
                 } else {
                     if activeHealthSyncCheckpoint == nil {
                         persistActiveHealthSyncCheckpoint(
@@ -2662,6 +2683,16 @@ final class CompanionAppModel: ObservableObject {
             (
                 nsError.localizedDescription.contains("chunk_checksum_mismatch") ||
                 failureReason?.contains("chunk_checksum_mismatch") == true
+            )
+    }
+
+    private static func isHealthSyncMissingRequiredChunks(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        let failureReason = nsError.userInfo[NSLocalizedFailureReasonErrorKey] as? String
+        return nsError.domain == "ForgeSyncClient" &&
+            (
+                nsError.localizedDescription.contains("missing_required_chunks") ||
+                failureReason?.contains("missing_required_chunks") == true
             )
     }
 
