@@ -4404,6 +4404,8 @@ function nestedRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
+const CURRENT_WORKOUT_RAW_EVIDENCE_VERSION = "healthkit-workout-raw-bulk-v4";
+
 function expectedWorkoutEvidenceCounts(derived: Record<string, unknown>) {
   const syncCursor = nestedRecord(derived.syncCursor);
   const captureQuality = nestedRecord(derived.captureQuality);
@@ -4437,10 +4439,16 @@ function expectedWorkoutEvidenceCounts(derived: Record<string, unknown>) {
     0,
     Math.ceil(Math.max(syncRoutePointCount ?? 0, captureRoutePointCount ?? 0))
   );
+  const rawEvidenceVersion =
+    typeof syncCursor.rawEvidenceVersion === "string"
+      ? syncCursor.rawEvidenceVersion
+      : "";
   return {
     expectedTimeSeriesSamples,
     expectedHeartRateSamples,
     expectedRoutePoints,
+    hasCurrentRawEvidenceVersion:
+      rawEvidenceVersion === CURRENT_WORKOUT_RAW_EVIDENCE_VERSION,
     hasEvidenceMetadata:
       syncTimeSeriesCount !== null ||
       captureHeartRateCount !== null ||
@@ -4508,7 +4516,8 @@ function mobileHealthWorkoutImportState(userId: string) {
     const actualHeartRateCount = Math.max(0, row.heart_rate_count ?? 0);
     const actualRoutePointCount = Math.max(0, row.route_point_count ?? 0);
     const evidenceComplete = evidenceCounts.hasEvidenceMetadata
-      ? actualTimeSeriesCount >= evidenceCounts.expectedTimeSeriesSamples &&
+      ? evidenceCounts.hasCurrentRawEvidenceVersion &&
+        actualTimeSeriesCount >= evidenceCounts.expectedTimeSeriesSamples &&
         actualHeartRateCount >= evidenceCounts.expectedHeartRateSamples &&
         actualRoutePointCount >= evidenceCounts.expectedRoutePoints
       : false;

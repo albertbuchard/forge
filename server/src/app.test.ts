@@ -2745,7 +2745,7 @@ test("mobile health sync exposes structured apple health workout descriptors and
               condensedSeriesExpanded: false
             },
             syncCursor: {
-              rawEvidenceVersion: "healthkit-workout-evidence-v2"
+              rawEvidenceVersion: "healthkit-workout-raw-bulk-v4"
             },
             links: [],
             annotations: {}
@@ -3245,7 +3245,7 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
         condensedSeriesExpanded: false
       },
       syncCursor: {
-        rawEvidenceVersion: "healthkit-workout-evidence-v2"
+        rawEvidenceVersion: "healthkit-workout-raw-bulk-v4"
       },
       links: [],
       annotations: {}
@@ -4031,7 +4031,29 @@ test("mobile health workout import state replays legacy workouts until evidence 
       "2024-04-08T08:00:00.000Z",
       JSON.stringify({
         captureQuality: { heartRateSamples: 0, routePoints: 2 },
-        syncCursor: { timeSeriesSampleCount: 0, routePointCount: 2 }
+        syncCursor: {
+          timeSeriesSampleCount: 0,
+          routePointCount: 2,
+          rawEvidenceVersion: "healthkit-workout-raw-bulk-v4"
+        }
+      }),
+      now,
+      now
+    );
+    insertWorkout.run(
+      "workout_stale_v3_sparse",
+      "hk-stale-v3-sparse",
+      qrPayload.sessionId,
+      "2024-04-08T09:00:00.000Z",
+      "2024-04-08T10:00:00.000Z",
+      JSON.stringify({
+        captureQuality: { status: "partial", heartRateSamples: 4, routePoints: 0 },
+        syncCursor: {
+          timeSeriesSampleCount: 4,
+          routePointCount: 0,
+          rawEvidenceVersion: "healthkit-workout-raw-bulk-v3",
+          phoneMappingMode: "summary_plus_bulk_evidence"
+        }
       }),
       now,
       now
@@ -4167,8 +4189,8 @@ test("mobile health workout import state replays legacy workouts until evidence 
       ["hk-explicit-zero-hr"]
     );
     assert.equal(upload.workoutImportState.alreadyUploadedWorkoutCount, 1);
-    assert.equal(upload.workoutImportState.existingWorkoutCount, 4);
-    assert.equal(upload.workoutImportState.incompleteWorkoutCount, 3);
+    assert.equal(upload.workoutImportState.existingWorkoutCount, 5);
+    assert.equal(upload.workoutImportState.incompleteWorkoutCount, 4);
     assert.equal(upload.workoutImportState.heartRateSampleCount, 0);
     assert.equal(upload.workoutImportState.routePointCount, 2);
   } finally {
