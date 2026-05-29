@@ -1,10 +1,10 @@
-Forge Companion 1.0.68 forces a historical workout evidence repair when Forge
-reports uploaded workout summaries with missing heart-rate or route evidence,
-even if the phone had previously marked the one-time backfill complete.
+Forge Companion 1.0.69 restores the historical workout import progress view to
+the main paired app surface, so heart-rate and route evidence repairs are visible
+without digging through Settings.
 
-Forge now distinguishes summary-only historical rows from real zero-heart-rate
-route-only workouts, so old kickboxing summaries are replayed until raw evidence
-metadata confirms the heart-rate and route capture state.
+The top-right companion menu now also shows a compact historical import card
+whenever a historical workout repair is active, paused, waiting for unlock, or
+recently completed.
 
-Base HealthKit chunks use payload-addressed identities, so empty locked-device
-sleep/vitals chunks cannot block a later retry that includes the real data.
+This keeps the existing historical upload function intact while making missing
+workout evidence replay explicit on-device.
