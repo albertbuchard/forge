@@ -3303,6 +3303,49 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertTrue(status.speedSummary?.contains("4s since ack") == true)
     }
 
+    func testHistoricalWorkoutImportPanelRemainsVisibleForRepairMessages() {
+        let progress = HistoricalWorkoutImportStatus(
+            indexedWorkouts: 1077,
+            totalWorkouts: 1077,
+            uploadedWorkoutSummaries: 900,
+            uploadedTimeSeriesSamples: 120_000,
+            uploadedRoutePoints: 45_000,
+            targetHeartRateSamples: 85_000,
+            targetTimeSeriesSamples: 140_000,
+            targetRoutePoints: 50_000,
+            uploadedChunks: 180,
+            resumedChunks: 12
+        )
+
+        let repairingStatus = CompanionSyncUploadStatus(
+            isSyncing: false,
+            syncMode: .normal,
+            message: "Repairing historical workout heart-rate and route evidence",
+            payloadSummary: nil,
+            lastChunkFamily: nil,
+            lastPayloadBytes: nil,
+            activeSessionId: nil,
+            transferStats: nil,
+            historicalWorkoutImport: progress
+        )
+
+        XCTAssertTrue(repairingStatus.shouldShowHistoricalWorkoutImportPanel)
+
+        let normalStatus = CompanionSyncUploadStatus(
+            isSyncing: true,
+            syncMode: .normal,
+            message: "Uploading sleep, vitals, movement, and screen time",
+            payloadSummary: nil,
+            lastChunkFamily: nil,
+            lastPayloadBytes: nil,
+            activeSessionId: nil,
+            transferStats: nil,
+            historicalWorkoutImport: progress
+        )
+
+        XCTAssertFalse(normalStatus.shouldShowHistoricalWorkoutImportPanel)
+    }
+
     func testWorkoutStreamingWindowsScanRecentHistoryFirstWithoutOneHugeQuery() {
         let startDate = makeDate("2024-01-01T00:00:00.000Z")
         let endDate = makeDate("2026-05-20T12:00:00.000Z")

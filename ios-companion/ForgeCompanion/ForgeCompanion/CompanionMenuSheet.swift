@@ -32,6 +32,13 @@ struct CompanionMenuSheet: View {
                 }
             }
 
+            if appModel.syncUploadStatus.shouldShowHistoricalWorkoutImportPanel {
+                HistoricalWorkoutImportCompactPanel(
+                    status: appModel.syncUploadStatus,
+                    syncInFlight: appModel.syncUploadStatus.isSyncing
+                )
+            }
+
             VStack(spacing: 10) {
                 actionButton("Life Timeline", systemName: "point.3.connected.trianglepath.dotted") {
                     companionDebugLog("CompanionMenuSheet", "tap Life Timeline")
@@ -168,6 +175,79 @@ private struct SyncActivityIndicator: View {
                 isRotating = true
             }
         }
+    }
+}
+
+private struct HistoricalWorkoutImportCompactPanel: View {
+    let status: CompanionSyncUploadStatus
+    let syncInFlight: Bool
+
+    var body: some View {
+        let progress = status.historicalWorkoutImport
+
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 9) {
+                if syncInFlight {
+                    SyncActivityIndicator(size: 17, color: CompanionStyle.accentStrong)
+                } else {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(CompanionStyle.accentStrong)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Workout history import")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .foregroundStyle(CompanionStyle.textPrimary)
+                    Text(status.message ?? "Repairing historical workout evidence")
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .foregroundStyle(CompanionStyle.textMuted)
+                        .lineLimit(2)
+                }
+            }
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Color.white.opacity(0.10))
+                    Capsule()
+                        .fill(CompanionStyle.accentStrong)
+                        .frame(width: max(8, proxy.size.width * (progress?.progressFraction ?? 0)))
+                }
+            }
+            .frame(height: 7)
+
+            Text(compactProgressLabel(progress))
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .foregroundStyle(CompanionStyle.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(CompanionStyle.accent.opacity(0.14))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(CompanionStyle.accentStrong.opacity(0.18), lineWidth: 1)
+                )
+        )
+        .animation(.easeInOut(duration: 0.22), value: progress?.uploadedWorkoutSummaries ?? 0)
+        .animation(.easeInOut(duration: 0.22), value: progress?.uploadedTimeSeriesSamples ?? 0)
+        .animation(.easeInOut(duration: 0.22), value: progress?.uploadedRoutePoints ?? 0)
+    }
+
+    private func compactProgressLabel(_ progress: HistoricalWorkoutImportStatus?) -> String {
+        guard let progress else {
+            return "Indexing the full workout library"
+        }
+        let workouts = progress.totalWorkouts.map {
+            "\(formatCount(progress.uploadedWorkoutSummaries))/\(formatCount($0)) workouts"
+        } ?? "\(formatCount(progress.indexedWorkouts)) workouts indexed"
+        return "\(workouts) - \(formatCount(progress.uploadedTimeSeriesSamples)) time-series - \(formatCount(progress.uploadedRoutePoints)) routes"
+    }
+
+    private func formatCount(_ value: Int) -> String {
+        value.formatted(.number)
     }
 }
 
@@ -352,7 +432,7 @@ struct CompanionSettingsSheet: View {
     @ViewBuilder
     private var syncStatusPanel: some View {
         let status = appModel.syncUploadStatus
-        if status.isHistoricalWorkoutImport {
+        if status.shouldShowHistoricalWorkoutImportPanel {
             historicalSyncStatusPanel(status)
         } else {
             standardSyncStatusPanel(status)

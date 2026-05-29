@@ -859,6 +859,20 @@ struct CompanionSyncUploadStatus {
         syncMode == .historicalWorkoutImport
     }
 
+    var shouldShowHistoricalWorkoutImportPanel: Bool {
+        if isHistoricalWorkoutImport {
+            return true
+        }
+        guard historicalWorkoutImport != nil else {
+            return false
+        }
+        let lowercasedMessage = message?.lowercased() ?? ""
+        return lowercasedMessage.contains("historical workout")
+            || lowercasedMessage.contains("workout history")
+            || lowercasedMessage.contains("historical workouts")
+            || lowercasedMessage.contains("heart-rate and route evidence")
+    }
+
     var headline: String {
         if isHistoricalWorkoutImport {
             return isSyncing ? "Historical workout import" : "Historical workout import ready"

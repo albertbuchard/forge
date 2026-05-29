@@ -64,6 +64,22 @@ struct PairedForgeScreen: View {
                     .allowsHitTesting(false)
                 }
 
+                if appModel.syncUploadStatus.shouldShowHistoricalWorkoutImportPanel {
+                    VStack {
+                        Spacer()
+
+                        HistoricalWorkoutImportFloatingPanel(
+                            status: appModel.syncUploadStatus
+                        )
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, proxy.safeAreaInsets.bottom + 18)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .allowsHitTesting(false)
+                    .zIndex(1.5)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+
                 Button {
                     companionDebugLog(
                         "PairedForgeScreen",
@@ -191,6 +207,7 @@ struct PairedForgeScreen: View {
             )
         }
         .animation(.spring(response: 0.28, dampingFraction: 0.88), value: menuVisible)
+        .animation(.spring(response: 0.32, dampingFraction: 0.9), value: appModel.syncUploadStatus.shouldShowHistoricalWorkoutImportPanel)
     }
 }
 
@@ -5340,6 +5357,133 @@ struct MovementLifeTimelineItem: Identifiable, Hashable {
             colors = [CompanionStyle.accent.opacity(0.94), CompanionStyle.accentStrong.opacity(0.82)]
         }
         return LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+}
+
+private struct HistoricalWorkoutImportFloatingPanel: View {
+    let status: CompanionSyncUploadStatus
+
+    @State private var rotating = false
+
+    var body: some View {
+        let progress = status.historicalWorkoutImport
+        let progressFraction = progress?.progressFraction ?? 0
+
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .stroke(CompanionStyle.accentStrong.opacity(0.22), lineWidth: 3)
+                    Circle()
+                        .trim(from: 0.08, to: 0.78)
+                        .stroke(
+                            CompanionStyle.accentStrong,
+                            style: StrokeStyle(lineWidth: 3.4, lineCap: .round)
+                        )
+                        .rotationEffect(.degrees(rotating ? 360 : 0))
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(CompanionStyle.accentStrong)
+                }
+                .frame(width: 38, height: 38)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Workout history import")
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .foregroundStyle(CompanionStyle.textPrimary)
+                    Text(status.message ?? "Uploading historical heart-rate and route evidence")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(CompanionStyle.textSecondary)
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: 8)
+
+                Text(status.isSyncing ? "Syncing" : "Paused")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color(red: 13 / 255, green: 20 / 255, blue: 37 / 255))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(CompanionStyle.accentStrong, in: Capsule())
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                GeometryReader { proxy in
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(Color.white.opacity(0.12))
+                        Capsule()
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        CompanionStyle.accentStrong,
+                                        Color(red: 0.39, green: 0.84, blue: 0.66)
+                                    ],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .frame(width: max(8, proxy.size.width * progressFraction))
+                    }
+                }
+                .frame(height: 8)
+
+                Text(progressLabel(progress))
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(CompanionStyle.textSecondary)
+            }
+
+            HStack(spacing: 10) {
+                metric("HR", value: formatCount(progress?.targetHeartRateSamples ?? 0), systemName: "heart.fill")
+                metric("Series", value: formatCount(progress?.uploadedTimeSeriesSamples ?? 0), systemName: "waveform.path.ecg")
+                metric("Routes", value: formatCount(progress?.uploadedRoutePoints ?? 0), systemName: "map")
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: 390, alignment: .leading)
+        .background(CompanionStyle.sheetBackground(cornerRadius: 24))
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(CompanionStyle.accentStrong.opacity(0.18), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.28), radius: 22, x: 0, y: 12)
+        .onAppear {
+            withAnimation(.linear(duration: 1.1).repeatForever(autoreverses: false)) {
+                rotating = true
+            }
+        }
+        .animation(.easeInOut(duration: 0.22), value: progress?.uploadedWorkoutSummaries ?? 0)
+        .animation(.easeInOut(duration: 0.22), value: progress?.uploadedTimeSeriesSamples ?? 0)
+        .animation(.easeInOut(duration: 0.22), value: progress?.uploadedRoutePoints ?? 0)
+    }
+
+    private func metric(_ label: String, value: String, systemName: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: systemName)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(CompanionStyle.accentStrong)
+            Text("\(label) \(value)")
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .foregroundStyle(CompanionStyle.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func progressLabel(_ progress: HistoricalWorkoutImportStatus?) -> String {
+        guard let progress else {
+            return "Indexing the full workout library"
+        }
+        if let total = progress.totalWorkouts {
+            let remaining = max(0, total - progress.uploadedWorkoutSummaries)
+            return "\(formatCount(progress.uploadedWorkoutSummaries))/\(formatCount(total)) workouts uploaded - \(formatCount(remaining)) left"
+        }
+        return "\(formatCount(progress.indexedWorkouts)) workouts indexed"
+    }
+
+    private func formatCount(_ value: Int) -> String {
+        value.formatted(.number)
     }
 }
 
