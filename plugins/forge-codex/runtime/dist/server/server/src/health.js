@@ -4123,6 +4123,176 @@ function zoneSeconds(session, keys) {
         .filter((zone) => keys.includes(zone.key))
         .reduce((sum, zone) => sum + zone.seconds, 0);
 }
+const TRAINING_DOMAIN_KEYS = ["low", "moderate", "high"];
+function clampNumber(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+}
+function createZoneRecord() {
+    return Object.fromEntries(WORKOUT_ZONE_ORDER.map((key) => [key, 0]));
+}
+function createDomainRecord() {
+    return { low: 0, moderate: 0, high: 0 };
+}
+function addSessionZones(target, session) {
+    const zones = session.analytics
+        ?.zoneDurations ?? [];
+    for (const zone of zones) {
+        if (WORKOUT_ZONE_ORDER.includes(zone.key)) {
+            target[zone.key] += zone.seconds;
+        }
+    }
+}
+function zoneRecordTotal(record) {
+    return WORKOUT_ZONE_ORDER.reduce((sum, key) => sum + record[key], 0);
+}
+function domainSecondsFromZones(zones) {
+    return {
+        low: zones.below_z1 + zones.zone_1,
+        moderate: zones.zone_2 + zones.zone_3,
+        high: zones.zone_4 + zones.zone_5
+    };
+}
+function percentageRecord(record, total) {
+    return Object.fromEntries(Object.entries(record).map(([key, value]) => [
+        key,
+        total > 0 ? round(value / total, 4) : 0
+    ]));
+}
+function minuteRecord(record) {
+    return Object.fromEntries(Object.entries(record).map(([key, value]) => [key, round(value / 60, 1)]));
+}
+function bucketConfidence(input) {
+    if (input.sessionCount <= 0 || input.heartRateSampleCount <= 0) {
+        return "unavailable";
+    }
+    if (input.averageHrCoverage >= 0.8 &&
+        input.heartRateSampleCount >= input.sessionCount * 100) {
+        return "high";
+    }
+    if (input.averageHrCoverage >= 0.45) {
+        return "medium";
+    }
+    return "low";
+}
+function monthKey(value) {
+    return value.slice(0, 7);
+}
+function monthEndDateKey(key) {
+    const [year, month] = key.split("-").map((part) => Number(part));
+    return dateKeyFromDate(new Date(Date.UTC(year, month, 0)));
+}
+function bucketDates(interval, session) {
+    if (interval === "daily") {
+        const key = dayKey(session.startedAt);
+        return { bucketKey: key, startDate: key, endDate: key };
+    }
+    if (interval === "weekly") {
+        const weekKey = isoWeekKey(session.startedAt);
+        const date = new Date(session.startedAt);
+        const day = date.getUTCDay() || 7;
+        const start = addDays(date, 1 - day);
+        const end = addDays(start, 6);
+        return {
+            bucketKey: weekKey,
+            startDate: dateKeyFromDate(start),
+            endDate: dateKeyFromDate(end)
+        };
+    }
+    const key = monthKey(session.startedAt);
+    return {
+        bucketKey: key,
+        startDate: `${key}-01`,
+        endDate: monthEndDateKey(key)
+    };
+}
+function buildZoneTimeBuckets(sessions, interval, limit) {
+    const buckets = new Map();
+    for (const session of sessions) {
+        const dates = bucketDates(interval, session);
+        const current = buckets.get(dates.bucketKey) ?? {
+            ...dates,
+            sessionCount: 0,
+            durationSeconds: 0,
+            trainingLoad: 0,
+            zoneSeconds: createZoneRecord(),
+            dayHighSeconds: new Map(),
+            heartRateCoverageValues: [],
+            heartRateSampleCount: 0
+        };
+        current.sessionCount += 1;
+        current.durationSeconds += session.durationSeconds;
+        current.trainingLoad += workoutLoad(session);
+        addSessionZones(current.zoneSeconds, session);
+        const sessionDayKey = dayKey(session.startedAt);
+        current.dayHighSeconds.set(sessionDayKey, (current.dayHighSeconds.get(sessionDayKey) ?? 0) +
+            zoneSeconds(session, ["zone_4", "zone_5"]));
+        current.heartRateCoverageValues.push(workoutHrCoverage(session));
+        current.heartRateSampleCount += workoutHrSampleCount(session);
+        buckets.set(dates.bucketKey, current);
+    }
+    const rows = [...buckets.values()]
+        .sort((left, right) => left.bucketKey.localeCompare(right.bucketKey))
+        .slice(-limit)
+        .map((bucket) => {
+        const hrCoveredSeconds = zoneRecordTotal(bucket.zoneSeconds);
+        const domains = domainSecondsFromZones(bucket.zoneSeconds);
+        const durationMinutes = bucket.durationSeconds / 60;
+        const loadPerMinute = durationMinutes > 0 ? round(bucket.trainingLoad / durationMinutes, 2) : 0;
+        const loadPerHour = bucket.durationSeconds > 0
+            ? round(bucket.trainingLoad / (bucket.durationSeconds / 3600), 1)
+            : 0;
+        const averageHrCoverage = round(average(bucket.heartRateCoverageValues), 3);
+        return {
+            bucketKey: bucket.bucketKey,
+            startDate: bucket.startDate,
+            endDate: bucket.endDate,
+            sessionCount: bucket.sessionCount,
+            durationSeconds: Math.round(bucket.durationSeconds),
+            durationMinutes: round(bucket.durationSeconds / 60, 1),
+            hrCoveredSeconds: Math.round(hrCoveredSeconds),
+            trainingLoad: round(bucket.trainingLoad, 1),
+            loadPerHour,
+            loadPerMinute,
+            baselineLoadRatio: null,
+            baselineIntensityRatio: null,
+            zoneSeconds: Object.fromEntries(WORKOUT_ZONE_ORDER.map((key) => [key, Math.round(bucket.zoneSeconds[key])])),
+            zoneMinutes: minuteRecord(bucket.zoneSeconds),
+            zonePercentages: percentageRecord(bucket.zoneSeconds, hrCoveredSeconds),
+            domainSeconds: Object.fromEntries(TRAINING_DOMAIN_KEYS.map((key) => [key, Math.round(domains[key])])),
+            domainMinutes: minuteRecord(domains),
+            domainPercentages: percentageRecord(domains, hrCoveredSeconds),
+            hardDayCount: [...bucket.dayHighSeconds.values()].filter((seconds) => seconds >= 10 * 60).length,
+            averageHrCoverage,
+            heartRateSampleCount: bucket.heartRateSampleCount,
+            confidence: bucketConfidence({
+                sessionCount: bucket.sessionCount,
+                averageHrCoverage,
+                heartRateSampleCount: bucket.heartRateSampleCount
+            })
+        };
+    });
+    return rows.map((row, index) => {
+        const baselineWindow = interval === "daily"
+            ? rows.slice(Math.max(0, index - 28), index)
+            : interval === "weekly"
+                ? rows.slice(Math.max(0, index - 4), index)
+                : rows.slice(Math.max(0, index - 3), index);
+        const baselineLoad = average(baselineWindow.map((bucket) => bucket.trainingLoad).filter((value) => value > 0));
+        const baselineIntensity = average(baselineWindow.map((bucket) => bucket.loadPerMinute).filter((value) => value > 0));
+        return {
+            ...row,
+            baselineLoadRatio: baselineLoad > 0 ? round(row.trainingLoad / baselineLoad, 2) : null,
+            baselineIntensityRatio: baselineIntensity > 0 ? round(row.loadPerMinute / baselineIntensity, 2) : null
+        };
+    });
+}
+function buildZoneTimeSeries(sessions) {
+    return {
+        daily: buildZoneTimeBuckets(sessions, "daily", 90),
+        weekly: buildZoneTimeBuckets(sessions, "weekly", 26),
+        monthly: buildZoneTimeBuckets(sessions, "monthly", 12)
+    };
+}
 function workoutLoad(session) {
     return (session.analytics?.load
         ?.trimp ?? 0);
@@ -4200,6 +4370,251 @@ function summarizeIntensityDistribution(sessions) {
 }
 function latestVitalValue(vitalsTrend, key) {
     return [...vitalsTrend].reverse().find((entry) => entry[key] != null)?.[key] ?? null;
+}
+const MODE_DOMAIN_TARGETS = {
+    combat_readiness: {
+        label: "Combat readiness",
+        statusLabel: "fight-ready balance",
+        low: [0.62, 0.78],
+        moderate: [0.1, 0.22],
+        high: [0.06, 0.16],
+        maxHardSessions: 2
+    },
+    aerobic_base: {
+        label: "Aerobic base",
+        statusLabel: "base-building balance",
+        low: [0.72, 0.9],
+        moderate: [0.05, 0.18],
+        high: [0.02, 0.1],
+        maxHardSessions: 1
+    },
+    endurance_pro: {
+        label: "Endurance pro",
+        statusLabel: "pyramidal/polarized balance",
+        low: [0.7, 0.88],
+        moderate: [0.04, 0.2],
+        high: [0.06, 0.18],
+        maxHardSessions: 2
+    }
+};
+function targetMidpoint(range) {
+    return (range[0] + range[1]) / 2;
+}
+function rangeScore(value, range) {
+    if (value >= range[0] && value <= range[1]) {
+        return 100;
+    }
+    const distance = value < range[0] ? range[0] - value : value - range[1];
+    return clampNumber(100 - distance * 350, 0, 100);
+}
+function loadBalanceStatus(summary) {
+    if (summary.readiness === "overload_watch" ||
+        (summary.acuteChronicRatio ?? 0) > 1.35 ||
+        (summary.strain7d ?? 0) > 450) {
+        return "recover";
+    }
+    if ((summary.acuteChronicRatio ?? 1) < 0.8) {
+        return "build";
+    }
+    if (summary.highIntensityMinutes7d >= 45) {
+        return "maintain";
+    }
+    return "sharpen";
+}
+function scoreStatus(score, balance) {
+    if (balance === "recover") {
+        return "recovery_priority";
+    }
+    if (score >= 82) {
+        return "on_target";
+    }
+    if (score >= 65) {
+        return "watch";
+    }
+    return "needs_adjustment";
+}
+function scoreConfidence(summary, latestBucket) {
+    const coverage = latestBucket?.averageHrCoverage ?? summary.averageHeartRateCoverage;
+    if (coverage >= 0.85 && (latestBucket?.heartRateSampleCount ?? 0) >= 300) {
+        return "high";
+    }
+    if (coverage >= 0.5) {
+        return "medium";
+    }
+    if (coverage > 0) {
+        return "low";
+    }
+    return "unavailable";
+}
+function targetMinutes(totalMinutes, range) {
+    return [Math.round(totalMinutes * range[0]), Math.round(totalMinutes * range[1])];
+}
+function buildZoneMinuteTargets(totalMinutes, target) {
+    const low = totalMinutes * targetMidpoint(target.low);
+    const moderate = totalMinutes * targetMidpoint(target.moderate);
+    const high = totalMinutes * targetMidpoint(target.high);
+    return {
+        below_z1: Math.round(low * 0.35),
+        zone_1: Math.round(low * 0.65),
+        zone_2: Math.round(moderate * 0.65),
+        zone_3: Math.round(moderate * 0.35),
+        zone_4: Math.round(high * 0.75),
+        zone_5: Math.round(high * 0.25)
+    };
+}
+function buildTrainingIntelligence(input) {
+    const latestWeek = input.zoneTimeSeries.weekly.at(-1);
+    const priorWeeks = input.zoneTimeSeries.weekly.slice(-5, -1);
+    const baselineMinutes = average(priorWeeks.map((week) => week.durationMinutes).filter((value) => value > 0)) ||
+        latestWeek?.durationMinutes ||
+        180;
+    const balance = loadBalanceStatus(input.summary);
+    const lowPct = input.recentIntensityDistribution.find((entry) => entry.key === "low")
+        ?.percentage ?? 0;
+    const moderatePct = input.recentIntensityDistribution.find((entry) => entry.key === "moderate")
+        ?.percentage ?? 0;
+    const highPct = input.recentIntensityDistribution.find((entry) => entry.key === "high")
+        ?.percentage ?? 0;
+    const currentLoadRatio = input.summary.acuteChronicRatio ?? 1;
+    const loadBalance = {
+        status: balance,
+        acuteLoad7d: input.summary.acuteLoad7d,
+        chronicWeeklyLoad28d: input.summary.chronicWeeklyLoad28d,
+        acuteChronicRatio: input.summary.acuteChronicRatio,
+        monotony7d: input.summary.monotony7d,
+        strain7d: input.summary.strain7d,
+        latestWeekLoad: latestWeek?.trainingLoad ?? 0,
+        latestWeekLoadPerMinute: latestWeek?.loadPerMinute ?? 0,
+        latestWeekBaselineLoadRatio: latestWeek?.baselineLoadRatio ?? null,
+        latestWeekBaselineIntensityRatio: latestWeek?.baselineIntensityRatio ?? null
+    };
+    return {
+        defaultMode: "combat_readiness",
+        modes: Object.keys(MODE_DOMAIN_TARGETS).map((mode) => {
+            const target = MODE_DOMAIN_TARGETS[mode];
+            const lowScore = rangeScore(lowPct, target.low);
+            const moderateScore = rangeScore(moderatePct, target.moderate);
+            const highScore = rangeScore(highPct, target.high);
+            const loadScore = balance === "recover"
+                ? 45
+                : clampNumber(100 - Math.abs(currentLoadRatio - 1) * 90, 0, 100);
+            const hardDayScore = clampNumber(100 - Math.max(0, input.summary.hardDayCount7d - target.maxHardSessions) * 28, 0, 100);
+            const qualityScore = clampNumber(input.summary.averageHeartRateCoverage * 100, 0, 100);
+            const score = Math.round(lowScore * 0.22 +
+                moderateScore * 0.14 +
+                highScore * 0.2 +
+                loadScore * 0.24 +
+                hardDayScore * 0.12 +
+                qualityScore * 0.08);
+            const nextWeekScale = balance === "recover" ? 0.75 : balance === "build" ? 1.12 : 1;
+            const nextWeekMinutes = Math.round(baselineMinutes * nextWeekScale);
+            const shouldAllowFourByFour = balance !== "recover" &&
+                highPct <= target.high[1] &&
+                input.summary.hardDayCount7d < target.maxHardSessions &&
+                scoreConfidence(input.summary, latestWeek) !== "low" &&
+                scoreConfidence(input.summary, latestWeek) !== "unavailable";
+            const drivers = [
+                lowPct >= target.low[0]
+                    ? `Low/base work is ${Math.round(lowPct * 100)}% of recent HR-zone time.`
+                    : null,
+                highPct <= target.high[1]
+                    ? `High-domain exposure is controlled at ${Math.round(highPct * 100)}%.`
+                    : null,
+                currentLoadRatio >= 0.8 && currentLoadRatio <= 1.25
+                    ? `Acute load is close to chronic base at ${round(currentLoadRatio, 2)}x.`
+                    : null,
+                latestWeek?.baselineLoadRatio != null
+                    ? `Latest week is ${latestWeek.baselineLoadRatio}x your recent weekly load baseline.`
+                    : null
+            ].filter((entry) => Boolean(entry));
+            const limitingFactors = [
+                lowPct < target.low[0]
+                    ? `Low/base work is below the ${Math.round(target.low[0] * 100)}-${Math.round(target.low[1] * 100)}% target band.`
+                    : null,
+                highPct > target.high[1]
+                    ? `High-domain work is above the ${Math.round(target.high[1] * 100)}% ceiling for this mode.`
+                    : null,
+                balance === "recover"
+                    ? "Recent load balance points to recovery before another hard stimulus."
+                    : null,
+                input.summary.hardDayCount7d > target.maxHardSessions
+                    ? `${input.summary.hardDayCount7d} hard days in 7 days exceeds this mode's target.`
+                    : null,
+                input.summary.averageHeartRateCoverage < 0.5
+                    ? "Heart-rate evidence is thin, so zone decisions need caution."
+                    : null
+            ].filter((entry) => Boolean(entry));
+            return {
+                key: mode,
+                label: target.label,
+                score,
+                status: scoreStatus(score, balance),
+                confidence: scoreConfidence(input.summary, latestWeek),
+                summary: balance === "recover"
+                    ? `${target.label}: recover first, then rebuild the next hard stimulus.`
+                    : `${target.label}: ${target.statusLabel} is ${score >= 75 ? "mostly aligned" : "not yet aligned"}.`,
+                drivers,
+                limitingFactors,
+                loadBalance,
+                nextWeekTargets: {
+                    totalMinutesRange: balance === "recover"
+                        ? targetMinutes(baselineMinutes, [0.65, 0.85])
+                        : targetMinutes(nextWeekMinutes, [0.95, 1.08]),
+                    zoneMinuteTargets: buildZoneMinuteTargets(nextWeekMinutes, target),
+                    domainMinuteTargets: {
+                        low: targetMinutes(nextWeekMinutes, target.low),
+                        moderate: targetMinutes(nextWeekMinutes, target.moderate),
+                        high: targetMinutes(nextWeekMinutes, target.high)
+                    },
+                    maxHardSessions: balance === "recover" ? Math.max(0, target.maxHardSessions - 1) : target.maxHardSessions,
+                    minimumEasyMinutes: Math.round(nextWeekMinutes * target.low[0]),
+                    warning: balance === "recover"
+                        ? "Keep next week below baseline and avoid stacking hard sessions until load balance normalizes."
+                        : highPct > target.high[1]
+                            ? "Do not add another high-intensity session until the high-domain share drops."
+                            : null
+                },
+                nextWorkout: {
+                    recommendedType: balance === "recover"
+                        ? "recovery"
+                        : lowPct < target.low[0]
+                            ? "zone_2_base"
+                            : shouldAllowFourByFour
+                                ? "vo2max_4x4"
+                                : mode === "combat_readiness"
+                                    ? "technical_kickboxing"
+                                    : "easy_aerobic",
+                    intensityCeiling: balance === "recover"
+                        ? "Z1"
+                        : shouldAllowFourByFour
+                            ? "Z5 intervals with full recovery"
+                            : highPct > target.high[1]
+                                ? "Z2"
+                                : "Z3",
+                    durationMinutesRange: balance === "recover"
+                        ? [20, 40]
+                        : lowPct < target.low[0]
+                            ? [45, 75]
+                            : shouldAllowFourByFour
+                                ? [32, 48]
+                                : [35, 60],
+                    fourByFourAppropriate: shouldAllowFourByFour,
+                    reason: shouldAllowFourByFour
+                        ? "Load balance, hard-day count, high-domain share, and HR confidence can support one controlled VO2max stimulus."
+                        : balance === "recover"
+                            ? "Current load balance makes recovery more useful than another hard interval day."
+                            : highPct > target.high[1]
+                                ? "Recent high-domain exposure is already above this mode's target."
+                                : "A base or technical session fits the current distribution better than 4x4 work."
+                },
+                methodologyNotes: [
+                    "Scores are deterministic summaries of Forge HRR zones, TRIMP load, hard-day spacing, and evidence quality.",
+                    "ACWR, monotony, and strain are monitoring flags, not injury predictions.",
+                    "4x4 guidance is gated by freshness, recent high-intensity share, hard-day count, and HR confidence."
+                ]
+            };
+        })
+    };
 }
 export function getTrainingLoadViewData(userIds) {
     const workoutRows = listWorkoutRows(userIds);
@@ -4343,33 +4758,42 @@ export function getTrainingLoadViewData(userIds) {
             : acwr < 0.75
                 ? "underloaded"
                 : "productive";
+    const summary = {
+        sessionCount: sessions.length,
+        reliableSessionCount: reliableSessions.length,
+        totalHours: round(sessions.reduce((sum, session) => sum + session.durationSeconds, 0) / 3600, 1),
+        totalTrainingLoad: round(sessions.reduce((sum, session) => sum + workoutLoad(session), 0), 1),
+        acuteLoad7d: round(acuteLoad7d, 1),
+        chronicWeeklyLoad28d: round(chronicWeeklyLoad28d, 1),
+        acuteChronicRatio: acwr,
+        monotony7d: monotony7d != null ? round(monotony7d, 2) : null,
+        strain7d: strain7d != null ? round(strain7d, 1) : null,
+        highIntensityMinutes7d: round(highSeconds7d / 60, 1),
+        thresholdMinutes7d: round(moderateSeconds7d / 60, 1),
+        easyMinutes7d: round(lowSeconds7d / 60, 1),
+        hardDayCount7d: last7Keys.filter((key) => (dailyMap.get(key)?.highIntensitySeconds ?? 0) >= 10 * 60).length,
+        averageHeartRateCoverage: round(average(sessions.map((session) => workoutHrCoverage(session))), 3),
+        vo2MaxLatest,
+        vo2MaxDelta,
+        latestRestingHeartRate: latestVitalValue(vitalsTrend, "restingHeartRate"),
+        readiness
+    };
+    const recentIntensityDistribution = summarizeIntensityDistribution(recent28);
+    const zoneTimeSeries = buildZoneTimeSeries(sessions);
     return {
-        summary: {
-            sessionCount: sessions.length,
-            reliableSessionCount: reliableSessions.length,
-            totalHours: round(sessions.reduce((sum, session) => sum + session.durationSeconds, 0) / 3600, 1),
-            totalTrainingLoad: round(sessions.reduce((sum, session) => sum + workoutLoad(session), 0), 1),
-            acuteLoad7d: round(acuteLoad7d, 1),
-            chronicWeeklyLoad28d: round(chronicWeeklyLoad28d, 1),
-            acuteChronicRatio: acwr,
-            monotony7d: monotony7d != null ? round(monotony7d, 2) : null,
-            strain7d: strain7d != null ? round(strain7d, 1) : null,
-            highIntensityMinutes7d: round(highSeconds7d / 60, 1),
-            thresholdMinutes7d: round(moderateSeconds7d / 60, 1),
-            easyMinutes7d: round(lowSeconds7d / 60, 1),
-            hardDayCount7d: last7Keys.filter((key) => (dailyMap.get(key)?.highIntensitySeconds ?? 0) >= 10 * 60).length,
-            averageHeartRateCoverage: round(average(sessions.map((session) => workoutHrCoverage(session))), 3),
-            vo2MaxLatest,
-            vo2MaxDelta,
-            latestRestingHeartRate: latestVitalValue(vitalsTrend, "restingHeartRate"),
-            readiness
-        },
+        summary,
         zoneTotals: summarizeZoneDistribution(sessions),
         recentZoneTotals: summarizeZoneDistribution(recent28),
         intensityDistribution: summarizeIntensityDistribution(sessions),
-        recentIntensityDistribution: summarizeIntensityDistribution(recent28),
+        recentIntensityDistribution,
         dailyLoad: dailyLoad.slice(-90),
         weeklyLoad,
+        zoneTimeSeries,
+        trainingIntelligence: buildTrainingIntelligence({
+            summary,
+            recentIntensityDistribution,
+            zoneTimeSeries
+        }),
         activityBreakdown,
         vitalsTrend,
         sessionSignals: sessions
