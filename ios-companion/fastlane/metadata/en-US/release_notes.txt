@@ -1,8 +1,9 @@
-Forge Companion 1.0.72 ships the latest native sync and agent-runtime release
-metadata alongside the updated Forge plugin runtime.
+Forge Companion 1.0.73 ships the clearer Forge training-load and shell UI
+release alongside the updated Forge plugin runtime.
 
-Historical workout import status remains in the native iOS menu and Settings,
-not as an overlay above the Forge web app.
+Training Load now explains cardiovascular load, heart-rate zones, acute/chronic
+balance, smart training modes, and next training targets with help affordances
+directly beside the metrics and charts.
 
-The app keeps the clamped historical workout progress display and current raw
-workout evidence contract for heart-rate and route replay.
+The mobile Forge shell separates the page title, action search, XP summary, and
+work timer so the web app remains readable on small screens.
