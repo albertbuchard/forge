@@ -16521,6 +16521,200 @@ test("direct health CRUD routes create, read, and delete manual sleep and workou
   }
 });
 
+test("training-load route exposes zone time series and smart training intelligence", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-training-load-zone-intelligence-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const db = getDatabase();
+    const now = new Date();
+    const startedAt = (dayOffset: number) => {
+      const date = new Date(
+        Date.UTC(
+          now.getUTCFullYear(),
+          now.getUTCMonth(),
+          now.getUTCDate() - dayOffset,
+          10,
+          0,
+          0
+        )
+      );
+      return date.toISOString();
+    };
+    const endedAt = (start: string, durationSeconds: number) =>
+      new Date(Date.parse(start) + durationSeconds * 1000).toISOString();
+    const insertWorkout = db.prepare(
+      `INSERT INTO health_workout_sessions (
+         id, external_uid, pairing_session_id, user_id, source, source_type, workout_type, source_device,
+         started_at, ended_at, duration_seconds, active_energy_kcal, total_energy_kcal, distance_meters,
+         step_count, exercise_minutes, average_heart_rate, max_heart_rate, subjective_effort, mood_before,
+         mood_after, meaning_text, planned_context, social_context, links_json, tags_json, annotations_json,
+         provenance_json, derived_json, reconciliation_status, created_at, updated_at
+       )
+       VALUES (?, ?, NULL, 'user_operator', 'apple_health', 'healthkit', ?, 'Apple Watch',
+         ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?, NULL, '', '', '', '', '',
+         '[]', '[]', '{}', '{}', '{}', 'standalone', ?, ?)`
+    );
+    const insertAnalytics = db.prepare(
+      `INSERT INTO health_workout_analytics (
+         id, workout_id, user_id, zone_profile_id, model_version, confidence,
+         data_quality_json, zone_durations_json, hr_summary_json, load_json,
+         route_summary_json, computed_at, created_at, updated_at
+       )
+       VALUES (?, ?, 'user_operator', NULL, 'forge-hrr-v1', ?, ?, ?, ?, ?, '{}', ?, ?, ?)`
+    );
+    const zoneLabels: Record<string, string> = {
+      below_z1: "Below Z1",
+      zone_1: "Zone 1",
+      zone_2: "Zone 2",
+      zone_3: "Zone 3",
+      zone_4: "Zone 4",
+      zone_5: "Zone 5"
+    };
+    const rows = [
+      {
+        id: "workout_tlz_base_now",
+        dayOffset: 1,
+        type: "cycling",
+        durationSeconds: 3600,
+        zones: { below_z1: 600, zone_1: 1500, zone_2: 1200, zone_3: 240, zone_4: 60, zone_5: 0 },
+        trimp: 54,
+        avgHr: 132,
+        maxHr: 158
+      },
+      {
+        id: "workout_tlz_hard_now",
+        dayOffset: 2,
+        type: "kickboxing",
+        durationSeconds: 3000,
+        zones: { below_z1: 180, zone_1: 420, zone_2: 600, zone_3: 780, zone_4: 720, zone_5: 300 },
+        trimp: 96,
+        avgHr: 156,
+        maxHr: 184
+      },
+      {
+        id: "workout_tlz_prior_week",
+        dayOffset: 9,
+        type: "running",
+        durationSeconds: 3300,
+        zones: { below_z1: 500, zone_1: 1200, zone_2: 1000, zone_3: 400, zone_4: 200, zone_5: 0 },
+        trimp: 68,
+        avgHr: 142,
+        maxHr: 170
+      },
+      {
+        id: "workout_tlz_prior_month",
+        dayOffset: 35,
+        type: "walking",
+        durationSeconds: 4200,
+        zones: { below_z1: 900, zone_1: 2100, zone_2: 900, zone_3: 300, zone_4: 0, zone_5: 0 },
+        trimp: 50,
+        avgHr: 118,
+        maxHr: 139
+      }
+    ];
+    const createdAt = now.toISOString();
+    for (const row of rows) {
+      const start = startedAt(row.dayOffset);
+      insertWorkout.run(
+        row.id,
+        row.id,
+        row.type,
+        start,
+        endedAt(start, row.durationSeconds),
+        row.durationSeconds,
+        row.durationSeconds / 60,
+        row.avgHr,
+        row.maxHr,
+        createdAt,
+        createdAt
+      );
+      insertAnalytics.run(
+        `hwa_${row.id}`,
+        row.id,
+        "high",
+        JSON.stringify({
+          sampleCoverage: 0.92,
+          heartRateSampleCount: Math.floor(row.durationSeconds / 5)
+        }),
+        JSON.stringify(
+          Object.entries(row.zones).map(([key, seconds]) => ({
+            key,
+            label: zoneLabels[key],
+            seconds
+          }))
+        ),
+        JSON.stringify({ averageHr: row.avgHr, maxHr: row.maxHr }),
+        JSON.stringify({ trimp: row.trimp, intensity: row.trimp / 100 }),
+        createdAt,
+        createdAt,
+        createdAt
+      );
+    }
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/health/training-load"
+    });
+    assert.equal(response.statusCode, 200);
+    const body = response.json() as {
+      trainingLoad: {
+        zoneTimeSeries: {
+          daily: Array<{ zoneMinutes: Record<string, number>; confidence: string }>;
+          weekly: Array<{
+            zoneMinutes: Record<string, number>;
+            domainMinutes: Record<string, number>;
+            loadPerMinute: number;
+            baselineLoadRatio: number | null;
+            hardDayCount: number;
+          }>;
+          monthly: unknown[];
+        };
+        trainingIntelligence: {
+          defaultMode: string;
+          modes: Array<{
+            key: string;
+            score: number;
+            loadBalance: { status: string };
+            nextWeekTargets: { domainMinuteTargets: Record<string, [number, number]> };
+            nextWorkout: { fourByFourAppropriate: boolean; reason: string };
+          }>;
+        };
+      };
+    };
+    assert.ok(body.trainingLoad.zoneTimeSeries.daily.length >= 3);
+    assert.ok(body.trainingLoad.zoneTimeSeries.weekly.length >= 2);
+    assert.ok(body.trainingLoad.zoneTimeSeries.monthly.length >= 2);
+    const latestWeek = body.trainingLoad.zoneTimeSeries.weekly.at(-1);
+    assert.ok(latestWeek);
+    assert.ok(latestWeek.zoneMinutes.zone_4 > 0);
+    assert.ok(latestWeek.domainMinutes.high > 0);
+    assert.ok(latestWeek.loadPerMinute > 0);
+    assert.notEqual(latestWeek.baselineLoadRatio, null);
+    assert.ok(latestWeek.hardDayCount >= 1);
+    const modeKeys = body.trainingLoad.trainingIntelligence.modes.map(
+      (mode) => mode.key
+    );
+    assert.deepEqual(modeKeys, [
+      "combat_readiness",
+      "aerobic_base",
+      "endurance_pro"
+    ]);
+    const combat = body.trainingLoad.trainingIntelligence.modes[0];
+    assert.equal(body.trainingLoad.trainingIntelligence.defaultMode, "combat_readiness");
+    assert.ok(combat.score >= 0 && combat.score <= 100);
+    assert.ok(combat.nextWeekTargets.domainMinuteTargets.low);
+    assert.equal(typeof combat.nextWorkout.fourByFourAppropriate, "boolean");
+    assert.ok(combat.nextWorkout.reason.length > 0);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("direct calendar get routes list and fetch events, work blocks, and timeboxes", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-direct-calendar-get-")

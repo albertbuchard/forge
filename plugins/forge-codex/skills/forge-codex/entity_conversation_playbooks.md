@@ -1429,10 +1429,11 @@ Route note:
 - `sports_overview` is a read-model-only surface. Use `forge_get_sports_overview` or
   `/api/v1/health/fitness` for session review. Do not create, update, or delete
   `sports_overview` through batch CRUD.
-- For cardiovascular load, HR zone distribution, acute/chronic load, VO2max
-  context, or training target questions, use `forge_get_training_load_overview`
-  or `/api/v1/health/training-load`. Treat `training_load` as read-model-only,
-  not a batch CRUD entity.
+- For cardiovascular load, HR zone distribution, zone-time by week/month/day,
+  acute/chronic load, VO2max context, smart training modes, 4x4 suitability,
+  next-workout guidance, or training target questions, use
+  `forge_get_training_load_overview` or `/api/v1/health/training-load`. Treat
+  `training_load` as read-model-only, not a batch CRUD entity.
 - If the review reveals that one workout needs reflective context, switch to the
   stored `workout_session` batch route or reflective update helper for that known
   session.

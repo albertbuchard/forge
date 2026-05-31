@@ -8686,6 +8686,8 @@
           "recentIntensityDistribution",
           "dailyLoad",
           "weeklyLoad",
+          "zoneTimeSeries",
+          "trainingIntelligence",
           "activityBreakdown",
           "vitalsTrend",
           "sessionSignals",
@@ -8737,6 +8739,42 @@
               "type": "object",
               "additionalProperties": true
             }
+          },
+          "zoneTimeSeries": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "daily",
+              "weekly",
+              "monthly"
+            ],
+            "properties": {
+              "daily": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "weekly": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "monthly": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "trainingIntelligence": {
+            "type": "object",
+            "additionalProperties": true
           },
           "activityBreakdown": {
             "type": "array",
