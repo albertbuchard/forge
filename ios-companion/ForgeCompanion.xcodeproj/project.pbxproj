@@ -19,6 +19,7 @@
 		11A5CF96FDEF553EFF861B84 /* WatchCheckInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10F1932A79199E826E23023A /* WatchCheckInView.swift */; };
 		17D03007115057EE8D4A0DF8 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E3301829CAC26D5E4B3E797F /* Assets.xcassets */; };
 		182189FC59058A0FCC3299E9 /* ForgeSyncClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 508A7FDE47AAB237525B75FA /* ForgeSyncClient.swift */; };
+		1A9B7C6D5E4F3210A1B2C3D4 /* CompanionHistoricalWorkoutImportPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A9B7C6D5E4F3210A1B2C3D5 /* CompanionHistoricalWorkoutImportPanel.swift */; };
 		1C25C8EF318715F075E06060 /* pierre-light.json in Resources */ = {isa = PBXBuildFile; fileRef = 8AE22BAF07847D34507268A5 /* pierre-light.json */; };
 		1FA86FA89A93065F3DFB6E40 /* github-light.json in Resources */ = {isa = PBXBuildFile; fileRef = 96D7DAF444A0D52A81F2C001 /* github-light.json */; };
 		2112E15E7A348BD74D701850 /* github-light-default.json in Resources */ = {isa = PBXBuildFile; fileRef = A2E1434263F464480FBDE76E /* github-light-default.json */; };
@@ -196,6 +197,7 @@
 		152C42F1046FDFCF9374C42E /* slack-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "slack-dark.json"; sourceTree = "<group>"; };
 		171F05A34E92FDE3047869AB /* ForgeWatchControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeWatchControl.swift; sourceTree = "<group>"; };
 		17A70C1857380E071D589108 /* AppIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIntent.swift; sourceTree = "<group>"; };
+		1A9B7C6D5E4F3210A1B2C3D5 /* CompanionHistoricalWorkoutImportPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionHistoricalWorkoutImportPanel.swift; sourceTree = "<group>"; };
 		1BE1776E02C9FA605C8A81FC /* min-dark-.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "min-dark-.json"; sourceTree = "<group>"; };
 		1BEBACBC0C8EA707FCD5C248 /* dracula-soft.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "dracula-soft.json"; sourceTree = "<group>"; };
 		1D58974CBFD49611754BECE2 /* MovementSyncStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MovementSyncStore.swift; sourceTree = "<group>"; };
@@ -453,6 +455,7 @@
 				2E3B5D8FC9E40AE175BE3227 /* CompanionAppRoot.swift */,
 				C513AA0B589621B7306006D7 /* CompanionBackgroundScheduler.swift */,
 				FF0F3F99DCEE623FFA4EF5AC /* CompanionDiagnosticsSheet.swift */,
+				1A9B7C6D5E4F3210A1B2C3D5 /* CompanionHistoricalWorkoutImportPanel.swift */,
 				9EDBE380934D1C0F028D57F9 /* CompanionMenuSheet.swift */,
 				A338AA98AF807B0E65966B73 /* CompanionScreenshotSupport.swift */,
 				FED8AED443BA8FD8D08D3F32 /* CompanionSetupFlow.swift */,
@@ -918,6 +921,7 @@
 				3B98589423316C410EFC2442 /* CompanionAppRoot.swift in Sources */,
 				75A76BDBA4705C8FDDA1A250 /* CompanionBackgroundScheduler.swift in Sources */,
 				6DE7D860A474AC5BDA176EF8 /* CompanionDiagnosticsSheet.swift in Sources */,
+				1A9B7C6D5E4F3210A1B2C3D4 /* CompanionHistoricalWorkoutImportPanel.swift in Sources */,
 				770E5FA69800C610CBDD3DC1 /* CompanionMenuSheet.swift in Sources */,
 				4DFA96F1114B86315608985C /* CompanionScreenshotSupport.swift in Sources */,
 				4F24388BC2FC9FDD7A97BD39 /* CompanionSetupFlow.swift in Sources */,

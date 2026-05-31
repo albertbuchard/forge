@@ -3346,6 +3346,66 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertFalse(normalStatus.shouldShowHistoricalWorkoutImportPanel)
     }
 
+    func testHistoricalWorkoutImportProgressClampsReplayedWorkoutSummariesToTotal() {
+        let progress = HistoricalWorkoutImportStatus(
+            indexedWorkouts: 1051,
+            totalWorkouts: 1051,
+            uploadedWorkoutSummaries: 1089,
+            uploadedTimeSeriesSamples: 409_262,
+            uploadedRoutePoints: 753_342,
+            targetHeartRateSamples: 94_782,
+            targetTimeSeriesSamples: 409_262,
+            targetRoutePoints: 753_342,
+            uploadedChunks: 0,
+            resumedChunks: 0
+        )
+
+        XCTAssertEqual(progress.completedWorkoutSummaries, 1051)
+        XCTAssertEqual(progress.remainingWorkouts, 0)
+        XCTAssertEqual(progress.progressFraction, 1)
+    }
+
+    func testHistoricalWorkoutImportPresentationUsesClampedWorkoutProgressAndEvidenceCounts() {
+        let progress = HistoricalWorkoutImportStatus(
+            indexedWorkouts: 1051,
+            totalWorkouts: 1051,
+            uploadedWorkoutSummaries: 1089,
+            uploadedTimeSeriesSamples: 409_262,
+            uploadedRoutePoints: 753_342,
+            targetHeartRateSamples: 94_782,
+            targetTimeSeriesSamples: 409_262,
+            targetRoutePoints: 753_342,
+            uploadedChunks: 0,
+            resumedChunks: 0
+        )
+        let status = CompanionSyncUploadStatus(
+            isSyncing: false,
+            syncMode: .historicalWorkoutImport,
+            message: nil,
+            payloadSummary: nil,
+            lastChunkFamily: nil,
+            lastPayloadBytes: nil,
+            activeSessionId: nil,
+            transferStats: nil,
+            historicalWorkoutImport: progress
+        )
+
+        let presentation = CompanionHistoricalWorkoutImportPresentation(status: status)
+
+        XCTAssertTrue(presentation.progressLabel.contains("1,051/1,051 workouts accounted for"))
+        XCTAssertTrue(presentation.compactProgressLabel.contains("1,051/1,051 workouts"))
+        XCTAssertTrue(presentation.evidenceLabel.contains("409,262 / 409,262 time-series"))
+        XCTAssertTrue(presentation.evidenceLabel.contains("94,782 HR"))
+        XCTAssertTrue(presentation.routeLabel.contains("753,342 / 753,342 route points"))
+    }
+
+    func testWorkoutRawEvidenceContractUsesCurrentBackendVersion() {
+        XCTAssertEqual(
+            HealthSyncEvidenceContract.workoutRawEvidenceVersion,
+            "healthkit-workout-raw-bulk-v4"
+        )
+    }
+
     func testWorkoutStreamingWindowsScanRecentHistoryFirstWithoutOneHugeQuery() {
         let startDate = makeDate("2024-01-01T00:00:00.000Z")
         let endDate = makeDate("2026-05-20T12:00:00.000Z")

@@ -2629,6 +2629,12 @@ final class CompanionAppModel: ObservableObject {
             switch event.family {
             case "workout_summaries":
                 status.uploadedWorkoutSummaries += event.recordCount
+                if let totalWorkouts = status.totalWorkouts {
+                    status.uploadedWorkoutSummaries = min(
+                        status.uploadedWorkoutSummaries,
+                        totalWorkouts
+                    )
+                }
             case "workout_time_series":
                 status.uploadedTimeSeriesSamples += event.recordCount
             case "workout_routes":
