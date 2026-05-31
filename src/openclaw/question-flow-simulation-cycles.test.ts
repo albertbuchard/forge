@@ -1179,35 +1179,35 @@ describe("question flow simulation cycles", () => {
 
   it("cycle 3 report retest: durable automation report covers this full run", () => {
     const report = readRepoFile("docs/question-flow-improvement-cycles.md");
-    const latestRun = getSectionSlice(report, "2026-05-28 Automation Pass");
+    const latestRun = getSectionSlice(report, "2026-05-31 Automation Pass");
 
-    expect(report).toMatch(/Latest run date: 2026-05-28/);
+    expect(report).toMatch(/Latest run date: 2026-05-31/);
     expect(latestRun).toMatch(/OpenClaw config[\s\S]*data\/forge/i);
-    expect(latestRun).toMatch(/forge-openclaw-plugin 0\.2\.94/i);
+    expect(latestRun).toMatch(/repo-local plugin path/i);
     expect(latestRun).toMatch(/forge-hermes-plugin 0\.2\.95/i);
-    expect(latestRun).toMatch(/42 catalog entries/i);
-    expect(latestRun).toMatch(/\/api\/v1\/health\/training-load/i);
+    expect(latestRun).toMatch(/42 entity catalog entries/i);
+    expect(latestRun).toMatch(/training_load/i);
     expect(latestRun).toMatch(
       /goal, project, strategy,\s+task, habit,\s+tag, note, insight, task_run, work_adjustment/i
     );
     expect(latestRun).toMatch(
-      /preference_catalog,\s+preference_catalog_item,\s+preference_context, preference_item, preference_judgment,\s+preference_signal/i
+      /preference_catalog[\s\S]*preference_catalog_item[\s\S]*preference_context[\s\S]*preference_item[\s\S]*preference_judgment[\s\S]*preference_signal/i
     );
     expect(latestRun).toMatch(
-      /psyche_value, behavior_pattern, behavior, belief_entry,\s+mode_profile,\s+mode_guide_session, flashcard, trigger_report, event_type, and\s+emotion_definition/i
+      /psyche_value[\s\S]*behavior_pattern[\s\S]*behavior[\s\S]*belief_entry[\s\S]*mode_profile[\s\S]*mode_guide_session[\s\S]*flashcard[\s\S]*trigger_report[\s\S]*event_type[\s\S]*emotion_definition/i
     );
     expect(latestRun).toMatch(/training_load/i);
     expect(latestRun).toMatch(/Movement[\s\S]*Life Force[\s\S]*Workbench/i);
     expect(latestRun).toMatch(
-      /Cycle 1[\s\S]*top-level agent\s+summaries[\s\S]*training_load/i
+      /Cycle 1[\s\S]*Movement place CRUD[\s\S]*Workbench\s+run-node/i
     );
     expect(latestRun).toMatch(
-      /Cycle 2[\s\S]*42-entry onboarding catalog/i
+      /Cycle 2[\s\S]*Reflection-sensitive non-Psyche records/i
     );
     expect(latestRun).toMatch(
-      /Cycle 3[\s\S]*No additional prompt, route, or OpenAPI changes/i
+      /Cycle 3[\s\S]*reflection-sensitive non-Psyche record rule/i
     );
-    expect(latestRun).toMatch(/33 focused tests/i);
+    expect(latestRun).toMatch(/39 focused tests/i);
     expect(latestRun).toMatch(/What happened after retesting/i);
   });
 });
