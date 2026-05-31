@@ -2997,7 +2997,7 @@ function buildPreferredMutationPath(entityType: string) {
     case "sports_overview":
       return "Read-only surface. Use batch CRUD for workout_session records or the review enrichment route for reflective notes.";
     case "training_load":
-      return "Read-only surface. Use it for cardiovascular load, HR zones, acute/chronic stress, VO2max context, and target analysis; use batch CRUD for underlying workout_session records.";
+      return "Read-only surface. Use it for cardiovascular load, HR zones, zone-time buckets, smart training modes, acute/chronic stress, VO2max context, next-workout guidance, and target analysis; use batch CRUD for underlying workout_session records.";
     default:
       return "Read-only surface.";
   }
@@ -3835,14 +3835,14 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
   enrichOnboardingEntityGuide({
     entityType: "training_load",
     purpose:
-      "The read-model cardiovascular training-load workspace for acute/chronic load, HR zone distribution, intensity targets, and VO2max context.",
+      "The read-model cardiovascular training-load workspace for acute/chronic load, HR zone distribution, zone-time buckets, smart training modes, next-workout guidance, intensity targets, and VO2max context.",
     minimumCreateFields: [],
     relationshipRules: [
       "Use this surface for review and interpretation.",
       "Create, update, delete, or search the underlying workout_session records through batch CRUD by default."
     ],
     searchHints: [
-      "Read this surface before advising on high-intensity balance, recovery load, or cardiovascular training targets."
+      "Read this surface before advising on high-intensity balance, recovery load, Zone 2/base work, 4x4 suitability, next-workout guidance, or cardiovascular training targets."
     ],
     fieldGuide: []
   })
@@ -5200,7 +5200,7 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
   {
     toolName: "forge_get_training_load_overview",
     summary:
-      "Read the cardiovascular training-load surface with acute/chronic load, HR zone distribution, weekly intensity targets, and data-quality flags.",
+      "Read the cardiovascular training-load surface with acute/chronic load, HR zone distribution, zone-time buckets, smart training modes, weekly targets, next-workout guidance, and data-quality flags.",
     whenToUse:
       "Use when the operator wants to analyze training stress, zone balance, VO2max context, combat-sport load, or what to optimize next.",
     inputShape: "{ userIds?: string[] }",
@@ -5208,7 +5208,7 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     notes: [
       "The API path is /api/v1/health/training-load and the UI route is /training-load.",
       "This is a read-model-only surface. Workout records remain ordinary workout_session entities for batch CRUD.",
-      "Forge uses HRR zone analytics and TRIMP-like internal load from stored workout evidence."
+      "Forge uses HRR zone analytics, TRIMP-like internal load, per-bucket load rate, personal-baseline comparisons, and deterministic training-intelligence modes from stored workout evidence."
     ],
     example: '{"userIds":["user_operator"]}'
   },
@@ -7702,6 +7702,24 @@ function compactTrainingLoad(
     summary: trainingLoad.summary,
     intensityDistribution: trainingLoad.recentIntensityDistribution,
     weeklyLoad: trainingLoad.weeklyLoad.slice(-8),
+    latestZoneTime:
+      trainingLoad.zoneTimeSeries.weekly.at(-1) ??
+      trainingLoad.zoneTimeSeries.daily.at(-1) ??
+      null,
+    trainingIntelligence: {
+      defaultMode: trainingLoad.trainingIntelligence.defaultMode,
+      modes: trainingLoad.trainingIntelligence.modes.map((mode) => ({
+        key: mode.key,
+        label: mode.label,
+        score: mode.score,
+        status: mode.status,
+        confidence: mode.confidence,
+        summary: mode.summary,
+        loadBalance: mode.loadBalance,
+        nextWorkout: mode.nextWorkout,
+        nextWeekTargets: mode.nextWeekTargets
+      }))
+    },
     topActivities: trainingLoad.activityBreakdown.slice(0, 6),
     targetModel: trainingLoad.targetModel,
     detailRoute: "/api/v1/health/training-load"

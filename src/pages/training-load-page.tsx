@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Area,
@@ -26,6 +25,8 @@ import {
   RadioTower,
   Target
 } from "lucide-react";
+import { ChartBox } from "@/components/training-load/chart-box";
+import { ZoneIntelligencePanel } from "@/components/training-load/zone-intelligence-panel";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { PageHero } from "@/components/shell/page-hero";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
@@ -51,41 +52,6 @@ const ZONE_COLORS: Record<string, string> = {
 };
 
 type TimeWindow = "recent" | "all";
-
-function ChartBox({
-  height,
-  children
-}: {
-  height: number;
-  children: (size: { width: number; height: number }) => ReactNode;
-}) {
-  const ref = useRef<HTMLDivElement | null>(null);
-  const [width, setWidth] = useState(0);
-
-  useEffect(() => {
-    const element = ref.current;
-    if (!element) {
-      return;
-    }
-    const updateWidth = () => {
-      setWidth(Math.max(0, Math.floor(element.getBoundingClientRect().width)));
-    };
-    updateWidth();
-    if (typeof ResizeObserver === "undefined") {
-      window.addEventListener("resize", updateWidth);
-      return () => window.removeEventListener("resize", updateWidth);
-    }
-    const observer = new ResizeObserver(updateWidth);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
-
-  return (
-    <div ref={ref} style={{ height }} className="min-w-0">
-      {width > 24 ? children({ width, height }) : null}
-    </div>
-  );
-}
 
 function pct(value: number | null | undefined, digits = 0) {
   if (value == null || Number.isNaN(value)) {
@@ -400,6 +366,8 @@ export function TrainingLoadPage() {
           icon: HeartPulse
         })}
       </section>
+
+      <ZoneIntelligencePanel trainingLoad={trainingLoad} />
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
         <Card className="overflow-hidden">

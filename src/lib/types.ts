@@ -1825,6 +1825,85 @@ export interface FitnessViewData {
   sessions: WorkoutSessionRecord[];
 }
 
+export type TrainingLoadZoneKey =
+  | "below_z1"
+  | "zone_1"
+  | "zone_2"
+  | "zone_3"
+  | "zone_4"
+  | "zone_5";
+
+export type TrainingLoadDomainKey = "low" | "moderate" | "high";
+
+export type TrainingIntelligenceModeKey =
+  | "combat_readiness"
+  | "aerobic_base"
+  | "endurance_pro";
+
+export interface ZoneTimeBucket {
+  bucketKey: string;
+  startDate: string;
+  endDate: string;
+  sessionCount: number;
+  durationSeconds: number;
+  durationMinutes: number;
+  hrCoveredSeconds: number;
+  trainingLoad: number;
+  loadPerHour: number;
+  loadPerMinute: number;
+  baselineLoadRatio: number | null;
+  baselineIntensityRatio: number | null;
+  zoneSeconds: Record<TrainingLoadZoneKey, number>;
+  zoneMinutes: Record<TrainingLoadZoneKey, number>;
+  zonePercentages: Record<TrainingLoadZoneKey, number>;
+  domainSeconds: Record<TrainingLoadDomainKey, number>;
+  domainMinutes: Record<TrainingLoadDomainKey, number>;
+  domainPercentages: Record<TrainingLoadDomainKey, number>;
+  hardDayCount: number;
+  averageHrCoverage: number;
+  heartRateSampleCount: number;
+  confidence: "high" | "medium" | "low" | "unavailable" | string;
+}
+
+export interface TrainingIntelligenceMode {
+  key: TrainingIntelligenceModeKey;
+  label: string;
+  score: number;
+  status: string;
+  confidence: "high" | "medium" | "low" | "unavailable" | string;
+  summary: string;
+  drivers: string[];
+  limitingFactors: string[];
+  loadBalance: {
+    status: string;
+    acuteLoad7d: number;
+    chronicWeeklyLoad28d: number;
+    acuteChronicRatio: number | null;
+    monotony7d: number | null;
+    strain7d: number | null;
+    latestWeekLoad: number;
+    latestWeekLoadPerMinute: number;
+    latestWeekBaselineLoadRatio: number | null;
+    latestWeekBaselineIntensityRatio: number | null;
+  };
+  nextWeekTargets: {
+    totalMinutesRange: [number, number];
+    zoneMinuteTargets: Record<TrainingLoadZoneKey, number>;
+    domainMinuteTargets: Record<TrainingLoadDomainKey, [number, number]>;
+    maxHardSessions: number;
+    minimumEasyMinutes: number;
+    warning: string | null;
+  };
+  nextWorkout: {
+    recommendedType: string;
+    intensityCeiling: string;
+    durationMinutesRange: [number, number];
+    fourByFourAppropriate: boolean;
+    reason: string;
+  };
+  methodologyNotes: string[];
+}
+
 export interface TrainingLoadViewData {
   summary: {
     sessionCount: number;
@@ -1897,6 +1976,15 @@ export interface TrainingLoadViewData {
     moderatePercentage: number;
     highPercentage: number;
   }>;
+  zoneTimeSeries: {
+    daily: ZoneTimeBucket[];
+    weekly: ZoneTimeBucket[];
+    monthly: ZoneTimeBucket[];
+  };
+  trainingIntelligence: {
+    defaultMode: TrainingIntelligenceModeKey;
+    modes: TrainingIntelligenceMode[];
+  };
   activityBreakdown: Array<{
     workoutType: string;
     workoutTypeLabel: string;

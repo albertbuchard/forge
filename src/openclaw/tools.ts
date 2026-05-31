@@ -1031,7 +1031,7 @@ export function registerForgePluginTools(
     name: "forge_get_training_load_overview",
     label: "Forge Training Load Overview",
     description:
-      "Read the cardiovascular training-load surface with acute/chronic load, HR zone distribution, weekly intensity targets, and data-quality flags.",
+      "Read the cardiovascular training-load surface with acute/chronic load, HR zone-time buckets, smart training modes, weekly targets, next-workout guidance, and data-quality flags.",
     parameters: scopedReadSchema,
     path: (params) =>
       withUserIds(

@@ -682,10 +682,10 @@ Use the health tools when the request is about sleep or sports review:
 
 - `forge_get_sleep_overview` to inspect recent nights, averages, regularity, stage breakdown, and linked reflective context
 - `forge_get_sports_overview` to inspect training volume, workout types, effort trends, habit-generated sessions, and linked context
-- `forge_get_training_load_overview` to inspect cardiovascular load, HR zone balance, acute/chronic stress, high-intensity pressure, VO2max context, and training target fit
+- `forge_get_training_load_overview` to inspect cardiovascular load, HR zone balance, zone-time buckets, smart training modes, acute/chronic stress, high-intensity pressure, VO2max context, next-workout guidance, and training target fit
 - `forge_update_sleep_session` to add sleep-quality notes, tags, or links back to Forge entities after review
 - `forge_update_workout_session` to add subjective effort, mood, meaning, tags, or links on one workout after review
-- remember that the UI route is `/sports` while the backend overview route is `/api/v1/health/fitness`; the dedicated training-load UI is `/training-load` and its backend route is `/api/v1/health/training-load`
+- remember that the UI route is `/sports` while the backend overview route is `/api/v1/health/fitness`; the dedicated training-load UI is `/training-load` and its backend route is `/api/v1/health/training-load`, including zone-time reporting and Combat/Base/Endurance smart modes
 
 Use these exact health batch payload shapes when the user is creating or editing the stored records themselves:
 

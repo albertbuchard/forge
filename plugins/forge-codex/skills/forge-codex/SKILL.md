@@ -322,6 +322,8 @@ Surface rule:
     `forge_update_sleep_session` and `forge_update_workout_session`
     only for reflective enrichment on one already-existing record. Ordinary
     `sleep_session` and `workout_session` CRUD belongs on the shared batch routes.
+    The training-load read model includes zone-time buckets, Combat/Base/Endurance
+    smart modes, next-week targets, and next-workout guidance.
 13. Movement, Life Force, and Workbench are specialized Forge API surfaces rather
     than simple batch entities. For Movement in particular, treat the surface as a
     timeline of stays and trips that supports time-in-place questions, travel-history
