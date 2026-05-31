@@ -1,8 +1,7 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Area,
-  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
@@ -33,6 +32,7 @@ import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import { ErrorState } from "@/components/ui/page-state";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { getTrainingLoadView } from "@/lib/api";
 import type { TrainingLoadViewData } from "@/lib/types";
 
@@ -49,6 +49,31 @@ const ZONE_COLORS: Record<string, string> = {
   zone_3: "#eab308",
   zone_4: "#f97316",
   zone_5: "#ef4444"
+};
+
+const TRAINING_LOAD_HELP = {
+  hero: "Forge estimates cardiovascular training stress from stored workouts, heart-rate samples, adaptive heart-rate-reserve zones, and recent vitals. Use this page to decide whether the next training block should build aerobic base, hold load steady, sharpen intensity, or recover. The numbers support coaching decisions; they are not medical diagnosis.",
+  acuteLoad:
+    "Acute load is the last seven days of Forge's TRIMP-like internal load. It rises when workouts are longer, harder, or spend more time in high heart-rate zones. Compare it with chronic load before adding hard sessions.",
+  chronicBase:
+    "Chronic base is the average weekly load over the last 28 days. It is Forge's estimate of the current load you have recently proven you can absorb.",
+  acwr: "ACWR is acute load divided by chronic weekly load. Values near 1.0 usually mean the current week resembles the recent base. High values ask for recovery checks; low values suggest underloading. Treat it as a flag, not a verdict.",
+  vo2max:
+    "VO2max is the latest available wearable estimate in ml/kg/min. Forge shows the recent change when enough points exist, but wearable VO2max can move with device model, terrain, heat, and workout type.",
+  weeklyMap:
+    "This chart combines weekly internal load, training hours, and the share of time in zones 4 and 5. It helps reveal whether fatigue comes from total volume, hard intensity, or both.",
+  adaptationRadar:
+    "The radar compresses six signals into one coach view: current load, base capacity, acute/chronic balance, heart-rate data quality, high-intensity pressure, and VO2max movement.",
+  intensityTarget:
+    "This compares your recent or all-time low, moderate, and high intensity distribution with broad target bands used in endurance and combat-sport conditioning. The target is a planning reference, not a rule.",
+  hrZones:
+    "These bars show minutes in each adaptive HRR zone. Zone 2 is commonly used for aerobic base, zones 4 and 5 for threshold and VO2max work, and below-zone time often reflects warm-up, recovery, or missing cardiovascular load.",
+  dailyTexture:
+    "Daily texture shows whether load spikes are coming from easy volume, threshold work, or high-intensity minutes. It is useful for spacing hard days and avoiding accidental clusters.",
+  sessionSignals:
+    "Recent workout rows expose the session evidence behind the summary: date, activity, training load, high-zone share, heart-rate response, and data confidence.",
+  sportContribution:
+    "Sport contribution groups load by workout type. In kickboxing and other combat sports, wrist heart rate can undercount short striking spikes, so compare this with how the session actually felt."
 };
 
 type TimeWindow = "recent" | "all";
@@ -102,11 +127,13 @@ function metricTile({
   label,
   value,
   detail,
+  help,
   icon: Icon
 }: {
   label: string;
   value: string;
   detail: string;
+  help: string;
   icon: typeof Gauge;
 }) {
   return (
@@ -114,8 +141,11 @@ function metricTile({
       <div className="absolute right-3 top-3 rounded-[8px] border border-white/8 bg-white/[0.045] p-2 text-white/58">
         <Icon className="size-4" />
       </div>
-      <div className="max-w-[80%] font-label text-[10px] uppercase tracking-[0.18em] text-white/45">
-        {label}
+      <div className="flex max-w-[80%] items-center gap-1.5">
+        <div className="font-label text-[10px] uppercase tracking-[0.18em] text-white/45">
+          {label}
+        </div>
+        <InfoTooltip label={`Explain ${label}`} title={label} content={help} />
       </div>
       <div className="mt-4 font-display text-4xl leading-none text-white">
         {value}
@@ -124,6 +154,44 @@ function metricTile({
         {detail}
       </div>
     </Card>
+  );
+}
+
+function SectionHeading({
+  eyebrow,
+  title,
+  description,
+  help,
+  action
+}: {
+  eyebrow: string;
+  title: string;
+  description?: string;
+  help: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="min-w-0">
+        <div className="flex items-center gap-1.5">
+          <div className="font-label text-[10px] uppercase tracking-[0.18em] text-white/45">
+            {eyebrow}
+          </div>
+          <InfoTooltip
+            label={`Explain ${eyebrow}`}
+            title={title}
+            content={help}
+          />
+        </div>
+        <div className="mt-2 text-lg text-white">{title}</div>
+        {description ? (
+          <div className="mt-1 max-w-2xl text-[12px] leading-5 text-white/50">
+            {description}
+          </div>
+        ) : null}
+      </div>
+      {action ? <div className="shrink-0">{action}</div> : null}
+    </div>
   );
 }
 
@@ -328,7 +396,9 @@ export function TrainingLoadPage() {
         eyebrow="Health"
         entityKind="habit"
         title="Training Load"
-        description="Cardiovascular stress, HR zone distribution, and elite-style targets from your stored workout evidence."
+        titleText="Training Load"
+        description="Forge estimates cardiovascular training stress from workout duration, heart-rate response, adaptive HRR zones, and recent vitals so you can plan the next training block with clearer load and recovery context."
+        helpContent={TRAINING_LOAD_HELP.hero}
         badge={`${summary.sessionCount} sessions · ${summary.reliableSessionCount} high-resolution`}
         actions={<Badge tone={readiness.tone}>{readiness.label}</Badge>}
       />
@@ -337,14 +407,15 @@ export function TrainingLoadPage() {
         {metricTile({
           label: "Acute load",
           value: numberLabel(summary.acuteLoad7d, 0),
-          detail: `7-day Forge TRIMP. ${readiness.text}`,
+          detail: `Last 7 days of internal load. ${readiness.text}`,
+          help: TRAINING_LOAD_HELP.acuteLoad,
           icon: Gauge
         })}
         {metricTile({
           label: "Chronic base",
           value: numberLabel(summary.chronicWeeklyLoad28d, 0),
-          detail:
-            "28-day average weekly load, used as the current base signal.",
+          detail: "Average weekly load across the last 28 days.",
+          help: TRAINING_LOAD_HELP.chronicBase,
           icon: RadioTower
         })}
         {metricTile({
@@ -352,6 +423,7 @@ export function TrainingLoadPage() {
           value: numberLabel(summary.acuteChronicRatio, 2),
           detail:
             "Acute load divided by chronic weekly load. Useful as a flag, not a verdict.",
+          help: TRAINING_LOAD_HELP.acwr,
           icon: Activity
         })}
         {metricTile({
@@ -363,6 +435,7 @@ export function TrainingLoadPage() {
             summary.vo2MaxDelta == null
               ? "No delta available yet."
               : `${summary.vo2MaxDelta >= 0 ? "+" : ""}${summary.vo2MaxDelta} since the first recent point.`,
+          help: TRAINING_LOAD_HELP.vo2max,
           icon: HeartPulse
         })}
       </section>
@@ -371,21 +444,13 @@ export function TrainingLoadPage() {
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
         <Card className="overflow-hidden">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="font-label text-[10px] uppercase tracking-[0.18em] text-white/45">
-                Weekly load map
-              </div>
-              <div className="mt-2 text-lg text-white">
-                Load, hours, and high-intensity share over the last 26 weeks.
-              </div>
-              <div className="mt-1 text-[12px] leading-5 text-white/50">
-                Load is internal stress. Hours are volume. The red line shows
-                how much of each week landed in Z4/Z5.
-              </div>
-            </div>
-            <Badge tone="meta">TRIMP · HRR zones</Badge>
-          </div>
+          <SectionHeading
+            eyebrow="Weekly load map"
+            title="Load, hours, and high-intensity share over the last 26 weeks."
+            description="Load estimates internal stress; hours show volume; the red line shows how much of each week landed in zones 4 and 5."
+            help={TRAINING_LOAD_HELP.weeklyMap}
+            action={<Badge tone="meta">TRIMP · HRR zones</Badge>}
+          />
           <div className="mt-5">
             <ChartBox height={340}>
               {({ width, height }) => (
@@ -474,14 +539,12 @@ export function TrainingLoadPage() {
         </Card>
 
         <Card className="overflow-hidden">
-          <div className="font-label text-[10px] uppercase tracking-[0.18em] text-white/45">
-            Adaptation radar
-          </div>
-          <div className="mt-2 text-lg text-white">Current signal balance</div>
-          <div className="mt-1 text-[12px] leading-5 text-white/50">
-            A compact coach view: load, base, balance, data quality,
-            high-intensity pressure, and VO2 movement.
-          </div>
+          <SectionHeading
+            eyebrow="Adaptation radar"
+            title="Current signal balance"
+            description="A compact coach view of load, base, balance, data quality, high-intensity pressure, and VO2max movement."
+            help={TRAINING_LOAD_HELP.adaptationRadar}
+          />
           <div className="mt-4">
             <ChartBox height={300}>
               {({ width, height }) => (
@@ -514,35 +577,33 @@ export function TrainingLoadPage() {
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
         <Card>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="font-label text-[10px] uppercase tracking-[0.18em] text-white/45">
-                Intensity target
+          <SectionHeading
+            eyebrow="Intensity target"
+            title="Distribution vs target bands"
+            description="Compare the selected time window with broad low, moderate, and high intensity bands."
+            help={TRAINING_LOAD_HELP.intensityTarget}
+            action={
+              <div className="grid grid-cols-2 gap-1 rounded-[8px] border border-white/8 bg-white/[0.035] p-1">
+                {[
+                  ["recent", "28d"],
+                  ["all", "All"]
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={`rounded-[6px] px-3 py-1.5 text-[12px] ${
+                      timeWindow === value
+                        ? "bg-white/[0.12] text-white"
+                        : "text-white/54"
+                    }`}
+                    onClick={() => setTimeWindow(value as TimeWindow)}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
-              <div className="mt-2 text-lg text-white">
-                Distribution vs target bands
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-1 rounded-[8px] border border-white/8 bg-white/[0.035] p-1">
-              {[
-                ["recent", "28d"],
-                ["all", "All"]
-              ].map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  className={`rounded-[6px] px-3 py-1.5 text-[12px] ${
-                    timeWindow === value
-                      ? "bg-white/[0.12] text-white"
-                      : "text-white/54"
-                  }`}
-                  onClick={() => setTimeWindow(value as TimeWindow)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
+            }
+          />
           <div className="mt-4 grid gap-3">
             {intensityData.map((entry) => (
               <div key={entry.key} className="grid gap-2">
@@ -583,16 +644,15 @@ export function TrainingLoadPage() {
         </Card>
 
         <Card>
-          <div className="font-label text-[10px] uppercase tracking-[0.18em] text-white/45">
-            HR zones
-          </div>
-          <div className="mt-2 text-lg text-white">
-            Detailed zone distribution for{" "}
-            {timeWindow === "recent"
-              ? "the last 28 days"
-              : "all available sessions"}
-            .
-          </div>
+          <SectionHeading
+            eyebrow="HR zones"
+            title={`Detailed zone distribution for ${
+              timeWindow === "recent"
+                ? "the last 28 days"
+                : "all available sessions"
+            }.`}
+            help={TRAINING_LOAD_HELP.hrZones}
+          />
           <div className="mt-4">
             <ChartBox height={290}>
               {({ width, height }) => (
@@ -636,12 +696,11 @@ export function TrainingLoadPage() {
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
         <Card>
-          <div className="font-label text-[10px] uppercase tracking-[0.18em] text-white/45">
-            Daily load texture
-          </div>
-          <div className="mt-2 text-lg text-white">
-            Easy, threshold, and high-intensity minutes against daily load.
-          </div>
+          <SectionHeading
+            eyebrow="Daily load texture"
+            title="Easy, threshold, and high-intensity minutes against daily load."
+            help={TRAINING_LOAD_HELP.dailyTexture}
+          />
           <div className="mt-4">
             <ChartBox height={310}>
               {({ width, height }) => (
@@ -713,15 +772,14 @@ export function TrainingLoadPage() {
         </Card>
 
         <Card>
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="font-label text-[10px] uppercase tracking-[0.18em] text-white/45">
-                Session signals
-              </div>
-              <div className="mt-2 text-lg text-white">Recent workouts</div>
-            </div>
-            <Badge tone="meta">{summary.hardDayCount7d} hard days / 7d</Badge>
-          </div>
+          <SectionHeading
+            eyebrow="Session signals"
+            title="Recent workouts"
+            help={TRAINING_LOAD_HELP.sessionSignals}
+            action={
+              <Badge tone="meta">{summary.hardDayCount7d} hard days / 7d</Badge>
+            }
+          />
           <div className="mt-4">
             <SessionSignalTable sessions={trainingLoad.sessionSignals} />
           </div>
@@ -730,9 +788,11 @@ export function TrainingLoadPage() {
 
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <Card>
-          <div className="font-label text-[10px] uppercase tracking-[0.18em] text-white/45">
-            Sport contribution
-          </div>
+          <SectionHeading
+            eyebrow="Sport contribution"
+            title="Load by workout type"
+            help={TRAINING_LOAD_HELP.sportContribution}
+          />
           <div className="mt-3 grid gap-3">
             {trainingLoad.activityBreakdown.slice(0, 8).map((activity) => (
               <div

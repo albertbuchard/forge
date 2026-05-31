@@ -3,9 +3,9 @@ import { useEffect, useId, useRef, useState } from "react";
 import { CircleHelp } from "lucide-react";
 import { cn } from "../../lib/utils.js";
 export function FieldHint({ children, className }) {
-    return _jsx("div", { className: cn("text-sm leading-6 text-white/50", className), children: children });
+    return (_jsx("div", { className: cn("text-sm leading-6 text-white/50", className), children: children }));
 }
-export function InfoTooltip({ content, label = "Explain this field", className }) {
+export function InfoTooltip({ content, title, label = "Explain this field", className, panelClassName }) {
     const [open, setOpen] = useState(false);
     const containerRef = useRef(null);
     const tooltipId = useId();
@@ -21,5 +21,9 @@ export function InfoTooltip({ content, label = "Explain this field", className }
         document.addEventListener("pointerdown", handlePointerDown);
         return () => document.removeEventListener("pointerdown", handlePointerDown);
     }, [open]);
-    return (_jsxs("span", { ref: containerRef, className: cn("relative inline-flex items-center", className), onMouseEnter: () => setOpen(true), onMouseLeave: () => setOpen(false), children: [_jsx("button", { type: "button", "aria-label": label, "aria-describedby": open ? tooltipId : undefined, "aria-expanded": open, className: "inline-flex size-5 items-center justify-center rounded-full text-white/42 transition hover:bg-white/[0.06] hover:text-white/78 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(192,193,255,0.35)]", onFocus: () => setOpen(true), onBlur: () => setOpen(false), onClick: () => setOpen((current) => !current), children: _jsx(CircleHelp, { className: "size-3.5" }) }), _jsx("span", { id: tooltipId, role: "tooltip", className: cn("pointer-events-none absolute right-0 top-[calc(100%+0.55rem)] z-40 w-[min(16rem,calc(100vw-2.5rem))] max-w-[calc(100vw-2.5rem)] rounded-[18px] border border-white/8 bg-[rgba(12,17,30,0.96)] px-3 py-2.5 text-sm leading-6 text-white/74 shadow-[0_18px_48px_rgba(3,8,18,0.42)] transition", open ? "translate-y-0 opacity-100" : "translate-y-1 opacity-0"), children: content })] }));
+    return (_jsxs("span", { ref: containerRef, className: cn("relative inline-flex items-center", className), onMouseEnter: () => setOpen(true), onMouseLeave: () => setOpen(false), children: [_jsx("button", { type: "button", "aria-label": label, "aria-describedby": open ? tooltipId : undefined, "aria-expanded": open, className: "inline-flex size-5 items-center justify-center rounded-full text-white/42 transition hover:bg-white/[0.06] hover:text-white/78 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(192,193,255,0.35)]", onFocus: () => setOpen(true), onBlur: () => setOpen(false), onClick: () => setOpen((current) => !current), onKeyDown: (event) => {
+                    if (event.key === "Escape") {
+                        setOpen(false);
+                    }
+                }, children: _jsx(CircleHelp, { className: "size-3.5" }) }), _jsxs("span", { id: tooltipId, role: "tooltip", "aria-hidden": !open, "data-state": open ? "open" : "closed", className: cn("pointer-events-none absolute right-0 top-[calc(100%+0.55rem)] z-40 grid w-[min(20rem,calc(100vw-2.5rem))] max-w-[calc(100vw-2.5rem)] gap-1 rounded-[8px] border border-white/10 bg-[rgba(12,17,30,0.97)] px-3 py-2.5 text-left text-sm leading-6 text-white/74 shadow-[0_18px_48px_rgba(3,8,18,0.42)] transition", open ? "translate-y-0 opacity-100" : "translate-y-1 opacity-0", panelClassName), children: [title ? (_jsx("span", { className: "text-[11px] font-semibold uppercase tracking-[0.14em] text-white/58", children: title })) : null, _jsx("span", { children: content })] })] }));
 }

@@ -1,16 +1,10 @@
 import { useMemo, useState } from "react";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Tooltip,
-  XAxis,
-  YAxis
-} from "recharts";
+import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
 import { Activity, Brain, Target, Zap } from "lucide-react";
 import { ChartBox } from "@/components/training-load/chart-box";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import type {
   TrainingIntelligenceMode,
   TrainingLoadViewData,
@@ -43,6 +37,21 @@ const ZONE_COLORS: Record<TrainingLoadZoneKey, string> = {
   zone_3: "#eab308",
   zone_4: "#f97316",
   zone_5: "#ef4444"
+};
+
+const ZONE_INTELLIGENCE_HELP = {
+  timeInZone:
+    "Each block totals the minutes Forge can place into adaptive HRR zones from stored heart-rate samples. Weekly is the default planning view because it matches common training microcycles; monthly and daily views help detect longer trends or recent spikes.",
+  smartMode:
+    "Smart modes do not change the underlying data. They change the coaching lens: combat readiness prioritizes hard-day spacing and controlled high intensity, aerobic base prioritizes low-zone development, and endurance pro compares the distribution with pyramidal or polarized endurance planning patterns.",
+  interpretation:
+    "This paragraph explains what the selected mode concludes from the latest load balance, zone distribution, hard-day count, and data confidence. It is a planning summary, not a medical clearance.",
+  drivers:
+    "Drivers are the signals helping the selected mode: examples include enough easy/base work, controlled high-zone share, stable acute/chronic load, or improving data quality.",
+  limiters:
+    "Limiters are the signals that should constrain the next block. If Forge lists a limiter, the next target should usually solve that before adding more hard work.",
+  targets:
+    "Next targets translate the selected mode into a practical week and next workout. The range is intentionally bounded so training can progress without turning every good week into a maximal week."
 };
 
 type ZoneInterval = "weekly" | "monthly" | "daily";
@@ -121,19 +130,30 @@ function ModeNarrative({ mode }: { mode: TrainingIntelligenceMode }) {
         <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-white/44">
           <Activity className="size-3.5" />
           Drivers
+          <InfoTooltip
+            label="Explain training drivers"
+            title="Drivers"
+            content={ZONE_INTELLIGENCE_HELP.drivers}
+          />
         </div>
         <div className="mt-3 grid gap-2 text-[12px] leading-5 text-white/62">
-          {(mode.drivers.length > 0 ? mode.drivers : ["No positive driver is strong enough yet."]).map(
-            (driver) => (
-              <div key={driver}>{driver}</div>
-            )
-          )}
+          {(mode.drivers.length > 0
+            ? mode.drivers
+            : ["No positive driver is strong enough yet."]
+          ).map((driver) => (
+            <div key={driver}>{driver}</div>
+          ))}
         </div>
       </div>
       <div className="rounded-[8px] border border-white/8 bg-white/[0.035] p-3">
         <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-white/44">
           <Zap className="size-3.5" />
           Limiters
+          <InfoTooltip
+            label="Explain training limiters"
+            title="Limiters"
+            content={ZONE_INTELLIGENCE_HELP.limiters}
+          />
         </div>
         <div className="mt-3 grid gap-2 text-[12px] leading-5 text-white/62">
           {(mode.limitingFactors.length > 0
@@ -158,8 +178,9 @@ export function ZoneIntelligencePanel({
   );
   const [interval, setInterval] = useState<ZoneInterval>("weekly");
   const selectedMode =
-    trainingLoad.trainingIntelligence.modes.find((mode) => mode.key === modeKey) ??
-    trainingLoad.trainingIntelligence.modes[0];
+    trainingLoad.trainingIntelligence.modes.find(
+      (mode) => mode.key === modeKey
+    ) ?? trainingLoad.trainingIntelligence.modes[0];
   const buckets = latestBuckets(trainingLoad, interval);
   const rows = useMemo(() => chartRows(buckets, interval), [buckets, interval]);
   const tableBuckets = buckets.slice(-8).reverse();
@@ -173,16 +194,23 @@ export function ZoneIntelligencePanel({
       <Card className="overflow-hidden">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="font-label text-[10px] uppercase tracking-[0.18em] text-white/45">
-              Zone intelligence
+            <div className="flex items-center gap-1.5">
+              <div className="font-label text-[10px] uppercase tracking-[0.18em] text-white/45">
+                Zone intelligence
+              </div>
+              <InfoTooltip
+                label="Explain zone intelligence"
+                title="Time in zone"
+                content={ZONE_INTELLIGENCE_HELP.timeInZone}
+              />
             </div>
             <div className="mt-2 text-lg text-white">
               Time in zone by training block
             </div>
             <div className="mt-1 max-w-2xl text-[12px] leading-5 text-white/50">
-              Weekly by default, with the same HRR zones Forge already uses.
-              Low/moderate/high domains keep the coach view readable while the
-              full five-zone split stays inspectable.
+              Weekly by default because most training plans are adjusted week by
+              week. The stacked bars preserve the full zone split, while the
+              table adds load rate, hard days, and data confidence.
             </div>
           </div>
           <div className="grid grid-cols-3 gap-1 rounded-[8px] border border-white/8 bg-white/[0.035] p-1">
@@ -195,7 +223,9 @@ export function ZoneIntelligencePanel({
                 key={value}
                 type="button"
                 className={`rounded-[6px] px-3 py-1.5 text-[12px] ${
-                  interval === value ? "bg-white/[0.12] text-white" : "text-white/54"
+                  interval === value
+                    ? "bg-white/[0.12] text-white"
+                    : "text-white/54"
                 }`}
                 onClick={() => setInterval(value as ZoneInterval)}
               >
@@ -209,7 +239,10 @@ export function ZoneIntelligencePanel({
           <ChartBox height={320}>
             {({ width, height }) => (
               <BarChart data={rows} width={width} height={height}>
-                <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                <CartesianGrid
+                  stroke="rgba(255,255,255,0.08)"
+                  vertical={false}
+                />
                 <XAxis
                   dataKey="bucket"
                   tick={{ fill: "rgba(255,255,255,0.54)", fontSize: 10 }}
@@ -276,8 +309,15 @@ export function ZoneIntelligencePanel({
       <Card className="overflow-hidden">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="font-label text-[10px] uppercase tracking-[0.18em] text-white/45">
-              Smart training mode
+            <div className="flex items-center gap-1.5">
+              <div className="font-label text-[10px] uppercase tracking-[0.18em] text-white/45">
+                Smart training mode
+              </div>
+              <InfoTooltip
+                label="Explain smart training modes"
+                title="Training mode"
+                content={ZONE_INTELLIGENCE_HELP.smartMode}
+              />
             </div>
             <div className="mt-2 text-lg text-white">{selectedMode.label}</div>
           </div>
@@ -307,6 +347,11 @@ export function ZoneIntelligencePanel({
           <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-white/44">
             <Brain className="size-3.5" />
             Interpretation
+            <InfoTooltip
+              label="Explain this interpretation"
+              title="Interpretation"
+              content={ZONE_INTELLIGENCE_HELP.interpretation}
+            />
           </div>
           <div className="mt-3 text-[13px] leading-5 text-white/72">
             {selectedMode.summary}
@@ -314,7 +359,9 @@ export function ZoneIntelligencePanel({
           <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-white/50">
             <div>Balance: {selectedMode.loadBalance.status}</div>
             <div>Confidence: {selectedMode.confidence}</div>
-            <div>ACWR: {selectedMode.loadBalance.acuteChronicRatio ?? "n/a"}</div>
+            <div>
+              ACWR: {selectedMode.loadBalance.acuteChronicRatio ?? "n/a"}
+            </div>
             <div>
               Baseline:{" "}
               {selectedMode.loadBalance.latestWeekBaselineLoadRatio ?? "n/a"}x
@@ -330,6 +377,11 @@ export function ZoneIntelligencePanel({
           <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-white/44">
             <Target className="size-3.5" />
             Next targets
+            <InfoTooltip
+              label="Explain next training targets"
+              title="Next targets"
+              content={ZONE_INTELLIGENCE_HELP.targets}
+            />
           </div>
           <div className="grid gap-2 text-[12px] leading-5 text-white/62">
             <div>
@@ -348,7 +400,9 @@ export function ZoneIntelligencePanel({
               {selectedMode.nextWorkout.durationMinutesRange[1]} min, ceiling{" "}
               {selectedMode.nextWorkout.intensityCeiling}.
             </div>
-            <div className="text-white/50">{selectedMode.nextWorkout.reason}</div>
+            <div className="text-white/50">
+              {selectedMode.nextWorkout.reason}
+            </div>
             {selectedMode.nextWeekTargets.warning ? (
               <div className="rounded-[6px] bg-amber-300/10 px-2 py-1 text-amber-100/82">
                 {selectedMode.nextWeekTargets.warning}
