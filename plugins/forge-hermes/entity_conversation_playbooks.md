@@ -158,6 +158,42 @@ to the stronger container:
 - Use a linked `note` when nuance should be preserved without pretending it is the
   whole structured model.
 
+## Reflection-sensitive non-Psyche records
+
+Use this when the user is creating or updating a reflective record that is meaningful
+but not necessarily a full Psyche formulation: `questionnaire_instrument`,
+`questionnaire_run`, `self_observation`, reflective `note`, `wiki_page`,
+`sleep_session`, `workout_session`, and some `preference_judgment` or
+`preference_signal` moments.
+
+- Start by asking what the reflection should help the user understand, decide,
+  notice, remember, or change later.
+- Reflect the lived or practical stake once before asking for fields, but do not
+  over-therapize if the user is only trying to store a clear answer, note, or
+  health-context update.
+- For questionnaire instruments, ask what kind of honest moment, review, or decision
+  the instrument should reveal before asking for item wording, scales, scoring, or
+  provenance.
+- For questionnaire runs, ask whether the user is trying to start, continue, review,
+  or complete the run, then focus on the next answer, uncertainty, or insight that
+  changes the run. Do not turn answer collection into generic Psyche intake unless a
+  belief, mode, trigger report, or behavior pattern clearly emerges.
+- For self-observation, keep the chain concrete: situation, cue, emotion/body,
+  thought/meaning, behavior/urge, and consequence. If that chain reveals a recurring
+  loop, belief, mode, schema theme, or one charged trigger episode, route to the
+  stronger Psyche container.
+- For sleep and workout enrichment, ask what the user wants future review to remember:
+  recovery context, subjective effort, mood, meaning, social context, or links.
+  Preserve raw health facts through the health model and store reflection as notes,
+  tags, links, or batch updates.
+- For notes and wiki pages, distinguish temporary operating context from durable
+  memory. A note can preserve nuance around another record; a wiki page should carry
+  reusable knowledge, source synthesis, person/context memory, or a personal manual.
+- Route posture still matters: `questionnaire_instrument`, `note`, `sleep_session`,
+  and `workout_session` use shared batch routes for normal CRUD; `questionnaire_run`
+  uses questionnaire run actions; `self_observation` is note-backed; `wiki_page` uses
+  the wiki routes.
+
 ## Conversation arc
 
 Most good Forge intake flows follow this sequence:

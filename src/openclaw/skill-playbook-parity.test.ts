@@ -133,6 +133,8 @@ describe("forge skill playbook parity", () => {
       expect(skill).toMatch(/place IDs inside `routeKey`[\s\S]*invent a raw route\s+string/i);
       expect(skill).toMatch(/pathParams[\s\S]*placeholder names exactly/i);
       expect(skill).toMatch(/live onboarding disagree[\s\S]*contract bug/i);
+      expect(skill).toMatch(/reflection-sensitive records/i);
+      expect(skill).toMatch(/understand, decide, notice, remember, or\s+change later/i);
       expect(skill).toMatch(/Concrete route-key examples for internal use/i);
       expect(skill).toMatch(/Movement all-time read[\s\S]*"routeKey":"allTime"/i);
       expect(skill).toMatch(/Movement timeline read[\s\S]*"routeKey":"timeline"/i);
@@ -143,9 +145,13 @@ describe("forge skill playbook parity", () => {
       expect(skill).toMatch(/Movement trip detail[\s\S]*"routeKey":"tripDetail"/i);
       expect(skill).toMatch(/Movement settings read[\s\S]*"routeKey":"settings"/i);
       expect(skill).toMatch(/Movement settings update[\s\S]*"routeKey":"settingsUpdate"/i);
+      expect(skill).toMatch(/Movement known-place creation[\s\S]*"routeKey":"placeCreate"/i);
+      expect(skill).toMatch(/Movement known-place update[\s\S]*"routeKey":"placeUpdate"/i);
       expect(skill).toMatch(/GET \/api\/v1\/movement\/settings[\s\S]*PATCH \/api\/v1\/movement\/settings/i);
       expect(skill).toMatch(/passive capture[\s\S]*publish mode[\s\S]*retention mode/i);
       expect(skill).toMatch(/Movement missing-stay correction[\s\S]*"routeKey":"userBoxPreflight"[\s\S]*"routeKey":"userBoxCreate"/i);
+      expect(skill).toMatch(/Movement saved-overlay update[\s\S]*"routeKey":"userBoxUpdate"/i);
+      expect(skill).toMatch(/Movement saved-overlay delete[\s\S]*"routeKey":"userBoxDelete"/i);
       expect(skill).toMatch(/Life Force overview[\s\S]*"routeKey":"overview"/i);
       expect(skill).toMatch(/Life Force profile edit[\s\S]*"routeKey":"profile"/i);
       expect(skill).toMatch(/Life Force weekday template edit[\s\S]*"routeKey":"weekdayTemplate"/i);
@@ -156,6 +162,8 @@ describe("forge skill playbook parity", () => {
       expect(skill).toMatch(/Workbench flow edit[\s\S]*"routeKey":"updateFlow"/i);
       expect(skill).toMatch(/Workbench flow deletion[\s\S]*"routeKey":"deleteFlow"/i);
       expect(skill).toMatch(/Workbench run detail[\s\S]*"routeKey":"runDetail"/i);
+      expect(skill).toMatch(/Workbench run nodes[\s\S]*"routeKey":"runNodes"/i);
+      expect(skill).toMatch(/Workbench node result[\s\S]*"routeKey":"nodeResult"/i);
       expect(skill).toMatch(/Workbench published output[\s\S]*"routeKey":"publishedOutput"/i);
       expect(skill).toMatch(/Workbench latest node output[\s\S]*"routeKey":"latestNodeOutput"/i);
       expect(skill).toMatch(/Workbench run execution[\s\S]*"routeKey":"runFlow"/i);
@@ -190,6 +198,8 @@ describe("forge skill playbook parity", () => {
     expect(hermesSkill).toMatch(/exact correction in usable language/i);
     expect(hermesSkill).toMatch(/stop asking and write/i);
     expect(hermesSkill).toMatch(/review, compare, inspect, or navigate an existing Forge/i);
+    expect(hermesSkill).toMatch(/reflection-sensitive records/i);
+    expect(hermesSkill).toMatch(/understand, decide, notice, remember, or\s+change later/i);
     expect(hermesSkill).toMatch(/Self-observation is note-backed/i);
     expect(hermesSkill).toMatch(/Batch CRUD is the default for simple entities/i);
     expect(hermesSkill).toMatch(/route jungle|one-route-per-entity/i);
@@ -205,6 +215,8 @@ describe("forge skill playbook parity", () => {
     expect(codexSkill).toMatch(/add, update, review, compare, navigate, link, or run/i);
     expect(codexSkill).toMatch(/exact correction in usable language/i);
     expect(codexSkill).toMatch(/stop asking and write/i);
+    expect(codexSkill).toMatch(/reflection-sensitive records/i);
+    expect(codexSkill).toMatch(/understand, decide, notice, remember, or\s+change later/i);
     expect(codexSkill).toMatch(/simple entities/i);
     expect(codexSkill).toMatch(/hundreds of individual CRUD routes|route jungle/i);
     expect(codexSkill).toMatch(/specializedDomainSurfaces/i);
