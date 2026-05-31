@@ -6,7 +6,7 @@ app:
     - com.albertbuchard.ForgeCompanion.watchkitapp.ForgeWatch
 
 version:
-  marketing: "1.0.71"
+  marketing: "1.0.72"
 
 release:
   default_mode: testflight

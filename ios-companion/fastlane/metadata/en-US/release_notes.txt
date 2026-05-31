@@ -1,10 +1,8 @@
-Forge Companion 1.0.71 keeps historical workout repair visible inside the native
-iOS menu and Settings without covering the Forge web app.
+Forge Companion 1.0.72 ships the latest native sync and agent-runtime release
+metadata alongside the updated Forge plugin runtime.
 
-The historical workout progress display now clamps replayed workout summaries to
-the backend-reported total, so repaired sessions cannot show more uploaded
-workouts than found.
+Historical workout import status remains in the native iOS menu and Settings,
+not as an overlay above the Forge web app.
 
-The top-right native menu button is more visible during historical repair, and
-the app continues using the current raw workout evidence contract for heart-rate
-and route replay.
+The app keeps the clamped historical workout progress display and current raw
+workout evidence contract for heart-rate and route replay.
