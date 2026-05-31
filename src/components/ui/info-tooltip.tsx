@@ -7,18 +7,32 @@ export type FieldHelpDefinition = {
   description: string;
 };
 
-export function FieldHint({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("text-sm leading-6 text-white/50", className)}>{children}</div>;
+export function FieldHint({
+  children,
+  className
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("text-sm leading-6 text-white/50", className)}>
+      {children}
+    </div>
+  );
 }
 
 export function InfoTooltip({
   content,
+  title,
   label = "Explain this field",
-  className
+  className,
+  panelClassName
 }: {
-  content: string;
+  content: ReactNode;
+  title?: string;
   label?: string;
   className?: string;
+  panelClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLSpanElement | null>(null);
@@ -55,18 +69,31 @@ export function InfoTooltip({
         onFocus={() => setOpen(true)}
         onBlur={() => setOpen(false)}
         onClick={() => setOpen((current) => !current)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            setOpen(false);
+          }
+        }}
       >
         <CircleHelp className="size-3.5" />
       </button>
       <span
         id={tooltipId}
         role="tooltip"
+        aria-hidden={!open}
+        data-state={open ? "open" : "closed"}
         className={cn(
-          "pointer-events-none absolute right-0 top-[calc(100%+0.55rem)] z-40 w-[min(16rem,calc(100vw-2.5rem))] max-w-[calc(100vw-2.5rem)] rounded-[18px] border border-white/8 bg-[rgba(12,17,30,0.96)] px-3 py-2.5 text-sm leading-6 text-white/74 shadow-[0_18px_48px_rgba(3,8,18,0.42)] transition",
-          open ? "translate-y-0 opacity-100" : "translate-y-1 opacity-0"
+          "pointer-events-none absolute right-0 top-[calc(100%+0.55rem)] z-40 grid w-[min(20rem,calc(100vw-2.5rem))] max-w-[calc(100vw-2.5rem)] gap-1 rounded-[8px] border border-white/10 bg-[rgba(12,17,30,0.97)] px-3 py-2.5 text-left text-sm leading-6 text-white/74 shadow-[0_18px_48px_rgba(3,8,18,0.42)] transition",
+          open ? "translate-y-0 opacity-100" : "translate-y-1 opacity-0",
+          panelClassName
         )}
       >
-        {content}
+        {title ? (
+          <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/58">
+            {title}
+          </span>
+        ) : null}
+        <span>{content}</span>
       </span>
     </span>
   );

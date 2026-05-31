@@ -429,10 +429,21 @@ describe("TrainingLoadPage", () => {
     renderPage();
 
     expect(await screen.findByText("Training Load")).toBeInTheDocument();
-    expect(screen.getByText(/Cardiovascular stress/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Forge estimates cardiovascular training stress/i)
+    ).toBeInTheDocument();
     expect(screen.getByText("Productive")).toBeInTheDocument();
     expect(screen.getByText("Zone intelligence")).toBeInTheDocument();
     expect(screen.getByText("Combat readiness")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Acute load is the last seven days/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Smart modes do not change the underlying data/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Next targets translate the selected mode/i)
+    ).toBeInTheDocument();
     expect(screen.getByText(/Next week: 170-195 min/i)).toBeInTheDocument();
     expect(screen.getByText(/Zone 2 \/ base/i)).toBeInTheDocument();
     expect(screen.getByText("Intensity target")).toBeInTheDocument();

@@ -28,7 +28,6 @@ import {
   useIsFetching,
   useIsMutating,
   useMutation,
-  useQuery,
   useQueryClient
 } from "@tanstack/react-query";
 import {
@@ -50,7 +49,6 @@ import {
   GitBranch,
   GripVertical,
   LayoutDashboard,
-  LayoutGrid,
   Map,
   Gauge,
   HeartPulse,
@@ -103,19 +101,7 @@ import { Badge } from "@/components/ui/badge";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { ErrorState, LoadingState } from "@/components/ui/page-state";
 import { useLiveEvents } from "@/hooks/use-live-events";
-import {
-  claimTaskRun,
-  completeTaskRun,
-  createGoal,
-  createProject,
-  createTask,
-  patchGoal,
-  patchProject,
-  patchTask,
-  focusTaskRun,
-  recordSessionEvent,
-  releaseTaskRun
-} from "@/lib/api";
+import { claimTaskRun, patchTask } from "@/lib/api";
 import { ForgeApiError } from "@/lib/api-error";
 import { I18nProvider, useI18n, type TranslationKey } from "@/lib/i18n";
 import {
@@ -514,31 +500,6 @@ function requirePrimaryRoute(id: string) {
   return route;
 }
 
-const MOBILE_CORE_ROUTES = [
-  requirePrimaryRoute("overview"),
-  requirePrimaryRoute("today"),
-  requirePrimaryRoute("kanban"),
-  requirePrimaryRoute("notes")
-] as const;
-const MOBILE_MORE_ROUTES = [
-  requirePrimaryRoute("goals"),
-  requirePrimaryRoute("habits"),
-  requirePrimaryRoute("projects"),
-  requirePrimaryRoute("strategies"),
-  requirePrimaryRoute("rewards"),
-  requirePrimaryRoute("calendar"),
-  requirePrimaryRoute("knowledge-graph"),
-  requirePrimaryRoute("workbench"),
-  requirePrimaryRoute("movement"),
-  requirePrimaryRoute("sports"),
-  requirePrimaryRoute("vitals"),
-  requirePrimaryRoute("wiki"),
-  requirePrimaryRoute("psyche"),
-  requirePrimaryRoute("activity"),
-  requirePrimaryRoute("insights")
-] as const;
-
-const USER_SCOPE_STORAGE_KEY = "forge.selected-user-ids";
 const DESKTOP_NAV_STORAGE_KEY = "forge.desktop-nav-layout";
 const MOBILE_NAV_STORAGE_KEY = "forge.mobile-nav-layout";
 const NAV_MIGRATION_STORAGE_KEY = "forge.nav-layout-migrations";
@@ -546,128 +507,6 @@ const DESKTOP_SIDEBAR_METRICS_POSITION_STORAGE_KEY =
   "forge.desktop-sidebar-metrics-position";
 const DESKTOP_KNOWLEDGE_GRAPH_MIGRATION = "desktop-knowledge-graph-default-v1";
 const MOBILE_KNOWLEDGE_GRAPH_MIGRATION = "mobile-knowledge-graph-default-v1";
-
-function clamp(value: number, minimum: number, maximum: number) {
-  return Math.min(Math.max(value, minimum), maximum);
-}
-
-function interpolateNumber(progress: number, from: number, to: number) {
-  return from + (to - from) * progress;
-}
-
-function applyShellCollapseVariables(
-  target: HTMLElement | null,
-  progress: number
-) {
-  if (!target) {
-    return;
-  }
-  target.style.setProperty("--forge-shell-collapse", progress.toFixed(4));
-  target.style.setProperty(
-    "--forge-shell-desktop-header-padding-top",
-    `${interpolateNumber(progress, 18, 4)}px`
-  );
-  target.style.setProperty(
-    "--forge-shell-desktop-header-padding-bottom",
-    `${interpolateNumber(progress, 15, 4)}px`
-  );
-  target.style.setProperty(
-    "--forge-shell-desktop-title-size",
-    `${interpolateNumber(progress, 1.42, 0.96)}rem`
-  );
-  target.style.setProperty(
-    "--forge-shell-desktop-primary-translate-y",
-    `${interpolateNumber(progress, 0, 2)}px`
-  );
-  target.style.setProperty(
-    "--forge-shell-desktop-primary-scale",
-    `${interpolateNumber(progress, 1, 0.98)}`
-  );
-  target.style.setProperty(
-    "--forge-shell-desktop-secondary-opacity",
-    `${interpolateNumber(progress, 1, 0)}`
-  );
-  target.style.setProperty(
-    "--forge-shell-desktop-secondary-max-height",
-    `${interpolateNumber(progress, 176, 0)}px`
-  );
-  target.style.setProperty(
-    "--forge-shell-desktop-secondary-spacing",
-    `${interpolateNumber(progress, 14, 0)}px`
-  );
-  target.style.setProperty(
-    "--forge-shell-desktop-secondary-translate-y",
-    `${interpolateNumber(progress, 0, -18)}px`
-  );
-  target.style.setProperty(
-    "--forge-shell-mobile-header-padding-top",
-    `${interpolateNumber(progress, 14, 4)}px`
-  );
-  target.style.setProperty(
-    "--forge-shell-mobile-header-padding-bottom",
-    `${interpolateNumber(progress, 12, 4)}px`
-  );
-  target.style.setProperty(
-    "--forge-shell-mobile-title-size",
-    `${interpolateNumber(progress, 1.2, 0.9)}rem`
-  );
-  target.style.setProperty(
-    "--forge-shell-mobile-primary-translate-y",
-    `${interpolateNumber(progress, 0, 1)}px`
-  );
-  target.style.setProperty(
-    "--forge-shell-mobile-primary-scale",
-    `${interpolateNumber(progress, 1, 0.98)}`
-  );
-  target.style.setProperty(
-    "--forge-shell-mobile-copy-opacity",
-    `${interpolateNumber(progress, 1, 0)}`
-  );
-  target.style.setProperty(
-    "--forge-shell-mobile-copy-max-height",
-    `${interpolateNumber(progress, 320, 0)}px`
-  );
-  target.style.setProperty(
-    "--forge-shell-mobile-copy-translate-y",
-    `${interpolateNumber(progress, 0, -14)}px`
-  );
-  target.style.setProperty(
-    "--forge-shell-hero-padding-top",
-    `${interpolateNumber(progress, 20, 15)}px`
-  );
-  target.style.setProperty(
-    "--forge-shell-hero-padding-bottom",
-    `${interpolateNumber(progress, 20, 14)}px`
-  );
-  target.style.setProperty(
-    "--forge-shell-hero-title-translate-y",
-    `${interpolateNumber(progress, 0, -6)}px`
-  );
-  target.style.setProperty(
-    "--forge-shell-hero-title-scale",
-    `${interpolateNumber(progress, 1, 0.94)}`
-  );
-  target.style.setProperty(
-    "--forge-shell-hero-description-opacity",
-    `${interpolateNumber(progress, 1, 0.45)}`
-  );
-  target.style.setProperty(
-    "--forge-shell-hero-description-translate-y",
-    `${interpolateNumber(progress, 0, -5)}px`
-  );
-}
-
-function readWindowScrollTop() {
-  if (typeof window === "undefined") {
-    return 0;
-  }
-  return Math.max(
-    window.scrollY || 0,
-    document.scrollingElement?.scrollTop || 0,
-    document.documentElement?.scrollTop || 0,
-    document.body?.scrollTop || 0
-  );
-}
 
 function formatCompactNumber(value: number) {
   return new Intl.NumberFormat("en", {
@@ -727,42 +566,6 @@ function formatActivityTimestamp(value: string) {
     hour: "2-digit",
     minute: "2-digit"
   }).format(new Date(value));
-}
-
-function readStoredSelectedUserIds() {
-  if (typeof window === "undefined") {
-    return [];
-  }
-  try {
-    const raw = window.localStorage.getItem(USER_SCOPE_STORAGE_KEY);
-    if (!raw) {
-      return [];
-    }
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-    return parsed
-      .filter((entry): entry is string => typeof entry === "string")
-      .map((entry) => entry.trim())
-      .filter(Boolean);
-  } catch {
-    return [];
-  }
-}
-
-function writeStoredSelectedUserIds(userIds: string[]) {
-  if (typeof window === "undefined") {
-    return;
-  }
-  try {
-    window.localStorage.setItem(
-      USER_SCOPE_STORAGE_KEY,
-      JSON.stringify(Array.from(new Set(userIds)))
-    );
-  } catch {
-    return;
-  }
 }
 
 function sameUserScope(left: string[], right: string[]) {
@@ -2270,7 +2073,7 @@ function ShellFrame({
               }}
             >
               <div
-                className="flex items-center justify-between gap-2"
+                className="grid gap-2"
                 style={{
                   transform:
                     "translateY(var(--forge-shell-mobile-primary-translate-y)) scale(var(--forge-shell-mobile-primary-scale))",
@@ -2278,9 +2081,9 @@ function ShellFrame({
                   willChange: "transform"
                 }}
               >
-                <div className="flex min-w-0 flex-1 items-center gap-3">
+                <div className="flex min-w-0 items-center justify-between gap-2">
                   <div
-                    className="min-w-0 truncate font-display text-white"
+                    className="min-w-0 flex-1 truncate font-display text-white"
                     style={{
                       fontSize: "var(--forge-shell-mobile-title-size)",
                       willChange: "font-size"
@@ -2288,36 +2091,41 @@ function ShellFrame({
                   >
                     {getRouteLabel(active, t)}
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <TaskTimerRailBar
-                      runs={shell.snapshot.activeTaskRuns}
-                      tasks={shell.snapshot.tasks}
-                      generatedAt={shell.snapshot.meta.generatedAt}
-                      timeAccountingMode={settings.execution.timeAccountingMode}
-                      pending={timerPending}
-                      onOpenStartWork={() => onOpenStartWork()}
-                      onPause={onPauseRun}
-                      onFocus={onFocusRun}
-                    />
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="min-h-[2.125rem] px-2.5"
+                      onClick={() => setActionBarOpen(true)}
+                      aria-label={t("common.actionBar.title")}
+                      title={t("common.actionBar.title")}
+                    >
+                      <Search className="size-4" />
+                    </Button>
+                    <div
+                      className="inline-flex min-h-[2.125rem] max-w-[9.5rem] items-center gap-1.5 rounded-full border border-white/8 bg-white/[0.05] px-2.5 text-[12px] font-medium text-[var(--primary)]"
+                      title={`Level ${shell.snapshot.metrics.level} · ${shell.snapshot.metrics.totalXp} XP · ${shell.snapshot.metrics.streakDays} day streak`}
+                    >
+                      <Zap className="size-3.5 shrink-0" />
+                      <span className="min-w-0 truncate">
+                        L{shell.snapshot.metrics.level} ·{" "}
+                        {formatCompactNumber(shell.snapshot.metrics.totalXp)} XP
+                        · {shell.snapshot.metrics.streakDays}d
+                      </span>
+                    </div>
                   </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-1.5">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="min-h-[2.125rem] px-2.5"
-                    onClick={() => setActionBarOpen(true)}
-                  >
-                    <Search className="size-4" />
-                  </Button>
-                  <div className="inline-flex min-h-[2.125rem] items-center gap-1.5 rounded-full border border-white/8 bg-white/[0.05] px-2.5 text-[12px] font-medium text-[var(--primary)]">
-                    <Zap className="size-3.5 shrink-0" />
-                    <span className="max-w-[9rem] truncate">
-                      L{shell.snapshot.metrics.level} ·{" "}
-                      {formatCompactNumber(shell.snapshot.metrics.totalXp)} XP ·{" "}
-                      {shell.snapshot.metrics.streakDays}d
-                    </span>
-                  </div>
+                <div className="min-w-0">
+                  <TaskTimerRailBar
+                    runs={shell.snapshot.activeTaskRuns}
+                    tasks={shell.snapshot.tasks}
+                    generatedAt={shell.snapshot.meta.generatedAt}
+                    timeAccountingMode={settings.execution.timeAccountingMode}
+                    pending={timerPending}
+                    onOpenStartWork={() => onOpenStartWork()}
+                    onPause={onPauseRun}
+                    onFocus={onFocusRun}
+                  />
                 </div>
               </div>
 
@@ -2725,16 +2533,13 @@ export function AppShell() {
     };
   }, []);
 
-  const [createTaskMutation, createTaskMutationState] = useCreateTaskMutation();
-  const [createGoalMutation, createGoalMutationState] = useCreateGoalMutation();
-  const [createProjectMutation, createProjectMutationState] =
-    useCreateProjectMutation();
-  const [patchGoalMutation, patchGoalMutationState] = usePatchGoalMutation();
-  const [patchProjectMutation, patchProjectMutationState] =
-    usePatchProjectMutation();
-  const [patchTaskMutation, patchTaskMutationState] = usePatchTaskMutation();
-  const [patchTaskStatusMutation, patchTaskStatusMutationState] =
-    usePatchTaskStatusMutation();
+  const [createTaskMutation] = useCreateTaskMutation();
+  const [createGoalMutation] = useCreateGoalMutation();
+  const [createProjectMutation] = useCreateProjectMutation();
+  const [patchGoalMutation] = usePatchGoalMutation();
+  const [patchProjectMutation] = usePatchProjectMutation();
+  const [patchTaskMutation] = usePatchTaskMutation();
+  const [patchTaskStatusMutation] = usePatchTaskStatusMutation();
   const [claimTaskRunMutation, claimTaskRunMutationState] =
     useClaimTaskRunMutation();
   const [focusTaskRunMutation, focusTaskRunMutationState] =

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { getEntityVisual, type EntityKind } from "@/lib/entity-visuals";
 import { cn } from "@/lib/utils";
 
@@ -59,6 +60,9 @@ export function PageHero({
   title,
   titleText,
   description,
+  helpTitle,
+  helpContent,
+  helpLabel,
   badge,
   actions,
   copyMode = "title_only"
@@ -68,6 +72,9 @@ export function PageHero({
   title: ReactNode;
   titleText?: string;
   description: ReactNode;
+  helpTitle?: string;
+  helpContent?: ReactNode;
+  helpLabel?: string;
   badge?: ReactNode;
   actions?: ReactNode;
   copyMode?: HeroCopyMode;
@@ -80,6 +87,10 @@ export function PageHero({
     entityKind,
     copyMode
   });
+  const resolvedTitleText =
+    titleText ?? (typeof title === "string" ? title : "this page");
+  const resolvedHelpContent =
+    helpContent ?? (typeof description === "string" ? description : null);
   const hasHeaderMeta = Boolean(entityVisual || resolvedEyebrow || badge);
   return (
     <header
@@ -128,17 +139,32 @@ export function PageHero({
         ) : null}
         <div
           className={cn(
-            "min-w-0 max-w-4xl text-[clamp(1.85rem,3.5vw,4rem)] font-medium leading-[0.92] text-white",
+            "flex min-w-0 max-w-4xl items-start gap-2",
             hasHeaderMeta ? "mt-3" : ""
           )}
-          style={{
-            transform:
-              "translateY(var(--forge-shell-hero-title-translate-y)) scale(var(--forge-shell-hero-title-scale))",
-            transformOrigin: "top left",
-            willChange: "transform"
-          }}
         >
-          {title}
+          <div
+            className="min-w-0 text-[clamp(1.85rem,3.5vw,4rem)] font-medium leading-[0.92] text-white"
+            style={{
+              transform:
+                "translateY(var(--forge-shell-hero-title-translate-y)) scale(var(--forge-shell-hero-title-scale))",
+              transformOrigin: "top left",
+              willChange: "transform"
+            }}
+          >
+            {title}
+          </div>
+          {resolvedHelpContent ? (
+            <InfoTooltip
+              className="mt-2 shrink-0"
+              label={
+                helpLabel ??
+                `Explain what the ${resolvedTitleText} page shows and how to interpret it`
+              }
+              title={helpTitle ?? `${resolvedTitleText} explained`}
+              content={resolvedHelpContent}
+            />
+          ) : null}
         </div>
         <div
           className="mt-2 min-w-0 max-w-3xl text-[14px] leading-6 text-white/58 sm:text-[15px]"
