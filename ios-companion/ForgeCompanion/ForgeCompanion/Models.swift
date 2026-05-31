@@ -833,15 +833,26 @@ struct HistoricalWorkoutImportStatus: Equatable {
         guard let totalWorkouts else {
             return nil
         }
-        return max(0, totalWorkouts - uploadedWorkoutSummaries)
+        return max(0, totalWorkouts - completedWorkoutSummaries)
+    }
+
+    var completedWorkoutSummaries: Int {
+        guard let totalWorkouts else {
+            return uploadedWorkoutSummaries
+        }
+        return min(totalWorkouts, max(0, uploadedWorkoutSummaries))
     }
 
     var progressFraction: Double {
         guard let totalWorkouts, totalWorkouts > 0 else {
             return uploadedWorkoutSummaries > 0 ? 1 : 0
         }
-        return min(1, max(0, Double(uploadedWorkoutSummaries) / Double(totalWorkouts)))
+        return min(1, max(0, Double(completedWorkoutSummaries) / Double(totalWorkouts)))
     }
+}
+
+enum HealthSyncEvidenceContract {
+    static let workoutRawEvidenceVersion = "healthkit-workout-raw-bulk-v4"
 }
 
 struct CompanionSyncUploadStatus {

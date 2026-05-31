@@ -1272,7 +1272,7 @@ actor HealthSyncStore {
             ),
             syncCursor: [
                 "workoutImportedAt": .string(isoString(Date())),
-                "rawEvidenceVersion": .string("healthkit-workout-raw-bulk-v4"),
+                "rawEvidenceVersion": .string(HealthSyncEvidenceContract.workoutRawEvidenceVersion),
                 "phoneMappingMode": .string("summary_plus_bulk_evidence")
             ],
             links: [],

@@ -1,9 +1,10 @@
-Forge Companion 1.0.70 forces historical workout heart-rate and route evidence
-to be replayed with the latest evidence contract.
+Forge Companion 1.0.71 keeps historical workout repair visible inside the native
+iOS menu and Settings without covering the Forge web app.
 
-Forge no longer accepts older sparse workout evidence versions as complete, so
-opening the app can trigger a real historical workout evidence repair instead of
-silently skipping already-uploaded workout summaries.
+The historical workout progress display now clamps replayed workout summaries to
+the backend-reported total, so repaired sessions cannot show more uploaded
+workouts than found.
 
-The historical import progress panels from 1.0.69 remain visible on the main
-paired screen, top-right menu, and Settings while this repair runs.
+The top-right native menu button is more visible during historical repair, and
+the app continues using the current raw workout evidence contract for heart-rate
+and route replay.

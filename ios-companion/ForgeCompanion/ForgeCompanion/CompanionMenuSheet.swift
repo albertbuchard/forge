@@ -33,8 +33,9 @@ struct CompanionMenuSheet: View {
             }
 
             if appModel.syncUploadStatus.shouldShowHistoricalWorkoutImportPanel {
-                HistoricalWorkoutImportCompactPanel(
+                CompanionHistoricalWorkoutImportPanel(
                     status: appModel.syncUploadStatus,
+                    style: .compact,
                     syncInFlight: appModel.syncUploadStatus.isSyncing
                 )
             }
@@ -148,106 +149,6 @@ struct CompanionMenuSheet: View {
             .foregroundStyle(destructive ? CompanionStyle.destructive : CompanionStyle.textPrimary)
         }
         .buttonStyle(CompanionGhostButtonStyle(destructive: destructive))
-    }
-}
-
-private struct SyncActivityIndicator: View {
-    let size: CGFloat
-    let color: Color
-
-    @State private var isRotating = false
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .stroke(color.opacity(0.18), lineWidth: 2)
-            Circle()
-                .trim(from: 0.08, to: 0.76)
-                .stroke(
-                    color,
-                    style: StrokeStyle(lineWidth: 2.4, lineCap: .round)
-                )
-                .rotationEffect(.degrees(isRotating ? 360 : 0))
-        }
-        .frame(width: size, height: size)
-        .onAppear {
-            withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) {
-                isRotating = true
-            }
-        }
-    }
-}
-
-private struct HistoricalWorkoutImportCompactPanel: View {
-    let status: CompanionSyncUploadStatus
-    let syncInFlight: Bool
-
-    var body: some View {
-        let progress = status.historicalWorkoutImport
-
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 9) {
-                if syncInFlight {
-                    SyncActivityIndicator(size: 17, color: CompanionStyle.accentStrong)
-                } else {
-                    Image(systemName: "clock.arrow.circlepath")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(CompanionStyle.accentStrong)
-                }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Workout history import")
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
-                        .foregroundStyle(CompanionStyle.textPrimary)
-                    Text(status.message ?? "Repairing historical workout evidence")
-                        .font(.system(size: 10, weight: .semibold, design: .rounded))
-                        .foregroundStyle(CompanionStyle.textMuted)
-                        .lineLimit(2)
-                }
-            }
-
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(Color.white.opacity(0.10))
-                    Capsule()
-                        .fill(CompanionStyle.accentStrong)
-                        .frame(width: max(8, proxy.size.width * (progress?.progressFraction ?? 0)))
-                }
-            }
-            .frame(height: 7)
-
-            Text(compactProgressLabel(progress))
-                .font(.system(size: 10, weight: .bold, design: .rounded))
-                .foregroundStyle(CompanionStyle.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(CompanionStyle.accent.opacity(0.14))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(CompanionStyle.accentStrong.opacity(0.18), lineWidth: 1)
-                )
-        )
-        .animation(.easeInOut(duration: 0.22), value: progress?.uploadedWorkoutSummaries ?? 0)
-        .animation(.easeInOut(duration: 0.22), value: progress?.uploadedTimeSeriesSamples ?? 0)
-        .animation(.easeInOut(duration: 0.22), value: progress?.uploadedRoutePoints ?? 0)
-    }
-
-    private func compactProgressLabel(_ progress: HistoricalWorkoutImportStatus?) -> String {
-        guard let progress else {
-            return "Indexing the full workout library"
-        }
-        let workouts = progress.totalWorkouts.map {
-            "\(formatCount(progress.uploadedWorkoutSummaries))/\(formatCount($0)) workouts"
-        } ?? "\(formatCount(progress.indexedWorkouts)) workouts indexed"
-        return "\(workouts) - \(formatCount(progress.uploadedTimeSeriesSamples)) time-series - \(formatCount(progress.uploadedRoutePoints)) routes"
-    }
-
-    private func formatCount(_ value: Int) -> String {
-        value.formatted(.number)
     }
 }
 
@@ -410,7 +311,7 @@ struct CompanionSettingsSheet: View {
                 label: {
                     HStack(spacing: 10) {
                         if syncInFlight {
-                            SyncActivityIndicator(
+                            CompanionSyncActivityIndicator(
                                 size: 17,
                                 color: Color(red: 13 / 255, green: 20 / 255, blue: 37 / 255)
                             )
@@ -433,7 +334,11 @@ struct CompanionSettingsSheet: View {
     private var syncStatusPanel: some View {
         let status = appModel.syncUploadStatus
         if status.shouldShowHistoricalWorkoutImportPanel {
-            historicalSyncStatusPanel(status)
+            CompanionHistoricalWorkoutImportPanel(
+                status: status,
+                style: .settings,
+                syncInFlight: syncInFlight
+            )
         } else {
             standardSyncStatusPanel(status)
         }
@@ -443,7 +348,7 @@ struct CompanionSettingsSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 10) {
                 if syncInFlight {
-                    SyncActivityIndicator(size: 18, color: CompanionStyle.accentStrong)
+                    CompanionSyncActivityIndicator(size: 18, color: CompanionStyle.accentStrong)
                 } else {
                     Image(systemName: appModel.latestError == nil ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                         .font(.system(size: 17, weight: .semibold))
@@ -471,201 +376,6 @@ struct CompanionSettingsSheet: View {
                         .stroke(Color.white.opacity(0.07), lineWidth: 1)
                 )
         )
-    }
-
-    private func historicalSyncStatusPanel(_ status: CompanionSyncUploadStatus) -> some View {
-        let progress = status.historicalWorkoutImport
-        let progressFraction = progress?.progressFraction ?? 0
-        let progressLabel = historicalProgressLabel(progress)
-
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .center, spacing: 10) {
-                ZStack {
-                    Circle()
-                        .fill(CompanionStyle.accentStrong.opacity(0.18))
-                    Image(systemName: "clock.arrow.circlepath")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(CompanionStyle.accentStrong)
-                }
-                .frame(width: 30, height: 30)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Workout history import")
-                        .font(.system(size: 14, weight: .bold, design: .rounded))
-                        .foregroundStyle(CompanionStyle.textPrimary)
-                    Text(syncInFlight ? "One-time backfill in progress" : "One-time backfill")
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .foregroundStyle(CompanionStyle.textMuted)
-                }
-
-                Spacer(minLength: 8)
-
-                Text(syncInFlight ? "Syncing" : "Ready")
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color(red: 13 / 255, green: 20 / 255, blue: 37 / 255))
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 5)
-                    .background(CompanionStyle.accentStrong, in: Capsule())
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                GeometryReader { proxy in
-                    ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(Color.white.opacity(0.10))
-                        Capsule()
-                            .fill(
-                                LinearGradient(
-                                    colors: [
-                                        CompanionStyle.accentStrong,
-                                        Color(red: 0.39, green: 0.84, blue: 0.66)
-                                    ],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            .frame(width: max(8, proxy.size.width * progressFraction))
-                    }
-                }
-                .frame(height: 8)
-
-                Text(progressLabel)
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundStyle(CompanionStyle.textSecondary)
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                historicalMetricRow(
-                    "Found",
-                    value: historicalFoundLabel(progress),
-                    systemName: "figure.run"
-                )
-                historicalMetricRow(
-                    "Uploaded",
-                    value: historicalUploadedLabel(progress),
-                    systemName: "arrow.up.circle"
-                )
-                historicalMetricRow(
-                    "Evidence",
-                    value: historicalEvidenceLabel(progress),
-                    systemName: "waveform.path.ecg"
-                )
-                historicalMetricRow(
-                    "Routes",
-                    value: historicalRouteLabel(progress),
-                    systemName: "map"
-                )
-                if let speedSummary = status.speedSummary {
-                    historicalMetricRow("Speed", value: speedSummary, systemName: "speedometer")
-                }
-                historicalMetricRow("Transfer", value: status.transferSummary, systemName: "externaldrive")
-            }
-        }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            CompanionStyle.accent.opacity(0.18),
-                            Color.white.opacity(0.045)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(CompanionStyle.accentStrong.opacity(0.18), lineWidth: 1)
-                )
-        )
-        .animation(.easeInOut(duration: 0.22), value: progress?.uploadedWorkoutSummaries ?? 0)
-        .animation(.easeInOut(duration: 0.22), value: progress?.uploadedTimeSeriesSamples ?? 0)
-        .animation(.easeInOut(duration: 0.22), value: progress?.uploadedRoutePoints ?? 0)
-    }
-
-    private func historicalMetricRow(
-        _ label: String,
-        value: String,
-        systemName: String
-    ) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Image(systemName: systemName)
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(CompanionStyle.accentStrong)
-                .frame(width: 15)
-
-            Text(label)
-                .font(.system(size: 11, weight: .bold, design: .rounded))
-                .foregroundStyle(CompanionStyle.textMuted)
-
-            Spacer(minLength: 8)
-
-            Text(value)
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundStyle(CompanionStyle.textSecondary)
-                .multilineTextAlignment(.trailing)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private func historicalProgressLabel(_ progress: HistoricalWorkoutImportStatus?) -> String {
-        guard let progress else {
-            return "Indexing the full workout library"
-        }
-        if let total = progress.totalWorkouts {
-            let remaining = max(0, total - progress.uploadedWorkoutSummaries)
-            return "\(formatCount(progress.uploadedWorkoutSummaries))/\(formatCount(total)) workouts uploaded • \(formatCount(remaining)) left"
-        }
-        return "\(formatCount(progress.indexedWorkouts)) workouts indexed"
-    }
-
-    private func historicalFoundLabel(_ progress: HistoricalWorkoutImportStatus?) -> String {
-        guard let progress else {
-            return "Counting workouts"
-        }
-        if let total = progress.totalWorkouts {
-            return "\(formatCount(total)) total workouts"
-        }
-        return "\(formatCount(progress.indexedWorkouts)) found so far"
-    }
-
-    private func historicalUploadedLabel(_ progress: HistoricalWorkoutImportStatus?) -> String {
-        guard let progress else {
-            return "Waiting for first workout chunk"
-        }
-        var parts = ["\(formatCount(progress.uploadedWorkoutSummaries)) workouts"]
-        if progress.uploadedChunks > 0 {
-            parts.append("\(formatCount(progress.uploadedChunks)) chunks")
-        }
-        if progress.resumedChunks > 0 {
-            parts.append("\(formatCount(progress.resumedChunks)) resumed")
-        }
-        return parts.joined(separator: " • ")
-    }
-
-    private func historicalEvidenceLabel(_ progress: HistoricalWorkoutImportStatus?) -> String {
-        guard let progress else {
-            return "Waiting for HR and metric evidence"
-        }
-        let target = progress.targetTimeSeriesSamples > 0
-            ? " / \(formatCount(progress.targetTimeSeriesSamples))"
-            : ""
-        return "\(formatCount(progress.uploadedTimeSeriesSamples))\(target) time-series • \(formatCount(progress.targetHeartRateSamples)) HR"
-    }
-
-    private func historicalRouteLabel(_ progress: HistoricalWorkoutImportStatus?) -> String {
-        guard let progress else {
-            return "Waiting for route evidence"
-        }
-        let target = progress.targetRoutePoints > 0
-            ? " / \(formatCount(progress.targetRoutePoints))"
-            : ""
-        return "\(formatCount(progress.uploadedRoutePoints))\(target) route points"
-    }
-
-    private func formatCount(_ value: Int) -> String {
-        value.formatted(.number)
     }
 
     private var syncLogDisclosure: some View {
