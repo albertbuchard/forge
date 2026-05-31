@@ -5178,6 +5178,8 @@ export function buildOpenApiDocument() {
             "recentIntensityDistribution",
             "dailyLoad",
             "weeklyLoad",
+            "zoneTimeSeries",
+            "trainingIntelligence",
             "activityBreakdown",
             "vitalsTrend",
             "sessionSignals",
@@ -5197,6 +5199,17 @@ export function buildOpenApiDocument() {
             }),
             dailyLoad: arrayOf({ type: "object", additionalProperties: true }),
             weeklyLoad: arrayOf({ type: "object", additionalProperties: true }),
+            zoneTimeSeries: {
+                type: "object",
+                additionalProperties: false,
+                required: ["daily", "weekly", "monthly"],
+                properties: {
+                    daily: arrayOf({ type: "object", additionalProperties: true }),
+                    weekly: arrayOf({ type: "object", additionalProperties: true }),
+                    monthly: arrayOf({ type: "object", additionalProperties: true })
+                }
+            },
+            trainingIntelligence: { type: "object", additionalProperties: true },
             activityBreakdown: arrayOf({ type: "object", additionalProperties: true }),
             vitalsTrend: arrayOf({ type: "object", additionalProperties: true }),
             sessionSignals: arrayOf({ type: "object", additionalProperties: true }),
