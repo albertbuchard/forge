@@ -1,10 +1,127 @@
 # Forge Question Flow Improvement Cycles
 
-Latest run date: 2026-05-28
+Latest run date: 2026-05-31
 
 This report records the three-cycle evaluation for Forge agent question flows. The
 same full flow set was tested in each cycle so improvements were kept only where they
 helped the entity or specialized surface.
+
+## 2026-05-31 Automation Pass
+
+Setup verification:
+
+- Read the prior automation memory and kept the existing Forge data root intact.
+- Confirmed the monorepo and Forge worktree were on `main` before implementation.
+- Confirmed OpenClaw config still points `forge-openclaw-plugin` at
+  `/Users/omarclaw/Documents/aurel-monorepo/data/forge` and the live Forge process on
+  `127.0.0.1:4317` had
+  `/Users/omarclaw/Documents/aurel-monorepo/data/forge/forge.sqlite` open. No Forge
+  data root was deleted, moved, merged, or overwritten.
+- Built and reinstalled the repo-local OpenClaw plugin with
+  `npm run build:openclaw-plugin`,
+  `openclaw plugins install --link --dangerously-force-unsafe-install ./openclaw-plugin`,
+  `openclaw plugins enable forge-openclaw-plugin`, and `openclaw gateway restart`.
+- Built the Hermes packaged runtime with
+  `node ./plugins/forge-hermes/scripts/build-package-runtime.mjs` and reinstalled the
+  Hermes plugin editable from `./plugins/forge-hermes`.
+- Verified OpenClaw loads the repo-local plugin path, and Hermes imports
+  `forge-hermes-plugin 0.2.95` from the repo-local editable package.
+- Verified live onboarding and OpenAPI before the cycles: 42 entity catalog entries,
+  28 batch-CRUD entities, 14 read models, 23 Movement route keys, four Life Force
+  route keys under both `lifeForce` and `life_force`, 16 Workbench route keys, and
+  182 OpenAPI paths at `/api/v1/openapi.json`.
+
+Every cycle retested the current full flow set: goal, project, strategy, task, habit,
+tag, note, insight, task_run, work_adjustment, calendar_event,
+work_block_template, task_timebox, calendar_connection, preference_catalog,
+preference_catalog_item, preference_context, preference_item,
+preference_judgment, preference_signal, questionnaire_instrument,
+questionnaire_run, self_observation, sleep_session, sleep_overview,
+workout_session, sports_overview, training_load, wiki_page, movement, life_force,
+workbench, psyche_value, behavior_pattern, behavior, belief_entry, mode_profile,
+mode_guide_session, flashcard, trigger_report, event_type, and
+emotion_definition.
+
+Specialized route scenarios covered Movement day, month, all-time, timeline, places,
+trip detail, selected-span aggregate, settings, saved overlays, known places,
+automatic-box repair, stay/trip/point repair actions; Life Force overview, profile
+updates, weekday templates, and fatigue signals; and Workbench flow catalog, flow
+CRUD, execution, run history, published outputs, node results, latest node outputs,
+one-off runs, and chat.
+
+Cycle 1 tested the full add, update, review, navigation, correction, and specialized
+route-selection matrix after the local plugin refresh. Strengths: the main
+conversation rules already pushed agents toward missing-only questions, active
+listening, Psyche functional analysis, and specialized routing for Movement, Life
+Force, and Workbench. Weakness: several agent-facing skill examples did not show how
+to call dedicated Movement place CRUD, saved-overlay update/delete, or Workbench
+run-node and node-result reads, so a new agent still had room to guess.
+
+What changed in Cycle 1:
+
+- Added route-key examples for Movement `placeCreate`, `placeUpdate`,
+  `userBoxUpdate`, and `userBoxDelete`.
+- Added route-key examples for Workbench `runNodes` and `nodeResult`.
+- Added parity assertions so Codex and Hermes skill surfaces keep those dedicated
+  route examples instead of falling back to vague endpoint guessing.
+
+What happened after retesting Cycle 1:
+
+- Re-ran the full question-flow simulation, quality, onboarding contract, and
+  skill-playbook parity suite. All 39 focused tests passed.
+- The change improved API-path clarity for Movement and Workbench without changing
+  the user-facing question style, so it was kept.
+
+Cycle 2 retested the same full flow matrix with special attention to records that are
+reflective but not always Psyche records. Strengths: Psyche entities remained strong,
+hypothesis-capable, and not minimized; normal stored entities stayed batch-first; and
+action workflows kept their dedicated routes. Weakness: questionnaire runs,
+self-observations, reflective notes/wiki pages, sleep and workout enrichments, and
+preference signals needed a clearer middle lane: active listening without turning
+every reflective fact into Psyche intake or a form-fill.
+
+What changed in Cycle 2:
+
+- Added a "Reflection-sensitive non-Psyche records" section to the shared entity
+  conversation playbook.
+- Synced that playbook into OpenClaw, Codex, Hermes source, and Hermes packaged
+  skill surfaces.
+- Added skill guidance telling agents to ask what the reflection should help the user
+  understand, decide, notice, remember, or change later, while preserving exact route
+  posture: batch CRUD for normal stored records, questionnaire-run actions for answer
+  lifecycle, self-observation calendar plus observed-note writes, and wiki routes for
+  wiki pages.
+- Added regression assertions for the new reflection-sensitive guidance.
+
+What happened after retesting Cycle 2:
+
+- Re-ran the full focused suite. All 39 focused tests passed.
+- The change improved reflective non-Psyche flow quality while leaving Psyche and
+  specialized-surface routing intact, so it was kept.
+
+Cycle 3 retested every flow again against the live onboarding contract. Strengths:
+the skill/playbook files now expressed the right reflective middle lane, and all
+specialized Movement, Life Force, and Workbench route families remained explicit.
+Weakness: live `/api/v1/agents/onboarding` did not yet expose the new
+reflection-sensitive guidance, so an agent relying only on live onboarding could miss
+it.
+
+What changed in Cycle 3:
+
+- Added the reflection-sensitive non-Psyche record rule to the live onboarding
+  `conversationRules` payload in `server/src/app.ts`.
+- Added onboarding contract assertions requiring that live onboarding mention
+  `questionnaire_run`, `self_observation`, `wiki_page`, `sleep_session`,
+  `workout_session`, the "understand, decide, notice, remember, or change later"
+  question, and the correct batch/action/self-observation/wiki API postures.
+
+What happened after retesting Cycle 3:
+
+- Re-ran the onboarding contract test alone first. All nine onboarding tests passed.
+- Re-ran the full question-flow simulation, quality, onboarding contract, and
+  skill-playbook parity suite. All 39 focused tests passed.
+- The live-contract change aligned onboarding with the skills and did not make any
+  entity or specialized surface worse, so it was kept and nothing was reverted.
 
 ## 2026-05-28 Automation Pass
 

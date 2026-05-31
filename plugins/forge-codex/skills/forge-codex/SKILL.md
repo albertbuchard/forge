@@ -76,9 +76,17 @@ Concrete route-key examples for internal use:
   `{"routeKey":"settings","query":{"userIds":["user_operator"]}}`
 - Movement settings update:
   `{"routeKey":"settingsUpdate","body":{"trackingEnabled":true,"publishMode":"draft_review","retentionMode":"aggregates_only"}}`
+- Movement known-place creation:
+  `{"routeKey":"placeCreate","body":{"label":"Home","centerLat":46.2044,"centerLon":6.1432,"radiusMeters":120,"userId":"user_operator","note":"Primary home boundary for future time-in-place reads."}}`
+- Movement known-place update:
+  `{"routeKey":"placeUpdate","pathParams":{"id":"place_home"},"body":{"label":"Home office","radiusMeters":90,"note":"Tighten the boundary so clinic visits do not count as home."}}`
 - Movement missing-stay correction:
   first `{"routeKey":"userBoxPreflight","body":{"kind":"stay","startedAt":"2026-05-06T13:00:00.000Z","endedAt":"2026-05-06T15:00:00.000Z","placeLabel":"Home","userId":"user_operator"}}`,
   then `{"routeKey":"userBoxCreate","body":{"kind":"stay","startedAt":"2026-05-06T13:00:00.000Z","endedAt":"2026-05-06T15:00:00.000Z","placeLabel":"Home","userId":"user_operator","note":"Manual correction after reviewing the timeline."}}`
+- Movement saved-overlay update:
+  `{"routeKey":"userBoxUpdate","pathParams":{"id":"box_manual_123"},"body":{"endedAt":"2026-05-06T15:30:00.000Z","note":"Extended after checking the timeline detail."}}`
+- Movement saved-overlay delete:
+  `{"routeKey":"userBoxDelete","pathParams":{"id":"box_manual_123"}}`
 - Life Force overview:
   `{"routeKey":"overview"}`
 - Life Force profile edit:
@@ -99,6 +107,10 @@ Concrete route-key examples for internal use:
   `{"routeKey":"deleteFlow","pathParams":{"id":"flow_research_digest"}}`
 - Workbench run detail:
   `{"routeKey":"runDetail","pathParams":{"id":"flow_research_digest","runId":"run_123"}}`
+- Workbench run nodes:
+  `{"routeKey":"runNodes","pathParams":{"id":"flow_research_digest","runId":"run_123"}}`
+- Workbench node result:
+  `{"routeKey":"nodeResult","pathParams":{"id":"flow_research_digest","runId":"run_123","nodeId":"node_summary"}}`
 - Workbench published output:
   `{"routeKey":"publishedOutput","pathParams":{"id":"flow_research_digest"}}`
 - Workbench latest node output:
@@ -183,6 +195,12 @@ Surface rule:
   `work_adjustment`, `preference_judgment`, `preference_signal`, and specialized
   `movement`, `life_force`, or `workbench` work so Codex starts from the user's real
   job before choosing the route family.
+- Treat questionnaire runs, self-observations, reflective notes, wiki pages,
+  sleep/workout enrichment, and preference signals as reflection-sensitive records:
+  ask what the record should help the user understand, decide, notice, remember, or
+  change later, then choose the right route. Do not flatten them into forms, but also
+  do not automatically turn them into full Psyche intake unless a belief, mode,
+  trigger report, or behavior pattern clearly emerges.
 - When the operation is not already explicit, identify the job first:
   add, update, review, compare, navigate, link, or run. Skip that meta question
   when the action is already obvious from the user's wording.

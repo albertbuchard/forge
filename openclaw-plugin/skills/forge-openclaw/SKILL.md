@@ -239,6 +239,7 @@ Entity conversation rule:
 - When updating an entity, start with what is changing, what should stay true, and what prompted the update now.
 - When enough is clear, briefly summarize what you heard in the user's own language before asking for the last missing structural detail.
 - Treat `userId` and human/bot assignees as accountability and scope, not as opening form fields. Ask whose human or bot record it is only when ownership changes visibility, review scope, collaboration, automation behavior, or later filtering; for read requests, ask user scope only when the answer would differ across owners.
+- Treat questionnaire runs, self-observations, reflective notes, wiki pages, sleep/workout enrichment, and preference signals as reflection-sensitive records: ask what the record should help the user understand, decide, notice, remember, or change later, then choose the right route. Do not flatten them into forms, but also do not automatically turn them into full Psyche intake unless a belief, mode, trigger report, or behavior pattern clearly emerges.
 - The quick intake prompts later in this file are fallback checkpoints, not a script to read aloud.
 
 Forge data location rule:

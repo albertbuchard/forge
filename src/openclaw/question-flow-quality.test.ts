@@ -140,6 +140,19 @@ describe("question flow quality coverage", () => {
 
   it("keeps abstract and reusable records grounded in future use before label wording", () => {
     expect(entityPlaybook).toMatch(/## Abstract And Reusable Record Moves/);
+    expect(entityPlaybook).toMatch(/## Reflection-sensitive non-Psyche records/);
+    expect(entityPlaybook).toMatch(
+      /questionnaire_instrument[\s\S]*questionnaire_run[\s\S]*self_observation[\s\S]*sleep_session[\s\S]*workout_session/i
+    );
+    expect(entityPlaybook).toMatch(
+      /what the reflection should help the user understand, decide,\s+notice, remember, or change later/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Do not turn answer collection into generic Psyche intake[\s\S]*belief, mode, trigger report, or behavior pattern clearly emerges/i
+    );
+    expect(entityPlaybook).toMatch(
+      /questionnaire_instrument[\s\S]*shared batch routes[\s\S]*questionnaire_run[\s\S]*questionnaire run actions[\s\S]*self_observation[\s\S]*note-backed[\s\S]*wiki_page[\s\S]*wiki routes/i
+    );
     expect(entityPlaybook).toMatch(/## Name, Define, Connect/);
     expect(entityPlaybook).toMatch(
       /Start from the future use, decision, or repeated moment the record should clarify/i

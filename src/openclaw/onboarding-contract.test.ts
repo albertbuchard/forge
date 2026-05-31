@@ -1091,6 +1091,12 @@ describe("forge onboarding contract", () => {
       /normal stored Preferences and questionnaire records[\s\S]*batch CRUD by default/i
     );
     expect(onboarding.conversationRules.join(" ")).toMatch(
+      /reflection-sensitive non-Psyche records[\s\S]*questionnaire_run[\s\S]*self_observation[\s\S]*wiki_page[\s\S]*sleep_session[\s\S]*workout_session/i
+    );
+    expect(onboarding.conversationRules.join(" ")).toMatch(
+      /understand, decide, notice, remember, or change later[\s\S]*batch CRUD[\s\S]*questionnaire run actions[\s\S]*self-observation calendar reads[\s\S]*wiki routes/i
+    );
+    expect(onboarding.conversationRules.join(" ")).toMatch(
       /Self-observation is not the default container[\s\S]*behavior_pattern for a recurring loop and functional analysis/i
     );
     expect(onboarding.conversationRules.join(" ")).toMatch(

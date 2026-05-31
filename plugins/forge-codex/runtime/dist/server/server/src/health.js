@@ -2750,20 +2750,34 @@ function nestedRecord(value) {
         ? value
         : {};
 }
+const CURRENT_WORKOUT_RAW_EVIDENCE_VERSION = "healthkit-workout-raw-bulk-v4";
 function expectedWorkoutEvidenceCounts(derived) {
     const syncCursor = nestedRecord(derived.syncCursor);
     const captureQuality = nestedRecord(derived.captureQuality);
+    const captureQualityFlags = Array.isArray(captureQuality.flags)
+        ? captureQuality.flags.filter((flag) => typeof flag === "string")
+        : [];
+    const summaryOnlyExport = captureQuality.status === "summary_exported" ||
+        captureQualityFlags.includes("server_side_evidence_derivation");
     const syncTimeSeriesCount = finiteNumberFromUnknown(syncCursor.timeSeriesSampleCount);
-    const captureHeartRateCount = finiteNumberFromUnknown(captureQuality.heartRateSamples);
+    const captureHeartRateCount = summaryOnlyExport
+        ? null
+        : finiteNumberFromUnknown(captureQuality.heartRateSamples);
     const syncRoutePointCount = finiteNumberFromUnknown(syncCursor.routePointCount);
-    const captureRoutePointCount = finiteNumberFromUnknown(captureQuality.routePoints);
+    const captureRoutePointCount = summaryOnlyExport
+        ? null
+        : finiteNumberFromUnknown(captureQuality.routePoints);
     const expectedTimeSeriesSamples = Math.max(0, Math.ceil(Math.max(syncTimeSeriesCount ?? 0, captureHeartRateCount ?? 0)));
     const expectedHeartRateSamples = Math.max(0, Math.ceil(captureHeartRateCount ?? 0));
     const expectedRoutePoints = Math.max(0, Math.ceil(Math.max(syncRoutePointCount ?? 0, captureRoutePointCount ?? 0)));
+    const rawEvidenceVersion = typeof syncCursor.rawEvidenceVersion === "string"
+        ? syncCursor.rawEvidenceVersion
+        : "";
     return {
         expectedTimeSeriesSamples,
         expectedHeartRateSamples,
         expectedRoutePoints,
+        hasCurrentRawEvidenceVersion: rawEvidenceVersion === CURRENT_WORKOUT_RAW_EVIDENCE_VERSION,
         hasEvidenceMetadata: syncTimeSeriesCount !== null ||
             captureHeartRateCount !== null ||
             syncRoutePointCount !== null ||
@@ -2816,7 +2830,8 @@ function mobileHealthWorkoutImportState(userId) {
         const actualHeartRateCount = Math.max(0, row.heart_rate_count ?? 0);
         const actualRoutePointCount = Math.max(0, row.route_point_count ?? 0);
         const evidenceComplete = evidenceCounts.hasEvidenceMetadata
-            ? actualTimeSeriesCount >= evidenceCounts.expectedTimeSeriesSamples &&
+            ? evidenceCounts.hasCurrentRawEvidenceVersion &&
+                actualTimeSeriesCount >= evidenceCounts.expectedTimeSeriesSamples &&
                 actualHeartRateCount >= evidenceCounts.expectedHeartRateSamples &&
                 actualRoutePointCount >= evidenceCounts.expectedRoutePoints
             : false;
