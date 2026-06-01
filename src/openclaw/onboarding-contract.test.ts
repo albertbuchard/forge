@@ -820,6 +820,9 @@ describe("forge onboarding contract", () => {
         ),
         readModelWriteRule: expect.stringMatching(
           /Self-observation is note-backed[\s\S]*Sleep and workout sessions stay on batch CRUD by default/i
+        ),
+        psycheHypothesisRule: expect.stringMatching(
+          /concrete Psyche example[\s\S]*user's own example[\s\S]*protection, prediction, relief, or cost[\s\S]*Do not present schema, mode, belief, or pattern language as a verdict/i
         )
       })
     );
@@ -1159,7 +1162,7 @@ describe("forge onboarding contract", () => {
       playbookByFocus.get("questionnaire_run")?.askSequence.join(" ")
     ).toMatch(/dedicated questionnaire run start, read, update, and complete routes/i);
     expect(playbookByFocus.get("questionnaire_run")?.openingQuestion).toMatch(
-      /start, continue, review, or finish it/i
+      /start, continue, review, or finish this run/i
     );
     expect(
       playbookByFocus.get("questionnaire_run")?.askSequence.join(" ")
@@ -1319,6 +1322,12 @@ describe("forge onboarding contract", () => {
     const onboarding = await loadOnboardingPayload();
     const openapi = buildOpenApiDocument();
     const openApiPaths = new Set(Object.keys(openapi.paths ?? {}));
+    const openApiMethodsByPath = new Map(
+      Object.entries(openapi.paths ?? {}).map(([route, methods]) => [
+        route,
+        new Set(Object.keys(methods ?? {}).map((method) => method.toUpperCase()))
+      ])
+    );
     const openapiSchemas = (
       openapi.components as {
         schemas?: Record<string, { properties?: Record<string, any> }>;
@@ -1354,6 +1363,25 @@ describe("forge onboarding contract", () => {
     expect(
       openApiPaths.has("/api/v1/calendar/connections/{id}/discovery")
     ).toBe(true);
+
+    for (const [surfaceName, surface] of Object.entries(
+      onboarding.entityRouteModel.specializedDomainSurfaces
+    )) {
+      for (const [routeKey, methodRoute] of Object.entries(surface.methodRoutes)) {
+        const match = /^([A-Z]+)\s+(\/api\/v1\/.+)$/.exec(methodRoute);
+        expect(
+          match,
+          `${surfaceName}.${routeKey} should publish "METHOD /api/v1/..." route text`
+        ).toBeTruthy();
+        const method = match![1];
+        const route = normalizeRouteTemplate(match![2]);
+        expect(
+          openApiMethodsByPath.get(route)?.has(method),
+          `${surfaceName}.${routeKey} should exist in OpenAPI as ${method} ${route}`
+        ).toBe(true);
+      }
+    }
+
     expect(psycheSubmoduleSchema).toEqual(
       expect.objectContaining({
         additionalProperties: false,
@@ -1425,6 +1453,7 @@ describe("forge onboarding contract", () => {
             "specializedSurfaceRule",
             "reviewShortcutRule",
             "readModelWriteRule",
+            "psycheHypothesisRule",
             "followUpQuestionRule",
             "antiDriftRule"
           ]),
@@ -1432,6 +1461,7 @@ describe("forge onboarding contract", () => {
             specializedSurfaceRule: { type: "string" },
             reviewShortcutRule: { type: "string" },
             readModelWriteRule: { type: "string" },
+            psycheHypothesisRule: { type: "string" },
             followUpQuestionRule: { type: "string" },
             antiDriftRule: { type: "string" }
           })

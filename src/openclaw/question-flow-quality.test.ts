@@ -40,9 +40,9 @@ describe("question flow quality coverage", () => {
       ["Note", /worth preserving in a note/i, /durable or temporary/i],
       ["Wiki Page", /remember or reuse later/i, /durable memory/i],
       ["Insight", /future-you or the agent/i, /practical recommendation/i],
-      ["Calendar Event", /when should it happen in your local time/i, /timezone/i],
-      ["Work Block Template", /when should it repeat/i, /allows or blocks work/i],
-      ["Task Timebox", /make time for/i, /planned work with completed work/i],
+      ["Calendar Event", /what time should Forge hold/i, /timezone/i],
+      ["Work Block Template", /when should this recurring block repeat/i, /allows or blocks work/i],
+      ["Task Timebox", /reserve focused time/i, /planned work with completed work/i],
       ["Task Run", /Which task should I start/i, /Start the run instead of turning it into intake/i],
       ["Work Adjustment", /time correction belong to/i, /truthfully/i],
       ["Operator Overview", /understand about Forge overall/i, /read-model-only operator surface/i],
@@ -53,7 +53,7 @@ describe("question flow quality coverage", () => {
       ["Sleep Overview", /understand from your sleep picture/i, /read-model-only surface/i],
       ["Sports Overview", /understand from your workout picture/i, /read-model-only surface/i],
       ["Calendar Overview", /understand or decide from your calendar picture/i, /read-model-only calendar surface/i],
-      ["Calendar Connection", /calendar provider are you trying to connect/i, /workflow they are trying to unlock/i],
+      ["Calendar Connection", /workflow do you want this calendar connection to unlock/i, /provider/i],
       ["Preference Judgment", /comparison are you actually trying to settle/i, /pairwise preference decision/i],
       ["Preference Signal", /remember about this item right now/i, /favorite, veto, bookmark,[\s\S]*compare-later/i],
       ["Movement", /understand, correct, or preserve/i, /timeline[\s\S]*overlay[\s\S]*repair/i],
@@ -64,7 +64,7 @@ describe("question flow quality coverage", () => {
       ["Preference Context", /treat your preferences differently here/i, /inside versus outside/i],
       ["Preference Item", /make clearer by saving this item/i, /favorite, veto, or compare-later/i],
       ["Questionnaire Instrument", /honest moment or decision/i, /reusable questionnaire/i],
-      ["Questionnaire Run", /start, continue, review, or finish it/i, /next answer or note that matters/i]
+      ["Questionnaire Run", /start, continue, review, or finish this run/i, /next answer or note that matters/i]
     ] as const;
 
     for (const [section, opening, purpose] of scenarios) {
@@ -98,6 +98,10 @@ describe("question flow quality coverage", () => {
     expect(entityPlaybook).toMatch(/Middle turn:/i);
     expect(entityPlaybook).toMatch(/Closing turn:/i);
     expect(entityPlaybook).toMatch(/One focused question is the default/i);
+    expect(entityPlaybook).toMatch(
+      /do not bundle name, scope, and timing into one opener/i
+    );
+    expect(entityPlaybook).toMatch(/route-changing missing detail\s+first/i);
     expect(entityPlaybook).toMatch(
       /The first question should usually clarify lived meaning, use, stake, or timing/i
     );
@@ -511,6 +515,11 @@ describe("question flow quality coverage", () => {
     expect(psychePlaybook).toMatch(
       /what the response protects,[\s\S]*what danger it predicts,[\s\S]*what belief or mode may be active/i
     );
+    expect(psychePlaybook).toMatch(/## Hypothesis Wording Shape/i);
+    expect(psychePlaybook).toMatch(/evidence in the user's own example/i);
+    expect(psychePlaybook).toMatch(/Name the function without blame/i);
+    expect(psychePlaybook).toMatch(/Ask for correction/i);
+    expect(psychePlaybook).toMatch(/Does that fit, or is the danger\/need somewhere else/i);
     expect(psychePlaybook).toMatch(
       /If the user rejects the hypothesis, accept the correction and revise once/i
     );

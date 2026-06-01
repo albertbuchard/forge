@@ -1,0 +1,1 @@
+function i(t){const e=`${t.title} ${t.description} ${t.source??""}`.toLowerCase();return e.includes("playwright")||e.includes("operator console")||e.includes("retroactive work logging")}function r(t){return i(t)?"Work log added":t.title}function o(t){return i(t)?"This entry was added later so the work history stays complete and accurate.":t.description}export{o as a,r as g};

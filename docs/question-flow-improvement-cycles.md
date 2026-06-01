@@ -1,10 +1,126 @@
 # Forge Question Flow Improvement Cycles
 
-Latest run date: 2026-05-31
+Latest run date: 2026-06-01
 
 This report records the three-cycle evaluation for Forge agent question flows. The
 same full flow set was tested in each cycle so improvements were kept only where they
 helped the entity or specialized surface.
+
+## 2026-06-01 Automation Pass
+
+Setup verification:
+
+- Confirmed the Forge worktree was on `main` before build, install, and edits.
+- No prior automation memory file existed for this automation in the active Codex
+  home; this run creates it at closeout.
+- Verified the live Forge runtime on `127.0.0.1:4317` was healthy and had the
+  canonical `/Users/omarclaw/Documents/aurel-monorepo/data/forge/forge.sqlite`
+  open. No Forge data root, SQLite database, backup, or user data was moved, merged,
+  deleted, or overwritten.
+- Built and reinstalled the repo-local OpenClaw plugin with
+  `npm run build:openclaw-plugin`,
+  `openclaw plugins install --link --dangerously-force-unsafe-install ./openclaw-plugin`,
+  `openclaw plugins enable forge-openclaw-plugin`, and `openclaw gateway restart`.
+- Built the Hermes packaged runtime with
+  `node ./plugins/forge-hermes/scripts/build-package-runtime.mjs` and reinstalled the
+  Hermes plugin editable from `./plugins/forge-hermes`.
+- Verified OpenClaw loads `forge-openclaw-plugin 0.2.99` from the repo-local plugin
+  dist, and Hermes imports `forge-hermes-plugin 0.2.99` from the repo-local editable
+  package.
+- Verified live onboarding and OpenAPI before the cycles: 42 entity catalog entries,
+  28 batch-CRUD entities, 14 read models, 23 Movement route keys, four Life Force
+  route keys under both `lifeForce` and `life_force`, 16 Workbench route keys, and
+  182 OpenAPI paths with five shared batch entity routes, 16 Movement paths, four Life
+  Force paths, 13 Workbench paths, and `/api/v1/health/training-load`.
+
+Every cycle retested the full current flow set: goal, project, strategy, task, habit,
+tag, note, insight, task_run, work_adjustment, calendar_event,
+work_block_template, task_timebox, calendar_connection, preference_catalog,
+preference_catalog_item, preference_context, preference_item,
+preference_judgment, preference_signal, questionnaire_instrument,
+questionnaire_run, self_observation, sleep_session, sleep_overview,
+workout_session, sports_overview, training_load, wiki_page, movement, life_force,
+workbench, psyche_value, behavior_pattern, behavior, belief_entry, mode_profile,
+mode_guide_session, flashcard, trigger_report, event_type, and
+emotion_definition.
+
+Specialized route scenarios covered Movement day, month, all-time, timeline, places,
+box detail, trip detail, selected-span aggregate, settings reads and updates, place
+create/update, user-box preflight/create/update/delete, automatic-box invalidation,
+stay/trip/point update/delete; Life Force overview, profile update, weekday template,
+and fatigue signal; and Workbench flow catalog, box catalog, flow CRUD, saved-flow
+execution, one-off execution, chat follow-up, run history, run detail, run node list,
+node result, published output, and latest node output.
+
+Cycle 1 tested all entity and specialized-surface flows after the plugin refresh, with
+extra attention to first-turn pacing. Strengths: the full suite already covered every
+live catalog entry, Psyche flows, reflection-sensitive non-Psyche records, Movement,
+Life Force, and Workbench. Weakness: a few operational openers still bundled name,
+scope, and timing into one first question, which made calendar events, work blocks,
+timeboxes, calendar connections, and questionnaire runs feel more like form intake
+than missing-only guidance.
+
+What changed in Cycle 1:
+
+- Added a first-turn discipline rule: operational create flows should not bundle
+  name, scope, and timing when the user has already supplied part of the answer.
+- Tightened preferred openers for `calendar_event`, `work_block_template`,
+  `task_timebox`, `calendar_connection`, and `questionnaire_run`.
+- Mirrored the same wording into live onboarding and all bundled OpenClaw, Hermes, and
+  Codex playbook copies.
+- Updated question-flow assertions so the shorter operational openers remain
+  protected.
+
+What happened after retesting Cycle 1:
+
+- The first retest found assertion wording mismatches only; provider handling and
+  route posture were still present.
+- After updating the assertions, the full question-flow, onboarding, tool, manifest,
+  route parity, and playbook parity suite passed: 50 focused tests.
+- The change improved operational pacing without weakening API clarity, so it was
+  kept.
+
+Cycle 2 retested the same full matrix with special attention to Psyche active
+listening and interpretive hypotheses. Strengths: the Psyche playbook already
+supported reflection, functional analysis, schema-theme routing, and correctable
+hypotheses. Weakness: the guidance said to offer hypotheses, but did not provide a
+compact enough wording shape for agents that rely on live onboarding and tend to stay
+in indefinite reflective questioning.
+
+What changed in Cycle 2:
+
+- Added a `Hypothesis Wording Shape` section to the Psyche playbook: start from the
+  user's concrete example, offer one testable interpretation, name the function
+  without blame, and ask for correction.
+- Added `psycheHypothesisRule` to the live onboarding `interactionGuidance` contract,
+  TypeScript onboarding type, and OpenAPI schema.
+- Mirrored the Psyche playbook into OpenClaw, Hermes, and Codex bundled skill copies.
+- Added regression assertions requiring the new hypothesis shape in Markdown,
+  onboarding, and OpenAPI coverage.
+
+What happened after retesting Cycle 2:
+
+- Re-ran the full focused suite. All 50 focused tests passed.
+- The change strengthened Psyche formulation without changing batch CRUD posture for
+  Psyche records, so it was kept.
+
+Cycle 3 retested every flow and specialized route lane against live onboarding and
+generated OpenAPI. Strengths: Movement, Life Force, and Workbench already exposed the
+right route-key families and route examples. Weakness: the tests sampled and counted
+specialized routes, but did not mechanically prove that every onboarding
+`methodRoutes` entry existed in generated OpenAPI with the exact HTTP method.
+
+What changed in Cycle 3:
+
+- Added an onboarding-contract assertion that parses every specialized `methodRoutes`
+  value for Movement, Life Force, `life_force`, and Workbench and verifies the exact
+  method/path against generated OpenAPI.
+
+What happened after retesting Cycle 3:
+
+- Re-ran the full focused suite. All 50 focused tests passed.
+- The new OpenAPI alignment guard improved API contract truthfulness without changing
+  any user-facing flow, so it was kept. Nothing was reverted.
 
 ## 2026-05-31 Automation Pass
 

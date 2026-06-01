@@ -83,6 +83,9 @@ Forge correctly, and gather only the structure that still matters.
 - Do not read schema fields out loud unless the user explicitly wants a checklist.
 - One focused question is the default. Ask two only when both questions serve the same
   job and the user is steady enough for it.
+- For operational create flows, do not bundle name, scope, and timing into one opener
+  when the user has already supplied part of it. Ask the route-changing missing detail
+  first, then move to the next detail only if it is still unknown.
 - Do not ask the user to do naming work alone when the meaning is already clear. Offer
   a tentative title or formulation and invite correction.
 - When the meaning is clearer than the wording, offer a tentative title or summary
@@ -1053,7 +1056,7 @@ Ready to save when:
 
 Preferred opening question:
 
-- "What is the event, and when should it happen in your local time?"
+- "What time should Forge hold for this event in your local timezone?"
 
 ## Work Block Template
 
@@ -1081,7 +1084,7 @@ Ready to save when:
 
 Preferred opening question:
 
-- "What recurring block do you want to set up, and when should it repeat?"
+- "When should this recurring block repeat?"
 
 ## Task Timebox
 
@@ -1109,7 +1112,7 @@ Ready to save when:
 
 Preferred opening question:
 
-- "Which task are you trying to make time for, and when should the slot be?"
+- "When should Forge reserve focused time for this task?"
 
 ## Task Run
 
@@ -1578,7 +1581,7 @@ Ready to act when:
 
 Preferred opening question:
 
-- "Which calendar provider are you trying to connect, and what do you want Forge to do with it?"
+- "What workflow do you want this calendar connection to unlock?"
 
 ## Preference Judgment
 
@@ -2183,7 +2186,7 @@ Ready to act when:
 
 Preferred opening question:
 
-- "What do you want from this questionnaire run right now: start, continue, review, or finish it?"
+- "Are you trying to start, continue, review, or finish this run right now?"
 
 ## Event Type
 

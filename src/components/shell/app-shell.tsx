@@ -98,6 +98,7 @@ import {
 } from "@/components/shell/task-timer-rail";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { ErrorState, LoadingState } from "@/components/ui/page-state";
 import { useLiveEvents } from "@/hooks/use-live-events";
@@ -110,6 +111,7 @@ import {
 } from "@/lib/knowledge-graph-types";
 import { formatLifeForceRate } from "@/lib/life-force-display";
 import { getEntityNotesHref } from "@/lib/note-helpers";
+import { getSurfaceHelp, SHELL_METRIC_HELP } from "@/lib/surface-help";
 import { cn } from "@/lib/utils";
 import { isShellRouteReady } from "@/features/shell/route-readiness";
 import {
@@ -1476,6 +1478,7 @@ function ShellFrame({
     NAV_ROUTE_REGISTRY.find((route) =>
       routeMatches(routeLocation.pathname, route)
     ) ?? PRIMARY_ROUTES[0];
+  const activeHelp = getSurfaceHelp(active.id);
   const transitionKey = getRouteTransitionKey(routeLocation.pathname);
   const [actionBarOpen, setActionBarOpen] = useState(false);
   const [backgroundActivityOpen, setBackgroundActivityOpen] = useState(false);
@@ -1759,8 +1762,17 @@ function ShellFrame({
                 key={metric.id}
                 className="rounded-[18px] bg-white/[0.04] px-3 py-3"
               >
-                <div className="text-[11px] uppercase tracking-[0.14em] text-white/42">
-                  {metric.label}
+                <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.14em] text-white/42">
+                  <span>{metric.label}</span>
+                  <InfoTooltip
+                    label={`Explain ${metric.label}`}
+                    title={metric.label}
+                    content={
+                      SHELL_METRIC_HELP[metric.id] ??
+                      "This is a live Forge shell metric for the selected user scope."
+                    }
+                    panelClassName="normal-case tracking-normal"
+                  />
                 </div>
                 <div className="mt-1 text-lg font-semibold leading-tight text-white">
                   {metric.expandedValue}
@@ -1907,14 +1919,30 @@ function ShellFrame({
               >
                 <div className="flex min-w-0 flex-1 items-center gap-5">
                   <div
-                    className="shrink-0 font-display text-white"
+                    className="flex shrink-0 items-center gap-2 font-display text-white"
                     style={{
                       fontSize: "var(--forge-shell-desktop-title-size)",
                       lineHeight: 1,
                       willChange: "font-size"
                     }}
                   >
-                    {getRouteLabel(active, t)}
+                    <span>{getRouteLabel(active, t)}</span>
+                    <InfoTooltip
+                      className="font-sans"
+                      label={`Explain ${getRouteLabel(active, t)}`}
+                      title={activeHelp.title}
+                      content={
+                        <span className="grid gap-2">
+                          <span>{activeHelp.purpose}</span>
+                          <span>{activeHelp.primaryAction}</span>
+                          {activeHelp.metricNote ? (
+                            <span className="text-white/58">
+                              {activeHelp.metricNote}
+                            </span>
+                          ) : null}
+                        </span>
+                      }
+                    />
                   </div>
                   <div className="min-w-0 flex-1">
                     <TaskTimerRailBar
@@ -1978,6 +2006,9 @@ function ShellFrame({
                 }}
               >
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <div className="max-w-[34rem] text-[12px] leading-5 text-white/48">
+                    {activeHelp.primaryAction}
+                  </div>
                   {railLinks.map((link) => (
                     <Link
                       key={link.to}
@@ -2082,14 +2113,32 @@ function ShellFrame({
                 }}
               >
                 <div className="flex min-w-0 items-center justify-between gap-2">
-                  <div
-                    className="min-w-0 flex-1 truncate font-display text-white"
-                    style={{
-                      fontSize: "var(--forge-shell-mobile-title-size)",
-                      willChange: "font-size"
-                    }}
-                  >
-                    {getRouteLabel(active, t)}
+                  <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                    <div
+                      className="min-w-0 truncate font-display text-white"
+                      style={{
+                        fontSize: "var(--forge-shell-mobile-title-size)",
+                        willChange: "font-size"
+                      }}
+                    >
+                      {getRouteLabel(active, t)}
+                    </div>
+                    <InfoTooltip
+                      className="shrink-0"
+                      label={`Explain ${getRouteLabel(active, t)}`}
+                      title={activeHelp.title}
+                      content={
+                        <span className="grid gap-2">
+                          <span>{activeHelp.purpose}</span>
+                          <span>{activeHelp.primaryAction}</span>
+                          {activeHelp.metricNote ? (
+                            <span className="text-white/58">
+                              {activeHelp.metricNote}
+                            </span>
+                          ) : null}
+                        </span>
+                      }
+                    />
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
                     <Button
@@ -2153,7 +2202,7 @@ function ShellFrame({
                 }}
               >
                 <div className="mt-2 text-[13px] leading-5 text-white/52">
-                  {getRouteDetail(active, t)}
+                  {getRouteDetail(active, t)} {activeHelp.primaryAction}
                 </div>
                 <div className="mt-2">
                   <AmbientActivityPill
@@ -2381,6 +2430,7 @@ export function AppShell() {
     deltaXp: number;
     totalXp: number;
   } | null>(null);
+  const [xpMetricsPollingEnabled, setXpMetricsPollingEnabled] = useState(false);
   const [locallySeenCelebrationIds, setLocallySeenCelebrationIds] = useState<
     Set<string>
   >(() => new Set());
@@ -2389,11 +2439,15 @@ export function AppShell() {
   const snapshotQuery = useGetSnapshotQuery(selectedUserIds, {
     skip: !operatorSessionQuery.isSuccess
   });
-  const xpMetricsQuery = useGetXpMetricsQuery(selectedUserIds, {
-    skip: !operatorSessionQuery.isSuccess
-  });
   const settingsQuery = useGetSettingsQuery(undefined, {
     skip: !operatorSessionQuery.isSuccess
+  });
+  const shellBootstrapReady =
+    operatorSessionQuery.isSuccess &&
+    snapshotQuery.isSuccess &&
+    settingsQuery.isSuccess;
+  const xpMetricsQuery = useGetXpMetricsQuery(selectedUserIds, {
+    skip: !shellBootstrapReady || !xpMetricsPollingEnabled
   });
   const [markCelebrationSeen, celebrationSeenMutation] =
     useMarkGamificationCelebrationSeenMutation();
@@ -2405,10 +2459,7 @@ export function AppShell() {
     [locallySeenCelebrationIds, xpMetricsQuery.data?.metrics.celebrations]
   );
   const routeReady = isShellRouteReady(routerLocation.pathname, {
-    bootstrapReady:
-      operatorSessionQuery.isSuccess &&
-      snapshotQuery.isSuccess &&
-      settingsQuery.isSuccess,
+    bootstrapReady: shellBootstrapReady,
     sleepReady: true
   });
   const {
@@ -2427,6 +2478,20 @@ export function AppShell() {
   const setSelectedUserIds = (userIds: string[]) => {
     dispatch(setSelectedUserIdsAction(userIds));
   };
+
+  useEffect(() => {
+    setXpMetricsPollingEnabled(false);
+    if (!shellBootstrapReady) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setXpMetricsPollingEnabled(true);
+    }, 8_000);
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [selectedUserIds, shellBootstrapReady]);
 
   const setKnowledgeGraphRouteFocus = (node: KnowledgeGraphNode | null) => {
     const search = buildKnowledgeGraphSearchFromLocation(routerLocation, node);

@@ -198,3 +198,49 @@ test("dev asset proxy reuses an upstream keep-alive socket", async () => {
     });
   }
 });
+
+test("dev asset proxy forces the HTML entrypoint to no-store", async () => {
+  const upstream = createServer((_request, response) => {
+    response.setHeader("Content-Type", "text/html; charset=utf-8");
+    response.setHeader("Cache-Control", "no-cache");
+    response.end("<!doctype html><title>Forge</title>");
+  });
+
+  await new Promise<void>((resolve) => {
+    upstream.listen(0, "127.0.0.1", resolve);
+  });
+  const address = upstream.address() as AddressInfo;
+  const app = fastify();
+  await registerWebRoutes(app, {
+    devWebRuntime: {
+      ensureReady: async () =>
+        new URL(`http://127.0.0.1:${address.port}/forge/`),
+      stop: async () => {}
+    }
+  });
+
+  try {
+    const response = await app.inject({
+      method: "GET",
+      url: "/forge"
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(
+      response.headers["cache-control"],
+      "no-store, max-age=0, must-revalidate"
+    );
+    assert.equal(response.headers.pragma, "no-cache");
+  } finally {
+    await app.close();
+    await new Promise<void>((resolve, reject) => {
+      upstream.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    });
+  }
+});
