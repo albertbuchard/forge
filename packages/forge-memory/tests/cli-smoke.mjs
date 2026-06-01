@@ -31,7 +31,7 @@ function run(args, options = {}) {
   return result;
 }
 
-async function listMcpTools() {
+async function inspectMcp() {
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [bin, "mcp"],
@@ -41,7 +41,13 @@ async function listMcpTools() {
   const client = new Client({ name: "forge-memory-smoke", version: "0.0.0" });
   await client.connect(transport);
   try {
-    return await client.listTools();
+    return {
+      tools: await client.listTools(),
+      diagnostics: await client.callTool({
+        name: "forge_memory_mcp_diagnostics",
+        arguments: {}
+      })
+    };
   } finally {
     await client.close();
   }
@@ -119,12 +125,19 @@ fs.writeFileSync(
     2
   )}\n`
 );
-const mcpTools = await listMcpTools();
+const mcp = await inspectMcp();
+const mcpTools = mcp.tools;
 const mcpToolNames = mcpTools.tools.map((tool) => tool.name);
+if (!mcpToolNames.includes("forge_memory_mcp_diagnostics")) {
+  throw new Error("Expected forge-memory mcp to expose diagnostics.");
+}
 if (!mcpToolNames.includes("forge_search_wiki")) {
-  throw new Error(
-    `Expected forge-memory mcp to expose wiki tools; got ${mcpToolNames.join(", ")}`
-  );
+  const diagnostics = JSON.parse(mcp.diagnostics.content[0].text);
+  if (diagnostics.runtimeLoaded) {
+    throw new Error(
+      `Forge runtime loaded but wiki tools were absent; got ${mcpToolNames.join(", ")}`
+    );
+  }
 }
 
 run(["uninstall", "--yes", "--json"]);
