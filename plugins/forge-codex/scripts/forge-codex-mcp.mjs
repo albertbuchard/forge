@@ -4,7 +4,12 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError } from "@modelcontextprotocol/sdk/types.js";
+import {
+  CallToolRequestSchema,
+  ErrorCode,
+  ListToolsRequestSchema,
+  McpError
+} from "@modelcontextprotocol/sdk/types.js";
 import { Value } from "@sinclair/typebox/value";
 import {
   callConfiguredForgeApi,
@@ -14,15 +19,28 @@ import {
 import { ensureForgeRuntimeReady } from "../runtime/dist/openclaw/local-runtime.js";
 import { resolveForgePluginConfig } from "../runtime/dist/openclaw/plugin-entry-shared.js";
 import { registerForgePluginTools } from "../runtime/dist/openclaw/tools.js";
+import {
+  maybeStructuredContent,
+  resolveMcpResponseLimits,
+  toMcpContent
+} from "./mcp-response.mjs";
 
 const SESSION_PROVIDER = "codex";
 const DEFAULT_RUNTIME_AGENT_LABEL = "Forge Codex";
 
 function resolvePluginVersion() {
-  const pluginManifestPath = path.resolve(import.meta.dirname, "..", ".codex-plugin", "plugin.json");
+  const pluginManifestPath = path.resolve(
+    import.meta.dirname,
+    "..",
+    ".codex-plugin",
+    "plugin.json"
+  );
   try {
     const parsed = JSON.parse(readFileSync(pluginManifestPath, "utf8"));
-    if (typeof parsed?.version === "string" && parsed.version.trim().length > 0) {
+    if (
+      typeof parsed?.version === "string" &&
+      parsed.version.trim().length > 0
+    ) {
       return parsed.version.trim();
     }
   } catch {
@@ -44,12 +62,27 @@ function resolveSharedDataRoot() {
     return process.env.FORGE_DATA_ROOT.trim();
   }
   const projectRoot = path.resolve(import.meta.dirname, "..", "..", "..");
-  const runtimePreferencePath = path.resolve(projectRoot, "..", "..", "data", "forge-runtime.json");
-  const monorepoDataRoot = path.resolve(projectRoot, "..", "..", "data", "forge");
+  const runtimePreferencePath = path.resolve(
+    projectRoot,
+    "..",
+    "..",
+    "data",
+    "forge-runtime.json"
+  );
+  const monorepoDataRoot = path.resolve(
+    projectRoot,
+    "..",
+    "..",
+    "data",
+    "forge"
+  );
   if (existsSync(runtimePreferencePath)) {
     try {
       const parsed = JSON.parse(readFileSync(runtimePreferencePath, "utf8"));
-      if (typeof parsed?.dataRoot === "string" && parsed.dataRoot.trim().length > 0) {
+      if (
+        typeof parsed?.dataRoot === "string" &&
+        parsed.dataRoot.trim().length > 0
+      ) {
         return path.resolve(parsed.dataRoot.trim());
       }
     } catch {
@@ -68,10 +101,12 @@ function resolveRuntimeAgentLabel() {
 
 function createStableMachineKey(config) {
   const fingerprint = createHash("sha1")
-    .update(JSON.stringify({
-      baseUrl: config.baseUrl,
-      dataRoot: config.dataRoot || ""
-    }))
+    .update(
+      JSON.stringify({
+        baseUrl: config.baseUrl,
+        dataRoot: config.dataRoot || ""
+      })
+    )
     .digest("hex")
     .slice(0, 12);
   return `machine_${fingerprint}`;
@@ -106,12 +141,14 @@ async function postSessionEvent(config, path, body) {
 
 function createStableSessionKey(config) {
   const fingerprint = createHash("sha1")
-    .update(JSON.stringify({
-      provider: SESSION_PROVIDER,
-      baseUrl: config.baseUrl,
-      dataRoot: config.dataRoot || "",
-      cwd: process.cwd()
-    }))
+    .update(
+      JSON.stringify({
+        provider: SESSION_PROVIDER,
+        baseUrl: config.baseUrl,
+        dataRoot: config.dataRoot || "",
+        cwd: process.cwd()
+      })
+    )
     .digest("hex")
     .slice(0, 12);
   return `codex-${fingerprint}`;
@@ -132,32 +169,39 @@ async function registerRuntimeSession(state) {
   try {
     await ensureForgeRuntimeReady(state.config);
     const actorLabel = await resolveConfiguredForgeActorLabel(state.config);
-    const payload = await postSessionEvent(state.config, "/api/v1/agents/sessions", {
-      provider: SESSION_PROVIDER,
-      agentLabel: resolveRuntimeAgentLabel(),
-      agentType: SESSION_PROVIDER,
-      agentIdentityKey: createStableAgentIdentityKey(state.config),
-      machineKey: createStableMachineKey(state.config),
-      personaKey: "default",
-      actorLabel,
-      sessionKey: state.key,
-      sessionLabel: "Forge Codex bridge",
-      connectionMode: "mcp",
-      baseUrl: state.config.baseUrl,
-      webUrl: state.config.webAppUrl,
-      dataRoot: state.config.dataRoot || null,
-      externalSessionId: state.instanceId,
-      staleAfterSeconds: 90,
-      metadata: {
-        singleton: true,
-        instanceId: state.instanceId,
-        pid: process.pid,
-        pluginVersion: resolvePluginVersion(),
-        cwd: process.cwd()
+    const payload = await postSessionEvent(
+      state.config,
+      "/api/v1/agents/sessions",
+      {
+        provider: SESSION_PROVIDER,
+        agentLabel: resolveRuntimeAgentLabel(),
+        agentType: SESSION_PROVIDER,
+        agentIdentityKey: createStableAgentIdentityKey(state.config),
+        machineKey: createStableMachineKey(state.config),
+        personaKey: "default",
+        actorLabel,
+        sessionKey: state.key,
+        sessionLabel: "Forge Codex bridge",
+        connectionMode: "mcp",
+        baseUrl: state.config.baseUrl,
+        webUrl: state.config.webAppUrl,
+        dataRoot: state.config.dataRoot || null,
+        externalSessionId: state.instanceId,
+        staleAfterSeconds: 90,
+        metadata: {
+          singleton: true,
+          instanceId: state.instanceId,
+          pid: process.pid,
+          pluginVersion: resolvePluginVersion(),
+          cwd: process.cwd()
+        }
       }
-    });
+    );
     state.id =
-      payload && typeof payload === "object" && payload.session && typeof payload.session.id === "string"
+      payload &&
+      typeof payload === "object" &&
+      payload.session &&
+      typeof payload.session.id === "string"
         ? payload.session.id
         : null;
     state.connected = Boolean(state.id);
@@ -247,42 +291,20 @@ function getValidationErrorMessage(schema, value) {
   return `${path}: ${firstError.message}`;
 }
 
-function toMcpContent(result) {
-  if (!Array.isArray(result.content) || result.content.length === 0) {
-    return [{ type: "text", text: JSON.stringify(result.details ?? null, null, 2) }];
-  }
-
-  return result.content.map((item) => {
-    if (item && typeof item === "object" && item.type === "text" && "text" in item) {
-      return {
-        type: "text",
-        text: typeof item.text === "string" ? item.text : JSON.stringify(item.text ?? null)
-      };
-    }
-
-    return {
-      type: "text",
-      text: JSON.stringify(item, null, 2)
-    };
-  });
-}
-
-function maybeStructuredContent(details) {
-  if (typeof details === "object" && details !== null) {
-    return details;
-  }
-  return undefined;
-}
-
 async function main() {
   const config = buildPluginConfigFromEnv();
+  const responseLimits = resolveMcpResponseLimits();
   const runtimeSession = createRuntimeSessionState(config);
   await registerRuntimeSession(runtimeSession);
   if (runtimeSession.connected) {
     runtimeSession.heartbeat = setInterval(() => {
-      void heartbeatRuntimeSession(runtimeSession, "Codex MCP server heartbeat.", {
-        pid: process.pid
-      });
+      void heartbeatRuntimeSession(
+        runtimeSession,
+        "Codex MCP server heartbeat.",
+        {
+          pid: process.pid
+        }
+      );
     }, 45_000);
     runtimeSession.heartbeat.unref?.();
     await appendRuntimeSessionEvent(runtimeSession, {
@@ -322,19 +344,29 @@ async function main() {
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const tool = toolByName.get(request.params.name);
     if (!tool) {
-      throw new McpError(ErrorCode.InvalidParams, `Forge tool not found: ${request.params.name}`);
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `Forge tool not found: ${request.params.name}`
+      );
     }
 
     const args = request.params.arguments ?? {};
     if (!Value.Check(tool.parameters, args)) {
-      throw new McpError(ErrorCode.InvalidParams, getValidationErrorMessage(tool.parameters, args));
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        getValidationErrorMessage(tool.parameters, args)
+      );
     }
 
     try {
       const startedAt = Date.now();
-      await heartbeatRuntimeSession(runtimeSession, `Tool call: ${request.params.name}`, {
-        toolName: request.params.name
-      });
+      await heartbeatRuntimeSession(
+        runtimeSession,
+        `Tool call: ${request.params.name}`,
+        {
+          toolName: request.params.name
+        }
+      );
       await appendRuntimeSessionEvent(runtimeSession, {
         eventType: "tool_call",
         title: `Tool call: ${request.params.name}`,
@@ -354,8 +386,11 @@ async function main() {
         }
       });
       return {
-        content: toMcpContent(result),
-        structuredContent: maybeStructuredContent(result.details)
+        content: toMcpContent(result, responseLimits),
+        structuredContent: maybeStructuredContent(
+          result.details,
+          responseLimits
+        )
       };
     } catch (error) {
       await appendRuntimeSessionEvent(runtimeSession, {
@@ -401,6 +436,8 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(error instanceof Error ? error.stack ?? error.message : String(error));
+  console.error(
+    error instanceof Error ? (error.stack ?? error.message) : String(error)
+  );
   process.exit(1);
 });

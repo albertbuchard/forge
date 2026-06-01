@@ -8,13 +8,19 @@ import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
 import { pathToFileURL } from "node:url";
+import { TextDecoder, TextEncoder } from "node:util";
 import { createRequire } from "node:module";
 import YAML from "yaml";
 import qrcode from "qrcode-terminal";
 import open from "open";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import {
+  CallToolRequestSchema,
+  ErrorCode,
+  ListToolsRequestSchema,
+  McpError
+} from "@modelcontextprotocol/sdk/types.js";
 
 const require = createRequire(import.meta.url);
 const VERSION = require("../package.json").version;
@@ -64,26 +70,35 @@ function parseArgs(argv) {
     else if (arg === "--dry-run") flags.dryRun = true;
     else if (arg === "--no-start") flags.noStart = true;
     else if (arg === "--json") flags.json = true;
-    else if (arg === "--skip-pair-ios" || arg === "--no-pair-ios") flags.skipPairIos = true;
+    else if (arg === "--skip-pair-ios" || arg === "--no-pair-ios")
+      flags.skipPairIos = true;
     else if (arg === "--pair-ios") flags.pairIos = true;
     else if (arg === "--skip-adapters") flags.skipAdapters = true;
     else if (arg === "--print-url") flags.printUrl = true;
     else if (arg === "--remove-data") flags.removeData = true;
     else if (arg === "--remove-adapters") flags.removeAdapters = true;
-    else if (arg === "--manual-http" || arg === "--no-iroh") flags.manualHttp = true;
-    else if (arg.startsWith("--output=")) values.output = arg.slice("--output=".length);
+    else if (arg === "--manual-http" || arg === "--no-iroh")
+      flags.manualHttp = true;
+    else if (arg.startsWith("--output="))
+      values.output = arg.slice("--output=".length);
     else if (arg === "--output") values.output = argv[++index];
-    else if (arg.startsWith("--data-root=")) values.dataRoot = arg.slice("--data-root=".length);
+    else if (arg.startsWith("--data-root="))
+      values.dataRoot = arg.slice("--data-root=".length);
     else if (arg === "--data-root") values.dataRoot = argv[++index];
-    else if (arg.startsWith("--adapters=")) values.adapters = arg.slice("--adapters=".length);
+    else if (arg.startsWith("--adapters="))
+      values.adapters = arg.slice("--adapters=".length);
     else if (arg === "--adapters") values.adapters = argv[++index];
-    else if (arg.startsWith("--origin=")) values.origin = arg.slice("--origin=".length);
+    else if (arg.startsWith("--origin="))
+      values.origin = arg.slice("--origin=".length);
     else if (arg === "--origin") values.origin = argv[++index];
-    else if (arg.startsWith("--port=")) values.port = arg.slice("--port=".length);
+    else if (arg.startsWith("--port="))
+      values.port = arg.slice("--port=".length);
     else if (arg === "--port") values.port = argv[++index];
-    else if (arg.startsWith("--web-port=")) values.webPort = arg.slice("--web-port=".length);
+    else if (arg.startsWith("--web-port="))
+      values.webPort = arg.slice("--web-port=".length);
     else if (arg === "--web-port") values.webPort = argv[++index];
-    else if (arg.startsWith("--repo=")) values.repo = arg.slice("--repo=".length);
+    else if (arg.startsWith("--repo="))
+      values.repo = arg.slice("--repo=".length);
     else if (arg === "--repo") values.repo = argv[++index];
     else if (arg === "--help" || arg === "-h") flags.help = true;
     else if (arg === "--version" || arg === "-v") flags.version = true;
@@ -128,7 +143,9 @@ function defaultDataRoot() {
 
 function normalizePort(value, fallback = DEFAULT_PORT) {
   const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed >= 0 && parsed <= 65535 ? parsed : fallback;
+  return Number.isInteger(parsed) && parsed >= 0 && parsed <= 65535
+    ? parsed
+    : fallback;
 }
 
 function normalizeAdapterList(value) {
@@ -170,11 +187,19 @@ async function backupIfExists(filePath) {
   return backupPath;
 }
 
-async function writeJson(filePath, payload, { dryRun = false, backup = true } = {}) {
+async function writeJson(
+  filePath,
+  payload,
+  { dryRun = false, backup = true } = {}
+) {
   if (dryRun) return { filePath, backupPath: null, dryRun: true };
   await fsp.mkdir(path.dirname(filePath), { recursive: true });
   const backupPath = backup ? await backupIfExists(filePath) : null;
-  await fsp.writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  await fsp.writeFile(
+    filePath,
+    `${JSON.stringify(payload, null, 2)}\n`,
+    "utf8"
+  );
   return { filePath, backupPath, dryRun: false };
 }
 
@@ -186,8 +211,13 @@ async function readConfig() {
     origin: typeof config?.origin === "string" ? config.origin : DEFAULT_ORIGIN,
     port: normalizePort(config?.port, DEFAULT_PORT),
     webPort: normalizePort(config?.webPort, DEFAULT_WEB_PORT),
-    dataRoot: typeof config?.dataRoot === "string" ? path.resolve(config.dataRoot) : defaultDataRoot(),
-    adapters: Array.isArray(config?.adapters) ? config.adapters.filter((entry) => ADAPTERS.includes(entry)) : [],
+    dataRoot:
+      typeof config?.dataRoot === "string"
+        ? path.resolve(config.dataRoot)
+        : defaultDataRoot(),
+    adapters: Array.isArray(config?.adapters)
+      ? config.adapters.filter((entry) => ADAPTERS.includes(entry))
+      : [],
     updatedAt: typeof config?.updatedAt === "string" ? config.updatedAt : null,
     repo: typeof config?.repo === "string" ? config.repo : null
   };
@@ -209,10 +239,14 @@ async function writeConfig(next, options) {
 }
 
 function commandExists(command) {
-  const result = spawnSync(process.platform === "win32" ? "where" : "command", process.platform === "win32" ? [command] : ["-v", command], {
-    shell: process.platform !== "win32",
-    stdio: "ignore"
-  });
+  const result = spawnSync(
+    process.platform === "win32" ? "where" : "command",
+    process.platform === "win32" ? [command] : ["-v", command],
+    {
+      shell: process.platform !== "win32",
+      stdio: "ignore"
+    }
+  );
   return result.status === 0;
 }
 
@@ -226,15 +260,19 @@ function runCapture(command, args, timeoutMs = 2_000) {
 }
 
 function detectOpenClaw() {
-  const installed = commandExists("openclaw") || fs.existsSync(path.join(homeDir(), ".openclaw"));
-  const version = commandExists("openclaw") ? runCapture("openclaw", ["--version"]) : null;
+  const installed =
+    commandExists("openclaw") ||
+    fs.existsSync(path.join(homeDir(), ".openclaw"));
+  const version = commandExists("openclaw")
+    ? runCapture("openclaw", ["--version"])
+    : null;
   const config = path.join(homeDir(), ".openclaw", "openclaw.json");
   return {
     id: "openclaw",
     label: "OpenClaw",
     installed,
     disabled: !installed,
-    status: installed ? (version || "detected") : "not found",
+    status: installed ? version || "detected" : "not found",
     configPath: config,
     hint: "Install OpenClaw first, then rerun npx forge-memory configure."
   };
@@ -242,15 +280,26 @@ function detectOpenClaw() {
 
 function detectHermes() {
   const hermesRoot = path.join(homeDir(), ".hermes");
-  const hermesPython = path.join(hermesRoot, "hermes-agent", "venv", "bin", "python");
-  const installed = commandExists("hermes") || fs.existsSync(hermesPython) || fs.existsSync(hermesRoot);
-  const version = commandExists("hermes") ? runCapture("hermes", ["--version"]) : null;
+  const hermesPython = path.join(
+    hermesRoot,
+    "hermes-agent",
+    "venv",
+    "bin",
+    "python"
+  );
+  const installed =
+    commandExists("hermes") ||
+    fs.existsSync(hermesPython) ||
+    fs.existsSync(hermesRoot);
+  const version = commandExists("hermes")
+    ? runCapture("hermes", ["--version"])
+    : null;
   return {
     id: "hermes",
     label: "Hermes",
     installed,
     disabled: !installed,
-    status: installed ? (version || "detected") : "not found",
+    status: installed ? version || "detected" : "not found",
     configPath: path.join(hermesRoot, "forge", "config.json"),
     pythonPath: hermesPython,
     hint: "Install Hermes first, then rerun npx forge-memory configure."
@@ -260,13 +309,15 @@ function detectHermes() {
 function detectCodex() {
   const codexRoot = path.join(homeDir(), ".codex");
   const installed = commandExists("codex") || fs.existsSync(codexRoot);
-  const version = commandExists("codex") ? runCapture("codex", ["--version"]) : null;
+  const version = commandExists("codex")
+    ? runCapture("codex", ["--version"])
+    : null;
   return {
     id: "codex",
     label: "Codex",
     installed,
     disabled: !installed,
-    status: installed ? (version || "detected") : "not found",
+    status: installed ? version || "detected" : "not found",
     configPath: path.join(codexRoot, "config.toml"),
     hint: "Install Codex first, then rerun npx forge-memory configure."
   };
@@ -287,7 +338,10 @@ function printBanner() {
 
 async function promptLine(question, defaultValue) {
   const suffix = defaultValue ? ` ${color.dim(`[${defaultValue}]`)}` : "";
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
   return await new Promise((resolve) => {
     rl.question(`${question}${suffix}: `, (answer) => {
       rl.close();
@@ -297,7 +351,9 @@ async function promptLine(question, defaultValue) {
 }
 
 async function promptYesNo(question, defaultValue = true) {
-  const answer = (await promptLine(`${question} ${defaultValue ? "[Y/n]" : "[y/N]"}`, "")).toLowerCase();
+  const answer = (
+    await promptLine(`${question} ${defaultValue ? "[Y/n]" : "[y/N]"}`, "")
+  ).toLowerCase();
   if (!answer) return defaultValue;
   return answer === "y" || answer === "yes";
 }
@@ -328,7 +384,9 @@ async function promptCheckbox(adapters, defaults) {
     process.stdout.write("\u001b[?25l");
     process.stdout.write("\u001b[2J\u001b[H");
     printBanner();
-    console.log("Select host adapters. Space toggles, arrows move, Enter confirms.\n");
+    console.log(
+      "Select host adapters. Space toggles, arrows move, Enter confirms.\n"
+    );
     for (let index = 0; index < rows.length; index += 1) {
       const row = rows[index];
       const prefix = index === cursor ? color.cyan(">") : " ";
@@ -354,7 +412,13 @@ async function promptCheckbox(adapters, defaults) {
           resolve([]);
           return;
         }
-        resolve(rows.filter((entry) => entry.selected && !entry.disabled && !entry.action).map((entry) => entry.id));
+        resolve(
+          rows
+            .filter(
+              (entry) => entry.selected && !entry.disabled && !entry.action
+            )
+            .map((entry) => entry.id)
+        );
         return;
       }
       if (key === " ") {
@@ -403,19 +467,30 @@ async function findFreePort(startPort) {
       server.once("error", reject);
       server.listen({ host: "127.0.0.1", port: 0, exclusive: true }, () => {
         const address = server.address();
-        const port = typeof address === "object" && address ? address.port : DEFAULT_PORT;
+        const port =
+          typeof address === "object" && address ? address.port : DEFAULT_PORT;
         server.close(() => resolve(port));
       });
     });
   }
-  for (let port = startPort; port < startPort + 30 && port <= 65535; port += 1) {
+  for (
+    let port = startPort;
+    port < startPort + 30 && port <= 65535;
+    port += 1
+  ) {
     if (await isPortAvailable(port)) return port;
   }
   throw new Error(`No free localhost port found near ${startPort}`);
 }
 
 async function resolveDevDataRoot(repoRoot) {
-  const preferencePath = path.resolve(repoRoot, "..", "..", "data", "forge-runtime.json");
+  const preferencePath = path.resolve(
+    repoRoot,
+    "..",
+    "..",
+    "data",
+    "forge-runtime.json"
+  );
   const monorepoDataRoot = path.resolve(repoRoot, "..", "..", "data", "forge");
   const preference = await readJson(preferencePath, null);
   if (typeof preference?.dataRoot === "string" && preference.dataRoot.trim()) {
@@ -432,7 +507,10 @@ function findForgeRepo(start = process.cwd()) {
     if (fs.existsSync(packageJsonPath)) {
       try {
         const parsed = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
-        if (parsed?.name === "forge" && fs.existsSync(path.join(current, "server", "src", "index.ts"))) {
+        if (
+          parsed?.name === "forge" &&
+          fs.existsSync(path.join(current, "server", "src", "index.ts"))
+        ) {
           return current;
         }
       } catch {
@@ -446,21 +524,41 @@ function findForgeRepo(start = process.cwd()) {
 }
 
 async function buildInstallConfig(parsed, currentConfig, discovery, command) {
-  const repo = parsed.values.repo ? path.resolve(parsed.values.repo) : findForgeRepo();
+  const repo = parsed.values.repo
+    ? path.resolve(parsed.values.repo)
+    : findForgeRepo();
   const mode = parsed.flags.dev ? "dev" : currentConfig.mode;
-  const detectedDefaults = discovery.adapters.filter((adapter) => adapter.installed).map((adapter) => adapter.id);
-  const currentDefaults = currentConfig.adapters.length > 0 ? currentConfig.adapters : detectedDefaults;
-  const adapterOverride = parsed.flags.skipAdapters ? [] : normalizeAdapterList(parsed.values.adapters);
-  const adapters = adapterOverride ?? (parsed.flags.yes ? currentDefaults : await promptCheckbox(discovery.adapters, currentDefaults));
+  const detectedDefaults = discovery.adapters
+    .filter((adapter) => adapter.installed)
+    .map((adapter) => adapter.id);
+  const currentDefaults =
+    currentConfig.adapters.length > 0
+      ? currentConfig.adapters
+      : detectedDefaults;
+  const adapterOverride = parsed.flags.skipAdapters
+    ? []
+    : normalizeAdapterList(parsed.values.adapters);
+  const adapters =
+    adapterOverride ??
+    (parsed.flags.yes
+      ? currentDefaults
+      : await promptCheckbox(discovery.adapters, currentDefaults));
   const dataRootDefault =
     parsed.values.dataRoot ??
-    (parsed.flags.dev && repo ? await resolveDevDataRoot(repo) : currentConfig.dataRoot || defaultDataRoot());
+    (parsed.flags.dev && repo
+      ? await resolveDevDataRoot(repo)
+      : currentConfig.dataRoot || defaultDataRoot());
   const dataRoot = parsed.flags.yes
     ? dataRootDefault
     : await promptLine("Forge data folder", dataRootDefault);
   const portInput = parsed.values.port ?? currentConfig.port;
   const port = await findFreePort(normalizePort(portInput, DEFAULT_PORT));
-  const webPort = await findFreePort(normalizePort(parsed.values.webPort ?? currentConfig.webPort, DEFAULT_WEB_PORT));
+  const webPort = await findFreePort(
+    normalizePort(
+      parsed.values.webPort ?? currentConfig.webPort,
+      DEFAULT_WEB_PORT
+    )
+  );
 
   return {
     version: VERSION,
@@ -478,10 +576,22 @@ async function buildInstallConfig(parsed, currentConfig, discovery, command) {
 async function patchOpenClawConfig(config, options) {
   const filePath = path.join(homeDir(), ".openclaw", "openclaw.json");
   const payload = (await readJson(filePath, {})) ?? {};
-  const plugins = payload.plugins && typeof payload.plugins === "object" ? { ...payload.plugins } : {};
-  const entries = plugins.entries && typeof plugins.entries === "object" ? { ...plugins.entries } : {};
-  const currentEntry = entries[FORGE_PLUGIN_ID] && typeof entries[FORGE_PLUGIN_ID] === "object" ? { ...entries[FORGE_PLUGIN_ID] } : {};
-  const currentPluginConfig = currentEntry.config && typeof currentEntry.config === "object" ? { ...currentEntry.config } : {};
+  const plugins =
+    payload.plugins && typeof payload.plugins === "object"
+      ? { ...payload.plugins }
+      : {};
+  const entries =
+    plugins.entries && typeof plugins.entries === "object"
+      ? { ...plugins.entries }
+      : {};
+  const currentEntry =
+    entries[FORGE_PLUGIN_ID] && typeof entries[FORGE_PLUGIN_ID] === "object"
+      ? { ...entries[FORGE_PLUGIN_ID] }
+      : {};
+  const currentPluginConfig =
+    currentEntry.config && typeof currentEntry.config === "object"
+      ? { ...currentEntry.config }
+      : {};
   currentEntry.enabled = true;
   currentEntry.config = {
     ...currentPluginConfig,
@@ -496,7 +606,12 @@ async function patchOpenClawConfig(config, options) {
 }
 
 async function patchHermesConfig(config, options) {
-  const forgeConfigPath = path.join(homeDir(), ".hermes", "forge", "config.json");
+  const forgeConfigPath = path.join(
+    homeDir(),
+    ".hermes",
+    "forge",
+    "config.json"
+  );
   await writeJson(
     forgeConfigPath,
     {
@@ -516,7 +631,8 @@ async function patchHermesConfig(config, options) {
   const root = doc.toJSON() ?? {};
   if (!root.plugins || typeof root.plugins !== "object") root.plugins = {};
   if (!Array.isArray(root.plugins.enabled)) root.plugins.enabled = [];
-  if (!root.plugins.enabled.includes("forge")) root.plugins.enabled.push("forge");
+  if (!root.plugins.enabled.includes("forge"))
+    root.plugins.enabled.push("forge");
   doc.contents = doc.createNode(root);
   if (!options.dryRun) {
     await backupIfExists(hermesYamlPath);
@@ -527,7 +643,9 @@ async function patchHermesConfig(config, options) {
 
 async function patchCodexConfig(config, options) {
   const filePath = path.join(homeDir(), ".codex", "config.toml");
-  let source = fs.existsSync(filePath) ? await fsp.readFile(filePath, "utf8") : "";
+  let source = fs.existsSync(filePath)
+    ? await fsp.readFile(filePath, "utf8")
+    : "";
   const block = [
     "[mcp_servers.forge]",
     'command = "npx"',
@@ -541,7 +659,8 @@ async function patchCodexConfig(config, options) {
     `FORGE_DATA_ROOT = "${config.dataRoot.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`,
     ""
   ].join("\n");
-  const pattern = /(?:^|\n)\[mcp_servers\.forge\][\s\S]*?(?=\n\[[^\]]+\]|\s*$)/m;
+  const pattern =
+    /(?:^|\n)\[mcp_servers\.forge\][\s\S]*?(?=\n\[[^\]]+\]|\s*$)/m;
   if (pattern.test(source)) {
     source = source.replace(pattern, `\n${block}`.trimEnd());
   } else {
@@ -550,12 +669,20 @@ async function patchCodexConfig(config, options) {
   if (!options.dryRun) {
     await fsp.mkdir(path.dirname(filePath), { recursive: true });
     await backupIfExists(filePath);
-    await fsp.writeFile(filePath, source.endsWith("\n") ? source : `${source}\n`, "utf8");
+    await fsp.writeFile(
+      filePath,
+      source.endsWith("\n") ? source : `${source}\n`,
+      "utf8"
+    );
   }
   return { filePath };
 }
 
-async function runCommand(command, args, { cwd, dryRun = false, env = process.env } = {}) {
+async function runCommand(
+  command,
+  args,
+  { cwd, dryRun = false, env = process.env } = {}
+) {
   if (dryRun) {
     return { ok: true, dryRun: true, command, args, cwd };
   }
@@ -569,14 +696,39 @@ async function runCommand(command, args, { cwd, dryRun = false, env = process.en
 async function installOpenClawAdapter(config, options) {
   await patchOpenClawConfig(config, options);
   if (!commandExists("openclaw")) {
-    return { adapter: "openclaw", ok: false, skipped: true, message: "openclaw command not found" };
+    return {
+      adapter: "openclaw",
+      ok: false,
+      skipped: true,
+      message: "openclaw command not found"
+    };
   }
-  const installTarget = config.mode === "dev" && config.repo ? path.join(config.repo, "openclaw-plugin") : FORGE_PLUGIN_ID;
-  const installArgs = config.mode === "dev"
-    ? ["plugins", "install", "--link", "--dangerously-force-unsafe-install", installTarget]
-    : ["plugins", "install", "--dangerously-force-unsafe-install", installTarget];
+  const installTarget =
+    config.mode === "dev" && config.repo
+      ? path.join(config.repo, "openclaw-plugin")
+      : FORGE_PLUGIN_ID;
+  const installArgs =
+    config.mode === "dev"
+      ? [
+          "plugins",
+          "install",
+          "--link",
+          "--dangerously-force-unsafe-install",
+          installTarget
+        ]
+      : [
+          "plugins",
+          "install",
+          "--dangerously-force-unsafe-install",
+          installTarget
+        ];
   const installResult = await runCommand("openclaw", installArgs, options);
-  if (!installResult.ok) return { adapter: "openclaw", ok: false, message: "OpenClaw plugin install failed" };
+  if (!installResult.ok)
+    return {
+      adapter: "openclaw",
+      ok: false,
+      message: "OpenClaw plugin install failed"
+    };
   await runCommand("openclaw", ["plugins", "enable", FORGE_PLUGIN_ID], options);
   await runCommand("openclaw", ["gateway", "restart"], options);
   return { adapter: "openclaw", ok: true };
@@ -584,15 +736,39 @@ async function installOpenClawAdapter(config, options) {
 
 async function installHermesAdapter(config, options) {
   await patchHermesConfig(config, options);
-  const pythonPath = path.join(homeDir(), ".hermes", "hermes-agent", "venv", "bin", "python");
+  const pythonPath = path.join(
+    homeDir(),
+    ".hermes",
+    "hermes-agent",
+    "venv",
+    "bin",
+    "python"
+  );
   if (!fs.existsSync(pythonPath)) {
-    return { adapter: "hermes", ok: false, skipped: true, message: "Hermes Python environment not found" };
+    return {
+      adapter: "hermes",
+      ok: false,
+      skipped: true,
+      message: "Hermes Python environment not found"
+    };
   }
-  const target = config.mode === "dev" && config.repo
-    ? ["-m", "pip", "install", "--upgrade", "-e", path.join(config.repo, "plugins", "forge-hermes")]
-    : ["-m", "pip", "install", "--upgrade", "forge-hermes-plugin"];
+  const target =
+    config.mode === "dev" && config.repo
+      ? [
+          "-m",
+          "pip",
+          "install",
+          "--upgrade",
+          "-e",
+          path.join(config.repo, "plugins", "forge-hermes")
+        ]
+      : ["-m", "pip", "install", "--upgrade", "forge-hermes-plugin"];
   const result = await runCommand(pythonPath, target, options);
-  return { adapter: "hermes", ok: result.ok, message: result.ok ? undefined : "Hermes plugin install failed" };
+  return {
+    adapter: "hermes",
+    ok: result.ok,
+    message: result.ok ? undefined : "Hermes plugin install failed"
+  };
 }
 
 async function installCodexAdapter(config, options) {
@@ -603,9 +779,12 @@ async function installCodexAdapter(config, options) {
 async function configureAdapters(config, options) {
   const results = [];
   for (const adapter of config.adapters) {
-    if (adapter === "openclaw") results.push(await installOpenClawAdapter(config, options));
-    if (adapter === "hermes") results.push(await installHermesAdapter(config, options));
-    if (adapter === "codex") results.push(await installCodexAdapter(config, options));
+    if (adapter === "openclaw")
+      results.push(await installOpenClawAdapter(config, options));
+    if (adapter === "hermes")
+      results.push(await installHermesAdapter(config, options));
+    if (adapter === "codex")
+      results.push(await installCodexAdapter(config, options));
   }
   return results;
 }
@@ -621,7 +800,10 @@ async function health(config, timeoutMs = 1_500) {
     if (!response.ok) return { ok: false, status: response.status };
     return { ok: true, payload: await response.json() };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
   } finally {
     clearTimeout(timeout);
   }
@@ -652,7 +834,10 @@ async function waitForHealth(config, timeoutMs = 30_000) {
 
 function resolveOpenClawPluginRoot() {
   const candidates = [require];
-  const installedRuntimePackageJson = path.join(runtimeInstallRoot(), "package.json");
+  const installedRuntimePackageJson = path.join(
+    runtimeInstallRoot(),
+    "package.json"
+  );
   if (fs.existsSync(installedRuntimePackageJson)) {
     candidates.push(createRequire(installedRuntimePackageJson));
   }
@@ -689,7 +874,13 @@ async function ensurePackagedRuntimeInstalled() {
   try {
     const result = spawnSync(
       "npm",
-      ["install", `${RUNTIME_PACKAGE}@${RUNTIME_PACKAGE_VERSION}`, "--omit=dev", "--ignore-scripts", "--silent"],
+      [
+        "install",
+        `${RUNTIME_PACKAGE}@${RUNTIME_PACKAGE_VERSION}`,
+        "--omit=dev",
+        "--ignore-scripts",
+        "--silent"
+      ],
       {
         cwd: installRoot,
         stdio: ["ignore", out, out],
@@ -697,13 +888,18 @@ async function ensurePackagedRuntimeInstalled() {
       }
     );
     if (result.status !== 0) {
-      throw new Error(`Failed to install ${RUNTIME_PACKAGE}@${RUNTIME_PACKAGE_VERSION}. Check ${logPath()}.`);
+      throw new Error(
+        `Failed to install ${RUNTIME_PACKAGE}@${RUNTIME_PACKAGE_VERSION}. Check ${logPath()}.`
+      );
     }
   } finally {
     fs.closeSync(out);
   }
   const installed = resolveOpenClawPluginRoot();
-  if (!installed) throw new Error(`${RUNTIME_PACKAGE} installed but its runtime entry could not be resolved.`);
+  if (!installed)
+    throw new Error(
+      `${RUNTIME_PACKAGE} installed but its runtime entry could not be resolved.`
+    );
   return installed;
 }
 
@@ -721,30 +917,56 @@ async function startRuntime(config) {
   const children = [];
 
   if (config.mode === "dev") {
-    if (!config.repo) throw new Error("Dev mode requires a Forge repo checkout.");
-    const tsx = path.join(config.repo, "node_modules", "tsx", "dist", "cli.mjs");
-    if (!fs.existsSync(tsx)) throw new Error(`tsx was not found at ${tsx}. Run npm install in the Forge repo.`);
-    const server = spawn(process.execPath, [tsx, path.join(config.repo, "server", "src", "index.ts")], {
-      cwd: config.repo,
-      detached: true,
-      stdio: ["ignore", out, out],
-      env: {
-        ...process.env,
-        HOST: "127.0.0.1",
-        PORT: String(config.port),
-        FORGE_BASE_PATH: "/forge/",
-        FORGE_DATA_ROOT: config.dataRoot,
-        FORGE_DEV_WEB_ORIGIN: `http://127.0.0.1:${config.webPort}/forge/`
+    if (!config.repo)
+      throw new Error("Dev mode requires a Forge repo checkout.");
+    const tsx = path.join(
+      config.repo,
+      "node_modules",
+      "tsx",
+      "dist",
+      "cli.mjs"
+    );
+    if (!fs.existsSync(tsx))
+      throw new Error(
+        `tsx was not found at ${tsx}. Run npm install in the Forge repo.`
+      );
+    const server = spawn(
+      process.execPath,
+      [tsx, path.join(config.repo, "server", "src", "index.ts")],
+      {
+        cwd: config.repo,
+        detached: true,
+        stdio: ["ignore", out, out],
+        env: {
+          ...process.env,
+          HOST: "127.0.0.1",
+          PORT: String(config.port),
+          FORGE_BASE_PATH: "/forge/",
+          FORGE_DATA_ROOT: config.dataRoot,
+          FORGE_DEV_WEB_ORIGIN: `http://127.0.0.1:${config.webPort}/forge/`
+        }
       }
-    });
+    );
     server.unref();
     children.push({ role: "server", pid: server.pid });
-    const web = spawn("npm", ["run", "dev:web", "--", "--host", "127.0.0.1", "--port", String(config.webPort)], {
-      cwd: config.repo,
-      detached: true,
-      stdio: ["ignore", out, out],
-      env: { ...process.env, FORGE_BASE_PATH: "/forge/" }
-    });
+    const web = spawn(
+      "npm",
+      [
+        "run",
+        "dev:web",
+        "--",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        String(config.webPort)
+      ],
+      {
+        cwd: config.repo,
+        detached: true,
+        stdio: ["ignore", out, out],
+        env: { ...process.env, FORGE_BASE_PATH: "/forge/" }
+      }
+    );
     web.unref();
     children.push({ role: "web", pid: web.pid });
   } else {
@@ -783,7 +1005,12 @@ async function startRuntime(config) {
 
 async function stopRuntime() {
   const state = await readRuntimeState();
-  if (!state?.children?.length) return { ok: true, stopped: false, message: "No forge-memory runtime state found." };
+  if (!state?.children?.length)
+    return {
+      ok: true,
+      stopped: false,
+      message: "No forge-memory runtime state found."
+    };
   const stopped = [];
   for (const child of state.children) {
     if (!child?.pid || !processExists(child.pid)) continue;
@@ -803,9 +1030,12 @@ async function exportForgeData(parsed) {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const requestedOutput = parsed.values.output ?? parsed.positionals[1];
   const outputPath = path.resolve(
-    requestedOutput ?? path.join(forgeHome(), "exports", `forge-memory-export-${stamp}.tar.gz`)
+    requestedOutput ??
+      path.join(forgeHome(), "exports", `forge-memory-export-${stamp}.tar.gz`)
   );
-  const stagingRoot = await fsp.mkdtemp(path.join(os.tmpdir(), "forge-memory-export-"));
+  const stagingRoot = await fsp.mkdtemp(
+    path.join(os.tmpdir(), "forge-memory-export-")
+  );
   const stagingData = path.join(stagingRoot, "data");
   const manifest = {
     exportedAt: new Date().toISOString(),
@@ -832,42 +1062,77 @@ async function exportForgeData(parsed) {
     }
   });
   if (fs.existsSync(configPath())) {
-    await fsp.copyFile(configPath(), path.join(stagingRoot, "forge-memory-config.json"));
+    await fsp.copyFile(
+      configPath(),
+      path.join(stagingRoot, "forge-memory-config.json")
+    );
   }
-  await fsp.writeFile(path.join(stagingRoot, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  await fsp.writeFile(
+    path.join(stagingRoot, "manifest.json"),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+    "utf8"
+  );
   await fsp.mkdir(path.dirname(outputPath), { recursive: true });
 
-  const wantsArchive = outputPath.endsWith(".tar.gz") || outputPath.endsWith(".tgz");
+  const wantsArchive =
+    outputPath.endsWith(".tar.gz") || outputPath.endsWith(".tgz");
   if (wantsArchive && commandExists("tar")) {
-    const result = spawnSync("tar", ["-czf", outputPath, "-C", stagingRoot, "."], {
-      stdio: parsed.flags.json ? "ignore" : "inherit"
-    });
+    const result = spawnSync(
+      "tar",
+      ["-czf", outputPath, "-C", stagingRoot, "."],
+      {
+        stdio: parsed.flags.json ? "ignore" : "inherit"
+      }
+    );
     await fsp.rm(stagingRoot, { recursive: true, force: true });
-    if (result.status !== 0) throw new Error(`Failed to write export archive: ${outputPath}`);
-    return { ok: true, outputPath, archive: true, sourceDataRoot: config.dataRoot };
+    if (result.status !== 0)
+      throw new Error(`Failed to write export archive: ${outputPath}`);
+    return {
+      ok: true,
+      outputPath,
+      archive: true,
+      sourceDataRoot: config.dataRoot
+    };
   }
 
   await fsp.rm(outputPath, { recursive: true, force: true });
   await fsp.cp(stagingRoot, outputPath, { recursive: true });
   await fsp.rm(stagingRoot, { recursive: true, force: true });
-  return { ok: true, outputPath, archive: false, sourceDataRoot: config.dataRoot };
+  return {
+    ok: true,
+    outputPath,
+    archive: false,
+    sourceDataRoot: config.dataRoot
+  };
 }
 
 async function removeOpenClawAdapterConfig() {
   const filePath = path.join(homeDir(), ".openclaw", "openclaw.json");
   const payload = await readJson(filePath, null);
-  if (!payload?.plugins?.entries?.[FORGE_PLUGIN_ID]) return { filePath, changed: false };
+  if (!payload?.plugins?.entries?.[FORGE_PLUGIN_ID])
+    return { filePath, changed: false };
   await backupIfExists(filePath);
   delete payload.plugins.entries[FORGE_PLUGIN_ID];
   if (Array.isArray(payload.plugins.allow)) {
-    payload.plugins.allow = payload.plugins.allow.filter((entry) => entry !== FORGE_PLUGIN_ID);
+    payload.plugins.allow = payload.plugins.allow.filter(
+      (entry) => entry !== FORGE_PLUGIN_ID
+    );
   }
-  await fsp.writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  await fsp.writeFile(
+    filePath,
+    `${JSON.stringify(payload, null, 2)}\n`,
+    "utf8"
+  );
   return { filePath, changed: true };
 }
 
 async function removeHermesAdapterConfig() {
-  const forgeConfigPath = path.join(homeDir(), ".hermes", "forge", "config.json");
+  const forgeConfigPath = path.join(
+    homeDir(),
+    ".hermes",
+    "forge",
+    "config.json"
+  );
   const changed = fs.existsSync(forgeConfigPath);
   if (changed) {
     await backupIfExists(forgeConfigPath);
@@ -880,10 +1145,14 @@ async function removeCodexAdapterConfig() {
   const filePath = path.join(homeDir(), ".codex", "config.toml");
   if (!fs.existsSync(filePath)) return { filePath, changed: false };
   const source = await fsp.readFile(filePath, "utf8");
-  const pattern = /(?:^|\n)\[mcp_servers\.forge\][\s\S]*?(?=\n\[[^\]]+\]|\s*$)/m;
+  const pattern =
+    /(?:^|\n)\[mcp_servers\.forge\][\s\S]*?(?=\n\[[^\]]+\]|\s*$)/m;
   if (!pattern.test(source)) return { filePath, changed: false };
   await backupIfExists(filePath);
-  const next = source.replace(pattern, "\n").replace(/\n{3,}/g, "\n\n").trimEnd();
+  const next = source
+    .replace(pattern, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trimEnd();
   await fsp.writeFile(filePath, next ? `${next}\n` : "", "utf8");
   return { filePath, changed: true };
 }
@@ -900,7 +1169,12 @@ async function uninstallForgeMemory(parsed) {
 
   const stop = await stopRuntime();
   const removed = [];
-  for (const target of [runtimeInstallRoot(), runtimeStatePath(), logPath(), configPath()]) {
+  for (const target of [
+    runtimeInstallRoot(),
+    runtimeStatePath(),
+    logPath(),
+    configPath()
+  ]) {
     if (fs.existsSync(target)) {
       await fsp.rm(target, { recursive: true, force: true });
       removed.push(target);
@@ -908,7 +1182,13 @@ async function uninstallForgeMemory(parsed) {
   }
 
   let adapterResults = [];
-  const removeAdapters = parsed.flags.removeAdapters || (!parsed.flags.yes && await promptYesNo("Remove Forge adapter entries from OpenClaw, Hermes, and Codex?", false));
+  const removeAdapters =
+    parsed.flags.removeAdapters ||
+    (!parsed.flags.yes &&
+      (await promptYesNo(
+        "Remove Forge adapter entries from OpenClaw, Hermes, and Codex?",
+        false
+      )));
   if (removeAdapters) {
     adapterResults = [
       await removeOpenClawAdapterConfig(),
@@ -921,7 +1201,10 @@ async function uninstallForgeMemory(parsed) {
   if (parsed.flags.removeData) {
     const dataConfirmed = parsed.flags.yes
       ? true
-      : await promptYesNo(`Delete Forge data folder ${config.dataRoot}? This cannot be undone.`, false);
+      : await promptYesNo(
+          `Delete Forge data folder ${config.dataRoot}? This cannot be undone.`,
+          false
+        );
     if (dataConfirmed) {
       await fsp.rm(config.dataRoot, { recursive: true, force: true });
       removedDataRoot = true;
@@ -941,12 +1224,19 @@ async function uninstallForgeMemory(parsed) {
 
 async function createPairing(config, options = {}) {
   const transportMode = options.transportMode ?? "iroh";
-  const response = await fetch(new URL("/api/v1/health/pairing-sessions", baseUrl(config)), {
-    method: "POST",
-    headers: { "content-type": "application/json", accept: "application/json" },
-    body: JSON.stringify({ userId: null, transportMode })
-  });
-  if (!response.ok) throw new Error(`Pairing request failed with ${response.status}`);
+  const response = await fetch(
+    new URL("/api/v1/health/pairing-sessions", baseUrl(config)),
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json"
+      },
+      body: JSON.stringify({ userId: null, transportMode })
+    }
+  );
+  if (!response.ok)
+    throw new Error(`Pairing request failed with ${response.status}`);
   return response.json();
 }
 
@@ -955,11 +1245,12 @@ function printPairing(pairing) {
   qrcode.generate(JSON.stringify(pairing.qrPayload), { small: true });
   const transport = pairing.qrPayload?.transport;
   if (transport?.provider) {
-    const label = pairing.qrPayload.transport?.protocol === "iroh"
-      ? "Iroh"
-      : pairing.qrPayload.transportMode === "iroh"
+    const label =
+      pairing.qrPayload.transport?.protocol === "iroh"
         ? "Iroh"
-        : "Manual HTTP";
+        : pairing.qrPayload.transportMode === "iroh"
+          ? "Iroh"
+          : "Manual HTTP";
     console.log(`${color.cyan(label)}: ${pairing.qrPayload.apiBaseUrl}`);
     if (transport.recreateCommand) {
       console.log(`${color.dim("recreate:")} ${transport.recreateCommand}`);
@@ -976,16 +1267,34 @@ async function runInstall(parsed, command) {
   const discovery = discover();
   if (!parsed.flags.yes) {
     printBanner();
-    console.log(color.dim("Discovery runs in the background. Forge UI/runtime is always installed.\n"));
+    console.log(
+      color.dim(
+        "Discovery runs in the background. Forge UI/runtime is always installed.\n"
+      )
+    );
   }
-  const config = await buildInstallConfig(parsed, currentConfig, discovery, command);
-  const writeResult = await writeConfig(config, { dryRun: parsed.flags.dryRun });
-  const adapterResults = await configureAdapters(config, { dryRun: parsed.flags.dryRun });
+  const config = await buildInstallConfig(
+    parsed,
+    currentConfig,
+    discovery,
+    command
+  );
+  const writeResult = await writeConfig(config, {
+    dryRun: parsed.flags.dryRun
+  });
+  const adapterResults = await configureAdapters(config, {
+    dryRun: parsed.flags.dryRun
+  });
   let runtimeResult = null;
   if (!parsed.flags.noStart && !parsed.flags.dryRun) {
     runtimeResult = await startRuntime(config);
   }
-  const shouldPair = parsed.flags.pairIos || (!parsed.flags.skipPairIos && (parsed.flags.yes ? true : await promptYesNo("Pair the iOS companion now?", true)));
+  const shouldPair =
+    parsed.flags.pairIos ||
+    (!parsed.flags.skipPairIos &&
+      (parsed.flags.yes
+        ? true
+        : await promptYesNo("Pair the iOS companion now?", true)));
   let pairing = null;
   if (shouldPair && !parsed.flags.dryRun) {
     if (!runtimeResult) await startRuntime(config);
@@ -996,13 +1305,23 @@ async function runInstall(parsed, command) {
       printPairing(pairing);
     }
   }
-  const summary = { ok: true, config, writeResult, adapterResults, runtimeResult, pairing: Boolean(pairing) };
+  const summary = {
+    ok: true,
+    config,
+    writeResult,
+    adapterResults,
+    runtimeResult,
+    pairing: Boolean(pairing)
+  };
   if (parsed.flags.json) console.log(JSON.stringify(summary, null, 2));
   else {
     console.log(color.green("Forge Memory configured."));
     console.log(`UI: ${webUrl(config)}`);
     console.log(`Data: ${config.dataRoot}`);
-    if (parsed.flags.dryRun) console.log(color.yellow("Dry run only; no files or adapter installs were changed."));
+    if (parsed.flags.dryRun)
+      console.log(
+        color.yellow("Dry run only; no files or adapter installs were changed.")
+      );
   }
 }
 
@@ -1023,11 +1342,15 @@ async function runStatus(parsed) {
   if (parsed.flags.json) console.log(JSON.stringify(payload, null, 2));
   else {
     console.log(`${color.bold("Forge Memory Status")}`);
-    console.log(`Runtime: ${currentHealth.ok ? color.green("healthy") : color.yellow("not reachable")}`);
+    console.log(
+      `Runtime: ${currentHealth.ok ? color.green("healthy") : color.yellow("not reachable")}`
+    );
     console.log(`Mode: ${config.mode}`);
     console.log(`UI: ${webUrl(config)}`);
     console.log(`Data: ${config.dataRoot}`);
-    console.log(`Adapters: ${config.adapters.length ? config.adapters.join(", ") : "none configured"}`);
+    console.log(
+      `Adapters: ${config.adapters.length ? config.adapters.join(", ") : "none configured"}`
+    );
     if (state?.logPath) console.log(`Logs: ${state.logPath}`);
   }
 }
@@ -1036,18 +1359,35 @@ async function runDoctor(parsed) {
   const config = await readConfig();
   const discovery = discover();
   const checks = [
-    { id: "node", ok: Number(process.versions.node.split(".")[0]) >= 22, detail: process.versions.node },
+    {
+      id: "node",
+      ok: Number(process.versions.node.split(".")[0]) >= 22,
+      detail: process.versions.node
+    },
     { id: "config", ok: fs.existsSync(configPath()), detail: configPath() },
-    { id: "dataRoot", ok: fs.existsSync(config.dataRoot), detail: config.dataRoot },
+    {
+      id: "dataRoot",
+      ok: fs.existsSync(config.dataRoot),
+      detail: config.dataRoot
+    },
     { id: "runtime", ok: (await health(config)).ok, detail: baseUrl(config) },
-    ...discovery.adapters.map((adapter) => ({ id: adapter.id, ok: adapter.installed, detail: adapter.status }))
+    ...discovery.adapters.map((adapter) => ({
+      id: adapter.id,
+      ok: adapter.installed,
+      detail: adapter.status
+    }))
   ];
-  const payload = { ok: checks.every((check) => check.ok || ADAPTERS.includes(check.id)), checks };
+  const payload = {
+    ok: checks.every((check) => check.ok || ADAPTERS.includes(check.id)),
+    checks
+  };
   if (parsed.flags.json) console.log(JSON.stringify(payload, null, 2));
   else {
     console.log(color.bold("Forge Memory Doctor"));
     for (const check of checks) {
-      console.log(`${check.ok ? color.green("ok") : color.yellow("warn")} ${check.id}: ${check.detail}`);
+      console.log(
+        `${check.ok ? color.green("ok") : color.yellow("warn")} ${check.id}: ${check.detail}`
+      );
     }
   }
 }
@@ -1056,7 +1396,11 @@ async function runUi(parsed) {
   const config = await readConfig();
   if (!parsed.flags.noStart) await startRuntime(config);
   if (parsed.flags.printUrl || parsed.flags.json) {
-    console.log(parsed.flags.json ? JSON.stringify({ url: webUrl(config) }, null, 2) : webUrl(config));
+    console.log(
+      parsed.flags.json
+        ? JSON.stringify({ url: webUrl(config) }, null, 2)
+        : webUrl(config)
+    );
     return;
   }
   await open(webUrl(config));
@@ -1088,9 +1432,181 @@ function sha(input) {
   return createHash("sha1").update(input).digest("hex").slice(0, 12);
 }
 
+const DEFAULT_MCP_TEXT_CONTENT_LIMIT_BYTES = 1_500_000;
+const DEFAULT_MCP_STRUCTURED_CONTENT_LIMIT_BYTES = 750_000;
+const MCP_PREVIEW_BYTES = 24_000;
+const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
+
+function importFile(filePath) {
+  return import(pathToFileURL(filePath).href);
+}
+
+function normalizePositiveNumber(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function resolveMcpResponseLimits() {
+  return {
+    textContentLimitBytes: normalizePositiveNumber(
+      process.env.FORGE_MCP_TEXT_CONTENT_LIMIT_BYTES,
+      DEFAULT_MCP_TEXT_CONTENT_LIMIT_BYTES
+    ),
+    structuredContentLimitBytes: normalizePositiveNumber(
+      process.env.FORGE_MCP_STRUCTURED_CONTENT_LIMIT_BYTES,
+      DEFAULT_MCP_STRUCTURED_CONTENT_LIMIT_BYTES
+    )
+  };
+}
+
+function safeStringify(value) {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch (error) {
+    return JSON.stringify(
+      {
+        error: "Forge MCP could not serialize this response.",
+        reason: error instanceof Error ? error.message : String(error)
+      },
+      null,
+      2
+    );
+  }
+}
+
+function utf8ByteLength(value) {
+  return textEncoder.encode(value).byteLength;
+}
+
+function truncateUtf8(value, limitBytes) {
+  const encoded = textEncoder.encode(value);
+  if (encoded.byteLength <= limitBytes) return value;
+  return textDecoder.decode(encoded.slice(0, Math.max(0, limitBytes)));
+}
+
+function createTruncatedMcpPayload({ kind, value, limitBytes }) {
+  const serialized = typeof value === "string" ? value : safeStringify(value);
+  return {
+    forgeMcpResponseTruncated: true,
+    kind,
+    approximateBytes: utf8ByteLength(serialized),
+    limitBytes,
+    preview: truncateUtf8(serialized, Math.min(MCP_PREVIEW_BYTES, limitBytes)),
+    guidance:
+      "The Forge MCP bridge truncated this response before writing to stdio. Narrow the request, lower the limit, or fetch one specific wiki page/result."
+  };
+}
+
+function toMcpContent(result, limits) {
+  const source =
+    Array.isArray(result?.content) && result.content.length > 0
+      ? result.content
+      : [{ type: "text", text: safeStringify(result?.details ?? null) }];
+
+  return source.map((item) => {
+    const text =
+      item && typeof item === "object" && item.type === "text" && "text" in item
+        ? typeof item.text === "string"
+          ? item.text
+          : safeStringify(item.text ?? null)
+        : safeStringify(item);
+
+    if (utf8ByteLength(text) <= limits.textContentLimitBytes) {
+      return { type: "text", text };
+    }
+
+    return {
+      type: "text",
+      text: safeStringify(
+        createTruncatedMcpPayload({
+          kind: "content",
+          value: text,
+          limitBytes: limits.textContentLimitBytes
+        })
+      )
+    };
+  });
+}
+
+function maybeStructuredContent(details, limits) {
+  if (typeof details !== "object" || details === null) return undefined;
+  const serialized = safeStringify(details);
+  if (utf8ByteLength(serialized) <= limits.structuredContentLimitBytes) {
+    return details;
+  }
+  return createTruncatedMcpPayload({
+    kind: "structuredContent",
+    value: serialized,
+    limitBytes: limits.structuredContentLimitBytes
+  });
+}
+
+function resolveMcpRuntimeRoot(config) {
+  if (config.mode === "dev" && config.repo) {
+    const devRoot = path.join(config.repo, "openclaw-plugin");
+    if (fs.existsSync(path.join(devRoot, "dist", "openclaw", "tools.js"))) {
+      return devRoot;
+    }
+  }
+  return resolveOpenClawPluginRoot();
+}
+
+async function loadForgeToolRuntime(config) {
+  const pluginRoot = resolveMcpRuntimeRoot(config);
+  if (!pluginRoot) return null;
+
+  const pluginRequire = createRequire(path.join(pluginRoot, "package.json"));
+  const [
+    { Value },
+    { resolveForgePluginConfig },
+    { registerForgePluginTools }
+  ] = await Promise.all([
+    importFile(pluginRequire.resolve("@sinclair/typebox/value")),
+    importFile(
+      path.join(pluginRoot, "dist", "openclaw", "plugin-entry-shared.js")
+    ),
+    importFile(path.join(pluginRoot, "dist", "openclaw", "tools.js"))
+  ]);
+
+  const forgeConfig = resolveForgePluginConfig({
+    origin: process.env.FORGE_ORIGIN ?? config.origin,
+    port: normalizePort(process.env.FORGE_PORT, config.port),
+    dataRoot: process.env.FORGE_DATA_ROOT?.trim() || config.dataRoot,
+    apiToken: process.env.FORGE_API_TOKEN ?? "",
+    actorLabel: process.env.FORGE_ACTOR_LABEL ?? "codex",
+    timeoutMs: normalizePositiveNumber(process.env.FORGE_TIMEOUT_MS, 15_000)
+  });
+  const tools = [];
+  registerForgePluginTools(
+    { registerTool: (tool) => tools.push(tool) },
+    forgeConfig
+  );
+  return { pluginRoot, Value, tools };
+}
+
+function validationErrorMessage(Value, schema, value) {
+  const firstError = Value.Errors(schema, value).First();
+  if (!firstError) return "Invalid arguments";
+  return `${firstError.path || "input"}: ${firstError.message}`;
+}
+
 async function runMcp() {
   const config = await readConfig();
-  const server = new Server({ name: "forge-memory", version: VERSION }, { capabilities: { tools: {} } });
+  const responseLimits = resolveMcpResponseLimits();
+  let toolRuntime = null;
+  let toolRuntimeError = null;
+  try {
+    toolRuntime = await loadForgeToolRuntime(config);
+  } catch (error) {
+    toolRuntimeError = error instanceof Error ? error.message : String(error);
+  }
+  const forgeTools = toolRuntime?.tools ?? [];
+  const forgeToolByName = new Map(forgeTools.map((tool) => [tool.name, tool]));
+  const server = new Server(
+    { name: "forge-memory", version: VERSION },
+    { capabilities: { tools: {} } }
+  );
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
       {
@@ -1102,8 +1618,20 @@ async function runMcp() {
         name: "forge_memory_health",
         description: "Check the configured Forge API health endpoint.",
         inputSchema: { type: "object", properties: {} }
+      },
+      {
+        name: "forge_memory_mcp_diagnostics",
+        description: "Return Forge Memory MCP runtime loading diagnostics.",
+        inputSchema: { type: "object", properties: {} }
       }
-    ]
+    ].concat(
+      forgeTools.map((tool) => ({
+        name: tool.name,
+        title: tool.label,
+        description: tool.description,
+        inputSchema: tool.parameters
+      }))
+    )
   }));
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (request.params.name === "forge_memory_status") {
@@ -1111,15 +1639,87 @@ async function runMcp() {
         content: [
           {
             type: "text",
-            text: JSON.stringify({ baseUrl: baseUrl(config), webUrl: webUrl(config), dataRoot: config.dataRoot, identity: sha(config.dataRoot) }, null, 2)
+            text: JSON.stringify(
+              {
+                baseUrl: baseUrl(config),
+                webUrl: webUrl(config),
+                dataRoot: config.dataRoot,
+                identity: sha(config.dataRoot)
+              },
+              null,
+              2
+            )
           }
         ]
       };
     }
     if (request.params.name === "forge_memory_health") {
-      return { content: [{ type: "text", text: JSON.stringify(await health(config), null, 2) }] };
+      return {
+        content: [
+          { type: "text", text: JSON.stringify(await health(config), null, 2) }
+        ]
+      };
     }
-    throw new Error(`Unknown tool: ${request.params.name}`);
+    if (request.params.name === "forge_memory_mcp_diagnostics") {
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                runtimeLoaded: Boolean(toolRuntime),
+                runtimeRoot: toolRuntime?.pluginRoot ?? null,
+                runtimeError: toolRuntimeError,
+                forgeToolCount: forgeTools.length,
+                wikiTools: forgeTools
+                  .filter((tool) => tool.name.includes("wiki"))
+                  .map((tool) => tool.name)
+                  .sort()
+              },
+              null,
+              2
+            )
+          }
+        ]
+      };
+    }
+
+    const tool = forgeToolByName.get(request.params.name);
+    if (!tool) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `Forge tool not found: ${request.params.name}`
+      );
+    }
+
+    const args = request.params.arguments ?? {};
+    if (!toolRuntime.Value.Check(tool.parameters, args)) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        validationErrorMessage(toolRuntime.Value, tool.parameters, args)
+      );
+    }
+
+    try {
+      const result = await tool.execute(request.params.name, args);
+      return {
+        content: toMcpContent(result, responseLimits),
+        structuredContent: maybeStructuredContent(
+          result.details,
+          responseLimits
+        )
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: error instanceof Error ? error.message : String(error)
+          }
+        ],
+        isError: true
+      };
+    }
   });
   await server.connect(new StdioServerTransport());
 }
@@ -1179,7 +1779,9 @@ async function main() {
       await runDoctor(parsed);
       break;
     case "start":
-      console.log(JSON.stringify(await startRuntime(await readConfig()), null, 2));
+      console.log(
+        JSON.stringify(await startRuntime(await readConfig()), null, 2)
+      );
       break;
     case "stop":
       console.log(JSON.stringify(await stopRuntime(), null, 2));
@@ -1187,18 +1789,30 @@ async function main() {
     case "export":
       {
         const result = await exportForgeData(parsed);
-        console.log(parsed.flags.json ? JSON.stringify(result, null, 2) : `Exported Forge data to ${result.outputPath}`);
+        console.log(
+          parsed.flags.json
+            ? JSON.stringify(result, null, 2)
+            : `Exported Forge data to ${result.outputPath}`
+        );
       }
       break;
     case "uninstall":
       {
         const result = await uninstallForgeMemory(parsed);
-        console.log(parsed.flags.json ? JSON.stringify(result, null, 2) : result.cancelled ? "Uninstall cancelled." : "Forge Memory uninstalled.");
+        console.log(
+          parsed.flags.json
+            ? JSON.stringify(result, null, 2)
+            : result.cancelled
+              ? "Uninstall cancelled."
+              : "Forge Memory uninstalled."
+        );
       }
       break;
     case "restart":
       await stopRuntime();
-      console.log(JSON.stringify(await startRuntime(await readConfig()), null, 2));
+      console.log(
+        JSON.stringify(await startRuntime(await readConfig()), null, 2)
+      );
       break;
     case "ui":
       await runUi(parsed);
@@ -1221,6 +1835,8 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(color.red(error instanceof Error ? error.message : String(error)));
+  console.error(
+    color.red(error instanceof Error ? error.message : String(error))
+  );
   process.exitCode = 1;
 });

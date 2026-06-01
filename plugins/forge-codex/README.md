@@ -79,6 +79,8 @@ Environment variables:
 - `FORGE_ACTOR_LABEL`
 - `FORGE_TIMEOUT_MS`
 - `FORGE_DATA_ROOT`
+- `FORGE_MCP_TEXT_CONTENT_LIMIT_BYTES`
+- `FORGE_MCP_STRUCTURED_CONTENT_LIMIT_BYTES`
 
 Defaults match the local Forge runtime:
 
@@ -89,6 +91,11 @@ Defaults match the local Forge runtime:
   when present
 
 If nothing is already listening on the configured local Forge port, the plugin auto-starts the bundled runtime.
+
+The MCP bridge caps oversized text and structured payloads before writing to
+stdio. This prevents large wiki/search responses from closing the client
+transport; when a cap is hit the result includes a truncated preview and
+guidance to narrow the request.
 
 ## Notes
 
