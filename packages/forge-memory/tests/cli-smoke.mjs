@@ -2,6 +2,8 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
 const packageRoot = path.resolve(import.meta.dirname, "..");
 const bin = path.join(packageRoot, "bin", "forge-memory.mjs");
@@ -22,9 +24,27 @@ function run(args, options = {}) {
     ...options
   });
   if (result.status !== 0) {
-    throw new Error(`forge-memory ${args.join(" ")} failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+    throw new Error(
+      `forge-memory ${args.join(" ")} failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`
+    );
   }
   return result;
+}
+
+async function listMcpTools() {
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [bin, "mcp"],
+    cwd: packageRoot,
+    env
+  });
+  const client = new Client({ name: "forge-memory-smoke", version: "0.0.0" });
+  await client.connect(transport);
+  try {
+    return await client.listTools();
+  } finally {
+    await client.close();
+  }
 }
 
 run(["--help"]);
@@ -56,7 +76,15 @@ run([
   "0",
   "--json"
 ]);
-run(["configure", "--yes", "--no-start", "--skip-pair-ios", "--adapters", "none", "--json"]);
+run([
+  "configure",
+  "--yes",
+  "--no-start",
+  "--skip-pair-ios",
+  "--adapters",
+  "none",
+  "--json"
+]);
 run(["status", "--json"]);
 run(["doctor", "--json"]);
 run(["stop"]);
@@ -79,12 +107,36 @@ if (!Array.isArray(config.adapters) || config.adapters.length !== 0) {
   throw new Error("Expected no adapters in smoke config");
 }
 
+fs.writeFileSync(
+  configPath,
+  `${JSON.stringify(
+    {
+      ...config,
+      mode: "dev",
+      repo: path.resolve(packageRoot, "../..")
+    },
+    null,
+    2
+  )}\n`
+);
+const mcpTools = await listMcpTools();
+const mcpToolNames = mcpTools.tools.map((tool) => tool.name);
+if (!mcpToolNames.includes("forge_search_wiki")) {
+  throw new Error(
+    `Expected forge-memory mcp to expose wiki tools; got ${mcpToolNames.join(", ")}`
+  );
+}
+
 run(["uninstall", "--yes", "--json"]);
 if (fs.existsSync(configPath)) {
-  throw new Error("Expected forge-memory uninstall to remove the manager config");
+  throw new Error(
+    "Expected forge-memory uninstall to remove the manager config"
+  );
 }
 if (!fs.existsSync(dataRoot)) {
-  throw new Error("Expected forge-memory uninstall to keep the data folder by default");
+  throw new Error(
+    "Expected forge-memory uninstall to keep the data folder by default"
+  );
 }
 
 console.log("forge-memory smoke tests passed");

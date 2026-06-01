@@ -30,6 +30,12 @@ npx forge-memory uninstall
 npx forge-memory pair-ios
 ```
 
+Codex uses `npx forge-memory mcp` after configuration. That MCP entrypoint loads
+the same curated Forge tool registry as the OpenClaw/Codex adapters, including
+the wiki tools (`forge_search_wiki`, `forge_get_wiki_page`, and maintenance
+tools). It also exposes `forge_memory_mcp_diagnostics` so adapter startup issues
+show up as a tool result instead of a closed MCP transport.
+
 `pair-ios` prefers the Iroh QR. Forge starts a Rust Iroh host, prints a QR payload
 with the desktop node id, pairing token, optional relay hint, and ALPN
 `forge-companion/1`, and the iPhone app connects through its native Rust bridge. Use
