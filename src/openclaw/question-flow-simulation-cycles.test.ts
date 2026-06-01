@@ -827,6 +827,9 @@ describe("question flow simulation cycles", () => {
     expect(psychePlaybook).toMatch(/emotionally meaningful kind of moment/i);
     expect(psychePlaybook).toMatch(/lived signature/i);
     expect(psychePlaybook).toMatch(/Interpretive Hypotheses/i);
+    expect(psychePlaybook).toMatch(/Hypothesis Wording Shape/i);
+    expect(psychePlaybook).toMatch(/evidence in the user's own example/i);
+    expect(psychePlaybook).toMatch(/function without blame/i);
     expect(psychePlaybook).toMatch(/Hypothesis To Record Bridge/i);
     expect(psychePlaybook).toMatch(/collaborative formulations/i);
     expect(psychePlaybook).toMatch(/protecting, predicting, relieving, or\s+costing/i);
@@ -1179,12 +1182,12 @@ describe("question flow simulation cycles", () => {
 
   it("cycle 3 report retest: durable automation report covers this full run", () => {
     const report = readRepoFile("docs/question-flow-improvement-cycles.md");
-    const latestRun = getSectionSlice(report, "2026-05-31 Automation Pass");
+    const latestRun = getSectionSlice(report, "2026-06-01 Automation Pass");
 
-    expect(report).toMatch(/Latest run date: 2026-05-31/);
-    expect(latestRun).toMatch(/OpenClaw config[\s\S]*data\/forge/i);
-    expect(latestRun).toMatch(/repo-local plugin path/i);
-    expect(latestRun).toMatch(/forge-hermes-plugin 0\.2\.95/i);
+    expect(report).toMatch(/Latest run date: 2026-06-01/);
+    expect(latestRun).toMatch(/data\/forge\/forge\.sqlite/i);
+    expect(latestRun).toMatch(/repo-local plugin\s+dist/i);
+    expect(latestRun).toMatch(/forge-hermes-plugin 0\.2\.99/i);
     expect(latestRun).toMatch(/42 entity catalog entries/i);
     expect(latestRun).toMatch(/training_load/i);
     expect(latestRun).toMatch(
@@ -1199,15 +1202,15 @@ describe("question flow simulation cycles", () => {
     expect(latestRun).toMatch(/training_load/i);
     expect(latestRun).toMatch(/Movement[\s\S]*Life Force[\s\S]*Workbench/i);
     expect(latestRun).toMatch(
-      /Cycle 1[\s\S]*Movement place CRUD[\s\S]*Workbench\s+run-node/i
+      /Cycle 1[\s\S]*operational openers/i
     );
     expect(latestRun).toMatch(
-      /Cycle 2[\s\S]*Reflection-sensitive non-Psyche records/i
+      /Cycle 2[\s\S]*Hypothesis Wording Shape/i
     );
     expect(latestRun).toMatch(
-      /Cycle 3[\s\S]*reflection-sensitive non-Psyche record rule/i
+      /Cycle 3[\s\S]*methodRoutes[\s\S]*generated OpenAPI/i
     );
-    expect(latestRun).toMatch(/39 focused tests/i);
+    expect(latestRun).toMatch(/50 focused tests/i);
     expect(latestRun).toMatch(/What happened after retesting/i);
   });
 });

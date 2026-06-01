@@ -598,7 +598,7 @@ describe("OverviewPage", () => {
     expect(screen.getByText("Momentum 82")).toBeInTheDocument();
     expect(screen.getAllByText("Life Force").length).toBeGreaterThan(0);
     expect(screen.getByText("132 / 214 AP")).toBeInTheDocument();
-    expect(screen.getByText("Instant")).toBeInTheDocument();
+    expect(screen.getAllByText("Instant").length).toBeGreaterThan(0);
     expect(screen.getAllByText("6.9 AP/h").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Weekly XP").length).toBeGreaterThan(0);
     expect(screen.getAllByText("126").length).toBeGreaterThan(0);

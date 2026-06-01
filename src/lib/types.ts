@@ -4326,6 +4326,7 @@ export interface AgentOnboardingPayload {
     reviewShortcutRule: string;
       readModelWriteRule: string;
       psycheOpeningQuestionRule: string;
+      psycheHypothesisRule: string;
       followUpQuestionRule: string;
       antiDriftRule: string;
       duplicateCheckRoute: string;

@@ -13,9 +13,145 @@
     />
     <link rel="icon" type="image/png" href="./favicon.png" />
     <link rel="alternate icon" href="./favicon.ico" />
+    <style>
+      :root {
+        color-scheme: dark;
+        background: #0b1326;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(
+            circle at top left,
+            rgba(192, 193, 255, 0.18),
+            transparent 28%
+          ),
+          radial-gradient(
+            circle at 82% 16%,
+            rgba(78, 222, 163, 0.12),
+            transparent 24%
+          ),
+          linear-gradient(180deg, #111a31 0%, #0b1326 52%, #09101f 100%);
+      }
+
+      #root {
+        min-height: 100vh;
+      }
+
+      .forge-boot-shell {
+        box-sizing: border-box;
+        display: grid;
+        min-height: 100vh;
+        place-items: center;
+        padding: 2rem;
+        color: rgba(238, 242, 255, 0.92);
+        font-family:
+          "Plus Jakarta Sans Variable", "Plus Jakarta Sans", Inter, system-ui,
+          sans-serif;
+      }
+
+      .forge-boot-panel {
+        width: min(100%, 31rem);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 1.25rem;
+        background: rgba(13, 20, 35, 0.82);
+        box-shadow: 0 32px 90px rgba(3, 8, 18, 0.38);
+        padding: 1.5rem;
+      }
+
+      .forge-boot-kicker {
+        margin: 0 0 0.75rem;
+        color: rgba(192, 193, 255, 0.82);
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .forge-boot-title {
+        margin: 0;
+        font-size: clamp(1.65rem, 6vw, 2.25rem);
+        font-weight: 780;
+        letter-spacing: 0;
+        line-height: 1.05;
+      }
+
+      .forge-boot-copy {
+        margin: 0.75rem 0 0;
+        color: rgba(238, 242, 255, 0.68);
+        font-size: 0.92rem;
+        line-height: 1.55;
+      }
+
+      .forge-boot-bar {
+        position: relative;
+        height: 0.45rem;
+        margin-top: 1.25rem;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      .forge-boot-bar::after {
+        position: absolute;
+        inset: 0;
+        width: 42%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #c0c1ff, #4edea3);
+        content: "";
+        animation: forge-boot-scan 1.35s ease-in-out infinite;
+      }
+
+      .forge-boot-note {
+        margin: 1rem 0 0;
+        color: rgba(238, 242, 255, 0.48);
+        font-size: 0.75rem;
+        line-height: 1.45;
+      }
+
+      @keyframes forge-boot-scan {
+        0% {
+          transform: translateX(-110%);
+        }
+        100% {
+          transform: translateX(250%);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .forge-boot-bar::after {
+          animation: none;
+          transform: none;
+          width: 100%;
+        }
+      }
+    </style>
   </head>
   <body class="bg-canvas text-ink antialiased">
-    <div id="root"></div>
+    <div id="root">
+      <main class="forge-boot-shell" aria-live="polite" aria-busy="true">
+        <section
+          class="forge-boot-panel"
+          role="status"
+          aria-label="Forge is loading"
+        >
+          <p class="forge-boot-kicker">Forge runtime</p>
+          <h1 class="forge-boot-title">Forge is starting</h1>
+          <p class="forge-boot-copy">
+            The app shell is loading from the local development server. If this
+            message stays visible after a hard refresh, the browser did not
+            finish loading the Forge JavaScript bundle.
+          </p>
+          <div class="forge-boot-bar" aria-hidden="true"></div>
+          <p class="forge-boot-note">
+            This screen is built into the HTML entrypoint so the Tailscale page
+            never starts as an empty white document.
+          </p>
+        </section>
+      </main>
+    </div>
     <script type="module" src="./src/main.tsx"></script>
   </body>
 </html>

@@ -1,4 +1,5 @@
 import { AiSurfaceWorkspace } from "@/components/customization/ai-surface-workspace";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { type SurfaceWidgetDefinition } from "@/components/customization/editable-surface";
@@ -17,6 +18,7 @@ import { useForgeShell } from "@/components/shell/app-shell";
 import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { EmptyState } from "@/components/ui/page-state";
 import { ProgressMeter } from "@/components/ui/progress-meter";
 import { EntityBadge } from "@/components/ui/entity-badge";
@@ -44,6 +46,19 @@ import type {
   VitalsViewData
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+const OVERVIEW_METRIC_HELP: Record<string, string> = {
+  "Life Force":
+    "Life Force compares today's spent Action Points with the modeled daily budget. It is Forge's local capacity planning layer, not a medical score.",
+  Momentum:
+    "Momentum summarizes recent execution, XP, streak context, and movement across Forge records. Use it as an attention signal.",
+  Instant:
+    "Instant AP/hour estimates current headroom from the Life Force drain model. Higher values mean Forge thinks the next block can absorb more effort.",
+  Level:
+    "Level comes from the XP ledger. It represents accumulated meaningful Forge activity for the selected user scope.",
+  "Weekly XP":
+    "Weekly XP is recent reward-ledger movement. It helps separate a genuinely active week from old accumulated progress."
+};
 
 function normalizeOverviewLayout(
   layout: SurfaceLayoutPayload
@@ -192,16 +207,31 @@ export function OverviewPage() {
   const selectedUserIds = Array.isArray(shell.selectedUserIds)
     ? shell.selectedUserIds
     : [];
+  const selectedScopeKey = selectedUserIds.join("|");
+  const [enableOverviewSideData, setEnableOverviewSideData] = useState(false);
+
+  useEffect(() => {
+    setEnableOverviewSideData(false);
+    const timer = window.setTimeout(() => {
+      setEnableOverviewSideData(true);
+    }, 650);
+    return () => window.clearTimeout(timer);
+  }, [selectedScopeKey]);
+
   const todayDateKey = localDateKey();
   const sleepQuery =
     useQuery({
       queryKey: ["forge-overview-sleep", ...selectedUserIds],
-      queryFn: async () => (await getSleepView(selectedUserIds)).sleep
+      queryFn: async () => (await getSleepView(selectedUserIds)).sleep,
+      enabled: enableOverviewSideData,
+      staleTime: 60_000
     }) ?? {};
   const fitnessQuery =
     useQuery({
       queryKey: ["forge-overview-fitness", ...selectedUserIds],
-      queryFn: async () => (await getFitnessView(selectedUserIds)).fitness
+      queryFn: async () => (await getFitnessView(selectedUserIds)).fitness,
+      enabled: enableOverviewSideData,
+      staleTime: 60_000
     }) ?? {};
   const movementDayQuery =
     useQuery({
@@ -216,14 +246,20 @@ export function OverviewPage() {
             date: todayDateKey,
             userIds: selectedUserIds
           })
-        ).movement
+        ).movement,
+      enabled: enableOverviewSideData,
+      staleTime: 60_000
     }) ?? {};
   const vitalsQuery =
     useQuery({
       queryKey: ["forge-overview-vitals", ...selectedUserIds],
-      queryFn: async () => (await getVitalsView(selectedUserIds)).vitals
+      queryFn: async () => (await getVitalsView(selectedUserIds)).vitals,
+      enabled: enableOverviewSideData,
+      staleTime: 60_000
     }) ?? {};
-  const xpMetricsQuery = useGetXpMetricsQuery(selectedUserIds);
+  const xpMetricsQuery = useGetXpMetricsQuery(selectedUserIds, {
+    skip: !enableOverviewSideData
+  });
   const nextMilestone =
     snapshot.dashboard.milestoneRewards.find((reward) => !reward.completed) ??
     snapshot.dashboard.milestoneRewards[0] ??
@@ -277,12 +313,14 @@ export function OverviewPage() {
         {
           label: "Life Force",
           value: `${Math.round(snapshot.lifeForce.spentTodayAp)} / ${Math.round(snapshot.lifeForce.dailyBudgetAp)} AP`,
-          detail: `Remaining ${formatLifeForceAp(snapshot.lifeForce.remainingAp)}`
+          detail: `Remaining ${formatLifeForceAp(snapshot.lifeForce.remainingAp)}`,
+          help: OVERVIEW_METRIC_HELP["Life Force"]
         },
         {
           label: "Momentum",
           value: `${snapshot.metrics.momentumScore}`,
-          detail: `${heroStatus} · ${snapshot.metrics.streakDays} day streak`
+          detail: `${heroStatus} · ${snapshot.metrics.streakDays} day streak`,
+          help: OVERVIEW_METRIC_HELP.Momentum
         },
         {
           label: "Instant",
@@ -290,34 +328,40 @@ export function OverviewPage() {
           detail:
             snapshot.lifeForce.overloadApPerHour > 0
               ? `${formatLifeForceRate(snapshot.lifeForce.overloadApPerHour)} overload`
-              : "Headroom right now"
+              : "Headroom right now",
+          help: OVERVIEW_METRIC_HELP.Instant
         },
         {
           label: "Level",
           value: `L${snapshot.metrics.level}`,
-          detail: `${snapshot.metrics.currentLevelXp} XP in level`
+          detail: `${snapshot.metrics.currentLevelXp} XP in level`,
+          help: OVERVIEW_METRIC_HELP.Level
         },
         {
           label: "Weekly XP",
           value: `${snapshot.metrics.weeklyXp}`,
-          detail: `${snapshot.metrics.totalXp} total XP`
+          detail: `${snapshot.metrics.totalXp} total XP`,
+          help: OVERVIEW_METRIC_HELP["Weekly XP"]
         }
       ]
     : [
         {
           label: "Level",
           value: `L${snapshot.metrics.level}`,
-          detail: `${snapshot.metrics.currentLevelXp} XP in level`
+          detail: `${snapshot.metrics.currentLevelXp} XP in level`,
+          help: OVERVIEW_METRIC_HELP.Level
         },
         {
           label: "Weekly XP",
           value: `${snapshot.metrics.weeklyXp}`,
-          detail: `${snapshot.metrics.totalXp} total XP`
+          detail: `${snapshot.metrics.totalXp} total XP`,
+          help: OVERVIEW_METRIC_HELP["Weekly XP"]
         },
         {
           label: "Momentum",
           value: `${snapshot.metrics.momentumScore}`,
-          detail: `${heroStatus} · ${snapshot.metrics.streakDays} day streak`
+          detail: `${heroStatus} · ${snapshot.metrics.streakDays} day streak`,
+          help: OVERVIEW_METRIC_HELP.Momentum
         }
       ];
 
@@ -509,8 +553,14 @@ export function OverviewPage() {
                 key={metric.label}
                 className="rounded-[20px] border border-white/8 bg-white/[0.04] px-4 py-3"
               >
-                <div className="text-[10px] uppercase tracking-[0.16em] text-white/40">
-                  {metric.label}
+                <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.16em] text-white/40">
+                  <span>{metric.label}</span>
+                  <InfoTooltip
+                    label={`Explain ${metric.label}`}
+                    title={metric.label}
+                    content={metric.help}
+                    panelClassName="normal-case tracking-normal"
+                  />
                 </div>
                 <div className="mt-1 text-lg font-semibold text-white">
                   {metric.value}

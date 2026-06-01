@@ -3066,6 +3066,7 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
     "Use a progression of concrete example or intent, working name, purpose or meaning, placement in Forge, operational details, and linked context.",
     "Ask one to three focused questions at a time. One is usually best when the user is uncertain or emotionally loaded.",
     "One focused question is the default. Only stack a second question when both serve the same clarification job and the user is steady enough for it.",
+    "For operational create flows, do not bundle name, scope, and timing into one opener when the user has already supplied part of it. Ask the route-changing missing detail first, then move to the next detail only if it is still unknown.",
     "When the user wants review, comparison, or navigation around an existing record, ask what they are trying to understand first and look up the existing record before reopening create or update intake.",
     "If the user already answered the normal opening question, do not repeat it. Move to the next missing clarification.",
     "Do not over-therapize logistical entities. For tasks, calendar events, work blocks, timeboxes, and task runs, one brief confirming sentence plus one question is usually enough.",
@@ -3087,6 +3088,7 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
     "Do not bury schema work in self-observation. If the user is describing a schema theme, preserve it through a belief_entry, behavior_pattern, mode_profile, mode_guide_session, trigger_report, or wiki_page depending on whether it appears as a rule, loop, part-state, live exploration, one episode, or durable explanation.",
     "Do not minimize functional analysis, trigger chains, behavior patterns, modes, beliefs, or schema themes. After at least one concrete example is clear, offer one careful interpretive hypothesis when it would help the user understand what the reaction may be protecting, predicting, relieving, or costing.",
     "Phrase Psyche interpretive hypotheses as collaborative and testable, not as verdicts. Ask whether the hypothesis lands or needs correction before turning it into a saved belief, pattern, mode, trigger report, or note.",
+    "A useful Psyche hypothesis starts from the user's concrete example, names one possible protection, prediction, relief, or cost, and asks for correction before it becomes a saved record shape.",
     "Once the Movement, Life Force, or Workbench job is clear, speak in product nouns such as timeline, overlay, weekday template, published output, run detail, or node result instead of generic record language.",
     "If the next answer would not change the route, wording, timing, or write shape in a meaningful way, stop asking and act.",
     "Before saving, briefly summarize the working formulation in the user's own language when that would reduce ambiguity.",
@@ -3216,7 +3218,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     },
     {
         focus: "calendar_event",
-        openingQuestion: "What is the event, and when should it happen in your local time?",
+        openingQuestion: "What time should Forge hold for this event in your local timezone?",
         coachingGoal: "Make the event legible as a real commitment in time, with the right timezone and links.",
         askSequence: [
             "Ask what the event is.",
@@ -3227,7 +3229,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     },
     {
         focus: "work_block_template",
-        openingQuestion: "What recurring block do you want to set up, and when should it repeat?",
+        openingQuestion: "When should this recurring block repeat?",
         coachingGoal: "Define a reusable availability rule rather than a one-off event.",
         askSequence: [
             "Ask what kind of block it is and what it should be called.",
@@ -3238,7 +3240,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     },
     {
         focus: "task_timebox",
-        openingQuestion: "Which task are you trying to make time for, and when should the slot be?",
+        openingQuestion: "When should Forge reserve focused time for this task?",
         coachingGoal: "Reserve real time for one task without confusing planned work with completed work.",
         askSequence: [
             "Ask which task the slot belongs to.",
@@ -3260,7 +3262,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     },
     {
         focus: "calendar_connection",
-        openingQuestion: "Which calendar provider are you trying to connect, and what do you want Forge to do with it?",
+        openingQuestion: "What workflow do you want this calendar connection to unlock?",
         coachingGoal: "Connect the right provider deliberately without turning setup into a credential dump.",
         askSequence: [
             "Ask which provider the user wants to connect and what they want Forge to do with it.",
@@ -3493,7 +3495,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     },
     {
         focus: "questionnaire_run",
-        openingQuestion: "What do you want from this questionnaire run right now: start, continue, review, or finish it?",
+        openingQuestion: "Are you trying to start, continue, review, or finish this run right now?",
         coachingGoal: "Clarify whether the user wants to start, continue, review, or complete one answer session without turning the run into a mechanical form fill.",
         askSequence: [
             "Ask what the user wants from the run right now: start, continue, review, or finish.",
@@ -5284,6 +5286,7 @@ function buildAgentOnboardingPayload(request) {
             reviewShortcutRule: "When the user is reviewing or correcting an existing record, ask what practical question they want the read or correction to answer, then narrow the saved object, timeframe, or route family first. Do not reopen the whole intake unless the user is actually redefining the record.",
             readModelWriteRule: "Self-observation is note-backed and should be written through observed notes with frontmatter.observedAt only when a lightweight episode observation is the right container. Do not use it as the default bucket for Psyche material: prefer trigger_report for one emotionally meaningful episode, behavior_pattern for functional analysis of a recurring loop, behavior for one repeated move, belief_entry for a core sentence, mode_guide_session or mode_profile for a central part-state, and wiki_page for durable memory such as books, articles, concepts, sources, or personal manuals. Sleep and workout sessions stay on batch CRUD by default; use the reflective review helpers only when enriching one already-known record after review.",
             psycheOpeningQuestionRule: "Prefer a concrete opening question tied to the entity: ask when the value mattered, what happened the last time the pattern appeared, what cue or body signal came first before the behavior, what the belief starts saying about self or outcome, what feels most at risk inside the mode, what the part is trying to get the user to do or stop doing, or where the shift began in the incident. Reflect briefly before the question, choose one follow-up lane at a time, say what is becoming clearer before the next deeper question, and if several Psyche entities are visible hold the adjacent ones lightly until the main container is clear.",
+            psycheHypothesisRule: "When one concrete Psyche example is visible, a helpful hypothesis should start from evidence in the user's own example, offer one testable interpretation, name the function without blame such as protection, prediction, relief, or cost, and ask whether the danger, need, or wording fits. Do not present schema, mode, belief, or pattern language as a verdict. If the user corrects the hypothesis, revise it once and move toward the saveable record shape instead of asking for another broad story.",
             followUpQuestionRule: "After a substantive answer, do not restart the opener or jump to the next schema field. First say what became clearer in concrete language, then choose exactly one next lane: wording, boundary, placement, timing, route scope, link, hypothesis, or write confirmation. Ask the smallest question that would change the record shape, route choice, useful wording, timing, or links. If nothing decision-relevant would change, stop asking, summarize the working record, and act with consent.",
             antiDriftRule: "Avoid vague reflective filler and internal route language. Replace phrases like 'that sounds important' with the specific stake you heard, and replace API nouns like surface, CRUD, payload, mutation path, or endpoint with user-facing product nouns such as belief, pattern, note, wiki page, timeline, overlay, weekday template, flow, run, node result, or published output. If a question would only decorate the intake, skip it.",
             duplicateCheckRoute: "/api/v1/entities/search",
@@ -5683,6 +5686,7 @@ function buildV1Context(scope = {
     projectIds: [],
     tagIds: []
 }) {
+    const now = new Date();
     const users = listUsers();
     const { validScopedUserIds, scopedUserIdsForReads } = normalizeScopedUserIdsForReads({
         scope,
@@ -5702,17 +5706,26 @@ function buildV1Context(scope = {
         meta: {
             apiVersion: "v1",
             transport: "rest+sse",
-            generatedAt: new Date().toISOString(),
+            generatedAt: now.toISOString(),
             backend: "forge-node-runtime",
             mode: "transitional-node"
         },
-        metrics: buildGamificationProfile(goals, tasks, habits, new Date(), {
+        metrics: buildGamificationProfile(goals, tasks, habits, now, {
             userIds: scopedUserIdsForReads
         }),
         dashboard,
-        overview: getOverviewContext(new Date(), { userIds: scopedUserIdsForReads }),
-        today: getTodayContext(new Date(), { userIds: scopedUserIdsForReads }),
-        risk: getRiskContext(new Date(), { userIds: scopedUserIdsForReads }),
+        overview: getOverviewContext(now, {
+            userIds: scopedUserIdsForReads,
+            dashboard
+        }),
+        today: getTodayContext(now, {
+            userIds: scopedUserIdsForReads,
+            dashboard
+        }),
+        risk: getRiskContext(now, {
+            userIds: scopedUserIdsForReads,
+            dashboard
+        }),
         goals,
         projects,
         tags: listTags(),
@@ -5730,7 +5743,7 @@ function buildV1Context(scope = {
             ? []
             : listTaskRuns({ active: true, limit: 25, userIds: scopedUserIdsForReads }),
         activity: dashboard.recentActivity,
-        lifeForce: buildLifeForcePayload(new Date(), scopedUserIdsForReads)
+        lifeForce: buildLifeForcePayload(now, scopedUserIdsForReads)
     };
 }
 function buildXpMetricsPayload(input = {}) {

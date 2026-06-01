@@ -197,6 +197,25 @@ material without a usable formulation.
 - Do not make the user supply every interpretation alone. If the sequence is clear
   enough, do the formulation work in plain language and invite correction.
 
+## Hypothesis Wording Shape
+
+Use this when reflection alone would leave the user with warmth but no clearer
+formulation.
+
+1. Start with the evidence in the user's own example:
+   "When X happened, Y seemed to happen inside you."
+2. Offer one testable interpretation:
+   "One hypothesis is that this response is trying to protect you from Z."
+3. Name the function without blame:
+   what it predicts, what it prevents, what relief it creates, or what it costs.
+4. Ask for correction:
+   "Does that fit, or is the danger/need somewhere else?"
+
+Do not say "this is your schema" or "this is your mode" as a verdict. Say what in the
+example makes the hypothesis plausible, then let the user correct the danger,
+protection, payoff, cost, or wording. If the correction is usable, revise once and move
+toward the record shape instead of asking for another broad story.
+
 ## Hypothesis To Record Bridge
 
 Once a hypothesis lands or is corrected, turn it into a saveable Forge shape instead

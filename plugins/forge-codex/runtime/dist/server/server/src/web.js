@@ -143,6 +143,14 @@ function copyProxyHeaders(response, reply) {
         reply.header(name, value);
     }
 }
+function isHtmlResponse(contentType) {
+    const values = Array.isArray(contentType) ? contentType : [contentType];
+    return values.some((value) => typeof value === "string" && value.toLowerCase().includes("text/html"));
+}
+function forceUncachedHtml(reply) {
+    reply.header("Cache-Control", "no-store, max-age=0, must-revalidate");
+    reply.header("Pragma", "no-cache");
+}
 const hopByHopHeaders = new Set([
     "connection",
     "content-length",
@@ -164,7 +172,10 @@ async function proxyDevAsset(input) {
     const response = await input.fetchImpl(target, { redirect: "manual" });
     input.reply.code(response.status);
     copyProxyHeaders(response, input.reply);
-    if (!response.headers.has("cache-control")) {
+    if (isHtmlResponse(response.headers.get("content-type") ?? undefined)) {
+        forceUncachedHtml(input.reply);
+    }
+    else if (!response.headers.has("cache-control")) {
         input.reply.header("Cache-Control", "no-store, max-age=0, must-revalidate");
     }
     if (!response.body) {
@@ -205,7 +216,10 @@ export function createKeepAliveDevAssetProxy() {
                         }
                         input.reply.header(name, value);
                     }
-                    if (!response.headers["cache-control"]) {
+                    if (isHtmlResponse(response.headers["content-type"])) {
+                        forceUncachedHtml(input.reply);
+                    }
+                    else if (!response.headers["cache-control"]) {
                         input.reply.header("Cache-Control", "no-store, max-age=0, must-revalidate");
                     }
                     const chunks = [];
@@ -444,7 +458,7 @@ async function serveAsset(requestPath, reply, options) {
         reply.type(contentTypes[ext] ?? "application/octet-stream");
         reply.header("Cache-Control", "no-store, max-age=0, must-revalidate");
         if (ext === ".html") {
-            reply.header("Pragma", "no-cache");
+            forceUncachedHtml(reply);
         }
         return payload;
     }
@@ -453,8 +467,7 @@ async function serveAsset(requestPath, reply, options) {
             try {
                 const payload = await readFile(path.join(clientDir, "index.html"));
                 reply.type(contentTypes[".html"]);
-                reply.header("Cache-Control", "no-store, max-age=0, must-revalidate");
-                reply.header("Pragma", "no-cache");
+                forceUncachedHtml(reply);
                 return payload;
             }
             catch {

@@ -5,13 +5,13 @@ import { listRewardLedger } from "../repositories/rewards.js";
 import { listTags, listTagsByIds } from "../repositories/tags.js";
 import { listTasks } from "../repositories/tasks.js";
 import { getDashboard } from "./dashboard.js";
-import { buildAchievementSignals, buildGamificationProfile, buildMilestoneRewards } from "./gamification.js";
 import {
   overviewContextSchema,
   riskContextSchema,
   todayContextSchema,
   type ContextDomainBalance,
   type ContextNeglectedGoal,
+  type DashboardPayload,
   type Goal,
   type OverviewContext,
   type RiskContext,
@@ -133,8 +133,13 @@ function buildDomainBalance(goals: Goal[], tasks: Task[]): ContextDomainBalance[
   return [...domainRows.values()].sort((left, right) => right.completedPoints - left.completedPoints);
 }
 
-export function getOverviewContext(now = new Date(), options: { userIds?: string[] } = {}): OverviewContext {
-  const dashboard = getDashboard(options);
+type ContextOptions = {
+  userIds?: string[];
+  dashboard?: DashboardPayload;
+};
+
+export function getOverviewContext(now = new Date(), options: ContextOptions = {}): OverviewContext {
+  const dashboard = options.dashboard ?? getDashboard({ userIds: options.userIds });
   const focusTasks = dashboard.tasks.filter((task) => task.status === "focus" || task.status === "in_progress").length;
   const overdueTasks = dashboard.tasks.filter((task) => task.status !== "done" && task.dueDate !== null && task.dueDate < now.toISOString().slice(0, 10)).length;
   const dueHabits = dashboard.habits.filter((habit) => habit.dueToday).slice(0, 6);
@@ -158,18 +163,18 @@ export function getOverviewContext(now = new Date(), options: { userIds?: string
     topTasks: sortStrategicTasks(tasks.filter((task) => task.status !== "done")).slice(0, 6),
     dueHabits,
     recentEvidence: listActivityEvents({ limit: 12, userIds: options.userIds }),
-    achievements: buildAchievementSignals(goals, tasks, habits, now),
+    achievements: dashboard.achievements,
     domainBalance: buildDomainBalance(goals, tasks),
     neglectedGoals: buildNeglectedGoals(goals, tasks, now)
   });
 }
 
-export function getTodayContext(now = new Date(), options: { userIds?: string[] } = {}): TodayContext {
-  const dashboard = getDashboard(options);
+export function getTodayContext(now = new Date(), options: ContextOptions = {}): TodayContext {
+  const dashboard = options.dashboard ?? getDashboard({ userIds: options.userIds });
   const goals = dashboard.goals;
   const tasks = dashboard.tasks;
   const habits = dashboard.habits;
-  const gamification = buildGamificationProfile(goals, tasks, habits, now);
+  const gamification = dashboard.gamification;
   const inProgressTasks = sortStrategicTasks(tasks.filter((task) => task.status === "in_progress")).slice(0, 4);
   const readyTasks = sortStrategicTasks(tasks.filter((task) => task.status === "focus" || task.status === "backlog")).slice(0, 4);
   const deferredTasks = sortStrategicTasks(tasks.filter((task) => task.status === "blocked")).slice(0, 4);
@@ -224,7 +229,7 @@ export function getTodayContext(now = new Date(), options: { userIds?: string[] 
       }
     ],
     dueHabits,
-    milestoneRewards: buildMilestoneRewards(goals, tasks, habits, now),
+    milestoneRewards: dashboard.milestoneRewards,
     recentHabitRewards: listRewardLedger({ entityType: "habit", limit: 8 }),
     momentum: {
       streakDays: gamification.streakDays,
@@ -239,8 +244,8 @@ export function getTodayContext(now = new Date(), options: { userIds?: string[] 
   });
 }
 
-export function getRiskContext(now = new Date(), options: { userIds?: string[] } = {}): RiskContext {
-  const dashboard = getDashboard(options);
+export function getRiskContext(now = new Date(), options: ContextOptions = {}): RiskContext {
+  const dashboard = options.dashboard ?? getDashboard({ userIds: options.userIds });
   const tasks = dashboard.tasks;
   const goals = dashboard.goals;
   const overdueTasks = sortStrategicTasks(

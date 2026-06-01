@@ -1,6 +1,20 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode
+} from "react";
+import { createPortal } from "react-dom";
 import { CircleHelp } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const TOOLTIP_GUTTER_PX = 16;
+const TOOLTIP_MAX_WIDTH_PX = 320;
+const TOOLTIP_MIN_HEIGHT_BELOW_PX = 180;
+const TOOLTIP_ESTIMATED_HEIGHT_PX = 220;
 
 export type FieldHelpDefinition = {
   label?: string;
@@ -35,8 +49,84 @@ export function InfoTooltip({
   panelClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [panelStyle, setPanelStyle] = useState<CSSProperties>({});
   const containerRef = useRef<HTMLSpanElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
   const tooltipId = useId();
+  const tooltipPanel =
+    typeof document === "undefined"
+      ? null
+      : createPortal(
+          <span
+            id={tooltipId}
+            role="tooltip"
+            aria-hidden={!open}
+            data-state={open ? "open" : "closed"}
+            style={panelStyle}
+            className={cn(
+              "pointer-events-none fixed z-[9999] grid overflow-y-auto rounded-[8px] border border-white/10 bg-[#0c111e] px-3 py-2.5 text-left font-sans text-sm normal-case leading-6 tracking-normal text-white/74 shadow-[0_18px_48px_rgba(3,8,18,0.42)] transition",
+              open ? "translate-y-0 opacity-100" : "translate-y-1 opacity-0",
+              panelClassName
+            )}
+          >
+            {title ? (
+              <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/58">
+                {title}
+              </span>
+            ) : null}
+            <span className="block min-w-0 whitespace-normal break-words">
+              {content}
+            </span>
+          </span>,
+          document.body
+        );
+
+  useLayoutEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const positionTooltip = () => {
+      const trigger = triggerRef.current;
+
+      if (!trigger) {
+        return;
+      }
+
+      const rect = trigger.getBoundingClientRect();
+      const width =
+        window.innerWidth < 480
+          ? window.innerWidth - TOOLTIP_GUTTER_PX * 2
+          : Math.min(
+              TOOLTIP_MAX_WIDTH_PX,
+              window.innerWidth - TOOLTIP_GUTTER_PX * 2
+            );
+      const centeredLeft = rect.left + rect.width / 2 - width / 2;
+      const maxLeft = window.innerWidth - width - TOOLTIP_GUTTER_PX;
+      const left = Math.max(TOOLTIP_GUTTER_PX, Math.min(centeredLeft, maxLeft));
+      const availableBelow = window.innerHeight - rect.bottom;
+      const top =
+        availableBelow >= TOOLTIP_MIN_HEIGHT_BELOW_PX
+          ? rect.bottom + 8
+          : Math.max(TOOLTIP_GUTTER_PX, rect.top - TOOLTIP_ESTIMATED_HEIGHT_PX);
+
+      setPanelStyle({
+        left,
+        maxHeight: `calc(100vh - ${top + TOOLTIP_GUTTER_PX}px)`,
+        top,
+        width
+      });
+    };
+
+    positionTooltip();
+    window.addEventListener("resize", positionTooltip);
+    window.addEventListener("scroll", positionTooltip, true);
+
+    return () => {
+      window.removeEventListener("resize", positionTooltip);
+      window.removeEventListener("scroll", positionTooltip, true);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) {
@@ -61,6 +151,7 @@ export function InfoTooltip({
       onMouseLeave={() => setOpen(false)}
     >
       <button
+        ref={triggerRef}
         type="button"
         aria-label={label}
         aria-describedby={open ? tooltipId : undefined}
@@ -77,24 +168,7 @@ export function InfoTooltip({
       >
         <CircleHelp className="size-3.5" />
       </button>
-      <span
-        id={tooltipId}
-        role="tooltip"
-        aria-hidden={!open}
-        data-state={open ? "open" : "closed"}
-        className={cn(
-          "pointer-events-none absolute right-0 top-[calc(100%+0.55rem)] z-40 grid w-[min(20rem,calc(100vw-2.5rem))] max-w-[calc(100vw-2.5rem)] gap-1 rounded-[8px] border border-white/10 bg-[rgba(12,17,30,0.97)] px-3 py-2.5 text-left text-sm leading-6 text-white/74 shadow-[0_18px_48px_rgba(3,8,18,0.42)] transition",
-          open ? "translate-y-0 opacity-100" : "translate-y-1 opacity-0",
-          panelClassName
-        )}
-      >
-        {title ? (
-          <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/58">
-            {title}
-          </span>
-        ) : null}
-        <span>{content}</span>
-      </span>
+      {tooltipPanel}
     </span>
   );
 }

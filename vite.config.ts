@@ -10,11 +10,15 @@ function normalizeBasePath(value: string) {
   }
 
   const withLeadingSlash = value.startsWith("/") ? value : `/${value}`;
-  return withLeadingSlash.endsWith("/") ? withLeadingSlash : `${withLeadingSlash}/`;
+  return withLeadingSlash.endsWith("/")
+    ? withLeadingSlash
+    : `${withLeadingSlash}/`;
 }
 
 export default defineConfig(({ command }) => {
-  const base = normalizeBasePath(process.env.FORGE_BASE_PATH ?? (command === "build" ? "/forge/" : "/"));
+  const base = normalizeBasePath(
+    process.env.FORGE_BASE_PATH ?? (command === "build" ? "/forge/" : "/")
+  );
   const apiTarget = process.env.FORGE_API_ORIGIN ?? "http://127.0.0.1:4317";
 
   return {
@@ -57,20 +61,76 @@ export default defineConfig(({ command }) => {
               return undefined;
             }
 
-            if (id.includes("framer-motion") || id.includes("motion-dom") || id.includes("motion-utils")) {
+            if (
+              id.includes("framer-motion") ||
+              id.includes("motion-dom") ||
+              id.includes("motion-utils")
+            ) {
               return "motion";
             }
 
-            if (id.includes("@tanstack/react-table") || id.includes("@tanstack/table-core")) {
+            if (
+              id.includes("@tanstack/react-table") ||
+              id.includes("@tanstack/table-core")
+            ) {
               return "table";
             }
 
-            if (id.includes("@radix-ui") || id.includes("@floating-ui") || id.includes("react-remove-scroll")) {
+            if (
+              id.includes("@radix-ui") ||
+              id.includes("@floating-ui") ||
+              id.includes("react-remove-scroll")
+            ) {
               return "ui";
             }
 
             if (id.includes("@dnd-kit")) {
               return "board";
+            }
+
+            if (
+              id.includes("@tanstack/react-query") ||
+              id.includes("@reduxjs/toolkit") ||
+              id.includes("react-redux") ||
+              id.includes("zustand")
+            ) {
+              return "state";
+            }
+
+            if (id.includes("recharts")) {
+              return "charts";
+            }
+
+            if (
+              id.includes("@xyflow") ||
+              id.includes("sigma") ||
+              id.includes("graphology")
+            ) {
+              return "graph";
+            }
+
+            if (id.includes("maplibre-gl")) {
+              return "maps";
+            }
+
+            if (id.includes("@tiptap") || id.includes("prosemirror")) {
+              return "editor";
+            }
+
+            if (
+              id.includes("react-hook-form") ||
+              id.includes("@hookform/resolvers") ||
+              id.includes("zod")
+            ) {
+              return "forms";
+            }
+
+            if (
+              id.includes("tsdav") ||
+              id.includes("node-ical") ||
+              id.includes("cron-parser")
+            ) {
+              return "calendar-data";
             }
 
             return "vendor";
