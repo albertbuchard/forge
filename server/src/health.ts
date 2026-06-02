@@ -4892,6 +4892,7 @@ function summarizeChunkPayload(
       return { daySummaries: payload.vitals?.daySummaries.length ?? 0 };
     case "movement":
       return {
+        knownPlaces: payload.movement?.knownPlaces.length ?? 0,
         stays: payload.movement?.stays.length ?? 0,
         trips: payload.movement?.trips.length ?? 0
       };
@@ -5081,6 +5082,115 @@ function applyWorkoutEvidenceChunkImmediately(
       summarizeUserHealthDay(pairing.user_id, dayKey(row.started_at));
     }
   });
+}
+
+function markMobileHealthSyncChunkApplied(input: {
+  syncSessionId: string;
+  chunkId: string;
+  payloadSummary: Record<string, unknown>;
+  mode: string;
+}) {
+  const now = nowIso();
+  getDatabase()
+    .prepare(
+      `UPDATE health_mobile_sync_chunks
+       SET applied_at = ?, payload_summary_json = ?, updated_at = ?
+       WHERE sync_session_id = ? AND chunk_id = ?`
+    )
+    .run(
+      now,
+      JSON.stringify({
+        ...input.payloadSummary,
+        immediateApplied: true,
+        immediateAppliedAt: now,
+        immediateAppliedMode: input.mode
+      }),
+      now,
+      input.syncSessionId,
+      input.chunkId
+    );
+}
+
+function mobileHealthSyncChunkWasImmediatelyApplied(chunk: MobileSyncChunkRow) {
+  const summary = safeJsonParse<Record<string, unknown>>(
+    chunk.payload_summary_json,
+    {}
+  );
+  return summary.immediateApplied === true;
+}
+
+function applyMovementChunkImmediately(
+  session: MobileSyncSessionRow,
+  payload: z.infer<typeof mobileHealthSyncChunkPayloadSchema>
+) {
+  if (!payload.movement) {
+    return false;
+  }
+  const pairing = mobileSyncSessionPairing(session);
+  ingestMovementSync(pairing, payload.movement);
+  return true;
+}
+
+function applyScreenTimeChunkImmediately(
+  session: MobileSyncSessionRow,
+  payload: z.infer<typeof mobileHealthSyncChunkPayloadSchema>
+) {
+  if (!payload.screenTime) {
+    return false;
+  }
+  const pairing = mobileSyncSessionPairing(session);
+  const metadata = mobileSyncSessionMetadata(session);
+  ingestScreenTimeSync(
+    pairing,
+    payload.screenTime,
+    metadata.device?.sourceDevice ?? pairing.device_name ?? "iPhone"
+  );
+  return true;
+}
+
+function applyVitalsChunkImmediately(
+  session: MobileSyncSessionRow,
+  payload: z.infer<typeof mobileHealthSyncChunkPayloadSchema>
+) {
+  if (!payload.vitals) {
+    return false;
+  }
+  const pairing = mobileSyncSessionPairing(session);
+  for (const daySummary of payload.vitals.daySummaries) {
+    upsertVitalDaySummary(pairing.user_id, daySummary);
+  }
+  return true;
+}
+
+function applyMobileHealthSyncChunkImmediately(
+  session: MobileSyncSessionRow,
+  family: MobileHealthSyncFamily,
+  payload: z.infer<typeof mobileHealthSyncChunkPayloadSchema>
+) {
+  switch (family) {
+    case "workout_summaries":
+    case "workout_archive":
+      applyWorkoutChunkImmediately(session, family, payload.workouts ?? []);
+      return "workout_progressive_apply";
+    case "workout_time_series":
+    case "workout_routes":
+      applyWorkoutEvidenceChunkImmediately(session, payload);
+      return "workout_evidence_progressive_apply";
+    case "movement":
+      return applyMovementChunkImmediately(session, payload)
+        ? "movement_progressive_apply"
+        : null;
+    case "screen_time":
+      return applyScreenTimeChunkImmediately(session, payload)
+        ? "screen_time_progressive_apply"
+        : null;
+    case "vitals":
+      return applyVitalsChunkImmediately(session, payload)
+        ? "vitals_progressive_apply"
+        : null;
+    default:
+      return null;
+  }
 }
 
 function updateMobileSyncSessionProgress(syncSessionId: string) {
@@ -5343,67 +5453,68 @@ export function ingestMobileHealthSyncChunk(
       }
     );
   }
-  const now = nowIso();
-  getDatabase()
-    .prepare(
-      `INSERT INTO health_mobile_sync_chunks (
-         id, sync_session_id, chunk_id, sequence, family, checksum_sha256,
-         record_count, byte_count, payload_json, payload_summary_json,
-         received_at, applied_at, created_at, updated_at
-       )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      mobileSyncChunkRecordId(),
-      syncSessionId,
-      parsed.chunkId,
-      parsed.sequence,
-      parsed.family,
-      serverChecksum,
-      parsed.recordCount,
+  return runInTransaction(() => {
+    const now = nowIso();
+    const payloadSummary = {
+      ...summarizeChunkPayload(parsed.family, wirePayload.payload),
+      clientByteCount: parsed.byteCount,
       actualByteCount,
-      payloadJson,
-      JSON.stringify({
-        ...summarizeChunkPayload(parsed.family, wirePayload.payload),
-        clientByteCount: parsed.byteCount,
-        actualByteCount,
-        compressedByteCount: wirePayload.compressedByteCount ?? null,
+      compressedByteCount: wirePayload.compressedByteCount ?? null,
+      serverChecksum,
+      mode: wirePayload.mode
+    };
+    getDatabase()
+      .prepare(
+        `INSERT INTO health_mobile_sync_chunks (
+           id, sync_session_id, chunk_id, sequence, family, checksum_sha256,
+           record_count, byte_count, payload_json, payload_summary_json,
+           received_at, applied_at, created_at, updated_at
+         )
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`
+      )
+      .run(
+        mobileSyncChunkRecordId(),
+        syncSessionId,
+        parsed.chunkId,
+        parsed.sequence,
+        parsed.family,
         serverChecksum,
-        mode: wirePayload.mode
-      }),
-      now,
-      now,
-      now,
-      now
-    );
-  if (
-    parsed.family === "workout_summaries" ||
-    parsed.family === "workout_archive"
-  ) {
-    applyWorkoutChunkImmediately(
+        parsed.recordCount,
+        actualByteCount,
+        payloadJson,
+        JSON.stringify(payloadSummary),
+        now,
+        now,
+        now
+      );
+    const appliedMode = applyMobileHealthSyncChunkImmediately(
       session,
       parsed.family,
-      wirePayload.payload.workouts ?? []
+      wirePayload.payload
     );
-  } else if (
-    parsed.family === "workout_time_series" ||
-    parsed.family === "workout_routes"
-  ) {
-    applyWorkoutEvidenceChunkImmediately(session, wirePayload.payload);
-  }
-  const progress = updateMobileSyncSessionProgress(syncSessionId);
-  return {
-    accepted: true,
-    duplicate: false,
-    receivedCount: progress.chunkCount,
-    receivedBytes: progress.receivedBytes,
-    progress
-  };
+    if (appliedMode) {
+      markMobileHealthSyncChunkApplied({
+        syncSessionId,
+        chunkId: parsed.chunkId,
+        payloadSummary,
+        mode: appliedMode
+      });
+    }
+    const progress = updateMobileSyncSessionProgress(syncSessionId);
+    return {
+      accepted: true,
+      duplicate: false,
+      receivedCount: progress.chunkCount,
+      receivedBytes: progress.receivedBytes,
+      progress
+    };
+  });
 }
 
 function mergeMobileHealthSyncChunks(
   session: MobileSyncSessionRow,
-  chunks: MobileSyncChunkRow[]
+  chunks: MobileSyncChunkRow[],
+  options: { skipImmediatelyApplied?: boolean } = {}
 ) {
   const pairing = getDatabase()
     .prepare(`SELECT * FROM companion_pairing_sessions WHERE id = ?`)
@@ -5465,6 +5576,18 @@ function mergeMobileHealthSyncChunks(
     const payload = mobileHealthSyncChunkPayloadSchema.parse(
       safeJsonParse<Record<string, unknown>>(chunk.payload_json, {})
     );
+    const skipRecords =
+      options.skipImmediatelyApplied === true &&
+      mobileHealthSyncChunkWasImmediatelyApplied(chunk);
+    if (skipRecords) {
+      if (payload.movement?.settings) {
+        assembled.movement.settings = payload.movement.settings;
+      }
+      if (payload.screenTime?.settings) {
+        assembled.screenTime.settings = payload.screenTime.settings;
+      }
+      continue;
+    }
     if (payload.sleepNights) {
       assembled.sleepNights.push(...payload.sleepNights);
     }
@@ -5620,6 +5743,105 @@ function validateMobileSyncExpectedCounts(
   }
 }
 
+function aggregateMobileSyncChunkCounts(chunks: MobileSyncChunkRow[]) {
+  const counts = {
+    sleepNights: 0,
+    sleepSegments: 0,
+    sleepRawRecords: 0,
+    workouts: 0,
+    vitalsDaySummaries: 0,
+    movementKnownPlaces: 0,
+    movementStays: 0,
+    movementTrips: 0,
+    screenTimeDaySummaries: 0,
+    screenTimeHourlySegments: 0
+  };
+  for (const chunk of chunks) {
+    const summary = safeJsonParse<Record<string, unknown>>(
+      chunk.payload_summary_json,
+      {}
+    );
+    const numberValue = (key: string) =>
+      typeof summary[key] === "number" && Number.isFinite(summary[key])
+        ? summary[key]
+        : 0;
+    switch (chunk.family) {
+      case "sleep_nights":
+        counts.sleepNights += numberValue("sleepNights");
+        break;
+      case "sleep_segments":
+        counts.sleepSegments += numberValue("sleepSegments");
+        break;
+      case "sleep_raw_records":
+        counts.sleepRawRecords += numberValue("sleepRawRecords");
+        break;
+      case "workout_summaries":
+      case "workout_archive":
+        counts.workouts += numberValue("workouts");
+        break;
+      case "vitals":
+        counts.vitalsDaySummaries += numberValue("daySummaries");
+        break;
+      case "movement":
+        counts.movementKnownPlaces += numberValue("knownPlaces");
+        counts.movementStays += numberValue("stays");
+        counts.movementTrips += numberValue("trips");
+        break;
+      case "screen_time":
+        counts.screenTimeDaySummaries += numberValue("daySummaries");
+        counts.screenTimeHourlySegments += numberValue("hourlySegments");
+        break;
+    }
+  }
+  return counts;
+}
+
+function syncReceiptWithChunkCounts<
+  T extends ReturnType<typeof ingestMobileHealthSync>
+>(sync: T, chunks: MobileSyncChunkRow[]): T {
+  const counts = aggregateMobileSyncChunkCounts(chunks);
+  return {
+    ...sync,
+    imported: {
+      ...sync.imported,
+      sleepNights: Math.max(sync.imported.sleepNights ?? 0, counts.sleepNights),
+      sleepSegments: Math.max(
+        sync.imported.sleepSegments ?? 0,
+        counts.sleepSegments
+      ),
+      sleepRawRecords: Math.max(
+        sync.imported.sleepRawRecords ?? 0,
+        counts.sleepRawRecords
+      ),
+      workouts: Math.max(sync.imported.workouts, counts.workouts),
+      vitalsDaySummaries: Math.max(
+        sync.imported.vitalsDaySummaries ?? 0,
+        counts.vitalsDaySummaries
+      ),
+      movementKnownPlaces: Math.max(
+        sync.imported.movementKnownPlaces ?? 0,
+        counts.movementKnownPlaces
+      ),
+      movementStays: Math.max(
+        sync.imported.movementStays ?? 0,
+        counts.movementStays
+      ),
+      movementTrips: Math.max(
+        sync.imported.movementTrips ?? 0,
+        counts.movementTrips
+      ),
+      screenTimeDaySummaries: Math.max(
+        sync.imported.screenTimeDaySummaries ?? 0,
+        counts.screenTimeDaySummaries
+      ),
+      screenTimeHourlySegments: Math.max(
+        sync.imported.screenTimeHourlySegments ?? 0,
+        counts.screenTimeHourlySegments
+      )
+    }
+  };
+}
+
 function markMobileSyncSessionFailed(
   session: MobileSyncSessionRow,
   error: unknown
@@ -5677,7 +5899,8 @@ export function completeMobileHealthSyncSession(
       validateMobileSyncExpectedCounts(syncSessionId, parsed.expectedCounts);
       const { assembled, tombstones } = mergeMobileHealthSyncChunks(
         session,
-        chunks
+        chunks,
+        { skipImmediatelyApplied: true }
       );
       const sync = ingestMobileHealthSync(assembled);
       const deletedWorkoutCount = applyWorkoutTombstones(pairing, tombstones);
@@ -5692,7 +5915,7 @@ export function completeMobileHealthSyncSession(
         )
         .run(JSON.stringify(parsed.expectedCounts), now, now, syncSessionId);
       return {
-        ...sync,
+        ...syncReceiptWithChunkCounts(sync, chunks),
         upload: {
           syncSessionId,
           chunks: chunks.length,

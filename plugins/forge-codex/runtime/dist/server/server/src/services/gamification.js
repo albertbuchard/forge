@@ -133,6 +133,12 @@ function resolveScopeUsers(requestedUserIds) {
             return { mode: "selected_user", users: selectedUsers };
         }
     }
+    if (uniqueRequestedUserIds.length > 1) {
+        const selectedUsers = listUsersByIds(uniqueRequestedUserIds);
+        if (selectedUsers.length > 0) {
+            return { mode: "aggregate_fallback", users: selectedUsers };
+        }
+    }
     try {
         return { mode: "operator_fallback", users: [getDefaultUser()] };
     }
@@ -152,6 +158,23 @@ export function resolveGamificationScope(requestedUserIds) {
         userIds: users.map((user) => user.id),
         users,
         label
+    };
+}
+function persistableUserIdForScope(scope) {
+    if (scope.users.length === 1 &&
+        (scope.mode === "selected_user" || scope.mode === "operator_fallback")) {
+        return scope.users[0].id;
+    }
+    return null;
+}
+function emptyGamificationEquipment() {
+    return {
+        selectedMascotSkin: null,
+        selectedHudTreatment: null,
+        selectedStreakEffect: null,
+        selectedTrophyShelf: null,
+        selectedCelebrationVariant: null,
+        updatedAt: null
     };
 }
 function buildOwnerResolver(defaultUserId) {
@@ -210,7 +233,7 @@ function loadScopedRewardEvents(scope) {
        ORDER BY reward_ledger.created_at ASC`)
         .all();
     const scopeUserIds = new Set(scope.userIds);
-    const defaultUserId = scope.userIds[0] ?? null;
+    const defaultUserId = persistableUserIdForScope(scope);
     const resolveOwner = buildOwnerResolver(defaultUserId);
     return rows
         .map((row) => {
@@ -242,6 +265,9 @@ function loadScopedRewardEvents(scope) {
         : event.ownerUserId !== null && scopeUserIds.has(event.ownerUserId));
 }
 function syncEntityCreationRewards(scope) {
+    if (!persistableUserIdForScope(scope)) {
+        return;
+    }
     const database = getDatabase();
     const scopeUserIds = [...new Set(scope.userIds)];
     const scopePlaceholders = scopeUserIds.map(() => "?").join(", ");
@@ -282,7 +308,7 @@ function isQualifyingStreakReward(event) {
         event.reversedByRewardId === null &&
         event.metadata.manual !== true);
 }
-function syncDailyActivity(userId, scopedRewards, timezone) {
+function deriveDailyActivityRows(userId, scopedRewards, timezone) {
     const byDate = new Map();
     for (const event of scopedRewards.filter(isQualifyingStreakReward)) {
         const dateKeyValue = dateKeyInTimezone(event.createdAt, timezone);
@@ -300,7 +326,7 @@ function syncDailyActivity(userId, scopedRewards, timezone) {
         current.lastRewardEventId = event.id;
         byDate.set(dateKeyValue, current);
     }
-    replaceGamificationDailyActivity(userId, [...byDate.values()].map((row) => ({
+    return [...byDate.values()].map((row) => ({
         userId,
         dateKey: row.dateKey,
         timezone,
@@ -308,7 +334,11 @@ function syncDailyActivity(userId, scopedRewards, timezone) {
         eventCount: row.eventCount,
         firstRewardEventId: row.firstRewardEventId,
         lastRewardEventId: row.lastRewardEventId
-    })));
+    }));
+}
+function syncDailyActivity(userId, scopedRewards, timezone) {
+    const rows = deriveDailyActivityRows(userId, scopedRewards, timezone);
+    replaceGamificationDailyActivity(userId, rows);
     return listGamificationDailyActivity(userId);
 }
 function calculateStreakFromActivity(activeDateKeys, now, timezone) {
@@ -695,14 +725,16 @@ function evaluateCatalogItem(item, metricValues) {
     return evaluateRequirement(item.requirement, metricValues);
 }
 function syncCatalog(input) {
-    const userId = input.scope.userIds[0] ?? "aggregate";
+    const userId = input.persistableUserId;
     const nowIso = input.now.toISOString();
     const catalogItemIds = new Set(GAMIFICATION_CATALOG.map((item) => item.id));
-    const existingUnlocks = listGamificationUnlocks(userId).filter((unlock) => catalogItemIds.has(unlock.itemId));
+    const existingUnlocks = userId
+        ? listGamificationUnlocks(userId).filter((unlock) => catalogItemIds.has(unlock.itemId))
+        : [];
     const isInitialBackfill = existingUnlocks.length === 0;
     for (const item of GAMIFICATION_CATALOG) {
         const evaluation = evaluateCatalogItem(item, input.metricValues);
-        if (evaluation.met) {
+        if (userId && evaluation.met) {
             const inserted = insertGamificationUnlock({
                 userId,
                 itemId: item.id,
@@ -731,7 +763,7 @@ function syncCatalog(input) {
             }
         }
     }
-    if (input.profile.level > 1) {
+    if (userId && input.profile.level > 1) {
         enqueueGamificationCelebration({
             id: `gce_${userId}_level_${input.profile.level}`,
             userId,
@@ -747,7 +779,7 @@ function syncCatalog(input) {
             createdAt: nowIso
         });
     }
-    if (input.mascot.missedDays > 0) {
+    if (userId && input.mascot.missedDays > 0) {
         enqueueGamificationCelebration({
             id: `gce_${userId}_comeback_pressure_${input.mascot.lastActiveDateKey ?? "none"}`,
             userId,
@@ -762,15 +794,16 @@ function syncCatalog(input) {
             createdAt: nowIso
         });
     }
-    const unlocksByItemId = new Map(listGamificationUnlocks(userId)
+    const unlocksByItemId = new Map((userId ? listGamificationUnlocks(userId) : existingUnlocks)
         .filter((unlock) => catalogItemIds.has(unlock.itemId))
         .map((unlock) => [unlock.itemId, unlock]));
     const entries = GAMIFICATION_CATALOG.map((item) => {
         const evaluation = evaluateCatalogItem(item, input.metricValues);
         const unlock = unlocksByItemId.get(item.id);
+        const readOnlyAggregateUnlock = !userId && evaluation.met;
         return {
             ...item,
-            unlocked: Boolean(unlock),
+            unlocked: Boolean(unlock) || readOnlyAggregateUnlock,
             unlockedAt: unlock?.unlockedAt ?? null,
             progressCurrent: Math.max(0, Math.min(evaluation.current, evaluation.target)),
             progressTarget: evaluation.target,
@@ -819,11 +852,13 @@ function syncCatalog(input) {
 function buildGamificationState(goals, tasks, habits, options = {}) {
     const now = options.now ?? new Date();
     const scope = resolveGamificationScope(options.userIds);
+    const persistableUserId = persistableUserIdForScope(scope);
     syncEntityCreationRewards(scope);
     const scopedRewards = loadScopedRewardEvents(scope);
     const timezone = resolveTimezone();
-    const primaryUserId = scope.userIds[0] ?? "aggregate";
-    const dailyActivity = syncDailyActivity(primaryUserId, scopedRewards, timezone);
+    const dailyActivity = persistableUserId
+        ? syncDailyActivity(persistableUserId, scopedRewards, timezone)
+        : deriveDailyActivityRows("aggregate", scopedRewards, timezone);
     const activeDateKeys = dailyActivity.map((row) => row.dateKey);
     const activeDateSet = new Set(activeDateKeys);
     const streakDays = calculateStreakFromActivity(activeDateSet, now, timezone);
@@ -871,7 +906,9 @@ function buildGamificationState(goals, tasks, habits, options = {}) {
         topGoalId: topGoal?.goalId ?? null,
         topGoalTitle: topGoal?.goalTitle ?? null
     });
-    const equipment = getGamificationEquipment(primaryUserId);
+    const equipment = persistableUserId
+        ? getGamificationEquipment(persistableUserId)
+        : emptyGamificationEquipment();
     const metricValues = buildMetricValues({
         scope,
         profile,
@@ -888,6 +925,7 @@ function buildGamificationState(goals, tasks, habits, options = {}) {
     });
     const catalog = syncCatalog({
         scope,
+        persistableUserId,
         profile,
         metricValues,
         equipment,
@@ -901,7 +939,8 @@ function buildGamificationState(goals, tasks, habits, options = {}) {
         metricValues,
         equipment,
         mascot,
-        catalog
+        catalog,
+        persistableUserId
     };
 }
 export function buildGamificationProfile(goals, tasks, habits, now = new Date(), options = {}) {
@@ -910,12 +949,8 @@ export function buildGamificationProfile(goals, tasks, habits, now = new Date(),
         now
     }).profile;
 }
-export function buildAchievementSignals(goals, tasks, habits, now = new Date(), options = {}) {
-    const state = buildGamificationState(goals, tasks, habits, {
-        userIds: options.userIds,
-        now
-    });
-    const profile = state.profile;
+function buildAchievementSignalsFromProfile(input) {
+    const { goals, tasks, habits, now, profile } = input;
     const doneTasks = tasks.filter((task) => task.status === "done");
     const alignedDoneTasks = doneTasks.filter((task) => task.goalId !== null && task.tagIds.length > 0);
     const focusTasks = tasks.filter((task) => task.status === "focus" || task.status === "in_progress");
@@ -1000,8 +1035,21 @@ export function buildAchievementSignals(goals, tasks, habits, now = new Date(), 
         }
     ].map((achievement) => achievementSignalSchema.parse(achievement));
 }
-export function buildMilestoneRewards(goals, tasks, habits, now = new Date(), options = {}) {
-    const profile = buildGamificationProfile(goals, tasks, habits, now, options);
+export function buildAchievementSignals(goals, tasks, habits, now = new Date(), options = {}) {
+    const state = buildGamificationState(goals, tasks, habits, {
+        userIds: options.userIds,
+        now
+    });
+    return buildAchievementSignalsFromProfile({
+        goals,
+        tasks,
+        habits,
+        now,
+        profile: state.profile
+    });
+}
+function buildMilestoneRewardsFromProfile(input) {
+    const { goals, tasks, habits, now, profile } = input;
     const doneTasks = tasks.filter((task) => task.status === "done");
     const topGoal = profile.topGoalId
         ? goals.find((goal) => goal.id === profile.topGoalId) ?? null
@@ -1071,10 +1119,12 @@ export function buildMilestoneRewards(goals, tasks, habits, now = new Date(), op
         }
     ].map((reward) => milestoneRewardSchema.parse(reward));
 }
-export function buildXpMomentumPulse(goals, tasks, habits, now = new Date(), options = {}) {
+export function buildMilestoneRewards(goals, tasks, habits, now = new Date(), options = {}) {
     const profile = buildGamificationProfile(goals, tasks, habits, now, options);
-    const achievements = buildAchievementSignals(goals, tasks, habits, now, options);
-    const milestoneRewards = buildMilestoneRewards(goals, tasks, habits, now, options);
+    return buildMilestoneRewardsFromProfile({ goals, tasks, habits, now, profile });
+}
+function buildXpMomentumPulseFromParts(input) {
+    const { profile, achievements, milestoneRewards } = input;
     const nextMilestone = milestoneRewards.find((reward) => !reward.completed) ??
         milestoneRewards[0] ??
         null;
@@ -1105,6 +1155,31 @@ export function buildXpMomentumPulse(goals, tasks, habits, now = new Date(), opt
         nextMilestoneId: nextMilestone?.id ?? null,
         nextMilestoneLabel: nextMilestone?.rewardLabel ?? "Keep building visible momentum"
     };
+}
+export function buildXpMomentumPulse(goals, tasks, habits, now = new Date(), options = {}) {
+    const state = buildGamificationState(goals, tasks, habits, {
+        userIds: options.userIds,
+        now
+    });
+    const achievements = buildAchievementSignalsFromProfile({
+        goals,
+        tasks,
+        habits,
+        now,
+        profile: state.profile
+    });
+    const milestoneRewards = buildMilestoneRewardsFromProfile({
+        goals,
+        tasks,
+        habits,
+        now,
+        profile: state.profile
+    });
+    return buildXpMomentumPulseFromParts({
+        profile: state.profile,
+        achievements,
+        milestoneRewards
+    });
 }
 export function buildGamificationCatalogPayload(goals, tasks, habits, options = {}) {
     return buildGamificationState(goals, tasks, habits, options).catalog;
@@ -1146,7 +1221,7 @@ export function updateGamificationEquipmentSelection(input) {
     const state = buildGamificationState(input.goals, input.tasks, input.habits, {
         userIds: input.userIds
     });
-    const userId = state.scope.userIds[0];
+    const userId = state.persistableUserId;
     if (!userId) {
         throw new LockedGamificationCosmeticError("Equipment can only be changed for a concrete Forge user.");
     }
@@ -1166,10 +1241,28 @@ export function updateGamificationEquipmentSelection(input) {
     return upsertGamificationEquipment(userId, input.equipment);
 }
 export function buildGamificationOverview(goals, tasks, habits, now = new Date(), options = {}) {
+    const state = buildGamificationState(goals, tasks, habits, {
+        userIds: options.userIds,
+        now
+    });
+    const achievements = buildAchievementSignalsFromProfile({
+        goals,
+        tasks,
+        habits,
+        now,
+        profile: state.profile
+    });
+    const milestoneRewards = buildMilestoneRewardsFromProfile({
+        goals,
+        tasks,
+        habits,
+        now,
+        profile: state.profile
+    });
     return {
-        profile: buildGamificationProfile(goals, tasks, habits, now, options),
-        achievements: buildAchievementSignals(goals, tasks, habits, now, options),
-        milestoneRewards: buildMilestoneRewards(goals, tasks, habits, now, options)
+        profile: state.profile,
+        achievements,
+        milestoneRewards
     };
 }
 export function buildXpMetricsPayloadModel(input) {
@@ -1182,8 +1275,25 @@ export function buildXpMetricsPayloadModel(input) {
     const dailyAmbientCap = rules
         .filter((rule) => rule.family === "ambient")
         .reduce((max, rule) => Math.max(max, Number(rule.config.dailyCap ?? 0)), 0) || 12;
-    const achievements = buildAchievementSignals(input.goals, input.tasks, input.habits, now, { userIds: input.userIds });
-    const milestoneRewards = buildMilestoneRewards(input.goals, input.tasks, input.habits, now, { userIds: input.userIds });
+    const achievements = buildAchievementSignalsFromProfile({
+        goals: input.goals,
+        tasks: input.tasks,
+        habits: input.habits,
+        now,
+        profile: state.profile
+    });
+    const milestoneRewards = buildMilestoneRewardsFromProfile({
+        goals: input.goals,
+        tasks: input.tasks,
+        habits: input.habits,
+        now,
+        profile: state.profile
+    });
+    const momentumPulse = buildXpMomentumPulseFromParts({
+        profile: state.profile,
+        achievements,
+        milestoneRewards
+    });
     const visibleCatalog = [
         ...(state.catalog.newestUnlock ? [state.catalog.newestUnlock] : []),
         ...(state.catalog.nextUnlock ? [state.catalog.nextUnlock] : []),
@@ -1198,7 +1308,7 @@ export function buildXpMetricsPayloadModel(input) {
         profile: state.profile,
         achievements,
         milestoneRewards,
-        momentumPulse: buildXpMomentumPulse(input.goals, input.tasks, input.habits, now, { userIds: input.userIds }),
+        momentumPulse,
         catalogPreview: uniquePreview,
         unlockedItemCount: state.catalog.unlockedCount,
         totalItemCount: state.catalog.totalCount,
@@ -1207,7 +1317,9 @@ export function buildXpMetricsPayloadModel(input) {
         nextTargets: state.catalog.nextTargets,
         equipment: state.equipment,
         mascot: state.mascot,
-        celebrations: listUnseenGamificationCelebrations(state.scope.userIds[0] ?? "aggregate", 5),
+        celebrations: state.persistableUserId
+            ? listUnseenGamificationCelebrations(state.persistableUserId, 5)
+            : [],
         recentLedger: state.scopedRewards
             .slice(-25)
             .reverse()

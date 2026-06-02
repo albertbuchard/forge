@@ -1313,9 +1313,6 @@ final class CompanionAppModel: ObservableObject {
     private func performBackgroundRefresh() async -> Bool {
         companionDebugLog("CompanionAppModel", "performBackgroundRefresh start")
         if let activeSyncTask {
-            if cancelActiveSyncIfStalled(now: Date(), reason: "background refresh") {
-                return false
-            }
             companionDebugLog("CompanionAppModel", "performBackgroundRefresh joining active foreground sync")
             let syncSucceeded = await activeSyncTask.value
             backgroundScheduler.schedule(
@@ -2558,7 +2555,16 @@ final class CompanionAppModel: ObservableObject {
     private func stopHealthSyncTransferTelemetry() {
         healthSyncTransferTickerTask?.cancel()
         healthSyncTransferTickerTask = nil
-        refreshHealthSyncTransferSpeed()
+        healthSyncTransferStartedAt = nil
+        healthSyncTransferLastSnapshotAt = nil
+        healthSyncTransferLastSnapshotBytes = 0
+        healthSyncTransferBytesSent = 0
+        healthSyncTransferCurrentBytesPerSecond = 0
+        healthSyncTransferUploadedChunks = 0
+        healthSyncTransferUploadedRecords = 0
+        healthSyncTransferSkippedChunks = 0
+        healthSyncTransferLastChunkAt = nil
+        healthSyncTransferStats = nil
     }
 
     private func recordHealthSyncChunkUpload(

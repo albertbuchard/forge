@@ -1165,7 +1165,8 @@ struct ForgeSyncClient {
                 finalCursor: [:],
                 expectedCounts: expectedCounts
             ),
-            transport: pairing.transport
+            transport: pairing.transport,
+            timeoutInterval: 60
         )
         companionDebugLog(
             "ForgeSyncClient",
@@ -2147,6 +2148,7 @@ struct ForgeSyncClient {
         body: Body,
         session: URLSession? = nil,
         transport: PairingTransport? = nil,
+        timeoutInterval: TimeInterval = 20,
         useBackgroundUpload: Bool = false
     ) async throws -> Response {
         guard let url = URL(string: "\(apiBaseUrl)\(path)") else {
@@ -2199,7 +2201,7 @@ struct ForgeSyncClient {
                 request.setValue(value, forHTTPHeaderField: name)
             }
             request.httpBody = requestBody
-            request.timeoutInterval = 20
+            request.timeoutInterval = timeoutInterval
             let (urlSessionData, response): (Data, URLResponse)
             if useBackgroundUpload, method == "POST", let requestBody {
                 (urlSessionData, response) = try await ForgeBackgroundUploadCoordinator.shared.upload(

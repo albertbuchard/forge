@@ -135,6 +135,32 @@ choice is an internal classification step, not a user-facing menu.
 - Once the lane is selected, use the exact route key internally and do not invent a
   friendlier path.
 
+## Mixed-intent sequencing
+
+Use this when one user message combines several Forge jobs, such as "review this and
+fix it", "save the pattern and make me a card", or "inspect the run and publish the
+output".
+
+- Name the primary job first in plain language, then do the smallest first action that
+  reduces uncertainty. Do not answer a mixed request by asking a broad "what do you
+  want to do?" question when the verbs already show the sequence.
+- If a read changes the truth of a later write, read first. Movement timeline or box
+  detail comes before correction; Workbench run or node detail comes before editing a
+  flow or published output; Life Force overview comes before changing planning
+  assumptions when the current energy picture is uncertain.
+- If a Psyche formulation and a utility record are both requested, formulate the
+  Psyche record first, then create the support record from that accepted wording. A
+  behavior pattern can lead to a flashcard, note, value link, task, or habit, but the
+  agent should not ask for every adjacent record at once.
+- If the user asks to save and act, finish the write shape before asking for follow-up
+  action details unless the action changes which record should be saved.
+- If two routes are needed, keep them in order internally and tell the user the
+  product sequence briefly: "I will check the timeline first, then correct the missing
+  block if the span matches." Avoid route-key language unless the user asks.
+- After the first action, ask only the next decision-relevant question. Do not restart
+  intake for the second action when the first answer already supplied the wording,
+  span, flow, run, node, weekday, or link.
+
 ## Psyche and memory routing
 
 Self-observation is not the default container for psychological material. Use it only
@@ -691,6 +717,57 @@ Connect:
   instead of generic "record" language.
 - If the user is emotionally loaded but the record is still non-Psyche, reflect the
   lived stake once and then return to the one operational question that still matters.
+
+## Search-before-write and existing-record disambiguation
+
+Use this before a create or update when a near-duplicate, existing target, or owner
+scope could change the write.
+
+- For normal stored entities, search the shared batch route by entity type, useful
+  title or wording, linked owner, and distinctive content before creating when
+  duplicate risk is plausible. Do not ask the user to re-supply fields that a quick
+  search can answer.
+- If a likely existing record appears, ask the narrow product question: should this
+  update that record, link to it, or become a separate new record? Do not reopen the
+  whole create flow.
+- For update requests, look up the current record before asking for replacement
+  wording when the user has not provided the current id, title, or owner scope.
+- For Psyche, a similar existing belief, pattern, mode, trigger report, value, or
+  flashcard is not a blocker. Treat it as a choice between updating, linking, or
+  saving a distinct version of the experience.
+- For `wiki_page` and `calendar_connection`, use the dedicated search/list/read routes
+  before creating another page or connection. Do not use batch entity search as the
+  source of truth for these specialized CRUD surfaces.
+- For Movement, Life Force, and Workbench, do not use batch duplicate search. Use the
+  dedicated read lane: known places or timeline for Movement, overview/profile or
+  weekday template for Life Force, and saved flows, run history, node result, latest
+  output, or published output for Workbench.
+- If the user already chose "new record" after seeing a near match, keep going with
+  create. Do not challenge the choice repeatedly.
+
+## Destructive and replacement actions
+
+Use this when the next action would delete, archive, invalidate, overwrite, replace,
+disconnect, or substantially narrow a record.
+
+- Confirm the exact target and the preservation need before destructive work. Ask one
+  narrow question such as what should be deleted versus kept, whether history should
+  remain visible, or what future behavior should change.
+- For normal stored entities, prefer the normal soft-delete path unless the user
+  explicitly asks for hard deletion or permanent removal. Do not make the user choose
+  a delete mode unless it changes the actual action.
+- For Psyche records, do not delete an old belief, pattern, mode, trigger report,
+  value, or flashcard just because a newer formulation exists. Ask whether the old
+  record should be updated, linked as history, archived, or kept distinct.
+- For Movement repair, distinguish deleting a user-defined overlay from invalidating
+  an automatic box or deleting an already-recorded stay, trip, or point. Read the
+  specific span first when the target is uncertain.
+- For calendar connections, Workbench flows, wiki pages, and questionnaire
+  instruments, ask what downstream sync, published output, backlinks, run history,
+  or completed runs should remain understandable before deleting or replacing the
+  saved object.
+- If the user has already explicitly confirmed the target and preservation choice,
+  act. Do not add a ceremonial second confirmation.
 
 ## Ready-to-save check
 

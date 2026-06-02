@@ -135,6 +135,18 @@ describe("forge skill playbook parity", () => {
       expect(skill).toMatch(/live onboarding disagree[\s\S]*contract bug/i);
       expect(skill).toMatch(/reflection-sensitive records/i);
       expect(skill).toMatch(/understand, decide, notice, remember, or\s+change later/i);
+      expect(skill).toMatch(/When one message combines several jobs/i);
+      expect(skill).toMatch(
+        /read before a correction[\s\S]*formulate[\s\S]*primary Psyche record[\s\S]*flashcard or note/i
+      );
+      expect(skill).toMatch(/Search before creating duplicates|check for duplicates/i);
+      expect(skill).toMatch(
+        /update (?:it|that record), link to it, or save a separate new record/i
+      );
+      expect(skill).toMatch(
+        /Before deleting, archiving, invalidating, disconnecting, or replacing a record/i
+      );
+      expect(skill).toMatch(/preserve\s+therapeutic history/i);
       expect(skill).toMatch(/Concrete route-key examples for internal use/i);
       expect(skill).toMatch(/Movement all-time read[\s\S]*"routeKey":"allTime"/i);
       expect(skill).toMatch(/Movement timeline read[\s\S]*"routeKey":"timeline"/i);
@@ -331,6 +343,27 @@ describe("forge skill playbook parity", () => {
     expect(entityPlaybook).toMatch(/Do not let API uncertainty leak out as vague wording/i);
     expect(entityPlaybook).toMatch(/Avoid generic reflections such as "that sounds important"/i);
     expect(entityPlaybook).toMatch(/Operation lane checkpoint/i);
+    expect(entityPlaybook).toMatch(/Mixed-intent sequencing/i);
+    expect(entityPlaybook).toMatch(/Search-before-write and existing-record disambiguation/i);
+    expect(entityPlaybook).toMatch(/Destructive and replacement actions/i);
+    expect(entityPlaybook).toMatch(
+      /Movement timeline or box\s+detail comes before correction[\s\S]*Workbench run or node detail comes before editing[\s\S]*Life Force overview comes before changing planning\s+assumptions/i
+    );
+    expect(entityPlaybook).toMatch(
+      /save the pattern and make me a card[\s\S]*formulate the\s+Psyche record first/i
+    );
+    expect(entityPlaybook).toMatch(
+      /shared batch route by entity type[\s\S]*update that record, link to it, or become a separate new record/i
+    );
+    expect(entityPlaybook).toMatch(
+      /wiki_page[\s\S]*calendar_connection[\s\S]*dedicated search\/list\/read routes/i
+    );
+    expect(entityPlaybook).toMatch(
+      /soft-delete path[\s\S]*hard deletion[\s\S]*permanent removal/i
+    );
+    expect(entityPlaybook).toMatch(
+      /downstream sync, published output, backlinks, run history,[\s\S]*completed runs/i
+    );
     expect(entityPlaybook).toMatch(/add, update, review, compare, navigate, link, or run/i);
     expect(entityPlaybook).toMatch(/what is becoming clearer/i);
     expect(entityPlaybook).toMatch(/feels true[\s\S]*or needs one correction/i);
@@ -409,6 +442,24 @@ describe("forge skill playbook parity", () => {
     expect(psychePlaybook).toMatch(/## Schema Theme Routing/i);
     expect(psychePlaybook).toMatch(/## Psyche API Posture/i);
     expect(psychePlaybook).toMatch(/## Psyche Hypothesis Map/i);
+    expect(psychePlaybook).toMatch(
+      /understanding plus an immediate support action[\s\S]*derive the support action from the accepted wording/i
+    );
+    expect(psychePlaybook).toMatch(
+      /similar Psyche record[\s\S]*not treat similarity as a cold duplicate\s+failure/i
+    );
+    expect(psychePlaybook).toMatch(
+      /update the existing record, link to it, or stand as a distinct new version/i
+    );
+    expect(psychePlaybook).toMatch(
+      /preserve therapeutic history unless the user\s+clearly wants removal/i
+    );
+    expect(psychePlaybook).toMatch(
+      /Do not delete a\s+Psyche record merely because a cleaner formulation now exists/i
+    );
+    expect(psychePlaybook).toMatch(
+      /Do not ask for every adjacent entity at once/i
+    );
     expect(psychePlaybook).toMatch(/`behavior_pattern`[\s\S]*cue[\s\S]*short-term payoff[\s\S]*long-term cost/i);
     expect(psychePlaybook).toMatch(/`belief_entry`[\s\S]*rule, prediction, or self\/other\/world sentence/i);
     expect(psychePlaybook).toMatch(/`mode_profile`[\s\S]*protective job[\s\S]*feared danger[\s\S]*burden/i);

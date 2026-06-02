@@ -3,8 +3,6 @@ import type { Location as RouterLocation } from "react-router-dom";
 import {
   beginRouteHandoff,
   commitPendingRoute,
-  setPendingRouteStatus,
-  setRouteReadyToCommit,
   syncDisplayedRouteKey
 } from "@/store/slices/shell-slice";
 import { useAppDispatch } from "@/store/typed-hooks";
@@ -15,17 +13,14 @@ type RouteRenderState = {
   location: RouterLocation;
 };
 
-type PendingRouteRenderState = RouteRenderState & {
-  baselineFetching: number;
-};
-
 export function useShellRouteHandoff({
   routePathKey,
   routerLocation,
   outlet,
   routerLocationContext,
-  externalFetching,
-  routeReady
+  optimisticLocation,
+  optimisticRoutePathKey,
+  destinationLoadingNode
 }: {
   routePathKey: string;
   routerLocation: RouterLocation;
@@ -33,113 +28,45 @@ export function useShellRouteHandoff({
   routerLocationContext: any;
   externalFetching: number;
   routeReady: boolean;
+  destinationLoadingNode: ReactNode;
+  optimisticLocation: RouterLocation | null;
+  optimisticRoutePathKey: string | null;
 }) {
   const dispatch = useAppDispatch();
-  const handoffTimerRef = useRef<number | null>(null);
-  const previousFetchingRef = useRef(externalFetching);
-  const [displayedRoute, setDisplayedRoute] = useState<RouteRenderState>({
-    key: routePathKey,
-    node: outlet,
-    location: routerLocation
-  });
-  const [pendingRoute, setPendingRoute] = useState<PendingRouteRenderState | null>(
-    null
-  );
+  const previousRoutePathKeyRef = useRef(routePathKey);
+  const [outletRevealKey, setOutletRevealKey] = useState(routePathKey);
+  const visibleRoutePathKey = optimisticRoutePathKey ?? routePathKey;
+  const visibleRouterLocation = optimisticLocation ?? routerLocation;
+  const routeAwaitingReveal =
+    optimisticRoutePathKey !== null || outletRevealKey !== routePathKey;
 
   useEffect(() => {
-    dispatch(syncDisplayedRouteKey(displayedRoute.key));
-  }, [dispatch, displayedRoute.key]);
-
-  useEffect(() => {
-    previousFetchingRef.current = externalFetching;
-  }, [externalFetching]);
-
-  useEffect(() => {
-    if (routePathKey === displayedRoute.key && pendingRoute === null) {
-      setDisplayedRoute((current) =>
-        current.node === outlet && current.location === routerLocation
-          ? current
-          : {
-              ...current,
-              node: outlet,
-              location: routerLocation
-            }
-      );
+    if (optimisticRoutePathKey !== null || outletRevealKey === routePathKey) {
       return;
     }
+    const timeoutId = window.setTimeout(() => {
+      setOutletRevealKey(routePathKey);
+    }, 120);
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [optimisticRoutePathKey, outletRevealKey, routePathKey]);
 
-    if (routePathKey !== displayedRoute.key) {
+  const displayedRoute: RouteRenderState = {
+    key: visibleRoutePathKey,
+    node: routeAwaitingReveal ? destinationLoadingNode : outlet,
+    location: visibleRouterLocation
+  };
+
+  useEffect(() => {
+    if (previousRoutePathKeyRef.current !== routePathKey) {
       dispatch(beginRouteHandoff(routePathKey));
-      setPendingRoute((current) => {
-        if (current?.key === routePathKey && current.node === outlet) {
-          return current;
-        }
-        return {
-          key: routePathKey,
-          node: outlet,
-          location: routerLocation,
-          baselineFetching: previousFetchingRef.current
-        };
-      });
-    }
-  }, [dispatch, displayedRoute.key, outlet, pendingRoute, routePathKey, routerLocation]);
-
-  useEffect(() => {
-    if (!pendingRoute) {
-      dispatch(setPendingRouteStatus("idle"));
-      dispatch(setRouteReadyToCommit(false));
-      if (handoffTimerRef.current !== null) {
-        window.clearTimeout(handoffTimerRef.current);
-        handoffTimerRef.current = null;
-      }
-      return;
-    }
-
-    const readyToCommit =
-      routeReady && externalFetching <= pendingRoute.baselineFetching;
-    dispatch(setPendingRouteStatus(readyToCommit ? "ready" : "loading"));
-    dispatch(setRouteReadyToCommit(readyToCommit));
-
-    if (!readyToCommit) {
-      if (handoffTimerRef.current !== null) {
-        window.clearTimeout(handoffTimerRef.current);
-        handoffTimerRef.current = null;
-      }
-      return;
-    }
-
-    if (handoffTimerRef.current !== null) {
-      return;
-    }
-
-    handoffTimerRef.current = window.setTimeout(() => {
-      setDisplayedRoute({
-        key: pendingRoute.key,
-        node: pendingRoute.node,
-        location: pendingRoute.location
-      });
-      setPendingRoute(null);
       dispatch(commitPendingRoute());
-      handoffTimerRef.current = null;
-    }, 140);
+      previousRoutePathKeyRef.current = routePathKey;
+    }
+    dispatch(syncDisplayedRouteKey(routePathKey));
+  }, [dispatch, routePathKey]);
 
-    return () => {
-      if (handoffTimerRef.current !== null) {
-        window.clearTimeout(handoffTimerRef.current);
-        handoffTimerRef.current = null;
-      }
-    };
-  }, [dispatch, externalFetching, pendingRoute, routeReady]);
-
-  useEffect(() => {
-    return () => {
-      if (handoffTimerRef.current !== null) {
-        window.clearTimeout(handoffTimerRef.current);
-      }
-    };
-  }, []);
-
-  const visibleLocation = pendingRoute ? displayedRoute.location : routerLocation;
   const displayedLocationContext = routerLocationContext
     ? {
         ...routerLocationContext,
@@ -150,7 +77,7 @@ export function useShellRouteHandoff({
   return {
     displayedRoute,
     displayedLocationContext,
-    pendingRoute,
-    visibleLocation
+    pendingRoute: null,
+    visibleLocation: visibleRouterLocation
   };
 }

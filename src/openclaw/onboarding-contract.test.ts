@@ -823,6 +823,15 @@ describe("forge onboarding contract", () => {
         ),
         psycheHypothesisRule: expect.stringMatching(
           /concrete Psyche example[\s\S]*user's own example[\s\S]*protection, prediction, relief, or cost[\s\S]*Do not present schema, mode, belief, or pattern language as a verdict/i
+        ),
+        mixedIntentSequencingRule: expect.stringMatching(
+          /several Forge jobs[\s\S]*read first[\s\S]*Movement timeline or box detail[\s\S]*Workbench run or node detail[\s\S]*Life Force overview[\s\S]*primary Psyche record first[\s\S]*flashcard, note, link, task, or habit/i
+        ),
+        duplicateDisambiguationRule: expect.stringMatching(
+          /normal stored entity[\s\S]*search the shared batch entity route[\s\S]*update that record, link to it, or save a separate new record[\s\S]*Psyche records[\s\S]*formulation choice[\s\S]*wiki_page and calendar_connection[\s\S]*dedicated search\/list\/read routes[\s\S]*Movement, Life Force, and Workbench[\s\S]*dedicated read lanes/i
+        ),
+        destructiveActionRule: expect.stringMatching(
+          /deleting, archiving, invalidating, overwriting, disconnecting,[\s\S]*confirm the exact target[\s\S]*soft-delete[\s\S]*Psyche records[\s\S]*updated, linked as history, archived, or kept distinct[\s\S]*Movement[\s\S]*automatic-box invalidation[\s\S]*calendar connections, Workbench flows, wiki pages, and questionnaire instruments/i
         )
       })
     );
@@ -1113,6 +1122,15 @@ describe("forge onboarding contract", () => {
     );
     expect(onboarding.interactionGuidance.followUpQuestionRule).toMatch(
       /After a substantive answer[\s\S]*exactly one next lane[\s\S]*stop asking/i
+    );
+    expect(onboarding.interactionGuidance.mixedIntentSequencingRule).toMatch(
+      /do not ask a broad lane question[\s\S]*span, wording, flow, run, node, weekday, or link/i
+    );
+    expect(onboarding.interactionGuidance.duplicateDisambiguationRule).toMatch(
+      /compare the sentence, cue\/payoff\/cost, protective job, episode, urge sentence, or message/i
+    );
+    expect(onboarding.interactionGuidance.destructiveActionRule).toMatch(
+      /downstream sync, published output, backlinks, run history, or completed runs/i
     );
     expect(onboarding.interactionGuidance.antiDriftRule).toMatch(
       /Avoid vague reflective filler[\s\S]*surface, CRUD, payload[\s\S]*product nouns/i
@@ -1454,6 +1472,9 @@ describe("forge onboarding contract", () => {
             "reviewShortcutRule",
             "readModelWriteRule",
             "psycheHypothesisRule",
+            "mixedIntentSequencingRule",
+            "duplicateDisambiguationRule",
+            "destructiveActionRule",
             "followUpQuestionRule",
             "antiDriftRule"
           ]),
@@ -1462,6 +1483,9 @@ describe("forge onboarding contract", () => {
             reviewShortcutRule: { type: "string" },
             readModelWriteRule: { type: "string" },
             psycheHypothesisRule: { type: "string" },
+            mixedIntentSequencingRule: { type: "string" },
+            duplicateDisambiguationRule: { type: "string" },
+            destructiveActionRule: { type: "string" },
             followUpQuestionRule: { type: "string" },
             antiDriftRule: { type: "string" }
           })

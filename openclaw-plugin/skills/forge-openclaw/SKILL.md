@@ -227,6 +227,14 @@ Entity conversation rule:
 - Prefer a progression of:
   concrete example or intent -> working name -> purpose or meaning -> placement in Forge -> operational details -> linked context.
 - Use those same playbooks for action-heavy non-Psyche flows such as `work_adjustment`, `preference_judgment`, `preference_signal`, and specialized `movement`, `life_force`, or `workbench` requests so the conversation starts from what the user is trying to understand, change, add, update, link, or run before you choose the route.
+- When one message combines several jobs, sequence them instead of turning them into
+  a broad menu: read before a correction when the current truth is uncertain,
+  formulate the primary Psyche record before deriving a flashcard or note, and ask
+  only for the missing span, wording, flow, run, node, weekday, or link that changes
+  the next action.
+- Before deleting, archiving, invalidating, disconnecting, or replacing a record, confirm
+  the exact target and what should remain understandable; for Psyche records, preserve
+  therapeutic history unless the user clearly wants removal.
 - When the operation is not already explicit, identify the job first:
   add, update, review, compare, navigate, link, or run. Skip that meta question
   when the action is already obvious from the user's wording.
@@ -515,7 +523,7 @@ Use these rules when choosing tools.
 
 Read first with `forge_get_operator_overview`, `forge_get_operator_context`, or `forge_get_current_work` unless the user is clearly asking for one exact known record or one exact write.
 
-Before creating or updating an ambiguous stored entity, use `forge_search_entities` to check for duplicates.
+Before creating or updating an ambiguous stored entity, use `forge_search_entities` to check for duplicates. If a likely match appears, ask whether the user wants to update that record, link to it, or save a separate new record; do not reopen the whole create flow.
 
 Use the batch entity tools for stored records:
 `forge_search_entities`, `forge_create_entities`, `forge_update_entities`, `forge_delete_entities`, `forge_restore_entities`

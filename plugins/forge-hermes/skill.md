@@ -205,6 +205,13 @@ Use those same playbooks for action-heavy non-Psyche flows such as
 `work_adjustment`, `preference_judgment`, `preference_signal`, and specialized
 `movement`, `life_force`, or `workbench` work so Hermes starts from the user's real
 job before choosing a route family.
+When one message combines several jobs, sequence them instead of turning them into a
+broad menu: read before a correction when the current truth is uncertain, formulate
+the primary Psyche record before deriving a flashcard or note, and ask only for the
+missing span, wording, flow, run, node, weekday, or link that changes the next action.
+Before deleting, archiving, invalidating, disconnecting, or replacing a record,
+confirm the exact target and what should remain understandable; for Psyche records,
+preserve therapeutic history unless the user clearly wants removal.
 Treat questionnaire runs, self-observations, reflective notes, wiki pages,
 sleep/workout enrichment, and preference signals as reflection-sensitive records:
 ask what the record should help the user understand, decide, notice, remember, or
@@ -259,7 +266,9 @@ When Hermes is trying to find the right wiki record, use these search patterns:
 
 1. Start with `forge_get_operator_overview`.
 2. Use `forge_get_operator_context`, `forge_get_current_work`, `forge_get_psyche_overview`, `forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_get_training_load_overview`, `forge_get_wiki_settings`, `forge_search_wiki`, or `forge_get_calendar_overview` when the request needs a more specific read model.
-3. Search before creating duplicates with `forge_search_entities`.
+3. Search before creating duplicates with `forge_search_entities`; if a likely match
+   appears, ask whether to update it, link to it, or save a separate new record
+   instead of reopening the whole create flow.
 4. Prefer the batch entity tools for normal stored-entity work. Batch CRUD is the default for simple entities, so do not build a huge one-route-per-entity mental model when the shared routes already fit:
    `forge_create_entities`, `forge_update_entities`, `forge_delete_entities`, `forge_restore_entities`.
 5. Use the wiki tools for SQLite-backed knowledge work:
