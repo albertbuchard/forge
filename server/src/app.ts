@@ -7904,6 +7904,15 @@ function compactWeightLoss(weightLoss: ReturnType<typeof getWeightLossViewData>)
       fiberCoverage: weightLoss.todayLedger.fiberCoverage,
       unconfirmedCount: weightLoss.todayLedger.unconfirmedCount
     },
+    energyModel: {
+      estimatedTdeeKcal: weightLoss.energyModel.estimatedTdeeKcal,
+      activeBurnKcal: weightLoss.energyModel.activeBurnKcal,
+      movementCaloriesKcal: weightLoss.energyModel.movementCaloriesKcal,
+      averageCalorieIntake: weightLoss.energyModel.averageCalorieIntake,
+      estimatedDailyEnergyBalanceKcal:
+        weightLoss.energyModel.estimatedDailyEnergyBalanceKcal,
+      wearableConfidence: weightLoss.energyModel.wearableConfidence
+    },
     weightTrend: weightLoss.weightTrend,
     foodQuality: weightLoss.foodQuality,
     trainingFuel: weightLoss.trainingFuel,

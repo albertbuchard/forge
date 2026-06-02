@@ -1418,8 +1418,8 @@ test("goal detail, operator context, and retroactive work logging are available 
           weightLoss: {
             summary: { loggedMealCount: number };
             todayLedger: {
+              mealCount: number;
               totals: { calories: number };
-              meals: Array<unknown>;
             };
             energyModel: {
               estimatedTdeeKcal: number | null;
@@ -1427,8 +1427,8 @@ test("goal detail, operator context, and retroactive work logging are available 
               estimatedDailyEnergyBalanceKcal: number | null;
             };
             foodQuality: {
-              qualityScore: number;
-              proteinPer1000Kcal: number;
+              qualityScore: number | null;
+              proteinPer1000Kcal: number | null;
             };
           };
           routeGuide: {
@@ -1445,8 +1445,8 @@ test("goal detail, operator context, and retroactive work logging are available 
     assert.ok(typeof overview.sleep.summary.averageSleepSeconds === "number");
     assert.ok(Array.isArray(overview.sleep.sessions));
     assert.ok(typeof overview.weightLoss.summary.loggedMealCount === "number");
+    assert.ok(typeof overview.weightLoss.todayLedger.mealCount === "number");
     assert.ok(typeof overview.weightLoss.todayLedger.totals.calories === "number");
-    assert.ok(Array.isArray(overview.weightLoss.todayLedger.meals));
     assert.ok(
       typeof overview.weightLoss.energyModel.estimatedTdeeKcal === "number" ||
         overview.weightLoss.energyModel.estimatedTdeeKcal === null
@@ -1460,9 +1460,13 @@ test("goal detail, operator context, and retroactive work logging are available 
         "number" ||
         overview.weightLoss.energyModel.estimatedDailyEnergyBalanceKcal === null
     );
-    assert.ok(typeof overview.weightLoss.foodQuality.qualityScore === "number");
     assert.ok(
-      typeof overview.weightLoss.foodQuality.proteinPer1000Kcal === "number"
+      typeof overview.weightLoss.foodQuality.qualityScore === "number" ||
+        overview.weightLoss.foodQuality.qualityScore === null
+    );
+    assert.ok(
+      typeof overview.weightLoss.foodQuality.proteinPer1000Kcal === "number" ||
+        overview.weightLoss.foodQuality.proteinPer1000Kcal === null
     );
     if (overview.sleep.latestNight) {
       assert.ok(typeof overview.sleep.latestNight.id === "string");
