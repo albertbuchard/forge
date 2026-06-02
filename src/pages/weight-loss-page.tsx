@@ -410,6 +410,7 @@ export function WeightLossPage() {
   const trainingFuel = view.trainingFuel;
   const subjective = view.subjective;
   const gut = view.gut;
+  const dataQuality = view.dataQuality;
   const hypotheses = insightArray(view.hypotheses);
   const foodResults = foodSearchMutation.data ?? [];
   const barcodeFood = barcodeMutation.data ?? null;
@@ -746,6 +747,60 @@ export function WeightLossPage() {
           </div>
         </Card>
       </section>
+
+      <Card className="grid gap-4 border-white/8 bg-white/[0.045] p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+              Data quality
+            </div>
+            <h2 className="mt-1 text-xl font-semibold text-white">Confidence, coverage, and next evidence</h2>
+          </div>
+          <Badge className="bg-white/[0.08] text-white/70">
+            {view.summary.dataQualityScore.toFixed(0)}% coverage
+          </Badge>
+        </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-[22px] border border-white/8 bg-white/[0.04] p-4">
+            <div className="text-[11px] uppercase tracking-[0.16em] text-white/36">
+              Source confidence
+            </div>
+            <div className="mt-2 text-lg font-semibold text-white">
+              {dataQuality.sourceConfidence}
+            </div>
+            <p className="mt-2 text-sm leading-6 text-white/54">
+              Food parsing stays candidate-based until accepted; wearable burn is treated as a trend input.
+            </p>
+          </div>
+          <div className="rounded-[22px] border border-white/8 bg-white/[0.04] p-4">
+            <div className="text-[11px] uppercase tracking-[0.16em] text-white/36">
+              Missing check-ins
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {dataQuality.missingHighValueCheckins.length > 0 ? (
+                dataQuality.missingHighValueCheckins.map((entry) => (
+                  <Badge key={entry} className="bg-amber-300/10 text-amber-50">
+                    {entry}
+                  </Badge>
+                ))
+              ) : (
+                <span className="text-sm text-white/58">Core evidence loop is covered.</span>
+              )}
+            </div>
+          </div>
+          <div className="rounded-[22px] border border-white/8 bg-white/[0.04] p-4">
+            <div className="text-[11px] uppercase tracking-[0.16em] text-white/36">
+              Next best cue
+            </div>
+            <p className="mt-2 text-sm leading-6 text-white/58">
+              {dataQuality.notes}
+            </p>
+            <div className="mt-3 text-xs text-white/42">
+              {ledger.unconfirmedCount} unconfirmed candidate{ledger.unconfirmedCount === 1 ? "" : "s"}
+            </div>
+          </div>
+        </div>
+      </Card>
     </div>
   );
 }
