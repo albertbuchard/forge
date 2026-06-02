@@ -911,26 +911,38 @@ const captureCommandPayloadSchema = z.object({
     linkedContext: watchLinkedContextSchema.default({}),
     payload: z.record(z.string(), z.unknown()).default({})
 });
+const booleanLikeSchema = z.preprocess((value) => {
+    if (typeof value === "string") {
+        const normalized = value.trim().toLowerCase();
+        if (normalized === "true") {
+            return true;
+        }
+        if (normalized === "false") {
+            return false;
+        }
+    }
+    return value;
+}, z.boolean());
+const nullableNumberLikeSchema = z.preprocess((value) => {
+    if (value === "" || value === null || value === undefined) {
+        return null;
+    }
+    return value;
+}, z.coerce.number().int().min(60).max(86_400).nullable());
 const taskRunStartCommandPayloadSchema = z.object({
     taskId: z.string().trim().min(1),
     actor: z.string().trim().min(1).optional(),
     timerMode: z.enum(["planned", "unlimited"]).default("unlimited"),
-    plannedDurationSeconds: z
-        .number()
-        .int()
-        .min(60)
-        .max(86_400)
-        .nullable()
-        .default(null),
-    isCurrent: z.boolean().default(true),
-    leaseTtlSeconds: z.number().int().min(1).max(14_400).default(900),
+    plannedDurationSeconds: nullableNumberLikeSchema.default(null),
+    isCurrent: booleanLikeSchema.default(true),
+    leaseTtlSeconds: z.coerce.number().int().min(1).max(14_400).default(900),
     note: z.string().trim().default(""),
     overrideReason: z.string().trim().optional()
 });
 const taskRunIdCommandPayloadSchema = z.object({
     runId: z.string().trim().min(1),
     actor: z.string().trim().min(1).optional(),
-    leaseTtlSeconds: z.number().int().min(1).max(14_400).default(900),
+    leaseTtlSeconds: z.coerce.number().int().min(1).max(14_400).default(900),
     note: z.string().trim().default(""),
     overrideReason: z.string().trim().optional()
 });

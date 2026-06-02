@@ -19,7 +19,30 @@ final class WatchAppModel: NSObject, ObservableObject {
         self.previewMode = preview
         if preview {
             self.bootstrap = ForgeWatchBootstrap(
+                schemaVersion: 2,
                 generatedAt: ISO8601DateFormatter().string(from: Date()),
+                surfaces: [
+                    .init(id: "now", title: "Now", icon: "sparkle"),
+                    .init(id: "work", title: "Work", icon: "kanban"),
+                    .init(id: "habits", title: "Habits", icon: "habit"),
+                    .init(id: "goals", title: "Goals", icon: "scope"),
+                    .init(id: "today", title: "Today", icon: "calendar"),
+                    .init(id: "health", title: "Health", icon: "heart"),
+                    .init(id: "movement", title: "Move", icon: "location"),
+                    .init(id: "psyche", title: "Psyche", icon: "mind"),
+                    .init(id: "inbox", title: "Inbox", icon: "tray"),
+                    .init(id: "sync", title: "Sync", icon: "antenna")
+                ],
+                now: nil,
+                work: nil,
+                goals: nil,
+                projects: nil,
+                today: nil,
+                health: nil,
+                movement: nil,
+                psyche: nil,
+                inbox: nil,
+                sync: nil,
                 habits: [
                     ForgeWatchHabitSummary(
                         id: "habit_preview",
@@ -90,13 +113,13 @@ final class WatchAppModel: NSObject, ObservableObject {
         defaults.removeObject(forKey: ForgeWatchStorage.pendingLaunchDestinationKey)
         switch rawValue {
         case "check_in", "emotion":
-            selectedSurface = .checkIn
+            selectedSurface = .psyche
         case "mark_moment":
-            selectedSurface = .markMoment
+            selectedSurface = .now
         case "prompt_inbox":
-            selectedSurface = .promptInbox
+            selectedSurface = .inbox
         default:
-            selectedSurface = .habits
+            selectedSurface = WatchSurface(rawValue: rawValue) ?? .now
         }
     }
 
@@ -135,7 +158,8 @@ final class WatchAppModel: NSObject, ObservableObject {
                     status: status,
                     note: note
                 ),
-                captureEvent: nil
+                captureEvent: nil,
+                command: nil
             )
         )
         WKInterfaceDevice.current().play(.success)
@@ -160,10 +184,26 @@ final class WatchAppModel: NSObject, ObservableObject {
                     promptId: promptId,
                     linkedContext: linkedContext,
                     payload: payload
-                )
+                ),
+                command: nil
             )
         )
         WKInterfaceDevice.current().play(.success)
+    }
+
+    func queueCommand(kind: ForgeWatchActionKind, payload: [String: String]) {
+        enqueue(
+            ForgeWatchOutboundEnvelope(
+                id: UUID().uuidString,
+                createdAt: ISO8601DateFormatter().string(from: Date()),
+                device: currentDeviceDescriptor(),
+                kind: kind,
+                habitCheckIn: nil,
+                captureEvent: nil,
+                command: ForgeWatchCommandAction(payload: payload)
+            )
+        )
+        WKInterfaceDevice.current().play(.click)
     }
 
     private func enqueue(_ envelope: ForgeWatchOutboundEnvelope) {

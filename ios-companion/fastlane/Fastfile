@@ -625,7 +625,10 @@ def configure_release_signing!
 end
 
 def build_release_archive!(artifact_dir:, archive_path:, marketing_version:, bump_build_number:)
-  export_options = configure_release_signing!
+  signing_export_options = configure_release_signing!
+  export_options = (signing_export_options || {}).merge(
+    manageAppVersionAndBuildNumber: false
+  )
   xcargs = [
     "-allowProvisioningUpdates",
     xcode_authentication_xcargs
@@ -645,7 +648,7 @@ def build_release_archive!(artifact_dir:, archive_path:, marketing_version:, bum
     xcargs: xcargs,
     export_team_id: ENV.fetch("FORGE_APPLE_TEAM_ID", "KZ65F7924F"),
     export_options: export_options,
-    skip_profile_detection: !export_options.nil?
+    skip_profile_detection: !signing_export_options.nil?
   )
 end
 

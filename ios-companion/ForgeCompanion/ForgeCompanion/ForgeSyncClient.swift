@@ -696,6 +696,24 @@ struct ForgeSyncClient {
         let watch: ForgeWatchBootstrap
     }
 
+    private struct WatchCommandBatchRequest: Encodable {
+        struct Command: Encodable {
+            let id: String
+            let kind: String
+            let createdAt: String
+            let payload: [String: String]
+        }
+
+        let sessionId: String
+        let pairingToken: String
+        let device: ForgeWatchDeviceDescriptor
+        let commands: [Command]
+    }
+
+    private struct WatchCommandBatchEnvelope: Decodable {
+        let watch: ForgeWatchBootstrap
+    }
+
     private struct MovementTimelineRequest: Encodable {
         let sessionId: String
         let pairingToken: String
@@ -2121,9 +2139,9 @@ struct ForgeSyncClient {
                 sessionId: pairing.sessionId,
                 pairingToken: pairing.pairingToken,
                 device: device,
-                events: actions.map { action in
+                events: actions.enumerated().map { index, action in
                     WatchCaptureBatchRequest.Event(
-                        dedupeKey: envelopeId,
+                        dedupeKey: actions.count == 1 ? envelopeId : "\(envelopeId)-\(index)",
                         eventType: action.eventType,
                         recordedAt: action.recordedAt,
                         promptId: action.promptId,
@@ -2137,6 +2155,83 @@ struct ForgeSyncClient {
         companionDebugLog(
             "ForgeSyncClient",
             "submitWatchCaptureBatch success action=\(envelopeId)"
+        )
+        return envelope.watch
+    }
+
+    func submitWatchCommandBatch(
+        device: ForgeWatchDeviceDescriptor,
+        envelopes: [ForgeWatchOutboundEnvelope],
+        pairing: PairingPayload
+    ) async throws -> ForgeWatchBootstrap {
+        companionDebugLog(
+            "ForgeSyncClient",
+            "submitWatchCommandBatch start commands=\(envelopes.count)"
+        )
+        let commands = envelopes.compactMap { envelope -> WatchCommandBatchRequest.Command? in
+            if let habit = envelope.habitCheckIn {
+                return WatchCommandBatchRequest.Command(
+                    id: envelope.id,
+                    kind: envelope.kind.rawValue,
+                    createdAt: envelope.createdAt,
+                    payload: [
+                        "habitId": habit.habitId,
+                        "dateKey": habit.dateKey,
+                        "status": habit.status,
+                        "note": habit.note
+                    ]
+                )
+            }
+            if let capture = envelope.captureEvent {
+                var payload = capture.payload
+                payload["eventType"] = capture.eventType
+                payload["recordedAt"] = capture.recordedAt
+                if let promptId = capture.promptId {
+                    payload["promptId"] = promptId
+                }
+                if let placeId = capture.linkedContext.placeId {
+                    payload["placeId"] = placeId
+                }
+                if let stayId = capture.linkedContext.stayId {
+                    payload["stayId"] = stayId
+                }
+                if let tripId = capture.linkedContext.tripId {
+                    payload["tripId"] = tripId
+                }
+                if let workoutId = capture.linkedContext.workoutId {
+                    payload["workoutId"] = workoutId
+                }
+                return WatchCommandBatchRequest.Command(
+                    id: envelope.id,
+                    kind: envelope.kind.rawValue,
+                    createdAt: envelope.createdAt,
+                    payload: payload
+                )
+            }
+            if let command = envelope.command {
+                return WatchCommandBatchRequest.Command(
+                    id: envelope.id,
+                    kind: envelope.kind.rawValue,
+                    createdAt: envelope.createdAt,
+                    payload: command.payload
+                )
+            }
+            return nil
+        }
+        let envelope: WatchCommandBatchEnvelope = try await sendRequest(
+            path: "/mobile/watch/actions:batch",
+            apiBaseUrl: pairing.apiBaseUrl,
+            body: WatchCommandBatchRequest(
+                sessionId: pairing.sessionId,
+                pairingToken: pairing.pairingToken,
+                device: device,
+                commands: commands
+            ),
+            transport: pairing.transport
+        )
+        companionDebugLog(
+            "ForgeSyncClient",
+            "submitWatchCommandBatch success commands=\(commands.count)"
         )
         return envelope.watch
     }
