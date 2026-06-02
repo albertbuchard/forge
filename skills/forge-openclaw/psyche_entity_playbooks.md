@@ -471,12 +471,38 @@ Use `forge_search_entities` before creating when a duplicate is plausible. Use
 and useful links are clear enough. Preserve nuance in a linked `note` when the
 experience is richer than the normalized fields.
 
+When search finds a similar Psyche record, do not treat similarity as a cold duplicate
+failure. Briefly name the difference that may matter and ask one narrow question:
+should this update the existing record, link to it, or stand as a distinct new version
+of the experience? For beliefs, compare the sentence; for patterns, compare the cue,
+payoff, and cost; for modes, compare the protective job; for trigger reports, compare
+the episode; for flashcards, compare the urge sentence and message. If the user wants
+a new record after seeing the near match, respect that and save the distinct version.
+
+For destructive or replacement requests, preserve therapeutic history unless the user
+clearly wants removal. If a new belief, pattern, mode, trigger interpretation, value
+wording, or flashcard message supersedes an old one, ask whether the old record should
+be updated, linked as history, archived, or kept as a distinct version. Do not delete a
+Psyche record merely because a cleaner formulation now exists. If the user already
+confirmed deletion and the exact target is clear, honor the request without reopening
+the whole exploration.
+
 Do not divert Psyche material into `self_observation` just because it started as an
 episode. Use `trigger_report` for one emotionally meaningful incident, use
 `behavior_pattern` for a recurring functional loop, use `belief_entry` for one
 explicit sentence, and use `mode_guide_session` or `mode_profile` when a part-state is
 central. Use `flashcard` when the user needs a small rehearsable message to retrieve
 during an urge, trigger, mode activation, belief activation, or values-based pivot.
+
+When the user asks for understanding plus an immediate support action, keep the order
+therapeutic and practical. Clarify or formulate the primary Psyche record first, then
+derive the support action from the accepted wording: a `behavior_pattern` can produce a
+`flashcard`, a `belief_entry` can produce a counter-message or note, a `trigger_report`
+can link to an `event_type` or `emotion_definition`, and a `mode_guide_session` can
+later become a durable `mode_profile`. Do not ask for every adjacent entity at once.
+If the user already supplied a clear action, say the sequence briefly in product
+language and ask only for the missing wording, cue, or link that changes the first
+save.
 
 When a user says they feel an urge or asks for help not doing something, search
 existing `flashcard` records before creating a new one. Use `forge_search_entities`

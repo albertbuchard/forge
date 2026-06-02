@@ -464,7 +464,39 @@ function strategyJsonChecks() {
 function rewardAndGamificationChecks(settings) {
     const checks = [];
     const catalogItemIds = new Set(GAMIFICATION_CATALOG.map((item) => item.id));
-    const equipmentItemIds = new Set(GAMIFICATION_CATALOG.filter((item) => item.kind === "unlock").map((item) => item.id));
+    const equipmentValueFields = [
+        {
+            column: "selected_mascot_skin",
+            unlockType: "mascot_skin",
+            payloadKey: "mascotSkin"
+        },
+        {
+            column: "selected_hud_treatment",
+            unlockType: "hud_treatment",
+            payloadKey: "hudTreatment"
+        },
+        {
+            column: "selected_streak_effect",
+            unlockType: "streak_effect",
+            payloadKey: "streakEffect"
+        },
+        {
+            column: "selected_trophy_shelf",
+            unlockType: "trophy_shelf",
+            payloadKey: "trophyShelf"
+        },
+        {
+            column: "selected_celebration_variant",
+            unlockType: "celebration_variant",
+            payloadKey: "celebrationVariant"
+        }
+    ];
+    const equipmentValuesByColumn = new Map(equipmentValueFields.map((field) => [
+        field.column,
+        new Set(GAMIFICATION_CATALOG.filter((item) => item.kind === "unlock" &&
+            item.unlockType === field.unlockType &&
+            typeof item.rewardPayload[field.payloadKey] === "string").map((item) => item.rewardPayload[field.payloadKey]))
+    ]));
     checks.push(safeCountCheck({
         id: "rewards.rules.missing",
         group: "Rewards",
@@ -532,7 +564,10 @@ function rewardAndGamificationChecks(settings) {
         : [];
     const staleEquipment = equipmentRows.reduce((count, row) => {
         return (count +
-            Object.values(row).filter((value) => typeof value === "string" && !equipmentItemIds.has(value)).length);
+            Object.entries(row).filter(([column, value]) => typeof value === "string" &&
+                !(equipmentValuesByColumn
+                    .get(column)
+                    ?.has(value) ?? false)).length);
     }, 0);
     checks.push(check({
         id: "rewards.gamification.equipment",
@@ -541,8 +576,8 @@ function rewardAndGamificationChecks(settings) {
         passed: staleEquipment === 0,
         severity: "warning",
         summary: staleEquipment === 0
-            ? "Selected gamification equipment points to current unlock catalog items."
-            : `${staleEquipment} selected equipment reference${staleEquipment === 1 ? "" : "s"} point to removed catalog items.`,
+            ? "Selected gamification equipment values match current unlock reward payloads."
+            : `${staleEquipment} selected equipment value${staleEquipment === 1 ? "" : "s"} point to removed catalog rewards.`,
         affectedCount: staleEquipment
     }));
     return checks.concat(check({

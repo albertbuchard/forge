@@ -3168,6 +3168,19 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(reason, "no health sync upload acknowledgement within 305s")
     }
 
+    func testHealthSyncLifecyclePolicyIgnoresStoppedTelemetry() {
+        let now = makeDate("2026-05-27T09:45:05.000Z")
+
+        let reason = CompanionAppModel.HealthSyncLifecyclePolicy.stallReason(
+            startedAt: nil,
+            lastChunkAt: nil,
+            uploadedChunks: 0,
+            now: now
+        )
+
+        XCTAssertNil(reason)
+    }
+
     func testActiveHealthSyncCheckpointPersistsFrozenWindowAndProgress() throws {
         let windowEnd = makeDate("2026-05-25T20:19:12.377Z")
         let checkpoint = ActiveHealthSyncCheckpoint(

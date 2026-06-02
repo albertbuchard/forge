@@ -3976,6 +3976,192 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
   }
 });
 
+test("mobile health chunked sync applies movement chunks before final completion", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-health-chunked-movement-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const pairingResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: { userId: "user_operator" }
+    });
+    assert.equal(pairingResponse.statusCode, 201);
+    const qrPayload = (
+      pairingResponse.json() as {
+        qrPayload: { sessionId: string; pairingToken: string };
+      }
+    ).qrPayload;
+
+    const startResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync-sessions",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        device: {
+          name: "Omar iPhone",
+          platform: "ios",
+          appVersion: "1.0",
+          sourceDevice: "iPhone"
+        },
+        permissions: {
+          healthKitAuthorized: false,
+          backgroundRefreshEnabled: true,
+          motionReady: true,
+          locationReady: true,
+          screenTimeReady: false
+        },
+        sourceStates: {
+          health: {
+            desiredEnabled: true,
+            appliedEnabled: true,
+            authorizationStatus: "partial",
+            syncEligible: false,
+            lastObservedAt: "2026-04-07T08:00:00.000Z",
+            metadata: {}
+          },
+          movement: {
+            desiredEnabled: true,
+            appliedEnabled: true,
+            authorizationStatus: "approved",
+            syncEligible: true,
+            lastObservedAt: "2026-04-07T08:00:00.000Z",
+            metadata: {}
+          },
+          screenTime: {
+            desiredEnabled: false,
+            appliedEnabled: false,
+            authorizationStatus: "disabled",
+            syncEligible: false,
+            lastObservedAt: "2026-04-07T08:00:00.000Z",
+            metadata: {}
+          }
+        },
+        requestedFamilies: ["movement"]
+      }
+    });
+    assert.equal(startResponse.statusCode, 200, startResponse.body);
+    const syncSessionId = (
+      startResponse.json() as { upload: { syncSessionId: string } }
+    ).upload.syncSessionId;
+
+    const movementPayload = {
+      movement: {
+        settings: {
+          trackingEnabled: true,
+          publishMode: "no_publish",
+          retentionMode: "aggregates_only",
+          locationPermissionStatus: "always",
+          motionPermissionStatus: "ready",
+          backgroundTrackingReady: true,
+          metadata: {}
+        },
+        knownPlaces: [
+          {
+            externalUid: "place_background_home",
+            label: "Background Home",
+            aliases: [],
+            latitude: 46.5191,
+            longitude: 6.6323,
+            radiusMeters: 120,
+            categoryTags: ["home"],
+            visibility: "personal",
+            wikiNoteId: null,
+            linkedEntities: [],
+            linkedPeople: [],
+            metadata: {}
+          }
+        ],
+        stays: [
+          {
+            externalUid: "stay_background_sync",
+            label: "Background stay",
+            status: "completed",
+            classification: "stationary",
+            startedAt: "2026-04-07T07:00:00.000Z",
+            endedAt: "2026-04-07T08:00:00.000Z",
+            centerLatitude: 46.5191,
+            centerLongitude: 6.6323,
+            radiusMeters: 100,
+            sampleCount: 6,
+            placeExternalUid: "place_background_home",
+            placeLabel: "Background Home",
+            tags: [],
+            metadata: {}
+          }
+        ],
+        trips: []
+      }
+    };
+    const chunkResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/chunks`,
+      payload: {
+        chunkId: "chunk-background-movement",
+        sequence: 0,
+        family: "movement",
+        recordCount: 2,
+        byteCount: Buffer.byteLength(JSON.stringify(movementPayload), "utf8"),
+        checksumSha256: sha256Json(movementPayload),
+        payload: movementPayload
+      }
+    });
+    assert.equal(chunkResponse.statusCode, 200, chunkResponse.body);
+
+    const storedStay = getDatabase()
+      .prepare(
+        `SELECT id
+         FROM movement_stays
+         WHERE external_uid = ?`
+      )
+      .get("stay_background_sync") as { id: string } | undefined;
+    assert.ok(storedStay);
+
+    const storedChunk = getDatabase()
+      .prepare(
+        `SELECT applied_at, payload_summary_json
+         FROM health_mobile_sync_chunks
+         WHERE sync_session_id = ? AND chunk_id = ?`
+      )
+      .get(syncSessionId, "chunk-background-movement") as {
+      applied_at: string | null;
+      payload_summary_json: string;
+    };
+    assert.ok(storedChunk.applied_at);
+    assert.equal(
+      JSON.parse(storedChunk.payload_summary_json).immediateApplied,
+      true
+    );
+
+    const completeResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/complete`,
+      payload: {
+        expectedCounts: { movement: 2 }
+      }
+    });
+    assert.equal(completeResponse.statusCode, 200, completeResponse.body);
+    assert.equal(
+      (completeResponse.json() as {
+        sync: { imported: { movementStays?: number } };
+      }).sync.imported.movementStays,
+      1
+    );
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("mobile health workout import state replays legacy workouts until evidence metadata exists", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-health-legacy-route-only-")
@@ -10159,7 +10345,8 @@ test("built frontend assets are served correctly from the /forge base path", asy
     });
     assert.equal(spaRouteResponse.statusCode, 200);
     assert.match(spaRouteResponse.headers["content-type"] ?? "", /text\/html/);
-    assert.match(spaRouteResponse.body, /<div id="root"><\/div>/);
+    assert.match(spaRouteResponse.body, /<div id="root">/);
+    assert.match(spaRouteResponse.body, /Forge is starting/);
   } finally {
     await app.close();
     closeDatabase();
@@ -16590,7 +16777,7 @@ test("training-load route exposes zone time series and smart training intelligen
       },
       {
         id: "workout_tlz_hard_now",
-        dayOffset: 2,
+        dayOffset: 1,
         type: "kickboxing",
         durationSeconds: 3000,
         zones: { below_z1: 180, zone_1: 420, zone_2: 600, zone_3: 780, zone_4: 720, zone_5: 300 },

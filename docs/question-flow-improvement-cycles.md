@@ -1,10 +1,138 @@
 # Forge Question Flow Improvement Cycles
 
-Latest run date: 2026-06-01
+Latest run date: 2026-06-02
 
 This report records the three-cycle evaluation for Forge agent question flows. The
 same full flow set was tested in each cycle so improvements were kept only where they
 helped the entity or specialized surface.
+
+## 2026-06-02 Automation Pass
+
+Setup verification:
+
+- Confirmed the Forge worktree was on `main` before plugin work and edits.
+- Read the prior automation memory and kept the existing Forge data root intact.
+- Verified OpenClaw and Hermes configs both point at
+  `/Users/omarclaw/Documents/aurel-monorepo/data/forge`; the live runtime on
+  `127.0.0.1:4317` had
+  `/Users/omarclaw/Documents/aurel-monorepo/data/forge/forge.sqlite` open. No
+  database, data root, backup, or user data was moved, merged, deleted, or
+  overwritten.
+- Built and reinstalled the repo-local OpenClaw plugin from `./openclaw-plugin`,
+  enabled it, and restarted the gateway. The known duplicate plugin-id warning
+  remains, with OpenClaw resolving to the config-selected repo-local plugin.
+- Built the Hermes packaged runtime and reinstalled Hermes editable from
+  `./plugins/forge-hermes`.
+- Verified OpenClaw loads `forge-openclaw-plugin 0.2.99` from the repo-local dist and
+  Hermes imports `forge-hermes-plugin 0.2.99` from the repo-local editable package.
+- Verified live onboarding and OpenAPI before the cycles: 42 entity catalog entries,
+  28 batch-CRUD entities, 14 read models, 23 Movement route keys, four Life Force
+  route keys under both `lifeForce` and `life_force`, 16 Workbench route keys, and
+  182 OpenAPI paths with the expected batch, Movement, Life Force, Workbench, and
+  training-load families.
+
+Every cycle retested the full current flow set: goal, project, strategy, task, habit,
+tag, note, insight, task_run, work_adjustment, calendar_event,
+work_block_template, task_timebox, calendar_connection, preference_catalog,
+preference_catalog_item, preference_context, preference_item,
+preference_judgment, preference_signal, questionnaire_instrument,
+questionnaire_run, self_observation, sleep_session, sleep_overview,
+workout_session, sports_overview, training_load, wiki_page, movement, life_force,
+workbench, psyche_value, behavior_pattern, behavior, belief_entry, mode_profile,
+mode_guide_session, flashcard, trigger_report, event_type, and
+emotion_definition.
+
+Specialized route scenarios covered all live Movement lanes for day, month, all-time,
+timeline, places, box detail, trip detail, selected-span aggregate, settings,
+settings updates, place create/update, user-box preflight/create/update/delete,
+automatic-box invalidation, stay/trip update/delete, and trip-point update/delete;
+Life Force overview, profile, weekday template, and fatigue signal; and Workbench
+flow catalog, flow detail by id or slug, flow CRUD, saved-flow execution, one-off
+execution, chat follow-up, run history, run detail, run nodes, node result, latest
+node output, published output, and box catalog.
+
+Cycle 1 tested all flows after the plugin refresh with extra attention to combined
+requests such as "review this and fix it", "save the pattern and make me a card", and
+"inspect the run and publish the output". Strengths: existing guidance was strong for
+single add, update, review, and specialized route flows. Weakness: mixed-intent
+requests did not yet have a clear sequence, so an agent could ask a broad route/menu
+question even when the verbs already implied read-then-write or formulation-then-card.
+
+What changed in Cycle 1:
+
+- Added `Mixed-intent sequencing` to the shared entity playbook.
+- Added Psyche-specific guidance for understanding-plus-support requests: formulate
+  the primary Psyche record first, then derive the flashcard, note, link, task, or
+  habit from accepted wording.
+- Added `mixedIntentSequencingRule` to live onboarding, the TypeScript onboarding
+  type, OpenAPI schema, OpenClaw/Hermes/Codex skill summaries, and regression tests.
+
+What happened after retesting Cycle 1:
+
+- The first retest found assertion line-wrap mismatches only; guidance and route
+  posture were intact.
+- After assertion adjustment, the full focused suite passed: 39 tests.
+- The change improved combined flows without weakening batch-first or specialized
+  route posture, so it was kept.
+
+Cycle 2 retested the full matrix with attention to near-duplicate records and
+add-versus-update ambiguity. Strengths: entity catalog search hints and tool docs
+already told agents to search before creating duplicates. Weakness: the conversation
+playbooks did not clearly say how to handle a likely match in user-facing language, so
+agents could either create duplicate batch records or reopen full intake instead of
+asking the narrow update/link/new-record question.
+
+What changed in Cycle 2:
+
+- Added `Search-before-write and existing-record disambiguation` to the shared entity
+  playbook.
+- Added Psyche-specific duplicate handling: similar beliefs, patterns, modes, trigger
+  reports, values, and flashcards are formulation choices, not cold duplicate errors.
+- Added `duplicateDisambiguationRule` to live onboarding, the TypeScript onboarding
+  type, OpenAPI schema, OpenClaw/Hermes/Codex skill summaries, and regression tests.
+- Kept specialized surfaces out of batch duplicate search: wiki/calendar use their
+  dedicated search/list/read routes, while Movement, Life Force, and Workbench use
+  their dedicated read lanes.
+
+What happened after retesting Cycle 2:
+
+- The first retest found one assertion wording mismatch between the Psyche Markdown
+  playbook and live onboarding phrasing.
+- After aligning the assertion to the playbook wording, the full focused suite passed:
+  39 tests.
+- The change improved duplicate handling and update/new-record disambiguation without
+  adding extra questions when the user already chose a distinct new record, so it was
+  kept.
+
+Cycle 3 retested all flows with attention to destructive, replacement, and repair
+actions. Strengths: several entity-specific sections already covered careful deletion,
+especially Workbench flow deletion and Movement repair. Weakness: there was no general
+question-flow rule for deleting, archiving, invalidating, disconnecting, overwriting,
+or replacing records, so an agent could treat a destructive action as ordinary update
+intake.
+
+What changed in Cycle 3:
+
+- Added `Destructive and replacement actions` to the shared entity playbook.
+- Added Psyche-specific history preservation: do not delete old beliefs, patterns,
+  modes, trigger interpretations, values, or flashcards just because a cleaner
+  formulation exists; ask whether the old record should be updated, linked as history,
+  archived, or kept distinct.
+- Added `destructiveActionRule` to live onboarding, the TypeScript onboarding type,
+  OpenAPI schema, OpenClaw/Hermes/Codex skill summaries, and regression tests.
+- Clarified that Movement repair must distinguish user-defined overlay deletion from
+  automatic-box invalidation and recorded stay/trip/point deletion, and that calendar
+  connections, Workbench flows, wiki pages, and questionnaire instruments need a
+  preservation check for downstream sync, published output, backlinks, run history, or
+  completed runs.
+
+What happened after retesting Cycle 3:
+
+- The first retest found one line-wrap-sensitive top-level skill assertion.
+- After assertion adjustment, the full focused suite passed: 39 tests.
+- The change improved replacement and deletion safety without requiring ceremonial
+  second confirmations when the user already confirmed the target and preservation
+  choice, so it was kept. Nothing was reverted.
 
 ## 2026-06-01 Automation Pass
 

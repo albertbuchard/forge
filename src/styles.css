@@ -648,6 +648,72 @@ body.theme-forge-light [class*="border-white/25"] {
     );
 }
 
+.route-view-loading {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface) 92%, transparent),
+      color-mix(in srgb, var(--surface-low) 96%, transparent)
+    ),
+    color-mix(in srgb, var(--canvas) 88%, transparent);
+}
+
+.route-view-loading--core {
+  --route-loading-accent: rgba(192, 193, 255, 0.2);
+}
+
+.route-view-loading--execution {
+  --route-loading-accent: rgba(78, 222, 163, 0.18);
+}
+
+.route-view-loading--health {
+  --route-loading-accent: rgba(94, 234, 212, 0.17);
+}
+
+.route-view-loading--knowledge {
+  --route-loading-accent: rgba(167, 139, 250, 0.17);
+}
+
+.route-view-loading--psyche {
+  --route-loading-accent: rgba(244, 114, 182, 0.16);
+}
+
+.route-view-loading--settings {
+  --route-loading-accent: rgba(148, 163, 184, 0.17);
+}
+
+.route-view-loading::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      110deg,
+      transparent 0%,
+      var(--route-loading-accent) 36%,
+      transparent 68%
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.018) 0,
+      rgba(255, 255, 255, 0.018) 1px,
+      transparent 1px,
+      transparent 34px
+    );
+  opacity: 0.65;
+  animation: route-view-drift 7.2s var(--ease-standard) infinite;
+}
+
+@keyframes route-view-drift {
+  0% {
+    transform: translate3d(-2rem, 0, 0);
+  }
+  100% {
+    transform: translate3d(2rem, 0, 0);
+  }
+}
+
 .shell-scope-trigger {
   min-height: 2.5rem;
   border-radius: 999px;
@@ -850,6 +916,10 @@ input[type="radio"] {
   }
 
   .surface-pulse::after {
+    animation: none;
+  }
+
+  .route-view-loading::before {
     animation: none;
   }
 }

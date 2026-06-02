@@ -140,6 +140,36 @@ describe("question flow quality coverage", () => {
     expect(entityPlaybook).toMatch(
       /If the next question would only decorate the record[\s\S]*skip it/i
     );
+    expect(entityPlaybook).toMatch(/## Mixed-intent sequencing/i);
+    expect(entityPlaybook).toMatch(
+      /review this and\s+fix it[\s\S]*save the pattern and make me a card[\s\S]*inspect the run and publish the\s+output/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Movement timeline or box\s+detail comes before correction[\s\S]*Workbench run or node detail comes before editing[\s\S]*Life Force overview comes before changing planning\s+assumptions/i
+    );
+    expect(entityPlaybook).toMatch(
+      /formulate the\s+Psyche record first[\s\S]*flashcard, note, value link, task, or habit/i
+    );
+    expect(entityPlaybook).toMatch(/## Search-before-write and existing-record disambiguation/i);
+    expect(entityPlaybook).toMatch(
+      /search the shared batch route by entity type[\s\S]*title or wording[\s\S]*owner[\s\S]*distinctive content/i
+    );
+    expect(entityPlaybook).toMatch(
+      /update that record, link to it, or become a separate new record/i
+    );
+    expect(entityPlaybook).toMatch(
+      /For Movement, Life Force, and Workbench,[\s\S]*dedicated read lane/i
+    );
+    expect(entityPlaybook).toMatch(/## Destructive and replacement actions/i);
+    expect(entityPlaybook).toMatch(
+      /delete, archive, invalidate, overwrite, replace,[\s\S]*disconnect/i
+    );
+    expect(entityPlaybook).toMatch(
+      /For Psyche records,[\s\S]*updated, linked as history, archived, or kept distinct/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Movement repair,[\s\S]*user-defined overlay[\s\S]*automatic box[\s\S]*stay, trip, or point/i
+    );
   });
 
   it("keeps abstract and reusable records grounded in future use before label wording", () => {
@@ -317,6 +347,24 @@ describe("question flow quality coverage", () => {
     expect(psychePlaybook).toMatch(/Hypotheses are not decorative reassurance/i);
     expect(psychePlaybook).toMatch(
       /Do not make the user supply every interpretation alone/i
+    );
+    expect(psychePlaybook).toMatch(
+      /understanding plus an immediate support action[\s\S]*formulate the primary Psyche record first[\s\S]*derive the support action/i
+    );
+    expect(psychePlaybook).toMatch(
+      /behavior_pattern[\s\S]*flashcard[\s\S]*belief_entry[\s\S]*counter-message[\s\S]*trigger_report[\s\S]*event_type[\s\S]*emotion_definition/i
+    );
+    expect(psychePlaybook).toMatch(
+      /similar Psyche record[\s\S]*update the existing record, link to it, or stand as a distinct new version/i
+    );
+    expect(psychePlaybook).toMatch(
+      /beliefs,[\s\S]*sentence[\s\S]*patterns,[\s\S]*cue,[\s\S]*payoff,[\s\S]*cost[\s\S]*flashcards,[\s\S]*urge sentence and message/i
+    );
+    expect(psychePlaybook).toMatch(
+      /destructive or replacement requests[\s\S]*preserve therapeutic history/i
+    );
+    expect(psychePlaybook).toMatch(
+      /Do not delete a\s+Psyche record merely because a cleaner formulation now exists/i
     );
     expect(psychePlaybook).toMatch(/## Hypothesis To Record Bridge/i);
     expect(psychePlaybook).toMatch(

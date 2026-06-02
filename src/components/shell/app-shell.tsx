@@ -21,6 +21,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode
 } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
@@ -161,6 +162,11 @@ import {
   setSelectedUserIds as setSelectedUserIdsAction
 } from "@/store/slices/shell-slice";
 import { useAppDispatch, useAppSelector } from "@/store/typed-hooks";
+import { RouteViewLoadingSurface } from "@/routes/route-view";
+import {
+  ROUTE_VIEW_CATALOG,
+  resolveRouteViewIdFromPathname
+} from "@/routes/route-view-catalog";
 
 type ShellContextValue = {
   snapshot: ForgeSnapshot;
@@ -529,6 +535,26 @@ function getRouteTransitionKey(pathname: string) {
   return pathname;
 }
 
+function buildRoutePathKey(
+  location: Pick<RouterLocation, "pathname" | "search" | "hash">
+) {
+  return `${location.pathname}${location.search}${location.hash}`;
+}
+
+function buildRouteIntentLocation(
+  currentLocation: RouterLocation,
+  to: string
+): RouterLocation {
+  const target = new URL(to, "http://forge.local");
+  return {
+    ...currentLocation,
+    pathname: target.pathname,
+    search: target.search,
+    hash: target.hash,
+    key: `intent:${target.pathname}${target.search}${target.hash}`
+  };
+}
+
 function isWikiRoute(pathname: string) {
   return (
     pathname === "/wiki" ||
@@ -601,6 +627,17 @@ function getRouteDetail(
     return t(route.detailKey);
   }
   return route.detail ?? route.to;
+}
+
+function shouldCaptureRouteIntent(event: ReactMouseEvent) {
+  return (
+    !event.defaultPrevented &&
+    event.button === 0 &&
+    !event.metaKey &&
+    !event.altKey &&
+    !event.ctrlKey &&
+    !event.shiftKey
+  );
 }
 
 function readStoredNavIds(storageKey: string, defaults: string[]) {
@@ -903,10 +940,12 @@ export function UserScopeSelector({
 
 function NavItem({
   route,
-  compact = false
+  compact = false,
+  onRouteIntent
 }: {
   route: ShellRouteDefinition;
   compact?: boolean;
+  onRouteIntent?: (to: string) => void;
 }) {
   const { t } = useI18n();
   const location = useLocation();
@@ -919,6 +958,11 @@ function NavItem({
       to={route.to}
       title={compact ? label : undefined}
       aria-label={label}
+      onClick={(event) => {
+        if (shouldCaptureRouteIntent(event)) {
+          onRouteIntent?.(route.to);
+        }
+      }}
       className={({ isActive }) =>
         `interactive-tap flex items-center rounded-[18px] text-sm transition ${
           isActive || forceActive
@@ -935,10 +979,12 @@ function NavItem({
 
 function MobileBottomNav({
   routes,
-  onOpenEditor
+  onOpenEditor,
+  onRouteIntent
 }: {
   routes: ShellRouteDefinition[];
   onOpenEditor?: () => void;
+  onRouteIntent?: (to: string) => void;
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const { t } = useI18n();
@@ -995,6 +1041,10 @@ function MobileBottomNav({
                 if (holdTriggeredRef.current) {
                   event.preventDefault();
                   holdTriggeredRef.current = false;
+                  return;
+                }
+                if (shouldCaptureRouteIntent(event)) {
+                  onRouteIntent?.(route.to);
                 }
               }}
               className={({ isActive }) =>
@@ -1054,7 +1104,12 @@ function MobileBottomNav({
             <NavLink
               key={route.id}
               to={route.to}
-              onClick={() => setMoreOpen(false)}
+              onClick={(event) => {
+                if (shouldCaptureRouteIntent(event)) {
+                  onRouteIntent?.(route.to);
+                }
+                setMoreOpen(false);
+              }}
               className={({ isActive }) =>
                 `interactive-tap flex items-center justify-between rounded-[24px] px-4 py-4 ${
                   isActive || routeMatches(location.pathname, route)
@@ -1425,6 +1480,7 @@ function ShellCommandButton({ onClick }: { onClick: () => void }) {
 function ShellFrame({
   children,
   routeLocation,
+  onRouteIntent,
   settings,
   timerPending,
   startWorkOpen,
@@ -1441,6 +1497,7 @@ function ShellFrame({
 }: {
   children: ReactNode;
   routeLocation: RouterLocation;
+  onRouteIntent: (to: string) => void;
   settings: SettingsPayload;
   timerPending: boolean;
   startWorkOpen: boolean;
@@ -1885,7 +1942,12 @@ function ShellFrame({
 
           <div className={cn("grid gap-2", navCollapsed ? "mt-6" : "mt-8")}>
             {desktopRoutes.map((route) => (
-              <NavItem key={route.id} route={route} compact={navCollapsed} />
+              <NavItem
+                key={route.id}
+                route={route}
+                compact={navCollapsed}
+                onRouteIntent={onRouteIntent}
+              />
             ))}
           </div>
 
@@ -2278,6 +2340,7 @@ function ShellFrame({
         <MobileBottomNav
           routes={mobileRoutes}
           onOpenEditor={() => setNavEditorOpen(true)}
+          onRouteIntent={onRouteIntent}
         />
 
         <ShellNavEditor
@@ -2431,10 +2494,23 @@ export function AppShell() {
     totalXp: number;
   } | null>(null);
   const [xpMetricsPollingEnabled, setXpMetricsPollingEnabled] = useState(false);
+  const [optimisticRouteLocation, setOptimisticRouteLocation] =
+    useState<RouterLocation | null>(null);
   const [locallySeenCelebrationIds, setLocallySeenCelebrationIds] = useState<
     Set<string>
   >(() => new Set());
-  const routePathKey = `${routerLocation.pathname}${routerLocation.search}${routerLocation.hash}`;
+  const routePathKey = buildRoutePathKey(routerLocation);
+  const optimisticRoutePathKey = optimisticRouteLocation
+    ? buildRoutePathKey(optimisticRouteLocation)
+    : null;
+  const handleRouteIntent = (to: string) => {
+    const nextLocation = buildRouteIntentLocation(routerLocation, to);
+    if (buildRoutePathKey(nextLocation) === routePathKey) {
+      setOptimisticRouteLocation(null);
+      return;
+    }
+    setOptimisticRouteLocation(nextLocation);
+  };
   const operatorSessionQuery = useGetOperatorSessionQuery();
   const snapshotQuery = useGetSnapshotQuery(selectedUserIds, {
     skip: !operatorSessionQuery.isSuccess
@@ -2462,22 +2538,42 @@ export function AppShell() {
     bootstrapReady: shellBootstrapReady,
     sleepReady: true
   });
-  const {
-    displayedRoute,
-    displayedLocationContext,
-    pendingRoute,
-    visibleLocation
-  } = useShellRouteHandoff({
-    routePathKey,
-    routerLocation,
-    outlet,
-    routerLocationContext,
-    externalFetching: tanstackFetching + pendingRtkRequests,
-    routeReady
-  });
+  const destinationRouteViewId = resolveRouteViewIdFromPathname(
+    optimisticRouteLocation?.pathname ?? routerLocation.pathname
+  );
+  const destinationLoadingNode = useMemo(
+    () => (
+      <RouteViewLoadingSurface
+        key={optimisticRoutePathKey ?? routePathKey}
+        meta={ROUTE_VIEW_CATALOG[destinationRouteViewId]}
+      />
+    ),
+    [destinationRouteViewId, optimisticRoutePathKey, routePathKey]
+  );
+  const { displayedRoute, displayedLocationContext, visibleLocation } =
+    useShellRouteHandoff({
+      routePathKey,
+      routerLocation,
+      outlet,
+      routerLocationContext,
+      optimisticLocation: optimisticRouteLocation,
+      optimisticRoutePathKey,
+      externalFetching: tanstackFetching + pendingRtkRequests,
+      routeReady,
+      destinationLoadingNode
+    });
   const setSelectedUserIds = (userIds: string[]) => {
     dispatch(setSelectedUserIdsAction(userIds));
   };
+
+  useEffect(() => {
+    if (
+      optimisticRoutePathKey !== null &&
+      optimisticRoutePathKey === routePathKey
+    ) {
+      setOptimisticRouteLocation(null);
+    }
+  }, [optimisticRoutePathKey, routePathKey]);
 
   useEffect(() => {
     setXpMetricsPollingEnabled(false);
@@ -2903,6 +2999,7 @@ export function AppShell() {
           <GamificationAssetSetupDialog />
           <ShellFrame
             routeLocation={visibleLocation}
+            onRouteIntent={handleRouteIntent}
             settings={settingsQuery.data.settings}
             timerPending={
               focusTaskRunMutationState.isLoading ||
@@ -3004,14 +3101,6 @@ export function AppShell() {
               ) : (
                 displayedRoute.node
               )}
-              {pendingRoute ? (
-                <div
-                  aria-hidden="true"
-                  className="pointer-events-none absolute inset-0 overflow-hidden opacity-0"
-                >
-                  {pendingRoute.node}
-                </div>
-              ) : null}
             </div>
           </ShellFrame>
           <Dialog.Root

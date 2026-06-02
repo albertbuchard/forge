@@ -431,6 +431,9 @@ describe("question flow simulation cycles", () => {
     expect(entityPlaybook).toMatch(/Reusable record:/i);
     expect(entityPlaybook).toMatch(/Operational record:/i);
     expect(entityPlaybook).toMatch(/Dedicated surface lane translation/i);
+    expect(entityPlaybook).toMatch(/Mixed-intent sequencing/i);
+    expect(entityPlaybook).toMatch(/Search-before-write and existing-record disambiguation/i);
+    expect(entityPlaybook).toMatch(/Destructive and replacement actions/i);
     expect(entityPlaybook).toMatch(
       /route\s+choice is an internal classification step, not a user-facing menu/i
     );
@@ -456,6 +459,18 @@ describe("question flow simulation cycles", () => {
     expect(entityPlaybook).toMatch(/do not widen[\s\S]*meta lane question/i);
     expect(entityPlaybook).toMatch(
       /another agent could follow[\s\S]*without guessing/i
+    );
+    expect(entityPlaybook).toMatch(
+      /If a read changes the truth of a later write,[\s\S]*read first/i
+    );
+    expect(entityPlaybook).toMatch(
+      /If two routes are needed,[\s\S]*keep them in order internally/i
+    );
+    expect(entityPlaybook).toMatch(
+      /If a likely existing record appears,[\s\S]*update that record, link to it, or become a separate new record/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Confirm the exact target and the preservation need before destructive work/i
     );
 
     for (const section of nonPsycheSections) {
@@ -844,6 +859,18 @@ describe("question flow simulation cycles", () => {
       /Once a hypothesis lands or is corrected[\s\S]*saveable Forge shape/i
     );
     expect(psychePlaybook).toMatch(
+      /understanding plus an immediate support action[\s\S]*formulate the primary Psyche record first/i
+    );
+    expect(psychePlaybook).toMatch(
+      /Do not ask for every adjacent entity at once/i
+    );
+    expect(psychePlaybook).toMatch(
+      /similar Psyche record[\s\S]*not treat similarity as a cold duplicate\s+failure/i
+    );
+    expect(psychePlaybook).toMatch(
+      /preserve therapeutic history[\s\S]*updated, linked as history, archived, or kept as a distinct version/i
+    );
+    expect(psychePlaybook).toMatch(
       /Ask one confirmation question about accuracy, not another broad exploration\s+question/i
     );
 
@@ -1182,11 +1209,11 @@ describe("question flow simulation cycles", () => {
 
   it("cycle 3 report retest: durable automation report covers this full run", () => {
     const report = readRepoFile("docs/question-flow-improvement-cycles.md");
-    const latestRun = getSectionSlice(report, "2026-06-01 Automation Pass");
+    const latestRun = getSectionSlice(report, "2026-06-02 Automation Pass");
 
-    expect(report).toMatch(/Latest run date: 2026-06-01/);
+    expect(report).toMatch(/Latest run date: 2026-06-02/);
     expect(latestRun).toMatch(/data\/forge\/forge\.sqlite/i);
-    expect(latestRun).toMatch(/repo-local plugin\s+dist/i);
+    expect(latestRun).toMatch(/repo-local dist/i);
     expect(latestRun).toMatch(/forge-hermes-plugin 0\.2\.99/i);
     expect(latestRun).toMatch(/42 entity catalog entries/i);
     expect(latestRun).toMatch(/training_load/i);
@@ -1202,15 +1229,15 @@ describe("question flow simulation cycles", () => {
     expect(latestRun).toMatch(/training_load/i);
     expect(latestRun).toMatch(/Movement[\s\S]*Life Force[\s\S]*Workbench/i);
     expect(latestRun).toMatch(
-      /Cycle 1[\s\S]*operational openers/i
+      /Cycle 1[\s\S]*Mixed-intent sequencing/i
     );
     expect(latestRun).toMatch(
-      /Cycle 2[\s\S]*Hypothesis Wording Shape/i
+      /Cycle 2[\s\S]*Search-before-write and existing-record disambiguation/i
     );
     expect(latestRun).toMatch(
-      /Cycle 3[\s\S]*methodRoutes[\s\S]*generated OpenAPI/i
+      /Cycle 3[\s\S]*Destructive and replacement actions/i
     );
-    expect(latestRun).toMatch(/50 focused tests/i);
+    expect(latestRun).toMatch(/39 tests/i);
     expect(latestRun).toMatch(/What happened after retesting/i);
   });
 });
