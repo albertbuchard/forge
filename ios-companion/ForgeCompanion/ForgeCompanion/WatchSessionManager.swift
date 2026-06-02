@@ -142,54 +142,37 @@ final class WatchSessionManager: NSObject, ObservableObject {
             }
 
             let remaining = self.loadQueue()
-            var nextQueue: [ForgeWatchOutboundEnvelope] = []
-
-            for envelope in remaining {
-                do {
-                    switch envelope.kind {
-                    case .habitCheckIn:
-                        guard let action = envelope.habitCheckIn else { continue }
-                        let bootstrap = try await self.syncClient.submitWatchHabitCheckIn(
-                            envelopeId: envelope.id,
-                            action: action,
-                            pairing: pairing
-                        )
-                        self.saveBootstrap(bootstrap)
-                        self.publishBootstrap(bootstrap)
-                        self.sendAck(
-                            ForgeWatchAckEnvelope(
-                                actionId: envelope.id,
-                                processedAt: Date().formatted(.iso8601),
-                                bootstrap: bootstrap
-                            )
-                        )
-                    case .captureEvent:
-                        guard let action = envelope.captureEvent else { continue }
-                        let bootstrap = try await self.syncClient.submitWatchCaptureBatch(
-                            envelopeId: envelope.id,
-                            device: envelope.device,
-                            actions: [action],
-                            pairing: pairing
-                        )
-                        self.saveBootstrap(bootstrap)
-                        self.publishBootstrap(bootstrap)
-                        self.sendAck(
-                            ForgeWatchAckEnvelope(
-                                actionId: envelope.id,
-                                processedAt: Date().formatted(.iso8601),
-                                bootstrap: bootstrap
-                            )
-                        )
-                    }
-                } catch {
-                    nextQueue.append(envelope)
-                    self.lastStatusMessage = "Watch sync deferred: \(error.localizedDescription)"
-                }
+            guard remaining.isEmpty == false else {
+                self.lastStatusMessage = "Watch bridge caught up"
+                return
             }
 
-            self.saveQueue(nextQueue)
-            if nextQueue.isEmpty {
+            do {
+                let bootstrap = try await self.syncClient.submitWatchCommandBatch(
+                    device: remaining.first?.device ?? ForgeWatchDeviceDescriptor(
+                        name: "Apple Watch",
+                        platform: "watchos",
+                        appVersion: "",
+                        sourceDevice: "Apple Watch"
+                    ),
+                    envelopes: remaining,
+                    pairing: pairing
+                )
+                self.saveBootstrap(bootstrap)
+                self.publishBootstrap(bootstrap)
+                for envelope in remaining {
+                    self.sendAck(
+                        ForgeWatchAckEnvelope(
+                            actionId: envelope.id,
+                            processedAt: Date().formatted(.iso8601),
+                            bootstrap: bootstrap
+                        )
+                    )
+                }
+                self.saveQueue([])
                 self.lastStatusMessage = "Watch bridge caught up"
+            } catch {
+                self.lastStatusMessage = "Watch sync deferred: \(error.localizedDescription)"
             }
         }
 

@@ -9120,6 +9120,60 @@ test("watch action batch records idempotent command receipts and replays accepte
       }
     ).qrPayload;
 
+    const goalResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/goals",
+      headers: { cookie: operatorCookie },
+      payload: {
+        title: "Watch command goal",
+        description: "Goal used to verify watch command batching.",
+        horizon: "quarter",
+        status: "active",
+        targetPoints: 120
+      }
+    });
+    assert.equal(goalResponse.statusCode, 201, goalResponse.body);
+    const goalId = (goalResponse.json() as { goal: { id: string } }).goal.id;
+
+    const projectResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects",
+      headers: { cookie: operatorCookie },
+      payload: {
+        goalId,
+        title: "Watch command project",
+        description: "Project used to verify watch command batching.",
+        status: "active",
+        targetPoints: 120,
+        themeColor: "#5577cc"
+      }
+    });
+    assert.equal(projectResponse.statusCode, 201, projectResponse.body);
+    const projectId = (projectResponse.json() as { project: { id: string } })
+      .project.id;
+
+    const taskResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/tasks",
+      headers: { cookie: operatorCookie },
+      payload: {
+        title: "Watch-started task",
+        description: "Task used to verify watch command batching.",
+        status: "backlog",
+        priority: "medium",
+        owner: "Aurel",
+        goalId,
+        projectId,
+        dueDate: null,
+        effort: "deep",
+        energy: "steady",
+        points: 25,
+        tagIds: []
+      }
+    });
+    assert.equal(taskResponse.statusCode, 201, taskResponse.body);
+    const taskId = (taskResponse.json() as { task: { id: string } }).task.id;
+
     const actionPayload = {
       sessionId: qrPayload.sessionId,
       pairingToken: qrPayload.pairingToken,
@@ -9140,6 +9194,29 @@ test("watch action batch records idempotent command receipts and replays accepte
             status: "done",
             note: "Queued from the watch."
           }
+        },
+        {
+          id: "watch-action-run-1",
+          kind: "task_run_start",
+          createdAt: "2026-04-07T08:01:00.000Z",
+          payload: {
+            taskId,
+            timerMode: "planned",
+            plannedDurationSeconds: "900",
+            isCurrent: "true",
+            leaseTtlSeconds: "600",
+            note: "Started from the watch."
+          }
+        },
+        {
+          id: "watch-action-status-1",
+          kind: "task_status_update",
+          createdAt: "2026-04-07T08:02:00.000Z",
+          payload: {
+            taskId,
+            status: "done",
+            note: "Moved from the watch."
+          }
         }
       ]
     };
@@ -9159,7 +9236,7 @@ test("watch action batch records idempotent command receipts and replays accepte
       };
       watch: { schemaVersion: number; surfaces: Array<{ id: string }> };
     };
-    assert.equal(actionBody.receipt.processedCount, 1);
+    assert.equal(actionBody.receipt.processedCount, 3);
     assert.equal(actionBody.receipt.replayedCount, 0);
     assert.equal(actionBody.receipt.failedCount, 0);
     assert.equal(
@@ -9186,7 +9263,7 @@ test("watch action batch records idempotent command receipts and replays accepte
       };
     };
     assert.equal(replayBody.receipt.processedCount, 0);
-    assert.equal(replayBody.receipt.replayedCount, 1);
+    assert.equal(replayBody.receipt.replayedCount, 3);
     assert.equal(replayBody.receipt.failedCount, 0);
     assert.equal(replayBody.receipt.receipts[0]?.status, "replayed");
 
@@ -9198,6 +9275,24 @@ test("watch action batch records idempotent command receipts and replays accepte
       )
       .get(habitId) as { count: number };
     assert.equal(checkInCount.count, 1);
+
+    const taskRunCount = getDatabase()
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM task_runs
+         WHERE task_id = ?`
+      )
+      .get(taskId) as { count: number };
+    assert.equal(taskRunCount.count, 1);
+
+    const taskState = getDatabase()
+      .prepare(
+        `SELECT status
+         FROM tasks
+         WHERE id = ?`
+      )
+      .get(taskId) as { status: string };
+    assert.equal(taskState.status, "done");
   } finally {
     await app.close();
     closeDatabase();

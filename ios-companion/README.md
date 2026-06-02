@@ -4,9 +4,9 @@ Native SwiftUI companion app for Forge.
 
 ## Scope
 
-This Apple companion is the sensor, sync, and micro-capture bridge for Forge. The
+This Apple companion is the sensor, sync, and micro-command bridge for Forge. The
 iPhone app remains the networked client that pairs with Forge, owns credentials, and
-handles retries. The watch app is a paired wrist-first capture surface, not a second
+handles retries. The watch app is a paired wrist-first command surface, not a second
 Forge client.
 
 The current shipped surfaces focus on:
@@ -18,20 +18,21 @@ The current shipped surfaces focus on:
 - Manual sync + background refresh hooks
 - Full-screen embedded Forge web app after pairing
 - Floating native control center for sync, HealthKit, and companion settings
-- WatchConnectivity bootstrap + queued action bridge
-- watchOS habits with 7-segment streak rings
-- watchOS quick check-in, mark moment, and prompt inbox
+- WatchConnectivity bootstrap + idempotent queued action bridge
+- watchOS crown-selected command surfaces for Now, Work, Habits, Goals, Today, Health, Movement, Psyche, Inbox, and Sync
+- watchOS habits with 7-segment streak rings and Done/Missed or Resisted/Performed decisions
+- watchOS task-run controls for starting, heartbeating, completing, releasing, and moving work
+- watchOS quick capture for emotions, triggers, routines, prompts, places, trips, workouts, and notes
 - watchOS WidgetKit / App Intents launch points for Habits, Check In, Mark Moment, and Emotion
 
-The companion architecture intentionally keeps the watch light. The phone does the
-networking, prompt generation, sync retries, and projection into canonical Forge APIs.
-The watch only captures or confirms moments that would otherwise be lost.
+The companion architecture intentionally keeps the watch compact but no longer
+one-dimensional. The phone does the networking, prompt generation, sync retries, and
+projection into canonical Forge APIs. The watch presents dense command cards and queues
+commands locally; Forge is still the canonical source of truth.
 
-The architecture still leaves room for:
-
-- Core Location
-- passive motion signals
-- richer Apple Watch prompts and biometrics surfaces
+The architecture still leaves room for richer Apple Watch biometrics and passive
+context surfaces, but each mutation must continue to flow through the iPhone relay and
+Forge's backend receipt model.
 
 ## Project generation
 
@@ -91,9 +92,9 @@ npx forge-memory pair-ios --manual-http
 ```
 
 Watch actions are never sent directly from the watch to Forge. The watch sends queued
-messages to the iPhone through WatchConnectivity, the iPhone submits canonical habit
-check-ins or watch capture batches to Forge, and the iPhone sends a compact bootstrap
-snapshot back to the watch and widget surfaces.
+messages to the iPhone through WatchConnectivity, the iPhone submits idempotent
+commands through `/mobile/watch/actions:batch`, and Forge records command receipts
+before sending a refreshed compact snapshot back to the watch and widget surfaces.
 
 Runtime discovery can still surface Bonjour candidates for known local or manual
 routes, but Iroh QR pairing is the default. When Forge advertises `_forge._tcp`, it
