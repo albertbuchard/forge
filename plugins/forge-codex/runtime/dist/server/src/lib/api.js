@@ -1756,6 +1756,137 @@ export function getVitalsView(userIds) {
     const suffix = search.size > 0 ? `?${search.toString()}` : "";
     return request(`/api/v1/health/vitals${suffix}`);
 }
+export function getWeightLossView(userIds) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(userIds));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/health/weight-loss${suffix}`);
+}
+export function updateNutritionTarget(patch, userIds) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(userIds));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/health/weight-loss/target${suffix}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch)
+    });
+}
+export function searchNutritionFoods(input) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(input.userIds));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/health/weight-loss/foods/search${suffix}`, {
+        method: "POST",
+        body: JSON.stringify({ query: input.query, limit: input.limit })
+    });
+}
+export function lookupNutritionBarcode(input) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(input.userIds));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/health/weight-loss/foods/barcode${suffix}`, {
+        method: "POST",
+        body: JSON.stringify({ barcode: input.barcode })
+    });
+}
+export function createNutritionFoodLog(input, userIds) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(userIds));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/health/weight-loss/food-logs${suffix}`, {
+        method: "POST",
+        body: JSON.stringify(input)
+    });
+}
+export function patchNutritionFoodLog(foodLogId, patch, userIds) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(userIds));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/health/weight-loss/food-logs/${foodLogId}${suffix}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch)
+    });
+}
+export function deleteNutritionFoodLog(foodLogId, userIds) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(userIds));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/health/weight-loss/food-logs/${foodLogId}${suffix}`, { method: "DELETE" });
+}
+export function parseNutritionFoodLogWithChatGpt(input) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(input.userIds));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/health/weight-loss/parse${suffix}`, {
+        method: "POST",
+        body: JSON.stringify({
+            text: input.text,
+            imageDescription: input.imageDescription,
+            loggedAt: input.loggedAt,
+            mealLabel: input.mealLabel
+        })
+    });
+}
+export function createNutritionBodyCheckin(input, userIds) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(userIds));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/health/weight-loss/body-checkins${suffix}`, {
+        method: "POST",
+        body: JSON.stringify(input)
+    });
+}
+export function createNutritionAppearanceCheckin(input, userIds) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(userIds));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/health/weight-loss/appearance-checkins${suffix}`, {
+        method: "POST",
+        body: JSON.stringify(input)
+    });
+}
+export function createNutritionSubjectiveCheckin(input, userIds) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(userIds));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/health/weight-loss/subjective-checkins${suffix}`, {
+        method: "POST",
+        body: JSON.stringify(input)
+    });
+}
+export function createNutritionGutCheckin(input, userIds) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(userIds));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/health/weight-loss/gut-checkins${suffix}`, {
+        method: "POST",
+        body: JSON.stringify(input)
+    });
+}
+export function getNutritionPatterns(userIds) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(userIds));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/health/weight-loss/patterns${suffix}`);
+}
+export function createNutritionExperiment(input, userIds) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(userIds));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/health/weight-loss/experiments${suffix}`, {
+        method: "POST",
+        body: JSON.stringify(input)
+    });
+}
+export function patchNutritionExperiment(experimentId, patch, userIds) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(userIds));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/health/weight-loss/experiments/${experimentId}${suffix}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch)
+    });
+}
 export function getMovementDay(input) {
     const search = new URLSearchParams();
     if (input?.date) {

@@ -67,9 +67,10 @@ import { createManagerRuntime } from "./managers/runtime.js";
 import { isManagerError } from "./managers/type-guards.js";
 import { buildCompanionPairingTransport, getCompanionIrohStatus, stopCompanionIroh } from "./services/companion-iroh.js";
 import { createCompanionPairingSession, createCompanionPairingSessionSchema, createSleepSession, createSleepSessionSchema, createWorkoutSession, createWorkoutSessionSchema, deleteSleepSession, deleteWorkoutSession, getCompanionPairingSessionById, getCompanionOverview, getFitnessViewData, getSleepSessionById, getSleepSessionDetailById, getSleepTimelineOverlaysForRange, getSleepViewData, getTrainingLoadViewData, getVitalsViewData, getHealthZoneProfileForUser, getMobileHealthSyncSessionStatus, getWorkoutSessionById, getWorkoutSessionDetailById, heartbeatCompanionPairing, heartbeatCompanionPairingSchema, healthZoneProfilePatchSchema, abortMobileHealthSyncSession, completeMobileHealthSyncSession, ingestMobileHealthSync, ingestMobileHealthSyncChunk, mobileHealthSyncChunkSchema, mobileHealthSyncSessionCompleteSchema, mobileHealthSyncSessionStartSchema, mobileHealthSyncSchema, patchHealthZoneProfileForUser, patchCompanionPairingSourceState, patchCompanionPairingSourceStateSchema, companionSourceKeySchema, requireValidPairing, startMobileHealthSyncSession, revokeAllCompanionPairingSessions, revokeAllCompanionPairingSessionsSchema, revokeCompanionPairingSession, updateMobileCompanionSourceState, updateMobileCompanionSourceStateSchema, verifyCompanionPairing, verifyCompanionPairingSchema, updateSleepMetadata, updateSleepMetadataSchema, updateWorkoutMetadata, updateWorkoutMetadataSchema } from "./health.js";
+import { createNutritionAppearanceCheckin, createNutritionBodyCheckin, createNutritionExperiment, createNutritionFoodLog, createNutritionGutCheckin, createNutritionSubjectiveCheckin, deleteNutritionFoodLog, getWeightLossViewData, lookupNutritionBarcode, nutritionAppearanceCheckinCreateSchema, nutritionBarcodeLookupSchema, nutritionBodyCheckinCreateSchema, nutritionExperimentCreateSchema, nutritionExperimentPatchSchema, nutritionFoodLogCreateSchema, nutritionFoodLogPatchSchema, nutritionFoodSearchSchema, nutritionGutCheckinCreateSchema, nutritionParseRequestSchema, nutritionSubjectiveCheckinCreateSchema, nutritionTargetUpdateSchema, parseNutritionFoodLogWithChatGpt, patchNutritionExperiment, patchNutritionFoodLog, searchNutritionFoods, updateNutritionTarget } from "./health-weight-loss.js";
 import { analyzeMovementUserBoxPreflight, createMovementUserBox, createMovementPlace, deleteMovementUserBox, getMovementAllTimeSummary, getMovementBoxDetail, getMovementDayDetail, getMovementMobileBootstrap, getMovementTimeline, getMovementSelectionAggregate, getMovementSettings, getMovementTripDetail, getMovementMonthSummary, invalidateAutomaticMovementBox, listMovementPlaces, movementAutomaticBoxInvalidateSchema, movementMobileBootstrapSchema, movementMobilePlaceMutationSchema, movementMobileStayPatchSchema, movementMobileUserBoxCreateSchema, movementMobileUserBoxPreflightSchema, movementMobileUserBoxPatchSchema, movementMobileAutomaticBoxInvalidateSchema, movementMobileTimelineSchema, movementPlaceMutationSchema, movementPlacePatchSchema, movementSelectionAggregateSchema, movementStayPatchSchema, movementTripPatchSchema, movementUserBoxCreateSchema, movementUserBoxPreflightSchema, movementUserBoxPatchSchema, movementSettingsPatchSchema, movementTimelineQuerySchema, movementTripPointPatchSchema, deleteMovementStay, deleteMovementTrip, deleteMovementTripPoint, updateMovementPlace, updateMovementSettings, updateMovementStay, updateMovementTrip, updateMovementUserBox, updateMovementTripPoint, resolveMovementTimelineSegmentForBox } from "./movement.js";
 import { getScreenTimeAllTimeSummary, getScreenTimeDayDetail, getScreenTimeMonthSummary, getScreenTimeSettings, screenTimeSettingsPatchSchema, updateScreenTimeSettings } from "./screen-time.js";
-import { assertWatchReady, buildWatchBootstrap, ingestWatchCaptureBatch, mobileWatchBootstrapSchema, mobileWatchCaptureBatchSchema, mobileWatchHabitCheckInSchema } from "./watch-mobile.js";
+import { assertWatchReady, buildWatchBootstrap, ingestWatchCommandBatch, ingestWatchCaptureBatch, mobileWatchBootstrapSchema, mobileWatchCommandBatchSchema, mobileWatchCaptureBatchSchema, mobileWatchHabitCheckInSchema } from "./watch-mobile.js";
 const COMPATIBILITY_SUNSET = "transitional-node";
 function markCompatibilityRoute(reply) {
     reply.header("Deprecation", "true");
@@ -4276,6 +4277,68 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
         example: '{"userIds":["user_operator"]}'
     },
     {
+        toolName: "forge_get_weight_loss_overview",
+        summary: "Read the nutrition and weight-loss surface with calorie ledger, protein/fiber targets, energy balance, body trend, subjective energy, gut comfort, aesthetic check-ins, hypotheses, experiments, and data-quality flags.",
+        whenToUse: "Use when the operator wants food, body composition, sport-fueling, appearance, gut-health, or subjective-energy context before coaching or logging.",
+        inputShape: "{ userIds?: string[] }",
+        requiredFields: [],
+        notes: [
+            "The API path is /api/v1/health/weight-loss and the UI route is /weight-loss.",
+            "Use the dedicated nutrition logging tools for food, body, appearance, subjective, gut, and experiment mutations.",
+            "Food parsing uses Forge's configured openai-codex ChatGPT subscription connection, not the metered OpenAI Platform API."
+        ],
+        example: '{"userIds":["user_operator"]}'
+    },
+    {
+        toolName: "forge_parse_food_log_with_chatgpt",
+        summary: "Parse natural-language food text or a photo description into a candidate Forge nutrition log through the openai-codex ChatGPT subscription connection.",
+        whenToUse: "Use when the operator describes a meal imprecisely, wants AI-assisted food decomposition, or wants subjective food-effect notes captured alongside nutrition.",
+        inputShape: "{ text?: string, imageDescription?: string, loggedAt?: string, mealLabel?: string, userIds?: string[] }",
+        requiredFields: ["text/imageDescription"],
+        notes: [
+            "Requires a configured openai-codex model connection.",
+            "Returns a candidate log that should be confirmed or corrected when precision matters.",
+            "Do not route this through OpenAI Platform API billing."
+        ],
+        example: '{"text":"3 eggs, sourdough, Greek yogurt with honey, espresso; focused but bloated later","mealLabel":"breakfast"}'
+    },
+    {
+        toolName: "forge_log_food",
+        summary: "Create a food log with explicit food items, calories, macros, quality tags, hunger, satiety, cravings, and context.",
+        whenToUse: "Use for confirmed manual entries, search/barcode-selected foods, or corrected ChatGPT candidates.",
+        inputShape: "{ mealLabel?: string, loggedAt?: string, source?: string, confirmationState?: string, notes?: string, items: Array<{ name, quantity, unit?, caloriesKcal?, proteinG?, carbsG?, fatG?, fiberG?, tags? }>, userIds?: string[] }",
+        requiredFields: ["items"],
+        notes: [
+            "Prefer confirmed entries when the user gave concrete amounts.",
+            "Use candidate entries for rough estimates that need later correction."
+        ],
+        example: '{"mealLabel":"post-workout","items":[{"name":"Greek yogurt","quantity":250,"unit":"g","caloriesKcal":180,"proteinG":25}]}'
+    },
+    {
+        toolName: "forge_log_body_checkin | forge_log_appearance_checkin | forge_log_subjective_food_effect | forge_log_gut_checkin",
+        summary: "Record body composition, aesthetic look, energy/mood/focus/cravings/performance, and gut-comfort check-ins.",
+        whenToUse: "Use alongside food logs to let Forge discover links between eating, sport, visual look, energy, cravings, and gut health.",
+        inputShape: "{ checkedAt?: string, score fields, linkedFoodLogId?: string, notes?: string, userIds?: string[] }",
+        requiredFields: ["at least one metric field"],
+        notes: [
+            "Scores are 0-10 unless the field name gives a physical unit such as kg or cm.",
+            "Link subjective or gut check-ins to a food log when the timing is known."
+        ],
+        example: '{"energy":8,"focus":7,"bloating":2,"timeRelation":"2h after lunch","linkedFoodLogId":"nfl_123"}'
+    },
+    {
+        toolName: "forge_get_nutrition_patterns | forge_start_nutrition_experiment | forge_update_nutrition_experiment",
+        summary: "Review nutrition hypotheses and manage N-of-1 experiments for food, training fuel, gut comfort, cravings, and aesthetic outcomes.",
+        whenToUse: "Use when the operator wants to test a causal idea such as caffeine timing, carb timing, sodium/puffiness, fiber ramp, low-FODMAP trial, or pre-training fueling.",
+        inputShape: "{ title, hypothesis, metricKey, intervention, baseline dates?, experiment dates?, successCriteria?, userIds? }",
+        requiredFields: ["title", "hypothesis", "metricKey", "intervention"],
+        notes: [
+            "Experiments should name the metric being optimized and define success criteria before results are interpreted.",
+            "Forge treats hypotheses as decision aids, not medical diagnosis."
+        ],
+        example: '{"title":"Carbs before kickboxing","hypothesis":"60g carbs 2h before training improves performance without gut discomfort","metricKey":"workoutPerformance","intervention":"60g low-fat carbs before training"}'
+    },
+    {
         toolName: "forge_update_sleep_session",
         summary: "Patch one sleep session with reflective notes, tags, or linked Forge context.",
         whenToUse: "Use after reviewing a specific night when the operator wants richer context stored on that sleep record. Do not use this as the primary CRUD path when batch entity mutation already fits the job.",
@@ -5210,7 +5273,8 @@ function buildAgentOnboardingPayload(request) {
             batchSearch: "/api/v1/entities/search",
             psycheSchemaCatalog: "/api/v1/psyche/schema-catalog",
             psycheEventTypes: "/api/v1/psyche/event-types",
-            psycheEmotions: "/api/v1/psyche/emotions"
+            psycheEmotions: "/api/v1/psyche/emotions",
+            weightLoss: "/api/v1/health/weight-loss"
         },
         recommendedPluginTools: {
             bootstrap: ["forge_get_operator_overview"],
@@ -5222,6 +5286,7 @@ function buildAgentOnboardingPayload(request) {
                 "forge_get_sleep_overview",
                 "forge_get_sports_overview",
                 "forge_get_training_load_overview",
+                "forge_get_weight_loss_overview",
                 "forge_get_xp_metrics",
                 "forge_get_weekly_review"
             ],
@@ -5253,6 +5318,19 @@ function buildAgentOnboardingPayload(request) {
                 "forge_get_sleep_overview",
                 "forge_get_sports_overview",
                 "forge_get_training_load_overview",
+                "forge_get_weight_loss_overview",
+                "forge_search_foods",
+                "forge_search_nutrition_foods",
+                "forge_lookup_nutrition_barcode",
+                "forge_log_food",
+                "forge_parse_food_log_with_chatgpt",
+                "forge_log_body_checkin",
+                "forge_log_appearance_checkin",
+                "forge_log_subjective_food_effect",
+                "forge_log_gut_checkin",
+                "forge_get_nutrition_patterns",
+                "forge_start_nutrition_experiment",
+                "forge_update_nutrition_experiment",
                 "forge_update_sleep_session",
                 "forge_update_workout_session"
             ],
@@ -6318,6 +6396,34 @@ function compactVitals(vitals) {
         detailRoute: "/api/v1/health/vitals"
     };
 }
+function compactWeightLoss(weightLoss) {
+    return {
+        generatedAt: weightLoss.generatedAt,
+        userId: weightLoss.userId,
+        summary: weightLoss.summary,
+        todayLedger: {
+            dateKey: weightLoss.todayLedger.dateKey,
+            mealCount: weightLoss.todayLedger.meals.length,
+            totals: weightLoss.todayLedger.totals,
+            targetCalories: weightLoss.todayLedger.targetCalories,
+            calorieDelta: weightLoss.todayLedger.calorieDelta,
+            proteinCoverage: weightLoss.todayLedger.proteinCoverage,
+            fiberCoverage: weightLoss.todayLedger.fiberCoverage,
+            unconfirmedCount: weightLoss.todayLedger.unconfirmedCount
+        },
+        weightTrend: weightLoss.weightTrend,
+        foodQuality: weightLoss.foodQuality,
+        trainingFuel: weightLoss.trainingFuel,
+        subjective: weightLoss.subjective,
+        gut: weightLoss.gut,
+        topHypotheses: weightLoss.hypotheses.slice(0, 4),
+        activeExperiments: weightLoss.experiments
+            .filter((experiment) => experiment.status !== "completed")
+            .slice(0, 4),
+        dataQuality: weightLoss.dataQuality,
+        detailRoute: "/api/v1/health/weight-loss"
+    };
+}
 function compactLifeForce(lifeForce) {
     return {
         userId: lifeForce.userId,
@@ -6583,6 +6689,7 @@ function buildOperatorOverview(request) {
     const fitness = compactFitness(getFitnessViewData(userIds));
     const trainingLoad = compactTrainingLoad(getTrainingLoadViewData(userIds));
     const vitals = compactVitals(getVitalsViewData(userIds));
+    const weightLoss = compactWeightLoss(getWeightLossViewData(userIds));
     const lifeForce = compactLifeForce(buildLifeForcePayload(now, userIds));
     const psyche = canReadPsyche ? compactPsyche(getPsycheOverview(userIds)) : null;
     const onboarding = compactOnboardingPayload(buildAgentOnboardingPayload(request));
@@ -6665,6 +6772,7 @@ function buildOperatorOverview(request) {
         fitness,
         trainingLoad,
         vitals,
+        weightLoss,
         lifeForce,
         domains: listDomains().map((domain) => ({
             id: domain.id,
@@ -7348,6 +7456,118 @@ export async function buildServer(options = {}) {
     app.get("/api/v1/health/vitals", async (request) => ({
         vitals: getVitalsViewData(resolveScopedUserIds(request.query))
     }));
+    app.get("/api/v1/health/weight-loss", async (request) => ({
+        weightLoss: getWeightLossViewData(resolveScopedUserIds(request.query))
+    }));
+    app.patch("/api/v1/health/weight-loss/target", async (request) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/health/weight-loss/target"
+        });
+        return {
+            target: updateNutritionTarget(nutritionTargetUpdateSchema.parse(request.body ?? {}))
+        };
+    });
+    app.post("/api/v1/health/weight-loss/foods/search", async (request) => ({
+        ...(await searchNutritionFoods(nutritionFoodSearchSchema.parse(request.body ?? {})))
+    }));
+    app.post("/api/v1/health/weight-loss/foods/barcode", async (request) => ({
+        ...(await lookupNutritionBarcode(nutritionBarcodeLookupSchema.parse(request.body ?? {})))
+    }));
+    app.post("/api/v1/health/weight-loss/food-logs", async (request, reply) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/health/weight-loss/food-logs"
+        });
+        const foodLog = createNutritionFoodLog(nutritionFoodLogCreateSchema.parse(request.body ?? {}));
+        reply.code(201);
+        return { log: foodLog };
+    });
+    app.patch("/api/v1/health/weight-loss/food-logs/:id", async (request, reply) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/health/weight-loss/food-logs/:id"
+        });
+        const foodLog = patchNutritionFoodLog(request.params.id, nutritionFoodLogPatchSchema.parse(request.body ?? {}));
+        if (!foodLog) {
+            reply.code(404);
+            return { error: "Food log not found" };
+        }
+        return { log: foodLog };
+    });
+    app.delete("/api/v1/health/weight-loss/food-logs/:id", async (request, reply) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/health/weight-loss/food-logs/:id"
+        });
+        const foodLog = deleteNutritionFoodLog(request.params.id);
+        if (!foodLog) {
+            reply.code(404);
+            return { error: "Food log not found" };
+        }
+        return { deleted: true };
+    });
+    app.post("/api/v1/health/weight-loss/parse", async (request, reply) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/health/weight-loss/parse"
+        });
+        reply.code(201);
+        return await parseNutritionFoodLogWithChatGpt(nutritionParseRequestSchema.parse(request.body ?? {}), managers.llm);
+    });
+    app.post("/api/v1/health/weight-loss/body-checkins", async (request, reply) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/health/weight-loss/body-checkins"
+        });
+        const bodyCheckin = createNutritionBodyCheckin(nutritionBodyCheckinCreateSchema.parse(request.body ?? {}));
+        reply.code(201);
+        return { checkin: bodyCheckin };
+    });
+    app.post("/api/v1/health/weight-loss/appearance-checkins", async (request, reply) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/health/weight-loss/appearance-checkins"
+        });
+        const appearanceCheckin = createNutritionAppearanceCheckin(nutritionAppearanceCheckinCreateSchema.parse(request.body ?? {}));
+        reply.code(201);
+        return { checkin: appearanceCheckin };
+    });
+    app.post("/api/v1/health/weight-loss/subjective-checkins", async (request, reply) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/health/weight-loss/subjective-checkins"
+        });
+        const subjectiveCheckin = createNutritionSubjectiveCheckin(nutritionSubjectiveCheckinCreateSchema.parse(request.body ?? {}));
+        reply.code(201);
+        return { checkin: subjectiveCheckin };
+    });
+    app.post("/api/v1/health/weight-loss/gut-checkins", async (request, reply) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/health/weight-loss/gut-checkins"
+        });
+        const gutCheckin = createNutritionGutCheckin(nutritionGutCheckinCreateSchema.parse(request.body ?? {}));
+        reply.code(201);
+        return { checkin: gutCheckin };
+    });
+    app.get("/api/v1/health/weight-loss/patterns", async (request) => {
+        const weightLoss = getWeightLossViewData(resolveScopedUserIds(request.query));
+        return {
+            hypotheses: weightLoss.hypotheses,
+            experiments: weightLoss.experiments
+        };
+    });
+    app.post("/api/v1/health/weight-loss/experiments", async (request, reply) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/health/weight-loss/experiments"
+        });
+        const experiment = createNutritionExperiment(nutritionExperimentCreateSchema.parse(request.body ?? {}));
+        reply.code(201);
+        return { experiment };
+    });
+    app.patch("/api/v1/health/weight-loss/experiments/:id", async (request, reply) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/health/weight-loss/experiments/:id"
+        });
+        const experiment = patchNutritionExperiment(request.params.id, nutritionExperimentPatchSchema.parse(request.body ?? {}));
+        if (!experiment) {
+            reply.code(404);
+            return { error: "Nutrition experiment not found" };
+        }
+        return { experiment };
+    });
     app.get("/api/v1/health/zone-profile", async (request) => {
         const userIds = resolveScopedUserIds(request.query);
         return {
@@ -7891,6 +8111,15 @@ export async function buildServer(options = {}) {
         assertWatchReady(pairing);
         return {
             receipt: ingestWatchCaptureBatch(pairing, parsed),
+            watch: buildWatchBootstrap(pairing)
+        };
+    });
+    app.post("/api/v1/mobile/watch/actions:batch", async (request) => {
+        const parsed = mobileWatchCommandBatchSchema.parse(request.body ?? {});
+        const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
+        assertWatchReady(pairing);
+        return {
+            receipt: ingestWatchCommandBatch(pairing, parsed),
             watch: buildWatchBootstrap(pairing)
         };
     });

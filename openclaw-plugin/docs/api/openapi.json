@@ -5906,6 +5906,10 @@
               "reviewShortcutRule",
               "readModelWriteRule",
               "psycheOpeningQuestionRule",
+              "psycheHypothesisRule",
+              "mixedIntentSequencingRule",
+              "duplicateDisambiguationRule",
+              "destructiveActionRule",
               "followUpQuestionRule",
               "antiDriftRule",
               "duplicateCheckRoute",
@@ -5939,6 +5943,18 @@
                 "type": "string"
               },
               "psycheOpeningQuestionRule": {
+                "type": "string"
+              },
+              "psycheHypothesisRule": {
+                "type": "string"
+              },
+              "mixedIntentSequencingRule": {
+                "type": "string"
+              },
+              "duplicateDisambiguationRule": {
+                "type": "string"
+              },
+              "destructiveActionRule": {
                 "type": "string"
               },
               "followUpQuestionRule": {
@@ -8798,6 +8814,828 @@
             }
           },
           "targetModel": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "NutritionMealItemInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "quantity"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "calories": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "proteinGrams": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "carbohydrateGrams": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fatGrams": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fiberGrams": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sugarGrams": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sodiumMg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "potassiumMg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "caffeineMg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "alcoholGrams": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "NutritionFoodLogInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "loggedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "mealLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "search",
+              "barcode",
+              "chatgpt",
+              "photo",
+              "saved_meal"
+            ]
+          },
+          "confirmationState": {
+            "type": "string",
+            "enum": [
+              "candidate",
+              "confirmed",
+              "needs_review",
+              "discarded"
+            ]
+          },
+          "userId": {
+            "type": "string"
+          },
+          "placeId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stayId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "workoutId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sleepId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dayKey": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "imageRefs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "parserProvenance": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "satietyScore": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hungerBefore": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hungerAfter": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cravingScore": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "enjoymentScore": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "socialContext": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "locationContext": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name",
+                "quantity"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "brand": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "quantity": {
+                  "type": "number"
+                },
+                "unit": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "calories": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "proteinGrams": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "carbohydrateGrams": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "fatGrams": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "fiberGrams": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "sugarGrams": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "sodiumMg": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "potassiumMg": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "caffeineMg": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "alcoholGrams": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "confidence": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "NutritionFoodLog": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": [
+          "id",
+          "loggedAt",
+          "items",
+          "totals"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "loggedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "mealLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "type": "string"
+          },
+          "confirmationState": {
+            "type": "string"
+          },
+          "totals": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        }
+      },
+      "NutritionFoodSearchResult": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": [
+          "id",
+          "source",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "sourceId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "barcode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "servingLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "servingGrams": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "calories": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "proteinGrams": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "carbohydrateGrams": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fatGrams": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fiberGrams": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "WeightLossViewData": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "userId",
+          "generatedAt",
+          "target",
+          "summary",
+          "todayLedger",
+          "recentMeals",
+          "energyModel",
+          "weightTrend",
+          "foodQuality",
+          "trainingFuel",
+          "subjective",
+          "gut",
+          "hypotheses",
+          "experiments",
+          "dataQuality"
+        ],
+        "properties": {
+          "userId": {
+            "type": "string"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "target": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "summary": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "todayLedger": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "recentMeals": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "required": [
+                "id",
+                "loggedAt",
+                "items",
+                "totals"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "userId": {
+                  "type": "string"
+                },
+                "loggedAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "mealLabel": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "source": {
+                  "type": "string"
+                },
+                "confirmationState": {
+                  "type": "string"
+                },
+                "totals": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "number"
+                  }
+                },
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            }
+          },
+          "bodyCheckins": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "appearanceCheckins": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "energyModel": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "weightTrend": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "foodQuality": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "trainingFuel": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "subjective": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "gut": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "hypotheses": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "experiments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "dataQuality": {
             "type": "object",
             "additionalProperties": true
           }
@@ -11816,6 +12654,578 @@
           "Health"
         ],
         "operationId": "gethealth_training_load"
+      }
+    },
+    "/api/v1/health/weight-loss": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Read the Forge nutrition, weight-loss, food-effect, and body insight surface",
+        "responses": {
+          "200": {
+            "description": "Weight loss overview",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "weightLoss"
+                  ],
+                  "properties": {
+                    "weightLoss": {
+                      "$ref": "#/components/schemas/WeightLossViewData"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "gethealth_weight_loss"
+      }
+    },
+    "/api/v1/health/weight-loss/target": {
+      "patch": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Update nutrition and weight-loss targets",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated nutrition target",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "target"
+                  ],
+                  "properties": {
+                    "target": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "patchhealth_weight_loss_target"
+      }
+    },
+    "/api/v1/health/weight-loss/foods/search": {
+      "post": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Search nutrition foods across local and public catalogs",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "query"
+                ],
+                "properties": {
+                  "query": {
+                    "type": "string"
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 30
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Nutrition food search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "foods"
+                  ],
+                  "properties": {
+                    "foods": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/NutritionFoodSearchResult"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "posthealth_weight_loss_foods_search"
+      }
+    },
+    "/api/v1/health/weight-loss/foods/barcode": {
+      "post": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Lookup one nutrition food by barcode",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "barcode"
+                ],
+                "properties": {
+                  "barcode": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Nutrition barcode lookup result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "food"
+                  ],
+                  "properties": {
+                    "food": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/components/schemas/NutritionFoodSearchResult"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "posthealth_weight_loss_foods_barcode"
+      }
+    },
+    "/api/v1/health/weight-loss/food-logs": {
+      "post": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Create a nutrition food log",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NutritionFoodLogInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created nutrition food log",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "log"
+                  ],
+                  "properties": {
+                    "log": {
+                      "$ref": "#/components/schemas/NutritionFoodLog"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "posthealth_weight_loss_food_logs"
+      }
+    },
+    "/api/v1/health/weight-loss/food-logs/{id}": {
+      "patch": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Patch a nutrition food log",
+        "responses": {
+          "200": {
+            "description": "Updated nutrition food log",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "log"
+                  ],
+                  "properties": {
+                    "log": {
+                      "$ref": "#/components/schemas/NutritionFoodLog"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "patchhealth_weight_loss_food_logs_id"
+      },
+      "delete": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Delete a nutrition food log",
+        "responses": {
+          "200": {
+            "description": "Deleted nutrition food log",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "deleted"
+                  ],
+                  "properties": {
+                    "deleted": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "deletehealth_weight_loss_food_logs_id"
+      }
+    },
+    "/api/v1/health/weight-loss/parse": {
+      "post": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Parse a food log through Forge's openai-codex ChatGPT subscription connection",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "imageDescription": {
+                    "type": "string"
+                  },
+                  "loggedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "mealLabel": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Parsed candidate nutrition food log",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "candidate",
+                    "log",
+                    "clarificationQuestions",
+                    "uncertaintyReasons"
+                  ],
+                  "properties": {
+                    "candidate": {
+                      "$ref": "#/components/schemas/NutritionFoodLogInput"
+                    },
+                    "log": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/components/schemas/NutritionFoodLog"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "clarificationQuestions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "uncertaintyReasons": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "posthealth_weight_loss_parse"
+      }
+    },
+    "/api/v1/health/weight-loss/body-checkins": {
+      "post": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Create a body-composition check-in",
+        "responses": {
+          "201": {
+            "description": "Created body check-in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "checkin"
+                  ],
+                  "properties": {
+                    "checkin": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "posthealth_weight_loss_body_checkins"
+      }
+    },
+    "/api/v1/health/weight-loss/appearance-checkins": {
+      "post": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Create an aesthetic appearance check-in",
+        "responses": {
+          "201": {
+            "description": "Created appearance check-in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "checkin"
+                  ],
+                  "properties": {
+                    "checkin": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "posthealth_weight_loss_appearance_checkins"
+      }
+    },
+    "/api/v1/health/weight-loss/subjective-checkins": {
+      "post": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Create a subjective food-effect check-in",
+        "responses": {
+          "201": {
+            "description": "Created subjective check-in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "checkin"
+                  ],
+                  "properties": {
+                    "checkin": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "posthealth_weight_loss_subjective_checkins"
+      }
+    },
+    "/api/v1/health/weight-loss/gut-checkins": {
+      "post": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Create a gut-health food-effect check-in",
+        "responses": {
+          "201": {
+            "description": "Created gut check-in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "checkin"
+                  ],
+                  "properties": {
+                    "checkin": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "posthealth_weight_loss_gut_checkins"
+      }
+    },
+    "/api/v1/health/weight-loss/patterns": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Read current nutrition hypotheses and experiments",
+        "responses": {
+          "200": {
+            "description": "Nutrition pattern candidates",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "hypotheses",
+                    "experiments"
+                  ],
+                  "properties": {
+                    "hypotheses": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "experiments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "gethealth_weight_loss_patterns"
+      }
+    },
+    "/api/v1/health/weight-loss/experiments": {
+      "post": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Create a nutrition N-of-1 experiment",
+        "responses": {
+          "201": {
+            "description": "Created nutrition experiment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "experiment"
+                  ],
+                  "properties": {
+                    "experiment": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "posthealth_weight_loss_experiments"
+      }
+    },
+    "/api/v1/health/weight-loss/experiments/{id}": {
+      "patch": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Patch a nutrition N-of-1 experiment",
+        "responses": {
+          "200": {
+            "description": "Updated nutrition experiment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "experiment"
+                  ],
+                  "properties": {
+                    "experiment": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "patchhealth_weight_loss_experiments_id"
       }
     },
     "/api/v1/health/workouts": {

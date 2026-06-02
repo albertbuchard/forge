@@ -265,7 +265,7 @@ When Hermes is trying to find the right wiki record, use these search patterns:
 ## Preferred workflow
 
 1. Start with `forge_get_operator_overview`.
-2. Use `forge_get_operator_context`, `forge_get_current_work`, `forge_get_psyche_overview`, `forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_get_training_load_overview`, `forge_get_wiki_settings`, `forge_search_wiki`, or `forge_get_calendar_overview` when the request needs a more specific read model.
+2. Use `forge_get_operator_context`, `forge_get_current_work`, `forge_get_psyche_overview`, `forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_get_training_load_overview`, `forge_get_weight_loss_overview`, `forge_get_wiki_settings`, `forge_search_wiki`, or `forge_get_calendar_overview` when the request needs a more specific read model.
 3. Search before creating duplicates with `forge_search_entities`; if a likely match
    appears, ask whether to update it, link to it, or save a separate new record
    instead of reopening the whole create flow.
@@ -274,8 +274,9 @@ When Hermes is trying to find the right wiki record, use these search patterns:
 5. Use the wiki tools for SQLite-backed knowledge work:
    `forge_get_wiki_settings`, `forge_list_wiki_pages`, `forge_get_wiki_page`, `forge_search_wiki`, `forge_upsert_wiki_page`, `forge_get_wiki_health`, `forge_sync_wiki_vault`, `forge_reindex_wiki_embeddings`, `forge_ingest_wiki_source`.
    `forge_ingest_wiki_source` queues background ingest work; when the user wants to review candidate pages or entities before publishing, hand off to the Forge UI instead of pretending Hermes already has an inline review tool.
-6. Use the health tools for sleep and sports review and reflective enrichment:
-   `forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_get_training_load_overview`, `forge_update_sleep_session`, `forge_update_workout_session`.
+6. Use the health tools for sleep, sports, training load, weight loss, nutrition, gut, subjective-energy, and appearance review:
+   `forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_get_training_load_overview`, `forge_get_weight_loss_overview`, `forge_update_sleep_session`, `forge_update_workout_session`, `forge_search_foods`, `forge_search_nutrition_foods`, `forge_lookup_nutrition_barcode`, `forge_log_food`, `forge_parse_food_log_with_chatgpt`, `forge_log_body_checkin`, `forge_log_appearance_checkin`, `forge_log_subjective_food_effect`, `forge_log_gut_checkin`, `forge_get_nutrition_patterns`, `forge_start_nutrition_experiment`, `forge_update_nutrition_experiment`.
+   Food parsing must use Forge's configured `openai-codex` ChatGPT subscription connection, not a metered OpenAI Platform API path.
 7. Movement, Life Force, and Workbench are specialized Forge API surfaces rather than simple batch entities. When Hermes needs those domains, read `forge_get_agent_onboarding`, choose the route from `entityRouteModel.specializedDomainSurfaces`, and use `forge_call_movement_route`, `forge_call_life_force_route`, or `forge_call_workbench_route` when the route-key tools are available.
 8. Treat narrow calendar helpers as convenience helpers, not the default architecture:
    `forge_create_work_block_template` and `forge_create_task_timebox` are fine, but Hermes should still prefer the generic batch entity routes when practical.
@@ -321,7 +322,7 @@ For wiki-specific recall:
 - `patch.checkIn` accepts `status` plus optional `dateKey`, `note`, and `description`; if `description` is provided, it replaces the habit's stored `description` in the same write.
 - Use the high-level batch routes for basic Preferences CRUD. `preference_catalog`, `preference_catalog_item`, `preference_context`, and `preference_item` should normally flow through `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`.
 - Use the high-level batch routes for basic questionnaire CRUD too. `questionnaire_instrument` should normally flow through `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`.
-- Use the high-level batch routes for ordinary health-session CRUD too. `sleep_session` and `workout_session` should normally flow through `forge_search_entities`, `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`. Keep `forge_get_sleep_overview`, `forge_get_sports_overview`, and `forge_get_training_load_overview` for read models, and keep `forge_update_sleep_session` and `forge_update_workout_session` for reflective enrichment on one already-existing record.
+- Use the high-level batch routes for ordinary health-session CRUD too. `sleep_session` and `workout_session` should normally flow through `forge_search_entities`, `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`. Keep `forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_get_training_load_overview`, and `forge_get_weight_loss_overview` for read models; use the dedicated nutrition tools for food/body/gut/appearance/subjective evidence; and keep `forge_update_sleep_session` and `forge_update_workout_session` for reflective enrichment on one already-existing record.
 - Use the dedicated API families for Movement, Life Force, and Workbench. Those routes are published in `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces` and are the preferred contract for movement stays, trips, time-in-place and travel-behavior queries, life-force state, and workbench execution/result work. Prefer `forge_call_movement_route`, `forge_call_life_force_route`, or `forge_call_workbench_route` when those route-key tools are present.
 - When that onboarding payload includes `routeSelectionQuestions`, use them before improvising follow-up questions for Movement, Life Force, or Workbench.
 - After the lane is clear, talk in product nouns such as timeline, overlay, weekday

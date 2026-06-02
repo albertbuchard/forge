@@ -63,6 +63,7 @@ import {
   TodayPage,
   TrainingLoadPage,
   VitalsPage,
+  WeightLossPage,
   WeeklyReviewPage,
   WikiEditorPage,
   WikiIngestHistoryPage,
@@ -329,6 +330,15 @@ export function App() {
               "Vitals",
               "Body signals, recovery, cardio fitness, and daily HealthKit metrics.",
               <VitalsPage />
+            )}
+          />
+          <Route
+            path="weight-loss"
+            element={surface(
+              "weight-loss-index",
+              "Weight Loss",
+              "Nutrition, body composition, food effects, gut signals, and aesthetic experiments.",
+              <WeightLossPage />
             )}
           />
           <Route

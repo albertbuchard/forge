@@ -1,0 +1,265 @@
+export type NutritionMealItemInput = {
+  name: string;
+  brand?: string | null;
+  quantity: number;
+  unit?: string | null;
+  calories?: number | null;
+  proteinGrams?: number | null;
+  carbohydrateGrams?: number | null;
+  fatGrams?: number | null;
+  fiberGrams?: number | null;
+  sugarGrams?: number | null;
+  sodiumMg?: number | null;
+  potassiumMg?: number | null;
+  caffeineMg?: number | null;
+  alcoholGrams?: number | null;
+  glycemicIndex?: number | null;
+  novaGroup?: number | null;
+  fermented?: boolean | null;
+  probiotic?: boolean | null;
+  fodmapLevel?: "low" | "medium" | "high" | null;
+  tags?: string[];
+  confidence?: number | null;
+};
+
+export type NutritionMealItem = NutritionMealItemInput & {
+  id: string;
+  foodId: string | null;
+  sortOrder: number;
+};
+
+export type NutritionFoodLogInput = {
+  userId?: string;
+  loggedAt?: string;
+  mealLabel?: string | null;
+  source?: "manual" | "search" | "barcode" | "chatgpt" | "photo" | "saved_meal";
+  confirmationState?: "candidate" | "confirmed" | "needs_review" | "discarded";
+  placeId?: string | null;
+  stayId?: string | null;
+  workoutId?: string | null;
+  sleepId?: string | null;
+  dayKey?: string | null;
+  imageRefs?: string[];
+  parserProvenance?: Record<string, unknown>;
+  satietyScore?: number | null;
+  hungerBefore?: number | null;
+  hungerAfter?: number | null;
+  cravingScore?: number | null;
+  enjoymentScore?: number | null;
+  socialContext?: string | null;
+  locationContext?: string | null;
+  notes?: string | null;
+  items: NutritionMealItemInput[];
+};
+
+export type NutritionFoodLogPatchInput = Partial<
+  Omit<NutritionFoodLogInput, "items">
+> & {
+  items?: NutritionMealItemInput[];
+};
+
+export type NutritionFoodLog = {
+  id: string;
+  userId: string;
+  loggedAt: string;
+  mealLabel: string | null;
+  source: string;
+  confirmationState: string;
+  placeId: string | null;
+  stayId: string | null;
+  workoutId: string | null;
+  sleepId: string | null;
+  dayKey: string;
+  imageRefs: string[];
+  parserProvenance: Record<string, unknown>;
+  satietyScore: number | null;
+  hungerBefore: number | null;
+  hungerAfter: number | null;
+  cravingScore: number | null;
+  enjoymentScore: number | null;
+  socialContext: string | null;
+  locationContext: string | null;
+  notes: string | null;
+  totals: {
+    calories: number;
+    proteinGrams: number;
+    carbohydrateGrams: number;
+    fatGrams: number;
+    fiberGrams: number;
+    sugarGrams: number;
+    sodiumMg: number;
+    potassiumMg: number;
+    caffeineMg: number;
+    alcoholGrams: number;
+  };
+  items: NutritionMealItem[];
+};
+
+export type NutritionTarget = {
+  calorieTarget: number;
+  proteinGramsTarget: number;
+  fiberGramsTarget: number;
+  carbohydrateGramsTarget: number | null;
+  fatGramsTarget: number | null;
+  weeklyRateGoalKg: number | null;
+  goalBodyWeightKg: number | null;
+  dietStyle: string | null;
+  trainingGoal: string | null;
+  notes: string | null;
+  updatedAt: string | null;
+};
+
+export type NutritionTargetPatchInput = Partial<
+  Omit<NutritionTarget, "updatedAt">
+>;
+
+export type NutritionFoodSearchResult = {
+  id: string;
+  source: string;
+  sourceId: string | null;
+  name: string;
+  brand: string | null;
+  barcode: string | null;
+  servingLabel: string | null;
+  servingGrams: number | null;
+  calories: number | null;
+  proteinGrams: number | null;
+  carbohydrateGrams: number | null;
+  fatGrams: number | null;
+  fiberGrams: number | null;
+  sugarGrams: number | null;
+  sodiumMg: number | null;
+  potassiumMg: number | null;
+  caffeineMg: number | null;
+  alcoholGrams: number | null;
+  glycemicIndex: number | null;
+  novaGroup: number | null;
+  tags: string[];
+};
+
+export type NutritionCheckinInput = {
+  checkedAt?: string;
+  weightKg?: number | null;
+  waistCm?: number | null;
+  hipCm?: number | null;
+  neckCm?: number | null;
+  bodyFatPercent?: number | null;
+  photoAssetId?: string | null;
+  notes?: string | null;
+};
+
+export type NutritionAppearanceInput = {
+  checkedAt?: string;
+  muscleFullness?: number | null;
+  leanness?: number | null;
+  vascularity?: number | null;
+  facePuffiness?: number | null;
+  abdomenBloatLook?: number | null;
+  postureConfidence?: number | null;
+  outfitFit?: number | null;
+  aestheticScore?: number | null;
+  notes?: string | null;
+};
+
+export type NutritionSubjectiveInput = {
+  checkedAt?: string;
+  energy?: number | null;
+  mood?: number | null;
+  focus?: number | null;
+  libido?: number | null;
+  sleepiness?: number | null;
+  soreness?: number | null;
+  stress?: number | null;
+  hunger?: number | null;
+  cravings?: number | null;
+  workoutPerformance?: number | null;
+  timeRelation?: string | null;
+  linkedFoodLogId?: string | null;
+  notes?: string | null;
+};
+
+export type NutritionGutInput = {
+  checkedAt?: string;
+  bloating?: number | null;
+  abdominalPain?: number | null;
+  gas?: number | null;
+  reflux?: number | null;
+  nausea?: number | null;
+  stoolType?: number | null;
+  stoolFrequency?: number | null;
+  suspectedTrigger?: string | null;
+  linkedFoodLogId?: string | null;
+  notes?: string | null;
+};
+
+export type NutritionExperimentInput = {
+  title: string;
+  hypothesis: string;
+  metricKey: string;
+  intervention: string;
+  baselineStart?: string | null;
+  baselineEnd?: string | null;
+  experimentStart?: string | null;
+  experimentEnd?: string | null;
+  status?: "planned" | "running" | "completed" | "abandoned";
+  successCriteria?: string | null;
+};
+
+export type NutritionExperimentPatchInput = Partial<NutritionExperimentInput> & {
+  conclusion?: string | null;
+};
+
+export type WeightLossViewData = {
+  userId: string;
+  generatedAt: string;
+  target: NutritionTarget;
+  summary: {
+    loggedMealCount: number;
+    trackedDays: number;
+    todayCalories: number;
+    targetCalories: number;
+    todayCalorieDelta: number;
+    averageCalories: number | null;
+    inferredTdee: number | null;
+    proteinCoverage: number | null;
+    fiberCoverage: number | null;
+    unconfirmedCount: number;
+    hypothesisCount: number;
+    dataQualityScore: number;
+  };
+  todayLedger: {
+    dateKey: string;
+    meals: NutritionFoodLog[];
+    totals: {
+      calories: number;
+      proteinGrams: number;
+      carbohydrateGrams: number;
+      fatGrams: number;
+      fiberGrams: number;
+      sodiumMg: number;
+      caffeineMg: number;
+      alcoholGrams: number;
+    };
+    targetCalories: number;
+    calorieDelta: number;
+    proteinCoverage: number | null;
+    fiberCoverage: number | null;
+    unconfirmedCount: number;
+  };
+  recentMeals: NutritionFoodLog[];
+  bodyCheckins: Array<Record<string, unknown>>;
+  appearanceCheckins: Array<Record<string, unknown>>;
+  energyModel: Record<string, unknown>;
+  weightTrend: Record<string, unknown>;
+  foodQuality: Record<string, unknown>;
+  trainingFuel: Record<string, unknown>;
+  subjective: Record<string, unknown>;
+  gut: Record<string, unknown>;
+  hypotheses: Array<Record<string, unknown>>;
+  experiments: Array<Record<string, unknown>>;
+  dataQuality: {
+    sourceConfidence: string;
+    missingHighValueCheckins: string[];
+    notes: string;
+  };
+};

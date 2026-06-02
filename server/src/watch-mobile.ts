@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { z } from "zod";
+import { z, ZodError } from "zod";
 import { getDatabase, runInTransaction } from "./db.js";
 import { HttpError } from "./errors.js";
 import { updateWorkoutMetadata } from "./health.js";
@@ -9,7 +9,18 @@ import {
   normalizeMovementCategoryTag,
   updateMovementPlace
 } from "./movement.js";
-import { listHabits } from "./repositories/habits.js";
+import { createHabitCheckIn, listHabits } from "./repositories/habits.js";
+import { listGoals } from "./repositories/goals.js";
+import { listProjectSummaries } from "./services/projects.js";
+import { listTasks, updateTask } from "./repositories/tasks.js";
+import {
+  claimTaskRun,
+  completeTaskRun,
+  focusTaskRun,
+  heartbeatTaskRun,
+  listTaskRuns,
+  releaseTaskRun
+} from "./repositories/task-runs.js";
 import { formatLocalDateKey } from "../../src/lib/date-keys.js";
 
 const watchCapability = "watch-ready";
@@ -34,6 +45,17 @@ const watchCaptureEventTypeSchema = z.enum([
   "routine_check",
   "dictated_note",
   "retrospective_label"
+]);
+
+const watchCommandKindSchema = z.enum([
+  "habit_check_in",
+  "capture_event",
+  "task_run_start",
+  "task_run_heartbeat",
+  "task_run_focus",
+  "task_run_complete",
+  "task_run_release",
+  "task_status_update"
 ]);
 
 const watchDeviceSchema = z.object({
@@ -83,6 +105,23 @@ export const mobileWatchCaptureBatchSchema = z.object({
   pairingToken: z.string().trim().min(1),
   device: watchDeviceSchema.default({}),
   events: z.array(watchCaptureEventSchema).max(100).default([])
+});
+
+export const mobileWatchCommandBatchSchema = z.object({
+  sessionId: z.string().trim().min(1),
+  pairingToken: z.string().trim().min(1),
+  device: watchDeviceSchema.default({}),
+  commands: z
+    .array(
+      z.object({
+        id: z.string().trim().min(1),
+        kind: watchCommandKindSchema,
+        createdAt: z.string().datetime(),
+        payload: z.record(z.string(), z.unknown()).default({})
+      })
+    )
+    .max(100)
+    .default([])
 });
 
 type PairingSessionLike = {
@@ -137,6 +176,15 @@ type WatchProjectionResult = {
   details: Record<string, unknown>;
 };
 
+type WatchCommandReceipt = {
+  actionId: string;
+  kind: z.infer<typeof watchCommandKindSchema>;
+  status: "processed" | "replayed" | "failed";
+  processedAt: string;
+  result: Record<string, unknown>;
+  error?: Record<string, unknown>;
+};
+
 function safeJsonParse<T>(raw: string | null | undefined, fallback: T): T {
   if (!raw || raw.trim().length === 0) {
     return fallback;
@@ -152,8 +200,22 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function watchActorLabel(pairing: PairingSessionLike) {
+  const settings = getDatabase()
+    .prepare(`SELECT operator_name FROM app_settings WHERE id = 1`)
+    .get() as { operator_name?: string } | undefined;
+  const operatorName = settings?.operator_name?.trim();
+  return operatorName || pairing.user_id || "Albert";
+}
+
 function formatDateKey(date: Date) {
   return formatLocalDateKey(date);
+}
+
+function userScopeFilter(pairing: PairingSessionLike) {
+  return pairing.user_id === "user_operator"
+    ? {}
+    : { userIds: [pairing.user_id] };
 }
 
 function parseDateKey(dateKey: string) {
@@ -656,6 +718,303 @@ export function assertWatchReady(pairing: PairingSessionLike) {
   }
 }
 
+function compactTask(task: Record<string, unknown>) {
+  return {
+    id: String(task.id ?? ""),
+    title: String(task.title ?? "Untitled work"),
+    status: String(task.status ?? "backlog"),
+    level: String(task.level ?? "task"),
+    priority: String(task.priority ?? "medium"),
+    dueDate: typeof task.dueDate === "string" ? task.dueDate : null,
+    projectId: typeof task.projectId === "string" ? task.projectId : null,
+    goalId: typeof task.goalId === "string" ? task.goalId : null,
+    parentWorkItemId:
+      typeof task.parentWorkItemId === "string" ? task.parentWorkItemId : null,
+    points: typeof task.points === "number" ? task.points : 0,
+    effort: String(task.effort ?? ""),
+    energy: String(task.energy ?? ""),
+    updatedAt: String(task.updatedAt ?? "")
+  };
+}
+
+function compactTaskRun(run: Record<string, unknown>) {
+  return {
+    id: String(run.id ?? ""),
+    taskId: String(run.taskId ?? ""),
+    taskTitle: String(run.taskTitle ?? "Active work"),
+    actor: String(run.actor ?? ""),
+    status: String(run.status ?? ""),
+    isCurrent: Boolean(run.isCurrent),
+    timerMode: String(run.timerMode ?? "unlimited"),
+    plannedDurationSeconds:
+      typeof run.plannedDurationSeconds === "number"
+        ? run.plannedDurationSeconds
+        : null,
+    creditedSeconds:
+      typeof run.creditedSeconds === "number" ? run.creditedSeconds : 0,
+    claimedAt: String(run.claimedAt ?? ""),
+    heartbeatAt: String(run.heartbeatAt ?? ""),
+    leaseExpiresAt: String(run.leaseExpiresAt ?? "")
+  };
+}
+
+function buildWorkSnapshot(pairing: PairingSessionLike) {
+  const scope = userScopeFilter(pairing);
+  const allTasks = (listTasks({ ...scope, limit: 100 }) as Array<
+    Record<string, unknown>
+  >).map(compactTask);
+  const activeRuns = (listTaskRuns({
+    ...scope,
+    active: true,
+    limit: 12
+  }) as Array<Record<string, unknown>>).map(compactTaskRun);
+  const visibleTasks = allTasks.filter((task) => task.status !== "done");
+  const statuses = ["focus", "in_progress", "blocked", "backlog", "done"];
+  const lanes = statuses.map((status) => {
+    const laneTasks = allTasks
+      .filter((task) => task.status === status)
+      .slice(0, status === "done" ? 5 : 12);
+    return {
+      id: status,
+      title:
+        status === "in_progress"
+          ? "In progress"
+          : status.charAt(0).toUpperCase() + status.slice(1),
+      count: allTasks.filter((task) => task.status === status).length,
+      tasks: laneTasks
+    };
+  });
+
+  return {
+    actor: watchActorLabel(pairing),
+    activeRuns,
+    currentRun: activeRuns.find((run) => run.isCurrent) ?? activeRuns[0] ?? null,
+    nextTask:
+      visibleTasks.find((task) => task.status === "focus") ??
+      visibleTasks.find((task) => task.status === "in_progress") ??
+      visibleTasks[0] ??
+      null,
+    lanes,
+    visibleCount: visibleTasks.length,
+    doneCount: allTasks.filter((task) => task.status === "done").length
+  };
+}
+
+function buildDirectionSnapshot(pairing: PairingSessionLike) {
+  const scope = userScopeFilter(pairing);
+  const goals = listGoals()
+    .filter(
+      (goal) =>
+        pairing.user_id === "user_operator" ||
+        (goal as Record<string, unknown>).userId === pairing.user_id
+    )
+    .filter((goal) => goal.status === "active")
+    .slice(0, 8)
+    .map((goal) => ({
+      id: goal.id,
+      title: goal.title,
+      horizon: goal.horizon,
+      status: goal.status,
+      targetPoints: goal.targetPoints
+    }));
+  const projects = listProjectSummaries(scope)
+    .filter((project) => project.status === "active")
+    .slice(0, 8)
+    .map((project) => ({
+      id: project.id,
+      title: project.title,
+      status: project.status,
+      workflowStatus: project.workflowStatus,
+      goalId: project.goalId,
+      goalTitle: project.goalTitle,
+      activeRunCount: project.time.activeRunCount,
+      openTaskCount: project.activeTaskCount
+    }));
+  return { goals, projects };
+}
+
+function buildTodaySnapshot(pairing: PairingSessionLike) {
+  const todayKey = formatLocalDateKey();
+  const tasks = (listTasks({ ...userScopeFilter(pairing), limit: 100 }) as Array<
+    Record<string, unknown>
+  >).map(compactTask);
+  const dueToday = tasks
+    .filter((task) => task.status !== "done" && task.dueDate === todayKey)
+    .slice(0, 8);
+  return {
+    dateKey: todayKey,
+    dueTasks: dueToday,
+    dueCount: dueToday.length,
+    recentDone: tasks.filter((task) => task.status === "done").slice(0, 5)
+  };
+}
+
+function buildHealthSnapshot(userId: string) {
+  const workout = getDatabase()
+    .prepare(
+      `SELECT id, workout_type, started_at, ended_at, duration_seconds,
+              average_heart_rate, max_heart_rate, derived_json
+       FROM health_workout_sessions
+       WHERE user_id = ?
+       ORDER BY started_at DESC
+       LIMIT 1`
+    )
+    .get(userId) as
+    | {
+        id: string;
+        workout_type: string;
+        started_at: string;
+        ended_at: string;
+        duration_seconds: number | null;
+        average_heart_rate: number | null;
+        max_heart_rate: number | null;
+        derived_json: string;
+      }
+    | undefined;
+  const latestVitals = getDatabase()
+    .prepare(
+      `SELECT date_key, metrics_json
+       FROM health_daily_summaries
+       WHERE user_id = ?
+         AND summary_type = 'vitals'
+       ORDER BY date_key DESC
+       LIMIT 1`
+    )
+    .get(userId) as
+    | {
+        date_key: string;
+        metrics_json: string;
+      }
+    | undefined;
+  const latestVitalMetrics = safeJsonParse<Record<string, unknown>>(
+    latestVitals?.metrics_json,
+    {}
+  );
+  const workoutDerived = safeJsonParse<Record<string, unknown>>(
+    workout?.derived_json,
+    {}
+  );
+  const trainingLoad =
+    typeof workoutDerived.trainingLoad === "number"
+      ? workoutDerived.trainingLoad
+      : typeof workoutDerived.trimp === "number"
+        ? workoutDerived.trimp
+        : null;
+  const heartRateSampleCount =
+    typeof workoutDerived.heartRateSampleCount === "number"
+      ? workoutDerived.heartRateSampleCount
+      : typeof workoutDerived.hrSampleCount === "number"
+        ? workoutDerived.hrSampleCount
+        : 0;
+
+  return {
+    lastWorkout: workout
+      ? {
+          id: workout.id,
+          workoutType: workout.workout_type,
+          startedAt: workout.started_at,
+          endedAt: workout.ended_at,
+          durationSeconds: workout.duration_seconds ?? 0,
+          averageHeartRate: workout.average_heart_rate,
+          maxHeartRate: workout.max_heart_rate,
+          trainingLoad,
+          heartRateSampleCount
+        }
+      : null,
+    latestVitals: latestVitals
+      ? {
+          dayKey: latestVitals.date_key,
+          metricCount: Object.keys(latestVitalMetrics).length
+        }
+      : null
+  };
+}
+
+function buildMovementSnapshot(userId: string) {
+  const latestStay = getDatabase()
+    .prepare(
+      `SELECT id, label, started_at, ended_at
+       FROM movement_stays
+       WHERE user_id = ?
+       ORDER BY started_at DESC
+       LIMIT 1`
+    )
+    .get(userId) as
+    | { id: string; label: string; started_at: string; ended_at: string | null }
+    | undefined;
+  const latestTrip = getDatabase()
+    .prepare(
+      `SELECT id, label, started_at, ended_at
+       FROM movement_trips
+       WHERE user_id = ?
+       ORDER BY started_at DESC
+       LIMIT 1`
+    )
+    .get(userId) as
+    | { id: string; label: string; started_at: string; ended_at: string | null }
+    | undefined;
+  const unlabeledPlaceCount = listMovementPlaces([userId]).filter(
+    (place) => place.categoryTags.length === 0
+  ).length;
+  return {
+    latestStay: latestStay
+      ? {
+          id: latestStay.id,
+          label: latestStay.label,
+          startedAt: latestStay.started_at,
+          endedAt: latestStay.ended_at
+        }
+      : null,
+    latestTrip: latestTrip
+      ? {
+          id: latestTrip.id,
+          label: latestTrip.label,
+          startedAt: latestTrip.started_at,
+          endedAt: latestTrip.ended_at
+        }
+      : null,
+    unlabeledPlaceCount
+  };
+}
+
+function buildSyncSnapshot(pairing: PairingSessionLike) {
+  const queuedCaptureCount = getDatabase()
+    .prepare(
+      `SELECT COUNT(*) AS count
+       FROM watch_capture_events
+       WHERE user_id = ?`
+    )
+    .get(pairing.user_id) as { count: number };
+  const actionReceiptCount = getDatabase()
+    .prepare(
+      `SELECT COUNT(*) AS count
+       FROM watch_action_receipts
+       WHERE user_id = ?`
+    )
+    .get(pairing.user_id) as { count: number };
+  return {
+    pairingSessionId: pairing.id,
+    generatedAt: nowIso(),
+    storedCaptureCount: queuedCaptureCount.count,
+    actionReceiptCount: actionReceiptCount.count
+  };
+}
+
+function buildWatchSurfaces() {
+  return [
+    { id: "now", title: "Now", icon: "sparkle" },
+    { id: "work", title: "Work", icon: "kanban" },
+    { id: "habits", title: "Habits", icon: "habit" },
+    { id: "goals", title: "Goals", icon: "scope" },
+    { id: "today", title: "Today", icon: "calendar" },
+    { id: "health", title: "Health", icon: "heart" },
+    { id: "movement", title: "Move", icon: "location" },
+    { id: "psyche", title: "Psyche", icon: "mind" },
+    { id: "inbox", title: "Inbox", icon: "tray" },
+    { id: "sync", title: "Sync", icon: "antenna" }
+  ];
+}
+
 export function buildWatchBootstrap(
   pairing: PairingSessionLike,
   options?: { anchorDateKey?: string }
@@ -698,8 +1057,38 @@ export function buildWatchBootstrap(
       };
     });
 
+  const pendingPrompts = buildPendingPrompts(pairing.user_id);
+  const work = buildWorkSnapshot(pairing);
+  const direction = buildDirectionSnapshot(pairing);
+  const today = buildTodaySnapshot(pairing);
+  const generatedAt = nowIso();
+
   return {
-    generatedAt: nowIso(),
+    schemaVersion: 2,
+    generatedAt,
+    surfaces: buildWatchSurfaces(),
+    now: {
+      currentRun: work.currentRun,
+      nextTask: work.nextTask,
+      dueHabitCount: habits.filter((habit) => habit.dueToday).length,
+      pendingPromptCount: pendingPrompts.length,
+      generatedAt
+    },
+    work,
+    goals: direction.goals,
+    projects: direction.projects,
+    today,
+    health: buildHealthSnapshot(pairing.user_id),
+    movement: buildMovementSnapshot(pairing.user_id),
+    psyche: {
+      emotionOptions,
+      triggerOptions,
+      routinePromptOptions
+    },
+    inbox: {
+      prompts: pendingPrompts
+    },
+    sync: buildSyncSnapshot(pairing),
     habits,
     checkInOptions: {
       activities: activityOptions,
@@ -709,7 +1098,7 @@ export function buildWatchBootstrap(
       routinePrompts: routinePromptOptions,
       recentPeople: recentPeopleLabels(pairing.user_id)
     },
-    pendingPrompts: buildPendingPrompts(pairing.user_id)
+    pendingPrompts
   };
 }
 
@@ -794,4 +1183,355 @@ export function ingestWatchCaptureBatch(
       projectionFailedCount
     };
   });
+}
+
+function readActionReceipt(userId: string, actionId: string) {
+  return getDatabase()
+    .prepare(
+      `SELECT action_id, kind, processed_at, status, result_json, error_json
+       FROM watch_action_receipts
+       WHERE user_id = ? AND action_id = ?`
+    )
+    .get(userId, actionId) as
+    | {
+        action_id: string;
+        kind: z.infer<typeof watchCommandKindSchema>;
+        processed_at: string;
+        status: "processed" | "failed";
+        result_json: string;
+        error_json: string;
+      }
+    | undefined;
+}
+
+function writeActionReceipt(
+  pairing: PairingSessionLike,
+  command: z.infer<typeof mobileWatchCommandBatchSchema>["commands"][number],
+  receipt: Omit<WatchCommandReceipt, "actionId" | "kind" | "processedAt">
+) {
+  const processedAt = nowIso();
+  getDatabase()
+    .prepare(
+      `INSERT INTO watch_action_receipts (
+         id, pairing_session_id, user_id, action_id, kind, received_at,
+         processed_at, status, result_json, error_json, created_at
+       )
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(user_id, action_id) DO NOTHING`
+    )
+    .run(
+      `watchact_${randomUUID().replaceAll("-", "").slice(0, 12)}`,
+      pairing.id,
+      pairing.user_id,
+      command.id,
+      command.kind,
+      command.createdAt,
+      processedAt,
+      receipt.status === "failed" ? "failed" : "processed",
+      JSON.stringify(receipt.result),
+      JSON.stringify(receipt.error ?? {}),
+      processedAt
+    );
+  return {
+    actionId: command.id,
+    kind: command.kind,
+    processedAt,
+    ...receipt
+  };
+}
+
+const habitCommandPayloadSchema = z.object({
+  habitId: z.string().trim().min(1),
+  dateKey: z.string().trim().min(1).default(() => formatLocalDateKey()),
+  status: z.enum(["done", "missed"]),
+  note: z.string().trim().default("")
+});
+
+const captureCommandPayloadSchema = z.object({
+  eventType: watchCaptureEventTypeSchema,
+  recordedAt: z.string().datetime().default(() => nowIso()),
+  promptId: z.string().trim().min(1).nullable().optional().default(null),
+  linkedContext: watchLinkedContextSchema.default({}),
+  payload: z.record(z.string(), z.unknown()).default({})
+});
+
+const taskRunStartCommandPayloadSchema = z.object({
+  taskId: z.string().trim().min(1),
+  actor: z.string().trim().min(1).optional(),
+  timerMode: z.enum(["planned", "unlimited"]).default("unlimited"),
+  plannedDurationSeconds: z
+    .number()
+    .int()
+    .min(60)
+    .max(86_400)
+    .nullable()
+    .default(null),
+  isCurrent: z.boolean().default(true),
+  leaseTtlSeconds: z.number().int().min(1).max(14_400).default(900),
+  note: z.string().trim().default(""),
+  overrideReason: z.string().trim().optional()
+});
+
+const taskRunIdCommandPayloadSchema = z.object({
+  runId: z.string().trim().min(1),
+  actor: z.string().trim().min(1).optional(),
+  leaseTtlSeconds: z.number().int().min(1).max(14_400).default(900),
+  note: z.string().trim().default(""),
+  overrideReason: z.string().trim().optional()
+});
+
+const taskStatusCommandPayloadSchema = z.object({
+  taskId: z.string().trim().min(1),
+  status: z.enum(["backlog", "focus", "in_progress", "blocked", "done"]),
+  note: z.string().trim().default("")
+});
+
+function processWatchCommand(
+  pairing: PairingSessionLike,
+  command: z.infer<typeof mobileWatchCommandBatchSchema>["commands"][number]
+): Record<string, unknown> {
+  const actor = watchActorLabel(pairing);
+  switch (command.kind) {
+    case "habit_check_in": {
+      const payload = habitCommandPayloadSchema.parse(command.payload);
+      const habit = createHabitCheckIn(
+        payload.habitId,
+        {
+          dateKey: payload.dateKey,
+          status: payload.status,
+          note: payload.note
+        },
+        { source: "system", actor: `watch:${command.id}` }
+      );
+      if (!habit) {
+        throw new HttpError(404, "watch_habit_not_found", "Habit not found");
+      }
+      return { habitId: habit.id, status: payload.status };
+    }
+    case "capture_event": {
+      const rawPayload = command.payload;
+      const payload = captureCommandPayloadSchema.parse({
+        ...rawPayload,
+        linkedContext:
+          typeof rawPayload.linkedContext === "object" &&
+          rawPayload.linkedContext != null &&
+          Array.isArray(rawPayload.linkedContext) === false
+            ? rawPayload.linkedContext
+            : {
+                placeId: rawPayload.placeId,
+                stayId: rawPayload.stayId,
+                tripId: rawPayload.tripId,
+                workoutId: rawPayload.workoutId
+              }
+      });
+      return {
+        receipt: ingestWatchCaptureBatch(pairing, {
+          sessionId: pairing.id,
+          pairingToken: "watch-command",
+          device: {
+            name: "Apple Watch",
+            platform: "watchos",
+            appVersion: "",
+            sourceDevice: "Apple Watch"
+          },
+          events: [
+            {
+              dedupeKey: command.id,
+              eventType: payload.eventType,
+              recordedAt: payload.recordedAt,
+              promptId: payload.promptId,
+              linkedContext: payload.linkedContext,
+              payload: payload.payload
+            }
+          ]
+        })
+      };
+    }
+    case "task_run_start": {
+      const payload = taskRunStartCommandPayloadSchema.parse(command.payload);
+      const result = claimTaskRun(
+        payload.taskId,
+        {
+          actor: payload.actor ?? actor,
+          timerMode: payload.timerMode,
+          plannedDurationSeconds: payload.plannedDurationSeconds,
+          isCurrent: payload.isCurrent,
+          leaseTtlSeconds: payload.leaseTtlSeconds,
+          note: payload.note,
+          overrideReason: payload.overrideReason
+        },
+        new Date(),
+        { source: "system" }
+      );
+      return { taskRun: result.run, replayed: result.replayed };
+    }
+    case "task_run_heartbeat": {
+      const payload = taskRunIdCommandPayloadSchema.parse(command.payload);
+      return {
+        taskRun: heartbeatTaskRun(
+          payload.runId,
+          {
+            actor: payload.actor ?? actor,
+            leaseTtlSeconds: payload.leaseTtlSeconds,
+            note: payload.note,
+            overrideReason: payload.overrideReason
+          },
+          new Date(),
+          { source: "system" }
+        )
+      };
+    }
+    case "task_run_focus": {
+      const payload = taskRunIdCommandPayloadSchema.parse(command.payload);
+      return {
+        taskRun: focusTaskRun(
+          payload.runId,
+          { actor: payload.actor ?? actor },
+          new Date(),
+          { source: "system" }
+        )
+      };
+    }
+    case "task_run_complete": {
+      const payload = taskRunIdCommandPayloadSchema.parse(command.payload);
+      return {
+        taskRun: completeTaskRun(
+          payload.runId,
+          { actor: payload.actor ?? actor, note: payload.note },
+          new Date(),
+          { source: "system" }
+        )
+      };
+    }
+    case "task_run_release": {
+      const payload = taskRunIdCommandPayloadSchema.parse(command.payload);
+      return {
+        taskRun: releaseTaskRun(
+          payload.runId,
+          { actor: payload.actor ?? actor, note: payload.note },
+          new Date(),
+          { source: "system" }
+        )
+      };
+    }
+    case "task_status_update": {
+      const payload = taskStatusCommandPayloadSchema.parse(command.payload);
+      const task = updateTask(
+        payload.taskId,
+        { status: payload.status },
+        { source: "system", actor: actor }
+      );
+      if (!task) {
+        throw new HttpError(404, "watch_task_not_found", "Task not found");
+      }
+      if (payload.note.length > 0) {
+        ingestWatchCaptureBatch(pairing, {
+          sessionId: pairing.id,
+          pairingToken: "watch-command",
+          device: {
+            name: "Apple Watch",
+            platform: "watchos",
+            appVersion: "",
+            sourceDevice: "Apple Watch"
+          },
+          events: [
+            {
+              dedupeKey: `${command.id}:note`,
+              eventType: "dictated_note",
+              promptId: null,
+              recordedAt: command.createdAt,
+              linkedContext: {},
+              payload: { note: payload.note, taskId: payload.taskId }
+            }
+          ]
+        });
+      }
+      return { taskId: task.id, status: task.status };
+    }
+  }
+}
+
+function commandErrorPayload(error: unknown) {
+  if (error instanceof HttpError) {
+    return {
+      statusCode: error.statusCode,
+      code: error.code,
+      message: error.message,
+      details: error.details ?? null
+    };
+  }
+  if (error instanceof ZodError) {
+    return {
+      statusCode: 400,
+      code: "watch_command_validation_failed",
+      message: "Watch command validation failed",
+      issues: error.issues
+    };
+  }
+  return {
+    statusCode: 500,
+    code: "watch_command_failed",
+    message:
+      error instanceof Error ? error.message : "Unknown watch command error"
+  };
+}
+
+export function ingestWatchCommandBatch(
+  pairing: PairingSessionLike,
+  input: z.infer<typeof mobileWatchCommandBatchSchema>
+) {
+  assertWatchReady(pairing);
+  const parsed = mobileWatchCommandBatchSchema.parse(input);
+  const receipts: WatchCommandReceipt[] = [];
+
+  for (const command of parsed.commands) {
+    const existing = readActionReceipt(pairing.user_id, command.id);
+    if (existing) {
+      receipts.push({
+        actionId: existing.action_id,
+        kind: existing.kind,
+        status: "replayed",
+        processedAt: existing.processed_at,
+        result: safeJsonParse<Record<string, unknown>>(
+          existing.result_json,
+          {}
+        ),
+        error: safeJsonParse<Record<string, unknown>>(
+          existing.error_json,
+          {}
+        )
+      });
+      continue;
+    }
+
+    try {
+      const result = processWatchCommand(pairing, command);
+      receipts.push(
+        writeActionReceipt(pairing, command, {
+          status: "processed",
+          result
+        })
+      );
+    } catch (error) {
+      const errorPayload = commandErrorPayload(error);
+      receipts.push(
+        writeActionReceipt(pairing, command, {
+          status: "failed",
+          result: {},
+          error: errorPayload
+        })
+      );
+    }
+  }
+
+  return {
+    receivedCount: parsed.commands.length,
+    processedCount: receipts.filter((receipt) => receipt.status === "processed")
+      .length,
+    replayedCount: receipts.filter((receipt) => receipt.status === "replayed")
+      .length,
+    failedCount: receipts.filter((receipt) => receipt.status === "failed")
+      .length,
+    receipts
+  };
 }
