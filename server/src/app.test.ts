@@ -1415,6 +1415,22 @@ test("goal detail, operator context, and retroactive work logging are available 
             latestNight: { id: string } | null;
             sessions: Array<{ id: string }>;
           };
+          weightLoss: {
+            summary: { loggedMealCount: number };
+            todayLedger: {
+              totals: { calories: number };
+              meals: Array<unknown>;
+            };
+            energyModel: {
+              estimatedTdeeKcal: number | null;
+              activeBurnKcal: number | null;
+              estimatedDailyEnergyBalanceKcal: number | null;
+            };
+            foodQuality: {
+              qualityScore: number;
+              proteinPer1000Kcal: number;
+            };
+          };
           routeGuide: {
             preferredStart: string;
             mainRoutes: Array<{ id: string }>;
@@ -1428,6 +1444,26 @@ test("goal detail, operator context, and retroactive work logging are available 
     assert.ok(typeof overview.sleep.summary.totalSleepSeconds === "number");
     assert.ok(typeof overview.sleep.summary.averageSleepSeconds === "number");
     assert.ok(Array.isArray(overview.sleep.sessions));
+    assert.ok(typeof overview.weightLoss.summary.loggedMealCount === "number");
+    assert.ok(typeof overview.weightLoss.todayLedger.totals.calories === "number");
+    assert.ok(Array.isArray(overview.weightLoss.todayLedger.meals));
+    assert.ok(
+      typeof overview.weightLoss.energyModel.estimatedTdeeKcal === "number" ||
+        overview.weightLoss.energyModel.estimatedTdeeKcal === null
+    );
+    assert.ok(
+      typeof overview.weightLoss.energyModel.activeBurnKcal === "number" ||
+        overview.weightLoss.energyModel.activeBurnKcal === null
+    );
+    assert.ok(
+      typeof overview.weightLoss.energyModel.estimatedDailyEnergyBalanceKcal ===
+        "number" ||
+        overview.weightLoss.energyModel.estimatedDailyEnergyBalanceKcal === null
+    );
+    assert.ok(typeof overview.weightLoss.foodQuality.qualityScore === "number");
+    assert.ok(
+      typeof overview.weightLoss.foodQuality.proteinPer1000Kcal === "number"
+    );
     if (overview.sleep.latestNight) {
       assert.ok(typeof overview.sleep.latestNight.id === "string");
       assert.ok(
@@ -9023,6 +9059,148 @@ test("watch capture batch stores raw events, dedupes repeats, and projects exact
   }
 });
 
+test("watch action batch records idempotent command receipts and replays accepted commands", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-watch-actions-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const habitId = createHabit({
+      title: "Check the plan",
+      description: "Open the work board before reacting.",
+      status: "active",
+      polarity: "positive",
+      frequency: "daily",
+      targetCount: 1,
+      weekDays: [],
+      linkedGoalIds: [],
+      linkedProjectIds: [],
+      linkedTaskIds: [],
+      linkedValueIds: [],
+      linkedPatternIds: [],
+      linkedBehaviorIds: [],
+      linkedBehaviorId: null,
+      linkedBeliefIds: [],
+      linkedModeIds: [],
+      linkedReportIds: [],
+      rewardXp: 5,
+      penaltyXp: 2,
+      generatedHealthEventTemplate: {
+        enabled: false,
+        workoutType: "workout",
+        title: "",
+        durationMinutes: 45,
+        xpReward: 0,
+        tags: [],
+        links: [],
+        notesTemplate: ""
+      }
+    }).id;
+
+    const pairingResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: {
+        userId: "user_operator",
+        capabilities: ["watch-ready"]
+      }
+    });
+    assert.equal(pairingResponse.statusCode, 201);
+    const qrPayload = (
+      pairingResponse.json() as {
+        qrPayload: { sessionId: string; pairingToken: string };
+      }
+    ).qrPayload;
+
+    const actionPayload = {
+      sessionId: qrPayload.sessionId,
+      pairingToken: qrPayload.pairingToken,
+      device: {
+        name: "Omar Watch",
+        platform: "watchos",
+        appVersion: "1.0",
+        sourceDevice: "Apple Watch"
+      },
+      commands: [
+        {
+          id: "watch-action-habit-1",
+          kind: "habit_check_in",
+          createdAt: "2026-04-07T08:00:00.000Z",
+          payload: {
+            habitId,
+            dateKey: "2026-04-07",
+            status: "done",
+            note: "Queued from the watch."
+          }
+        }
+      ]
+    };
+
+    const actionResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/watch/actions:batch",
+      payload: actionPayload
+    });
+    assert.equal(actionResponse.statusCode, 200, actionResponse.body);
+    const actionBody = actionResponse.json() as {
+      receipt: {
+        processedCount: number;
+        replayedCount: number;
+        failedCount: number;
+        receipts: Array<{ actionId: string; status: string }>;
+      };
+      watch: { schemaVersion: number; surfaces: Array<{ id: string }> };
+    };
+    assert.equal(actionBody.receipt.processedCount, 1);
+    assert.equal(actionBody.receipt.replayedCount, 0);
+    assert.equal(actionBody.receipt.failedCount, 0);
+    assert.equal(
+      actionBody.receipt.receipts[0]?.actionId,
+      "watch-action-habit-1"
+    );
+    assert.equal(actionBody.watch.schemaVersion, 2);
+    assert.ok(
+      actionBody.watch.surfaces.some((surface) => surface.id === "work")
+    );
+
+    const replayResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/watch/actions:batch",
+      payload: actionPayload
+    });
+    assert.equal(replayResponse.statusCode, 200, replayResponse.body);
+    const replayBody = replayResponse.json() as {
+      receipt: {
+        processedCount: number;
+        replayedCount: number;
+        failedCount: number;
+        receipts: Array<{ actionId: string; status: string }>;
+      };
+    };
+    assert.equal(replayBody.receipt.processedCount, 0);
+    assert.equal(replayBody.receipt.replayedCount, 1);
+    assert.equal(replayBody.receipt.failedCount, 0);
+    assert.equal(replayBody.receipt.receipts[0]?.status, "replayed");
+
+    const checkInCount = getDatabase()
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM habit_check_ins
+         WHERE habit_id = ?`
+      )
+      .get(habitId) as { count: number };
+    assert.equal(checkInCount.count, 1);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("strategy lock rejects drafts that are missing targets or narrative", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-strategy-lock-guard-")
@@ -11268,6 +11446,14 @@ test("openapi document exposes schema-backed versioned contracts", async () => {
     assert.ok(body.paths?.["/api/v1/health/fitness"]);
     assert.ok(body.paths?.["/api/v1/health/workouts"]);
     assert.ok(body.paths?.["/api/v1/health/workouts/{id}"]);
+    assert.ok(body.paths?.["/api/v1/health/weight-loss"]);
+    assert.ok(body.paths?.["/api/v1/health/weight-loss/target"]);
+    assert.ok(body.paths?.["/api/v1/health/weight-loss/foods/search"]);
+    assert.ok(body.paths?.["/api/v1/health/weight-loss/foods/barcode"]);
+    assert.ok(body.paths?.["/api/v1/health/weight-loss/food-logs"]);
+    assert.ok(body.paths?.["/api/v1/health/weight-loss/food-logs/{id}"]);
+    assert.ok(body.paths?.["/api/v1/health/weight-loss/parse"]);
+    assert.ok(body.components?.schemas?.WeightLossViewData);
     assert.ok(body.paths?.["/api/v1/habits"]);
     assert.ok(body.paths?.["/api/v1/habits/{id}"]);
     assert.ok(body.paths?.["/api/v1/habits/{id}/check-ins"]);
@@ -19618,6 +19804,7 @@ test("settings and local agent token management persist through the versioned AP
         "forge_get_sleep_overview",
         "forge_get_sports_overview",
         "forge_get_training_load_overview",
+        "forge_get_weight_loss_overview",
         "forge_get_xp_metrics",
         "forge_get_weekly_review"
       ]
@@ -19642,6 +19829,19 @@ test("settings and local agent token management persist through the versioned AP
         "forge_get_sleep_overview",
         "forge_get_sports_overview",
         "forge_get_training_load_overview",
+        "forge_get_weight_loss_overview",
+        "forge_search_foods",
+        "forge_search_nutrition_foods",
+        "forge_lookup_nutrition_barcode",
+        "forge_log_food",
+        "forge_parse_food_log_with_chatgpt",
+        "forge_log_body_checkin",
+        "forge_log_appearance_checkin",
+        "forge_log_subjective_food_effect",
+        "forge_log_gut_checkin",
+        "forge_get_nutrition_patterns",
+        "forge_start_nutrition_experiment",
+        "forge_update_nutrition_experiment",
         "forge_update_sleep_session",
         "forge_update_workout_session"
       ]

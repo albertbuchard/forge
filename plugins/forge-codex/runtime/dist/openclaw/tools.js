@@ -269,6 +269,62 @@ const healthLinkInputSchema = () => Type.Object({
     entityId: Type.String({ minLength: 1 }),
     relationshipType: Type.Optional(Type.String({ minLength: 1 }))
 });
+const nutritionMealItemInputSchema = () => Type.Object({
+    name: Type.String({ minLength: 1 }),
+    brand: optionalNullableString(),
+    quantity: Type.Number({ minimum: 0 }),
+    unit: optionalNullableString(),
+    caloriesKcal: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+    proteinG: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+    carbsG: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+    fatG: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+    fiberG: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+    sugarG: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+    sodiumMg: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+    potassiumMg: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+    caffeineMg: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+    alcoholG: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+    glycemicIndex: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+    novaGroup: Type.Optional(Type.Union([Type.Integer(), Type.Null()])),
+    fermented: Type.Optional(Type.Union([Type.Boolean(), Type.Null()])),
+    probiotic: Type.Optional(Type.Union([Type.Boolean(), Type.Null()])),
+    fodmapLevel: Type.Optional(Type.Union([
+        Type.Literal("low"),
+        Type.Literal("medium"),
+        Type.Literal("high"),
+        Type.Null()
+    ])),
+    tags: Type.Optional(Type.Array(Type.String())),
+    confidence: Type.Optional(Type.Union([Type.Number(), Type.Null()]))
+});
+const nutritionUserScopeSchema = () => Type.Optional(Type.Array(Type.String({ minLength: 1 })));
+const nutritionFoodLogSchema = () => Type.Object({
+    userIds: nutritionUserScopeSchema(),
+    loggedAt: optionalString(),
+    mealLabel: optionalNullableString(),
+    source: Type.Optional(Type.Union([
+        Type.Literal("manual"),
+        Type.Literal("barcode"),
+        Type.Literal("chatgpt"),
+        Type.Literal("photo"),
+        Type.Literal("import")
+    ])),
+    confirmationState: Type.Optional(Type.Union([
+        Type.Literal("candidate"),
+        Type.Literal("confirmed"),
+        Type.Literal("corrected"),
+        Type.Literal("rejected")
+    ])),
+    satietyScore: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+    hungerBefore: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+    hungerAfter: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+    cravingScore: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+    enjoymentScore: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+    socialContext: optionalNullableString(),
+    locationContext: optionalNullableString(),
+    notes: optionalNullableString(),
+    items: Type.Array(nutritionMealItemInputSchema(), { minItems: 1 })
+});
 const noteInputSchema = () => Type.Object({
     contentMarkdown: Type.String({ minLength: 1 }),
     author: optionalNullableString(),
@@ -758,6 +814,290 @@ export function registerForgePluginTools(api, config) {
         description: "Read the cardiovascular training-load surface with acute/chronic load, HR zone-time buckets, smart training modes, weekly targets, next-workout guidance, and data-quality flags.",
         parameters: scopedReadSchema,
         path: (params) => withUserIds("/api/v1/health/training-load", params.userIds)
+    });
+    registerReadTool(api, config, {
+        name: "forge_get_weight_loss_overview",
+        label: "Forge Weight Loss Overview",
+        description: "Read the weight-loss and nutrition insight surface with calorie ledger, protein/fiber targets, energy balance, body trend, subjective energy, gut comfort, aesthetic check-ins, hypotheses, experiments, and data-quality flags.",
+        parameters: scopedReadSchema,
+        path: (params) => withUserIds("/api/v1/health/weight-loss", params.userIds)
+    });
+    api.registerTool({
+        name: "forge_search_nutrition_foods",
+        label: "Forge Search Nutrition Foods",
+        description: "Search local, Open Food Facts, and USDA-backed nutrition foods before logging a concrete food item.",
+        parameters: Type.Object({
+            userIds: nutritionUserScopeSchema(),
+            query: Type.String({ minLength: 1 }),
+            limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 30 }))
+        }),
+        async execute(_toolCallId, params) {
+            const typed = params;
+            return jsonResult(await runWrite(config, {
+                method: "POST",
+                path: withUserIds("/api/v1/health/weight-loss/foods/search", typed.userIds),
+                body: { query: typed.query, limit: typed.limit }
+            }));
+        }
+    });
+    api.registerTool({
+        name: "forge_search_foods",
+        label: "Forge Search Foods",
+        description: "Search local, Open Food Facts, and USDA-backed nutrition foods before logging a concrete food item. This is the short alias for forge_search_nutrition_foods.",
+        parameters: Type.Object({
+            userIds: nutritionUserScopeSchema(),
+            query: Type.String({ minLength: 1 }),
+            limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 30 }))
+        }),
+        async execute(_toolCallId, params) {
+            const typed = params;
+            return jsonResult(await runWrite(config, {
+                method: "POST",
+                path: withUserIds("/api/v1/health/weight-loss/foods/search", typed.userIds),
+                body: { query: typed.query, limit: typed.limit }
+            }));
+        }
+    });
+    api.registerTool({
+        name: "forge_lookup_nutrition_barcode",
+        label: "Forge Lookup Nutrition Barcode",
+        description: "Lookup a packaged food by barcode through Forge's nutrition catalog adapters.",
+        parameters: Type.Object({
+            userIds: nutritionUserScopeSchema(),
+            barcode: Type.String({ minLength: 1 })
+        }),
+        async execute(_toolCallId, params) {
+            const typed = params;
+            return jsonResult(await runWrite(config, {
+                method: "POST",
+                path: withUserIds("/api/v1/health/weight-loss/foods/barcode", typed.userIds),
+                body: { barcode: typed.barcode }
+            }));
+        }
+    });
+    api.registerTool({
+        name: "forge_log_food",
+        label: "Forge Log Food",
+        description: "Create a confirmed or candidate food log with explicit meal items, calories, macros, quality tags, hunger, satiety, cravings, and context.",
+        parameters: nutritionFoodLogSchema(),
+        async execute(_toolCallId, params) {
+            const typed = params;
+            const { userIds: _userIds, ...body } = typed;
+            return jsonResult(await runWrite(config, {
+                method: "POST",
+                path: withUserIds("/api/v1/health/weight-loss/food-logs", typed.userIds),
+                body
+            }));
+        }
+    });
+    api.registerTool({
+        name: "forge_parse_food_log_with_chatgpt",
+        label: "Forge Parse Food Log With ChatGPT",
+        description: "Use Forge's openai-codex ChatGPT subscription connection to parse natural-language food text or a photo description into a candidate nutrition log. This must not use the metered OpenAI API.",
+        parameters: Type.Object({
+            userIds: nutritionUserScopeSchema(),
+            text: optionalString(),
+            imageDescription: optionalString(),
+            loggedAt: optionalString(),
+            mealLabel: optionalString()
+        }),
+        async execute(_toolCallId, params) {
+            const typed = params;
+            return jsonResult(await runWrite(config, {
+                method: "POST",
+                path: withUserIds("/api/v1/health/weight-loss/parse", typed.userIds),
+                body: {
+                    text: typed.text,
+                    imageDescription: typed.imageDescription,
+                    loggedAt: typed.loggedAt,
+                    mealLabel: typed.mealLabel
+                }
+            }));
+        }
+    });
+    api.registerTool({
+        name: "forge_log_body_checkin",
+        label: "Forge Log Body Check-In",
+        description: "Record body-composition check-ins such as weight, waist, hip, neck, body-fat estimate, and notes for trend calculations.",
+        parameters: Type.Object({
+            userIds: nutritionUserScopeSchema(),
+            checkedAt: optionalString(),
+            weightKg: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+            waistCm: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+            hipCm: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+            neckCm: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+            bodyFatPercent: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+            photoAssetId: optionalNullableString(),
+            notes: optionalNullableString()
+        }),
+        async execute(_toolCallId, params) {
+            const typed = params;
+            const { userIds: _userIds, ...body } = typed;
+            return jsonResult(await runWrite(config, {
+                method: "POST",
+                path: withUserIds("/api/v1/health/weight-loss/body-checkins", typed.userIds),
+                body
+            }));
+        }
+    });
+    api.registerTool({
+        name: "forge_log_appearance_checkin",
+        label: "Forge Log Appearance Check-In",
+        description: "Record aesthetic-look metrics such as muscle fullness, leanness, vascularity, face puffiness, visual bloat, posture confidence, outfit fit, and overall aesthetic score.",
+        parameters: Type.Object({
+            userIds: nutritionUserScopeSchema(),
+            checkedAt: optionalString(),
+            muscleFullness: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+            leanness: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+            vascularity: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+            facePuffiness: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+            abdomenBloatLook: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+            postureConfidence: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+            outfitFit: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+            aestheticScore: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+            notes: optionalNullableString()
+        }),
+        async execute(_toolCallId, params) {
+            const typed = params;
+            const { userIds: _userIds, ...body } = typed;
+            return jsonResult(await runWrite(config, {
+                method: "POST",
+                path: withUserIds("/api/v1/health/weight-loss/appearance-checkins", typed.userIds),
+                body
+            }));
+        }
+    });
+    api.registerTool({
+        name: "forge_log_subjective_food_effect",
+        label: "Forge Log Subjective Food Effect",
+        description: "Record subjective food-effect metrics such as energy, mood, focus, libido, sleepiness, soreness, stress, hunger, cravings, and workout performance.",
+        parameters: Type.Object({
+            userIds: nutritionUserScopeSchema(),
+            checkedAt: optionalString(),
+            energy: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+            mood: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+            focus: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+            libido: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+            sleepiness: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+            soreness: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+            stress: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+            hunger: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+            cravings: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+            workoutPerformance: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+            timeRelation: optionalNullableString(),
+            linkedFoodLogId: optionalNullableString(),
+            notes: optionalNullableString()
+        }),
+        async execute(_toolCallId, params) {
+            const typed = params;
+            const { userIds: _userIds, ...body } = typed;
+            return jsonResult(await runWrite(config, {
+                method: "POST",
+                path: withUserIds("/api/v1/health/weight-loss/subjective-checkins", typed.userIds),
+                body
+            }));
+        }
+    });
+    api.registerTool({
+        name: "forge_log_gut_checkin",
+        label: "Forge Log Gut Check-In",
+        description: "Record gut-health food-effect metrics such as bloating, abdominal pain, gas, reflux, nausea, stool type, stool frequency, and suspected triggers.",
+        parameters: Type.Object({
+            userIds: nutritionUserScopeSchema(),
+            checkedAt: optionalString(),
+            bloating: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+            abdominalPain: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+            gas: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+            reflux: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+            nausea: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+            stoolType: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+            stoolFrequency: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+            suspectedTrigger: optionalNullableString(),
+            linkedFoodLogId: optionalNullableString(),
+            notes: optionalNullableString()
+        }),
+        async execute(_toolCallId, params) {
+            const typed = params;
+            const { userIds: _userIds, ...body } = typed;
+            return jsonResult(await runWrite(config, {
+                method: "POST",
+                path: withUserIds("/api/v1/health/weight-loss/gut-checkins", typed.userIds),
+                body
+            }));
+        }
+    });
+    registerReadTool(api, config, {
+        name: "forge_get_nutrition_patterns",
+        label: "Forge Nutrition Patterns",
+        description: "Read current food-effect hypotheses and nutrition experiments, including links between meals, sport fueling, energy, gut comfort, cravings, and aesthetic look.",
+        parameters: scopedReadSchema,
+        path: (params) => withUserIds("/api/v1/health/weight-loss/patterns", params.userIds)
+    });
+    api.registerTool({
+        name: "forge_start_nutrition_experiment",
+        label: "Forge Start Nutrition Experiment",
+        description: "Create a structured N-of-1 nutrition experiment, such as carb timing, caffeine timing, low-FODMAP trial, sodium/puffiness test, fiber ramp, or pre-training fueling.",
+        parameters: Type.Object({
+            userIds: nutritionUserScopeSchema(),
+            title: Type.String({ minLength: 1 }),
+            hypothesis: Type.String({ minLength: 1 }),
+            metricKey: Type.String({ minLength: 1 }),
+            intervention: Type.String({ minLength: 1 }),
+            baselineStart: optionalNullableString(),
+            baselineEnd: optionalNullableString(),
+            experimentStart: optionalNullableString(),
+            experimentEnd: optionalNullableString(),
+            status: Type.Optional(Type.Union([
+                Type.Literal("planned"),
+                Type.Literal("running"),
+                Type.Literal("completed"),
+                Type.Literal("abandoned")
+            ])),
+            successCriteria: optionalNullableString()
+        }),
+        async execute(_toolCallId, params) {
+            const typed = params;
+            const { userIds: _userIds, ...body } = typed;
+            return jsonResult(await runWrite(config, {
+                method: "POST",
+                path: withUserIds("/api/v1/health/weight-loss/experiments", typed.userIds),
+                body
+            }));
+        }
+    });
+    api.registerTool({
+        name: "forge_update_nutrition_experiment",
+        label: "Forge Update Nutrition Experiment",
+        description: "Patch a nutrition experiment's status, dates, success criteria, intervention, hypothesis, or conclusion after new evidence arrives.",
+        parameters: Type.Object({
+            userIds: nutritionUserScopeSchema(),
+            experimentId: Type.String({ minLength: 1 }),
+            title: optionalString(),
+            hypothesis: optionalString(),
+            metricKey: optionalString(),
+            intervention: optionalString(),
+            baselineStart: optionalNullableString(),
+            baselineEnd: optionalNullableString(),
+            experimentStart: optionalNullableString(),
+            experimentEnd: optionalNullableString(),
+            status: Type.Optional(Type.Union([
+                Type.Literal("planned"),
+                Type.Literal("running"),
+                Type.Literal("completed"),
+                Type.Literal("abandoned")
+            ])),
+            successCriteria: optionalNullableString(),
+            conclusion: optionalNullableString()
+        }),
+        async execute(_toolCallId, params) {
+            const typed = params;
+            const { userIds: _userIds, experimentId: _experimentId, ...body } = typed;
+            return jsonResult(await runWrite(config, {
+                method: "PATCH",
+                path: withUserIds(`/api/v1/health/weight-loss/experiments/${typed.experimentId}`, typed.userIds),
+                body
+            }));
+        }
     });
     api.registerTool({
         name: "forge_update_sleep_session",

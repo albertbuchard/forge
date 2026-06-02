@@ -285,6 +285,11 @@ export const VitalsPage = lazy(() =>
     default: module.VitalsPage
   }))
 );
+export const WeightLossPage = lazy(() =>
+  import("@/pages/weight-loss-page").then((module) => ({
+    default: module.WeightLossPage
+  }))
+);
 export const WikiPage = lazy(() =>
   import("@/pages/wiki-page").then((module) => ({
     default: module.WikiPage

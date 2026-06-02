@@ -408,6 +408,14 @@ still knowing the exact write/read family before it acts.
   user wants training-load trends, acute/chronic ratio, HR zone distribution,
   threshold exposure, VO2max/resting-HR context, or optimization targets before
   deciding whether a specific `workout_session` needs notes or links.
+- `weight_loss`: nutrition and body-composition health surface. Use
+  `forge_get_weight_loss_overview` or `/api/v1/health/weight-loss` when the user
+  wants calorie balance, food quality, protein/fiber targets, training fuel,
+  body trend, aesthetic look, subjective energy, cravings, gut comfort,
+  hypotheses, or nutrition experiments. Use `forge_parse_food_log_with_chatgpt`
+  for rough meal text/photo descriptions through the configured `openai-codex`
+  ChatGPT subscription connection, then use `forge_log_food` and the body,
+  appearance, subjective, gut, and experiment tools for durable evidence.
 - `movement`: specialized domain surface. Use the dedicated movement routes for day,
   month, all-time, timeline, places, trip detail, selection aggregates, manual
   overlays, and repair actions.
@@ -1570,6 +1578,47 @@ Ready to review when:
 Preferred opening question:
 
 - "What training-load decision are you trying to support right now?"
+
+## Weight Loss
+
+Aim: review and capture nutrition, body-composition, sport-fueling, aesthetic,
+subjective-energy, craving, and gut-comfort evidence before turning observations
+into a testable food or training hypothesis.
+
+Arc:
+
+1. Ask what link the user is trying to understand: fat loss pace, food intake,
+   training fuel, look/puffiness, energy, cravings, gut comfort, or a specific
+   meal reaction.
+2. Read `forge_get_weight_loss_overview` before asking the user to reconstruct
+   recent food, weight, workouts, or subjective state from memory.
+3. Use `forge_parse_food_log_with_chatgpt` for rough meal text or photo
+   descriptions. This must go through Forge's configured `openai-codex` ChatGPT
+   subscription connection, not a metered OpenAI API path.
+4. Use `forge_log_food`, `forge_log_body_checkin`,
+   `forge_log_appearance_checkin`, `forge_log_subjective_food_effect`, and
+   `forge_log_gut_checkin` to preserve the user's actual evidence.
+5. Use `forge_get_nutrition_patterns`, `forge_start_nutrition_experiment`, and
+   `forge_update_nutrition_experiment` when repeated observations should become
+   an N-of-1 test instead of vague advice.
+
+Helpful follow-up lanes:
+
+- whether the decision is weight trend, protein/fiber sufficiency, sport fuel,
+  visual look, water retention, gut comfort, cravings, or energy
+- whether a meal should be confirmed precisely or logged as a candidate estimate
+- which outcome metric should define a nutrition experiment before interpreting it
+
+Route note:
+
+- `weight_loss` is a health read model plus dedicated nutrition write workflow.
+  Use `/api/v1/health/weight-loss` or `forge_get_weight_loss_overview` for the
+  overview. Do not invent generic batch entities for food logs or body check-ins
+  when the dedicated tools exist.
+
+Preferred opening question:
+
+- "What food-body link are you trying to test or understand right now?"
 
 ## Calendar Overview
 

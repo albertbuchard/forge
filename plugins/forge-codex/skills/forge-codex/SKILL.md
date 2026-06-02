@@ -328,11 +328,20 @@ Surface rule:
     truthful signed minute correction on an existing task or project.
 11. Use the dedicated Preferences action tools for `preference_judgment` and
     `preference_signal` rather than forcing those decisions through batch CRUD.
-12. Use `forge_get_sleep_overview`, `forge_get_sports_overview`, and
-    `forge_get_training_load_overview` for health read models, and use
-    `forge_update_sleep_session` and `forge_update_workout_session`
+12. Use `forge_get_sleep_overview`, `forge_get_sports_overview`,
+    `forge_get_training_load_overview`, and `forge_get_weight_loss_overview`
+    for health read models, and use `forge_update_sleep_session` and `forge_update_workout_session`
     only for reflective enrichment on one already-existing record. Ordinary
     `sleep_session` and `workout_session` CRUD belongs on the shared batch routes.
+    Use the dedicated nutrition tools for food/body/gut/appearance/subjective evidence:
+    `forge_search_foods`, `forge_search_nutrition_foods`, `forge_lookup_nutrition_barcode`,
+    `forge_log_food`, `forge_parse_food_log_with_chatgpt`,
+    `forge_log_body_checkin`, `forge_log_appearance_checkin`,
+    `forge_log_subjective_food_effect`, `forge_log_gut_checkin`,
+    `forge_get_nutrition_patterns`, `forge_start_nutrition_experiment`, and
+    `forge_update_nutrition_experiment`. Food parsing must use Forge's
+    configured `openai-codex` ChatGPT subscription connection, not a metered
+    OpenAI Platform API path.
     The training-load read model includes zone-time buckets, Combat/Base/Endurance
     smart modes, next-week targets, and next-workout guidance.
 13. Movement, Life Force, and Workbench are specialized Forge API surfaces rather

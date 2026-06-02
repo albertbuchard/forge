@@ -65,6 +65,7 @@ import {
   SlidersHorizontal,
   Target,
   Trophy,
+  Utensils,
   UserRound,
   Users,
   Zap
@@ -408,6 +409,14 @@ const PRIMARY_ROUTES: ShellRouteDefinition[] = [
     detail:
       "Recovery, cardio fitness, breathing, composition, and body signals",
     icon: HeartPulse
+  },
+  {
+    id: "weight-loss",
+    to: "/weight-loss",
+    label: "Weight Loss",
+    detail:
+      "Food logs, body composition, gut comfort, aesthetic signals, and nutrition experiments",
+    icon: Utensils
   },
   {
     id: "kanban",

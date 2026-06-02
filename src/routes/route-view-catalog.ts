@@ -160,6 +160,14 @@ export const ROUTE_VIEW_CATALOG = {
     tone: "health",
     skeleton: { blocks: 6, columns: 3, sideRail: true }
   },
+  "weight-loss-index": {
+    surfaceId: "weight-loss-index",
+    title: "Weight Loss",
+    description:
+      "Nutrition, calorie balance, body composition, gut comfort, subjective energy, aesthetic signals, and food experiments.",
+    tone: "health",
+    skeleton: { blocks: 7, columns: 3, sideRail: true }
+  },
   "psyche-index": {
     surfaceId: "psyche-index",
     title: "Psyche",
@@ -549,6 +557,7 @@ const ROUTE_VIEW_PATH_MATCHERS: RouteViewPathMatcher[] = [
   { viewId: "sports-index", match: exactly("/sports") },
   { viewId: "training-load-index", match: exactly("/training-load") },
   { viewId: "vitals-index", match: exactly("/vitals") },
+  { viewId: "weight-loss-index", match: exactly("/weight-loss") },
   { viewId: "psyche-metrics", match: exactly("/psyche/metrics") },
   { viewId: "psyche-flashcards", match: exactly("/psyche/flashcards") },
   { viewId: "psyche-values", match: exactly("/psyche/values") },

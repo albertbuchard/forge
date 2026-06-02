@@ -116,7 +116,10 @@ describe("gamification scope and persistence", () => {
         item.unlockType === "mascot_skin" &&
         typeof item.rewardPayload.mascotSkin === "string"
     )?.rewardPayload.mascotSkin;
-    assert.equal(typeof mascotSkin, "string");
+    if (typeof mascotSkin !== "string") {
+      assert.fail("Expected a mascot skin reward in the catalog");
+    }
+    const selectedMascotSkin = mascotSkin;
 
     getDatabase()
       .prepare(
@@ -126,7 +129,7 @@ describe("gamification scope and persistence", () => {
            selected_celebration_variant, updated_at
          ) VALUES ('user_operator', ?, NULL, NULL, NULL, NULL, ?)`
       )
-      .run(mascotSkin, new Date().toISOString());
+      .run(selectedMascotSkin, new Date().toISOString());
 
     const report = await buildForgeDoctorReport({
       settings: getSettings(),

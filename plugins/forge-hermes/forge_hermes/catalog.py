@@ -236,6 +236,25 @@ def training_load_overview_path(args: Dict[str, Any]) -> str:
     return with_query("/api/v1/health/training-load", args, ["userIds"])
 
 
+def weight_loss_overview_path(args: Dict[str, Any]) -> str:
+    return with_query("/api/v1/health/weight-loss", args, ["userIds"])
+
+
+def nutrition_scoped_path(path: str, args: Dict[str, Any]) -> str:
+    return with_query(path, args, ["userIds"])
+
+
+def nutrition_experiment_path(args: Dict[str, Any]) -> str:
+    experiment_id = str(args.get("experimentId") or "").strip()
+    if not experiment_id:
+        raise ValueError("Nutrition experiment updates require a non-empty experimentId.")
+    return nutrition_scoped_path(f"/api/v1/health/weight-loss/experiments/{experiment_id}", args)
+
+
+def without_user_ids_body(args: Dict[str, Any], _config: Any) -> Dict[str, Any]:
+    return {key: value for key, value in args.items() if key not in {"userIds", "experimentId"}}
+
+
 def sync_calendar_connection_path(args: Dict[str, Any]) -> str:
     return f"/api/v1/calendar/connections/{args['connectionId']}/sync"
 
@@ -380,6 +399,49 @@ NOTE_INPUT = object_schema(
         ),
     },
     required=["contentMarkdown"],
+)
+
+NUTRITION_MEAL_ITEM = object_schema(
+    {
+        "name": {"type": "string", "minLength": 1},
+        "brand": optional_nullable_string("Optional brand."),
+        "quantity": {"type": "number", "minimum": 0},
+        "unit": optional_nullable_string("Serving unit."),
+        "caloriesKcal": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "proteinG": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "carbsG": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "fatG": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "fiberG": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "tags": array_schema({"type": "string"}, "Optional food tags."),
+        "confidence": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+    },
+    required=["name", "quantity"],
+)
+
+NUTRITION_FOOD_LOG = object_schema(
+    {
+        "userIds": array_schema({"type": "string"}, "Optional user ownership scope."),
+        "loggedAt": optional_string("Optional ISO logged-at timestamp."),
+        "mealLabel": optional_nullable_string("Optional meal label."),
+        "source": {"enum": ["manual", "barcode", "chatgpt", "photo", "import"]},
+        "confirmationState": {"enum": ["candidate", "confirmed", "corrected", "rejected"]},
+        "satietyScore": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "hungerBefore": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "hungerAfter": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "cravingScore": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "enjoymentScore": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "notes": optional_nullable_string("Optional notes."),
+        "items": array_schema(NUTRITION_MEAL_ITEM, "Food items in the meal."),
+    },
+    required=["items"],
+)
+
+NUTRITION_SCORE_CHECKIN = object_schema(
+    {
+        "userIds": array_schema({"type": "string"}, "Optional user ownership scope."),
+        "checkedAt": optional_string("Optional ISO checked-at timestamp."),
+        "notes": optional_nullable_string("Optional notes."),
+    }
 )
 
 
@@ -814,6 +876,212 @@ TOOL_CATALOG: List[ToolSpec] = [
         "parameters": scoped_read_schema(),
         "method": "GET",
         "path_builder": training_load_overview_path,
+    },
+    {
+        "name": "forge_get_weight_loss_overview",
+        "description": "Read the nutrition and weight-loss surface with calorie ledger, protein/fiber targets, energy balance, body trend, subjective energy, gut comfort, aesthetic check-ins, hypotheses, experiments, and data-quality flags.",
+        "parameters": scoped_read_schema(),
+        "method": "GET",
+        "path_builder": weight_loss_overview_path,
+    },
+    {
+        "name": "forge_search_nutrition_foods",
+        "description": "Search local, Open Food Facts, and USDA-backed nutrition foods before logging a concrete food item.",
+        "parameters": object_schema(
+            {
+                "userIds": array_schema({"type": "string"}, "Optional user ownership scope."),
+                "query": {"type": "string", "minLength": 1},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 30},
+            },
+            required=["query"],
+        ),
+        "method": "POST",
+        "path_builder": lambda args: nutrition_scoped_path("/api/v1/health/weight-loss/foods/search", args),
+        "body_builder": without_user_ids_body,
+        "write": True,
+    },
+    {
+        "name": "forge_search_foods",
+        "description": "Search local, Open Food Facts, and USDA-backed nutrition foods before logging a concrete food item. This is the short alias for forge_search_nutrition_foods.",
+        "parameters": object_schema(
+            {
+                "userIds": array_schema({"type": "string"}, "Optional user ownership scope."),
+                "query": {"type": "string", "minLength": 1},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 30},
+            },
+            required=["query"],
+        ),
+        "method": "POST",
+        "path_builder": lambda args: nutrition_scoped_path("/api/v1/health/weight-loss/foods/search", args),
+        "body_builder": without_user_ids_body,
+        "write": True,
+    },
+    {
+        "name": "forge_lookup_nutrition_barcode",
+        "description": "Lookup a packaged food by barcode through Forge's nutrition catalog adapters.",
+        "parameters": object_schema(
+            {
+                "userIds": array_schema({"type": "string"}, "Optional user ownership scope."),
+                "barcode": {"type": "string", "minLength": 1},
+            },
+            required=["barcode"],
+        ),
+        "method": "POST",
+        "path_builder": lambda args: nutrition_scoped_path("/api/v1/health/weight-loss/foods/barcode", args),
+        "body_builder": without_user_ids_body,
+        "write": True,
+    },
+    {
+        "name": "forge_log_food",
+        "description": "Create a confirmed or candidate food log with explicit food items, calories, macros, quality tags, hunger, satiety, cravings, and context.",
+        "parameters": NUTRITION_FOOD_LOG,
+        "method": "POST",
+        "path_builder": lambda args: nutrition_scoped_path("/api/v1/health/weight-loss/food-logs", args),
+        "body_builder": without_user_ids_body,
+        "write": True,
+    },
+    {
+        "name": "forge_parse_food_log_with_chatgpt",
+        "description": "Use Forge's openai-codex ChatGPT subscription connection to parse natural-language food text or a photo description into a candidate nutrition log. This must not use the metered OpenAI API.",
+        "parameters": object_schema(
+            {
+                "userIds": array_schema({"type": "string"}, "Optional user ownership scope."),
+                "text": optional_string("Meal text to parse."),
+                "imageDescription": optional_string("Photo description to parse."),
+                "loggedAt": optional_string("Optional ISO logged-at timestamp."),
+                "mealLabel": optional_string("Optional meal label."),
+            }
+        ),
+        "method": "POST",
+        "path_builder": lambda args: nutrition_scoped_path("/api/v1/health/weight-loss/parse", args),
+        "body_builder": without_user_ids_body,
+        "write": True,
+    },
+    {
+        "name": "forge_log_body_checkin",
+        "description": "Record body-composition check-ins such as weight, waist, hip, neck, body-fat estimate, and notes for trend calculations.",
+        "parameters": object_schema(
+            {
+                **NUTRITION_SCORE_CHECKIN["properties"],
+                "weightKg": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "waistCm": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "hipCm": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "neckCm": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "bodyFatPercent": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+            }
+        ),
+        "method": "POST",
+        "path_builder": lambda args: nutrition_scoped_path("/api/v1/health/weight-loss/body-checkins", args),
+        "body_builder": without_user_ids_body,
+        "write": True,
+    },
+    {
+        "name": "forge_log_appearance_checkin",
+        "description": "Record aesthetic-look metrics such as fullness, leanness, vascularity, puffiness, visual bloat, outfit fit, and overall look.",
+        "parameters": object_schema(
+            {
+                **NUTRITION_SCORE_CHECKIN["properties"],
+                "muscleFullness": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "leanness": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "vascularity": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "facePuffiness": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "abdomenBloatLook": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "postureConfidence": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "outfitFit": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "aestheticScore": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+            }
+        ),
+        "method": "POST",
+        "path_builder": lambda args: nutrition_scoped_path("/api/v1/health/weight-loss/appearance-checkins", args),
+        "body_builder": without_user_ids_body,
+        "write": True,
+    },
+    {
+        "name": "forge_log_subjective_food_effect",
+        "description": "Record subjective food-effect metrics such as energy, mood, focus, hunger, cravings, stress, sleepiness, soreness, libido, and workout performance.",
+        "parameters": object_schema(
+            {
+                **NUTRITION_SCORE_CHECKIN["properties"],
+                "energy": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "mood": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "focus": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "hunger": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "cravings": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "workoutPerformance": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "timeRelation": optional_nullable_string("Optional relation to food timing."),
+                "linkedFoodLogId": optional_nullable_string("Optional linked food log id."),
+            }
+        ),
+        "method": "POST",
+        "path_builder": lambda args: nutrition_scoped_path("/api/v1/health/weight-loss/subjective-checkins", args),
+        "body_builder": without_user_ids_body,
+        "write": True,
+    },
+    {
+        "name": "forge_log_gut_checkin",
+        "description": "Record gut-health food-effect metrics such as bloating, pain, gas, reflux, nausea, stool type, frequency, and suspected triggers.",
+        "parameters": object_schema(
+            {
+                **NUTRITION_SCORE_CHECKIN["properties"],
+                "bloating": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "abdominalPain": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "gas": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "reflux": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "nausea": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "stoolType": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "stoolFrequency": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "suspectedTrigger": optional_nullable_string("Optional suspected trigger."),
+                "linkedFoodLogId": optional_nullable_string("Optional linked food log id."),
+            }
+        ),
+        "method": "POST",
+        "path_builder": lambda args: nutrition_scoped_path("/api/v1/health/weight-loss/gut-checkins", args),
+        "body_builder": without_user_ids_body,
+        "write": True,
+    },
+    {
+        "name": "forge_get_nutrition_patterns",
+        "description": "Read food-effect hypotheses and nutrition experiments across meals, sport fueling, energy, gut comfort, cravings, and aesthetic look.",
+        "parameters": scoped_read_schema(),
+        "method": "GET",
+        "path_builder": lambda args: nutrition_scoped_path("/api/v1/health/weight-loss/patterns", args),
+    },
+    {
+        "name": "forge_start_nutrition_experiment",
+        "description": "Create a structured N-of-1 nutrition experiment such as carb timing, caffeine timing, low-FODMAP trial, sodium/puffiness, fiber ramp, or pre-training fueling.",
+        "parameters": object_schema(
+            {
+                "userIds": array_schema({"type": "string"}, "Optional user ownership scope."),
+                "title": {"type": "string", "minLength": 1},
+                "hypothesis": {"type": "string", "minLength": 1},
+                "metricKey": {"type": "string", "minLength": 1},
+                "intervention": {"type": "string", "minLength": 1},
+                "successCriteria": optional_nullable_string("Optional success criteria."),
+            },
+            required=["title", "hypothesis", "metricKey", "intervention"],
+        ),
+        "method": "POST",
+        "path_builder": lambda args: nutrition_scoped_path("/api/v1/health/weight-loss/experiments", args),
+        "body_builder": without_user_ids_body,
+        "write": True,
+    },
+    {
+        "name": "forge_update_nutrition_experiment",
+        "description": "Patch a nutrition experiment's status, dates, success criteria, intervention, hypothesis, or conclusion after new evidence arrives.",
+        "parameters": object_schema(
+            {
+                "userIds": array_schema({"type": "string"}, "Optional user ownership scope."),
+                "experimentId": {"type": "string", "minLength": 1},
+                "status": {"enum": ["planned", "running", "completed", "abandoned"]},
+                "conclusion": optional_nullable_string("Optional conclusion."),
+                "successCriteria": optional_nullable_string("Optional success criteria."),
+            },
+            required=["experimentId"],
+        ),
+        "method": "PATCH",
+        "path_builder": nutrition_experiment_path,
+        "body_builder": without_user_ids_body,
+        "write": True,
     },
     {
         "name": "forge_update_sleep_session",

@@ -137,7 +137,9 @@ The intended workflow is:
 - use `forge_grant_reward_bonus` only when a manual XP bonus or penalty should be explicit and auditable
 - use first-class `note` entities for Markdown progress evidence, handoff context, and multi-entity work summaries
 - use the dedicated wiki tools for SQLite-backed knowledge work, not the batch entity routes
-- use `forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_update_sleep_session`, and `forge_update_workout_session` for the first-class sleep and sports surfaces
+- use `forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_get_training_load_overview`, `forge_get_weight_loss_overview`, `forge_update_sleep_session`, and `forge_update_workout_session` for the first-class health surfaces
+- use `forge_parse_food_log_with_chatgpt` for rough food text or photo descriptions through the configured `openai-codex` ChatGPT subscription connection; this path must not fall back to metered OpenAI Platform API billing
+- use `forge_log_food`, `forge_log_body_checkin`, `forge_log_appearance_checkin`, `forge_log_subjective_food_effect`, `forge_log_gut_checkin`, `forge_get_nutrition_patterns`, `forge_start_nutrition_experiment`, and `forge_update_nutrition_experiment` for nutrition/body evidence and N-of-1 food experiments
 - store agent-authored recommendations with `forge_post_insight`
 - use `forge_get_ui_entrypoint` when the user should continue in the visual Forge UI
 
@@ -169,13 +171,15 @@ Hermes exposes dedicated Preferences tools directly, while OpenClaw should use
 the live onboarding contract for exact route-facing fields and prefer a UI
 handoff when the user wants to play the comparison game visually.
 
-## Wiki, Sleep, And Sports
+## Wiki And Health Surfaces
 
-Forge now exposes three newer agent-facing surfaces that matter for OpenClaw:
+Forge exposes several agent-facing surfaces that matter for OpenClaw:
 
 - Wiki is the SQLite-backed memory layer. Use the dedicated wiki tools so page rows, backlinks, search, and ingest metadata stay aligned.
 - Sleep is a first-class reflective surface. Use `forge_get_sleep_overview` for review and `forge_update_sleep_session` to attach tags, notes, or Forge links to one night.
 - Sports is the workout review surface. Use `forge_get_sports_overview` for read access and `forge_update_workout_session` to add subjective effort, narrative meaning, tags, or links to one workout.
+- Training Load is the cardiovascular load surface. Use `forge_get_training_load_overview` for HR zones, acute/chronic load, smart training modes, and target fit.
+- Weight Loss is the nutrition/body insight surface. Use `forge_get_weight_loss_overview` for calorie balance, protein/fiber targets, body trend, training fuel, aesthetic look, subjective energy, cravings, gut comfort, hypotheses, and experiments. Use the dedicated nutrition write tools for food, body, gut, appearance, subjective effects, and experiment records.
 
 The curated plugin route surface now mirrors those capabilities directly:
 

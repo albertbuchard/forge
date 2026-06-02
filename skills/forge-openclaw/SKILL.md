@@ -199,8 +199,17 @@ Wiki navigation and search rule:
 Health rule:
 
 - Sleep and sports records are first-class health surfaces, not generic notes or tasks.
-- Use `forge_get_sleep_overview`, `forge_get_sports_overview`, and
-  `forge_get_training_load_overview` for health review and trend reading.
+- Use `forge_get_sleep_overview`, `forge_get_sports_overview`,
+  `forge_get_training_load_overview`, and `forge_get_weight_loss_overview`
+  for health review and trend reading.
+- Use the dedicated nutrition tools for food/body work: `forge_search_foods`, `forge_search_nutrition_foods`,
+  `forge_lookup_nutrition_barcode`, `forge_log_food`,
+  `forge_parse_food_log_with_chatgpt`, `forge_log_body_checkin`,
+  `forge_log_appearance_checkin`, `forge_log_subjective_food_effect`,
+  `forge_log_gut_checkin`, `forge_get_nutrition_patterns`,
+  `forge_start_nutrition_experiment`, and `forge_update_nutrition_experiment`.
+  `forge_parse_food_log_with_chatgpt` must use Forge's configured `openai-codex`
+  ChatGPT subscription connection, not a metered OpenAI Platform API path.
 - In `forge_get_agent_onboarding.entityRouteModel.readModelOnlySurfaces`, operator,
   calendar, self-observation, sleep, sports, and training-load read models are published with
   both camelCase names and entity-style aliases where useful, including
@@ -534,8 +543,8 @@ These tools operate on:
 Use the wiki tools for SQLite-backed memory work:
 `forge_get_wiki_settings`, `forge_list_wiki_pages`, `forge_get_wiki_page`, `forge_search_wiki`, `forge_upsert_wiki_page`, `forge_get_wiki_health`, `forge_sync_wiki_vault`, `forge_reindex_wiki_embeddings`, `forge_ingest_wiki_source`
 
-Use the health tools for review and reflective enrichment, not as the default CRUD architecture:
-`forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_get_training_load_overview`, `forge_update_sleep_session`, `forge_update_workout_session`
+Use the health tools for review, reflective enrichment, and nutrition evidence capture:
+`forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_get_training_load_overview`, `forge_get_weight_loss_overview`, `forge_update_sleep_session`, `forge_update_workout_session`, `forge_search_foods`, `forge_search_nutrition_foods`, `forge_lookup_nutrition_barcode`, `forge_log_food`, `forge_parse_food_log_with_chatgpt`, `forge_log_body_checkin`, `forge_log_appearance_checkin`, `forge_log_subjective_food_effect`, `forge_log_gut_checkin`, `forge_get_nutrition_patterns`, `forge_start_nutrition_experiment`, `forge_update_nutrition_experiment`
 
 Use the dedicated domain routes for specialized surfaces that are not simple batch entities:
 
@@ -691,6 +700,10 @@ Use the health tools when the request is about sleep or sports review:
 - `forge_get_sleep_overview` to inspect recent nights, averages, regularity, stage breakdown, and linked reflective context
 - `forge_get_sports_overview` to inspect training volume, workout types, effort trends, habit-generated sessions, and linked context
 - `forge_get_training_load_overview` to inspect cardiovascular load, HR zone balance, zone-time buckets, smart training modes, acute/chronic stress, high-intensity pressure, VO2max context, next-workout guidance, and training target fit
+- `forge_get_weight_loss_overview` to inspect calorie balance, protein/fiber targets, body trend, food quality, training fuel, subjective energy, gut comfort, aesthetic look, hypotheses, and experiments
+- `forge_parse_food_log_with_chatgpt` to convert rough meal text or a photo description into a candidate food log through the configured `openai-codex` ChatGPT subscription connection
+- `forge_log_food`, `forge_log_body_checkin`, `forge_log_appearance_checkin`, `forge_log_subjective_food_effect`, and `forge_log_gut_checkin` to preserve the user's food, body-composition, visual-look, energy/craving/performance, and gut-health evidence
+- `forge_get_nutrition_patterns`, `forge_start_nutrition_experiment`, and `forge_update_nutrition_experiment` to turn repeated food/body observations into testable N-of-1 hypotheses
 - `forge_update_sleep_session` to add sleep-quality notes, tags, or links back to Forge entities after review
 - `forge_update_workout_session` to add subjective effort, mood, meaning, tags, or links on one workout after review
 - remember that the UI route is `/sports` while the backend overview route is `/api/v1/health/fitness`; the dedicated training-load UI is `/training-load` and its backend route is `/api/v1/health/training-load`, including zone-time reporting and Combat/Base/Endurance smart modes

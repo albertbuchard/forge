@@ -23,6 +23,19 @@ provides_tools:
   - forge_get_sleep_overview
   - forge_get_sports_overview
   - forge_get_training_load_overview
+  - forge_get_weight_loss_overview
+  - forge_search_foods
+  - forge_search_nutrition_foods
+  - forge_lookup_nutrition_barcode
+  - forge_log_food
+  - forge_parse_food_log_with_chatgpt
+  - forge_log_body_checkin
+  - forge_log_appearance_checkin
+  - forge_log_subjective_food_effect
+  - forge_log_gut_checkin
+  - forge_get_nutrition_patterns
+  - forge_start_nutrition_experiment
+  - forge_update_nutrition_experiment
   - forge_update_sleep_session
   - forge_update_workout_session
   - forge_get_preferences_workspace

@@ -5397,6 +5397,144 @@ export function buildOpenApiDocument() {
     }
   };
 
+  const nutritionMealItemInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["name", "quantity"],
+    properties: {
+      name: { type: "string" },
+      brand: nullable({ type: "string" }),
+      quantity: { type: "number" },
+      unit: nullable({ type: "string" }),
+      calories: nullable({ type: "number" }),
+      proteinGrams: nullable({ type: "number" }),
+      carbohydrateGrams: nullable({ type: "number" }),
+      fatGrams: nullable({ type: "number" }),
+      fiberGrams: nullable({ type: "number" }),
+      sugarGrams: nullable({ type: "number" }),
+      sodiumMg: nullable({ type: "number" }),
+      potassiumMg: nullable({ type: "number" }),
+      caffeineMg: nullable({ type: "number" }),
+      alcoholGrams: nullable({ type: "number" }),
+      tags: arrayOf({ type: "string" }),
+      confidence: nullable({ type: "number" })
+    }
+  };
+
+  const nutritionFoodLogInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["items"],
+    properties: {
+      loggedAt: { type: "string", format: "date-time" },
+      mealLabel: nullable({ type: "string" }),
+      source: {
+        type: "string",
+        enum: ["manual", "search", "barcode", "chatgpt", "photo", "saved_meal"]
+      },
+      confirmationState: {
+        type: "string",
+        enum: ["candidate", "confirmed", "needs_review", "discarded"]
+      },
+      userId: { type: "string" },
+      placeId: nullable({ type: "string" }),
+      stayId: nullable({ type: "string" }),
+      workoutId: nullable({ type: "string" }),
+      sleepId: nullable({ type: "string" }),
+      dayKey: nullable({ type: "string" }),
+      imageRefs: arrayOf({ type: "string" }),
+      parserProvenance: { type: "object", additionalProperties: true },
+      satietyScore: nullable({ type: "number" }),
+      hungerBefore: nullable({ type: "number" }),
+      hungerAfter: nullable({ type: "number" }),
+      cravingScore: nullable({ type: "number" }),
+      enjoymentScore: nullable({ type: "number" }),
+      socialContext: nullable({ type: "string" }),
+      locationContext: nullable({ type: "string" }),
+      notes: nullable({ type: "string" }),
+      items: arrayOf(nutritionMealItemInput)
+    }
+  };
+
+  const nutritionFoodLog = {
+    type: "object",
+    additionalProperties: true,
+    required: ["id", "loggedAt", "items", "totals"],
+    properties: {
+      id: { type: "string" },
+      userId: { type: "string" },
+      loggedAt: { type: "string", format: "date-time" },
+      mealLabel: nullable({ type: "string" }),
+      source: { type: "string" },
+      confirmationState: { type: "string" },
+      totals: { type: "object", additionalProperties: { type: "number" } },
+      items: arrayOf({ type: "object", additionalProperties: true })
+    }
+  };
+
+  const nutritionFoodSearchResult = {
+    type: "object",
+    additionalProperties: true,
+    required: ["id", "source", "name"],
+    properties: {
+      id: { type: "string" },
+      source: { type: "string" },
+      sourceId: nullable({ type: "string" }),
+      name: { type: "string" },
+      brand: nullable({ type: "string" }),
+      barcode: nullable({ type: "string" }),
+      servingLabel: nullable({ type: "string" }),
+      servingGrams: nullable({ type: "number" }),
+      calories: nullable({ type: "number" }),
+      proteinGrams: nullable({ type: "number" }),
+      carbohydrateGrams: nullable({ type: "number" }),
+      fatGrams: nullable({ type: "number" }),
+      fiberGrams: nullable({ type: "number" }),
+      tags: arrayOf({ type: "string" })
+    }
+  };
+
+  const weightLossViewData = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "userId",
+      "generatedAt",
+      "target",
+      "summary",
+      "todayLedger",
+      "recentMeals",
+      "energyModel",
+      "weightTrend",
+      "foodQuality",
+      "trainingFuel",
+      "subjective",
+      "gut",
+      "hypotheses",
+      "experiments",
+      "dataQuality"
+    ],
+    properties: {
+      userId: { type: "string" },
+      generatedAt: { type: "string", format: "date-time" },
+      target: { type: "object", additionalProperties: true },
+      summary: { type: "object", additionalProperties: true },
+      todayLedger: { type: "object", additionalProperties: true },
+      recentMeals: arrayOf(nutritionFoodLog),
+      bodyCheckins: arrayOf({ type: "object", additionalProperties: true }),
+      appearanceCheckins: arrayOf({ type: "object", additionalProperties: true }),
+      energyModel: { type: "object", additionalProperties: true },
+      weightTrend: { type: "object", additionalProperties: true },
+      foodQuality: { type: "object", additionalProperties: true },
+      trainingFuel: { type: "object", additionalProperties: true },
+      subjective: { type: "object", additionalProperties: true },
+      gut: { type: "object", additionalProperties: true },
+      hypotheses: arrayOf({ type: "object", additionalProperties: true }),
+      experiments: arrayOf({ type: "object", additionalProperties: true }),
+      dataQuality: { type: "object", additionalProperties: true }
+    }
+  };
+
   const document = {
     openapi: "3.1.0",
     info: {
@@ -5510,6 +5648,11 @@ export function buildOpenApiDocument() {
         SleepViewData: sleepViewData,
         FitnessViewData: fitnessViewData,
         TrainingLoadViewData: trainingLoadViewData,
+        NutritionMealItemInput: nutritionMealItemInput,
+        NutritionFoodLogInput: nutritionFoodLogInput,
+        NutritionFoodLog: nutritionFoodLog,
+        NutritionFoodSearchResult: nutritionFoodSearchResult,
+        WeightLossViewData: weightLossViewData,
         PsycheMetricsViewData: psycheMetricsViewData,
         PsycheOverviewPayload: psycheOverviewPayload,
         Insight: insight,
@@ -5851,6 +5994,356 @@ export function buildOpenApiDocument() {
                 }
               },
               "Training load overview"
+            )
+          }
+        }
+      },
+      "/api/v1/health/weight-loss": {
+        get: {
+          tags: ["Health"],
+          summary:
+            "Read the Forge nutrition, weight-loss, food-effect, and body insight surface",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["weightLoss"],
+                properties: {
+                  weightLoss: {
+                    $ref: "#/components/schemas/WeightLossViewData"
+                  }
+                }
+              },
+              "Weight loss overview"
+            )
+          }
+        }
+      },
+      "/api/v1/health/weight-loss/target": {
+        patch: {
+          tags: ["Health"],
+          summary: "Update nutrition and weight-loss targets",
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: { type: "object", additionalProperties: true }
+              }
+            }
+          },
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["target"],
+                properties: {
+                  target: { type: "object", additionalProperties: true }
+                }
+              },
+              "Updated nutrition target"
+            )
+          }
+        }
+      },
+      "/api/v1/health/weight-loss/foods/search": {
+        post: {
+          tags: ["Health"],
+          summary: "Search nutrition foods across local and public catalogs",
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["query"],
+                  properties: {
+                    query: { type: "string" },
+                    limit: { type: "integer", minimum: 1, maximum: 30 }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["foods"],
+                properties: {
+                  foods: arrayOf({
+                    $ref: "#/components/schemas/NutritionFoodSearchResult"
+                  })
+                }
+              },
+              "Nutrition food search results"
+            )
+          }
+        }
+      },
+      "/api/v1/health/weight-loss/foods/barcode": {
+        post: {
+          tags: ["Health"],
+          summary: "Lookup one nutrition food by barcode",
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["barcode"],
+                  properties: { barcode: { type: "string" } }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["food"],
+                properties: {
+                  food: nullable({
+                    $ref: "#/components/schemas/NutritionFoodSearchResult"
+                  })
+                }
+              },
+              "Nutrition barcode lookup result"
+            )
+          }
+        }
+      },
+      "/api/v1/health/weight-loss/food-logs": {
+        post: {
+          tags: ["Health"],
+          summary: "Create a nutrition food log",
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/NutritionFoodLogInput" }
+              }
+            }
+          },
+          responses: {
+            "201": jsonResponse(
+              {
+                type: "object",
+                required: ["log"],
+                properties: {
+                  log: { $ref: "#/components/schemas/NutritionFoodLog" }
+                }
+              },
+              "Created nutrition food log"
+            )
+          }
+        }
+      },
+      "/api/v1/health/weight-loss/food-logs/{id}": {
+        patch: {
+          tags: ["Health"],
+          summary: "Patch a nutrition food log",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["log"],
+                properties: {
+                  log: { $ref: "#/components/schemas/NutritionFoodLog" }
+                }
+              },
+              "Updated nutrition food log"
+            )
+          }
+        },
+        delete: {
+          tags: ["Health"],
+          summary: "Delete a nutrition food log",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["deleted"],
+                properties: { deleted: { type: "boolean" } }
+              },
+              "Deleted nutrition food log"
+            )
+          }
+        }
+      },
+      "/api/v1/health/weight-loss/parse": {
+        post: {
+          tags: ["Health"],
+          summary:
+            "Parse a food log through Forge's openai-codex ChatGPT subscription connection",
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    text: { type: "string" },
+                    imageDescription: { type: "string" },
+                    loggedAt: { type: "string", format: "date-time" },
+                    mealLabel: { type: "string" }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "201": jsonResponse(
+              {
+                type: "object",
+                required: [
+                  "candidate",
+                  "log",
+                  "clarificationQuestions",
+                  "uncertaintyReasons"
+                ],
+                properties: {
+                  candidate: {
+                    $ref: "#/components/schemas/NutritionFoodLogInput"
+                  },
+                  log: nullable({
+                    $ref: "#/components/schemas/NutritionFoodLog"
+                  }),
+                  clarificationQuestions: arrayOf({ type: "string" }),
+                  uncertaintyReasons: arrayOf({ type: "string" })
+                }
+              },
+              "Parsed candidate nutrition food log"
+            )
+          }
+        }
+      },
+      "/api/v1/health/weight-loss/body-checkins": {
+        post: {
+          tags: ["Health"],
+          summary: "Create a body-composition check-in",
+          responses: {
+            "201": jsonResponse(
+              {
+                type: "object",
+                required: ["checkin"],
+                properties: {
+                  checkin: { type: "object", additionalProperties: true }
+                }
+              },
+              "Created body check-in"
+            )
+          }
+        }
+      },
+      "/api/v1/health/weight-loss/appearance-checkins": {
+        post: {
+          tags: ["Health"],
+          summary: "Create an aesthetic appearance check-in",
+          responses: {
+            "201": jsonResponse(
+              {
+                type: "object",
+                required: ["checkin"],
+                properties: {
+                  checkin: { type: "object", additionalProperties: true }
+                }
+              },
+              "Created appearance check-in"
+            )
+          }
+        }
+      },
+      "/api/v1/health/weight-loss/subjective-checkins": {
+        post: {
+          tags: ["Health"],
+          summary: "Create a subjective food-effect check-in",
+          responses: {
+            "201": jsonResponse(
+              {
+                type: "object",
+                required: ["checkin"],
+                properties: {
+                  checkin: { type: "object", additionalProperties: true }
+                }
+              },
+              "Created subjective check-in"
+            )
+          }
+        }
+      },
+      "/api/v1/health/weight-loss/gut-checkins": {
+        post: {
+          tags: ["Health"],
+          summary: "Create a gut-health food-effect check-in",
+          responses: {
+            "201": jsonResponse(
+              {
+                type: "object",
+                required: ["checkin"],
+                properties: {
+                  checkin: { type: "object", additionalProperties: true }
+                }
+              },
+              "Created gut check-in"
+            )
+          }
+        }
+      },
+      "/api/v1/health/weight-loss/patterns": {
+        get: {
+          tags: ["Health"],
+          summary: "Read current nutrition hypotheses and experiments",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["hypotheses", "experiments"],
+                properties: {
+                  hypotheses: arrayOf({
+                    type: "object",
+                    additionalProperties: true
+                  }),
+                  experiments: arrayOf({
+                    type: "object",
+                    additionalProperties: true
+                  })
+                }
+              },
+              "Nutrition pattern candidates"
+            )
+          }
+        }
+      },
+      "/api/v1/health/weight-loss/experiments": {
+        post: {
+          tags: ["Health"],
+          summary: "Create a nutrition N-of-1 experiment",
+          responses: {
+            "201": jsonResponse(
+              {
+                type: "object",
+                required: ["experiment"],
+                properties: {
+                  experiment: { type: "object", additionalProperties: true }
+                }
+              },
+              "Created nutrition experiment"
+            )
+          }
+        }
+      },
+      "/api/v1/health/weight-loss/experiments/{id}": {
+        patch: {
+          tags: ["Health"],
+          summary: "Patch a nutrition N-of-1 experiment",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["experiment"],
+                properties: {
+                  experiment: { type: "object", additionalProperties: true }
+                }
+              },
+              "Updated nutrition experiment"
             )
           }
         }
