@@ -13,7 +13,7 @@ import {
 } from "@/lib/api";
 import {
   getGamificationSpriteUrl,
-  getGamificationThemePreviewUrl,
+  getGamificationThemePreviewUrl
 } from "@/lib/gamification-assets";
 import type { GamificationCelebration, XpMetricsPayload } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -117,18 +117,18 @@ export function GamificationMiniHud({
     <Link
       to="/rewards"
       className={cn(
-        "inline-flex min-h-10 max-w-full items-center gap-2 rounded-full border border-white/10 bg-white/[0.055] px-3 py-2 text-[12px] font-medium text-white/78 shadow-[0_12px_30px_rgba(3,8,18,0.18)] transition hover:border-white/16 hover:bg-white/[0.08] hover:text-white",
+        "inline-flex min-h-10 max-w-full items-center gap-2 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-2 text-[12px] font-medium text-[var(--ui-ink-medium)] shadow-[var(--ui-shadow-soft)] transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]",
         className
       )}
     >
-      <span className="relative grid size-8 shrink-0 place-items-center rounded-full bg-black/24">
+      <span className="relative grid size-8 shrink-0 place-items-center rounded-full bg-[var(--ui-surface-2)]">
         <span
           className="absolute inset-0 rounded-full"
           style={{
-            background: `conic-gradient(var(--tertiary) ${progress}%, rgba(255,255,255,0.12) 0)`
+            background: `conic-gradient(var(--tertiary) ${progress}%, var(--ui-border-subtle) 0)`
           }}
         />
-        <span className="relative grid size-6 place-items-center rounded-full bg-[rgba(9,13,24,0.92)] text-[10px] text-[var(--tertiary)]">
+        <span className="relative grid size-6 place-items-center rounded-full bg-[var(--ui-surface-section)] text-[10px] text-[var(--tertiary)]">
           L{profile.level}
         </span>
       </span>
@@ -136,7 +136,7 @@ export function GamificationMiniHud({
         <span className="block truncate">
           {profile.currentLevelXp}/{profile.nextLevelXp} XP
         </span>
-        <span className="block truncate text-[11px] text-white/48">
+        <span className="block truncate text-[11px] text-[var(--ui-ink-faint)]">
           {profile.streakDays} day streak
         </span>
       </span>
@@ -204,9 +204,9 @@ export function GamificationOverviewWidget({
       assetInstallMutation.isPending &&
       assetInstallMutation.variables === gamificationTheme;
     return (
-      <section className="relative isolate min-w-0 overflow-hidden rounded-[24px] border border-white/8 bg-[linear-gradient(135deg,rgba(10,15,28,0.96),rgba(13,22,28,0.94))] p-4 shadow-[0_20px_58px_rgba(3,8,18,0.28)]">
+      <section className="relative isolate min-w-0 overflow-hidden rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)] p-4 shadow-[var(--ui-shadow-soft)]">
         <div className="grid min-w-0 gap-4 sm:grid-cols-[4.5rem_minmax(0,1fr)] sm:items-center">
-          <div className="grid size-18 place-items-center overflow-hidden rounded-[18px] border border-white/10 bg-white/[0.055]">
+          <div className="grid size-18 place-items-center overflow-hidden rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]">
             <img
               src={getGamificationThemePreviewUrl(gamificationTheme)}
               alt={`${selectedStyleLabel} preview`}
@@ -215,22 +215,22 @@ export function GamificationOverviewWidget({
           </div>
           <div className="min-w-0">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <Badge className="bg-black/24 text-[var(--tertiary)]">
+              <Badge className="bg-[var(--ui-surface-2)] text-[var(--tertiary)]">
                 Level {profile.level}
               </Badge>
-              <Badge className="bg-black/24 text-white/72">
+              <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
                 {profile.currentLevelXp}/{profile.nextLevelXp} XP
               </Badge>
-              <Badge className="bg-amber-400/14 text-amber-100">
+              <Badge className="bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]">
                 Assets not downloaded
               </Badge>
             </div>
             <div className="mt-3 flex min-w-0 flex-wrap items-end justify-between gap-3">
               <div className="min-w-0">
-                <div className="font-display text-xl text-white">
+                <div className="font-display text-xl text-[var(--ui-ink-strong)]">
                   Download {selectedStyleLabel} rewards
                 </div>
-                <p className="mt-1 max-w-2xl text-sm leading-6 text-white/58">
+                <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--ui-ink-soft)]">
                   This installs the optional mascot, trophy, and unlock art for
                   the selected reward style.
                 </p>
@@ -247,7 +247,7 @@ export function GamificationOverviewWidget({
                 </Button>
                 <Link
                   to="/settings"
-                  className="inline-flex min-h-[2.125rem] items-center gap-2 rounded-[var(--radius-control)] border border-white/10 bg-white/[0.055] px-2.5 py-[0.4375rem] text-[13px] font-medium text-white/72 transition hover:border-white/16 hover:bg-white/[0.08] hover:text-white"
+                  className="inline-flex min-h-[2.125rem] items-center gap-2 rounded-[var(--radius-control)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-2.5 py-[0.4375rem] text-[13px] font-medium text-[var(--ui-ink-soft)] transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]"
                 >
                   <Settings className="size-3.5" />
                   Settings
@@ -255,13 +255,13 @@ export function GamificationOverviewWidget({
               </div>
             </div>
             {assetInstallMutation.isError ? (
-              <div className="mt-3 text-sm text-rose-200">
+              <div className="mt-3 text-sm text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]">
                 {assetInstallMutation.error instanceof Error
                   ? assetInstallMutation.error.message
                   : "Could not download reward assets."}
               </div>
             ) : (
-              <div className="mt-3 text-[11px] uppercase tracking-[0.16em] text-white/38">
+              <div className="mt-3 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                 {selectedAssetStatus.spriteCount}/
                 {selectedAssetStatus.expectedSpriteCount} sprites installed
               </div>
@@ -273,10 +273,10 @@ export function GamificationOverviewWidget({
   }
 
   return (
-    <section className="relative isolate min-w-0 overflow-hidden rounded-[28px] border border-white/8 bg-[linear-gradient(135deg,rgba(10,15,28,0.98),rgba(19,13,28,0.94)_48%,rgba(8,20,30,0.94))] p-4 shadow-[0_24px_70px_rgba(3,8,18,0.34)] md:p-5">
-      <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_18%_20%,rgba(249,115,22,0.18),transparent_34%),radial-gradient(circle_at_82%_10%,rgba(56,189,248,0.14),transparent_32%),radial-gradient(circle_at_76%_82%,rgba(167,139,250,0.12),transparent_34%)]" />
+    <section className="relative isolate min-w-0 overflow-hidden rounded-[28px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)] p-4 shadow-[var(--ui-shadow-soft)] md:p-5">
+      <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_18%_20%,color-mix(in_srgb,var(--tertiary)_12%,transparent),transparent_34%),radial-gradient(circle_at_82%_10%,color-mix(in_srgb,var(--info)_10%,transparent),transparent_32%),radial-gradient(circle_at_76%_82%,color-mix(in_srgb,var(--primary)_10%,transparent),transparent_34%)]" />
       <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(18rem,0.84fr)_minmax(0,1.16fr)] lg:items-center">
-        <div className="relative min-h-[17rem] overflow-hidden rounded-[24px] border border-white/8 bg-[linear-gradient(145deg,rgba(255,255,255,0.055),rgba(8,14,25,0.78))]">
+        <div className="relative min-h-[17rem] overflow-hidden rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]">
           <img
             src={getGamificationSpriteUrl(
               metrics.mascot.spriteKey,
@@ -285,13 +285,13 @@ export function GamificationOverviewWidget({
             )}
             alt="Forge Smith mascot"
             onError={hideMissingGamificationImage}
-            className="absolute inset-x-0 bottom-3 mx-auto h-[15.5rem] max-w-none object-contain drop-shadow-[0_24px_40px_rgba(0,0,0,0.52)]"
+            className="absolute inset-x-0 bottom-3 mx-auto h-[15.5rem] max-w-none object-contain drop-shadow-[var(--ui-shadow-soft)]"
           />
-          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/76 to-transparent p-4">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/50">
+          <div className="absolute inset-x-0 bottom-0 bg-[linear-gradient(to_top,color-mix(in_srgb,var(--ui-surface-section)_92%,transparent),transparent)] p-4">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
               {metrics.scope.label} · {equippedSkin.replaceAll("-", " ")}
             </div>
-            <div className="mt-1 font-display text-xl text-white">
+            <div className="mt-1 font-display text-xl text-[var(--ui-ink-strong)]">
               {metrics.mascot.headline}
             </div>
           </div>
@@ -299,36 +299,36 @@ export function GamificationOverviewWidget({
 
         <div className="min-w-0">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <Badge className="bg-black/24 text-[var(--tertiary)]">
+            <Badge className="bg-[var(--ui-surface-2)] text-[var(--tertiary)]">
               Level {profile.level}
             </Badge>
-            <Badge className="bg-black/24 text-emerald-200">
+            <Badge className="bg-[var(--ui-surface-2)] text-[color-mix(in_srgb,var(--success)_74%,var(--ui-ink-strong)_26%)]">
               {profile.streakDays} days
             </Badge>
-            <Badge className="bg-black/24 text-white/76">
+            <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
               {formatCompactNumber(profile.totalXp)} XP
             </Badge>
           </div>
           <div className="mt-4 grid gap-3">
             <div className="flex min-w-0 items-end justify-between gap-3">
               <div className="min-w-0">
-                <div className="font-display text-2xl text-white md:text-3xl">
+                <div className="font-display text-2xl text-[var(--ui-ink-strong)] md:text-3xl">
                   Forge level {profile.level}
                 </div>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-white/60">
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--ui-ink-soft)]">
                   {metrics.mascot.line}
                 </p>
               </div>
               <Link
                 to="/rewards"
-                className="inline-flex shrink-0 items-center gap-2 rounded-full bg-[var(--primary)] px-3 py-2 text-[12px] font-semibold text-slate-950 transition hover:opacity-90"
+                className="inline-flex shrink-0 items-center gap-2 rounded-full bg-[var(--primary)] px-3 py-2 text-[12px] font-semibold text-[var(--ui-ink-on-accent)] transition hover:opacity-90"
               >
                 <Trophy className="size-3.5" />
                 Hall
               </Link>
             </div>
             <ProgressMeter value={progress} />
-            <div className="flex flex-wrap justify-between gap-2 text-[11px] uppercase tracking-[0.16em] text-white/42">
+            <div className="flex flex-wrap justify-between gap-2 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
               <span>
                 {profile.currentLevelXp}/{profile.nextLevelXp} XP
               </span>
@@ -342,8 +342,8 @@ export function GamificationOverviewWidget({
 
           {!compact ? (
             <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(13rem,0.72fr)]">
-              <div className="rounded-[18px] border border-white/8 bg-white/[0.045] p-4">
-                <div className="flex items-center gap-2 text-sm font-medium text-white">
+              <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+                <div className="flex items-center gap-2 text-sm font-medium text-[var(--ui-ink-strong)]">
                   <Sparkles className="size-4 text-[var(--tertiary)]" />
                   Next targets
                 </div>
@@ -365,28 +365,28 @@ export function GamificationOverviewWidget({
                           className="size-8 object-contain opacity-90"
                         />
                         <div className="min-w-0">
-                          <div className="truncate text-sm text-white/80">
+                          <div className="truncate text-sm text-[var(--ui-ink-medium)]">
                             {target.title}
                           </div>
-                          <div className="truncate text-[11px] text-white/42">
+                          <div className="truncate text-[11px] text-[var(--ui-ink-faint)]">
                             {target.requirementText}
                           </div>
                         </div>
-                        <div className="text-right text-[11px] text-white/46">
+                        <div className="text-right text-[11px] text-[var(--ui-ink-faint)]">
                           {target.progressPercent}%
                         </div>
                       </div>
                     ))
                   ) : (
-                    <div className="text-sm text-white/60">
+                    <div className="text-sm text-[var(--ui-ink-soft)]">
                       All visible rewards unlocked
                     </div>
                   )}
                 </div>
               </div>
-              <div className="rounded-[18px] border border-white/8 bg-white/[0.045] p-4">
-                <div className="flex items-center gap-2 text-sm font-medium text-white">
-                  <Trophy className="size-4 text-amber-200" />
+              <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+                <div className="flex items-center gap-2 text-sm font-medium text-[var(--ui-ink-strong)]">
+                  <Trophy className="size-4 text-[color-mix(in_srgb,var(--warning)_76%,var(--ui-ink-strong)_24%)]" />
                   Latest shelf
                 </div>
                 <div className="mt-3 flex min-w-0 gap-2">
@@ -402,14 +402,16 @@ export function GamificationOverviewWidget({
                         alt={item.title}
                         title={item.title}
                         onError={hideMissingGamificationImage}
-                        className="size-11 rounded-2xl bg-black/22 object-contain p-1"
+                        className="size-11 rounded-2xl bg-[var(--ui-surface-2)] object-contain p-1"
                       />
                     ))
                   ) : (
-                    <div className="text-sm text-white/60">No trophy yet</div>
+                    <div className="text-sm text-[var(--ui-ink-soft)]">
+                      No trophy yet
+                    </div>
                   )}
                 </div>
-                <div className="mt-3 text-[11px] uppercase tracking-[0.16em] text-white/40">
+                <div className="mt-3 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   {metrics.unlockedItemCount}/{metrics.totalItemCount} unlocked
                 </div>
               </div>
@@ -468,11 +470,11 @@ export function GamificationCelebrationLayer({
         >
           <div
             className={cn(
-              "relative min-w-0 overflow-hidden rounded-[26px] border border-white/10 bg-[rgba(10,15,28,0.92)] shadow-[0_32px_90px_rgba(3,8,18,0.48)] backdrop-blur-xl",
+              "relative min-w-0 overflow-hidden rounded-[26px] border border-[var(--ui-border-subtle)] bg-[var(--surface-glass)] shadow-[var(--ui-shadow-floating)] backdrop-blur-xl",
               isMajor ? "w-full max-w-[34rem] p-4" : "max-w-[24rem] p-3"
             )}
           >
-            <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_22%_12%,rgba(249,115,22,0.22),transparent_42%),radial-gradient(circle_at_82%_16%,rgba(139,92,246,0.18),transparent_38%)]" />
+            <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_22%_12%,color-mix(in_srgb,var(--tertiary)_16%,transparent),transparent_42%),radial-gradient(circle_at_82%_16%,color-mix(in_srgb,var(--primary)_14%,transparent),transparent_38%)]" />
             <div className="flex min-w-0 items-center gap-3">
               <img
                 src={getGamificationSpriteUrl(
@@ -491,10 +493,10 @@ export function GamificationCelebrationLayer({
                 <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--tertiary)]">
                   {celebration.kind}
                 </div>
-                <div className="mt-1 truncate font-display text-xl text-white">
+                <div className="mt-1 truncate font-display text-xl text-[var(--ui-ink-strong)]">
                   {celebration.title}
                 </div>
-                <div className="mt-1 line-clamp-2 text-sm leading-6 text-white/62">
+                <div className="mt-1 line-clamp-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                   {celebration.summary}
                 </div>
               </div>
@@ -511,10 +513,10 @@ export function GamificationCelebrationLayer({
         >
           <div
             className={cn(
-              "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium shadow-[0_18px_48px_rgba(3,8,18,0.38)] backdrop-blur-xl",
+              "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium shadow-[var(--ui-shadow-floating)] backdrop-blur-xl",
               xpNotice.deltaXp > 0
-                ? "border-emerald-400/30 bg-emerald-500/14 text-emerald-100"
-                : "border-rose-400/30 bg-rose-500/14 text-rose-100"
+                ? "border-[color-mix(in_srgb,var(--success)_34%,var(--ui-border-subtle)_66%)] bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_74%,var(--ui-ink-strong)_26%)]"
+                : "border-[color-mix(in_srgb,var(--danger)_34%,var(--ui-border-subtle)_66%)] bg-[var(--ui-danger-soft)] text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]"
             )}
           >
             {xpNotice.deltaXp > 0 ? (

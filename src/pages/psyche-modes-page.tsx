@@ -349,7 +349,7 @@ export function PsycheModesPage() {
                 <button
                   key={family}
                   type="button"
-                  className={`rounded-[22px] border px-4 py-4 text-left transition ${value.family === family ? "border-white/20 bg-white/[0.12] text-white" : "border-white/8 bg-white/[0.04] text-white/62 hover:bg-white/[0.07]"}`}
+                  className={`rounded-[22px] border px-4 py-4 text-left transition ${value.family === family ? "border-[var(--ui-border-strong)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-strong)]" : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] hover:bg-white/[0.07]"}`}
                   onClick={() => setValue({ family })}
                 >
                   {familyLabelMap[family]}
@@ -655,7 +655,7 @@ export function PsycheModesPage() {
             ).map((family) => (
               <div
                 key={family}
-                className="grid gap-3 rounded-[26px] bg-white/[0.04] p-4"
+                className="grid gap-3 rounded-[26px] bg-[var(--ui-surface-1)] p-4"
               >
                 <div className="flex items-center justify-between gap-3">
                   <ModeChip family={family} label={familyLabelMap[family]} />
@@ -682,7 +682,7 @@ export function PsycheModesPage() {
                     <div
                       key={mode.id}
                       data-psyche-focus-id={mode.id}
-                      className={`rounded-[22px] bg-white/[0.04] p-4 text-left transition hover:bg-white/[0.08] ${psycheFocusClass(focusedModeId === mode.id)}`}
+                      className={`rounded-[22px] bg-[var(--ui-surface-1)] p-4 text-left transition hover:bg-[var(--ui-surface-2)] ${psycheFocusClass(focusedModeId === mode.id)}`}
                     >
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
@@ -719,10 +719,10 @@ export function PsycheModesPage() {
                           </Button>
                         </div>
                       </div>
-                      <div className="mt-2 text-sm text-white/52">
+                      <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
                         {mode.archetype}
                       </div>
-                      <div className="mt-3 text-sm leading-6 text-white/62">
+                      <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
                         {mode.persona ||
                           mode.protectiveJob ||
                           "Open the mode to add persona and protective details."}

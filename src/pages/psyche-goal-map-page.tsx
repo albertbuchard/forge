@@ -30,18 +30,31 @@ export function PsycheGoalMapPage() {
     }
 
     return shell.snapshot.goals.map((goal) => {
-      const linkedValues = overview.values.filter((value) => value.linkedGoalIds.includes(goal.id));
-      const linkedProjects = shell.snapshot.dashboard.projects.filter((project) => project.goalId === goal.id);
-      const linkedHabits = shell.snapshot.habits.filter((habit) =>
-        habit.linkedGoalIds.includes(goal.id) ||
-        habit.linkedValueIds.some((valueId) => linkedValues.some((value) => value.id === valueId))
+      const linkedValues = overview.values.filter((value) =>
+        value.linkedGoalIds.includes(goal.id)
       );
-      const linkedReports = overview.reports.filter((report) => report.linkedGoalIds.includes(goal.id));
+      const linkedProjects = shell.snapshot.dashboard.projects.filter(
+        (project) => project.goalId === goal.id
+      );
+      const linkedHabits = shell.snapshot.habits.filter(
+        (habit) =>
+          habit.linkedGoalIds.includes(goal.id) ||
+          habit.linkedValueIds.some((valueId) =>
+            linkedValues.some((value) => value.id === valueId)
+          )
+      );
+      const linkedReports = overview.reports.filter((report) =>
+        report.linkedGoalIds.includes(goal.id)
+      );
       const linkedBehaviors = overview.behaviors.filter((behavior) =>
-        behavior.linkedValueIds.some((valueId) => linkedValues.some((value) => value.id === valueId))
+        behavior.linkedValueIds.some((valueId) =>
+          linkedValues.some((value) => value.id === valueId)
+        )
       );
       const linkedBeliefs = overview.beliefs.filter((belief) =>
-        belief.linkedValueIds.some((valueId) => linkedValues.some((value) => value.id === valueId))
+        belief.linkedValueIds.some((valueId) =>
+          linkedValues.some((value) => value.id === valueId)
+        )
       );
 
       return {
@@ -54,7 +67,12 @@ export function PsycheGoalMapPage() {
         linkedBeliefs
       };
     });
-  }, [overview, shell.snapshot.dashboard.projects, shell.snapshot.goals, shell.snapshot.habits]);
+  }, [
+    overview,
+    shell.snapshot.dashboard.projects,
+    shell.snapshot.goals,
+    shell.snapshot.habits
+  ]);
 
   const scene = useMemo(() => buildGoalGravityScene(clusters), [clusters]);
 
@@ -73,10 +91,21 @@ export function PsycheGoalMapPage() {
   }
 
   if (overviewQuery.isError || !overview) {
-    return <ErrorState eyebrow="Goal map" error={overviewQuery.error ?? new Error("Forge returned an empty Psyche overview payload.")} onRetry={() => void overviewQuery.refetch()} />;
+    return (
+      <ErrorState
+        eyebrow="Goal map"
+        error={
+          overviewQuery.error ??
+          new Error("Forge returned an empty Psyche overview payload.")
+        }
+        onRetry={() => void overviewQuery.refetch()}
+      />
+    );
   }
 
-  const inspector = scene.inspectors[selectedNodeId ?? scene.defaultSelectedId] ?? scene.inspectors[scene.defaultSelectedId];
+  const inspector =
+    scene.inspectors[selectedNodeId ?? scene.defaultSelectedId] ??
+    scene.inspectors[scene.defaultSelectedId];
 
   return (
     <div className="grid min-w-0 gap-4">
@@ -87,10 +116,16 @@ export function PsycheGoalMapPage() {
         badge={`${clusters.length} goal${clusters.length === 1 ? "" : "s"}`}
         actions={
           <>
-            <Link to="/goals" className="inline-flex min-h-10 min-w-max shrink-0 items-center justify-center rounded-full bg-white/[0.08] px-4 py-2 text-sm whitespace-nowrap text-white transition hover:bg-white/[0.12]">
+            <Link
+              to="/goals"
+              className="inline-flex min-h-10 min-w-max shrink-0 items-center justify-center rounded-full bg-[var(--ui-surface-2)] px-4 py-2 text-sm whitespace-nowrap text-[var(--ui-ink-strong)] transition hover:bg-[var(--ui-surface-hover)]"
+            >
               Open goals
             </Link>
-            <Link to="/psyche/reports?create=1" className="inline-flex min-h-10 min-w-max shrink-0 items-center justify-center rounded-full bg-[rgba(125,211,252,0.16)] px-4 py-2 text-sm whitespace-nowrap text-white transition hover:bg-[rgba(125,211,252,0.22)]">
+            <Link
+              to="/psyche/reports?create=1"
+              className="inline-flex min-h-10 min-w-max shrink-0 items-center justify-center rounded-full bg-[var(--ui-info-soft)] px-4 py-2 text-sm whitespace-nowrap text-[color-mix(in_srgb,var(--info)_76%,var(--ui-ink-strong)_24%)] transition hover:bg-[color-mix(in_srgb,var(--info)_18%,var(--ui-surface-hover)_82%)]"
+            >
               Reflect
             </Link>
           </>
@@ -121,11 +156,17 @@ export function PsycheGoalMapPage() {
           ]}
           action={
             clusters.length === 0 ? (
-              <Link to="/goals" className="inline-flex min-h-10 min-w-max shrink-0 items-center justify-center rounded-[var(--radius-control)] bg-[linear-gradient(135deg,rgba(192,193,255,0.36),rgba(192,193,255,0.22))] px-4 py-2 text-sm font-medium whitespace-nowrap text-white">
+              <Link
+                to="/goals"
+                className="inline-flex min-h-10 min-w-max shrink-0 items-center justify-center rounded-[var(--radius-control)] bg-[var(--ui-accent-soft)] px-4 py-2 text-sm font-medium whitespace-nowrap text-[var(--ui-ink-strong)]"
+              >
                 Add first goal
               </Link>
             ) : (
-              <Link to="/goals" className="inline-flex min-h-10 min-w-max shrink-0 items-center justify-center rounded-[var(--radius-control)] bg-white/8 px-4 py-2 text-sm font-medium whitespace-nowrap text-white transition hover:bg-white/12">
+              <Link
+                to="/goals"
+                className="inline-flex min-h-10 min-w-max shrink-0 items-center justify-center rounded-[var(--radius-control)] bg-[var(--ui-surface-2)] px-4 py-2 text-sm font-medium whitespace-nowrap text-[var(--ui-ink-strong)] transition hover:bg-[var(--ui-surface-hover)]"
+              >
                 Open goals
               </Link>
             )
@@ -135,29 +176,49 @@ export function PsycheGoalMapPage() {
         <Card className="min-w-0 h-fit xl:sticky xl:top-24">
           <div className="flex flex-wrap items-center gap-2">
             {inspector.entityKind ? (
-              <EntityBadge kind={inspector.entityKind} compact gradient={false} iconOnly />
+              <EntityBadge
+                kind={inspector.entityKind}
+                compact
+                gradient={false}
+                iconOnly
+              />
             ) : (
-              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/42">{inspector.eyebrow}</div>
+              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+                {inspector.eyebrow}
+              </div>
             )}
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {inspector.entityKind ? (
-              <EntityName kind={inspector.entityKind} label={inspector.title} variant="heading" size="lg" showKind={false} />
+              <EntityName
+                kind={inspector.entityKind}
+                label={inspector.title}
+                variant="heading"
+                size="lg"
+                showKind={false}
+              />
             ) : (
-              <h2 className="font-display text-[clamp(1.35rem,2.2vw,2rem)] leading-none text-white">{inspector.title}</h2>
+              <h2 className="break-words font-display text-[clamp(1.35rem,2.2vw,2rem)] leading-none text-[var(--ui-ink-strong)] [overflow-wrap:anywhere]">
+                {inspector.title}
+              </h2>
             )}
             {!inspector.entityKind ? (
-              <Badge className="bg-white/[0.08]" style={{ color: "white" }}>
+              <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                 {inspector.tone}
               </Badge>
             ) : null}
           </div>
-          <p className="mt-3 text-sm leading-6 text-white/60">{inspector.summary}</p>
+          <p className="mt-3 break-words text-sm leading-6 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
+            {inspector.summary}
+          </p>
 
           {inspector.stats.length > 0 ? (
             <div className="mt-4 grid gap-2">
               {inspector.stats.map((stat) => (
-                <div key={stat} className="rounded-[18px] bg-white/[0.04] px-3 py-3 text-sm text-white/68">
+                <div
+                  key={stat}
+                  className="break-words rounded-[18px] bg-[var(--ui-surface-1)] px-3 py-3 text-sm text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]"
+                >
                   {stat}
                 </div>
               ))}
@@ -167,7 +228,10 @@ export function PsycheGoalMapPage() {
           {inspector.chips.length > 0 ? (
             <div className="mt-4 flex flex-wrap gap-2">
               {inspector.chips.map((chip) => (
-                <Badge key={chip} className="bg-white/[0.08] text-white/74">
+                <Badge
+                  key={chip}
+                  className="max-w-full bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]"
+                >
                   {chip}
                 </Badge>
               ))}
@@ -178,10 +242,10 @@ export function PsycheGoalMapPage() {
             <Link
               to={inspector.href}
               className={cn(
-                "inline-flex min-h-11 w-full items-center justify-center rounded-[var(--radius-control)] px-4 py-2.5 text-sm font-medium whitespace-nowrap shadow-[0_12px_30px_rgba(192,193,255,0.08)]",
+                "inline-flex min-h-11 w-full items-center justify-center rounded-[var(--radius-control)] px-4 py-2.5 text-sm font-medium whitespace-nowrap shadow-[var(--ui-shadow-soft)]",
                 inspector.entityKind
                   ? getEntityButtonClassName(inspector.entityKind, true)
-                  : "bg-[linear-gradient(135deg,rgba(192,193,255,0.36),rgba(192,193,255,0.22))] text-white"
+                  : "bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]"
               )}
             >
               {inspector.ctaLabel}
