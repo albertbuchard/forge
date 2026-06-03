@@ -255,6 +255,36 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(bootstrap.checkInOptions.recentPeople.first, "Julien")
     }
 
+    func testWatchTaskStatusCommandEnvelopeEncodesBlockedPayload() throws {
+        let envelope = ForgeWatchOutboundEnvelope(
+            id: "watch-action-blocked-1",
+            createdAt: "2026-04-07T08:02:00.000Z",
+            device: ForgeWatchDeviceDescriptor(
+                name: "Omar Watch",
+                platform: "watchos",
+                appVersion: "1.0.77",
+                sourceDevice: "Apple Watch"
+            ),
+            kind: .taskStatusUpdate,
+            habitCheckIn: nil,
+            captureEvent: nil,
+            command: ForgeWatchCommandAction(
+                payload: ["taskId": "task_watch_blocked", "status": "blocked"]
+            )
+        )
+
+        let decoded = try JSONDecoder().decode(
+            ForgeWatchOutboundEnvelope.self,
+            from: JSONEncoder().encode(envelope)
+        )
+
+        XCTAssertEqual(decoded.kind, .taskStatusUpdate)
+        XCTAssertEqual(decoded.command?.payload["taskId"], "task_watch_blocked")
+        XCTAssertEqual(decoded.command?.payload["status"], "blocked")
+        XCTAssertNil(decoded.habitCheckIn)
+        XCTAssertNil(decoded.captureEvent)
+    }
+
     func testCompanionOperationalSummaryFlagsMissingAuthorizationAsWarning() {
         let summary = CompanionOperationalSummary.derive(
             syncState: .permissionDenied,

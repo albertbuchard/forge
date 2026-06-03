@@ -33,8 +33,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.albertbuchard.ForgeCompanion
         CODE_SIGN_ENTITLEMENTS: ForgeCompanion/ForgeCompanion/ForgeCompanion.entitlements
-        CURRENT_PROJECT_VERSION: "26"
-        MARKETING_VERSION: 1.0.76
+        CURRENT_PROJECT_VERSION: "27"
+        MARKETING_VERSION: 1.0.77
         TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
@@ -85,11 +85,12 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.albertbuchard.ForgeCompanion.watchkitapp
         CODE_SIGN_ENTITLEMENTS: ForgeCompanion/ForgeWatch Watch App/ForgeWatch Watch App.entitlements
-        CURRENT_PROJECT_VERSION: "26"
-        MARKETING_VERSION: 1.0.76
+        CURRENT_PROJECT_VERSION: "27"
+        MARKETING_VERSION: 1.0.77
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_KEY_CFBundleDisplayName: Forge
         INFOPLIST_KEY_CFBundleIconName: AppIcon
+        INFOPLIST_KEY_WKCompanionAppBundleIdentifier: com.albertbuchard.ForgeCompanion
         GENERATE_INFOPLIST_FILE: YES
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: KZ65F7924F
@@ -105,8 +106,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.albertbuchard.ForgeCompanion.watchkitapp.ForgeWatch
         CODE_SIGN_ENTITLEMENTS: ForgeCompanion/ForgeWatchExtension.entitlements
         INFOPLIST_FILE: ForgeCompanion/ForgeWatch/Info.plist
-        CURRENT_PROJECT_VERSION: "26"
-        MARKETING_VERSION: 1.0.76
+        CURRENT_PROJECT_VERSION: "27"
+        MARKETING_VERSION: 1.0.77
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: KZ65F7924F
     info:
@@ -134,8 +135,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.albertbuchard.ForgeCompanion.ForgeScreenTimeReportExtension
         CODE_SIGN_ENTITLEMENTS: ForgeCompanion/ForgeScreenTimeReportExtension/ForgeScreenTimeReportExtension.entitlements
         INFOPLIST_FILE: ForgeCompanion/ForgeScreenTimeReportExtension/Info.plist
-        CURRENT_PROJECT_VERSION: "26"
-        MARKETING_VERSION: 1.0.76
+        CURRENT_PROJECT_VERSION: "27"
+        MARKETING_VERSION: 1.0.77
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: KZ65F7924F
     info:
