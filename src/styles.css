@@ -275,7 +275,7 @@ body.theme-forge-light {
   --ui-ink-faint: color-mix(in srgb, var(--forge-body-text) 42%, transparent);
   --ui-ink: var(--ui-ink-strong);
   --ui-ink-muted: var(--ui-ink-soft);
-  --ui-ink-on-accent: color-mix(in srgb, var(--primary) 78%, black 22%);
+  --ui-ink-on-accent: var(--ui-ink-strong);
   --ui-border-subtle: rgba(24, 34, 53, 0.1);
   --ui-border-strong: rgba(24, 34, 53, 0.16);
   --ui-surface-1: color-mix(
@@ -303,6 +303,17 @@ body.theme-forge-light {
     var(--primary) 14%,
     var(--surface-high) 86%
   );
+  --ui-surface-modal:
+    radial-gradient(
+      circle at top,
+      color-mix(in srgb, var(--primary) 10%, transparent),
+      transparent 38%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-high) 96%, var(--surface-panel) 4%),
+      color-mix(in srgb, var(--surface-panel) 92%, var(--surface-low) 8%)
+    );
   --ui-overlay-backdrop: rgba(24, 34, 53, 0.28);
   --ui-accent-soft: color-mix(
     in srgb,
