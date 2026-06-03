@@ -740,7 +740,7 @@ export async function listFlashcards(userIds) {
             {
                 entityTypes: ["flashcard"],
                 userIds: coerceUserIds(userIds),
-                limit: 500
+                limit: 200
             }
         ]
     });
@@ -1771,6 +1771,15 @@ export function updateNutritionTarget(patch, userIds) {
         body: JSON.stringify(patch)
     });
 }
+export function updateNutritionDailyActiveCalories(patch, userIds) {
+    const search = new URLSearchParams();
+    appendUserIds(search, coerceUserIds(userIds));
+    const suffix = search.size > 0 ? `?${search.toString()}` : "";
+    return request(`/api/v1/health/weight-loss/daily-active-calories${suffix}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch)
+    });
+}
 export function searchNutritionFoods(input) {
     const search = new URLSearchParams();
     appendUserIds(search, coerceUserIds(input.userIds));
@@ -1821,9 +1830,10 @@ export function parseNutritionFoodLogWithChatGpt(input) {
         method: "POST",
         body: JSON.stringify({
             text: input.text,
-            imageDescription: input.imageDescription,
-            loggedAt: input.loggedAt,
-            mealLabel: input.mealLabel
+            mealTime: input.mealTime,
+            imageRefs: input.imageRefs,
+            connectionId: input.connectionId,
+            commitCandidate: input.commitCandidate
         })
     });
 }

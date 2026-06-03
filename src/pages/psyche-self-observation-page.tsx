@@ -71,7 +71,12 @@ import type {
   PsycheValue,
   TriggerReport
 } from "@/lib/psyche-types";
-import type { ActivityEvent, CrudEntityType, Note, NoteLink } from "@/lib/types";
+import type {
+  ActivityEvent,
+  CrudEntityType,
+  Note,
+  NoteLink
+} from "@/lib/types";
 import {
   buildOwnedEntitySearchText,
   formatOwnedEntityDescription,
@@ -128,6 +133,28 @@ const CALENDAR_EXPORT_OPTIONS: SelectMenuOption<CalendarExportFormat>[] = [
     description: "Importable weekly timeline in calendar apps."
   }
 ];
+
+const sectionPanelClass =
+  "box-border min-w-0 max-w-full overflow-hidden rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)]";
+const subPanelClass =
+  "box-border min-w-0 max-w-full overflow-hidden rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]";
+const labelClass =
+  "text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]";
+const fieldLabelClass = "text-sm font-medium text-[var(--ui-ink-strong)]";
+const mutedTextClass = "text-[var(--ui-ink-soft)]";
+const faintTextClass = "text-[var(--ui-ink-faint)]";
+const neutralBadgeClass =
+  "max-w-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]";
+const observationBadgeClass =
+  "max-w-full border border-[color-mix(in_srgb,var(--info)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-info-soft)] text-[color-mix(in_srgb,var(--info)_74%,var(--ui-ink-strong)_26%)]";
+const activityBadgeClass =
+  "max-w-full border border-[color-mix(in_srgb,var(--warning)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_74%,var(--ui-ink-strong)_26%)]";
+const pillButtonClass =
+  "inline-flex max-w-full items-center gap-2 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-1.5 text-xs text-[var(--ui-ink-medium)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]";
+const tinyAddButtonClass =
+  "inline-flex max-w-full items-center gap-1 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-2 py-1 text-[11px] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]";
+const dashedAddClass =
+  "min-w-0 rounded-[8px] border border-dashed border-[var(--ui-border-subtle)] text-left text-sm text-[var(--ui-ink-faint)] transition hover:border-[var(--ui-border-strong)] hover:text-[var(--ui-ink-medium)]";
 
 const LINKABLE_ENTITY_TYPES = new Set<CrudEntityType>([
   "goal",
@@ -328,7 +355,8 @@ function getObservationTitle(
   observation: PsycheObservationEntry,
   maxChars: number
 ) {
-  const text = observation.note.contentPlain || observation.note.contentMarkdown;
+  const text =
+    observation.note.contentPlain || observation.note.contentMarkdown;
   return truncateText(text || "Observation", maxChars);
 }
 
@@ -677,7 +705,7 @@ function renderOtherLinkBadges(observation: PsycheObservationEntry) {
     .map((link) => (
       <Badge
         key={`${observation.note.id}-${link.entityType}-${link.entityId}`}
-        className="bg-white/[0.08] text-white/68"
+        className={neutralBadgeClass}
       >
         {formatEntityTypeLabel(link.entityType)}
       </Badge>
@@ -699,8 +727,7 @@ export function PsycheSelfObservationPage() {
   const [onlyHumanOwned, setOnlyHumanOwned] = useState(false);
   const [showObservations, setShowObservations] = useState(true);
   const [showActivity, setShowActivity] = useState(true);
-  const [viewMode, setViewMode] =
-    useState<ObservationViewMode>("informative");
+  const [viewMode, setViewMode] = useState<ObservationViewMode>("informative");
   const [exportFormat, setExportFormat] =
     useState<CalendarExportFormat>("markdown");
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -988,7 +1015,10 @@ export function PsycheSelfObservationPage() {
           return false;
         }
         const trimmedSearch = searchFilter.trim().toLowerCase();
-        if (trimmedSearch && !getTimelineSearchText(entry).includes(trimmedSearch)) {
+        if (
+          trimmedSearch &&
+          !getTimelineSearchText(entry).includes(trimmedSearch)
+        ) {
           return false;
         }
         return true;
@@ -1024,7 +1054,9 @@ export function PsycheSelfObservationPage() {
       map.set(slotKey, current);
     }
     for (const entries of map.values()) {
-      entries.sort((left, right) => left.observedAt.localeCompare(right.observedAt));
+      entries.sort((left, right) =>
+        left.observedAt.localeCompare(right.observedAt)
+      );
     }
     return map;
   }, [visibleEntries]);
@@ -1046,120 +1078,122 @@ export function PsycheSelfObservationPage() {
       <div
         key={observation.id}
         draggable={!compact}
-      data-self-observation-card={observation.note.id}
-      onDragStart={(event) => {
-        if (compact) {
-          return;
-        }
-        setDraggedObservationId(observation.note.id);
-        event.dataTransfer.setData(
-          "text/forge-self-observation-id",
-          observation.note.id
-        );
-      }}
-      onDragEnd={() => setDraggedObservationId(null)}
-      className={cn(
-        "rounded-[22px] border p-3 text-white transition hover:border-white/18",
-        isMovementObservation(observation)
-          ? "border-[rgba(126,229,255,0.14)] bg-[rgba(126,229,255,0.08)] hover:bg-[rgba(126,229,255,0.12)]"
-          : "border-white/10 bg-[rgba(110,231,183,0.08)] hover:bg-[rgba(110,231,183,0.12)]",
-        compact && "rounded-[16px] px-2.5 py-2"
-      )}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <button
-          type="button"
-          className="min-w-0 flex-1 text-left"
-          onClick={() => openComposerForObservation(observation)}
-        >
-          {compact ? (
-            <div className="flex items-center gap-2 overflow-hidden">
-              <div className="shrink-0 text-[11px] uppercase tracking-[0.16em] text-[rgba(110,231,183,0.82)]">
-                {formatClock(observation.observedAt)}
-              </div>
-              <Badge className="shrink-0 bg-cyan-400/12 text-cyan-100">
-                {entityLabel}
-              </Badge>
-              <div className="min-w-0 truncate text-sm font-medium text-white/86">
-                {title}
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="text-xs uppercase tracking-[0.16em] text-[rgba(110,231,183,0.82)]">
-                    {formatClock(observation.observedAt)}
-                  </div>
-                  <Badge className="bg-cyan-400/12 text-cyan-100">
-                    {entityLabel}
-                  </Badge>
-                  <UserBadge user={observation.note.user} compact />
+        data-self-observation-card={observation.note.id}
+        onDragStart={(event) => {
+          if (compact) {
+            return;
+          }
+          setDraggedObservationId(observation.note.id);
+          event.dataTransfer.setData(
+            "text/forge-self-observation-id",
+            observation.note.id
+          );
+        }}
+        onDragEnd={() => setDraggedObservationId(null)}
+        className={cn(
+          "min-w-0 rounded-[8px] border p-3 text-[var(--ui-ink-strong)] transition",
+          isMovementObservation(observation)
+            ? "border-[color-mix(in_srgb,var(--info)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-info-soft)] hover:bg-[color-mix(in_srgb,var(--info)_12%,var(--ui-surface-1)_88%)]"
+            : "border-[color-mix(in_srgb,var(--success)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-success-soft)] hover:bg-[color-mix(in_srgb,var(--success)_12%,var(--ui-surface-1)_88%)]",
+          compact && "px-2.5 py-2"
+        )}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <button
+            type="button"
+            className="min-w-0 flex-1 text-left"
+            onClick={() => openComposerForObservation(observation)}
+          >
+            {compact ? (
+              <div className="flex min-w-0 items-center gap-2 overflow-hidden">
+                <div className="shrink-0 text-[11px] uppercase tracking-[0.16em] text-[color-mix(in_srgb,var(--success)_72%,var(--ui-ink-strong)_28%)]">
+                  {formatClock(observation.observedAt)}
+                </div>
+                <Badge className={cn("shrink-0", observationBadgeClass)}>
+                  {entityLabel}
+                </Badge>
+                <div className="min-w-0 truncate text-sm font-medium text-[var(--ui-ink-strong)]">
+                  {title}
                 </div>
               </div>
-              <div className="mt-2 text-sm font-medium text-white">{title}</div>
-              <div
-                className={cn(
-                  "mt-1 text-sm leading-6 text-white/72",
-                  extended ? "line-clamp-3" : "line-clamp-1"
-                )}
-              >
-                {preview}
-              </div>
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {observation.note.author ? (
-                  <Badge className="bg-white/[0.08] text-white/72">
-                    {observation.note.author}
-                  </Badge>
-                ) : null}
-                {observation.tags.slice(0, visibleTagCount).map((tag) => (
-                  <Badge
-                    key={`${observation.id}-${tag}`}
-                    className="bg-cyan-400/10 text-cyan-50"
-                  >
-                    {tag}
-                  </Badge>
-                ))}
-                {renderOtherLinkBadges(observation)}
-                {observation.linkedPatterns
-                  .slice(0, extended ? 2 : 1)
-                  .map((pattern) => (
+            ) : (
+              <>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <div className="text-xs uppercase tracking-[0.16em] text-[color-mix(in_srgb,var(--success)_72%,var(--ui-ink-strong)_28%)]">
+                      {formatClock(observation.observedAt)}
+                    </div>
+                    <Badge className={observationBadgeClass}>
+                      {entityLabel}
+                    </Badge>
+                    <UserBadge user={observation.note.user} compact />
+                  </div>
+                </div>
+                <div className="mt-2 break-words text-sm font-medium text-[var(--ui-ink-strong)] [overflow-wrap:anywhere]">
+                  {title}
+                </div>
+                <div
+                  className={cn(
+                    "mt-1 break-words text-sm leading-6 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]",
+                    extended ? "line-clamp-3" : "line-clamp-1"
+                  )}
+                >
+                  {preview}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {observation.note.author ? (
+                    <Badge className={neutralBadgeClass}>
+                      {observation.note.author}
+                    </Badge>
+                  ) : null}
+                  {observation.tags.slice(0, visibleTagCount).map((tag) => (
+                    <Badge
+                      key={`${observation.id}-${tag}`}
+                      className={observationBadgeClass}
+                    >
+                      {tag}
+                    </Badge>
+                  ))}
+                  {renderOtherLinkBadges(observation)}
+                  {observation.linkedPatterns
+                    .slice(0, extended ? 2 : 1)
+                    .map((pattern) => (
+                      <EntityBadge
+                        key={pattern.id}
+                        kind="pattern"
+                        label={pattern.title}
+                        compact
+                        gradient={false}
+                      />
+                    ))}
+                  {observation.linkedReports.slice(0, 1).map((report) => (
                     <EntityBadge
-                      key={pattern.id}
-                      kind="pattern"
-                      label={pattern.title}
+                      key={report.id}
+                      kind="report"
+                      label={report.title}
                       compact
                       gradient={false}
                     />
                   ))}
-                {observation.linkedReports.slice(0, 1).map((report) => (
-                  <EntityBadge
-                    key={report.id}
-                    kind="report"
-                    label={report.title}
-                    compact
-                    gradient={false}
-                  />
-                ))}
-              </div>
-            </>
-          )}
-        </button>
-        {!compact ? (
-          <button
-            type="button"
-            className="rounded-full border border-white/8 bg-white/[0.04] p-2 text-white/54 transition hover:bg-rose-500/18 hover:text-rose-100"
-            aria-label={`Delete observation ${observation.note.id}`}
-            onClick={(event) => {
-              event.stopPropagation();
-              void deleteObservationMutation.mutateAsync(observation.note.id);
-            }}
-          >
-            <Trash2 className="size-3.5" />
+                </div>
+              </>
+            )}
           </button>
-        ) : null}
+          {!compact ? (
+            <button
+              type="button"
+              className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-2 text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-danger-soft)] hover:text-[color-mix(in_srgb,var(--danger)_74%,var(--ui-ink-strong)_26%)]"
+              aria-label={`Delete observation ${observation.note.id}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                void deleteObservationMutation.mutateAsync(observation.note.id);
+              }}
+            >
+              <Trash2 className="size-3.5" />
+            </button>
+          ) : null}
+        </div>
       </div>
-    </div>
     );
   };
 
@@ -1182,8 +1216,8 @@ export function PsycheSelfObservationPage() {
         role={compact && href ? "button" : undefined}
         tabIndex={compact && href ? 0 : undefined}
         className={cn(
-          "rounded-[22px] border border-white/8 bg-[rgba(255,255,255,0.04)] p-3 text-white/80",
-          compact && "rounded-[16px] px-2.5 py-2",
+          "min-w-0 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3 text-[var(--ui-ink-medium)]",
+          compact && "px-2.5 py-2",
           compact && href && "cursor-pointer"
         )}
         onClick={compact && href ? () => navigate(href) : undefined}
@@ -1191,35 +1225,45 @@ export function PsycheSelfObservationPage() {
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             {compact ? (
-              <div className="flex items-center gap-2 overflow-hidden">
-                <div className="shrink-0 text-[11px] uppercase tracking-[0.16em] text-white/42">
+              <div className="flex min-w-0 items-center gap-2 overflow-hidden">
+                <div
+                  className={cn(
+                    "shrink-0 text-[11px] uppercase tracking-[0.16em]",
+                    faintTextClass
+                  )}
+                >
                   {formatClock(activity.observedAt)}
                 </div>
-                <Badge className="shrink-0 bg-amber-300/12 text-amber-100">
+                <Badge className={cn("shrink-0", activityBadgeClass)}>
                   {getActivityEntityLabel(activity)}
                 </Badge>
-                <div className="min-w-0 truncate text-sm font-medium text-white">
+                <div className="min-w-0 truncate text-sm font-medium text-[var(--ui-ink-strong)]">
                   {title}
                 </div>
               </div>
             ) : (
               <>
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="text-xs uppercase tracking-[0.16em] text-white/42">
+                  <div
+                    className={cn(
+                      "text-xs uppercase tracking-[0.16em]",
+                      faintTextClass
+                    )}
+                  >
                     {formatClock(activity.observedAt)}
                   </div>
-                  <Badge className="bg-amber-300/12 text-amber-100">
+                  <Badge className={activityBadgeClass}>
                     {getActivityEntityLabel(activity)}
                   </Badge>
                   <UserBadge user={activity.event.user} compact />
                 </div>
-                <div className="mt-2 text-sm font-medium text-white">
+                <div className="mt-2 break-words text-sm font-medium text-[var(--ui-ink-strong)] [overflow-wrap:anywhere]">
                   {title}
                 </div>
                 {activity.event.description ? (
                   <div
                     className={cn(
-                      "mt-1 text-sm leading-6 text-white/60",
+                      "mt-1 break-words text-sm leading-6 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]",
                       extended ? "line-clamp-3" : "line-clamp-1"
                     )}
                   >
@@ -1230,7 +1274,7 @@ export function PsycheSelfObservationPage() {
                   {activity.tags.slice(0, visibleTagCount).map((tag) => (
                     <Badge
                       key={`${activity.id}-${tag}`}
-                      className="bg-white/[0.08] text-white/68"
+                      className={neutralBadgeClass}
                     >
                       {tag}
                     </Badge>
@@ -1338,23 +1382,21 @@ export function PsycheSelfObservationPage() {
 
       <PsycheSectionNav />
 
-      <Card className="grid gap-4 rounded-[32px] border border-white/8 bg-[linear-gradient(180deg,rgba(18,31,34,0.96),rgba(13,24,27,0.94))]">
+      <Card className={cn("grid gap-4 p-5", sectionPanelClass)}>
         <CalendarWeekToolbar
           eyebrow="Observation week"
           description="True self-observation stays primary. Forge activity sits underneath it as supporting context, so you can review the week as lived evidence and export exactly the slice you want to share."
           weekStart={weekStart}
           badges={
             <>
-              <Badge className="bg-white/[0.08] text-white/74">
-                {scopeSummary}
-              </Badge>
-              <Badge className="bg-[rgba(110,231,183,0.14)] text-[var(--tertiary)]">
+              <Badge className={neutralBadgeClass}>{scopeSummary}</Badge>
+              <Badge className="max-w-full border border-[color-mix(in_srgb,var(--success)_32%,var(--ui-border-subtle)_68%)] bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_74%,var(--ui-ink-strong)_26%)]">
                 {visibleObservationCount} observations
               </Badge>
-              <Badge className="bg-amber-300/14 text-amber-100">
+              <Badge className={activityBadgeClass}>
                 {visibleActivityCount} activity
               </Badge>
-              <Badge className="bg-white/[0.08] text-white/62">
+              <Badge className={neutralBadgeClass}>
                 {onlyHumanOwned ? "Human-owned only" : "All owners"}
               </Badge>
             </>
@@ -1364,19 +1406,27 @@ export function PsycheSelfObservationPage() {
           onNext={() => setWeekStart(addDays(weekStart, 7))}
         />
 
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.8fr)]">
-          <div className="grid gap-3 rounded-[24px] border border-white/8 bg-white/[0.03] p-4">
+        <div className="grid min-w-0 max-w-full gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.8fr)]">
+          <div
+            className={cn(
+              "grid min-w-0 w-full max-w-[calc(100vw-4rem)] box-border gap-3 p-4 sm:max-w-full",
+              subPanelClass
+            )}
+          >
             <div>
-              <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/42">
-                Filter timeline
-              </div>
-              <div className="mt-1 text-sm text-white/58">
+              <div className={labelClass}>Filter timeline</div>
+              <div
+                className={cn(
+                  "mt-1 break-words text-sm [overflow-wrap:anywhere]",
+                  mutedTextClass
+                )}
+              >
                 Search the week, focus a specific entity kind, switch density,
                 and narrow the timeline before you review it.
               </div>
             </div>
 
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(15rem,0.8fr)_minmax(15rem,0.8fr)]">
+            <div className="grid min-w-0 max-w-full gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(15rem,0.8fr)_minmax(15rem,0.8fr)]">
               <Input
                 value={searchFilter}
                 onChange={(event) => setSearchFilter(event.target.value)}
@@ -1397,11 +1447,15 @@ export function PsycheSelfObservationPage() {
             </div>
 
             <div className="grid gap-2">
-              <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/42">
-                Extra tags
-              </div>
-              <div className="text-xs text-white/48">
-                Add narrower filters like `focus`, `Forge activity`, or `Source · UI`.
+              <div className={labelClass}>Extra tags</div>
+              <div
+                className={cn(
+                  "break-words text-xs [overflow-wrap:anywhere]",
+                  faintTextClass
+                )}
+              >
+                Add narrower filters like `focus`, `Forge activity`, or `Source
+                · UI`.
               </div>
               <NoteTagsInput
                 value={selectedTags}
@@ -1439,12 +1493,20 @@ export function PsycheSelfObservationPage() {
             </div>
           </div>
 
-          <div className="grid gap-3 rounded-[24px] border border-white/8 bg-[rgba(255,255,255,0.035)] p-4">
-            <div>
-              <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/42">
-                Export week
-              </div>
-              <div className="mt-1 text-sm text-white/58">
+          <div
+            className={cn(
+              "grid min-w-0 w-full max-w-[calc(100vw-4rem)] box-border gap-3 p-4 sm:max-w-full",
+              subPanelClass
+            )}
+          >
+            <div className="min-w-0 max-w-full">
+              <div className={labelClass}>Export week</div>
+              <div
+                className={cn(
+                  "mt-1 break-words text-sm [overflow-wrap:anywhere]",
+                  mutedTextClass
+                )}
+              >
                 Export respects the current search, entity, tag, owner, and
                 observation/activity filters.
               </div>
@@ -1468,22 +1530,22 @@ export function PsycheSelfObservationPage() {
         </div>
       </Card>
 
-      <Card className="overflow-hidden rounded-[32px] border border-white/8 bg-[linear-gradient(180deg,rgba(16,26,34,0.98),rgba(10,18,27,0.96))] p-0">
+      <Card className={cn("min-w-0 overflow-hidden p-0", sectionPanelClass)}>
         <div className="hidden overflow-x-auto lg:block">
           <div className="min-w-[76rem]">
-            <div className="grid grid-cols-[5rem_repeat(7,minmax(10rem,1fr))] border-b border-white/8 bg-[rgba(10,17,29,0.96)]">
-              <div className="border-r border-white/8 px-3 py-4 text-[11px] uppercase tracking-[0.18em] text-white/34">
+            <div className="grid grid-cols-[5rem_repeat(7,minmax(10rem,1fr))] border-b border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]">
+              <div className="border-r border-[var(--ui-border-subtle)] px-3 py-4 text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                 Hour
               </div>
               {days.map((day) => (
                 <div
                   key={day.toISOString()}
-                  className="border-r border-white/8 px-3 py-4 last:border-r-0"
+                  className="border-r border-[var(--ui-border-subtle)] px-3 py-4 last:border-r-0"
                 >
-                  <div className="text-sm font-medium text-white">
+                  <div className="text-sm font-medium text-[var(--ui-ink-strong)]">
                     {formatWeekday(day)}
                   </div>
-                  <div className="mt-1 text-xs text-white/42">
+                  <div className="mt-1 text-xs text-[var(--ui-ink-faint)]">
                     {formatLocalDayKey(day)}
                   </div>
                 </div>
@@ -1493,9 +1555,9 @@ export function PsycheSelfObservationPage() {
             {hours.map((hour) => (
               <div
                 key={hour}
-                className="grid grid-cols-[5rem_repeat(7,minmax(10rem,1fr))] border-b border-white/6 last:border-b-0"
+                className="grid grid-cols-[5rem_repeat(7,minmax(10rem,1fr))] border-b border-[var(--ui-border-subtle)] last:border-b-0"
               >
-                <div className="border-r border-white/8 bg-[rgba(8,14,24,0.8)] px-3 py-4 text-sm text-white/52">
+                <div className="border-r border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-4 text-sm text-[var(--ui-ink-soft)]">
                   {formatHourLabel(hour)}
                 </div>
                 {days.map((day) => {
@@ -1507,7 +1569,7 @@ export function PsycheSelfObservationPage() {
                       key={slotKey}
                       data-self-observation-slot={slotKey}
                       className={cn(
-                        "border-r border-white/6 px-2 py-2 last:border-r-0",
+                        "border-r border-[var(--ui-border-subtle)] px-2 py-2 last:border-r-0",
                         viewMode === "compact"
                           ? "min-h-[4.25rem]"
                           : viewMode === "extended"
@@ -1535,7 +1597,11 @@ export function PsycheSelfObservationPage() {
                         ) {
                           return;
                         }
-                        void handleDrop(observationEntry.observation, day, hour);
+                        void handleDrop(
+                          observationEntry.observation,
+                          day,
+                          hour
+                        );
                         setDraggedObservationId(null);
                       }}
                     >
@@ -1544,7 +1610,7 @@ export function PsycheSelfObservationPage() {
                           <div className="flex justify-end">
                             <button
                               type="button"
-                              className="inline-flex items-center gap-1 rounded-full border border-white/8 bg-white/[0.04] px-2 py-1 text-[11px] text-white/58 transition hover:bg-white/[0.08] hover:text-white"
+                              className={tinyAddButtonClass}
                               onClick={() => openComposerForSlot(day, hour)}
                             >
                               <Plus className="size-3.5" />
@@ -1563,10 +1629,8 @@ export function PsycheSelfObservationPage() {
                           <button
                             type="button"
                             className={cn(
-                              "rounded-[18px] border border-dashed border-white/8 text-left text-sm text-white/34 transition hover:border-white/16 hover:text-white/56",
-                              viewMode === "compact"
-                                ? "px-3 py-2"
-                                : "px-3 py-4"
+                              dashedAddClass,
+                              viewMode === "compact" ? "px-3 py-2" : "px-3 py-4"
                             )}
                             onClick={() => openComposerForSlot(day, hour)}
                           >
@@ -1586,16 +1650,15 @@ export function PsycheSelfObservationPage() {
           {days.map((day) => {
             const dayKey = formatLocalDayKey(day);
             return (
-              <div
-                key={dayKey}
-                className="rounded-[24px] border border-white/8 bg-white/[0.03] p-3"
-              >
-                <div className="flex items-center justify-between gap-3 rounded-[18px] bg-[rgba(10,16,30,0.96)] px-3 py-3">
-                  <div>
-                    <div className="text-sm font-medium text-white">
+              <div key={dayKey} className={cn("p-3", subPanelClass)}>
+                <div className="flex min-w-0 items-center justify-between gap-3 rounded-[8px] bg-[var(--ui-surface-2)] px-3 py-3">
+                  <div className="min-w-0">
+                    <div className="break-words text-sm font-medium text-[var(--ui-ink-strong)] [overflow-wrap:anywhere]">
                       {formatWeekday(day)}
                     </div>
-                    <div className="mt-1 text-xs text-white/42">{dayKey}</div>
+                    <div className="mt-1 text-xs text-[var(--ui-ink-faint)]">
+                      {dayKey}
+                    </div>
                   </div>
                   <Button
                     size="sm"
@@ -1616,15 +1679,15 @@ export function PsycheSelfObservationPage() {
                       <div
                         key={slotKey}
                         data-self-observation-slot-mobile={slotKey}
-                        className="rounded-[18px] border border-white/6 bg-white/[0.03] px-3 py-3"
+                        className="min-w-0 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-3"
                       >
                         <div className="flex items-center justify-between gap-3">
-                          <div className="text-xs uppercase tracking-[0.16em] text-white/34">
+                          <div className="text-xs uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                             {formatHourLabel(hour)}
                           </div>
                           <button
                             type="button"
-                            className="inline-flex items-center gap-1 rounded-full border border-white/8 bg-white/[0.04] px-2 py-1 text-[11px] text-white/58 transition hover:bg-white/[0.08] hover:text-white"
+                            className={tinyAddButtonClass}
                             onClick={() => openComposerForSlot(day, hour)}
                           >
                             <Plus className="size-3.5" />
@@ -1636,14 +1699,16 @@ export function PsycheSelfObservationPage() {
                             <button
                               type="button"
                               className={cn(
-                                "rounded-[16px] border border-dashed border-white/8 text-left text-sm text-white/38 transition hover:border-white/16 hover:text-white/56",
+                                dashedAddClass,
                                 viewMode === "compact"
                                   ? "px-3 py-2"
                                   : "px-3 py-3"
                               )}
                               onClick={() => openComposerForSlot(day, hour)}
                             >
-                              {viewMode === "compact" ? "Add" : "Add observation"}
+                              {viewMode === "compact"
+                                ? "Add"
+                                : "Add observation"}
                             </button>
                           ) : (
                             slotEntries.map((entry) =>
@@ -1687,7 +1752,7 @@ export function PsycheSelfObservationPage() {
               help="Observation notes stay multi-user aware just like the rest of Forge."
             />
             <label className="grid gap-2">
-              <span className="text-sm font-medium text-white">Author</span>
+              <span className={fieldLabelClass}>Author</span>
               <Input
                 value={draft.author}
                 onChange={(event) =>
@@ -1702,7 +1767,7 @@ export function PsycheSelfObservationPage() {
           </div>
 
           <label className="grid gap-2">
-            <span className="text-sm font-medium text-white">Observed at</span>
+            <span className={fieldLabelClass}>Observed at</span>
             <Input
               type="datetime-local"
               value={draft.observedAtInput}
@@ -1716,9 +1781,7 @@ export function PsycheSelfObservationPage() {
           </label>
 
           <label className="grid gap-2">
-            <span className="text-sm font-medium text-white">
-              Observation note
-            </span>
+            <span className={fieldLabelClass}>Observation note</span>
             <Textarea
               value={draft.contentMarkdown}
               onChange={(event) =>
@@ -1742,12 +1805,10 @@ export function PsycheSelfObservationPage() {
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             <div className="grid gap-2">
               <div className="flex items-center justify-between gap-3">
-                <div className="text-sm font-medium text-white">
-                  Linked patterns
-                </div>
+                <div className={fieldLabelClass}>Linked patterns</div>
                 <button
                   type="button"
-                  className="inline-flex items-center gap-2 rounded-full bg-white/[0.06] px-3 py-1.5 text-xs text-white/72 transition hover:bg-white/[0.1] hover:text-white"
+                  className={pillButtonClass}
                   onClick={() => void handleCreatePatternFromObservation()}
                   disabled={
                     saveObservationMutation.isPending ||
@@ -1771,12 +1832,10 @@ export function PsycheSelfObservationPage() {
 
             <div className="grid gap-2">
               <div className="flex items-center justify-between gap-3">
-                <div className="text-sm font-medium text-white">
-                  Trigger report
-                </div>
+                <div className={fieldLabelClass}>Trigger report</div>
                 <button
                   type="button"
-                  className="inline-flex items-center gap-2 rounded-full bg-white/[0.06] px-3 py-1.5 text-xs text-white/72 transition hover:bg-white/[0.1] hover:text-white"
+                  className={pillButtonClass}
                   onClick={() => {
                     const search = new URLSearchParams();
                     search.set("create", "1");
@@ -1818,7 +1877,7 @@ export function PsycheSelfObservationPage() {
           </div>
 
           <div className="grid gap-2">
-            <div className="text-sm font-medium text-white">Linked records</div>
+            <div className={fieldLabelClass}>Linked records</div>
             <EntityLinkMultiSelect
               options={genericLinkOptions}
               selectedValues={draft.linkedEntityValues}
@@ -1830,14 +1889,14 @@ export function PsycheSelfObservationPage() {
             />
           </div>
 
-          <div className="rounded-[22px] border border-white/8 bg-white/[0.03] px-4 py-4">
-            <div className="flex flex-wrap items-center gap-2 text-sm text-white/70">
+          <div className={cn("px-4 py-4", subPanelClass)}>
+            <div className="flex min-w-0 flex-wrap items-center gap-2 break-words text-sm text-[var(--ui-ink-medium)] [overflow-wrap:anywhere]">
               <StickyNote className="size-4 text-[var(--tertiary)]" />
               Cards appear in the hourly week grid at the exact observation
               time, whether they came from deliberate reflection or rolling
               movement sync.
             </div>
-            <div className="mt-2 text-sm leading-6 text-white/52">
+            <div className="mt-2 break-words text-sm leading-6 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
               Move them later by drag-and-drop, edit the timestamp directly
               here, or delete them from the card itself when the observation
               should not stay on the calendar.
@@ -1864,7 +1923,7 @@ export function PsycheSelfObservationPage() {
               {draft.linkedTriggerReportId ? (
                 <button
                   type="button"
-                  className="inline-flex items-center gap-2 rounded-full bg-white/[0.06] px-3 py-2 text-sm text-white/72 transition hover:bg-white/[0.1] hover:text-white"
+                  className={cn(pillButtonClass, "py-2 text-sm")}
                   onClick={() =>
                     navigate(`/psyche/reports/${draft.linkedTriggerReportId}`)
                   }

@@ -43,19 +43,14 @@ import { ErrorState, LoadingState } from "@/components/ui/page-state";
 import { UserBadge } from "@/components/ui/user-badge";
 import { getKnowledgeGraph } from "@/lib/api";
 import {
-  formatKnowledgeGraphFocusValue,
   KNOWLEDGE_GRAPH_HIERARCHY_ORDER,
-  parseKnowledgeGraphFocusValue,
   type KnowledgeGraphEntityKind,
   type KnowledgeGraphNode,
   type KnowledgeGraphQuery,
   type KnowledgeGraphRelationKind,
   type KnowledgeGraphView
 } from "@/lib/knowledge-graph-types";
-import {
-  buildKnowledgeGraphFocusNodeId,
-  buildKnowledgeGraphFocusPayload
-} from "@/lib/knowledge-graph";
+import { buildKnowledgeGraphFocusPayload } from "@/lib/knowledge-graph";
 import {
   DEFAULT_KNOWLEDGE_GRAPH_PHYSICS_SETTINGS,
   KNOWLEDGE_GRAPH_MAX_EDGE_SPRING_STRENGTH,
@@ -78,25 +73,31 @@ import {
   mirrorKnowledgeGraphDiagnosticsEventToConsole
 } from "@/lib/knowledge-graph-dev-diagnostics";
 import {
+  DEFAULT_KNOWLEDGE_GRAPH_MAX_NODES,
+  MAX_KNOWLEDGE_GRAPH_MAX_NODES,
+  MIN_KNOWLEDGE_GRAPH_MAX_NODES,
+  buildKnowledgeGraphQueryFromPageState,
+  buildKnowledgeGraphQuickFilterSelectionIds,
+  findKnowledgeGraphUserSummary,
+  formatKnowledgeGraphDateInput,
+  getKnowledgeGraphNodeNotesHref,
+  loadKnowledgeGraphPhysicsSettings,
+  parseKnowledgeGraphPageState,
+  parseKnowledgeGraphQuickFilterSelectionIds,
   resolveKnowledgeGraphFocusInteraction,
-  resolveKnowledgeGraphOverlaySyncAction
+  resolveKnowledgeGraphOverlaySyncAction,
+  saveKnowledgeGraphPhysicsSettings,
+  shouldPublishKnowledgeGraphPageDiagnostics,
+  writeKnowledgeGraphFocusParam,
+  writeKnowledgeGraphMultiParam
 } from "@/pages/knowledge-graph-page-model";
-import {
-  setKnowledgeGraphDiagnosticsPanelOpen
-} from "@/store/slices/knowledge-graph-diagnostics-slice";
+import { setKnowledgeGraphDiagnosticsPanelOpen } from "@/store/slices/knowledge-graph-diagnostics-slice";
 import {
   clearKnowledgeGraphOverlayFocus,
   setKnowledgeGraphOverlayFocus
 } from "@/store/slices/shell-slice";
 import { useAppDispatch, useAppSelector } from "@/store/typed-hooks";
-import type { UserSummary } from "@/lib/types";
-import { getEntityNotesHref } from "@/lib/note-helpers";
 import { getEntityVisual } from "@/lib/entity-visuals";
-
-const DEFAULT_MAX_NODES = 2000;
-const MIN_MAX_NODES = 40;
-const MAX_MAX_NODES = 2000;
-const KNOWLEDGE_GRAPH_PHYSICS_STORAGE_KEY = "forge.knowledge-graph.physics";
 
 declare global {
   interface Window {
@@ -110,149 +111,6 @@ declare global {
       activateFocusedNode?: () => void;
     };
   }
-}
-
-function shouldPublishKnowledgeGraphPageDiagnostics() {
-  if (typeof window === "undefined") {
-    return false;
-  }
-  if (window.__FORGE_ENABLE_GRAPH_DIAGNOSTICS__) {
-    return true;
-  }
-  try {
-    return new URLSearchParams(window.location.search).get("graphDiagnostics") === "1";
-  } catch {
-    return false;
-  }
-}
-
-function readMultiParam(searchParams: URLSearchParams, key: string) {
-  return Array.from(
-    new Set(
-      searchParams
-        .getAll(key)
-        .flatMap((value) => value.split(","))
-        .map((value) => value.trim())
-        .filter(Boolean)
-    )
-  );
-}
-
-function writeMultiParam(
-  searchParams: URLSearchParams,
-  key: string,
-  values: string[]
-) {
-  searchParams.delete(key);
-  values.forEach((value) => searchParams.append(key, value));
-}
-
-function getNodeNotesHref(node: KnowledgeGraphNode) {
-  switch (node.entityType) {
-    case "workbench_flow":
-    case "workbench_surface":
-    case "wiki_space":
-      return null;
-    default:
-      return getEntityNotesHref(node.entityType, node.entityId);
-  }
-}
-
-function formatDateInput(value: string | null) {
-  return value ? value.slice(0, 10) : "";
-}
-
-function loadKnowledgeGraphPhysicsSettings() {
-  if (typeof window === "undefined") {
-    return DEFAULT_KNOWLEDGE_GRAPH_PHYSICS_SETTINGS;
-  }
-  try {
-    const raw = window.localStorage.getItem(KNOWLEDGE_GRAPH_PHYSICS_STORAGE_KEY);
-    if (!raw) {
-      return DEFAULT_KNOWLEDGE_GRAPH_PHYSICS_SETTINGS;
-    }
-    return sanitizeKnowledgeGraphPhysicsSettings(
-      JSON.parse(raw) as Partial<KnowledgeGraphPhysicsSettings>
-    );
-  } catch {
-    return DEFAULT_KNOWLEDGE_GRAPH_PHYSICS_SETTINGS;
-  }
-}
-
-function findUserSummary(
-  users: UserSummary[],
-  userId: string | null | undefined,
-  fallbackLabel: string | null | undefined,
-  fallbackKind: "human" | "bot" | null | undefined,
-  fallbackAccent: string | null | undefined
-) {
-  const matched = users.find((user) => user.id === userId);
-  if (matched) {
-    return matched;
-  }
-  if (!userId || !fallbackLabel) {
-    return null;
-  }
-  return {
-    id: userId,
-    displayName: fallbackLabel,
-    kind: fallbackKind ?? "human",
-    accentColor: fallbackAccent ?? "",
-    handle: fallbackLabel.toLowerCase().replace(/\s+/g, "-"),
-    description: "",
-    createdAt: "",
-    updatedAt: ""
-  } satisfies UserSummary;
-}
-
-function buildQuickFilterSelectionIds({
-  entityKinds,
-  relationKinds,
-  tags,
-  owners
-}: {
-  entityKinds: string[];
-  relationKinds: string[];
-  tags: string[];
-  owners: string[];
-}) {
-  return [
-    ...entityKinds.map((value) => `entity:${value}`),
-    ...relationKinds.map((value) => `relation:${value}`),
-    ...tags.map((value) => `tag:${value}`),
-    ...owners.map((value) => `owner:${value}`)
-  ];
-}
-
-function parseQuickFilterSelectionIds(selectedOptionIds: string[]) {
-  const entityKinds: string[] = [];
-  const relationKinds: string[] = [];
-  const tags: string[] = [];
-  const owners: string[] = [];
-
-  for (const optionId of selectedOptionIds) {
-    const [prefix, ...valueParts] = optionId.split(":");
-    const value = valueParts.join(":").trim();
-    if (!value) {
-      continue;
-    }
-    if (prefix === "entity") {
-      entityKinds.push(value);
-    } else if (prefix === "relation") {
-      relationKinds.push(value);
-    } else if (prefix === "tag") {
-      tags.push(value);
-    } else if (prefix === "owner") {
-      owners.push(value);
-    }
-  }
-
-  return {
-    entityKinds,
-    relationKinds,
-    tags,
-    owners
-  };
 }
 
 class KnowledgeGraphRendererBoundary extends Component<
@@ -328,9 +186,10 @@ export function KnowledgeGraphPage() {
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
   const [appearanceDialogOpen, setAppearanceDialogOpen] = useState(false);
   const [draftQueryText, setDraftQueryText] = useState("");
-  const [physicsSettings, setPhysicsSettings] = useState<KnowledgeGraphPhysicsSettings>(
-    () => loadKnowledgeGraphPhysicsSettings()
-  );
+  const [physicsSettings, setPhysicsSettings] =
+    useState<KnowledgeGraphPhysicsSettings>(() =>
+      loadKnowledgeGraphPhysicsSettings()
+    );
   const diagnosticsAvailable = isKnowledgeGraphDevDiagnosticsEnabled();
   const diagnosticsEnabled =
     diagnosticsAvailable && knowledgeGraphDiagnostics.panelOpen;
@@ -409,56 +268,14 @@ export function KnowledgeGraphPage() {
   }, [isMobile]);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    window.localStorage.setItem(
-      KNOWLEDGE_GRAPH_PHYSICS_STORAGE_KEY,
-      JSON.stringify(physicsSettings)
-    );
+    saveKnowledgeGraphPhysicsSettings(physicsSettings);
   }, [physicsSettings]);
 
   const searchParamsKey = searchParams.toString();
-  const parsedPageState = useMemo(() => {
-    const params = new URLSearchParams(searchParamsKey);
-    const selectedView: KnowledgeGraphView =
-      params.get("view") === "hierarchy" ? "hierarchy" : "graph";
-    const focusSpec = parseKnowledgeGraphFocusValue(params.get("focus"));
-    const focusNodeId = focusSpec
-      ? buildKnowledgeGraphFocusNodeId(focusSpec.entityType, focusSpec.entityId)
-      : null;
-    const selectedKinds = readMultiParam(
-      params,
-      "entityKind"
-    ) as KnowledgeGraphEntityKind[];
-    const selectedRelations = readMultiParam(
-      params,
-      "relationKind"
-    ) as KnowledgeGraphRelationKind[];
-    const selectedTags = readMultiParam(params, "tag");
-    const selectedOwners = readMultiParam(params, "owner");
-    const queryText = params.get("q") ?? "";
-    const updatedFrom = params.get("updatedFrom");
-    const updatedTo = params.get("updatedTo");
-    const parsedLimit = Number(params.get("limit") ?? DEFAULT_MAX_NODES);
-    const maxNodes = Number.isFinite(parsedLimit)
-      ? Math.max(MIN_MAX_NODES, Math.min(MAX_MAX_NODES, parsedLimit))
-      : DEFAULT_MAX_NODES;
-
-    return {
-      selectedView,
-      focusNodeId,
-      selectedKinds,
-      selectedRelations,
-      selectedTags,
-      selectedOwners,
-      showHierarchyCrossLinks: params.get("cross") === "1",
-      queryText,
-      updatedFrom,
-      updatedTo,
-      maxNodes
-    };
-  }, [searchParamsKey]);
+  const parsedPageState = useMemo(
+    () => parseKnowledgeGraphPageState(searchParamsKey),
+    [searchParamsKey]
+  );
 
   const {
     selectedView,
@@ -479,27 +296,8 @@ export function KnowledgeGraphPage() {
   }, [queryText]);
 
   const query = useMemo<KnowledgeGraphQuery>(
-    () => ({
-      q: queryText.trim() || null,
-      entityKinds: [...selectedKinds].sort(),
-      relationKinds: [...selectedRelations].sort(),
-      tags: [...selectedTags].sort(),
-      owners: [...selectedOwners].sort(),
-      updatedFrom,
-      updatedTo,
-      limit: maxNodes,
-      focusNodeId: null
-    }),
-    [
-      maxNodes,
-      queryText,
-      selectedKinds,
-      selectedOwners,
-      selectedRelations,
-      selectedTags,
-      updatedFrom,
-      updatedTo
-    ]
+    () => buildKnowledgeGraphQueryFromPageState(parsedPageState),
+    [parsedPageState]
   );
 
   const queryKey = useMemo(
@@ -530,7 +328,7 @@ export function KnowledgeGraphPage() {
         search: searchParams.toString()
       }
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -576,11 +374,14 @@ export function KnowledgeGraphPage() {
     if (graph.nodes.some((node) => node.id === focusNodeId)) {
       return;
     }
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current);
-      next.delete("focus");
-      return next;
-    }, { replace: true });
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete("focus");
+        return next;
+      },
+      { replace: true }
+    );
     setMobilePanelOpen(false);
     pendingMobileSheetNodeIdRef.current = null;
   }, [focusNodeId, graph, setSearchParams]);
@@ -607,7 +408,11 @@ export function KnowledgeGraphPage() {
     if (!graph || !focusNodeId) {
       return buildKnowledgeGraphFocusPayload([], [], null);
     }
-    return buildKnowledgeGraphFocusPayload(graph.nodes, graph.edges, focusNodeId);
+    return buildKnowledgeGraphFocusPayload(
+      graph.nodes,
+      graph.edges,
+      focusNodeId
+    );
   }, [focusNodeId, graph]);
 
   useEffect(() => {
@@ -679,7 +484,7 @@ export function KnowledgeGraphPage() {
           return;
         }
         const nextNode = nodeId
-          ? graph.nodes.find((node) => node.id === nodeId) ?? null
+          ? (graph.nodes.find((node) => node.id === nodeId) ?? null)
           : null;
         handleFocusNode(nextNode);
       },
@@ -687,7 +492,8 @@ export function KnowledgeGraphPage() {
         if (!focusNodeId || !graph) {
           return;
         }
-        const nextNode = graph.nodes.find((node) => node.id === focusNodeId) ?? null;
+        const nextNode =
+          graph.nodes.find((node) => node.id === focusNodeId) ?? null;
         if (nextNode) {
           handleFocusNode(nextNode);
         }
@@ -699,11 +505,14 @@ export function KnowledgeGraphPage() {
   }, [focusNodeId, isMobile, mobilePanelOpen, selectedView]);
 
   const setParam = (mutate: (next: URLSearchParams) => void) => {
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current);
-      mutate(next);
-      return next;
-    }, { replace: true });
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        mutate(next);
+        return next;
+      },
+      { replace: true }
+    );
   };
 
   const submitGraphSearch = (value: string) => {
@@ -726,21 +535,14 @@ export function KnowledgeGraphPage() {
     });
 
     pendingMobileSheetNodeIdRef.current =
-      isMobile && interaction.nextMobileSheetOpen ? node?.id ?? null : null;
+      isMobile && interaction.nextMobileSheetOpen ? (node?.id ?? null) : null;
     setMobilePanelOpen(interaction.nextMobileSheetOpen);
     if (!interaction.shouldUpdateFocus) {
       return;
     }
 
     setParam((next) => {
-      if (!node) {
-        next.delete("focus");
-        return;
-      }
-      next.set(
-        "focus",
-        formatKnowledgeGraphFocusValue(node.entityType, node.entityId)
-      );
+      writeKnowledgeGraphFocusParam(next, node);
     });
     if (isMobile) {
       setMobileFiltersOpen(false);
@@ -768,7 +570,7 @@ export function KnowledgeGraphPage() {
   };
 
   const handleOpenNotes = (node: KnowledgeGraphNode) => {
-    const href = getNodeNotesHref(node);
+    const href = getKnowledgeGraphNodeNotesHref(node);
     if (href) {
       navigate(href);
     }
@@ -777,7 +579,7 @@ export function KnowledgeGraphPage() {
   const handleOpenHierarchy = (node: KnowledgeGraphNode) => {
     setParam((next) => {
       next.set("view", "hierarchy");
-      next.set("focus", formatKnowledgeGraphFocusValue(node.entityType, node.entityId));
+      writeKnowledgeGraphFocusParam(next, node);
     });
   };
 
@@ -793,7 +595,7 @@ export function KnowledgeGraphPage() {
         "updatedTo",
         "focus"
       ].forEach((key) => next.delete(key));
-      next.set("limit", String(DEFAULT_MAX_NODES));
+      next.set("limit", String(DEFAULT_KNOWLEDGE_GRAPH_MAX_NODES));
     });
     setAdvancedFiltersOpen(false);
   };
@@ -846,24 +648,14 @@ export function KnowledgeGraphPage() {
     label: entry.label,
     description: `${entry.count} linked nodes`,
     badge: (
-      <EntityBadge
-        kind="tag"
-        label={entry.label}
-        compact
-        gradient={false}
-      />
+      <EntityBadge kind="tag" label={entry.label} compact gradient={false} />
     ),
     menuBadge: (
-      <EntityBadge
-        kind="tag"
-        label={entry.label}
-        compact
-        gradient={false}
-      />
+      <EntityBadge kind="tag" label={entry.label} compact gradient={false} />
     )
   }));
   const ownerOptions = graph.facets.owners.map((entry) => {
-    const user = findUserSummary(
+    const user = findKnowledgeGraphUserSummary(
       shell.snapshot.users,
       entry.userId,
       entry.displayName,
@@ -914,7 +706,7 @@ export function KnowledgeGraphPage() {
       badge: entry.menuBadge ?? entry.badge
     }))
   ] satisfies FacetedTokenOption[];
-  const quickFilterSelectionIds = buildQuickFilterSelectionIds({
+  const quickFilterSelectionIds = buildKnowledgeGraphQuickFilterSelectionIds({
     entityKinds: selectedKinds,
     relationKinds: selectedRelations,
     tags: selectedTags,
@@ -935,7 +727,7 @@ export function KnowledgeGraphPage() {
     selectedOwners.length > 0 ||
     Boolean(updatedFrom) ||
     Boolean(updatedTo) ||
-    maxNodes !== DEFAULT_MAX_NODES;
+    maxNodes !== DEFAULT_KNOWLEDGE_GRAPH_MAX_NODES;
 
   const showDesktopGraphChrome = !isMobile;
   const graphSurfaceResetKey = `${selectedView}:${graph.nodes
@@ -943,7 +735,7 @@ export function KnowledgeGraphPage() {
     .join("|")}::${graph.edges.map((edge) => edge.id).join("|")}`;
 
   return (
-    <div className="-mx-4 -mb-2.5 h-[calc(100dvh-var(--forge-mobile-nav-clearance)-5.25rem)] overflow-hidden lg:-mx-6 lg:-mb-3 lg:-mt-3 lg:h-[calc(100dvh-10rem)]">
+    <div className="h-[calc(100dvh-var(--forge-mobile-nav-clearance)-5.25rem)] overflow-hidden lg:-mt-3 lg:h-[calc(100dvh-10rem)]">
       <div className="relative h-full bg-[radial-gradient(circle_at_top,rgba(125,211,252,0.08),transparent_26%),linear-gradient(180deg,rgba(7,12,23,0.98),rgba(5,10,19,1))]">
         <div className="pointer-events-auto absolute right-3 top-3 z-30 hidden md:block">
           <GamificationMiniHud metrics={shell.snapshot.metrics} />
@@ -964,7 +756,9 @@ export function KnowledgeGraphPage() {
                     The graph renderer hit a display error.
                   </h2>
                   <p className="text-sm leading-6 text-[var(--ui-ink-soft)]">
-                    Switch to the hierarchy view or reset the current graph filters. The graph will recover automatically when the dataset changes.
+                    Switch to the hierarchy view or reset the current graph
+                    filters. The graph will recover automatically when the
+                    dataset changes.
                   </p>
                   <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[rgba(255,255,255,0.04)] px-4 py-3 text-left text-xs text-[var(--ui-ink-faint)]">
                     {error.message}
@@ -1113,12 +907,27 @@ export function KnowledgeGraphPage() {
                   options={quickFilterOptions}
                   selectedOptionIds={quickFilterSelectionIds}
                   onSelectedOptionIdsChange={(selectedOptionIds) => {
-                    const parsed = parseQuickFilterSelectionIds(selectedOptionIds);
+                    const parsed =
+                      parseKnowledgeGraphQuickFilterSelectionIds(
+                        selectedOptionIds
+                      );
                     setParam((next) => {
-                      writeMultiParam(next, "entityKind", parsed.entityKinds);
-                      writeMultiParam(next, "relationKind", parsed.relationKinds);
-                      writeMultiParam(next, "tag", parsed.tags);
-                      writeMultiParam(next, "owner", parsed.owners);
+                      writeKnowledgeGraphMultiParam(
+                        next,
+                        "entityKind",
+                        parsed.entityKinds
+                      );
+                      writeKnowledgeGraphMultiParam(
+                        next,
+                        "relationKind",
+                        parsed.relationKinds
+                      );
+                      writeKnowledgeGraphMultiParam(next, "tag", parsed.tags);
+                      writeKnowledgeGraphMultiParam(
+                        next,
+                        "owner",
+                        parsed.owners
+                      );
                     });
                   }}
                   resultSummary=""
@@ -1162,7 +971,11 @@ export function KnowledgeGraphPage() {
                         selectedValues={selectedKinds}
                         onChange={(values) =>
                           setParam((next) => {
-                            writeMultiParam(next, "entityKind", values);
+                            writeKnowledgeGraphMultiParam(
+                              next,
+                              "entityKind",
+                              values
+                            );
                           })
                         }
                         placeholder="Filter by entity type"
@@ -1173,7 +986,11 @@ export function KnowledgeGraphPage() {
                         selectedValues={selectedRelations}
                         onChange={(values) =>
                           setParam((next) => {
-                            writeMultiParam(next, "relationKind", values);
+                            writeKnowledgeGraphMultiParam(
+                              next,
+                              "relationKind",
+                              values
+                            );
                           })
                         }
                         placeholder="Filter by relation type"
@@ -1184,7 +1001,7 @@ export function KnowledgeGraphPage() {
                         selectedValues={selectedTags}
                         onChange={(values) =>
                           setParam((next) => {
-                            writeMultiParam(next, "tag", values);
+                            writeKnowledgeGraphMultiParam(next, "tag", values);
                           })
                         }
                         placeholder="Filter by tag"
@@ -1195,7 +1012,11 @@ export function KnowledgeGraphPage() {
                         selectedValues={selectedOwners}
                         onChange={(values) =>
                           setParam((next) => {
-                            writeMultiParam(next, "owner", values);
+                            writeKnowledgeGraphMultiParam(
+                              next,
+                              "owner",
+                              values
+                            );
                           })
                         }
                         placeholder="Filter by owner"
@@ -1211,8 +1032,8 @@ export function KnowledgeGraphPage() {
                         </div>
                         <input
                           type="range"
-                          min={MIN_MAX_NODES}
-                          max={MAX_MAX_NODES}
+                          min={MIN_KNOWLEDGE_GRAPH_MAX_NODES}
+                          max={MAX_KNOWLEDGE_GRAPH_MAX_NODES}
                           step={20}
                           value={maxNodes}
                           onChange={(event) =>
@@ -1223,7 +1044,9 @@ export function KnowledgeGraphPage() {
                           className="w-full accent-[var(--secondary)]"
                         />
                         <div className="text-xs text-white/42">
-                          The graph stays deterministic under the cap and focus mode redistributes the visible neighborhood around the selected node.
+                          The graph stays deterministic under the cap and focus
+                          mode redistributes the visible neighborhood around the
+                          selected node.
                         </div>
                       </div>
 
@@ -1234,9 +1057,13 @@ export function KnowledgeGraphPage() {
                           </div>
                           <Input
                             type="date"
-                            value={formatDateInput(updatedFrom)}
-                            min={formatDateInput(graph.facets.updatedAt.min)}
-                            max={formatDateInput(updatedTo ?? graph.facets.updatedAt.max)}
+                            value={formatKnowledgeGraphDateInput(updatedFrom)}
+                            min={formatKnowledgeGraphDateInput(
+                              graph.facets.updatedAt.min
+                            )}
+                            max={formatKnowledgeGraphDateInput(
+                              updatedTo ?? graph.facets.updatedAt.max
+                            )}
                             onChange={(event) =>
                               setParam((next) => {
                                 if (event.target.value) {
@@ -1254,9 +1081,13 @@ export function KnowledgeGraphPage() {
                           </div>
                           <Input
                             type="date"
-                            value={formatDateInput(updatedTo)}
-                            min={formatDateInput(updatedFrom ?? graph.facets.updatedAt.min)}
-                            max={formatDateInput(graph.facets.updatedAt.max)}
+                            value={formatKnowledgeGraphDateInput(updatedTo)}
+                            min={formatKnowledgeGraphDateInput(
+                              updatedFrom ?? graph.facets.updatedAt.min
+                            )}
+                            max={formatKnowledgeGraphDateInput(
+                              graph.facets.updatedAt.max
+                            )}
                             onChange={(event) =>
                               setParam((next) => {
                                 if (event.target.value) {
@@ -1272,7 +1103,9 @@ export function KnowledgeGraphPage() {
 
                       {selectedView === "hierarchy" ? (
                         <Button
-                          variant={showHierarchyCrossLinks ? "primary" : "secondary"}
+                          variant={
+                            showHierarchyCrossLinks ? "primary" : "secondary"
+                          }
                           size="sm"
                           className="h-8 rounded-full px-3 text-xs"
                           onClick={() =>
@@ -1285,7 +1118,9 @@ export function KnowledgeGraphPage() {
                             })
                           }
                         >
-                          {showHierarchyCrossLinks ? "Hide cross-links" : "Show cross-links"}
+                          {showHierarchyCrossLinks
+                            ? "Hide cross-links"
+                            : "Show cross-links"}
                         </Button>
                       ) : null}
                     </div>
@@ -1407,7 +1242,6 @@ export function KnowledgeGraphPage() {
             </div>
           </div>
         ) : null}
-
       </div>
 
       <SheetScaffold
@@ -1459,12 +1293,21 @@ export function KnowledgeGraphPage() {
               options={quickFilterOptions}
               selectedOptionIds={quickFilterSelectionIds}
               onSelectedOptionIdsChange={(selectedOptionIds) => {
-                const parsed = parseQuickFilterSelectionIds(selectedOptionIds);
+                const parsed =
+                  parseKnowledgeGraphQuickFilterSelectionIds(selectedOptionIds);
                 setParam((next) => {
-                  writeMultiParam(next, "entityKind", parsed.entityKinds);
-                  writeMultiParam(next, "relationKind", parsed.relationKinds);
-                  writeMultiParam(next, "tag", parsed.tags);
-                  writeMultiParam(next, "owner", parsed.owners);
+                  writeKnowledgeGraphMultiParam(
+                    next,
+                    "entityKind",
+                    parsed.entityKinds
+                  );
+                  writeKnowledgeGraphMultiParam(
+                    next,
+                    "relationKind",
+                    parsed.relationKinds
+                  );
+                  writeKnowledgeGraphMultiParam(next, "tag", parsed.tags);
+                  writeKnowledgeGraphMultiParam(next, "owner", parsed.owners);
                 });
               }}
               resultSummary={summaryBadgeTitle}
@@ -1478,7 +1321,7 @@ export function KnowledgeGraphPage() {
               selectedValues={selectedKinds}
               onChange={(values) =>
                 setParam((next) => {
-                  writeMultiParam(next, "entityKind", values);
+                  writeKnowledgeGraphMultiParam(next, "entityKind", values);
                 })
               }
               placeholder="Filter by entity type"
@@ -1489,7 +1332,7 @@ export function KnowledgeGraphPage() {
               selectedValues={selectedRelations}
               onChange={(values) =>
                 setParam((next) => {
-                  writeMultiParam(next, "relationKind", values);
+                  writeKnowledgeGraphMultiParam(next, "relationKind", values);
                 })
               }
               placeholder="Filter by relation type"
@@ -1500,7 +1343,7 @@ export function KnowledgeGraphPage() {
               selectedValues={selectedTags}
               onChange={(values) =>
                 setParam((next) => {
-                  writeMultiParam(next, "tag", values);
+                  writeKnowledgeGraphMultiParam(next, "tag", values);
                 })
               }
               placeholder="Filter by tag"
@@ -1511,7 +1354,7 @@ export function KnowledgeGraphPage() {
               selectedValues={selectedOwners}
               onChange={(values) =>
                 setParam((next) => {
-                  writeMultiParam(next, "owner", values);
+                  writeKnowledgeGraphMultiParam(next, "owner", values);
                 })
               }
               placeholder="Filter by owner"
@@ -1526,8 +1369,8 @@ export function KnowledgeGraphPage() {
             </div>
             <input
               type="range"
-              min={MIN_MAX_NODES}
-              max={MAX_MAX_NODES}
+              min={MIN_KNOWLEDGE_GRAPH_MAX_NODES}
+              max={MAX_KNOWLEDGE_GRAPH_MAX_NODES}
               step={20}
               value={maxNodes}
               onChange={(event) =>
@@ -1544,9 +1387,13 @@ export function KnowledgeGraphPage() {
                 </div>
                 <Input
                   type="date"
-                  value={formatDateInput(updatedFrom)}
-                  min={formatDateInput(graph.facets.updatedAt.min)}
-                  max={formatDateInput(updatedTo ?? graph.facets.updatedAt.max)}
+                  value={formatKnowledgeGraphDateInput(updatedFrom)}
+                  min={formatKnowledgeGraphDateInput(
+                    graph.facets.updatedAt.min
+                  )}
+                  max={formatKnowledgeGraphDateInput(
+                    updatedTo ?? graph.facets.updatedAt.max
+                  )}
                   onChange={(event) =>
                     setParam((next) => {
                       if (event.target.value) {
@@ -1564,9 +1411,13 @@ export function KnowledgeGraphPage() {
                 </div>
                 <Input
                   type="date"
-                  value={formatDateInput(updatedTo)}
-                  min={formatDateInput(updatedFrom ?? graph.facets.updatedAt.min)}
-                  max={formatDateInput(graph.facets.updatedAt.max)}
+                  value={formatKnowledgeGraphDateInput(updatedTo)}
+                  min={formatKnowledgeGraphDateInput(
+                    updatedFrom ?? graph.facets.updatedAt.min
+                  )}
+                  max={formatKnowledgeGraphDateInput(
+                    graph.facets.updatedAt.max
+                  )}
                   onChange={(event) =>
                     setParam((next) => {
                       if (event.target.value) {
@@ -1583,7 +1434,11 @@ export function KnowledgeGraphPage() {
               <Button variant="secondary" size="sm" onClick={resetFilters}>
                 Reset
               </Button>
-              <Button variant="primary" size="sm" onClick={() => setMobileFiltersOpen(false)}>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setMobileFiltersOpen(false)}
+              >
                 Done
               </Button>
             </div>
@@ -1591,11 +1446,16 @@ export function KnowledgeGraphPage() {
         </div>
       </SheetScaffold>
 
-      <Dialog.Root open={appearanceDialogOpen} onOpenChange={setAppearanceDialogOpen}>
+      <Dialog.Root
+        open={appearanceDialogOpen}
+        onOpenChange={setAppearanceDialogOpen}
+      >
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-40 bg-[rgba(4,8,18,0.72)] backdrop-blur-xl" />
           <Dialog.Content className="fixed inset-x-4 top-[max(1rem,env(safe-area-inset-top))] z-50 max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(16,23,36,0.98),rgba(8,12,22,0.98))] shadow-[0_32px_90px_rgba(3,8,18,0.48)] md:left-1/2 md:right-auto md:w-[min(40rem,calc(100vw-3rem))] md:-translate-x-1/2">
-            <Dialog.Title className="sr-only">Knowledge Graph appearance settings</Dialog.Title>
+            <Dialog.Title className="sr-only">
+              Knowledge Graph appearance settings
+            </Dialog.Title>
             <Dialog.Description className="sr-only">
               Tune the graph focus physics and appearance response.
             </Dialog.Description>
@@ -1609,7 +1469,8 @@ export function KnowledgeGraphPage() {
                   Tune the focus field
                 </div>
                 <p className="max-w-xl text-sm leading-6 text-white/55">
-                  Shape how strongly a focused node opens its neighborhood and how far that pressure diffuses through connected hops.
+                  Shape how strongly a focused node opens its neighborhood and
+                  how far that pressure diffuses through connected hops.
                 </p>
               </div>
               <Dialog.Close asChild>
@@ -1626,7 +1487,8 @@ export function KnowledgeGraphPage() {
                         Focused repulsion
                       </div>
                       <div className="text-xs leading-5 text-white/46">
-                        Push nearby nodes apart more aggressively while the focused node stays anchored.
+                        Push nearby nodes apart more aggressively while the
+                        focused node stays anchored.
                       </div>
                     </div>
                     <div className="rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-xs text-white/72">
@@ -1657,7 +1519,8 @@ export function KnowledgeGraphPage() {
                         Focus diffusion
                       </div>
                       <div className="text-xs leading-5 text-white/46">
-                        Extend the focus field further through multi-hop neighbors and lengthen the reversible transition.
+                        Extend the focus field further through multi-hop
+                        neighbors and lengthen the reversible transition.
                       </div>
                     </div>
                     <div className="rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-xs text-white/72">
@@ -1688,7 +1551,9 @@ export function KnowledgeGraphPage() {
                         Spring reduction max
                       </div>
                       <div className="text-xs leading-5 text-white/46">
-                        Reduce edge spring constants most strongly around the focused node so its local neighborhood can open more freely.
+                        Reduce edge spring constants most strongly around the
+                        focused node so its local neighborhood can open more
+                        freely.
                       </div>
                     </div>
                     <div className="rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-xs text-white/72">
@@ -1719,7 +1584,8 @@ export function KnowledgeGraphPage() {
                         Spring reduction diffusion
                       </div>
                       <div className="text-xs leading-5 text-white/46">
-                        Spread that spring softening progressively through first-hop, second-hop, and more distant neighborhoods.
+                        Spread that spring softening progressively through
+                        first-hop, second-hop, and more distant neighborhoods.
                       </div>
                     </div>
                     <div className="rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-xs text-white/72">
@@ -1750,7 +1616,8 @@ export function KnowledgeGraphPage() {
                         Edge spring strength
                       </div>
                       <div className="text-xs leading-5 text-white/46">
-                        Lower this to loosen graph edges globally and let neighborhoods spread instead of snapping tightly inward.
+                        Lower this to loosen graph edges globally and let
+                        neighborhoods spread instead of snapping tightly inward.
                       </div>
                     </div>
                     <div className="rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-xs text-white/72">
@@ -1781,7 +1648,8 @@ export function KnowledgeGraphPage() {
                         Gravity strength
                       </div>
                       <div className="text-xs leading-5 text-white/46">
-                        Reduce this to weaken the global inward pull that compacts the whole graph toward the middle.
+                        Reduce this to weaken the global inward pull that
+                        compacts the whole graph toward the middle.
                       </div>
                     </div>
                     <div className="rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-xs text-white/72">
@@ -1812,7 +1680,8 @@ export function KnowledgeGraphPage() {
                         Focus shell spacing
                       </div>
                       <div className="text-xs leading-5 text-white/46">
-                        Increase this to push focused rings farther outward and visibly open the local structure.
+                        Increase this to push focused rings farther outward and
+                        visibly open the local structure.
                       </div>
                     </div>
                     <div className="rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-xs text-white/72">
@@ -1838,7 +1707,11 @@ export function KnowledgeGraphPage() {
               </div>
 
               <div className="rounded-[24px] border border-white/8 bg-[rgba(125,211,252,0.07)] px-4 py-3 text-sm leading-6 text-white/62">
-                The main cramming forces are the edge springs and the inward gravity pull. Lower edge spring strength or gravity strength to let the whole graph breathe more, then raise focus shell spacing and spring-reduction controls when you want a selected neighborhood to open dramatically.
+                The main cramming forces are the edge springs and the inward
+                gravity pull. Lower edge spring strength or gravity strength to
+                let the whole graph breathe more, then raise focus shell spacing
+                and spring-reduction controls when you want a selected
+                neighborhood to open dramatically.
               </div>
 
               <div className="flex flex-wrap justify-between gap-3">
@@ -1869,9 +1742,12 @@ export function KnowledgeGraphPage() {
           <Dialog.Portal>
             <Dialog.Overlay className="fixed inset-0 z-40 bg-[rgba(4,8,18,0.64)] backdrop-blur-xl" />
             <Dialog.Content className="fixed inset-x-4 top-[max(1rem,env(safe-area-inset-top))] z-50 max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(16,23,36,0.98),rgba(8,12,22,0.98))] shadow-[0_32px_90px_rgba(3,8,18,0.48)] md:left-1/2 md:right-auto md:w-[min(56rem,calc(100vw-3rem))] md:-translate-x-1/2">
-              <Dialog.Title className="sr-only">Knowledge Graph diagnostics</Dialog.Title>
+              <Dialog.Title className="sr-only">
+                Knowledge Graph diagnostics
+              </Dialog.Title>
               <Dialog.Description className="sr-only">
-                Inspect startup centering, drift metrics, lifecycle events, and periodic graph snapshots.
+                Inspect startup centering, drift metrics, lifecycle events, and
+                periodic graph snapshots.
               </Dialog.Description>
 
               <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-white/8 bg-[rgba(8,12,22,0.9)] px-5 py-4 backdrop-blur-xl">
@@ -1883,7 +1759,9 @@ export function KnowledgeGraphPage() {
                     Knowledge Graph truth surface
                   </div>
                   <p className="max-w-2xl text-sm leading-6 text-white/55">
-                    Track startup phase, origin drift, recent lifecycle logs, and the bounded 5-second graph snapshots that help catch centering regressions.
+                    Track startup phase, origin drift, recent lifecycle logs,
+                    and the bounded 5-second graph snapshots that help catch
+                    centering regressions.
                   </p>
                 </div>
                 <Dialog.Close asChild>
@@ -1898,10 +1776,12 @@ export function KnowledgeGraphPage() {
                       Startup phase
                     </div>
                     <div className="mt-2 text-lg font-semibold text-white">
-                      {knowledgeGraphDiagnostics.latestStatus?.startupPhase ?? "boot"}
+                      {knowledgeGraphDiagnostics.latestStatus?.startupPhase ??
+                        "boot"}
                     </div>
                     <div className="mt-1 text-xs text-white/50">
-                      {knowledgeGraphDiagnostics.latestStatus?.startupInvariantSatisfied
+                      {knowledgeGraphDiagnostics.latestStatus
+                        ?.startupInvariantSatisfied
                         ? "Origin invariant holding"
                         : "Waiting for invariant or correction"}
                     </div>
@@ -1918,7 +1798,8 @@ export function KnowledgeGraphPage() {
                         : "0.000"}
                     </div>
                     <div className="mt-1 text-xs text-white/50">
-                      camera {knowledgeGraphDiagnostics.latestStatus
+                      camera{" "}
+                      {knowledgeGraphDiagnostics.latestStatus
                         ? `${knowledgeGraphDiagnostics.latestStatus.camera.x.toFixed(3)}, ${knowledgeGraphDiagnostics.latestStatus.camera.y.toFixed(3)}`
                         : "0.000, 0.000"}
                     </div>
@@ -1935,7 +1816,8 @@ export function KnowledgeGraphPage() {
                         : "0.000"}
                     </div>
                     <div className="mt-1 text-xs text-white/50">
-                      centroid {knowledgeGraphDiagnostics.latestStatus
+                      centroid{" "}
+                      {knowledgeGraphDiagnostics.latestStatus
                         ? `${knowledgeGraphDiagnostics.latestStatus.graphCentroid.x.toFixed(3)}, ${knowledgeGraphDiagnostics.latestStatus.graphCentroid.y.toFixed(3)}`
                         : "0.000, 0.000"}
                     </div>
@@ -1948,7 +1830,9 @@ export function KnowledgeGraphPage() {
                       {knowledgeGraphDiagnostics.recentSnapshots.length}
                     </div>
                     <div className="mt-1 text-xs text-white/50">
-                      latest {knowledgeGraphDiagnostics.latestStatus?.latestSnapshotAt ?? "none"}
+                      latest{" "}
+                      {knowledgeGraphDiagnostics.latestStatus
+                        ?.latestSnapshotAt ?? "none"}
                     </div>
                   </div>
                 </div>
@@ -2000,34 +1884,42 @@ export function KnowledgeGraphPage() {
                           Snapshot summaries
                         </div>
                         <div className="text-xs text-white/46">
-                          Periodic dev snapshots of node positions, camera state, and drift metrics.
+                          Periodic dev snapshots of node positions, camera
+                          state, and drift metrics.
                         </div>
                       </div>
                     </div>
                     <div className="grid max-h-[28rem] gap-2 overflow-y-auto pr-1">
-                      {knowledgeGraphDiagnostics.recentSnapshots.map((snapshot) => (
-                        <div
-                          key={snapshot.id}
-                          className="rounded-[18px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-3 py-2"
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="text-xs font-medium text-white">
-                              {snapshot.startupPhase}
+                      {knowledgeGraphDiagnostics.recentSnapshots.map(
+                        (snapshot) => (
+                          <div
+                            key={snapshot.id}
+                            className="rounded-[18px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-3 py-2"
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="text-xs font-medium text-white">
+                                {snapshot.startupPhase}
+                              </div>
+                              <div className="text-[11px] uppercase tracking-[0.14em] text-white/38">
+                                {snapshot.rendererMode}
+                              </div>
                             </div>
-                            <div className="text-[11px] uppercase tracking-[0.14em] text-white/38">
-                              {snapshot.rendererMode}
+                            <div className="mt-1 text-sm text-white/72">
+                              {snapshot.nodeCount} nodes · centroid drift{" "}
+                              {snapshot.driftMetrics.centroidDistanceFromOrigin.toFixed(
+                                3
+                              )}{" "}
+                              · camera drift{" "}
+                              {snapshot.driftMetrics.cameraDistanceFromOrigin.toFixed(
+                                3
+                              )}
+                            </div>
+                            <div className="mt-1 text-[11px] text-white/40">
+                              {snapshot.capturedAt}
                             </div>
                           </div>
-                          <div className="mt-1 text-sm text-white/72">
-                            {snapshot.nodeCount} nodes · centroid drift{" "}
-                            {snapshot.driftMetrics.centroidDistanceFromOrigin.toFixed(3)} · camera drift{" "}
-                            {snapshot.driftMetrics.cameraDistanceFromOrigin.toFixed(3)}
-                          </div>
-                          <div className="mt-1 text-[11px] text-white/40">
-                            {snapshot.capturedAt}
-                          </div>
-                        </div>
-                      ))}
+                        )
+                      )}
                     </div>
                   </div>
                 </div>

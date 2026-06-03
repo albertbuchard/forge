@@ -1,14 +1,10 @@
-import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowUpRight,
-  Bot,
   BriefcaseBusiness,
   CalendarDays,
-  CheckCheck,
-  CircleAlert,
   Clock3,
   Files,
   GitBranch,
@@ -30,14 +26,13 @@ import { TaskDialog } from "@/components/task-dialog";
 import { WorkAdjustmentDialog } from "@/components/work-adjustment-dialog";
 import { GamificationMiniHud } from "@/components/gamification/gamification-widgets";
 import { PageHero } from "@/components/shell/page-hero";
+import { TaskDetailContextGrid } from "@/pages/task-detail-context-grid";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { EntityBadge } from "@/components/ui/entity-badge";
 import { EntityName } from "@/components/ui/entity-name";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { ErrorState } from "@/components/ui/page-state";
-import { UserBadge } from "@/components/ui/user-badge";
 import {
   completeTaskRun,
   createTaskTimebox,
@@ -76,189 +71,18 @@ import { useForgeShell } from "@/components/shell/app-shell";
 import type { TaskStatus, TaskTimebox } from "@/lib/types";
 import { getSingleSelectedUserId } from "@/lib/user-ownership";
 import { invalidateForgeSnapshot } from "@/store/api/invalidate-forge-snapshot";
-
-function DetailLabel({ label, help }: { label: string; help?: string }) {
-  return (
-    <div className="flex items-center gap-2 text-sm text-white/58">
-      <span>{label}</span>
-      {help ? <InfoTooltip content={help} label={`Explain ${label}`} /> : null}
-    </div>
-  );
-}
-
-const STATUS_META: Array<{
-  status: TaskStatus;
-  label: string;
-  description: string;
-  icon: typeof Clock3;
-}> = [
-  {
-    status: "backlog",
-    label: "Backlog",
-    description: "Not started yet.",
-    icon: Clock3
-  },
-  {
-    status: "focus",
-    label: "Focus",
-    description: "Ready to start soon.",
-    icon: Target
-  },
-  {
-    status: "in_progress",
-    label: "In progress",
-    description: "Work is active now.",
-    icon: Play
-  },
-  {
-    status: "blocked",
-    label: "Blocked",
-    description: "Something is stopping progress.",
-    icon: CircleAlert
-  },
-  {
-    status: "done",
-    label: "Done",
-    description: "The task is completed.",
-    icon: CheckCheck
-  }
-];
-
-const WORK_ITEM_LEVEL_META = {
-  issue: {
-    label: "Issue",
-    noun: "issue",
-    descriptor: "Vertical slice issue",
-    heroDescription:
-      "Track the vertical slice, keep the acceptance bar explicit, and surface the execution context without losing the product-level story."
-  },
-  task: {
-    label: "Task",
-    noun: "task",
-    descriptor: "AI session task",
-    heroDescription:
-      "Drive one focused AI execution session, keep the work contract crisp, and show the concrete evidence of what changed."
-  },
-  subtask: {
-    label: "Subtask",
-    noun: "subtask",
-    descriptor: "Granular child step",
-    heroDescription:
-      "Keep the child step sharply scoped, trace its parent chain, and make the work evidence visible without opening the editor."
-  }
-} as const;
-
-const GIT_REF_META = {
-  commit: {
-    label: "Commit",
-    className: "bg-emerald-500/12 text-emerald-100"
-  },
-  branch: {
-    label: "Branch",
-    className: "bg-sky-500/12 text-sky-100"
-  },
-  pull_request: {
-    label: "Pull request",
-    className: "bg-fuchsia-500/12 text-fuchsia-100"
-  }
-} as const;
-
-function getWorkItemVisualKind(level: "issue" | "task" | "subtask") {
-  return level === "issue" ? "issue" : "task";
-}
-
-function getEntityHref(entityType: string, entityId: string) {
-  switch (entityType) {
-    case "goal":
-      return `/goals/${entityId}`;
-    case "project":
-      return `/projects/${entityId}`;
-    case "task":
-      return `/tasks/${entityId}`;
-    case "strategy":
-      return `/strategies/${entityId}`;
-    case "habit":
-      return "/habits";
-    default:
-      return null;
-  }
-}
-
-function formatDurationLabel(seconds: number | null | undefined) {
-  if (!seconds || seconds <= 0) {
-    return "0 min";
-  }
-  if (seconds < 3600) {
-    return `${Math.max(1, Math.round(seconds / 60))} min`;
-  }
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.round((seconds % 3600) / 60);
-  if (minutes === 0) {
-    return `${hours} h`;
-  }
-  return `${hours} h ${minutes} min`;
-}
-
-function SectionCard({
-  eyebrow,
-  title,
-  description,
-  children,
-  className
-}: {
-  eyebrow: string;
-  title: string;
-  description?: string;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <div
-      className={cn(
-        "rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.025))] p-4 sm:p-5",
-        className
-      )}
-    >
-      <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/42">
-        {eyebrow}
-      </div>
-      <div className="mt-2 text-lg font-medium text-white">{title}</div>
-      {description ? (
-        <p className="mt-2 text-sm leading-6 text-white/56">{description}</p>
-      ) : null}
-      <div className="mt-4">{children}</div>
-    </div>
-  );
-}
-
-function StatTile({
-  label,
-  value,
-  hint,
-  className
-}: {
-  label: string;
-  value: ReactNode;
-  hint?: ReactNode;
-  className?: string;
-}) {
-  return (
-    <div
-      className={cn(
-        "rounded-[18px] border border-white/8 bg-white/[0.035] px-4 py-3",
-        className
-      )}
-    >
-      <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">
-        {label}
-      </div>
-      <div className="mt-2 text-base font-medium text-white">{value}</div>
-      {hint ? (
-        <div className="mt-1 text-sm leading-5 text-white/52">{hint}</div>
-      ) : null}
-    </div>
-  );
-}
+import {
+  GIT_REF_META,
+  TASK_STATUS_META,
+  WORK_ITEM_LEVEL_META,
+  formatDurationLabel,
+  getWorkItemVisualKind
+} from "@/pages/task-detail-page-model";
+import {
+  DetailLabel,
+  SectionCard,
+  StatTile
+} from "@/pages/task-detail-page-ui";
 
 export function TaskDetailPage() {
   const { t, formatDate, formatDateTime } = useI18n();
@@ -273,9 +97,12 @@ export function TaskDetailPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [workAdjustmentOpen, setWorkAdjustmentOpen] = useState(false);
   const [timeboxDialogOpen, setTimeboxDialogOpen] = useState(false);
-  const [taskSchedulingDialogOpen, setTaskSchedulingDialogOpen] = useState(false);
+  const [taskSchedulingDialogOpen, setTaskSchedulingDialogOpen] =
+    useState(false);
   const [statusSheetOpen, setStatusSheetOpen] = useState(false);
-  const [editingTimebox, setEditingTimebox] = useState<TaskTimebox | null>(null);
+  const [editingTimebox, setEditingTimebox] = useState<TaskTimebox | null>(
+    null
+  );
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== "undefined"
       ? window.matchMedia("(max-width: 1023px)").matches
@@ -479,8 +306,8 @@ export function TaskDetailPage() {
   const currentRun = payload.activeTaskRun ?? null;
   const actionPointSummary = payload.task.actionPointSummary ?? null;
   const currentStatus =
-    STATUS_META.find((entry) => entry.status === payload.task.status) ??
-    STATUS_META[0];
+    TASK_STATUS_META.find((entry) => entry.status === payload.task.status) ??
+    TASK_STATUS_META[0];
   const taskLevel = payload.task.level ?? "task";
   const aiInstructions = payload.task.aiInstructions ?? "";
   const effectiveSchedulingRules = getTaskSchedulingRules(
@@ -495,29 +322,23 @@ export function TaskDetailPage() {
     planningCalendarOverviewQuery.data?.calendar.timeboxes ?? []
   )
     .filter((timebox) => timebox.taskId === payload.task.id)
-    .sort((left, right) => Date.parse(left.startsAt) - Date.parse(right.startsAt));
+    .sort(
+      (left, right) => Date.parse(left.startsAt) - Date.parse(right.startsAt)
+    );
   const nextScheduledTimebox = scheduledTimeboxes[0] ?? null;
   const workItemMeta = WORK_ITEM_LEVEL_META[taskLevel];
   const workItemVisualKind = getWorkItemVisualKind(taskLevel);
-  const relatedWorkItems = shell.snapshot.workItems ?? shell.snapshot.tasks ?? [];
-  const parentWorkItem = payload.task.parentWorkItemId
-    ? relatedWorkItems.find((item) => item.id === payload.task.parentWorkItemId) ??
-      null
-    : null;
-  const childWorkItems = relatedWorkItems
-    .filter((item) => item.parentWorkItemId === payload.task.id)
-    .sort((left, right) => left.sortOrder - right.sortOrder);
+  const relatedWorkItems =
+    shell.snapshot.workItems ?? shell.snapshot.tasks ?? [];
   const availableTags = shell.snapshot.tags ?? [];
-  const mappedTags = (payload.task.tagIds ?? [])
-    .map((tagId) => availableTags.find((tag) => tag.id === tagId) ?? null)
-    .filter((tag): tag is (typeof availableTags)[number] => Boolean(tag));
   const acceptanceCriteria = payload.task.acceptanceCriteria ?? [];
-  const blockerLinks = payload.task.blockerLinks ?? [];
   const gitRefs = payload.task.gitRefs ?? [];
   const completionReport = payload.task.completionReport;
   const linkedGitRefIds = new Set(completionReport?.linkedGitRefIds ?? []);
   const closeoutGitRefs = gitRefs.filter((ref) => linkedGitRefIds.has(ref.id));
-  const supportingGitRefs = gitRefs.filter((ref) => !linkedGitRefIds.has(ref.id));
+  const supportingGitRefs = gitRefs.filter(
+    (ref) => !linkedGitRefIds.has(ref.id)
+  );
   const botOwner =
     payload.task.user?.kind === "bot" || payload.task.ownerUser?.kind === "bot";
   const botAssignees = (payload.task.assignees ?? []).filter(
@@ -740,7 +561,10 @@ export function TaskDetailPage() {
                 </Button>
               ) : null}
               <Button
-                className={cn(actionButtonClass, "text-rose-200 hover:bg-rose-500/10")}
+                className={cn(
+                  actionButtonClass,
+                  "text-rose-200 hover:bg-rose-500/10"
+                )}
                 variant="ghost"
                 pending={deleteTaskMutation.isPending}
                 pendingLabel={t("common.taskDetail.deleting")}
@@ -797,9 +621,7 @@ export function TaskDetailPage() {
             </Badge>
           ) : null}
           {hasAiBrief ? (
-            <Badge className="bg-sky-500/12 text-sky-100">
-              AI brief ready
-            </Badge>
+            <Badge className="bg-sky-500/12 text-sky-100">AI brief ready</Badge>
           ) : null}
           {botOwner || botAssignees.length > 0 ? (
             <Badge className="bg-fuchsia-500/12 text-fuchsia-100">
@@ -824,7 +646,7 @@ export function TaskDetailPage() {
               Status
             </div>
             <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
-              {STATUS_META.map((entry) => {
+              {TASK_STATUS_META.map((entry) => {
                 const Icon = entry.icon;
                 const selected = entry.status === payload.task.status;
                 return (
@@ -853,302 +675,17 @@ export function TaskDetailPage() {
           </div>
         ) : null}
 
-        <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1fr)]">
-          <SectionCard
-            eyebrow="Hierarchy"
-            title="Context map"
-            description={`See where this ${workItemMeta.noun} sits in the larger planning ladder without opening the board.`}
-          >
-            <div className="grid gap-4">
-              <div>
-                <DetailLabel
-                  label="Project"
-                  help={`The project is the main work stream this ${workItemMeta.noun} belongs to.`}
-                />
-                <div className="mt-2">
-                  {payload.project ? (
-                    <Link
-                      to={`/projects/${payload.project.id}`}
-                      className="inline-flex max-w-full"
-                    >
-                      <EntityBadge
-                        kind="project"
-                        label={payload.project.title}
-                        compact
-                        gradient={false}
-                        wrap
-                        className="max-w-full"
-                      />
-                    </Link>
-                  ) : (
-                    <Badge className="bg-white/[0.08] text-white/65">
-                      No project linked
-                    </Badge>
-                  )}
-                </div>
-              </div>
-              <div>
-                <DetailLabel
-                  label="Goal"
-                  help="The goal shows the longer-term result this work supports."
-                />
-                <div className="mt-2">
-                  {payload.goal ? (
-                    <Link
-                      to={`/goals/${payload.goal.id}`}
-                      className="inline-flex max-w-full"
-                    >
-                      <EntityBadge
-                        kind="goal"
-                        label={payload.goal.title}
-                        compact
-                        gradient={false}
-                        wrap
-                        className="max-w-full"
-                      />
-                    </Link>
-                  ) : (
-                    <Badge className="bg-white/[0.08] text-white/65">
-                      No goal linked
-                    </Badge>
-                  )}
-                </div>
-              </div>
-              <div>
-                <DetailLabel
-                  label="Parent item"
-                  help="Issues parent tasks, tasks parent subtasks, and split child items stay legible here."
-                />
-                <div className="mt-2">
-                  {parentWorkItem ? (
-                    <Link
-                      to={`/tasks/${parentWorkItem.id}`}
-                      className="inline-flex max-w-full"
-                    >
-                      <EntityBadge
-                        kind={getWorkItemVisualKind(parentWorkItem.level)}
-                        label={parentWorkItem.title}
-                        compact
-                        gradient={false}
-                        wrap
-                        className="max-w-full"
-                      />
-                    </Link>
-                  ) : (
-                    <Badge className="bg-white/[0.08] text-white/65">
-                      No parent work item
-                    </Badge>
-                  )}
-                </div>
-              </div>
-              <div>
-                <DetailLabel
-                  label="Child items"
-                  help="Child work items let you scan the next layer down without leaving the detail view."
-                />
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {childWorkItems.length > 0 ? (
-                    childWorkItems.map((item) => (
-                      <Link
-                        key={item.id}
-                        to={`/tasks/${item.id}`}
-                        className="inline-flex max-w-full"
-                      >
-                        <EntityBadge
-                          kind={getWorkItemVisualKind(item.level)}
-                          label={item.title}
-                          compact
-                          gradient={false}
-                          wrap
-                          className="max-w-full"
-                        />
-                      </Link>
-                    ))
-                  ) : (
-                    <Badge className="bg-white/[0.08] text-white/65">
-                      No child work items
-                    </Badge>
-                  )}
-                </div>
-              </div>
-            </div>
-          </SectionCard>
-
-          <SectionCard
-            eyebrow="Execution"
-            title="Execution profile"
-            description="Surface the operating mode, AI posture, tags, and blockers as a single readable brief."
-          >
-            <div className="grid gap-3">
-              <StatTile
-                label="Work-item type"
-                value={workItemMeta.descriptor}
-                hint={
-                  taskLevel === "task"
-                    ? "Tasks are meant to fit one focused AI session."
-                    : taskLevel === "issue"
-                      ? "Issues hold the vertical slice and its delivery contract."
-                      : "Subtasks stay intentionally small and concrete."
-                }
-              />
-              <div className="grid gap-3 sm:grid-cols-2">
-                <StatTile
-                  label="Execution mode"
-                  value={
-                    payload.task.executionMode
-                      ? payload.task.executionMode.toUpperCase()
-                      : "Not set"
-                  }
-                />
-                <StatTile
-                  label="AI posture"
-                  value={
-                    hasAiBrief
-                      ? "AI brief ready"
-                      : taskLevel === "issue"
-                        ? "Issue narrative only"
-                        : "Needs AI brief"
-                  }
-                />
-              </div>
-              <div>
-                <DetailLabel
-                  label="Tags"
-                  help="Tags shape filtering and fast scanning across the board and hierarchy views."
-                />
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {mappedTags.length > 0 ? (
-                    mappedTags.map((tag) => (
-                      <Badge key={tag.id} className="bg-white/[0.08] text-white/72">
-                        {tag.name}
-                      </Badge>
-                    ))
-                  ) : (
-                    <Badge className="bg-white/[0.08] text-white/65">
-                      No tags
-                    </Badge>
-                  )}
-                </div>
-              </div>
-              <div>
-                <DetailLabel
-                  label="Blockers"
-                  help="Blockers tie this work item to the entities that currently constrain it."
-                />
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {blockerLinks.length > 0 ? (
-                    blockerLinks.map((blocker) => {
-                      const href = getEntityHref(
-                        blocker.entityType,
-                        blocker.entityId
-                      );
-                      const content = (
-                        <Badge
-                          key={`${blocker.entityType}:${blocker.entityId}`}
-                          wrap
-                          className="bg-amber-500/12 text-amber-100"
-                        >
-                          {blocker.label ??
-                            `${blocker.entityType} · ${blocker.entityId}`}
-                        </Badge>
-                      );
-                      if (!href) {
-                        return content;
-                      }
-                      return (
-                        <Link
-                          key={`${blocker.entityType}:${blocker.entityId}`}
-                          to={href}
-                          className="inline-flex max-w-full"
-                        >
-                          {content}
-                        </Link>
-                      );
-                    })
-                  ) : (
-                    <Badge className="bg-white/[0.08] text-white/65">
-                      No blockers linked
-                    </Badge>
-                  )}
-                </div>
-              </div>
-            </div>
-          </SectionCard>
-
-          <SectionCard
-            eyebrow="People and timing"
-            title="Accountability surface"
-            description="Show who owns the work, who is helping, and when the record moved."
-          >
-            <div className="grid gap-3">
-              <StatTile
-                label="Owner"
-                value={
-                  <div className="flex flex-wrap items-center gap-2">
-                    {payload.task.user ? (
-                      <UserBadge user={payload.task.user} compact />
-                    ) : null}
-                    <span>{payload.task.owner}</span>
-                    {botOwner ? (
-                      <Badge className="bg-fuchsia-500/12 text-fuchsia-100">
-                        <Bot className="mr-1 size-3.5" />
-                        Bot owner
-                      </Badge>
-                    ) : null}
-                  </div>
-                }
-              />
-              <div>
-                <DetailLabel label="Assignees" />
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {payload.task.assignees && payload.task.assignees.length > 0 ? (
-                    payload.task.assignees.map((user) => (
-                      <div
-                        key={user.id}
-                        className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.05] px-3 py-1.5 text-sm text-white/72"
-                      >
-                        <UserBadge user={user} compact />
-                        <span>{user.displayName}</span>
-                        {user.kind === "bot" ? (
-                          <Bot className="size-3.5 text-fuchsia-200" />
-                        ) : null}
-                      </div>
-                    ))
-                  ) : (
-                    <Badge className="bg-white/[0.08] text-white/65">
-                      No assignees
-                    </Badge>
-                  )}
-                </div>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <StatTile
-                  label="Due date"
-                  value={formatDate(payload.task.dueDate)}
-                  hint={`Use due dates only when timing materially matters for this ${workItemMeta.noun}.`}
-                />
-                <StatTile
-                  label="Completed"
-                  value={
-                    payload.task.completedAt
-                      ? formatDateTime(payload.task.completedAt)
-                      : "Not completed"
-                  }
-                />
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <StatTile
-                  label="Created"
-                  value={formatDateTime(payload.task.createdAt)}
-                />
-                <StatTile
-                  label="Updated"
-                  value={formatDateTime(payload.task.updatedAt)}
-                />
-              </div>
-            </div>
-          </SectionCard>
-        </div>
+        <TaskDetailContextGrid
+          payload={payload}
+          relatedWorkItems={relatedWorkItems}
+          availableTags={availableTags}
+          workItemMeta={workItemMeta}
+          taskLevel={taskLevel}
+          hasAiBrief={hasAiBrief}
+          botOwner={botOwner}
+          formatDate={formatDate}
+          formatDateTime={formatDateTime}
+        />
 
         {hasAiBrief ||
         acceptanceCriteria.length > 0 ||
@@ -1259,8 +796,12 @@ export function TaskDetailPage() {
                     {[closeoutGitRefs, supportingGitRefs]
                       .filter((group) => group.length > 0)
                       .map((group, groupIndex) => (
-                        <div key={`git-group-${groupIndex}`} className="grid gap-2">
-                          {closeoutGitRefs.length > 0 && supportingGitRefs.length > 0 ? (
+                        <div
+                          key={`git-group-${groupIndex}`}
+                          className="grid gap-2"
+                        >
+                          {closeoutGitRefs.length > 0 &&
+                          supportingGitRefs.length > 0 ? (
                             <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
                               {groupIndex === 0
                                 ? "Linked in completion report"
@@ -1280,7 +821,9 @@ export function TaskDetailPage() {
                                   </div>
                                 </div>
                                 <div className="mt-2 text-sm text-white/58">
-                                  {ref.displayTitle || ref.repository || ref.provider}
+                                  {ref.displayTitle ||
+                                    ref.repository ||
+                                    ref.provider}
                                 </div>
                               </div>
                             );
@@ -1326,27 +869,39 @@ export function TaskDetailPage() {
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <StatTile
                 label="Tracked total"
-                value={formatDurationLabel(payload.task.time.totalTrackedSeconds)}
+                value={formatDurationLabel(
+                  payload.task.time.totalTrackedSeconds
+                )}
               />
               <StatTile
                 label="Credited total"
-                value={formatDurationLabel(payload.task.time.totalCreditedSeconds)}
+                value={formatDurationLabel(
+                  payload.task.time.totalCreditedSeconds
+                )}
               />
               <StatTile
                 label="Live work"
-                value={formatDurationLabel(payload.task.time.liveCreditedSeconds)}
+                value={formatDurationLabel(
+                  payload.task.time.liveCreditedSeconds
+                )}
               />
               <StatTile
                 label="Manual adjustments"
-                value={formatDurationLabel(payload.task.time.manualAdjustedSeconds)}
+                value={formatDurationLabel(
+                  payload.task.time.manualAdjustedSeconds
+                )}
               />
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               <Badge className="bg-white/[0.08] text-white/72">
-                Today credited {formatDurationLabel(payload.task.time.todayCreditedSeconds ?? 0)}
+                Today credited{" "}
+                {formatDurationLabel(
+                  payload.task.time.todayCreditedSeconds ?? 0
+                )}
               </Badge>
               <Badge className="bg-white/[0.08] text-white/72">
-                Live tracked {formatDurationLabel(payload.task.time.liveTrackedSeconds)}
+                Live tracked{" "}
+                {formatDurationLabel(payload.task.time.liveTrackedSeconds)}
               </Badge>
               <Badge className="bg-white/[0.08] text-white/72">
                 Active runs {payload.task.time.activeRunCount}
@@ -1378,7 +933,8 @@ export function TaskDetailPage() {
                 value={
                   botOwner || botAssignees.length > 0
                     ? "Human + bot"
-                    : payload.task.assignees && payload.task.assignees.length > 0
+                    : payload.task.assignees &&
+                        payload.task.assignees.length > 0
                       ? "Shared human work"
                       : "Single owner"
                 }
@@ -1400,7 +956,8 @@ export function TaskDetailPage() {
                 Energy {t(`common.enums.energy.${payload.task.energy}`)}
               </Badge>
               <Badge className="bg-white/[0.08] text-white/72">
-                Duration {formatDurationLabel(payload.task.plannedDurationSeconds)}
+                Duration{" "}
+                {formatDurationLabel(payload.task.plannedDurationSeconds)}
               </Badge>
             </div>
           </SectionCard>
@@ -1431,9 +988,7 @@ export function TaskDetailPage() {
               <DetailLabel label="Sustain rate" />
               <div className="mt-2 text-lg text-white">
                 {actionPointSummary
-                  ? formatLifeForceRate(
-                      actionPointSummary.sustainRateApPerHour
-                    )
+                  ? formatLifeForceRate(actionPointSummary.sustainRateApPerHour)
                   : "0 AP/h"}
               </div>
             </div>
@@ -1450,9 +1005,7 @@ export function TaskDetailPage() {
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
             {payload.task.splitSuggestion?.shouldSplit ? (
-              <Badge className="bg-amber-400/12 text-amber-100">
-                Split it
-              </Badge>
+              <Badge className="bg-amber-400/12 text-amber-100">Split it</Badge>
             ) : null}
             {actionPointSummary ? (
               <Badge className="bg-white/[0.08] text-white/72">
@@ -1493,7 +1046,9 @@ export function TaskDetailPage() {
               <DetailLabel label="Instant headroom" />
               <div className="mt-2 text-lg text-white">
                 {lifeForceQuery.data
-                  ? formatLifeForceRate(lifeForceQuery.data.instantFreeApPerHour)
+                  ? formatLifeForceRate(
+                      lifeForceQuery.data.instantFreeApPerHour
+                    )
                   : "Loading..."}
               </div>
             </div>
@@ -1547,7 +1102,10 @@ export function TaskDetailPage() {
               </div>
             </div>
             <p className="mt-4 text-sm leading-6 text-white/58">
-              Scheduling rules now live behind the guided modal flow instead of an inline editor. Use it to change eligible blocks, blocked contexts, and the planning duration without overcrowding the task page.
+              Scheduling rules now live behind the guided modal flow instead of
+              an inline editor. Use it to change eligible blocks, blocked
+              contexts, and the planning duration without overcrowding the task
+              page.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <Button onClick={() => setTaskSchedulingDialogOpen(true)}>
@@ -1624,7 +1182,10 @@ export function TaskDetailPage() {
             ) : null}
             <div className="mt-4 flex flex-wrap gap-2">
               <Button
-                pending={createTimeboxMutation.isPending || patchTimeboxMutation.isPending}
+                pending={
+                  createTimeboxMutation.isPending ||
+                  patchTimeboxMutation.isPending
+                }
                 pendingLabel="Planning"
                 onClick={() => {
                   setEditingTimebox(null);
@@ -1645,7 +1206,8 @@ export function TaskDetailPage() {
                 Scheduled blocks
               </div>
               <p className="mt-2 text-sm leading-6 text-white/58">
-                Open a scheduled block to edit the day, the hour range, or the AP profile tied to this task.
+                Open a scheduled block to edit the day, the hour range, or the
+                AP profile tied to this task.
               </p>
             </div>
             <Badge className="bg-white/[0.08] text-white/72">
@@ -1683,7 +1245,8 @@ export function TaskDetailPage() {
                     </div>
                     <div className="mt-1 flex items-center gap-2 text-sm text-white/58">
                       <Clock3 className="size-3.5 shrink-0" />
-                      {formatDateTime(timebox.startsAt)} to {formatDateTime(timebox.endsAt)}
+                      {formatDateTime(timebox.startsAt)} to{" "}
+                      {formatDateTime(timebox.endsAt)}
                     </div>
                   </div>
                 </div>
@@ -1939,7 +1502,7 @@ export function TaskDetailPage() {
         description={`Pick the state that best matches where this ${workItemMeta.noun} is right now.`}
       >
         <div className="grid gap-3">
-          {STATUS_META.map((entry) => {
+          {TASK_STATUS_META.map((entry) => {
             const Icon = entry.icon;
             const selected = entry.status === payload.task.status;
             return (

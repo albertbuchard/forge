@@ -22,6 +22,12 @@ type ForgeRuntimeLaunchPlan = {
   sourceEntryFile?: string;
 };
 
+type ForgeSourceRuntimeCandidate = {
+  root: string;
+  entryFile: string;
+  tsxCli: string;
+};
+
 type ForgeRuntimeProbe = {
   healthy: boolean;
   pid: number | null;
@@ -275,8 +281,17 @@ function getCurrentModuleRoot() {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 }
 
+function uniquePaths(paths: string[]) {
+  return Array.from(new Set(paths.map((candidate) => path.resolve(candidate))));
+}
+
 function buildLaunchPlanSearchPaths(moduleRoot: string) {
   const repoRoot = path.resolve(moduleRoot, "..");
+  const sourceRoots = uniquePaths([
+    repoRoot,
+    moduleRoot,
+    path.resolve(moduleRoot, "..", "..", "..")
+  ]);
   return {
     packagedEntries: [
       path.join(moduleRoot, "server", "index.js"),
@@ -285,14 +300,9 @@ function buildLaunchPlanSearchPaths(moduleRoot: string) {
       path.join(moduleRoot, "dist", "server", "server", "src", "index.js")
     ],
     packagedMigrations: path.join(moduleRoot, "server", "migrations"),
-    sourceEntries: [
-      path.join(repoRoot, "server", "src", "index.ts"),
-      path.join(moduleRoot, "server", "src", "index.ts")
-    ],
-    tsxCliCandidates: [
-      path.join(repoRoot, "node_modules", "tsx", "dist", "cli.mjs"),
-      path.join(moduleRoot, "node_modules", "tsx", "dist", "cli.mjs")
-    ],
+    sourceRoots,
+    sourceEntries: sourceRoots.map((root) => path.join(root, "server", "src", "index.ts")),
+    tsxCliCandidates: sourceRoots.map((root) => path.join(root, "node_modules", "tsx", "dist", "cli.mjs")),
     repoRoot
   };
 }
@@ -306,6 +316,21 @@ function formatLaunchPlanFailure(moduleRoot: string) {
     `Source entry candidates: ${paths.sourceEntries.join(", ")}.`,
     `tsx candidates: ${paths.tsxCliCandidates.join(", ")}.`
   ].join(" ");
+}
+
+function resolveSourceRuntimeCandidate(paths: ReturnType<typeof buildLaunchPlanSearchPaths>): ForgeSourceRuntimeCandidate | null {
+  for (const sourceRoot of paths.sourceRoots) {
+    const entryFile = path.join(sourceRoot, "server", "src", "index.ts");
+    const tsxCli = path.join(sourceRoot, "node_modules", "tsx", "dist", "cli.mjs");
+    if (existsSync(entryFile) && existsSync(tsxCli)) {
+      return {
+        root: sourceRoot,
+        entryFile,
+        tsxCli
+      };
+    }
+  }
+  return null;
 }
 
 function getRuntimeLogPath(config: ForgePluginConfig) {
@@ -412,6 +437,19 @@ async function ensurePackagedRuntimeDependencies(plan: ForgeRuntimeLaunchPlan, c
 function resolveLaunchPlan(): ForgeRuntimeLaunchPlan | null {
   const moduleRoot = getCurrentModuleRoot();
   const paths = buildLaunchPlanSearchPaths(moduleRoot);
+  const sourceCandidate = resolveSourceRuntimeCandidate(paths);
+
+  if (isTruthyEnvFlag(process.env.FORGE_OPENCLAW_DEV)) {
+    if (sourceCandidate) {
+      return {
+        packageRoot: sourceCandidate.root,
+        entryFile: sourceCandidate.tsxCli,
+        mode: "source",
+        sourceEntryFile: sourceCandidate.entryFile
+      };
+    }
+    throw new Error(formatLaunchPlanFailure(moduleRoot));
+  }
 
   // Published or linked plugin package runtime.
   const packagedEntry = paths.packagedEntries.find((candidate) => existsSync(candidate));
@@ -424,14 +462,12 @@ function resolveLaunchPlan(): ForgeRuntimeLaunchPlan | null {
   }
 
   // Source-tree fallback for local development before packaging.
-  const sourceEntry = paths.sourceEntries.find((candidate) => existsSync(candidate));
-  const tsxCli = paths.tsxCliCandidates.find((candidate) => existsSync(candidate));
-  if (sourceEntry && tsxCli) {
+  if (sourceCandidate) {
     return {
-      packageRoot: paths.repoRoot,
-      entryFile: tsxCli,
+      packageRoot: sourceCandidate.root,
+      entryFile: sourceCandidate.tsxCli,
       mode: "source",
-      sourceEntryFile: sourceEntry
+      sourceEntryFile: sourceCandidate.entryFile
     };
   }
 

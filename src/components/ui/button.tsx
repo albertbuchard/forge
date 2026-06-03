@@ -4,7 +4,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex min-w-0 max-w-full items-center justify-center gap-2 overflow-hidden whitespace-nowrap rounded-[var(--radius-control)] font-medium leading-none transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(192,193,255,0.45)] disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex min-w-0 max-w-full items-center justify-center gap-2 overflow-hidden whitespace-nowrap rounded-[var(--radius-control)] font-medium leading-none transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--primary)_45%,transparent)] disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
@@ -34,9 +34,23 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> &
     pendingLabel?: string;
   };
 
-export function Button({ className, variant, size, pending = false, pendingLabel, children, disabled, ...props }: ButtonProps) {
+export function Button({
+  className,
+  variant,
+  size,
+  pending = false,
+  pendingLabel,
+  children,
+  disabled,
+  ...props
+}: ButtonProps) {
   return (
-    <button className={cn(buttonVariants({ variant, size }), className)} disabled={disabled || pending} aria-busy={pending} {...props}>
+    <button
+      className={cn(buttonVariants({ variant, size }), className)}
+      disabled={disabled || pending}
+      aria-busy={pending}
+      {...props}
+    >
       {pending ? <Spinner className="size-3.5" tone="subtle" /> : null}
       <span className="inline-flex min-w-0 max-w-full items-center gap-2 overflow-hidden truncate whitespace-nowrap">
         {pending && pendingLabel ? pendingLabel : children}

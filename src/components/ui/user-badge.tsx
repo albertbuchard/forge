@@ -18,7 +18,10 @@ export function UserBadge({
     return (
       <Badge
         size={size ?? (compact ? "sm" : "md")}
-        className={cn("border-white/10 bg-white/[0.05] text-white/55", className)}
+        className={cn(
+          "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)]",
+          className
+        )}
       >
         Unassigned
       </Badge>
@@ -31,17 +34,17 @@ export function UserBadge({
     <Badge
       size={size ?? (compact ? "sm" : "md")}
       className={cn(
-        "max-w-full gap-1.5 border text-white",
+        "max-w-full gap-1.5 border",
         user.kind === "bot"
-          ? "border-cyan-300/18 bg-cyan-400/12 text-cyan-50"
-          : "border-amber-300/18 bg-amber-400/12 text-amber-50",
+          ? "border-[color-mix(in_srgb,var(--info)_24%,transparent)] bg-[var(--ui-info-soft)] text-[color-mix(in_srgb,var(--info)_78%,var(--ui-ink-strong)_22%)]"
+          : "border-[color-mix(in_srgb,var(--warning)_24%,transparent)] bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]",
         size === "xs" && "gap-1",
         className
       )}
     >
       <Icon className={cn(size === "xs" ? "size-3" : "size-3.5", "shrink-0")} />
       <span className="truncate">{user.displayName}</span>
-      <span className="text-white/55">{user.kind}</span>
+      <span className="text-[var(--ui-ink-faint)]">{user.kind}</span>
     </Badge>
   );
 }

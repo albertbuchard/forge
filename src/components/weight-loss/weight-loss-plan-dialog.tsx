@@ -6,6 +6,7 @@ import {
   type QuestionFlowStep
 } from "@/components/flows/question-flow-dialog";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { SurfaceStat } from "@/components/ui/surface";
 import { Textarea } from "@/components/ui/textarea";
 import type {
@@ -13,6 +14,8 @@ import type {
   WeightLossViewData
 } from "@/lib/weight-loss-types";
 import { formatNumber, numeric } from "./weight-loss-format";
+import { WeightLossFormulaTooltip } from "./weight-loss-formula-tooltip";
+import { buildNutritionTargetGroupsFromValues } from "./weight-loss-nutrition-targets";
 
 type GoalMode = "lose" | "gain" | "maintain";
 type Sex = "male" | "female";
@@ -67,6 +70,39 @@ function formatKg(value: number) {
   return value.toFixed(1);
 }
 
+function fiberDri(sex: Sex, ageYears: number) {
+  return sex === "male" ? (ageYears >= 51 ? 30 : 38) : ageYears >= 51 ? 21 : 25;
+}
+
+function weightAtBmi(heightCm: number, bmi: number) {
+  const heightM = heightCm / 100;
+  return heightM > 0 ? bmi * heightM * heightM : null;
+}
+
+function proteinReferenceWeightKg(input: {
+  currentWeightKg: number;
+  goalWeightKg: number | null;
+  heightCm: number;
+  goalMode: GoalMode;
+}) {
+  const objectiveReference =
+    input.goalMode === "lose" && input.goalWeightKg != null
+      ? Math.min(input.currentWeightKg, input.goalWeightKg)
+      : input.currentWeightKg;
+  const bmi30Weight = weightAtBmi(input.heightCm, 30);
+  const bmi25Weight = weightAtBmi(input.heightCm, 25);
+  if (
+    bmi30Weight != null &&
+    bmi25Weight != null &&
+    input.currentWeightKg > bmi30Weight
+  ) {
+    const adjustedWeight =
+      bmi25Weight + (input.currentWeightKg - bmi25Weight) * 0.25;
+    return Math.min(objectiveReference, adjustedWeight);
+  }
+  return objectiveReference;
+}
+
 function applyObjectiveDefaults(
   draft: WeightLossPlanDraft,
   goalMode: GoalMode
@@ -80,7 +116,9 @@ function applyObjectiveDefaults(
   };
 }
 
-export function buildInitialPlanDraft(view: WeightLossViewData): WeightLossPlanDraft {
+export function buildInitialPlanDraft(
+  view: WeightLossViewData
+): WeightLossPlanDraft {
   const latestWeight = numeric(view.weightTrend.latestWeightKg);
   const target = view.target;
   const savedSex = parsePlanNote(target.notes, "sex");
@@ -107,24 +145,42 @@ export function buildInitialPlanDraft(view: WeightLossViewData): WeightLossPlanD
   return {
     goalMode,
     sex: savedSex === "female" ? "female" : "male",
-    ageYears: positiveNumber(savedAge) ? String(savedAge) : "35",
+    ageYears: positiveNumber(savedAge) ? String(savedAge) : "",
     heightCm: positiveNumber(savedHeight) ? String(savedHeight) : "",
     currentWeightKg: latestWeight ? latestWeight.toFixed(1) : "",
-    goalWeightKg: targetWeight ? String(targetWeight) : formatKg(defaultGoalWeightKg(currentWeight, goalMode)),
+    goalWeightKg: targetWeight
+      ? String(targetWeight)
+      : formatKg(defaultGoalWeightKg(currentWeight, goalMode)),
     weeklyRateKg:
       target.weeklyRateGoalKg !== null && target.weeklyRateGoalKg !== undefined
         ? String(Math.abs(target.weeklyRateGoalKg))
         : defaultWeeklyRateKg(currentWeight, goalMode).toFixed(2),
     activeCaloriesKcal: inferredActive.toFixed(0),
-    restingCaloriesKcal: inferredResting != null ? inferredResting.toFixed(0) : "",
+    restingCaloriesKcal:
+      inferredResting != null ? inferredResting.toFixed(0) : "",
     dietStyle: target.dietStyle ?? ""
   };
+}
+
+export function isWeightLossPlanConfigured(view: WeightLossViewData) {
+  const hasAge =
+    positiveNumber(parsePlanNote(view.target.notes, "age_years")) != null;
+  const hasHeight =
+    positiveNumber(parsePlanNote(view.target.notes, "height_cm")) != null;
+  const hasWeight = numeric(view.weightTrend.latestWeightKg) != null;
+  const hasGoal =
+    typeof view.target.bodyGoal === "string" &&
+    view.target.bodyGoal.trim().length > 0 &&
+    view.target.calorieTarget > 0 &&
+    view.target.proteinGramsTarget > 0;
+  return hasAge && hasHeight && hasWeight && hasGoal;
 }
 
 export function calculatePlan(draft: WeightLossPlanDraft) {
   const weight = Number(draft.currentWeightKg) || 80;
   const height = Number(draft.heightCm) || 178;
   const age = Number(draft.ageYears) || 35;
+  const goalWeight = positiveNumber(draft.goalWeightKg);
   const activeCalories = Math.max(0, Number(draft.activeCaloriesKcal) || 0);
   const measuredRestingCalories = positiveNumber(draft.restingCaloriesKcal);
   const sexAdjustment = draft.sex === "male" ? 5 : -161;
@@ -139,39 +195,156 @@ export function calculatePlan(draft: WeightLossPlanDraft) {
         ? weeklyMagnitude
         : 0;
   const dailyEnergyAdjustment = (weeklyRateGoalKg * 7700) / 7;
-  const calorieTarget = Math.max(1200, Math.round(maintenanceCalories + dailyEnergyAdjustment));
+  const minimumCalorieFloor = draft.sex === "male" ? 1500 : 1200;
+  const plannedCalorieTarget = Math.round(
+    maintenanceCalories + dailyEnergyAdjustment
+  );
+  const calorieTarget = Math.max(minimumCalorieFloor, plannedCalorieTarget);
+  const proteinReferenceWeight = proteinReferenceWeightKg({
+    currentWeightKg: weight,
+    goalWeightKg: goalWeight,
+    heightCm: height,
+    goalMode: draft.goalMode
+  });
   const proteinFactor =
     draft.goalMode === "lose" ? 2 : draft.goalMode === "gain" ? 1.8 : 1.6;
-  const proteinGramsTarget = Math.round(weight * proteinFactor);
-  const fatGramsTarget = Math.round(
-    Math.max(weight * 0.6, Math.min((calorieTarget * 0.3) / 9, (calorieTarget * 0.35) / 9))
+  const idealProteinGrams = Math.round(proteinReferenceWeight * proteinFactor);
+  const maxProteinGrams = Math.floor((calorieTarget * 0.45) / 4);
+  const proteinGramsTarget = Math.max(
+    1,
+    Math.min(idealProteinGrams, maxProteinGrams)
+  );
+  const fatFloorGrams = proteinReferenceWeight * 0.6;
+  const amdrFatTargetGrams = (calorieTarget * 0.25) / 9;
+  const maxFatForTarget = Math.max(
+    0,
+    (calorieTarget - proteinGramsTarget * 4) / 9
+  );
+  const fatGramsTarget = Math.max(
+    0,
+    Math.floor(
+      Math.min(
+        maxFatForTarget,
+        (calorieTarget * 0.35) / 9,
+        Math.max(fatFloorGrams, amdrFatTargetGrams)
+      )
+    )
   );
   const carbohydrateGramsTarget = Math.max(
-    130,
-    Math.round((calorieTarget - proteinGramsTarget * 4 - fatGramsTarget * 9) / 4)
+    0,
+    Math.floor(
+      (calorieTarget - proteinGramsTarget * 4 - fatGramsTarget * 9) / 4
+    )
   );
-  const fiberGramsTarget = Math.round(Math.max(25, (calorieTarget / 1000) * 14));
+  const fiberEnergyAdjustedGrams = Math.round((calorieTarget / 1000) * 14);
+  const fiberDriGrams = fiberDri(draft.sex, age);
+  const fiberGramsTarget = fiberEnergyAdjustedGrams;
   const saturatedFatLimitGrams = Math.round((calorieTarget * 0.1) / 9);
   const addedSugarLimitGrams = Math.round((calorieTarget * 0.1) / 4);
   return {
     bmr: Math.round(bmr),
     restingCalories: Math.round(restingCalories),
-    restingSource: measuredRestingCalories != null ? "HealthKit basal/resting" : "Mifflin-St Jeor",
+    restingSource:
+      measuredRestingCalories != null
+        ? "HealthKit basal/resting"
+        : "Mifflin-St Jeor",
     activeCalories: Math.round(activeCalories),
     maintenanceCalories: Math.round(maintenanceCalories),
+    plannedCalorieTarget,
+    minimumCalorieFloor,
     weeklyRateGoalKg,
     dailyEnergyAdjustment: Math.round(dailyEnergyAdjustment),
     calorieTarget,
+    proteinReferenceWeight: Math.round(proteinReferenceWeight * 10) / 10,
     proteinGramsTarget,
     carbohydrateGramsTarget,
     fatGramsTarget,
     fiberGramsTarget,
+    fiberEnergyAdjustedGrams,
+    fiberDriGrams,
     saturatedFatLimitGrams,
     addedSugarLimitGrams
   };
 }
 
-export function buildTargetPatchFromPlan(draft: WeightLossPlanDraft): NutritionTargetPatchInput {
+export function validateWeightLossPlanDraft(draft: WeightLossPlanDraft) {
+  const errors: string[] = [];
+  const age = Number(draft.ageYears);
+  const height = Number(draft.heightCm);
+  const currentWeight = Number(draft.currentWeightKg);
+  const goalWeight = Number(draft.goalWeightKg);
+  const weeklyRate = Number(draft.weeklyRateKg);
+  const activeCalories = draft.activeCaloriesKcal.trim()
+    ? Number(draft.activeCaloriesKcal)
+    : Number.NaN;
+  const restingCalories = draft.restingCaloriesKcal.trim()
+    ? Number(draft.restingCaloriesKcal)
+    : null;
+
+  if (!Number.isFinite(age) || age < 13 || age > 100) {
+    errors.push(
+      "- Enter the user's real age. Forge uses it in Mifflin-St Jeor resting metabolism."
+    );
+  }
+  if (!Number.isFinite(height) || height < 120 || height > 230) {
+    errors.push(
+      "- Enter height in cm. Height changes BMR and protein reference weight."
+    );
+  }
+  if (
+    !Number.isFinite(currentWeight) ||
+    currentWeight < 30 ||
+    currentWeight > 300
+  ) {
+    errors.push(
+      "- Enter current weight in kg. Use the latest known body measure as the starting state."
+    );
+  }
+  if (
+    draft.goalMode !== "maintain" &&
+    (!Number.isFinite(goalWeight) || goalWeight < 30 || goalWeight > 300)
+  ) {
+    errors.push(
+      "- Enter a target weight for the selected loss or gain objective."
+    );
+  }
+  if (!Number.isFinite(weeklyRate) || weeklyRate < 0) {
+    errors.push("- Enter a non-negative weekly change rate in kg/week.");
+  }
+  if (
+    Number.isFinite(weeklyRate) &&
+    weeklyRate > Math.max(1.5, currentWeight * 0.02)
+  ) {
+    errors.push(
+      "- The weekly rate is very aggressive. Choose a slower default unless this is a supervised plan."
+    );
+  }
+  if (
+    !Number.isFinite(activeCalories) ||
+    activeCalories < 0 ||
+    activeCalories > 3000
+  ) {
+    errors.push(
+      "- Enter average active calories per day. Zero is valid only when Forge has no activity evidence."
+    );
+  }
+  if (
+    restingCalories != null &&
+    (!Number.isFinite(restingCalories) ||
+      restingCalories < 900 ||
+      restingCalories > 3500)
+  ) {
+    errors.push(
+      "- Resting calories should be blank for formula mode or a plausible HealthKit basal/resting value."
+    );
+  }
+
+  return errors.length > 0 ? errors.join("\n") : null;
+}
+
+export function buildTargetPatchFromPlan(
+  draft: WeightLossPlanDraft
+): NutritionTargetPatchInput {
   const plan = calculatePlan(draft);
   const goalWeight = Number(draft.goalWeightKg);
   return {
@@ -205,7 +378,8 @@ export function WeightLossPlanDialog({
   value,
   onChange,
   onSubmit,
-  pending
+  pending,
+  error
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -214,14 +388,33 @@ export function WeightLossPlanDialog({
   onChange: (value: WeightLossPlanDraft) => void;
   onSubmit: () => Promise<void>;
   pending: boolean;
+  error?: string | null;
 }) {
   const plan = useMemo(() => calculatePlan(value), [value]);
+  const nutritionPreview = useMemo(
+    () =>
+      buildNutritionTargetGroupsFromValues({
+        sex: value.sex,
+        ageYears: Number(value.ageYears) || 35,
+        currentWeightKg: Number(value.currentWeightKg) || 80,
+        calorieTarget: plan.calorieTarget,
+        proteinGramsTarget: plan.proteinGramsTarget,
+        carbohydrateGramsTarget: plan.carbohydrateGramsTarget,
+        fatGramsTarget: plan.fatGramsTarget,
+        fiberGramsTarget: plan.fiberGramsTarget,
+        activeBurnKcal: plan.activeCalories,
+        movementCaloriesKcal: numeric(view.energyModel.movementCaloriesKcal),
+        restingEnergyKcal: plan.restingCalories
+      }),
+    [plan, value, view.energyModel.movementCaloriesKcal]
+  );
   const steps: Array<QuestionFlowStep<WeightLossPlanDraft>> = [
     {
       id: "profile",
       eyebrow: "Current state",
       title: "Confirm the body data Forge knows",
-      description: "These fields drive resting metabolism. Saved values are reused when Forge has them.",
+      description:
+        "These fields drive resting metabolism. Saved values are reused when Forge has them.",
       render: (draft, setDraft) => (
         <div className="grid gap-4 md:grid-cols-2">
           <FlowField label="Sex">
@@ -235,13 +428,30 @@ export function WeightLossPlanDialog({
             />
           </FlowField>
           <FlowField label="Age">
-            <Input inputMode="numeric" value={draft.ageYears} onChange={(event) => setDraft({ ageYears: event.target.value })} placeholder="35" />
+            <Input
+              inputMode="numeric"
+              value={draft.ageYears}
+              onChange={(event) => setDraft({ ageYears: event.target.value })}
+              placeholder="35"
+            />
           </FlowField>
           <FlowField label="Height cm">
-            <Input inputMode="decimal" value={draft.heightCm} onChange={(event) => setDraft({ heightCm: event.target.value })} placeholder="178" />
+            <Input
+              inputMode="decimal"
+              value={draft.heightCm}
+              onChange={(event) => setDraft({ heightCm: event.target.value })}
+              placeholder="178"
+            />
           </FlowField>
           <FlowField label="Current weight kg">
-            <Input inputMode="decimal" value={draft.currentWeightKg} onChange={(event) => setDraft({ currentWeightKg: event.target.value })} placeholder="80.0" />
+            <Input
+              inputMode="decimal"
+              value={draft.currentWeightKg}
+              onChange={(event) =>
+                setDraft({ currentWeightKg: event.target.value })
+              }
+              placeholder="80.0"
+            />
           </FlowField>
         </div>
       )
@@ -250,7 +460,8 @@ export function WeightLossPlanDialog({
       id: "objective",
       eyebrow: "Goal",
       title: "Choose what should happen next",
-      description: "Forge proposes a default target and weekly rate from current weight; you can change both.",
+      description:
+        "Forge proposes a default target and weekly rate from current weight; you can change both.",
       render: (draft, setDraft) => (
         <div className="grid gap-4 md:grid-cols-2">
           <div className="md:col-span-2">
@@ -261,17 +472,49 @@ export function WeightLossPlanDialog({
                 setDraft(applyObjectiveDefaults(draft, goalMode as GoalMode))
               }
               options={[
-                { value: "lose", label: "Lose fat", description: "Default: about 0.5% body weight per week." },
-                { value: "gain", label: "Gain mass", description: "Default: small surplus around 0.25% per week." },
-                { value: "maintain", label: "Maintain", description: "Hold weight while optimizing signals." }
+                {
+                  value: "lose",
+                  label: "Lose fat",
+                  description: "Default: about 0.5% body weight per week."
+                },
+                {
+                  value: "gain",
+                  label: "Gain mass",
+                  description: "Default: small surplus around 0.25% per week."
+                },
+                {
+                  value: "maintain",
+                  label: "Maintain",
+                  description: "Hold weight while optimizing signals."
+                }
               ]}
             />
           </div>
-          <FlowField label="Target weight kg" hint="Auto-filled from the objective; change it anytime.">
-            <Input inputMode="decimal" value={draft.goalWeightKg} onChange={(event) => setDraft({ goalWeightKg: event.target.value })} placeholder="75.0" />
+          <FlowField
+            label="Target weight kg"
+            hint="Filled from the objective; change it anytime."
+          >
+            <Input
+              inputMode="decimal"
+              value={draft.goalWeightKg}
+              onChange={(event) =>
+                setDraft({ goalWeightKg: event.target.value })
+              }
+              placeholder="75.0"
+            />
           </FlowField>
-          <FlowField label="Weekly change kg" hint="Loss/gain rate is converted to kcal/day with the 7700 kcal/kg planning model.">
-            <Input inputMode="decimal" value={draft.weeklyRateKg} onChange={(event) => setDraft({ weeklyRateKg: event.target.value })} placeholder="0.35" />
+          <FlowField
+            label="Weekly change kg"
+            hint="Loss/gain rate is converted to kcal/day with the 7700 kcal/kg planning model."
+          >
+            <Input
+              inputMode="decimal"
+              value={draft.weeklyRateKg}
+              onChange={(event) =>
+                setDraft({ weeklyRateKg: event.target.value })
+              }
+              placeholder="0.35"
+            />
           </FlowField>
         </div>
       )
@@ -280,21 +523,51 @@ export function WeightLossPlanDialog({
       id: "activity",
       eyebrow: "Activity",
       title: "Add active burn to resting burn",
-      description: "Active calories are independent evidence from HealthKit, workouts, and movement. The objective only changes the deficit or surplus.",
+      description:
+        "Active calories are independent evidence from HealthKit, workouts, and movement. The objective only changes the deficit or surplus.",
       render: (draft, setDraft) => (
         <div className="grid gap-4">
           <div className="grid gap-4 md:grid-cols-2">
-            <FlowField label="Resting calories/day" hint={`Forge uses HealthKit basal energy when present, otherwise Mifflin-St Jeor BMR. Current formula value: ${plan.bmr} kcal.`}>
-              <Input inputMode="decimal" value={draft.restingCaloriesKcal} onChange={(event) => setDraft({ restingCaloriesKcal: event.target.value })} placeholder={String(plan.bmr)} />
+            <FlowField
+              label="Resting calories/day"
+              hint={`Forge uses HealthKit basal energy when present, otherwise Mifflin-St Jeor BMR. Current formula value: ${plan.bmr} kcal.`}
+            >
+              <Input
+                inputMode="decimal"
+                value={draft.restingCaloriesKcal}
+                onChange={(event) =>
+                  setDraft({ restingCaloriesKcal: event.target.value })
+                }
+                placeholder={String(plan.bmr)}
+              />
             </FlowField>
-            <FlowField label="Average active calories/day" hint={`Forge currently sees ${formatNumber(view.energyModel.movementCaloriesKcal)} movement kcal and ${formatNumber(view.energyModel.activeBurnKcal)} active burn kcal.`}>
-              <Input inputMode="decimal" value={draft.activeCaloriesKcal} onChange={(event) => setDraft({ activeCaloriesKcal: event.target.value })} placeholder="350" />
+            <FlowField
+              label="Average active calories/day"
+              hint={`This is the default active allowance used when today has no same-day workout or active-energy evidence. Forge currently sees ${formatNumber(view.energyModel.movementCaloriesKcal)} movement kcal, ${formatNumber(view.energyModel.activeBurnKcal)} average active burn, and ${formatNumber(view.energyModel.todayWorkoutEnergyKcal)} workout kcal today.`}
+            >
+              <Input
+                inputMode="decimal"
+                value={draft.activeCaloriesKcal}
+                onChange={(event) =>
+                  setDraft({ activeCaloriesKcal: event.target.value })
+                }
+                placeholder="350"
+              />
             </FlowField>
           </div>
           <div className="grid gap-3 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 md:grid-cols-3">
-            <SurfaceStat label={plan.restingSource} value={`${plan.restingCalories} kcal`} />
-            <SurfaceStat label="Maintenance" value={`${plan.maintenanceCalories} kcal`} />
-            <SurfaceStat label="Daily adjustment" value={`${plan.dailyEnergyAdjustment > 0 ? "+" : ""}${plan.dailyEnergyAdjustment} kcal`} />
+            <SurfaceStat
+              label={plan.restingSource}
+              value={`${plan.restingCalories} kcal`}
+            />
+            <SurfaceStat
+              label="Maintenance"
+              value={`${plan.maintenanceCalories} kcal`}
+            />
+            <SurfaceStat
+              label="Daily adjustment"
+              value={`${plan.dailyEnergyAdjustment > 0 ? "+" : ""}${plan.dailyEnergyAdjustment} kcal`}
+            />
           </div>
         </div>
       )
@@ -303,20 +576,120 @@ export function WeightLossPlanDialog({
       id: "macros",
       eyebrow: "Macros",
       title: "Validate calories, macros, and limits",
-      description: "Target intake equals resting burn plus active burn plus the objective adjustment. Macros are generated from protein-per-kg, fat floor, carb floor, fiber density, and dietary limits.",
+      description:
+        "Target intake equals resting burn plus active burn plus the objective adjustment. Macros are generated from protein-per-kg, a practical fat floor, remaining carbohydrates, fiber density, and dietary limits.",
       render: (draft, setDraft) => (
         <div className="grid gap-4">
+          <div className="flex items-start justify-between gap-3 rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3">
+            <div className="min-w-0 text-sm leading-6 text-[var(--ui-ink-muted)]">
+              Inspect the exact math behind the current calories, macro targets,
+              and sport-loss preview.
+            </div>
+            <WeightLossFormulaTooltip
+              values={{
+                sex: draft.sex,
+                ageYears: Number(draft.ageYears) || null,
+                currentWeightKg: Number(draft.currentWeightKg) || null,
+                heightCm: Number(draft.heightCm) || null,
+                bmrKcal: plan.bmr,
+                restingKcal: plan.restingCalories,
+                restingSource: plan.restingSource,
+                activeKcal: plan.activeCalories,
+                maintenanceKcal: plan.maintenanceCalories,
+                weeklyRateKg: plan.weeklyRateGoalKg,
+                dailyAdjustmentKcal: plan.dailyEnergyAdjustment,
+                calorieTarget: plan.calorieTarget,
+                calorieFloor: plan.minimumCalorieFloor,
+                proteinReferenceWeightKg: plan.proteinReferenceWeight,
+                proteinFactor:
+                  draft.goalMode === "lose"
+                    ? 2
+                    : draft.goalMode === "gain"
+                      ? 1.8
+                      : 1.6,
+                proteinGrams: plan.proteinGramsTarget,
+                fatGrams: plan.fatGramsTarget,
+                carbohydrateGrams: plan.carbohydrateGramsTarget,
+                fiberGrams: plan.fiberGramsTarget,
+                fiberEnergyAdjustedGrams: plan.fiberEnergyAdjustedGrams,
+                fiberDriGrams: plan.fiberDriGrams
+              }}
+            />
+          </div>
           <div className="grid gap-3 md:grid-cols-4 xl:grid-cols-7">
             <SurfaceStat label="Calories" value={`${plan.calorieTarget}`} />
-            <SurfaceStat label="Protein" value={`${plan.proteinGramsTarget}g`} />
-            <SurfaceStat label="Carbs" value={`${plan.carbohydrateGramsTarget}g`} />
+            <SurfaceStat
+              label="Protein"
+              value={`${plan.proteinGramsTarget}g`}
+            />
+            <SurfaceStat
+              label="Carbs"
+              value={`${plan.carbohydrateGramsTarget}g`}
+            />
             <SurfaceStat label="Fat" value={`${plan.fatGramsTarget}g`} />
             <SurfaceStat label="Fiber" value={`${plan.fiberGramsTarget}g`} />
-            <SurfaceStat label="Sat fat max" value={`${plan.saturatedFatLimitGrams}g`} />
-            <SurfaceStat label="Added sugar max" value={`${plan.addedSugarLimitGrams}g`} />
+            <SurfaceStat
+              label="Sat fat max"
+              value={`${plan.saturatedFatLimitGrams}g`}
+            />
+            <SurfaceStat
+              label="Added sugar max"
+              value={`${plan.addedSugarLimitGrams}g`}
+            />
+          </div>
+          <div className="grid gap-4 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-[var(--ui-ink)]">
+                  Micronutrient and sport-loss preview
+                </div>
+                <div className="mt-1 text-sm leading-6 text-[var(--ui-ink-muted)]">
+                  The dashboard will track vitamin, mineral, trace-element,
+                  water, sodium-ceiling, essential-fat, and sport-loss targets
+                  from this plan.
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Badge tone="meta">
+                  {nutritionPreview.vitamins.length} vitamins
+                </Badge>
+                <Badge tone="meta">
+                  {nutritionPreview.minerals.length} minerals
+                </Badge>
+                <Badge tone="signal">
+                  {nutritionPreview.sportSummary.fluidLossLiters} L sweat
+                </Badge>
+              </div>
+            </div>
+            <div className="grid gap-3 md:grid-cols-4">
+              <SurfaceStat
+                label="Sport sodium loss"
+                value={`${nutritionPreview.sportSummary.sodiumLossMg} mg`}
+              />
+              <SurfaceStat
+                label="Sport potassium loss"
+                value={`${nutritionPreview.sportSummary.potassiumLossMg} mg`}
+              />
+              <SurfaceStat
+                label="Water baseline"
+                value={value.sex === "male" ? "3.7 L" : "2.7 L"}
+              />
+              <SurfaceStat
+                label="Essential fats"
+                value={
+                  value.sex === "male"
+                    ? "17g LA / 1.6g ALA"
+                    : "12g LA / 1.1g ALA"
+                }
+              />
+            </div>
           </div>
           <FlowField label="Diet style or constraints">
-            <Textarea value={draft.dietStyle} onChange={(event) => setDraft({ dietStyle: event.target.value })} placeholder="Mediterranean, high protein, no lactose, low FODMAP trial..." />
+            <Textarea
+              value={draft.dietStyle}
+              onChange={(event) => setDraft({ dietStyle: event.target.value })}
+              placeholder="Mediterranean, high protein, no lactose, low FODMAP trial..."
+            />
           </FlowField>
         </div>
       )
@@ -337,6 +710,7 @@ export function WeightLossPlanDialog({
       submitLabel="Save plan"
       pending={pending}
       pendingLabel="Saving plan"
+      error={error}
       draftPersistenceKey="weight-loss-plan"
     />
   );

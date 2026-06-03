@@ -904,9 +904,7 @@ export function getPsycheOverview(userIds?: string[] | unknown) {
 }
 
 export function getPsycheMetricsView() {
-  return request<{ metrics: PsycheMetricsViewData }>(
-    "/api/v1/psyche/metrics"
-  );
+  return request<{ metrics: PsycheMetricsViewData }>("/api/v1/psyche/metrics");
 }
 
 export function listQuestionnaires(userIds?: string[] | unknown) {
@@ -1297,7 +1295,7 @@ export async function listFlashcards(userIds?: string[] | unknown) {
       {
         entityTypes: ["flashcard"],
         userIds: coerceUserIds(userIds),
-        limit: 500
+        limit: 200
       }
     ]
   });
@@ -3409,6 +3407,26 @@ export function updateNutritionTarget(
   );
 }
 
+export function updateNutritionDailyActiveCalories(
+  patch: {
+    dayKey?: string;
+    activeCaloriesKcal?: number | null;
+    notes?: string;
+  },
+  userIds?: string[] | unknown
+) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{
+    dayKey: string;
+    override: WeightLossViewData["energyModel"]["todayActiveOverride"];
+  }>(`/api/v1/health/weight-loss/daily-active-calories${suffix}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch)
+  });
+}
+
 export function searchNutritionFoods(input: {
   query: string;
   limit?: number;
@@ -3490,9 +3508,10 @@ export function deleteNutritionFoodLog(
 
 export function parseNutritionFoodLogWithChatGpt(input: {
   text?: string;
-  imageDescription?: string;
-  loggedAt?: string;
-  mealLabel?: string;
+  mealTime?: string;
+  imageRefs?: string[];
+  connectionId?: string;
+  commitCandidate?: boolean;
   userIds?: string[] | unknown;
 }) {
   const search = new URLSearchParams();
@@ -3507,9 +3526,10 @@ export function parseNutritionFoodLogWithChatGpt(input: {
     method: "POST",
     body: JSON.stringify({
       text: input.text,
-      imageDescription: input.imageDescription,
-      loggedAt: input.loggedAt,
-      mealLabel: input.mealLabel
+      mealTime: input.mealTime,
+      imageRefs: input.imageRefs,
+      connectionId: input.connectionId,
+      commitCandidate: input.commitCandidate
     })
   });
 }

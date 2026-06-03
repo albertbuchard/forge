@@ -1,4 +1,7 @@
 @import "tailwindcss";
+@source not "../dist";
+@source not "../openclaw-plugin/dist";
+@source not "../plugins/*/runtime/dist";
 
 @theme {
   --font-display: "Sora Variable", "Sora", sans-serif;
@@ -30,6 +33,10 @@
   --primary: #c0c1ff;
   --secondary: #4edea3;
   --tertiary: #ffb95f;
+  --success: #4edea3;
+  --danger: #fb7185;
+  --warning: #ffb95f;
+  --info: #7dd3fc;
   --forge-entity-goal-rgb: 251, 191, 36;
   --forge-entity-project-rgb: 56, 189, 248;
   --forge-entity-task-rgb: 129, 140, 248;
@@ -56,6 +63,7 @@
   --forge-entity-functor-rgb: 250, 204, 21;
   --forge-entity-chat-rgb: 129, 140, 248;
   --surface: #0b1326;
+  --canvas: var(--surface);
   --surface-low: #131b2e;
   --surface-panel: #171f33;
   --surface-high: #222a3d;
@@ -83,7 +91,10 @@
   --ui-ink-medium: rgba(238, 242, 255, 0.74);
   --ui-ink-soft: rgba(238, 242, 255, 0.58);
   --ui-ink-faint: rgba(238, 242, 255, 0.4);
+  --ui-ink: var(--ui-ink-strong);
+  --ui-ink-muted: var(--ui-ink-soft);
   --ui-ink-on-accent: #ffffff;
+  --ui-accent: var(--primary);
   --ui-border-subtle: rgba(255, 255, 255, 0.08);
   --ui-border-strong: rgba(255, 255, 255, 0.14);
   --ui-surface-1: rgba(255, 255, 255, 0.04);
@@ -115,7 +126,10 @@
   --ui-overlay-backdrop: rgba(5, 10, 18, 0.72);
   --ui-accent-soft: color-mix(in srgb, var(--primary) 14%, transparent);
   --ui-accent-soft-hover: color-mix(in srgb, var(--primary) 20%, transparent);
-  --ui-success-soft: rgba(16, 185, 129, 0.16);
+  --ui-success-soft: color-mix(in srgb, var(--success) 16%, transparent);
+  --ui-danger-soft: color-mix(in srgb, var(--danger) 14%, transparent);
+  --ui-warning-soft: color-mix(in srgb, var(--warning) 14%, transparent);
+  --ui-info-soft: color-mix(in srgb, var(--info) 14%, transparent);
   --ui-shadow-soft: 0 18px 38px rgba(3, 8, 18, 0.18);
   --ui-shadow-floating: 0 36px 110px rgba(3, 8, 18, 0.5);
   --knowledge-graph-ambient: rgba(125, 211, 252, 0.12);
@@ -155,6 +169,35 @@ body,
 }
 
 body {
+  --canvas: var(--surface);
+  --ui-surface-shell: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-panel) 94%, transparent),
+    color-mix(in srgb, var(--surface-low) 92%, transparent)
+  );
+  --ui-surface-section: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-panel) 98%, transparent),
+    color-mix(in srgb, var(--surface-low) 96%, transparent)
+  );
+  --ui-surface-modal:
+    radial-gradient(
+      circle at top,
+      color-mix(in srgb, var(--primary) 18%, transparent),
+      transparent 38%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-panel) 98%, transparent),
+      color-mix(in srgb, var(--surface-low) 98%, transparent)
+    );
+  --ui-accent: var(--primary);
+  --ui-accent-soft: color-mix(in srgb, var(--primary) 14%, transparent);
+  --ui-accent-soft-hover: color-mix(in srgb, var(--primary) 20%, transparent);
+  --ui-success-soft: color-mix(in srgb, var(--success) 16%, transparent);
+  --ui-danger-soft: color-mix(in srgb, var(--danger) 14%, transparent);
+  --ui-warning-soft: color-mix(in srgb, var(--warning) 14%, transparent);
+  --ui-info-soft: color-mix(in srgb, var(--info) 14%, transparent);
   margin: 0;
   min-height: 100dvh;
   font-family: var(--font-sans);
@@ -185,23 +228,23 @@ body {
 
 .user-relationship-flow .react-flow__controls {
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--ui-border-subtle);
   border-radius: 16px;
-  background: rgba(8, 13, 24, 0.92);
-  box-shadow: 0 18px 48px rgba(3, 8, 18, 0.42);
+  background: var(--surface-glass);
+  box-shadow: var(--ui-shadow-floating);
 }
 
 .user-relationship-flow .react-flow__controls-button {
   width: 2.35rem;
   height: 2.35rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(13, 20, 35, 0.94);
-  color: rgba(238, 242, 255, 0.76);
+  border-bottom: 1px solid var(--ui-border-subtle);
+  background: var(--ui-surface-1);
+  color: var(--ui-ink-medium);
 }
 
 .user-relationship-flow .react-flow__controls-button:hover {
-  background: rgba(192, 193, 255, 0.14);
-  color: rgba(255, 255, 255, 0.94);
+  background: var(--ui-surface-active);
+  color: var(--ui-ink-strong);
 }
 
 .user-relationship-flow .react-flow__controls-button svg {
@@ -209,10 +252,10 @@ body {
 }
 
 .user-relationship-flow .react-flow__attribution {
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--ui-border-subtle);
   border-radius: 999px;
-  background: rgba(8, 13, 24, 0.78);
-  color: rgba(238, 242, 255, 0.48);
+  background: var(--surface-glass);
+  color: var(--ui-ink-faint);
 }
 
 .user-relationship-flow .react-flow__minimap {
@@ -230,6 +273,8 @@ body.theme-forge-light {
   --ui-ink-medium: color-mix(in srgb, var(--forge-body-text) 74%, transparent);
   --ui-ink-soft: color-mix(in srgb, var(--forge-body-text) 58%, transparent);
   --ui-ink-faint: color-mix(in srgb, var(--forge-body-text) 42%, transparent);
+  --ui-ink: var(--ui-ink-strong);
+  --ui-ink-muted: var(--ui-ink-soft);
   --ui-ink-on-accent: color-mix(in srgb, var(--primary) 78%, black 22%);
   --ui-border-subtle: rgba(24, 34, 53, 0.1);
   --ui-border-strong: rgba(24, 34, 53, 0.16);
@@ -269,7 +314,22 @@ body.theme-forge-light {
     var(--primary) 18%,
     var(--surface-high) 82%
   );
-  --ui-success-soft: color-mix(in srgb, #10b981 18%, var(--surface-high) 82%);
+  --ui-success-soft: color-mix(
+    in srgb,
+    var(--success) 18%,
+    var(--surface-high) 82%
+  );
+  --ui-danger-soft: color-mix(
+    in srgb,
+    var(--danger) 16%,
+    var(--surface-high) 84%
+  );
+  --ui-warning-soft: color-mix(
+    in srgb,
+    var(--warning) 16%,
+    var(--surface-high) 84%
+  );
+  --ui-info-soft: color-mix(in srgb, var(--info) 16%, var(--surface-high) 84%);
   --ui-shadow-soft: 0 16px 38px rgba(24, 34, 53, 0.09);
   --ui-shadow-floating: 0 28px 88px rgba(24, 34, 53, 0.16);
 }
@@ -489,13 +549,18 @@ body.theme-forge-light .text-white {
 }
 
 body.theme-forge-light [class*="text-white/82"],
+body.theme-forge-light [class*="text-white/80"],
 body.theme-forge-light [class*="text-white/78"],
+body.theme-forge-light [class*="text-white/76"],
 body.theme-forge-light [class*="text-white/74"],
 body.theme-forge-light [class*="text-white/72"],
 body.theme-forge-light [class*="text-white/70"] {
   color: color-mix(in srgb, var(--forge-body-text) 78%, transparent) !important;
 }
 
+body.theme-forge-light [class*="text-white/68"],
+body.theme-forge-light [class*="text-white/66"],
+body.theme-forge-light [class*="text-white/64"],
 body.theme-forge-light [class*="text-white/62"],
 body.theme-forge-light [class*="text-white/60"],
 body.theme-forge-light [class*="text-white/58"],
@@ -514,8 +579,12 @@ body.theme-forge-light [class*="text-white/40"] {
 }
 
 body.theme-forge-light [class*="text-white/38"],
+body.theme-forge-light [class*="text-white/36"],
 body.theme-forge-light [class*="text-white/35"],
-body.theme-forge-light [class*="text-white/30"] {
+body.theme-forge-light [class*="text-white/34"],
+body.theme-forge-light [class*="text-white/32"],
+body.theme-forge-light [class*="text-white/30"],
+body.theme-forge-light [class*="text-white/25"] {
   color: color-mix(in srgb, var(--forge-body-text) 46%, transparent) !important;
 }
 
@@ -531,7 +600,11 @@ body.theme-forge-light [class*="bg-white/[0.05]"] {
 
 body.theme-forge-light [class*="bg-white/[0.06]"],
 body.theme-forge-light [class*="bg-white/[0.08]"],
-body.theme-forge-light [class*="bg-white/[0.12]"] {
+body.theme-forge-light [class*="bg-white/[0.10]"],
+body.theme-forge-light [class*="bg-white/[0.12]"],
+body.theme-forge-light [class*="bg-white/[0.14]"],
+body.theme-forge-light [class*="bg-white/10"],
+body.theme-forge-light [class*="bg-white/15"] {
   background-color: color-mix(
     in srgb,
     var(--surface-panel) 88%,
@@ -539,9 +612,36 @@ body.theme-forge-light [class*="bg-white/[0.12]"] {
   ) !important;
 }
 
+body.theme-forge-light [class*="bg-[rgba(8,13,24"],
+body.theme-forge-light [class*="bg-[rgba(8,13,28"],
+body.theme-forge-light [class*="bg-[rgba(9,14,26"],
+body.theme-forge-light [class*="bg-[rgba(10,15,28"],
+body.theme-forge-light [class*="bg-[rgba(10,16,30"],
+body.theme-forge-light [class*="bg-[rgba(11,16,24"],
+body.theme-forge-light [class*="bg-[rgba(12,17,30"],
+body.theme-forge-light [class*="bg-[rgba(13,19,37"],
+body.theme-forge-light [class*="bg-[rgba(14,20,32"],
+body.theme-forge-light [class*="bg-[rgba(15,21,36"],
+body.theme-forge-light [class*="bg-[rgba(17,24,35"],
+body.theme-forge-light [class*="bg-[rgba(18,24,40"],
+body.theme-forge-light [class*="bg-[rgba(19,28,42"],
+body.theme-forge-light [class*="bg-[rgba(20,28,42"],
+body.theme-forge-light [class*="bg-[rgba(24,31,50"] {
+  background-color: color-mix(
+    in srgb,
+    var(--surface-high) 88%,
+    var(--surface-panel) 12%
+  ) !important;
+  background-image: none !important;
+}
+
+body.theme-forge-light [class*="border-white/6"],
 body.theme-forge-light [class*="border-white/8"],
 body.theme-forge-light [class*="border-white/10"],
 body.theme-forge-light [class*="border-white/12"],
+body.theme-forge-light [class*="border-white/14"],
+body.theme-forge-light [class*="border-white/16"],
+body.theme-forge-light [class*="border-white/18"],
 body.theme-forge-light [class*="border-white/25"] {
   border-color: color-mix(
     in srgb,
@@ -717,9 +817,9 @@ body.theme-forge-light [class*="border-white/25"] {
 .shell-scope-trigger {
   min-height: 2.5rem;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.05);
-  color: rgba(255, 255, 255, 0.8);
+  border: 1px solid var(--ui-border-subtle);
+  background: var(--ui-surface-1);
+  color: var(--ui-ink-medium);
   transition:
     background var(--motion-fast) var(--ease-standard),
     border-color var(--motion-fast) var(--ease-standard),
@@ -727,8 +827,8 @@ body.theme-forge-light [class*="border-white/25"] {
 }
 
 .shell-scope-trigger:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  background: var(--ui-surface-hover);
+  color: var(--ui-ink-strong);
 }
 
 .shell-scope-avatar {
@@ -737,8 +837,8 @@ body.theme-forge-light [class*="border-white/25"] {
   width: 1.75rem;
   height: 1.75rem;
   border-radius: 999px;
-  background: rgba(192, 193, 255, 0.16);
-  color: rgba(255, 255, 255, 0.94);
+  background: var(--ui-accent-soft);
+  color: var(--primary);
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.02em;

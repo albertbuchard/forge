@@ -934,7 +934,7 @@ export function OverviewPage() {
       minWidth: 6,
       render: ({ compact }) => (
         <div className="grid min-w-0 gap-4 xl:grid-cols-3">
-          <div className="grid gap-3">
+          <div className="grid min-w-0 gap-3">
             <div className="text-[12px] uppercase tracking-[0.16em] text-white/38">
               Projects
             </div>
@@ -944,7 +944,7 @@ export function OverviewPage() {
                 <Link
                   key={project.id}
                   to={`/projects/${project.id}`}
-                  className="rounded-[18px] bg-white/[0.04] px-4 py-3 transition hover:bg-white/[0.06]"
+                  className="block min-w-0 max-w-full rounded-[18px] bg-white/[0.04] px-4 py-3 transition hover:bg-white/[0.06]"
                 >
                   <div className="flex min-w-0 items-center justify-between gap-3">
                     <div className="min-w-0">
@@ -967,7 +967,7 @@ export function OverviewPage() {
                 </Link>
               ))}
           </div>
-          <div className="grid gap-3">
+          <div className="grid min-w-0 gap-3">
             <div className="text-[12px] uppercase tracking-[0.16em] text-white/38">
               Due habits
             </div>
@@ -978,7 +978,7 @@ export function OverviewPage() {
                   key={habit.id}
                   to="/habits"
                   aria-label={`Open habit ${habit.title}`}
-                  className="rounded-[18px] bg-white/[0.04] px-4 py-3 transition hover:bg-white/[0.06]"
+                  className="block min-w-0 max-w-full rounded-[18px] bg-white/[0.04] px-4 py-3 transition hover:bg-white/[0.06]"
                 >
                   <div className="flex min-w-0 items-center justify-between gap-3">
                     <div className="min-w-0">
@@ -991,14 +991,17 @@ export function OverviewPage() {
                         </div>
                       ) : null}
                     </div>
-                    <Badge className="bg-[rgba(78,222,163,0.14)] text-[var(--secondary)]">
+                    <Badge
+                      wrap
+                      className="max-w-[7rem] shrink-0 bg-[rgba(78,222,163,0.14)] text-[var(--secondary)]"
+                    >
                       {habit.rewardXp} xp
                     </Badge>
                   </div>
                 </Link>
               ))}
           </div>
-          <div className="grid gap-3">
+          <div className="grid min-w-0 gap-3">
             <div className="text-[12px] uppercase tracking-[0.16em] text-white/38">
               Top tasks
             </div>
@@ -1008,7 +1011,7 @@ export function OverviewPage() {
                 <Link
                   key={task.id}
                   to={`/tasks/${task.id}`}
-                  className="rounded-[18px] bg-white/[0.04] px-4 py-3 transition hover:bg-white/[0.06]"
+                  className="block min-w-0 max-w-full rounded-[18px] bg-white/[0.04] px-4 py-3 transition hover:bg-white/[0.06]"
                 >
                   <div className="flex min-w-0 items-center justify-between gap-3">
                     <div className="min-w-0">

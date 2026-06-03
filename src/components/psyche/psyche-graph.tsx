@@ -49,36 +49,36 @@ export interface PsycheGraphViewportState {
 }
 
 const toneStrokeMap: Record<PsycheGraphTone, string> = {
-  mint: "rgba(110,231,183,0.64)",
-  sky: "rgba(125,211,252,0.66)",
-  violet: "rgba(196,181,253,0.72)",
-  rose: "rgba(251,113,133,0.68)",
-  amber: "rgba(251,191,36,0.68)",
-  orange: "rgba(251,146,60,0.72)",
-  blue: "rgba(96,165,250,0.72)",
-  slate: "rgba(148,163,184,0.52)"
+  mint: "color-mix(in srgb, var(--success) 64%, transparent)",
+  sky: "color-mix(in srgb, var(--info) 66%, transparent)",
+  violet: "color-mix(in srgb, var(--primary) 72%, transparent)",
+  rose: "color-mix(in srgb, var(--danger) 68%, transparent)",
+  amber: "color-mix(in srgb, var(--warning) 68%, transparent)",
+  orange: "color-mix(in srgb, var(--tertiary) 72%, transparent)",
+  blue: "color-mix(in srgb, var(--info) 72%, transparent)",
+  slate: "color-mix(in srgb, var(--ui-ink-soft) 52%, transparent)"
 };
 
 const toneFillMap: Record<PsycheGraphTone, string> = {
-  mint: "rgba(16,185,129,0.18)",
-  sky: "rgba(56,189,248,0.18)",
-  violet: "rgba(167,139,250,0.18)",
-  rose: "rgba(251,113,133,0.18)",
-  amber: "rgba(251,191,36,0.18)",
-  orange: "rgba(251,146,60,0.18)",
-  blue: "rgba(96,165,250,0.18)",
-  slate: "rgba(148,163,184,0.12)"
+  mint: "color-mix(in srgb, var(--success) 18%, transparent)",
+  sky: "color-mix(in srgb, var(--info) 18%, transparent)",
+  violet: "color-mix(in srgb, var(--primary) 18%, transparent)",
+  rose: "color-mix(in srgb, var(--danger) 18%, transparent)",
+  amber: "color-mix(in srgb, var(--warning) 18%, transparent)",
+  orange: "color-mix(in srgb, var(--tertiary) 18%, transparent)",
+  blue: "color-mix(in srgb, var(--info) 18%, transparent)",
+  slate: "color-mix(in srgb, var(--ui-ink-soft) 12%, transparent)"
 };
 
 const toneTextMap: Record<PsycheGraphTone, string> = {
-  mint: "rgba(209,250,229,0.98)",
-  sky: "rgba(224,242,254,0.98)",
-  violet: "rgba(237,233,254,0.98)",
-  rose: "rgba(255,228,230,0.98)",
-  amber: "rgba(254,243,199,0.98)",
-  orange: "rgba(255,237,213,0.98)",
-  blue: "rgba(219,234,254,0.98)",
-  slate: "rgba(241,245,249,0.9)"
+  mint: "color-mix(in srgb, var(--success) 56%, var(--ui-ink-strong) 44%)",
+  sky: "color-mix(in srgb, var(--info) 56%, var(--ui-ink-strong) 44%)",
+  violet: "color-mix(in srgb, var(--primary) 60%, var(--ui-ink-strong) 40%)",
+  rose: "color-mix(in srgb, var(--danger) 58%, var(--ui-ink-strong) 42%)",
+  amber: "color-mix(in srgb, var(--warning) 60%, var(--ui-ink-strong) 40%)",
+  orange: "color-mix(in srgb, var(--tertiary) 60%, var(--ui-ink-strong) 40%)",
+  blue: "color-mix(in srgb, var(--info) 58%, var(--ui-ink-strong) 42%)",
+  slate: "var(--ui-ink-medium)"
 };
 
 function getEntityKindForNode(nodeKind: PsycheGraphNodeKind): EntityKind | null {
@@ -311,12 +311,12 @@ export function PsycheGraphCanvas({
       return;
     }
 
-    const padding = isMobileFrame ? 132 : compact ? 140 : 190;
+    const padding = isMobileFrame ? 260 : compact ? 140 : 190;
     const width = Math.max(bounds.maxX - bounds.minX, 1);
     const height = Math.max(bounds.maxY - bounds.minY, 1);
     const scale = clamp(
       Math.min(frameSize.width / (width + padding), frameSize.height / (height + padding)),
-      isMobileFrame ? 0.24 : compact ? 0.4 : 0.46,
+      isMobileFrame ? 0.16 : compact ? 0.4 : 0.46,
       isMobileFrame ? 0.76 : compact ? 1.04 : 1.18
     );
     const centerX = (bounds.minX + bounds.maxX) / 2;
@@ -510,15 +510,15 @@ export function PsycheGraphCanvas({
     <section
       data-testid={testId}
       className={cn(
-        "overflow-hidden rounded-[32px] border border-white/8 bg-[radial-gradient(circle_at_top,rgba(125,211,252,0.12),transparent_32%),linear-gradient(180deg,rgba(11,18,31,0.985),rgba(7,12,23,0.98))] shadow-[0_26px_90px_rgba(2,6,16,0.38)]",
+        "overflow-hidden rounded-[32px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)] shadow-[var(--card-shadow)]",
         compact ? "px-3 py-3 sm:px-4 sm:py-4 lg:px-5 lg:py-5" : "px-3 py-3 sm:px-4 sm:py-4 lg:px-5 lg:py-5"
       )}
     >
       <div className="mb-3 flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[rgba(125,211,252,0.82)]">Gravity well</div>
-          <h2 className={cn("mt-2 font-display leading-none text-white", compact ? "text-[clamp(1.25rem,2vw,1.7rem)]" : "text-[clamp(1.45rem,2.8vw,2.3rem)]")}>{title}</h2>
-          {hint ? <p className="mt-1.5 max-w-3xl text-sm leading-6 text-white/54">{isMobileFrame ? "Select a node, pan the field, and open the full map when you need the wider structure." : hint}</p> : null}
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--info)]">Gravity well</div>
+          <h2 className={cn("mt-2 break-words font-display leading-none text-[var(--ui-ink-strong)]", compact ? "text-[clamp(1.25rem,2vw,1.7rem)]" : "text-[clamp(1.45rem,2.8vw,2.3rem)]")}>{title}</h2>
+          {hint ? <p className="mt-1.5 max-w-3xl break-words text-sm leading-6 text-[var(--ui-ink-soft)]">{isMobileFrame ? "Select a node, pan the field, and open the full map when you need the wider structure." : hint}</p> : null}
         </div>
         <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">{action}</div>
       </div>
@@ -526,7 +526,7 @@ export function PsycheGraphCanvas({
       <div
         ref={frameRef}
         className={cn(
-          "group relative overflow-hidden rounded-[30px] border border-white/6 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.04),transparent_46%)] touch-none",
+          "group relative overflow-hidden rounded-[30px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] touch-none",
           minHeightClassName
         )}
         style={{ touchAction: "none" }}
@@ -536,9 +536,9 @@ export function PsycheGraphCanvas({
         onPointerUp={handlePointerEnd}
         onPointerCancel={handlePointerEnd}
       >
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(110,231,183,0.06),transparent_28%),radial-gradient(circle_at_20%_20%,rgba(196,181,253,0.08),transparent_24%),linear-gradient(180deg,rgba(255,255,255,0.015),rgba(4,8,18,0.24))]" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,color-mix(in_srgb,var(--success)_8%,transparent),transparent_28%),radial-gradient(circle_at_20%_20%,color-mix(in_srgb,var(--primary)_10%,transparent),transparent_24%),var(--ui-surface-section)]" />
 
-        <div className="absolute left-3 top-3 z-10 inline-flex max-w-[calc(100%-7rem)] items-center gap-2 rounded-full border border-white/8 bg-[rgba(8,14,25,0.78)] px-2.5 py-1.5 text-[11px] uppercase tracking-[0.18em] text-white/42 backdrop-blur-xl sm:left-4 sm:top-4 sm:max-w-none sm:px-3" onPointerDown={(event) => event.stopPropagation()}>
+        <div className="absolute left-3 top-3 z-10 inline-flex max-w-[calc(100%-7rem)] items-center gap-2 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--surface-glass)] px-2.5 py-1.5 text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)] backdrop-blur-xl sm:left-4 sm:top-4 sm:max-w-none sm:px-3" onPointerDown={(event) => event.stopPropagation()}>
           <Move className="size-3.5" />
           {isMobileFrame ? "Drag or pinch" : "Drag to pan, scroll to zoom"}
         </div>
@@ -573,12 +573,12 @@ export function PsycheGraphCanvas({
         </div>
 
         {legend && legend.length > 0 && !isMobileFrame ? (
-          <div className="absolute bottom-4 left-4 z-10 flex flex-wrap items-center gap-2 rounded-[24px] border border-white/8 bg-[rgba(8,14,25,0.76)] px-3 py-2 text-xs text-white/58 backdrop-blur-xl">
+          <div className="absolute bottom-4 left-4 z-10 flex flex-wrap items-center gap-2 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--surface-glass)] px-3 py-2 text-xs text-[var(--ui-ink-soft)] backdrop-blur-xl">
             {legend.map((item) => {
               const legendTone = item.kind ? getToneForEntityKind(item.kind) : (item.tone ?? "slate");
               const Icon = item.kind ? getEntityVisual(item.kind).icon : null;
               return (
-                <span key={item.label} className="inline-flex items-center gap-2 whitespace-nowrap rounded-full bg-white/[0.04] px-2.5 py-1.5">
+                <span key={item.label} className="inline-flex items-center gap-2 whitespace-nowrap rounded-full bg-[var(--ui-surface-1)] px-2.5 py-1.5">
                   {Icon ? <Icon className="size-3.5" color={toneTextMap[legendTone]} strokeWidth={2.1} /> : <span className="size-2 rounded-full" style={{ backgroundColor: toneStrokeMap[legendTone] }} />}
                   {item.label}
                 </span>
@@ -587,7 +587,7 @@ export function PsycheGraphCanvas({
           </div>
         ) : null}
 
-        <svg className="relative z-[1] h-full w-full" viewBox={`0 0 ${frameSize.width || 1200} ${frameSize.height || 760}`} role="img" aria-label={title}>
+        <svg className="relative z-[1] h-full w-full overflow-hidden" viewBox={`0 0 ${frameSize.width || 1200} ${frameSize.height || 760}`} role="img" aria-label={title} style={{ overflow: "hidden" }}>
           <defs>
             <filter id="forge-graph-blur">
               <feGaussianBlur stdDeviation="34" />
@@ -621,7 +621,7 @@ export function PsycheGraphCanvas({
                         cy={node.y}
                         r={ringRadius}
                         fill="none"
-                        stroke={index === 0 ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.045)"}
+                        stroke={index === 0 ? "var(--ui-border-subtle)" : "var(--ui-border-strong)"}
                         strokeDasharray={index === 0 ? "0" : "10 10"}
                       />
                     ))}
@@ -693,25 +693,25 @@ export function PsycheGraphCanvas({
                     }}
                     className="cursor-pointer outline-none"
                   >
+	                    <circle
+	                      cx={node.x}
+	                      cy={node.y}
+	                      r={radius + (isActive ? 14 : 0)}
+	                      fill={isActive ? toneFillMap[tone] : "transparent"}
+	                      stroke={isActive ? toneStrokeMap[tone] : "transparent"}
+	                      opacity={isHovered ? 0.98 : 0.9}
+	                    />
                     <circle
                       cx={node.x}
-                      cy={node.y}
-                      r={radius + (isActive ? 14 : 0)}
-                      fill={isActive ? `${toneStrokeMap[tone]}22` : "transparent"}
-                      stroke={isActive ? toneStrokeMap[tone] : "transparent"}
-                      opacity={isHovered ? 0.98 : 0.9}
-                    />
-                    <circle
-                      cx={node.x}
-                      cy={node.y}
-                      r={radius + (isHovered ? 2 : 0)}
-                      fill={node.kind === "ghost" ? "rgba(255,255,255,0.03)" : toneFillMap[tone]}
-                      stroke={node.kind === "ghost" ? "rgba(255,255,255,0.18)" : toneStrokeMap[tone]}
+	                      cy={node.y}
+	                      r={radius + (isHovered ? 2 : 0)}
+	                      fill={node.kind === "ghost" ? "var(--ui-surface-1)" : toneFillMap[tone]}
+	                      stroke={node.kind === "ghost" ? "var(--ui-border-strong)" : toneStrokeMap[tone]}
                       strokeDasharray={node.kind === "ghost" ? "8 8" : undefined}
                       strokeWidth={isActive ? 2.8 : 1.6}
                     />
                     {metaLabel ? (
-                      <text x={node.x} y={metaY ?? node.y - 12} textAnchor="middle" fontSize={node.kind === "goal" ? "11.5" : "10.5"} fill={node.kind === "ghost" ? "rgba(255,255,255,0.62)" : toneTextMap[tone]} style={{ letterSpacing: "0.18em", textTransform: "uppercase" }}>
+	                      <text x={node.x} y={metaY ?? node.y - 12} textAnchor="middle" fontSize={node.kind === "goal" ? "11.5" : "10.5"} fill={node.kind === "ghost" ? "var(--ui-ink-soft)" : toneTextMap[tone]} style={{ letterSpacing: "0.18em", textTransform: "uppercase" }}>
                         {metaLabel}
                       </text>
                     ) : null}
@@ -733,7 +733,7 @@ export function PsycheGraphCanvas({
                         textAnchor="middle"
                         fontSize={node.kind === "goal" ? 21 : 12.8}
                         fontWeight={node.kind === "goal" ? 600 : 500}
-                        fill={node.kind === "ghost" ? "rgba(255,255,255,0.92)" : toneTextMap[tone]}
+	                        fill={node.kind === "ghost" ? "var(--ui-ink-strong)" : toneTextMap[tone]}
                       >
                         {line}
                       </text>
@@ -774,15 +774,15 @@ export function PsycheGraphCanvas({
                   }}
                   className="cursor-pointer outline-none"
                 >
-                  <rect
-                    x={x - (isActive ? 6 : 0)}
-                    y={y - (isActive ? 6 : 0)}
+	                  <rect
+	                    x={x - (isActive ? 6 : 0)}
+	                    y={y - (isActive ? 6 : 0)}
                     rx="28"
                     ry="28"
                     width={width + (isActive ? 12 : 0)}
                     height={height + (isActive ? 12 : 0)}
-                    fill={isActive ? `${toneStrokeMap[tone]}22` : "transparent"}
-                  />
+	                    fill={isActive ? toneFillMap[tone] : "transparent"}
+	                  />
                   <rect
                     x={x - (isHovered ? 2 : 0)}
                     y={y - (isHovered ? 2 : 0)}

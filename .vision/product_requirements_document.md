@@ -232,7 +232,17 @@ Public docs, GitHub Pages docs, README, and agent-facing docs must all explain:
 - The Sports web surface must expose both aggregate training intelligence and per-workout drill-down: zone mix, training load, HR coverage, resting HR/VO2max context, route availability, dense HR timelines with zone bands, route maps with explicit tile-source configuration, events, phases, metrics, and polished missing-data states.
 - Cardiovascular training-target analytics must have their own read-model surface separate from the general Sports cockpit. Forge exposes `/api/v1/health/training-load`, OpenAPI contract `TrainingLoadViewData`, OpenClaw/Hermes/Codex tool coverage through `forge_get_training_load_overview`, and the React `/training-load` view for acute 7-day load, chronic 28-day weekly load, acute:chronic ratio, monotony, strain, HRR zone distribution, Z4/Z5 threshold exposure, easy/moderate/hard intensity split, VO2max and resting-HR context, sport contribution, recent session signals, data-quality caveats, and target bands. The view must remain summary-first, responsive on desktop and mobile, and explicit that wearable HR and derived load are decision-support signals rather than clinical diagnosis.
 
-### 12. Gamification Achievement Contract
+### 12. Weight Loss And Nutrition Contract
+
+The Weight Loss surface is a first-class Forge health cockpit, not an inline questionnaire or a simple food diary clone. Setup, food logging, body measurements, subjective check-ins, gut check-ins, appearance check-ins, and objective changes must use guided modal flows. The page itself should remain a dense dashboard for current targets, food ledger, body trend, sport-fuel context, micronutrient coverage, gut/energy/look signals, and hypothesis cards.
+
+The calorie model must separate current body state, resting burn, active burn, and objective math. Forge pre-fills sex, age, height, latest weight, HealthKit basal energy, HealthKit active energy, workout energy, and movement-trip calories when known. Nutrition body check-ins are the editable weight source for this surface, but HealthKit `bodyMass` seeds the latest weight when no nutrition check-in exists yet. Forge estimates resting energy with HealthKit basal energy first and Mifflin-St Jeor otherwise. Active calories come from HealthKit/workouts/movement and never change because the user chooses lose, gain, or maintain. The objective only applies a signed deficit or surplus from the selected weekly weight-change rate: `target_kcal = resting_or_basal_kcal + active_burn_kcal + objective_daily_delta_kcal`.
+
+Nutrition targets must include all macros plus a detailed daily vitamin, mineral, trace-element, essential-fat, water, sodium-ceiling, and sport-loss view. Macro math must be internally consistent: protein is generated from g/kg goal posture using a sane reference weight rather than blindly multiplying current mass in every case, fat keeps a practical floor and AMDR context where possible, carbohydrates use remaining energy, and the 130 g/day carbohydrate DRI is shown as reference rather than forced when it would make total macro calories exceed the target. Sport losses are displayed as expected ranges for fluid, sodium, and potassium, calibrated from active/exercise evidence when possible and never presented as medical supplementation orders.
+
+The insight layer must connect food to Forge context: workouts, movement places, sleep, vitals, Psyche observations, notes, calendar events, projects/tasks, energy, focus, cravings, gut symptoms, and private user-defined appearance metrics. AI food parsing uses the existing ChatGPT/Codex OAuth path, stores candidates as unconfirmed until accepted, and must not default to OpenAI Platform API billing.
+
+### 13. Gamification Achievement Contract
 
 - Trophies are permanent achievements earned from meaningful Forge behavior, not decorative XP badges.
 - Unlocks are cosmetic only: mascot skins, poses, HUD treatments, streak effects, trophy shelves, icon frames, and celebration variants.
@@ -254,11 +264,11 @@ Public docs, GitHub Pages docs, README, and agent-facing docs must all explain:
 - Apple Health and HealthKit are the first production adapter path, but the architecture must stay modular so Android Health Connect, Garmin, and other providers can plug into the same backend and UI contract without forking the product model.
 - The web sports surface must present friendly workout naming, provider provenance, and captured metrics/events/phases directly in the session UI instead of hiding them behind transport-only fields.
 
-### 12. Psyche Daily Metrics
+### 14. Psyche Daily Metrics
 
 Psyche metrics are daily, local-first measurements derived from stored observations rather than live page-time scanners. Devrage is the first metric family: it stores conversation-day counts and daily metric rows for user-message swear count and swearing-message percentage, exposes those rows through a Psyche Metrics view, and renders them with the same history, coverage, baseline, delta, and sparkline treatment as Vitals. If no conversations or stored metric rows exist, devrage-specific cards stay hidden while the generic Metrics route remains available for future Psyche measures.
 
-### 12. Gamified Progression
+### 15. Gamified Progression
 
 Forge should make user momentum visible through a selected-user-first XP and trophy system. The progression model must extend the existing reward ledger rather than duplicating it: XP totals, levels, streaks, trophies, unlocks, and celebrations are projections of auditable reward events.
 

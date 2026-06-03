@@ -142,7 +142,7 @@ export function InsightFlowDialog({
             description="Use a specific entity when the insight is about one goal, project, task, or report. Keep it general when it applies to the wider system."
           >
             {lockedEntity ? (
-              <div className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4">
+              <div className="rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
                 <EntityBadge
                   kind={lockedEntity.kind}
                   label={lockedEntity.label}
@@ -190,7 +190,7 @@ export function InsightFlowDialog({
                           <button
                             key={`${candidate.entityType}:${candidate.entityId}`}
                             type="button"
-                            className={`rounded-[22px] border px-4 py-4 text-left transition ${selected ? "border-[rgba(192,193,255,0.28)] bg-[rgba(192,193,255,0.14)] text-white" : "border-white/8 bg-white/[0.04] text-white/72 hover:bg-white/[0.07]"}`}
+                            className={`rounded-[22px] border px-4 py-4 text-left transition ${selected ? "border-[color-mix(in_srgb,var(--primary)_34%,var(--ui-border-subtle)_66%)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]" : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)]"}`}
                             onClick={() =>
                               patch({
                                 entityType: candidate.entityType,
@@ -204,7 +204,7 @@ export function InsightFlowDialog({
                               compact
                             />
                             {candidate.description ? (
-                              <div className="mt-2 text-sm leading-6 text-white/54">
+                              <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-faint)]">
                                 {candidate.description}
                               </div>
                             ) : null}

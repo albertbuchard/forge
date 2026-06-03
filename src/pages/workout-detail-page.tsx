@@ -58,6 +58,18 @@ function formatWindow(startedAt: string, endedAt: string) {
   return `${date.format(new Date(startedAt))} · ${time.format(new Date(startedAt))} - ${time.format(new Date(endedAt))}`;
 }
 
+function formatChartTime(value: unknown) {
+  const timestamp =
+    typeof value === "number" ? Math.floor(value) : Number.parseFloat(String(value ?? ""));
+  if (!Number.isFinite(timestamp)) {
+    return "";
+  }
+  return new Date(timestamp).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
 function formatMetricValue(value: unknown, unit: string) {
   if (typeof value === "number") {
     const formatted = Number.isInteger(value) ? String(value) : value.toFixed(1);
@@ -181,11 +193,11 @@ function RoutePreview({ points }: { points: WorkoutRoutePointRecord[] }) {
   }, [bounds, points]);
 
   return (
-    <div className="relative min-h-[280px] overflow-hidden rounded-[8px] border border-white/10 bg-white/[0.035]">
+    <div className="relative min-h-[280px] overflow-hidden rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]">
       <div ref={containerRef} className="absolute inset-0" />
       {!mapReady ? (
         <svg viewBox="0 0 720 280" className="absolute inset-0 h-full w-full">
-          <rect width="720" height="280" fill="rgba(255,255,255,0.025)" />
+          <rect width="720" height="280" fill="var(--ui-surface-1)" />
           {polyline ? (
             <polyline
               points={polyline}
@@ -198,7 +210,7 @@ function RoutePreview({ points }: { points: WorkoutRoutePointRecord[] }) {
           ) : null}
         </svg>
       ) : null}
-      <div className="absolute left-3 top-3 rounded-[8px] border border-white/10 bg-black/50 px-3 py-2 text-xs text-white/70 backdrop-blur">
+      <div className="absolute left-3 top-3 max-w-[calc(100%-1.5rem)] rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--surface-glass)] px-3 py-2 text-xs text-[var(--ui-ink-medium)] backdrop-blur">
         {tileUrl
           ? "Local-first map tiles configured"
           : "No tile source configured; showing private route shape only"}
@@ -212,13 +224,15 @@ function ZoneBars({ zones }: { zones: WorkoutZoneDuration[] }) {
     <div className="grid gap-3">
       {zones.map((zone) => (
         <div key={zone.key} className="grid gap-2">
-          <div className="flex items-center justify-between gap-3 text-sm">
-            <span className="text-white/72">{zone.label}</span>
-            <span className="text-white">
+          <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+            <span className="min-w-0 break-words text-[var(--ui-ink-medium)] [overflow-wrap:anywhere]">
+              {zone.label}
+            </span>
+            <span className="shrink-0 text-[var(--ui-ink-strong)]">
               {(zone.percentage * 100).toFixed(1)}% · {formatMinutes(zone.seconds)}
             </span>
           </div>
-          <div className="h-2 overflow-hidden rounded-full bg-white/[0.08]">
+          <div className="h-2 overflow-hidden rounded-full bg-[var(--ui-surface-2)]">
             <div
               className="h-full rounded-full"
               style={{
@@ -284,11 +298,10 @@ export function WorkoutDetailPage() {
   const { workout, analytics, evidence } = detail;
   const heartRateSeries = evidence.timeSeries
     .filter((sample) => sample.metricKey === "heart_rate")
-    .map((sample) => ({
-      time: new Date(sample.startedAt).toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit"
-      }),
+    .map((sample, sampleIndex) => ({
+      // Recharts keys internal area segments from the X value. Keep display
+      // formatting separate so dense same-minute HR samples do not collide.
+      time: Date.parse(sample.startedAt) + sampleIndex / 1000,
       bpm: sample.value
     }));
   const zoneChartData = analytics.zoneDurations.map((zone) => ({
@@ -301,7 +314,7 @@ export function WorkoutDetailPage() {
     <div className="grid gap-6">
       <Link
         to="/sports"
-        className="inline-flex w-fit items-center gap-2 text-sm text-white/62 transition hover:text-white"
+        className="inline-flex w-fit items-center gap-2 text-sm text-[var(--ui-ink-soft)] transition hover:text-[var(--ui-ink-strong)]"
       >
         <ArrowLeft className="size-4" />
         Back to sports
@@ -324,32 +337,32 @@ export function WorkoutDetailPage() {
 
       <section className="grid gap-4 lg:grid-cols-4">
         <Card>
-          <div className="text-sm text-white/58">Avg HR</div>
-          <div className="mt-3 font-display text-4xl text-white">
+          <div className="text-sm text-[var(--ui-ink-soft)]">Avg HR</div>
+          <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
             {analytics.hrSummary.averageHr ?? workout.averageHeartRate ?? "n/a"}
           </div>
-          <div className="mt-1 text-sm text-white/48">bpm</div>
+          <div className="mt-1 text-sm text-[var(--ui-ink-faint)]">bpm</div>
         </Card>
         <Card>
-          <div className="text-sm text-white/58">Max HR</div>
-          <div className="mt-3 font-display text-4xl text-white">
+          <div className="text-sm text-[var(--ui-ink-soft)]">Max HR</div>
+          <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
             {analytics.hrSummary.maxHr ?? workout.maxHeartRate ?? "n/a"}
           </div>
-          <div className="mt-1 text-sm text-white/48">bpm</div>
+          <div className="mt-1 text-sm text-[var(--ui-ink-faint)]">bpm</div>
         </Card>
         <Card>
-          <div className="text-sm text-white/58">Training load</div>
-          <div className="mt-3 font-display text-4xl text-white">
+          <div className="text-sm text-[var(--ui-ink-soft)]">Training load</div>
+          <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
             {analytics.load.trimp ?? "n/a"}
           </div>
-          <div className="mt-1 text-sm text-white/48">Forge TRIMP</div>
+          <div className="mt-1 text-sm text-[var(--ui-ink-faint)]">Forge TRIMP</div>
         </Card>
         <Card>
-          <div className="text-sm text-white/58">HR coverage</div>
-          <div className="mt-3 font-display text-4xl text-white">
+          <div className="text-sm text-[var(--ui-ink-soft)]">HR coverage</div>
+          <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
             {Math.round((analytics.dataQuality.sampleCoverage ?? 0) * 100)}%
           </div>
-          <div className="mt-1 text-sm text-white/48">
+          <div className="mt-1 text-sm text-[var(--ui-ink-faint)]">
             {analytics.dataQuality.heartRateSampleCount ?? 0} samples
           </div>
         </Card>
@@ -357,7 +370,7 @@ export function WorkoutDetailPage() {
 
       <section className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(280px,0.75fr)]">
         <Card className="min-h-[360px] min-w-0 overflow-hidden">
-          <div className="flex items-center gap-2 text-white">
+          <div className="flex items-center gap-2 text-[var(--ui-ink-strong)]">
             <HeartPulse className="size-4 text-[var(--primary)]" />
             Heart-rate timeline
           </div>
@@ -371,15 +384,23 @@ export function WorkoutDetailPage() {
                       <stop offset="100%" stopColor="#ef4444" stopOpacity={0.04} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
-                  <XAxis dataKey="time" interval="preserveStartEnd" tick={{ fill: "rgba(255,255,255,0.55)", fontSize: 11 }} />
-                  <YAxis tick={{ fill: "rgba(255,255,255,0.55)", fontSize: 11 }} width={42} />
+                  <CartesianGrid stroke="var(--ui-border-subtle)" vertical={false} />
+                  <XAxis
+                    dataKey="time"
+                    interval="preserveStartEnd"
+                    tick={{ fill: "var(--ui-ink-soft)", fontSize: 11 }}
+                    tickFormatter={formatChartTime}
+                    type="number"
+                    domain={["dataMin", "dataMax"]}
+                  />
+                  <YAxis tick={{ fill: "var(--ui-ink-soft)", fontSize: 11 }} width={42} />
                   <Tooltip
+                    labelFormatter={formatChartTime}
                     contentStyle={{
-                      background: "rgba(8,12,22,0.94)",
-                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: "var(--surface-glass)",
+                      border: "1px solid var(--ui-border-subtle)",
                       borderRadius: 8,
-                      color: "white"
+                      color: "var(--ui-ink-strong)"
                     }}
                   />
                   <Area
@@ -393,7 +414,7 @@ export function WorkoutDetailPage() {
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
-              <div className="grid h-full place-items-center rounded-[8px] bg-white/[0.035] text-sm text-white/54">
+              <div className="grid h-full place-items-center rounded-[8px] bg-[var(--ui-surface-1)] text-sm text-[var(--ui-ink-soft)]">
                 No raw HR timeline has been synced for this workout yet.
               </div>
             )}
@@ -401,7 +422,7 @@ export function WorkoutDetailPage() {
         </Card>
 
         <Card className="min-w-0 overflow-hidden">
-          <div className="flex items-center gap-2 text-white">
+          <div className="flex items-center gap-2 text-[var(--ui-ink-strong)]">
             <Activity className="size-4 text-[var(--primary)]" />
             Zone mix
           </div>
@@ -411,14 +432,14 @@ export function WorkoutDetailPage() {
           <div className="mt-5 h-[180px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={zoneChartData}>
-                <XAxis dataKey="zone" tick={{ fill: "rgba(255,255,255,0.55)", fontSize: 10 }} />
-                <YAxis tick={{ fill: "rgba(255,255,255,0.55)", fontSize: 10 }} width={34} />
+                <XAxis dataKey="zone" tick={{ fill: "var(--ui-ink-soft)", fontSize: 10 }} />
+                <YAxis tick={{ fill: "var(--ui-ink-soft)", fontSize: 10 }} width={34} />
                 <Tooltip
                   contentStyle={{
-                    background: "rgba(8,12,22,0.94)",
-                    border: "1px solid rgba(255,255,255,0.12)",
+                    background: "var(--surface-glass)",
+                    border: "1px solid var(--ui-border-subtle)",
                     borderRadius: 8,
-                    color: "white"
+                    color: "var(--ui-ink-strong)"
                   }}
                 />
                 <Bar dataKey="minutes" radius={[4, 4, 0, 0]} />
@@ -430,7 +451,7 @@ export function WorkoutDetailPage() {
 
       <section className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card className="min-w-0 overflow-hidden">
-          <div className="flex items-center gap-2 text-white">
+          <div className="flex items-center gap-2 text-[var(--ui-ink-strong)]">
             <MapPinned className="size-4 text-[var(--primary)]" />
             Route
           </div>
@@ -438,7 +459,7 @@ export function WorkoutDetailPage() {
             {evidence.routePoints.length > 1 ? (
               <RoutePreview points={evidence.routePoints} />
             ) : (
-              <div className="grid min-h-[240px] place-items-center rounded-[8px] bg-white/[0.035] text-sm text-white/54">
+              <div className="grid min-h-[240px] place-items-center rounded-[8px] bg-[var(--ui-surface-1)] text-sm text-[var(--ui-ink-soft)]">
                 No route evidence is available for this workout.
               </div>
             )}
@@ -446,15 +467,17 @@ export function WorkoutDetailPage() {
         </Card>
 
         <Card className="min-w-0 overflow-hidden">
-          <div className="text-white">Captured metrics</div>
+          <div className="text-[var(--ui-ink-strong)]">Captured metrics</div>
           <div className="mt-4 grid gap-3">
             {(workout.details?.metrics ?? []).slice(0, 14).map((metric) => (
               <div
                 key={`${metric.category}:${metric.key}:${metric.statistic}`}
-                className="rounded-[8px] bg-white/[0.04] px-3 py-2"
+                className="min-w-0 rounded-[8px] bg-[var(--ui-surface-1)] px-3 py-2"
               >
-                <div className="text-sm text-white/58">{metric.label}</div>
-                <div className="mt-1 text-white">
+                <div className="break-words text-sm text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
+                  {metric.label}
+                </div>
+                <div className="mt-1 break-words text-[var(--ui-ink-strong)] [overflow-wrap:anywhere]">
                   {formatMetricValue(metric.value, metric.unit)}
                 </div>
               </div>
@@ -465,22 +488,22 @@ export function WorkoutDetailPage() {
 
       <section className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.7fr)]">
         <Card className="min-w-0 overflow-hidden">
-          <div className="text-white">Events and phases</div>
+          <div className="text-[var(--ui-ink-strong)]">Events and phases</div>
           <div className="mt-4 grid gap-3">
             {[...(workout.details?.events ?? []), ...(workout.details?.components ?? [])]
               .slice(0, 18)
-              .map((entry) => (
+              .map((entry, entryIndex) => (
                 <div
-                  key={`${"type" in entry ? entry.type : entry.externalUid}:${entry.startedAt}`}
-                  className="rounded-[8px] bg-white/[0.04] px-4 py-3"
+                  key={`${"type" in entry ? entry.type : entry.externalUid}:${entry.startedAt}:${entryIndex}`}
+                  className="min-w-0 rounded-[8px] bg-[var(--ui-surface-1)] px-4 py-3"
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-white">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0 break-words text-[var(--ui-ink-strong)] [overflow-wrap:anywhere]">
                       {"label" in entry ? entry.label : entry.activity.canonicalLabel}
                     </div>
                     <Badge tone="meta">{formatMinutes(entry.durationSeconds)}</Badge>
                   </div>
-                  <div className="mt-1 text-sm text-white/52">
+                  <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
                     {formatWindow(entry.startedAt, entry.endedAt ?? entry.startedAt)}
                   </div>
                 </div>
@@ -488,7 +511,7 @@ export function WorkoutDetailPage() {
             {(workout.details?.events?.length ?? 0) +
               (workout.details?.components?.length ?? 0) ===
             0 ? (
-              <div className="rounded-[8px] bg-white/[0.035] p-4 text-sm text-white/52">
+              <div className="rounded-[8px] bg-[var(--ui-surface-1)] p-4 text-sm text-[var(--ui-ink-soft)]">
                 No provider events or phases were captured.
               </div>
             ) : null}
@@ -496,10 +519,10 @@ export function WorkoutDetailPage() {
         </Card>
 
         <Card className="min-w-0 overflow-hidden">
-          <div className="text-white">Reflection</div>
+          <div className="text-[var(--ui-ink-strong)]">Reflection</div>
           <div className="mt-4 grid gap-4">
             <label className="grid gap-2">
-              <span className="text-sm text-white/58">Meaning and impact</span>
+              <span className="text-sm text-[var(--ui-ink-soft)]">Meaning and impact</span>
               <Textarea
                 className="min-h-[160px]"
                 value={meaningText}
@@ -507,7 +530,7 @@ export function WorkoutDetailPage() {
               />
             </label>
             <label className="grid gap-2">
-              <span className="text-sm text-white/58">Tags</span>
+              <span className="text-sm text-[var(--ui-ink-soft)]">Tags</span>
               <Input
                 value={tagsText}
                 onChange={(event) => setTagsText(event.target.value)}

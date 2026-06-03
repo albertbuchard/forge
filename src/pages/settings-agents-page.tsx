@@ -135,8 +135,7 @@ function groupRuntimeSessions(sessions: AgentRuntimeSession[]) {
     existing.actionCount += session.actionCount;
     existing.eventCount += session.eventCount;
     existing.sessions.sort(
-      (a, b) =>
-        Date.parse(b.lastHeartbeatAt) - Date.parse(a.lastHeartbeatAt)
+      (a, b) => Date.parse(b.lastHeartbeatAt) - Date.parse(a.lastHeartbeatAt)
     );
     existing.primary = existing.sessions[0] ?? existing.primary;
     existing.status = resolveRuntimeGroupStatus(existing.sessions);
@@ -149,7 +148,9 @@ function groupRuntimeSessions(sessions: AgentRuntimeSession[]) {
   );
 }
 
-function formatBootstrapMode(mode: AgentTokenSummary["bootstrapPolicy"]["mode"]) {
+function formatBootstrapMode(
+  mode: AgentTokenSummary["bootstrapPolicy"]["mode"]
+) {
   return mode.replaceAll("_", " ");
 }
 
@@ -235,7 +236,9 @@ export function SettingsAgentsPage() {
       queryClient.invalidateQueries({ queryKey: ["forge-settings"] }),
       queryClient.invalidateQueries({ queryKey: ["forge-approval-requests"] }),
       queryClient.invalidateQueries({ queryKey: ["forge-agent-onboarding"] }),
-      queryClient.invalidateQueries({ queryKey: ["forge-agent-runtime-sessions"] }),
+      queryClient.invalidateQueries({
+        queryKey: ["forge-agent-runtime-sessions"]
+      }),
       queryClient.invalidateQueries({
         queryKey: ["forge-agent-runtime-session-history"]
       }),
@@ -623,12 +626,14 @@ export function SettingsAgentsPage() {
                 Runtime sessions
               </div>
               <div className="mt-1 text-sm text-white/55">
-                Live OpenClaw, Hermes, and Codex sessions registered against this Forge runtime, with stale detection and reconnect guidance.
+                Live OpenClaw, Hermes, and Codex sessions registered against
+                this Forge runtime, with stale detection and reconnect guidance.
               </div>
             </div>
             {runtimeSessionGroups.length > 0 ? (
               <Badge className="text-white/60">
-                {connectedRuntimeSessions.length} live · {staleRuntimeSessions.length} stale
+                {connectedRuntimeSessions.length} live ·{" "}
+                {staleRuntimeSessions.length} stale
               </Badge>
             ) : null}
           </div>
@@ -639,238 +644,258 @@ export function SettingsAgentsPage() {
               </div>
             ) : runtimeSessionGroups.length === 0 ? (
               <div className="rounded-[18px] bg-white/[0.04] px-4 py-4 text-sm text-white/55">
-                No runtime sessions have registered yet. OpenClaw, Hermes, and Codex now self-register here when their Forge adapter starts.
+                No runtime sessions have registered yet. OpenClaw, Hermes, and
+                Codex now self-register here when their Forge adapter starts.
               </div>
             ) : (
               runtimeSessionGroups.map((group) => {
                 const session = group.primary;
                 return (
-                <div key={group.key} className="rounded-[18px] bg-white/[0.04] p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2.5">
-                        <div className="font-medium text-white">
-                          {group.agentLabel}
+                  <div
+                    key={group.key}
+                    className="min-w-0 rounded-[18px] bg-white/[0.04] p-4"
+                  >
+                    <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2.5">
+                          <div className="font-medium text-white">
+                            {group.agentLabel}
+                          </div>
+                          <Badge className={runtimeStatusTone(group.status)}>
+                            {group.status}
+                          </Badge>
                         </div>
-                        <Badge className={runtimeStatusTone(group.status)}>
-                          {group.status}
-                        </Badge>
-                      </div>
-                      <div className="mt-1 text-sm text-white/52">
-                        {group.provider} · {session.connectionMode.replaceAll("_", " ")} · last heartbeat{" "}
-                        {formatDateTime(session.lastHeartbeatAt)}
-                      </div>
-                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-white/42">
-                        <span>
-                          {group.sessions.length} runtime session
-                          {group.sessions.length === 1 ? "" : "s"}
-                        </span>
-                        <span>Current key {session.sessionKey}</span>
-                        <span>{group.actionCount} recorded actions</span>
-                        <span>{group.eventCount} session events</span>
-                      </div>
-                      {session.lastError ? (
-                        <div className="mt-3 text-sm text-rose-200/82">
-                          {session.lastError}
+                        <div className="mt-1 text-sm text-white/52">
+                          {group.provider} ·{" "}
+                          {session.connectionMode.replaceAll("_", " ")} · last
+                          heartbeat {formatDateTime(session.lastHeartbeatAt)}
                         </div>
-                      ) : null}
-                    </div>
-                    <div className="flex shrink-0 flex-wrap gap-2">
-                      {group.status !== "connected" ? (
+                        <div className="mt-2 flex min-w-0 flex-wrap gap-x-4 gap-y-1 text-xs text-white/42">
+                          <span>
+                            {group.sessions.length} runtime session
+                            {group.sessions.length === 1 ? "" : "s"}
+                          </span>
+                          <span className="min-w-0 break-all">
+                            Current key {session.sessionKey}
+                          </span>
+                          <span>{group.actionCount} recorded actions</span>
+                          <span>{group.eventCount} session events</span>
+                        </div>
+                        {session.lastError ? (
+                          <div className="mt-3 text-sm text-rose-200/82">
+                            {session.lastError}
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="flex min-w-0 flex-wrap gap-2 lg:shrink-0 lg:justify-end">
+                        {group.status !== "connected" ? (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="flex-1 sm:flex-none"
+                            pending={reconnectSessionMutation.isPending}
+                            pendingLabel="Requesting"
+                            onClick={() =>
+                              void reconnectSessionMutation.mutateAsync({
+                                sessionId: session.id
+                              })
+                            }
+                          >
+                            Reconnect
+                          </Button>
+                        ) : null}
                         <Button
                           variant="secondary"
                           size="sm"
-                          pending={reconnectSessionMutation.isPending}
-                          pendingLabel="Requesting"
+                          className="flex-1 sm:flex-none"
                           onClick={() =>
-                            void reconnectSessionMutation.mutateAsync({
-                              sessionId: session.id
-                            })
+                            setExpandedRuntimeSessionId((current) =>
+                              current === session.id ? null : session.id
+                            )
                           }
                         >
-                          Reconnect
+                          {expandedRuntimeSessionId === session.id
+                            ? "Hide history"
+                            : "View history"}
                         </Button>
-                      ) : null}
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() =>
-                          setExpandedRuntimeSessionId((current) =>
-                            current === session.id ? null : session.id
-                          )
-                        }
-                      >
-                        {expandedRuntimeSessionId === session.id
-                          ? "Hide history"
-                          : "View history"}
-                      </Button>
-                      {group.status !== "disconnected" ? (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          pending={disconnectSessionMutation.isPending}
-                          pendingLabel="Closing"
-                          onClick={() =>
-                            void disconnectSessionMutation.mutateAsync({
-                              sessionId: session.id,
-                              note: "Marked disconnected from the Forge agents console."
-                            })
-                          }
-                        >
-                          Mark offline
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  {session.recentEvents.length > 0 ? (
-                    <div className="mt-4 grid gap-2">
-                      {session.recentEvents.slice(0, 3).map((event: AgentRuntimeSessionEvent) => (
-                        <div
-                          key={event.id}
-                          className="flex items-start justify-between gap-3 rounded-[16px] bg-[rgba(255,255,255,0.03)] px-3 py-2.5"
-                        >
-                          <div className="min-w-0">
-                            <div className="text-sm text-white">{event.title}</div>
-                            <div className="mt-0.5 text-xs leading-5 text-white/48">
-                              {event.summary || event.eventType}
-                            </div>
-                          </div>
-                          <div className="shrink-0 text-xs text-white/35">
-                            {formatDateTime(event.createdAt)}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-
-                  <div className="mt-4 rounded-[16px] bg-[rgba(8,13,28,0.52)] p-3">
-                    <div className="text-xs uppercase tracking-[0.14em] text-white/38">
-                      Reconnect plan
-                    </div>
-                    <div className="mt-2 text-sm text-white/62">
-                      {session.reconnectPlan.summary}
-                    </div>
-                    <pre className="mt-3 overflow-x-auto text-xs leading-6 text-white/70">
-                      <code>{session.reconnectPlan.commands.join("\n")}</code>
-                    </pre>
-                  </div>
-
-                  {group.sessions.length > 1 ? (
-                    <div className="mt-4 rounded-[16px] bg-[rgba(8,13,28,0.38)] p-3">
-                      <div className="text-xs uppercase tracking-[0.14em] text-white/38">
-                        Session history under this agent
-                      </div>
-                      <div className="mt-2 grid gap-2">
-                        {group.sessions.slice(0, 6).map((entry) => (
-                          <div
-                            key={entry.id}
-                            className="flex flex-wrap items-center justify-between gap-2 rounded-[12px] bg-white/[0.035] px-3 py-2 text-xs text-white/50"
+                        {group.status !== "disconnected" ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="flex-1 sm:flex-none"
+                            pending={disconnectSessionMutation.isPending}
+                            pendingLabel="Closing"
+                            onClick={() =>
+                              void disconnectSessionMutation.mutateAsync({
+                                sessionId: session.id,
+                                note: "Marked disconnected from the Forge agents console."
+                              })
+                            }
                           >
-                            <span className="min-w-0 truncate">
-                              {entry.sessionKey}
-                            </span>
-                            <span className={runtimeStatusTone(entry.status)}>
-                              {entry.status} · {formatDateTime(entry.lastHeartbeatAt)}
-                            </span>
-                          </div>
-                        ))}
+                            Mark offline
+                          </Button>
+                        ) : null}
                       </div>
                     </div>
-                  ) : null}
 
-                  {expandedRuntimeSessionId === session.id ? (
+                    {session.recentEvents.length > 0 ? (
+                      <div className="mt-4 grid gap-2">
+                        {session.recentEvents
+                          .slice(0, 3)
+                          .map((event: AgentRuntimeSessionEvent) => (
+                            <div
+                              key={event.id}
+                              className="flex items-start justify-between gap-3 rounded-[16px] bg-[rgba(255,255,255,0.03)] px-3 py-2.5"
+                            >
+                              <div className="min-w-0">
+                                <div className="text-sm text-white">
+                                  {event.title}
+                                </div>
+                                <div className="mt-0.5 text-xs leading-5 text-white/48">
+                                  {event.summary || event.eventType}
+                                </div>
+                              </div>
+                              <div className="shrink-0 text-xs text-white/35">
+                                {formatDateTime(event.createdAt)}
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    ) : null}
+
                     <div className="mt-4 rounded-[16px] bg-[rgba(8,13,28,0.52)] p-3">
                       <div className="text-xs uppercase tracking-[0.14em] text-white/38">
-                        Work history
+                        Reconnect plan
                       </div>
-                      {runtimeSessionHistoryQuery.isLoading ? (
-                        <div className="mt-3 text-sm text-white/55">
-                          Loading session history…
-                        </div>
-                      ) : runtimeSessionHistoryQuery.isError ? (
-                        <div className="mt-3 text-sm text-rose-200/82">
-                          Could not load session history.
-                        </div>
-                      ) : runtimeSessionHistory?.session.id === session.id ? (
-                        <div className="mt-3 grid gap-4 lg:grid-cols-2">
-                          <div>
-                            <div className="text-xs uppercase tracking-[0.14em] text-white/38">
-                              Agent actions
-                            </div>
-                            <div className="mt-2 grid gap-2">
-                              {runtimeSessionHistory.actions.length > 0 ? (
-                                runtimeSessionHistory.actions.map(
-                                  (action: AgentAction) => (
-                                    <div
-                                      key={action.id}
-                                      className="rounded-[14px] bg-white/[0.04] px-3 py-2.5"
-                                    >
-                                      <div className="flex items-center justify-between gap-2">
-                                        <div className="text-sm text-white">
-                                          {action.title}
-                                        </div>
-                                        <Badge className="text-white/55">
-                                          {action.status}
-                                        </Badge>
-                                      </div>
-                                      <div className="mt-1 text-xs leading-5 text-white/48">
-                                        {action.summary || action.actionType}
-                                      </div>
-                                      <div className="mt-1 text-xs text-white/35">
-                                        {formatDateTime(action.createdAt)}
-                                      </div>
-                                    </div>
-                                  )
-                                )
-                              ) : (
-                                <div className="rounded-[14px] bg-white/[0.04] px-3 py-2.5 text-sm text-white/50">
-                                  No recorded agent actions for this session yet.
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-xs uppercase tracking-[0.14em] text-white/38">
-                              Session events
-                            </div>
-                            <div className="mt-2 grid gap-2">
-                              {runtimeSessionHistory.events.length > 0 ? (
-                                runtimeSessionHistory.events.map(
-                                  (event: AgentRuntimeSessionEvent) => (
-                                    <div
-                                      key={event.id}
-                                      className="rounded-[14px] bg-white/[0.04] px-3 py-2.5"
-                                    >
-                                      <div className="flex items-center justify-between gap-2">
-                                        <div className="text-sm text-white">
-                                          {event.title}
-                                        </div>
-                                        <Badge className="text-white/55">
-                                          {event.level}
-                                        </Badge>
-                                      </div>
-                                      <div className="mt-1 text-xs leading-5 text-white/48">
-                                        {event.summary || event.eventType}
-                                      </div>
-                                      <div className="mt-1 text-xs text-white/35">
-                                        {formatDateTime(event.createdAt)}
-                                      </div>
-                                    </div>
-                                  )
-                                )
-                              ) : (
-                                <div className="rounded-[14px] bg-white/[0.04] px-3 py-2.5 text-sm text-white/50">
-                                  No session events recorded yet.
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      ) : null}
+                      <div className="mt-2 text-sm text-white/62">
+                        {session.reconnectPlan.summary}
+                      </div>
+                      <pre className="mt-3 whitespace-pre-wrap break-words text-xs leading-6 text-white/70 md:overflow-x-auto md:whitespace-pre">
+                        <code className="break-words">
+                          {session.reconnectPlan.commands.join("\n")}
+                        </code>
+                      </pre>
                     </div>
-                  ) : null}
-                </div>
+
+                    {group.sessions.length > 1 ? (
+                      <div className="mt-4 rounded-[16px] bg-[rgba(8,13,28,0.38)] p-3">
+                        <div className="text-xs uppercase tracking-[0.14em] text-white/38">
+                          Session history under this agent
+                        </div>
+                        <div className="mt-2 grid gap-2">
+                          {group.sessions.slice(0, 6).map((entry) => (
+                            <div
+                              key={entry.id}
+                              className="grid min-w-0 gap-1 rounded-[12px] bg-white/[0.035] px-3 py-2 text-xs text-white/50 sm:flex sm:items-center sm:justify-between sm:gap-2"
+                            >
+                              <span className="min-w-0 break-all sm:truncate">
+                                {entry.sessionKey}
+                              </span>
+                              <span
+                                className={`${runtimeStatusTone(entry.status)} min-w-0 break-words sm:shrink-0`}
+                              >
+                                {entry.status} ·{" "}
+                                {formatDateTime(entry.lastHeartbeatAt)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {expandedRuntimeSessionId === session.id ? (
+                      <div className="mt-4 rounded-[16px] bg-[rgba(8,13,28,0.52)] p-3">
+                        <div className="text-xs uppercase tracking-[0.14em] text-white/38">
+                          Work history
+                        </div>
+                        {runtimeSessionHistoryQuery.isLoading ? (
+                          <div className="mt-3 text-sm text-white/55">
+                            Loading session history…
+                          </div>
+                        ) : runtimeSessionHistoryQuery.isError ? (
+                          <div className="mt-3 text-sm text-rose-200/82">
+                            Could not load session history.
+                          </div>
+                        ) : runtimeSessionHistory?.session.id === session.id ? (
+                          <div className="mt-3 grid gap-4 lg:grid-cols-2">
+                            <div>
+                              <div className="text-xs uppercase tracking-[0.14em] text-white/38">
+                                Agent actions
+                              </div>
+                              <div className="mt-2 grid gap-2">
+                                {runtimeSessionHistory.actions.length > 0 ? (
+                                  runtimeSessionHistory.actions.map(
+                                    (action: AgentAction) => (
+                                      <div
+                                        key={action.id}
+                                        className="rounded-[14px] bg-white/[0.04] px-3 py-2.5"
+                                      >
+                                        <div className="flex items-center justify-between gap-2">
+                                          <div className="text-sm text-white">
+                                            {action.title}
+                                          </div>
+                                          <Badge className="text-white/55">
+                                            {action.status}
+                                          </Badge>
+                                        </div>
+                                        <div className="mt-1 text-xs leading-5 text-white/48">
+                                          {action.summary || action.actionType}
+                                        </div>
+                                        <div className="mt-1 text-xs text-white/35">
+                                          {formatDateTime(action.createdAt)}
+                                        </div>
+                                      </div>
+                                    )
+                                  )
+                                ) : (
+                                  <div className="rounded-[14px] bg-white/[0.04] px-3 py-2.5 text-sm text-white/50">
+                                    No recorded agent actions for this session
+                                    yet.
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-xs uppercase tracking-[0.14em] text-white/38">
+                                Session events
+                              </div>
+                              <div className="mt-2 grid gap-2">
+                                {runtimeSessionHistory.events.length > 0 ? (
+                                  runtimeSessionHistory.events.map(
+                                    (event: AgentRuntimeSessionEvent) => (
+                                      <div
+                                        key={event.id}
+                                        className="rounded-[14px] bg-white/[0.04] px-3 py-2.5"
+                                      >
+                                        <div className="flex items-center justify-between gap-2">
+                                          <div className="text-sm text-white">
+                                            {event.title}
+                                          </div>
+                                          <Badge className="text-white/55">
+                                            {event.level}
+                                          </Badge>
+                                        </div>
+                                        <div className="mt-1 text-xs leading-5 text-white/48">
+                                          {event.summary || event.eventType}
+                                        </div>
+                                        <div className="mt-1 text-xs text-white/35">
+                                          {formatDateTime(event.createdAt)}
+                                        </div>
+                                      </div>
+                                    )
+                                  )
+                                ) : (
+                                  <div className="rounded-[14px] bg-white/[0.04] px-3 py-2.5 text-sm text-white/50">
+                                    No session events recorded yet.
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
                 );
               })
             )}
@@ -906,26 +931,22 @@ export function SettingsAgentsPage() {
               settings.agentTokens.map((token) => (
                 <div
                   key={token.id}
-                  className="rounded-[18px] bg-white/[0.04] p-4"
+                  className="min-w-0 rounded-[18px] bg-white/[0.04] p-4"
                 >
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
                       <div className="font-medium text-white">
                         {token.label}
                       </div>
                       <div className="mt-0.5 text-sm text-white/50">
                         {token.agentLabel ?? "Unassigned agent"} ·{" "}
-                        <span className="font-mono text-xs">
+                        <span className="break-all font-mono text-xs">
                           {token.tokenPrefix}
                         </span>
                       </div>
                     </div>
                     <Badge
-                      className={
-                        token.status === "active"
-                          ? "text-emerald-300"
-                          : "text-white/45"
-                      }
+                      className={`${token.status === "active" ? "text-emerald-300" : "text-white/45"} self-start`}
                     >
                       {token.status}
                     </Badge>
@@ -1006,7 +1027,7 @@ export function SettingsAgentsPage() {
               {settings.agents.map((agent) => (
                 <div
                   key={agent.id}
-                  className="flex items-start justify-between gap-3 rounded-[18px] bg-white/[0.04] p-4"
+                  className="flex min-w-0 flex-col gap-3 rounded-[18px] bg-white/[0.04] p-4 sm:flex-row sm:items-start sm:justify-between"
                 >
                   <div className="min-w-0">
                     <div className="font-medium text-white">{agent.label}</div>
@@ -1024,10 +1045,10 @@ export function SettingsAgentsPage() {
                         ))}
                       </div>
                     ) : null}
-                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-white/55">
+                    <div className="mt-2 flex min-w-0 flex-wrap gap-x-4 gap-y-1 text-sm text-white/55">
                       <span>{agent.agentType}</span>
                       {agent.identityKey ? (
-                        <span className="font-mono text-xs">
+                        <span className="min-w-0 break-all font-mono text-xs">
                           {agent.identityKey}
                         </span>
                       ) : null}
@@ -1038,7 +1059,9 @@ export function SettingsAgentsPage() {
                       </span>
                     </div>
                   </div>
-                  <Badge className="text-white/60">{agent.trustLevel}</Badge>
+                  <Badge className="self-start text-white/60">
+                    {agent.trustLevel}
+                  </Badge>
                 </div>
               ))}
             </div>
@@ -1133,11 +1156,13 @@ export function SettingsAgentsPage() {
               {operatorContext.activeProjects.slice(0, 6).map((project) => (
                 <div
                   key={project.id}
-                  className="rounded-[18px] bg-white/[0.04] p-4"
+                  className="min-w-0 rounded-[18px] bg-white/[0.04] p-4"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <EntityName kind="project" label={project.title} />
-                    <Badge>{project.progress}%</Badge>
+                  <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <EntityName kind="project" label={project.title} />
+                    </div>
+                    <Badge className="self-start">{project.progress}%</Badge>
                   </div>
                   <div className="mt-2">
                     <EntityBadge
@@ -1330,7 +1355,9 @@ export function SettingsAgentsPage() {
                   </div>
                   <div className="mt-2 text-xs text-white/45">
                     Bootstrap default:{" "}
-                    {formatBootstrapMode(onboarding.defaultBootstrapPolicy.mode)}
+                    {formatBootstrapMode(
+                      onboarding.defaultBootstrapPolicy.mode
+                    )}
                     {" · "}
                     {onboarding.defaultBootstrapPolicy.projectsLimit} projects
                     {" · "}
@@ -1527,7 +1554,9 @@ export function SettingsAgentsPage() {
                 </div>
                 <div className="mt-3 grid gap-1 text-xs leading-5 text-white/46">
                   <div>Register: {onboarding.sessionRegistry.registerUrl}</div>
-                  <div>Heartbeat: {onboarding.sessionRegistry.heartbeatUrl}</div>
+                  <div>
+                    Heartbeat: {onboarding.sessionRegistry.heartbeatUrl}
+                  </div>
                   <div>Events: {onboarding.sessionRegistry.eventsUrl}</div>
                 </div>
               </div>

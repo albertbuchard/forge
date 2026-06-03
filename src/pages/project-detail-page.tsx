@@ -735,25 +735,25 @@ export function ProjectDetailPage() {
       ) : null}
 
       <Card className="min-w-0">
-        <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+        <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
           {t("common.projectDetail.sectionEvidence")}
         </div>
-        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        <div className="mt-4 grid min-w-0 gap-3 lg:grid-cols-2">
           {payload.activity.slice(0, 6).map((event) => (
             <Link
               key={event.id}
               to={
                 getActivityEventHref(event) ?? `/activity?eventId=${event.id}`
               }
-              className="rounded-[18px] bg-white/[0.04] p-4 transition hover:bg-white/[0.08]"
+              className="min-w-0 max-w-full rounded-[18px] bg-[var(--ui-surface-1)] p-4 transition hover:bg-[var(--ui-surface-hover)]"
             >
-              <div className="flex items-center justify-between gap-3">
-                <div className="font-medium text-white">
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0 break-words font-medium text-[var(--ui-ink-strong)] [overflow-wrap:anywhere]">
                   {getReadableActivityTitle(event)}
                 </div>
                 <Badge>{event.source}</Badge>
               </div>
-              <div className="mt-2 text-sm text-white/58">
+              <div className="mt-2 min-w-0 break-words text-sm leading-6 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
                 {getReadableActivityDescription(event)}
               </div>
             </Link>

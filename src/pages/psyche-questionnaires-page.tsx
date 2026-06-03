@@ -192,25 +192,25 @@ export function PsycheQuestionnairesPage() {
           {filteredInstruments.map((instrument) => (
             <Card
               key={instrument.id}
-              className="overflow-hidden bg-[linear-gradient(180deg,rgba(16,24,34,0.97),rgba(10,16,24,0.95))]"
+              className="min-w-0 overflow-hidden border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]"
             >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[rgba(110,231,183,0.74)]">
+              <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="break-words font-label text-[11px] uppercase tracking-[0.18em] text-[var(--tertiary)] [overflow-wrap:anywhere]">
                     {instrument.subtitle || "Questionnaire"}
                   </div>
-                  <h2 className="mt-3 font-display text-[clamp(1.35rem,2vw,1.9rem)] leading-none text-white">
+                  <h2 className="mt-3 break-words font-display text-[clamp(1.35rem,2vw,1.9rem)] leading-tight text-[var(--ui-ink-strong)] [overflow-wrap:anywhere]">
                     {instrument.title}
                   </h2>
-                  <p className="mt-3 text-sm leading-6 text-white/60">
+                  <p className="mt-3 break-words text-sm leading-6 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
                     {instrument.description}
                   </p>
                 </div>
-                <div className="rounded-[22px] border border-white/8 bg-white/[0.04] px-3 py-3 text-right">
-                  <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+                <div className="min-w-[8.5rem] rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-3 text-left sm:text-right">
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                     Latest
                   </div>
-                  <div className="mt-2 text-sm text-white/78">
+                  <div className="mt-2 break-words text-sm text-[var(--ui-ink-medium)]">
                     {instrument.latestRunAt
                       ? new Date(instrument.latestRunAt).toLocaleDateString()
                       : "Not taken yet"}
@@ -219,30 +219,33 @@ export function PsycheQuestionnairesPage() {
               </div>
 
               <div className="mt-4 flex flex-wrap gap-2">
-                <Badge className="bg-white/[0.08] text-white/80">
+                <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                   {instrument.itemCount} items
                 </Badge>
-                <Badge className="bg-[rgba(110,231,183,0.12)] text-[rgba(187,247,208,0.9)]">
+                <Badge className="bg-[color-mix(in_srgb,var(--success)_12%,var(--ui-surface-1)_88%)] text-[color-mix(in_srgb,var(--success)_68%,var(--ui-ink-strong)_32%)]">
                   {instrument.presentationMode.replaceAll("_", " ")}
                 </Badge>
-                <Badge className="bg-[rgba(125,211,252,0.12)] text-sky-100/90">
+                <Badge className="bg-[color-mix(in_srgb,var(--info)_12%,var(--ui-surface-1)_88%)] text-[color-mix(in_srgb,var(--info)_68%,var(--ui-ink-strong)_32%)]">
                   {instrument.responseStyle.replaceAll("_", " ")}
                 </Badge>
-                <Badge className="bg-[rgba(192,193,255,0.12)] text-white/84">
+                <Badge className="bg-[color-mix(in_srgb,var(--primary)_12%,var(--ui-surface-1)_88%)] text-[color-mix(in_srgb,var(--primary)_68%,var(--ui-ink-strong)_32%)]">
                   {instrument.sourceClass.replaceAll("_", " ")}
                 </Badge>
               </div>
 
               <div className="mt-3 flex flex-wrap gap-2">
                 {instrument.symptomDomains.map((domain) => (
-                  <Badge key={`${instrument.id}-${domain}`} className="bg-white/[0.05] text-white/66">
+                  <Badge
+                    key={`${instrument.id}-${domain}`}
+                    className="max-w-full whitespace-normal break-words bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]"
+                  >
                     {domain}
                   </Badge>
                 ))}
               </div>
 
               <div className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
-                <div className="rounded-[22px] border border-white/8 bg-white/[0.03] px-4 py-3 text-sm text-white/60">
+                <div className="min-w-0 break-words rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3 text-sm text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
                   {instrument.completedRunCount > 0
                     ? `${instrument.completedRunCount} completed runs saved in history`
                     : "No saved history yet"}
@@ -262,28 +265,28 @@ export function PsycheQuestionnairesPage() {
       )}
 
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
-        <Card className="bg-[linear-gradient(180deg,rgba(15,22,34,0.98),rgba(9,14,22,0.96))]">
+        <Card className="min-w-0 border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]">
           <div className="flex items-center gap-3">
             <SearchCheck className="size-5 text-[var(--tertiary)]" />
-            <div className="font-display text-2xl text-white">
+            <div className="break-words font-display text-2xl text-[var(--ui-ink-strong)]">
               Seeded first wave
             </div>
           </div>
-          <p className="mt-3 text-sm leading-6 text-white/62">
+          <p className="mt-3 break-words text-sm leading-6 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
             The current library ships a verified first wave: PHQ-9, GAD-7, WHO-5,
             PCL-5, AUDIT, SRQ-20, and YSQ-R, each stored in SQLite as a versioned
             definition with scoring and provenance.
           </p>
         </Card>
 
-        <Card className="bg-[linear-gradient(180deg,rgba(18,26,36,0.98),rgba(11,17,26,0.96))]">
+        <Card className="min-w-0 border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]">
           <div className="flex items-center gap-3">
             <SlidersHorizontal className="size-5 text-[var(--secondary)]" />
-            <div className="font-display text-2xl text-white">
+            <div className="break-words font-display text-2xl text-[var(--ui-ink-strong)]">
               Builder ready
             </div>
           </div>
-          <p className="mt-3 text-sm leading-6 text-white/62">
+          <p className="mt-3 break-words text-sm leading-6 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
             System questionnaires stay read-only. Custom drafts can branch from
             any seed, edit structure and scoring JSON safely, and publish new
             immutable versions without rewriting past runs.

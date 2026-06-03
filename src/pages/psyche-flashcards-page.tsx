@@ -121,8 +121,10 @@ function FlashcardPreview({
     <button
       type="button"
       className={cn(
-        "group min-w-0 rounded-[26px] border p-2 text-left shadow-[0_26px_80px_rgba(3,8,18,0.28)] transition hover:-translate-y-0.5 hover:border-white/20",
-        focused ? "border-[rgba(110,231,183,0.8)]" : "border-white/10"
+        "group min-w-0 rounded-[26px] border p-2 text-left shadow-[var(--card-shadow)] transition hover:-translate-y-0.5 hover:border-[var(--ui-border-strong)]",
+        focused
+          ? "border-[color-mix(in_srgb,var(--tertiary)_72%,var(--ui-border-subtle)_28%)]"
+          : "border-[var(--ui-border-subtle)]"
       )}
       onClick={onClick}
     >
@@ -184,11 +186,11 @@ function FlashcardPreview({
       <div className="px-2 pt-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           {title ? (
-            <div className="truncate text-sm font-semibold text-white">
+            <div className="truncate text-sm font-semibold text-[var(--ui-ink-strong)]">
               {title}
             </div>
           ) : null}
-          <Badge className="bg-white/[0.06] text-white/70">
+          <Badge className="bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)]">
             {STYLE_LABELS[card.visualStyle]}
           </Badge>
         </div>
@@ -197,7 +199,7 @@ function FlashcardPreview({
             {card.tags.slice(0, 5).map((tag) => (
               <span
                 key={tag}
-                className="rounded-full bg-white/[0.06] px-2 py-1 text-[11px] text-white/55"
+                className="rounded-full bg-[var(--ui-surface-1)] px-2 py-1 text-[11px] text-[var(--ui-ink-soft)]"
               >
                 {tag}
               </span>
@@ -239,21 +241,21 @@ function FlashcardDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-[rgba(3,8,18,0.76)] px-3 py-4 backdrop-blur-xl sm:items-center sm:p-6">
-      <div className="max-h-[min(92dvh,58rem)] w-full max-w-6xl overflow-hidden rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(17,24,39,0.98),rgba(7,12,22,0.98))] shadow-[0_42px_120px_rgba(0,0,0,0.5)]">
-        <div className="flex items-start justify-between gap-4 border-b border-white/8 px-5 py-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-[var(--overlay)] px-3 py-4 backdrop-blur-xl sm:items-center sm:p-6">
+      <div className="max-h-[min(92dvh,58rem)] w-full max-w-6xl overflow-hidden rounded-[30px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)] shadow-[var(--ui-shadow-floating)]">
+        <div className="flex items-start justify-between gap-4 border-b border-[var(--ui-border-subtle)] px-5 py-4">
           <div>
             <div className="font-label text-[11px] uppercase tracking-[0.2em] text-[var(--tertiary)]">
               {editingCard ? "Edit flashcard" : "New flashcard"}
             </div>
-            <div className="mt-1 text-lg font-semibold text-white">
+            <div className="mt-1 text-lg font-semibold text-[var(--ui-ink-strong)]">
               Message first, retrieval second, styling last.
             </div>
           </div>
           <button
             type="button"
             aria-label="Close flashcard editor"
-            className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-white/65 hover:bg-white/[0.1]"
+            className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
             onClick={onClose}
           >
             <X className="size-4" />
@@ -262,7 +264,7 @@ function FlashcardDialog({
         <div className="grid max-h-[calc(min(92dvh,58rem)-5rem)] min-h-0 overflow-y-auto p-4 md:grid-cols-[1fr_0.9fr] md:p-5">
           <div className="grid content-start gap-4 pr-0 md:pr-5">
             <div>
-              <label className="text-xs font-semibold uppercase tracking-[0.16em] text-white/48">
+              <label className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                 Main message
               </label>
               <Textarea
@@ -276,7 +278,7 @@ function FlashcardDialog({
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="text-xs font-semibold uppercase tracking-[0.16em] text-white/48">
+                <label className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   Trigger sentence
                 </label>
                 <Input
@@ -292,7 +294,7 @@ function FlashcardDialog({
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold uppercase tracking-[0.16em] text-white/48">
+                <label className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   Optional title
                 </label>
                 <Input
@@ -306,7 +308,7 @@ function FlashcardDialog({
               </div>
             </div>
             <div>
-              <label className="text-xs font-semibold uppercase tracking-[0.16em] text-white/48">
+              <label className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                 Trigger situation
               </label>
               <Input
@@ -322,7 +324,7 @@ function FlashcardDialog({
               />
             </div>
             <div>
-              <label className="text-xs font-semibold uppercase tracking-[0.16em] text-white/48">
+              <label className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                 Tags
               </label>
               <Input
@@ -340,12 +342,12 @@ function FlashcardDialog({
                 ["textColor", "Text"],
                 ["accentColor", "Accent"]
               ].map(([key, label]) => (
-                <label key={key} className="grid gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-white/48">
+                <label key={key} className="grid gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   {label}
                   <input
                     type="color"
                     value={String(draft[key as keyof FlashcardInput])}
-                    className="h-11 w-full rounded-[16px] border border-white/10 bg-white/[0.05] p-1"
+                    className="h-11 w-full rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-1"
                     onChange={(event) =>
                       onDraftChange({
                         ...draft,
@@ -357,10 +359,10 @@ function FlashcardDialog({
               ))}
             </div>
             <div className="grid gap-4 sm:grid-cols-3">
-              <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-white/48">
+              <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                 Typography
                 <select
-                  className="h-11 rounded-[16px] border border-white/10 bg-[rgba(15,23,42,0.95)] px-3 text-sm normal-case tracking-normal text-white"
+                  className="h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 text-sm normal-case tracking-normal text-[var(--ui-ink-strong)]"
                   value={draft.typography}
                   onChange={(event) =>
                     onDraftChange({
@@ -375,10 +377,10 @@ function FlashcardDialog({
                   <option value="display">Display</option>
                 </select>
               </label>
-              <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-white/48">
+              <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                 Layout
                 <select
-                  className="h-11 rounded-[16px] border border-white/10 bg-[rgba(15,23,42,0.95)] px-3 text-sm normal-case tracking-normal text-white"
+                  className="h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 text-sm normal-case tracking-normal text-[var(--ui-ink-strong)]"
                   value={draft.layout}
                   onChange={(event) =>
                     onDraftChange({
@@ -393,10 +395,10 @@ function FlashcardDialog({
                   <option value="poster">Poster</option>
                 </select>
               </label>
-              <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-white/48">
+              <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                 Tone
                 <select
-                  className="h-11 rounded-[16px] border border-white/10 bg-[rgba(15,23,42,0.95)] px-3 text-sm normal-case tracking-normal text-white"
+                  className="h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 text-sm normal-case tracking-normal text-[var(--ui-ink-strong)]"
                   value={draft.visualStyle}
                   onChange={(event) =>
                     onDraftChange({
@@ -415,7 +417,7 @@ function FlashcardDialog({
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="text-xs font-semibold uppercase tracking-[0.16em] text-white/48">
+                <label className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   Image URL
                 </label>
                 <Input
@@ -428,7 +430,7 @@ function FlashcardDialog({
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold uppercase tracking-[0.16em] text-white/48">
+                <label className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   Image alt
                 </label>
                 <Input
@@ -452,7 +454,7 @@ function FlashcardDialog({
               help="Flashcards can belong to a human or bot owner while still being searchable by trigger, tags, and linked Psyche records."
             />
             {submitError ? (
-              <div className="rounded-[18px] border border-red-300/20 bg-red-400/10 px-4 py-3 text-sm text-red-100">
+              <div className="rounded-[18px] border border-[var(--danger)]/20 bg-[var(--ui-danger-soft)] px-4 py-3 text-sm text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]">
                 {submitError}
               </div>
             ) : null}
@@ -601,9 +603,9 @@ export function PsycheFlashcardsPage() {
       />
       <PsycheSectionNav />
 
-      <div className="grid gap-4 rounded-[26px] border border-white/10 bg-white/[0.04] p-4 md:grid-cols-[1fr_auto] md:items-center">
+      <div className="grid gap-4 rounded-[26px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)] p-4 md:grid-cols-[1fr_auto] md:items-center">
         <div className="relative min-w-0">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-white/38" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--ui-ink-faint)]" />
           <Input
             value={query}
             placeholder="Search message, tags, trigger sentence, or situation"
@@ -611,11 +613,11 @@ export function PsycheFlashcardsPage() {
             onChange={(event) => setQuery(event.target.value)}
           />
         </div>
-        <div className="flex flex-wrap gap-2 text-sm text-white/52">
-          <Badge className="bg-white/[0.06] text-white/70">
+        <div className="flex flex-wrap gap-2 text-sm text-[var(--ui-ink-soft)]">
+          <Badge className="bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)]">
             {flashcards.length} saved
           </Badge>
-          <Badge className="bg-white/[0.06] text-white/70">
+          <Badge className="bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)]">
             {filtered.length} visible
           </Badge>
         </div>
@@ -641,7 +643,7 @@ export function PsycheFlashcardsPage() {
                 <div className="flex min-w-0 items-center gap-2">
                   {card.user ? <UserBadge user={card.user} compact /> : null}
                   {card.imageUrl ? (
-                    <Badge className="bg-white/[0.06] text-white/60">
+                    <Badge className="bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)]">
                       <Image className="mr-1 size-3" />
                       image
                     </Badge>
@@ -663,12 +665,12 @@ export function PsycheFlashcardsPage() {
           ))}
         </div>
       ) : (
-        <div className="rounded-[30px] border border-white/10 bg-[linear-gradient(135deg,rgba(110,231,183,0.08),rgba(96,165,250,0.08))] p-8 text-center">
+        <div className="rounded-[30px] border border-[var(--ui-border-subtle)] bg-[radial-gradient(circle_at_top_left,color-mix(in_srgb,var(--tertiary)_12%,transparent),transparent_46%),var(--ui-surface-section)] p-8 text-center">
           <Sparkles className="mx-auto size-8 text-[var(--tertiary)]" />
-          <div className="mt-4 text-xl font-semibold text-white">
+          <div className="mt-4 text-xl font-semibold text-[var(--ui-ink-strong)]">
             No flashcards match this view.
           </div>
-          <div className="mx-auto mt-2 max-w-xl text-sm leading-6 text-white/58">
+          <div className="mx-auto mt-2 max-w-xl text-sm leading-6 text-[var(--ui-ink-soft)]">
             Create cards for the sentences you want available during urges,
             shame spirals, critic attacks, and values-based pivots.
           </div>

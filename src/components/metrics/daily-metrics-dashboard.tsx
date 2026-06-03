@@ -81,7 +81,10 @@ export function metricPrimaryValue(
   return day.latest ?? day.average ?? day.maximum ?? day.minimum;
 }
 
-export function formatMetricValue(metric: DailyMetricRecord, value: number | null) {
+export function formatMetricValue(
+  metric: DailyMetricRecord,
+  value: number | null
+) {
   if (value == null) {
     return "No reading";
   }
@@ -114,6 +117,18 @@ export function formatDelta(metric: DailyMetricRecord) {
 function roundDisplayValue(value: number) {
   return Math.round(value * 10) / 10;
 }
+
+const chartTickStyle = {
+  fill: "var(--ui-ink-faint)",
+  fontSize: 11
+};
+
+const chartAxisLineStyle = { stroke: "var(--ui-border-subtle)" };
+const chartGridStroke = "var(--ui-border-subtle)";
+const chartCursorStyle = {
+  stroke: "var(--ui-border-strong)",
+  strokeWidth: 1
+};
 
 function metricPeriodValue(
   day: DailyMetricDayRecord,
@@ -166,13 +181,14 @@ function MetricTooltip({
   if (!active || !payload?.length || typeof label !== "string") {
     return null;
   }
-  const value = payload.find((entry) => typeof entry.value === "number")?.value ?? null;
+  const value =
+    payload.find((entry) => typeof entry.value === "number")?.value ?? null;
   return (
-    <div className="rounded-[18px] border border-white/10 bg-[rgba(9,13,24,0.94)] px-3 py-2 shadow-[0_18px_48px_rgba(0,0,0,0.38)] backdrop-blur-xl">
-      <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">
+    <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--surface-glass)] px-3 py-2 text-[var(--ui-ink-medium)] shadow-[var(--ui-shadow-floating)] backdrop-blur-xl">
+      <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
         {formatAxisDate(label)}
       </div>
-      <div className="mt-1 text-sm font-semibold text-white">
+      <div className="mt-1 text-sm font-semibold text-[var(--ui-ink-strong)]">
         {formatMetricValue(metric, value)}
       </div>
     </div>
@@ -203,14 +219,17 @@ function MetricTimeSeriesChart({
     .filter((value): value is number => value != null);
   const min = values.length > 0 ? Math.min(...values) : 0;
   const max = values.length > 0 ? Math.max(...values) : 1;
-  const domainPadding = Math.max((max - min) * 0.12, metric.unit === "%" ? 2 : 1);
+  const domainPadding = Math.max(
+    (max - min) * 0.12,
+    metric.unit === "%" ? 2 : 1
+  );
   const tone = metricTone(metric.category);
   const gradientId = `metric-gradient-${metric.metric.replace(/[^a-z0-9]/gi, "-")}`;
 
   if (values.length === 0) {
     return (
       <div
-        className="flex items-center justify-center rounded-[22px] border border-dashed border-white/8 bg-white/[0.025] text-sm text-white/40"
+        className="flex items-center justify-center rounded-[22px] border border-dashed border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 text-center text-sm text-[var(--ui-ink-faint)]"
         style={{ height }}
       >
         Waiting for chart data
@@ -221,7 +240,7 @@ function MetricTimeSeriesChart({
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-[22px] border bg-[radial-gradient(circle_at_top_left,rgba(171,232,255,0.08),transparent_34%),rgba(255,255,255,0.025)] p-3",
+        "overflow-hidden rounded-[22px] border bg-[var(--ui-surface-1)] p-3",
         tone.ring
       )}
       style={{ height }}
@@ -238,43 +257,55 @@ function MetricTimeSeriesChart({
         >
           <defs>
             <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="rgba(171,232,255,0.55)" />
-              <stop offset="56%" stopColor="rgba(251,191,36,0.22)" />
-              <stop offset="100%" stopColor="rgba(251,191,36,0.02)" />
+              <stop
+                offset="0%"
+                stopColor="var(--primary)"
+                stopOpacity={0.55}
+              />
+              <stop
+                offset="56%"
+                stopColor="var(--warning)"
+                stopOpacity={0.22}
+              />
+              <stop
+                offset="100%"
+                stopColor="var(--warning)"
+                stopOpacity={0.02}
+              />
             </linearGradient>
           </defs>
-          <CartesianGrid
-            stroke="rgba(255,255,255,0.07)"
-            vertical={detailed}
-          />
+          <CartesianGrid stroke={chartGridStroke} vertical={detailed} />
           <XAxis
             dataKey="dateKey"
             tickFormatter={formatAxisDate}
             minTickGap={detailed ? 22 : 34}
-            tick={{ fill: "rgba(255,255,255,0.46)", fontSize: 11 }}
-            axisLine={{ stroke: "rgba(255,255,255,0.1)" }}
+            tick={chartTickStyle}
+            axisLine={chartAxisLineStyle}
             tickLine={false}
           />
           <YAxis
             width={detailed ? 62 : 36}
             domain={[Math.max(0, min - domainPadding), max + domainPadding]}
             tickFormatter={(value) =>
-              formatMetricValue(metric, Number(value)).replace(` ${metric.unit}`, "")
+              formatMetricValue(metric, Number(value)).replace(
+                ` ${metric.unit}`,
+                ""
+              )
             }
-            tick={{ fill: "rgba(255,255,255,0.46)", fontSize: 11 }}
+            tick={chartTickStyle}
             axisLine={false}
             tickLine={false}
           />
           {stats.average != null ? (
             <ReferenceLine
               y={roundDisplayValue(stats.average)}
-              stroke="rgba(255,255,255,0.34)"
+              stroke="var(--ui-ink-faint)"
               strokeDasharray="5 5"
               ifOverflow="extendDomain"
             />
           ) : null}
           <Tooltip
-            cursor={{ stroke: "rgba(255,255,255,0.22)", strokeWidth: 1 }}
+            cursor={chartCursorStyle}
             content={<MetricTooltip metric={metric} />}
           />
           {metric.aggregation === "cumulative" ? (
@@ -288,11 +319,11 @@ function MetricTimeSeriesChart({
             <Area
               type="monotone"
               dataKey="value"
-              stroke="rgba(171,232,255,0.92)"
+              stroke="var(--primary)"
               strokeWidth={detailed ? 3 : 2}
               fill={`url(#${gradientId})`}
-              dot={detailed ? { r: 3, fill: "rgba(251,191,36,0.9)" } : false}
-              activeDot={{ r: 5, fill: "rgba(251,191,36,0.95)" }}
+              dot={detailed ? { r: 3, fill: "var(--warning)" } : false}
+              activeDot={{ r: 5, fill: "var(--warning)" }}
             />
           )}
         </ComposedChart>
@@ -315,31 +346,33 @@ function MetricFullscreenDialog({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-[rgba(3,7,18,0.82)] backdrop-blur-xl" />
-        <Dialog.Content className="fixed inset-3 z-[51] grid min-h-0 overflow-hidden rounded-[32px] border border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(171,232,255,0.12),transparent_34%),linear-gradient(180deg,rgba(12,18,32,0.98),rgba(7,10,20,0.99))] shadow-[0_34px_110px_rgba(0,0,0,0.58)] sm:inset-5">
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-[var(--overlay)] backdrop-blur-xl" />
+        <Dialog.Content className="fixed inset-3 z-[51] grid min-h-0 overflow-hidden rounded-[32px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-modal)] shadow-[var(--ui-shadow-floating)] sm:inset-5">
           <Dialog.Title className="sr-only">{metric.label} chart</Dialog.Title>
           <Dialog.Description className="sr-only">
             Full-screen time-series chart for the selected daily metric.
           </Dialog.Description>
           <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)]">
-            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/8 px-5 py-4 sm:px-6">
+            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[var(--ui-border-subtle)] px-5 py-4 sm:px-6">
               <div className="min-w-0">
-                <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                   {metric.category} time series
                 </div>
-                <div className="mt-1 text-2xl font-semibold text-white sm:text-3xl">
+                <div className="mt-1 break-words text-2xl font-semibold text-[var(--ui-ink-strong)] sm:text-3xl">
                   {metric.label}
                 </div>
-                <div className="mt-2 flex flex-wrap gap-2 text-xs text-white/54">
+                <div className="mt-2 flex flex-wrap gap-2 text-xs text-[var(--ui-ink-soft)]">
                   <Badge className={tone.badge}>{metric.aggregation}</Badge>
                   <Badge tone="meta">{metric.coverageDays} tracked days</Badge>
-                  <Badge tone="meta">latest {formatDateKey(metric.latestDateKey)}</Badge>
+                  <Badge tone="meta">
+                    latest {formatDateKey(metric.latestDateKey)}
+                  </Badge>
                 </div>
               </div>
               <Dialog.Close asChild>
                 <button
                   type="button"
-                  className="inline-flex size-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-white/72 transition hover:bg-white/[0.1] hover:text-white"
+                  className="inline-flex size-11 items-center justify-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                   aria-label="Close metric chart"
                 >
                   <X className="size-5" />
@@ -360,13 +393,16 @@ function MetricFullscreenDialog({
                 ].map(([label, value]) => (
                   <div
                     key={String(label)}
-                    className="rounded-[22px] border border-white/8 bg-white/[0.035] px-4 py-3"
+                    className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3"
                   >
-                    <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                    <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                       {label}
                     </div>
-                    <div className="mt-1 text-xl font-semibold text-white">
-                      {formatMetricValue(metric, typeof value === "number" ? value : null)}
+                    <div className="mt-1 break-words text-xl font-semibold text-[var(--ui-ink-strong)]">
+                      {formatMetricValue(
+                        metric,
+                        typeof value === "number" ? value : null
+                      )}
                     </div>
                   </div>
                 ))}
@@ -390,50 +426,52 @@ export function metricTone(category: string) {
   switch (category) {
     case "recovery":
       return {
-        ring: "border-[rgba(255,122,167,0.18)]",
-        badge: "bg-[rgba(255,122,167,0.16)] text-[rgb(255,179,205)]",
-        glow: "from-[rgba(255,122,167,0.2)] via-[rgba(109,76,255,0.06)] to-transparent"
+        ring: "border-[var(--danger)]/20",
+        badge: "bg-[var(--ui-danger-soft)] text-[var(--danger)]",
+        glow: "from-[var(--ui-danger-soft)] via-[var(--ui-surface-2)] to-transparent"
       };
     case "cardio":
       return {
-        ring: "border-[rgba(109,173,255,0.22)]",
-        badge: "bg-[rgba(109,173,255,0.16)] text-[rgb(186,220,255)]",
-        glow: "from-[rgba(109,173,255,0.22)] via-[rgba(64,108,255,0.08)] to-transparent"
+        ring: "border-[var(--info)]/24",
+        badge: "bg-[var(--ui-info-soft)] text-[var(--info)]",
+        glow: "from-[var(--ui-info-soft)] via-[var(--ui-surface-2)] to-transparent"
       };
     case "breathing":
       return {
-        ring: "border-[rgba(111,232,195,0.2)]",
-        badge: "bg-[rgba(111,232,195,0.15)] text-[rgb(195,255,237)]",
-        glow: "from-[rgba(111,232,195,0.2)] via-[rgba(29,154,123,0.08)] to-transparent"
+        ring: "border-[var(--success)]/22",
+        badge: "bg-[var(--ui-success-soft)] text-[var(--success)]",
+        glow: "from-[var(--ui-success-soft)] via-[var(--ui-surface-2)] to-transparent"
       };
     case "composition":
       return {
-        ring: "border-[rgba(247,211,110,0.18)]",
-        badge: "bg-[rgba(247,211,110,0.15)] text-[rgb(255,235,176)]",
-        glow: "from-[rgba(247,211,110,0.18)] via-[rgba(184,128,24,0.08)] to-transparent"
+        ring: "border-[var(--warning)]/22",
+        badge: "bg-[var(--ui-warning-soft)] text-[var(--warning)]",
+        glow: "from-[var(--ui-warning-soft)] via-[var(--ui-surface-2)] to-transparent"
       };
     case "temperature":
       return {
-        ring: "border-[rgba(255,153,102,0.18)]",
-        badge: "bg-[rgba(255,153,102,0.16)] text-[rgb(255,214,190)]",
-        glow: "from-[rgba(255,153,102,0.2)] via-[rgba(255,91,46,0.06)] to-transparent"
+        ring: "border-[var(--warning)]/22",
+        badge: "bg-[var(--ui-warning-soft)] text-[var(--warning)]",
+        glow: "from-[var(--ui-warning-soft)] via-[var(--ui-surface-2)] to-transparent"
       };
     case "conversationTone":
       return {
-        ring: "border-[rgba(251,191,36,0.2)]",
-        badge: "bg-[rgba(251,191,36,0.16)] text-[rgb(255,232,166)]",
-        glow: "from-[rgba(251,191,36,0.18)] via-[rgba(244,114,182,0.08)] to-transparent"
+        ring: "border-[var(--warning)]/22",
+        badge: "bg-[var(--ui-warning-soft)] text-[var(--warning)]",
+        glow: "from-[var(--ui-warning-soft)] via-[var(--ui-surface-2)] to-transparent"
       };
     default:
       return {
-        ring: "border-[rgba(163,174,208,0.16)]",
-        badge: "bg-[rgba(163,174,208,0.14)] text-[rgb(220,228,255)]",
-        glow: "from-[rgba(163,174,208,0.14)] via-[rgba(112,120,167,0.06)] to-transparent"
+        ring: "border-[var(--ui-border-subtle)]",
+        badge: "bg-[var(--ui-accent-soft)] text-[var(--primary)]",
+        glow: "from-[var(--ui-accent-soft)] via-[var(--ui-surface-2)] to-transparent"
       };
   }
 }
 
-export function metricIcon(metric: string): ComponentType<{ className?: string }> {
+export function metricIcon(
+  metric: string
+): ComponentType<{ className?: string }> {
   switch (metric) {
     case "restingHeartRate":
     case "walkingHeartRateAverage":
@@ -480,7 +518,7 @@ export function Sparkbar({
     return (
       <div
         className={cn(
-          "flex h-16 items-center justify-center rounded-[18px] border border-dashed border-white/8 bg-white/[0.025] text-xs text-white/36",
+          "flex h-16 items-center justify-center rounded-[18px] border border-dashed border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-2 text-center text-xs text-[var(--ui-ink-faint)]",
           className
         )}
       >
@@ -497,7 +535,7 @@ export function Sparkbar({
   return (
     <div
       className={cn(
-        "flex h-16 items-end gap-1 rounded-[18px] border border-white/8 bg-white/[0.025] px-3 py-2",
+        "flex h-16 items-end gap-1 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-2",
         className
       )}
     >
@@ -507,11 +545,14 @@ export function Sparkbar({
           value == null ? 12 : 18 + Math.round(((value - min) / range) * 34);
         const isLatest = index === recent.length - 1;
         return (
-          <div key={`${metric.metric}-${day.dateKey}`} className="flex min-w-0 flex-1 flex-col items-center justify-end gap-1">
+          <div
+            key={`${metric.metric}-${day.dateKey}`}
+            className="flex min-w-0 flex-1 flex-col items-center justify-end gap-1"
+          >
             <div
               className={cn(
-                "w-full rounded-full bg-gradient-to-t from-white/28 to-white/60 transition",
-                isLatest && "from-[var(--primary)] to-[rgba(171,232,255,0.9)]"
+                "w-full rounded-full bg-gradient-to-t from-[var(--ui-ink-faint)] to-[var(--ui-ink-soft)] opacity-80 transition",
+                isLatest && "from-[var(--primary)] to-[var(--info)] opacity-100"
               )}
               style={{ height }}
               title={`${day.dateKey}: ${value == null ? "No reading" : formatMetricValue(metric, value)}`}
@@ -541,49 +582,63 @@ export function SpotlightCard({
   return (
     <Card
       className={cn(
-        "relative overflow-hidden rounded-[28px] border bg-[rgba(12,18,36,0.82)] p-5 shadow-[0_18px_60px_rgba(4,8,18,0.3)]",
+        "relative overflow-hidden rounded-[28px] border bg-[var(--ui-surface-section)] p-5 shadow-[var(--card-shadow)]",
         tone.ring
       )}
     >
-      <div className={cn("pointer-events-none absolute inset-0 bg-gradient-to-br opacity-90", tone.glow)} />
+      <div
+        className={cn(
+          "pointer-events-none absolute inset-0 bg-gradient-to-br opacity-90",
+          tone.glow
+        )}
+      />
       <div className="relative grid gap-4">
         <div className="flex items-start justify-between gap-3">
-          <div className="grid gap-1">
-            <div className="text-[11px] uppercase tracking-[0.18em] text-white/38">
+          <div className="grid min-w-0 gap-1">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
               {title}
             </div>
-            <div className="text-sm leading-6 text-white/56">{description}</div>
+            <div className="break-words text-sm leading-6 text-[var(--ui-ink-soft)]">
+              {description}
+            </div>
           </div>
-          <div className="rounded-[18px] border border-white/10 bg-white/[0.05] p-3 text-white/80">
+          <div className="shrink-0 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3 text-[var(--ui-ink-medium)]">
             <Icon className="size-5" />
           </div>
         </div>
         <div className="grid gap-2">
-          <div className="text-xl font-semibold text-white">
-            {metric ? formatMetricValue(metric, metric.latestValue) : "No signal yet"}
+          <div className="break-words text-xl font-semibold text-[var(--ui-ink-strong)]">
+            {metric
+              ? formatMetricValue(metric, metric.latestValue)
+              : "No signal yet"}
           </div>
-          <div className="flex flex-wrap items-center gap-2 text-xs text-white/56">
-            {metric ? <Badge className={tone.badge}>{metric.label}</Badge> : null}
+          <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-[var(--ui-ink-soft)]">
+            {metric ? (
+              <Badge className={tone.badge}>{metric.label}</Badge>
+            ) : null}
             {metric ? (
               <Badge
                 className={cn(
                   "border-none",
                   trend === "up"
-                    ? "bg-[rgba(111,232,195,0.14)] text-[rgb(190,255,231)]"
+                    ? "bg-[var(--ui-success-soft)] text-[var(--success)]"
                     : trend === "down"
-                      ? "bg-[rgba(255,122,167,0.14)] text-[rgb(255,193,215)]"
-                      : "bg-white/[0.08] text-white/72"
+                      ? "bg-[var(--ui-danger-soft)] text-[var(--danger)]"
+                      : "bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]"
                 )}
               >
                 {formatDelta(metric)}
               </Badge>
             ) : null}
-            {metric ? <Badge tone="meta">{metric.coverageDays} days tracked</Badge> : null}
+            {metric ? (
+              <Badge tone="meta">{metric.coverageDays} days tracked</Badge>
+            ) : null}
           </div>
-          <div className="text-xs text-white/48">
+          <div className="break-words text-xs text-[var(--ui-ink-faint)]">
             {metric
               ? `Latest reading on ${formatDateKey(metric.latestDateKey)}`
-              : emptyDescription ?? "Forge will populate this card as soon as daily readings are available."}
+              : (emptyDescription ??
+                "Forge will populate this card as soon as daily readings are available.")}
           </div>
         </div>
       </div>
@@ -601,32 +656,33 @@ function MetricDetailCard({ metric }: { metric: DailyMetricRecord }) {
   return (
     <Card
       className={cn(
-        "overflow-hidden rounded-[28px] border bg-[linear-gradient(180deg,rgba(12,18,36,0.94),rgba(8,12,24,0.98))] p-5",
+        "overflow-hidden rounded-[28px] border bg-[var(--ui-surface-section)] p-5",
         tone.ring
       )}
     >
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-start gap-4">
-          <div className="rounded-[18px] border border-white/10 bg-white/[0.04] p-3 text-white/84">
+      <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 items-start gap-4">
+          <div className="shrink-0 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3 text-[var(--ui-ink-medium)]">
             <Icon className="size-5" />
           </div>
-          <div className="grid gap-1">
-            <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+          <div className="grid min-w-0 gap-1">
+            <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
               {metric.category}
             </div>
-            <div className="text-xl font-semibold text-white">
+            <div className="break-words text-xl font-semibold text-[var(--ui-ink-strong)]">
               {metric.label}
             </div>
-            <div className="text-sm text-white/52">
-              {metric.coverageDays} tracked day{metric.coverageDays === 1 ? "" : "s"}
+            <div className="text-sm text-[var(--ui-ink-soft)]">
+              {metric.coverageDays} tracked day
+              {metric.coverageDays === 1 ? "" : "s"}
             </div>
           </div>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">
           <Badge className={tone.badge}>{metric.aggregation}</Badge>
           <button
             type="button"
-            className="inline-flex min-h-9 items-center gap-2 rounded-full border border-white/10 bg-white/[0.055] px-3 py-1.5 text-xs font-medium text-white/72 transition hover:bg-white/[0.09] hover:text-white"
+            className="inline-flex min-h-9 min-w-0 max-w-full items-center gap-2 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-1.5 text-xs font-medium text-[var(--ui-ink-medium)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
             onClick={() => setChartOpen(true)}
           >
             <Maximize2 className="size-3.5" />
@@ -638,45 +694,45 @@ function MetricDetailCard({ metric }: { metric: DailyMetricRecord }) {
       <div className="mt-5 grid gap-4 md:grid-cols-[minmax(0,0.95fr)_minmax(220px,1.05fr)]">
         <div className="grid gap-3">
           <div>
-            <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+            <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
               Latest
             </div>
-            <div className="mt-1 text-3xl font-semibold text-white">
+            <div className="mt-1 break-words text-3xl font-semibold text-[var(--ui-ink-strong)]">
               {formatMetricValue(metric, metric.latestValue)}
             </div>
-            <div className="mt-1 text-sm text-white/52">
+            <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
               {metric.latestDateKey
                 ? `Latest reading on ${formatDateKey(metric.latestDateKey)}`
                 : "Waiting for the first successful reading"}
             </div>
           </div>
-          <div className="grid gap-2 rounded-[22px] border border-white/8 bg-white/[0.03] p-4 text-sm text-white/70">
-            <div className="flex items-center justify-between gap-2">
-              <span>Baseline</span>
-              <span className="font-medium text-white">
+          <div className="grid gap-2 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 text-sm text-[var(--ui-ink-medium)]">
+            <div className="flex min-w-0 items-center justify-between gap-2">
+              <span className="min-w-0">Baseline</span>
+              <span className="min-w-0 break-words text-right font-medium text-[var(--ui-ink-strong)]">
                 {formatMetricValue(metric, metric.baselineValue)}
               </span>
             </div>
-            <div className="flex items-center justify-between gap-2">
-              <span>Delta</span>
+            <div className="flex min-w-0 items-center justify-between gap-2">
+              <span className="min-w-0">Delta</span>
               <span
                 className={cn(
-                  "font-medium",
+                  "min-w-0 break-words text-right font-medium",
                   metric.deltaValue == null
-                    ? "text-white/58"
+                    ? "text-[var(--ui-ink-soft)]"
                     : metric.deltaValue > 0
-                      ? "text-[rgb(190,255,231)]"
+                      ? "text-[var(--success)]"
                       : metric.deltaValue < 0
-                        ? "text-[rgb(255,198,219)]"
-                        : "text-white"
+                        ? "text-[var(--danger)]"
+                        : "text-[var(--ui-ink-strong)]"
                 )}
               >
                 {formatDelta(metric)}
               </span>
             </div>
-            <div className="flex items-center justify-between gap-2">
-              <span>Latest samples</span>
-              <span className="font-medium text-white">
+            <div className="flex min-w-0 items-center justify-between gap-2">
+              <span className="min-w-0">Latest samples</span>
+              <span className="min-w-0 break-words text-right font-medium text-[var(--ui-ink-strong)]">
                 {latestDay?.sampleCount ?? 0}
               </span>
             </div>
@@ -685,22 +741,22 @@ function MetricDetailCard({ metric }: { metric: DailyMetricRecord }) {
 
         <div className="grid gap-3">
           <MetricTimeSeriesChart metric={metric} />
-          <div className="grid grid-cols-3 gap-2 text-xs text-white/48">
-            <div className="rounded-[16px] border border-white/8 bg-white/[0.025] px-3 py-2">
+          <div className="grid gap-2 text-xs text-[var(--ui-ink-faint)] sm:grid-cols-3">
+            <div className="min-w-0 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-2">
               <div>Period min</div>
-              <div className="mt-1 font-medium text-white/78">
+              <div className="mt-1 break-words font-medium text-[var(--ui-ink-medium)]">
                 {formatMetricValue(metric, stats.minimum)}
               </div>
             </div>
-            <div className="rounded-[16px] border border-white/8 bg-white/[0.025] px-3 py-2">
+            <div className="min-w-0 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-2">
               <div>Period avg</div>
-              <div className="mt-1 font-medium text-white/78">
+              <div className="mt-1 break-words font-medium text-[var(--ui-ink-medium)]">
                 {formatMetricValue(metric, stats.average)}
               </div>
             </div>
-            <div className="rounded-[16px] border border-white/8 bg-white/[0.025] px-3 py-2">
+            <div className="min-w-0 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-2">
               <div>Period max</div>
-              <div className="mt-1 font-medium text-white/78">
+              <div className="mt-1 break-words font-medium text-[var(--ui-ink-medium)]">
                 {formatMetricValue(metric, stats.maximum)}
               </div>
             </div>
@@ -716,17 +772,21 @@ function MetricDetailCard({ metric }: { metric: DailyMetricRecord }) {
   );
 }
 
-export function MetricDetailSections({ groups }: { groups: DailyMetricCategoryGroup[] }) {
+export function MetricDetailSections({
+  groups
+}: {
+  groups: DailyMetricCategoryGroup[];
+}) {
   return (
     <section className="grid gap-5">
       {groups.map((group) => (
         <div key={group.category} className="grid gap-4">
           <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <div className="text-[11px] uppercase tracking-[0.18em] text-white/38">
+            <div className="min-w-0">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                 {group.category}
               </div>
-              <div className="mt-1 text-2xl font-semibold text-white">
+              <div className="mt-1 break-words text-2xl font-semibold text-[var(--ui-ink-strong)]">
                 {group.metrics.length} signals in this lane
               </div>
             </div>

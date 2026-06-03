@@ -52,6 +52,8 @@ describe("question flow quality coverage", () => {
       ["Workout Session", /most worth remembering or connecting/i, /subjective effort, mood, meaning/i],
       ["Sleep Overview", /understand from your sleep picture/i, /read-model-only surface/i],
       ["Sports Overview", /understand from your workout picture/i, /read-model-only surface/i],
+      ["Training Load", /training-load decision/i, /read-model-only/i],
+      ["Weight Loss", /food-body link/i, /dedicated nutrition/i],
       ["Calendar Overview", /understand or decide from your calendar picture/i, /read-model-only calendar surface/i],
       ["Calendar Connection", /workflow do you want this calendar connection to unlock/i, /provider/i],
       ["Preference Judgment", /comparison are you actually trying to settle/i, /pairwise preference decision/i],
@@ -426,6 +428,9 @@ describe("question flow quality coverage", () => {
       /sports_overview[\s\S]*read-model-only health surface|read-model-only health surface[\s\S]*sports_overview/i
     );
     expect(entityPlaybook).toMatch(
+      /weight_loss[\s\S]*health read model plus dedicated nutrition write workflow/i
+    );
+    expect(entityPlaybook).toMatch(
       /operator_overview[\s\S]*read-model-only operator surface|read-model-only operator surface[\s\S]*operator_overview/i
     );
     expect(entityPlaybook).toMatch(
@@ -436,6 +441,7 @@ describe("question flow quality coverage", () => {
     );
     expect(entityPlaybook).toMatch(/forge_get_sleep_overview/);
     expect(entityPlaybook).toMatch(/forge_get_sports_overview/);
+    expect(entityPlaybook).toMatch(/forge_get_weight_loss_overview/);
     expect(entityPlaybook).toMatch(/forge_get_operator_overview/);
     expect(entityPlaybook).toMatch(/forge_get_operator_context/);
     expect(entityPlaybook).toMatch(/forge_get_calendar_overview/);

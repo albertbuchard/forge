@@ -34,16 +34,14 @@ const HTTP_METHODS = new Set([
 
 const mobileHealthSyncProgressSchema = {
   type: "object",
-  required: [
-    "chunkCount",
-    "receivedBytes",
-    "receivedCounts",
-    "byteTotals"
-  ],
+  required: ["chunkCount", "receivedBytes", "receivedCounts", "byteTotals"],
   properties: {
     chunkCount: { type: "number" },
     receivedBytes: { type: "number" },
-    receivedCounts: { type: "object", additionalProperties: { type: "number" } },
+    receivedCounts: {
+      type: "object",
+      additionalProperties: { type: "number" }
+    },
     byteTotals: { type: "object", additionalProperties: { type: "number" } }
   }
 };
@@ -3179,8 +3177,12 @@ export function buildOpenApiDocument() {
       newestUnlock: nullable({
         $ref: "#/components/schemas/GamificationCatalogEntry"
       }),
-      nextTargets: arrayOf({ $ref: "#/components/schemas/GamificationCatalogEntry" }),
-      recentlyUnlocked: arrayOf({ $ref: "#/components/schemas/GamificationCatalogEntry" })
+      nextTargets: arrayOf({
+        $ref: "#/components/schemas/GamificationCatalogEntry"
+      }),
+      recentlyUnlocked: arrayOf({
+        $ref: "#/components/schemas/GamificationCatalogEntry"
+      })
     }
   };
 
@@ -3226,7 +3228,9 @@ export function buildOpenApiDocument() {
       newestUnlock: nullable({
         $ref: "#/components/schemas/GamificationCatalogEntry"
       }),
-      nextTargets: arrayOf({ $ref: "#/components/schemas/GamificationCatalogEntry" }),
+      nextTargets: arrayOf({
+        $ref: "#/components/schemas/GamificationCatalogEntry"
+      }),
       equipment: { $ref: "#/components/schemas/GamificationEquipment" },
       mascot: { $ref: "#/components/schemas/GamificationMascotState" },
       celebrations: arrayOf({
@@ -3798,6 +3802,7 @@ export function buildOpenApiDocument() {
           "movement",
           "lifeForce",
           "workbench",
+          "weightLoss",
           "psyche"
         ],
         properties: {
@@ -3820,6 +3825,7 @@ export function buildOpenApiDocument() {
           movement: { type: "string" },
           lifeForce: { type: "string" },
           workbench: { type: "string" },
+          weightLoss: { type: "string" },
           psyche: { type: "string" }
         }
       },
@@ -4113,6 +4119,22 @@ export function buildOpenApiDocument() {
           "weeklyReview",
           "sleepOverview",
           "sportsOverview",
+          "trainingLoad",
+          "weightLoss",
+          "weightLossTarget",
+          "weightLossDailyActiveCalories",
+          "weightLossFoodsSearch",
+          "weightLossFoodsBarcode",
+          "weightLossFoodLogs",
+          "weightLossFoodLogDetail",
+          "weightLossParse",
+          "weightLossBodyCheckins",
+          "weightLossAppearanceCheckins",
+          "weightLossSubjectiveCheckins",
+          "weightLossGutCheckins",
+          "weightLossPatterns",
+          "weightLossExperiments",
+          "weightLossExperimentDetail",
           "lifeForce",
           "lifeForceProfile",
           "lifeForceWeekdayTemplate",
@@ -4161,6 +4183,22 @@ export function buildOpenApiDocument() {
           weeklyReview: { type: "string" },
           sleepOverview: { type: "string" },
           sportsOverview: { type: "string" },
+          trainingLoad: { type: "string" },
+          weightLoss: { type: "string" },
+          weightLossTarget: { type: "string" },
+          weightLossDailyActiveCalories: { type: "string" },
+          weightLossFoodsSearch: { type: "string" },
+          weightLossFoodsBarcode: { type: "string" },
+          weightLossFoodLogs: { type: "string" },
+          weightLossFoodLogDetail: { type: "string" },
+          weightLossParse: { type: "string" },
+          weightLossBodyCheckins: { type: "string" },
+          weightLossAppearanceCheckins: { type: "string" },
+          weightLossSubjectiveCheckins: { type: "string" },
+          weightLossGutCheckins: { type: "string" },
+          weightLossPatterns: { type: "string" },
+          weightLossExperiments: { type: "string" },
+          weightLossExperimentDetail: { type: "string" },
           lifeForce: { type: "string" },
           lifeForceProfile: { type: "string" },
           lifeForceWeekdayTemplate: { type: "string" },
@@ -4948,9 +4986,16 @@ export function buildOpenApiDocument() {
       sync: {
         type: "object",
         additionalProperties: false,
-        required: ["fullSyncCompletedAt", "lastDailySyncAt", "lastSyncedDateKey"],
+        required: [
+          "fullSyncCompletedAt",
+          "lastDailySyncAt",
+          "lastSyncedDateKey"
+        ],
         properties: {
-          fullSyncCompletedAt: nullable({ type: "string", format: "date-time" }),
+          fullSyncCompletedAt: nullable({
+            type: "string",
+            format: "date-time"
+          }),
           lastDailySyncAt: nullable({ type: "string", format: "date-time" }),
           lastSyncedDateKey: nullable({ type: "string" })
         }
@@ -5090,10 +5135,20 @@ export function buildOpenApiDocument() {
           sync: {
             type: "object",
             additionalProperties: false,
-            required: ["fullSyncCompletedAt", "lastDailySyncAt", "lastSyncedDateKey"],
+            required: [
+              "fullSyncCompletedAt",
+              "lastDailySyncAt",
+              "lastSyncedDateKey"
+            ],
             properties: {
-              fullSyncCompletedAt: nullable({ type: "string", format: "date-time" }),
-              lastDailySyncAt: nullable({ type: "string", format: "date-time" }),
+              fullSyncCompletedAt: nullable({
+                type: "string",
+                format: "date-time"
+              }),
+              lastDailySyncAt: nullable({
+                type: "string",
+                format: "date-time"
+              }),
               lastSyncedDateKey: nullable({ type: "string" })
             }
           }
@@ -5390,7 +5445,10 @@ export function buildOpenApiDocument() {
         }
       },
       trainingIntelligence: { type: "object", additionalProperties: true },
-      activityBreakdown: arrayOf({ type: "object", additionalProperties: true }),
+      activityBreakdown: arrayOf({
+        type: "object",
+        additionalProperties: true
+      }),
       vitalsTrend: arrayOf({ type: "object", additionalProperties: true }),
       sessionSignals: arrayOf({ type: "object", additionalProperties: true }),
       targetModel: { type: "object", additionalProperties: true }
@@ -5522,7 +5580,10 @@ export function buildOpenApiDocument() {
       todayLedger: { type: "object", additionalProperties: true },
       recentMeals: arrayOf(nutritionFoodLog),
       bodyCheckins: arrayOf({ type: "object", additionalProperties: true }),
-      appearanceCheckins: arrayOf({ type: "object", additionalProperties: true }),
+      appearanceCheckins: arrayOf({
+        type: "object",
+        additionalProperties: true
+      }),
       energyModel: { type: "object", additionalProperties: true },
       weightTrend: { type: "object", additionalProperties: true },
       foodQuality: { type: "object", additionalProperties: true },
@@ -6040,6 +6101,51 @@ export function buildOpenApiDocument() {
                 }
               },
               "Updated nutrition target"
+            )
+          }
+        }
+      },
+      "/api/v1/health/weight-loss/daily-active-calories": {
+        patch: {
+          tags: ["Health"],
+          summary:
+            "Set or clear the user-edited active calorie allowance for one weight-loss day",
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    userId: { type: "string" },
+                    dayKey: {
+                      type: "string",
+                      pattern: "^\\d{4}-\\d{2}-\\d{2}$"
+                    },
+                    activeCaloriesKcal: {
+                      type: ["number", "null"],
+                      minimum: 0
+                    },
+                    notes: { type: "string" }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["dayKey"],
+                properties: {
+                  dayKey: { type: "string" },
+                  override: {
+                    type: ["object", "null"],
+                    additionalProperties: true
+                  }
+                }
+              },
+              "Updated daily active calorie override"
             )
           }
         }
@@ -9653,7 +9759,10 @@ export function buildOpenApiDocument() {
                       "connectionHelp"
                     ],
                     properties: {
-                      provider: { type: "string", enum: CALENDAR_PROVIDER_VALUES },
+                      provider: {
+                        type: "string",
+                        enum: CALENDAR_PROVIDER_VALUES
+                      },
                       label: { type: "string" },
                       supportsDedicatedForgeCalendar: { type: "boolean" },
                       connectionHelp: { type: "string" }

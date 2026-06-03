@@ -1,21 +1,32 @@
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import type { NutritionFoodLog, WeightLossViewData } from "@/lib/weight-loss-types";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
+import type {
+  NutritionFoodLog,
+  WeightLossViewData
+} from "@/lib/weight-loss-types";
 import { cn } from "@/lib/utils";
-import { WeightLossEmptyState, WeightLossRecentMeal } from "./weight-loss-cards";
+import {
+  WeightLossEmptyState,
+  WeightLossRecentMeal
+} from "./weight-loss-cards";
 
 export function WeightLossLedgerPanel({
   ledger,
   remainingCalories,
   intakePercent,
   logSavedPending,
-  onLogAgain
+  onLogAgain,
+  onEditMeal,
+  onDeleteMeal
 }: {
   ledger: WeightLossViewData["todayLedger"];
   remainingCalories: number;
   intakePercent: number;
   logSavedPending: boolean;
   onLogAgain: (meal: NutritionFoodLog) => void;
+  onEditMeal: (meal: NutritionFoodLog) => void;
+  onDeleteMeal: (meal: NutritionFoodLog) => void;
 }) {
   const totals = ledger.totals;
   return (
@@ -23,10 +34,14 @@ export function WeightLossLedgerPanel({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
-            Today ledger
+            Food log
           </div>
-          <h2 className="mt-1 text-xl font-semibold text-[var(--ui-ink-strong)]">
-            Calories, macros, and meal evidence
+          <h2 className="mt-1 flex items-center gap-2 text-xl font-semibold text-[var(--ui-ink-strong)]">
+            <span>Calories, macros, and meal evidence</span>
+            <InfoTooltip
+              label="Explain food log"
+              content="The food log is today's editable record of what was eaten. Edit a meal to change quantities, remove items, correct food parameters, or delete the meal entirely."
+            />
           </h2>
         </div>
         <Badge tone="meta">{ledger.meals.length} meals</Badge>
@@ -37,8 +52,8 @@ export function WeightLossLedgerPanel({
             className={cn(
               "h-full rounded-full",
               remainingCalories >= 0
-                ? "bg-[color-mix(in_srgb,#10b981_82%,var(--secondary)_18%)]"
-                : "bg-[color-mix(in_srgb,#f43f5e_82%,var(--tertiary)_18%)]"
+                ? "bg-[color-mix(in_srgb,var(--success)_82%,var(--secondary)_18%)]"
+                : "bg-[color-mix(in_srgb,var(--danger)_82%,var(--tertiary)_18%)]"
             )}
             style={{ width: `${Math.min(100, intakePercent)}%` }}
           />
@@ -58,10 +73,14 @@ export function WeightLossLedgerPanel({
               meal={meal}
               pending={logSavedPending}
               onLogAgain={onLogAgain}
+              onEdit={onEditMeal}
+              onDelete={onDeleteMeal}
             />
           ))
         ) : (
-          <WeightLossEmptyState>No meals logged today yet.</WeightLossEmptyState>
+          <WeightLossEmptyState>
+            No meals logged today yet.
+          </WeightLossEmptyState>
         )}
       </div>
     </Card>

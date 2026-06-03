@@ -271,7 +271,9 @@ export function FlowField({
         ) : null}
       </span>
       {description ? (
-        <span className="text-sm leading-6 text-[var(--ui-ink-soft)]">{description}</span>
+        <span className="text-sm leading-6 text-[var(--ui-ink-soft)]">
+          {description}
+        </span>
       ) : null}
       {children}
       {hint ? <FieldHint>{hint}</FieldHint> : null}
@@ -533,7 +535,7 @@ export function QuestionFlowDialog<TValue>({
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                   <span className="truncate">{eyebrow}</span>
-                  <span className="whitespace-nowrap">
+                  <span className="shrink-0 text-right">
                     Step {stepIndex + 1} of {totalSteps}
                   </span>
                 </div>
@@ -596,16 +598,16 @@ export function QuestionFlowDialog<TValue>({
           <div className="sticky bottom-0 border-t border-[var(--ui-border-subtle)] bg-[var(--surface-glass)] px-4 pt-2.5 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur-xl md:px-6 md:pb-3">
             <div className="flex flex-wrap items-center justify-end gap-2 sm:justify-between">
               <div className="hidden min-w-0 shrink text-[12px] text-[var(--ui-ink-faint)] sm:block">
-                <span className="truncate whitespace-nowrap">
+                <span className="truncate">
                   Step {stepIndex + 1}/{totalSteps}
                 </span>
               </div>
-              <div className="flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
+              <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
                 {stepIndex > 0 ? (
                   <Button
                     type="button"
                     variant="secondary"
-                    className="min-w-max px-3 text-[12px]"
+                    className="min-w-0 px-3 text-[12px]"
                     onClick={() => changeStep(Math.max(0, stepIndex - 1))}
                   >
                     <ArrowLeft className="size-4" />
@@ -616,7 +618,7 @@ export function QuestionFlowDialog<TValue>({
                     <Button
                       type="button"
                       variant="secondary"
-                      className="min-w-max px-3 text-[12px]"
+                      className="min-w-0 px-3 text-[12px]"
                     >
                       {t("common.actions.cancel")}
                     </Button>
@@ -625,7 +627,7 @@ export function QuestionFlowDialog<TValue>({
                 {stepIndex < totalSteps - 1 ? (
                   <Button
                     type="button"
-                    className="min-w-max px-3 text-[12px]"
+                    className="min-w-0 px-3 text-[12px]"
                     onClick={() =>
                       changeStep(Math.min(totalSteps - 1, stepIndex + 1))
                     }
@@ -636,7 +638,7 @@ export function QuestionFlowDialog<TValue>({
                 ) : (
                   <Button
                     type="button"
-                    className="min-w-max px-3 text-[12px]"
+                    className="min-w-0 px-3 text-[12px]"
                     pending={pending}
                     pendingLabel={pendingLabel}
                     onClick={() => {

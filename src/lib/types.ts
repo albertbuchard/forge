@@ -4166,6 +4166,7 @@ export interface AgentOnboardingPayload {
     movement: string;
     lifeForce: string;
     workbench: string;
+    weightLoss: string;
     psyche: string;
   };
   psycheSubmoduleModel: {
@@ -4261,6 +4262,21 @@ export interface AgentOnboardingPayload {
     sleepOverview: string;
     sportsOverview: string;
     trainingLoad: string;
+    weightLoss: string;
+    weightLossTarget: string;
+    weightLossDailyActiveCalories: string;
+    weightLossFoodsSearch: string;
+    weightLossFoodsBarcode: string;
+    weightLossFoodLogs: string;
+    weightLossFoodLogDetail: string;
+    weightLossParse: string;
+    weightLossBodyCheckins: string;
+    weightLossAppearanceCheckins: string;
+    weightLossSubjectiveCheckins: string;
+    weightLossGutCheckins: string;
+    weightLossPatterns: string;
+    weightLossExperiments: string;
+    weightLossExperimentDetail: string;
     lifeForce: string;
     lifeForceProfile: string;
     lifeForceWeekdayTemplate: string;

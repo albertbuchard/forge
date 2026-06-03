@@ -6,7 +6,7 @@ import { logForgeDebug } from "../debug.js";
 import { recordActivityEvent } from "./activity-events.js";
 import { recordEventLog } from "./event-log.js";
 import { resolveGoogleCalendarOauthPublicConfig } from "../services/google-calendar-oauth-config.js";
-import { buildConnectionAgentIdentity, FORGE_DEFAULT_AGENT_ID, listAiModelConnections, syncForgeManagedWikiProfile } from "./model-settings.js";
+import { buildConnectionAgentIdentity, FORGE_DEFAULT_AGENT_ID, getAiModelConnectionById, listAiModelConnections, syncForgeManagedWikiProfile } from "./model-settings.js";
 import { listUsersByIds } from "./users.js";
 import { agentBootstrapPolicySchema, agentScopePolicySchema, createAgentTokenSchema, legacyAgentBootstrapPolicy, defaultAgentScopePolicy, agentIdentitySchema, customThemeSchema, settingsPayloadSchema, updateSettingsSchema } from "../types.js";
 const settingsFileSchema = settingsPayloadSchema.deepPartial();
@@ -591,7 +591,10 @@ function buildSettingsPayloadFromDatabase() {
     const basicChatConnectionId = normalizeModelConnectionId(row.forge_basic_chat_connection_id);
     const wikiConnectionId = normalizeModelConnectionId(row.forge_wiki_connection_id);
     const basicChatConnection = connections.find((entry) => entry.id === basicChatConnectionId) ?? null;
-    const wikiConnection = connections.find((entry) => entry.id === wikiConnectionId) ?? null;
+    const wikiConnectionCandidate = connections.find((entry) => entry.id === wikiConnectionId) ?? null;
+    const wikiConnection = wikiConnectionCandidate?.provider === "openai-codex"
+        ? wikiConnectionCandidate
+        : null;
     const customTheme = parseCustomThemeJson(row.custom_theme_json);
     return settingsPayloadSchema.parse({
         profile: {
@@ -832,9 +835,20 @@ function updateSettingsInternal(input, options = {}) {
                             current.modelSettings.forgeAgent.basicChat.model
                     },
                     wiki: {
-                        connectionId: parsed.modelSettings?.forgeAgent?.wiki?.connectionId !== undefined
-                            ? normalizeModelConnectionId(parsed.modelSettings.forgeAgent.wiki.connectionId)
-                            : (current.modelSettings.forgeAgent.wiki.connectionId ?? ""),
+                        connectionId: (() => {
+                            const normalized = parsed.modelSettings?.forgeAgent?.wiki?.connectionId !==
+                                undefined
+                                ? normalizeModelConnectionId(parsed.modelSettings.forgeAgent.wiki.connectionId)
+                                : (current.modelSettings.forgeAgent.wiki.connectionId ?? "");
+                            if (!normalized) {
+                                return "";
+                            }
+                            const connection = getAiModelConnectionById(normalized);
+                            if (connection?.provider !== "openai-codex") {
+                                throw new Error("KarpaWiki ingest must use an OpenAI Codex OAuth model connection, not an OpenAI Platform API connection.");
+                            }
+                            return normalized;
+                        })(),
                         model: parsed.modelSettings?.forgeAgent?.wiki?.model?.trim() ||
                             current.modelSettings.forgeAgent.wiki.model
                     }

@@ -24,18 +24,18 @@ export function CalendarWeekToolbar({
   onNext: () => void;
 }) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div>
-        <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">
+    <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+      <div className="min-w-0">
+        <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
           {eyebrow}
         </div>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-white/60">
+        <p className="mt-2 max-w-3xl break-words text-sm leading-6 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
           {description}
         </p>
         {status ? <div className="mt-3">{status}</div> : null}
       </div>
-      <div className="flex flex-wrap gap-2">
-        <Badge className="bg-[var(--primary)]/14 text-[var(--primary)]">
+      <div className="flex min-w-0 flex-wrap gap-2">
+        <Badge className="border border-[color-mix(in_srgb,var(--primary)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-accent-soft)] text-[var(--primary)]">
           <CalendarDays className="mr-1 size-3.5" />
           Week of {formatWeekday(weekStart)}
         </Badge>

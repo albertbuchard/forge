@@ -34,6 +34,12 @@ function formatCount(value: number) {
   return new Intl.NumberFormat().format(Math.round(value));
 }
 
+const psycheSecondaryActionClassName =
+  "inline-flex min-h-10 min-w-0 max-w-full items-center justify-center rounded-[var(--radius-control)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-2 text-sm font-medium whitespace-nowrap text-[var(--ui-ink-medium)] transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]";
+
+const psycheFallbackCtaClassName =
+  "bg-[linear-gradient(135deg,color-mix(in_srgb,var(--primary)_34%,var(--ui-surface-2)_66%),color-mix(in_srgb,var(--primary)_18%,var(--ui-surface-1)_82%))] text-[var(--ui-ink-strong)]";
+
 function formatSignedAverage(value: number, unit: "count" | "percent") {
   const formatted = unit === "percent" ? formatPercent(value) : formatCount(value);
   return formatted;
@@ -44,37 +50,37 @@ function DevrageMetricCard({ metric }: { metric: DevrageMetricPayload }) {
   const maxSwears = Math.max(1, ...latestHistory.map((day) => day.rawSwearCount));
 
   return (
-    <Card className="min-w-0 border border-amber-200/12 bg-[linear-gradient(180deg,rgba(39,31,17,0.96),rgba(19,21,17,0.95))] p-5">
+    <Card className="min-w-0 border border-[color-mix(in_srgb,var(--warning)_24%,var(--ui-border-subtle)_76%)] bg-[color-mix(in_srgb,var(--ui-warning-soft)_48%,var(--ui-surface-1)_52%)] p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-amber-100/72">
+        <div className="min-w-0">
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--warning)]">
             Devrage metric
           </div>
-          <div className="mt-2 font-display text-[clamp(1.4rem,2.5vw,2.15rem)] leading-none text-white">
+          <div className="mt-2 break-words font-display text-[clamp(1.4rem,2.5vw,2.15rem)] leading-none text-[var(--ui-ink-strong)]">
             {formatCount(metric.rawSwearCount)} swears
           </div>
         </div>
-        <Badge className="bg-amber-200/10 text-amber-50">
+        <Badge className="bg-[var(--ui-warning-soft)] text-[var(--warning)]">
           {metric.latestDateKey ?? "No history"}
         </Badge>
       </div>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
-        <div className="rounded-[18px] bg-white/[0.045] px-4 py-3">
-          <div className="text-xs text-white/48">Swearing messages</div>
-          <div className="mt-1 text-2xl font-semibold text-white">
+        <div className="min-w-0 rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3">
+          <div className="text-xs text-[var(--ui-ink-faint)]">Swearing messages</div>
+          <div className="mt-1 break-words text-2xl font-semibold text-[var(--ui-ink-strong)]">
             {formatPercent(metric.swearingMessagePercent)}
           </div>
         </div>
-        <div className="rounded-[18px] bg-white/[0.045] px-4 py-3">
-          <div className="text-xs text-white/48">Daily average</div>
-          <div className="mt-1 text-2xl font-semibold text-white">
+        <div className="min-w-0 rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3">
+          <div className="text-xs text-[var(--ui-ink-faint)]">Daily average</div>
+          <div className="mt-1 break-words text-2xl font-semibold text-[var(--ui-ink-strong)]">
             {formatSignedAverage(metric.dailyAverage.rawSwearCount, "count")}
           </div>
         </div>
-        <div className="rounded-[18px] bg-white/[0.045] px-4 py-3">
-          <div className="text-xs text-white/48">Weekly average</div>
-          <div className="mt-1 text-2xl font-semibold text-white">
+        <div className="min-w-0 rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3">
+          <div className="text-xs text-[var(--ui-ink-faint)]">Weekly average</div>
+          <div className="mt-1 break-words text-2xl font-semibold text-[var(--ui-ink-strong)]">
             {formatSignedAverage(metric.weeklyAverage.rawSwearCount, "count")}
           </div>
         </div>
@@ -85,7 +91,7 @@ function DevrageMetricCard({ metric }: { metric: DevrageMetricPayload }) {
           latestHistory.map((day) => (
             <div
               key={day.dateKey}
-              className="min-w-0 flex-1 rounded-t-[6px] bg-amber-200/50"
+              className="min-w-0 flex-1 rounded-t-[6px] bg-[var(--warning)]/50"
               style={{
                 height: `${Math.max(8, (day.rawSwearCount / maxSwears) * 64)}px`
               }}
@@ -93,13 +99,13 @@ function DevrageMetricCard({ metric }: { metric: DevrageMetricPayload }) {
             />
           ))
         ) : (
-          <div className="self-center text-sm text-white/48">
+          <div className="self-center text-sm text-[var(--ui-ink-faint)]">
             History will appear after the first local backfill.
           </div>
         )}
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-2 text-xs text-white/50">
+      <div className="mt-4 flex flex-wrap gap-2 text-xs text-[var(--ui-ink-soft)]">
         <span>{formatCount(metric.conversationsScanned)} conversations</span>
         <span>{formatCount(metric.messagesScanned)} messages</span>
         <span>{formatCount(metric.messagesWithSwears)} flagged</span>
@@ -107,7 +113,7 @@ function DevrageMetricCard({ metric }: { metric: DevrageMetricPayload }) {
 
       <Link
         to="/psyche/metrics"
-        className="mt-4 inline-flex min-h-10 items-center justify-center rounded-[var(--radius-control)] border border-amber-200/14 bg-amber-200/10 px-4 py-2 text-sm font-medium text-amber-50 transition hover:bg-amber-200/14"
+        className="mt-4 inline-flex min-h-10 items-center justify-center rounded-[var(--radius-control)] border border-[color-mix(in_srgb,var(--warning)_24%,transparent)] bg-[var(--ui-warning-soft)] px-4 py-2 text-sm font-medium text-[var(--warning)] transition hover:bg-[color-mix(in_srgb,var(--warning)_20%,transparent)]"
       >
         Open metrics
       </Link>
@@ -233,7 +239,7 @@ export function PsychePage() {
       <GamificationMiniHud metrics={shell.snapshot.metrics} />
       <Link
         to="/psyche/goal-map"
-        className="inline-flex min-h-10 min-w-0 max-w-full items-center justify-center rounded-full bg-white/[0.08] px-4 py-2 text-sm whitespace-nowrap text-white transition hover:bg-white/[0.12]"
+        className={psycheSecondaryActionClassName}
       >
         Open goal map
       </Link>
@@ -300,7 +306,7 @@ export function PsychePage() {
             <>
               <Link
                 to="/psyche/goal-map"
-                className="inline-flex min-h-10 min-w-0 max-w-full items-center justify-center rounded-[var(--radius-control)] bg-white/8 px-4 py-2 text-sm font-medium whitespace-nowrap text-white transition hover:bg-white/12"
+                className={psycheSecondaryActionClassName}
               >
                 Open goal map
               </Link>
@@ -334,7 +340,7 @@ export function PsychePage() {
                 iconOnly
               />
             ) : (
-              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/42">
+              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                 {inspector.eyebrow}
               </div>
             )}
@@ -349,18 +355,18 @@ export function PsychePage() {
                 showKind={false}
               />
             ) : (
-              <h2 className="font-display text-[clamp(1.25rem,2.2vw,1.8rem)] leading-none text-white">
+              <h2 className="break-words font-display text-[clamp(1.25rem,2.2vw,1.8rem)] leading-none text-[var(--ui-ink-strong)]">
                 {inspector.title}
               </h2>
             )}
           </div>
-          <p className="mt-3 text-sm leading-6 text-white/60">
+          <p className="mt-3 break-words text-sm leading-6 text-[var(--ui-ink-soft)]">
             {inspector.summary}
           </p>
           {inspector.chips.length > 0 ? (
             <div className="mt-4 flex flex-wrap gap-2">
               {inspector.chips.map((chip) => (
-                <Badge key={chip} className="bg-white/[0.08] text-white/74">
+                <Badge key={chip} className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                   {chip}
                 </Badge>
               ))}
@@ -371,7 +377,7 @@ export function PsychePage() {
               {inspector.stats.map((stat) => (
                 <div
                   key={stat}
-                  className="rounded-[18px] bg-white/[0.04] px-3 py-3 text-sm text-white/68"
+                  className="min-w-0 rounded-[18px] bg-[var(--ui-surface-1)] px-3 py-3 text-sm text-[var(--ui-ink-medium)] break-words"
                 >
                   {stat}
                 </div>
@@ -380,13 +386,13 @@ export function PsychePage() {
           ) : null}
           <div className="mt-5">
             <Link
-              to={inspector.href}
-              className={cn(
-                "inline-flex min-h-11 w-full items-center justify-center rounded-[var(--radius-control)] px-4 py-2.5 text-sm font-medium whitespace-nowrap shadow-[0_12px_30px_rgba(192,193,255,0.08)]",
-                inspector.entityKind
-                  ? getEntityButtonClassName(inspector.entityKind, true)
-                  : "bg-[linear-gradient(135deg,rgba(192,193,255,0.36),rgba(192,193,255,0.22))] text-white"
-              )}
+	              to={inspector.href}
+	              className={cn(
+	                "inline-flex min-h-11 w-full items-center justify-center rounded-[var(--radius-control)] px-4 py-2.5 text-sm font-medium whitespace-nowrap shadow-[var(--ui-shadow-soft)]",
+	                inspector.entityKind
+	                  ? getEntityButtonClassName(inspector.entityKind, true)
+	                  : psycheFallbackCtaClassName
+	              )}
             >
               {inspector.ctaLabel}
             </Link>
@@ -417,16 +423,16 @@ export function PsychePage() {
         <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
           <InteractiveCard
             to="/psyche/behaviors"
-            className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(17,29,32,0.96),rgba(11,21,23,0.94))] p-5"
+            className="rounded-[28px] border border-[color-mix(in_srgb,var(--success)_22%,var(--ui-border-subtle)_78%)] bg-[color-mix(in_srgb,var(--ui-success-soft)_44%,var(--ui-surface-1)_56%)] p-5"
           >
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[rgba(110,231,183,0.82)]">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--success)]">
               Best next reflective move
             </div>
-            <div className="mt-3 font-display text-[clamp(1.45rem,2.2vw,2rem)] leading-none text-white">
+            <div className="mt-3 break-words font-display text-[clamp(1.45rem,2.2vw,2rem)] leading-none text-[var(--ui-ink-strong)]">
               {hotPattern?.preferredResponse ||
                 "Map the active loop, then name the committed move that brings you back."}
             </div>
-            <p className="mt-3 text-sm leading-6 text-white/58">
+            <p className="mt-3 break-words text-sm leading-6 text-[var(--ui-ink-soft)]">
               {hotPattern?.targetBehavior ||
                 "When the loop is explicit, the return path stops feeling abstract."}
             </p>
@@ -438,21 +444,21 @@ export function PsychePage() {
                 ? `/psyche/reports/${nextReport.id}`
                 : "/psyche/reports"
             }
-            className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(24,19,37,0.96),rgba(13,12,22,0.94))] p-5"
+            className="rounded-[28px] border border-[color-mix(in_srgb,var(--primary)_22%,var(--ui-border-subtle)_78%)] bg-[color-mix(in_srgb,var(--ui-accent-soft)_46%,var(--ui-surface-1)_54%)] p-5"
           >
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-violet-100/72">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--primary)]">
               Open threads
             </div>
             <div className="mt-3 grid gap-3 md:grid-cols-2">
-              <div className="rounded-[22px] bg-white/[0.04] px-4 py-4">
-                <div className="text-sm text-white/58">Insights</div>
-                <div className="mt-2 font-display text-4xl text-white">
+              <div className="min-w-0 rounded-[22px] bg-[var(--ui-surface-1)] px-4 py-4">
+                <div className="text-sm text-[var(--ui-ink-soft)]">Insights</div>
+                <div className="mt-2 break-words font-display text-4xl text-[var(--ui-ink-strong)]">
                   {overview.openInsights}
                 </div>
               </div>
-              <div className="rounded-[22px] bg-white/[0.04] px-4 py-4">
-                <div className="text-sm text-white/58">Notes</div>
-                <div className="mt-2 font-display text-4xl text-white">
+              <div className="min-w-0 rounded-[22px] bg-[var(--ui-surface-1)] px-4 py-4">
+                <div className="text-sm text-[var(--ui-ink-soft)]">Notes</div>
+                <div className="mt-2 break-words font-display text-4xl text-[var(--ui-ink-strong)]">
                   {overview.openNotes}
                 </div>
               </div>
@@ -474,16 +480,16 @@ export function PsychePage() {
               ? `/psyche/questionnaire-runs/${latestQuestionnaire.latestRunId}`
               : "/psyche/questionnaires"
           }
-          className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(17,31,39,0.97),rgba(10,18,24,0.95))] p-5"
+          className="rounded-[28px] border border-[color-mix(in_srgb,var(--info)_22%,var(--ui-border-subtle)_78%)] bg-[color-mix(in_srgb,var(--ui-info-soft)_42%,var(--ui-surface-1)_58%)] p-5"
         >
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-sky-100/72">
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--info)]">
             Questionnaire pulse
           </div>
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-            <div className="font-display text-[clamp(1.4rem,2.2vw,2rem)] leading-none text-white">
+            <div className="min-w-0 break-words font-display text-[clamp(1.4rem,2.2vw,2rem)] leading-none text-[var(--ui-ink-strong)]">
               {latestQuestionnaire?.title ?? "Questionnaire library ready"}
             </div>
-            <Badge className="bg-white/[0.08] text-white/78">
+            <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
               {(questionnairesQuery.data?.instruments ?? []).length} available
             </Badge>
           </div>
@@ -526,10 +532,10 @@ export function PsychePage() {
               ]}
               action={
                 <>
-                  <Link
-                    to="/psyche/goal-map"
-                    className="inline-flex min-h-10 min-w-0 max-w-full items-center justify-center rounded-[var(--radius-control)] bg-white/8 px-4 py-2 text-sm font-medium whitespace-nowrap text-white transition hover:bg-white/12"
-                  >
+	                  <Link
+	                    to="/psyche/goal-map"
+	                    className={psycheSecondaryActionClassName}
+	                  >
                     Open goal map
                   </Link>
                   <Button
@@ -552,10 +558,10 @@ export function PsychePage() {
                     gradient={false}
                     iconOnly
                   />
-                ) : (
-                  <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/42">
-                    {inspector.eyebrow}
-                  </div>
+	                ) : (
+	                  <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+	                    {inspector.eyebrow}
+	                  </div>
                 )}
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -567,31 +573,31 @@ export function PsychePage() {
                     size="lg"
                     showKind={false}
                   />
-                ) : (
-                  <h2 className="font-display text-[clamp(1.25rem,2.2vw,1.8rem)] leading-none text-white">
-                    {inspector.title}
-                  </h2>
-                )}
-              </div>
-              <p className="mt-3 text-sm leading-6 text-white/60">
-                {inspector.summary}
-              </p>
+	                ) : (
+	                  <h2 className="break-words font-display text-[clamp(1.25rem,2.2vw,1.8rem)] leading-none text-[var(--ui-ink-strong)]">
+	                    {inspector.title}
+	                  </h2>
+	                )}
+	              </div>
+	              <p className="mt-3 break-words text-sm leading-6 text-[var(--ui-ink-soft)]">
+	                {inspector.summary}
+	              </p>
               {inspector.chips.length > 0 ? (
                 <div className="mt-4 flex flex-wrap gap-2">
-                  {inspector.chips.map((chip) => (
-                    <Badge key={chip} className="bg-white/[0.08] text-white/74">
-                      {chip}
-                    </Badge>
+	                  {inspector.chips.map((chip) => (
+	                    <Badge key={chip} className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
+	                      {chip}
+	                    </Badge>
                   ))}
                 </div>
               ) : null}
               {inspector.stats.length > 0 ? (
                 <div className="mt-4 grid gap-2">
                   {inspector.stats.map((stat) => (
-                    <div
-                      key={stat}
-                      className="rounded-[18px] bg-white/[0.04] px-3 py-3 text-sm text-white/68"
-                    >
+	                    <div
+	                      key={stat}
+	                      className="min-w-0 rounded-[18px] bg-[var(--ui-surface-1)] px-3 py-3 text-sm text-[var(--ui-ink-medium)] break-words"
+	                    >
                       {stat}
                     </div>
                   ))}
@@ -601,10 +607,10 @@ export function PsychePage() {
                 <Link
                   to={inspector.href}
                   className={cn(
-                    "inline-flex min-h-11 w-full items-center justify-center rounded-[var(--radius-control)] px-4 py-2.5 text-sm font-medium whitespace-nowrap shadow-[0_12px_30px_rgba(192,193,255,0.08)]",
+                    "inline-flex min-h-11 w-full items-center justify-center rounded-[var(--radius-control)] px-4 py-2.5 text-sm font-medium whitespace-nowrap shadow-[var(--ui-shadow-soft)]",
                     inspector.entityKind
                       ? getEntityButtonClassName(inspector.entityKind, true)
-                      : "bg-[linear-gradient(135deg,rgba(192,193,255,0.36),rgba(192,193,255,0.22))] text-white"
+                      : psycheFallbackCtaClassName
                   )}
                 >
                   {inspector.ctaLabel}
@@ -614,69 +620,69 @@ export function PsychePage() {
           </section>
 
           <section className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
-            <InteractiveCard
-              to="/psyche/behaviors"
-              className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(17,29,32,0.96),rgba(11,21,23,0.94))] p-5"
-            >
-              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[rgba(110,231,183,0.82)]">
-                Best next reflective move
-              </div>
-              <div className="mt-3 font-display text-[clamp(1.45rem,2.2vw,2rem)] leading-none text-white">
-                {hotPattern?.preferredResponse ||
-                  "Map the active loop, then name the committed move that brings you back."}
-              </div>
-              <p className="mt-3 text-sm leading-6 text-white/58">
-                {hotPattern?.targetBehavior ||
-                  "When the loop is explicit, the return path stops feeling abstract."}
-              </p>
+	            <InteractiveCard
+	              to="/psyche/behaviors"
+	              className="rounded-[28px] border border-[color-mix(in_srgb,var(--success)_22%,var(--ui-border-subtle)_78%)] bg-[color-mix(in_srgb,var(--ui-success-soft)_44%,var(--ui-surface-1)_56%)] p-5"
+	            >
+	              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--success)]">
+	                Best next reflective move
+	              </div>
+	              <div className="mt-3 break-words font-display text-[clamp(1.45rem,2.2vw,2rem)] leading-none text-[var(--ui-ink-strong)]">
+	                {hotPattern?.preferredResponse ||
+	                  "Map the active loop, then name the committed move that brings you back."}
+	              </div>
+	              <p className="mt-3 break-words text-sm leading-6 text-[var(--ui-ink-soft)]">
+	                {hotPattern?.targetBehavior ||
+	                  "When the loop is explicit, the return path stops feeling abstract."}
+	              </p>
             </InteractiveCard>
 
             <InteractiveCard
               to={
-                nextReport
-                  ? `/psyche/reports/${nextReport.id}`
-                  : "/psyche/reports"
-              }
-              className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(24,19,37,0.96),rgba(13,12,22,0.94))] p-5"
-            >
-              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-violet-100/72">
-                Open threads
-              </div>
-              <div className="mt-3 grid gap-3 md:grid-cols-2">
-                <div className="rounded-[22px] bg-white/[0.04] px-4 py-4">
-                  <div className="text-sm text-white/58">Insights</div>
-                  <div className="mt-2 font-display text-4xl text-white">
-                    {overview.openInsights}
-                  </div>
-                </div>
-                <div className="rounded-[22px] bg-white/[0.04] px-4 py-4">
-                  <div className="text-sm text-white/58">Notes</div>
-                  <div className="mt-2 font-display text-4xl text-white">
-                    {overview.openNotes}
-                  </div>
-                </div>
+	                nextReport
+	                  ? `/psyche/reports/${nextReport.id}`
+	                  : "/psyche/reports"
+	              }
+	              className="rounded-[28px] border border-[color-mix(in_srgb,var(--primary)_22%,var(--ui-border-subtle)_78%)] bg-[color-mix(in_srgb,var(--ui-accent-soft)_46%,var(--ui-surface-1)_54%)] p-5"
+	            >
+	              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--primary)]">
+	                Open threads
+	              </div>
+	              <div className="mt-3 grid gap-3 md:grid-cols-2">
+	                <div className="min-w-0 rounded-[22px] bg-[var(--ui-surface-1)] px-4 py-4">
+	                  <div className="text-sm text-[var(--ui-ink-soft)]">Insights</div>
+	                  <div className="mt-2 break-words font-display text-4xl text-[var(--ui-ink-strong)]">
+	                    {overview.openInsights}
+	                  </div>
+	                </div>
+	                <div className="min-w-0 rounded-[22px] bg-[var(--ui-surface-1)] px-4 py-4">
+	                  <div className="text-sm text-[var(--ui-ink-soft)]">Notes</div>
+	                  <div className="mt-2 break-words font-display text-4xl text-[var(--ui-ink-strong)]">
+	                    {overview.openNotes}
+	                  </div>
+	                </div>
               </div>
             </InteractiveCard>
           </section>
 
           <InteractiveCard
             to={
-              latestQuestionnaire?.latestRunId
-                ? `/psyche/questionnaire-runs/${latestQuestionnaire.latestRunId}`
-                : "/psyche/questionnaires"
-            }
-            className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(17,31,39,0.97),rgba(10,18,24,0.95))] p-5"
-          >
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-sky-100/72">
-              Questionnaire pulse
-            </div>
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-              <div className="font-display text-[clamp(1.4rem,2.2vw,2rem)] leading-none text-white">
-                {latestQuestionnaire?.title ?? "Questionnaire library ready"}
-              </div>
-              <Badge className="bg-white/[0.08] text-white/78">
-                {(questionnairesQuery.data?.instruments ?? []).length} available
-              </Badge>
+	              latestQuestionnaire?.latestRunId
+	                ? `/psyche/questionnaire-runs/${latestQuestionnaire.latestRunId}`
+	                : "/psyche/questionnaires"
+	            }
+	            className="rounded-[28px] border border-[color-mix(in_srgb,var(--info)_22%,var(--ui-border-subtle)_78%)] bg-[color-mix(in_srgb,var(--ui-info-soft)_42%,var(--ui-surface-1)_58%)] p-5"
+	          >
+	            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--info)]">
+	              Questionnaire pulse
+	            </div>
+	            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+	              <div className="min-w-0 break-words font-display text-[clamp(1.4rem,2.2vw,2rem)] leading-none text-[var(--ui-ink-strong)]">
+	                {latestQuestionnaire?.title ?? "Questionnaire library ready"}
+	              </div>
+	              <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
+	                {(questionnairesQuery.data?.instruments ?? []).length} available
+	              </Badge>
             </div>
           </InteractiveCard>
         </>

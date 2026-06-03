@@ -417,15 +417,17 @@ export function PsycheValuesPage() {
                 <div
                   key={value.id}
                   data-psyche-focus-id={value.id}
-                  className={`rounded-[26px] border border-white/8 bg-white/[0.04] p-5 transition ${psycheFocusClass(isFocused)}`}
+                  className={`min-w-0 rounded-[26px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-5 transition ${psycheFocusClass(isFocused)}`}
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div>
+                  <div className="flex min-w-0 flex-wrap items-start justify-between gap-4">
+                    <div className="min-w-0">
                       <EntityName
                         kind="value"
                         label={value.title}
                         variant="heading"
                         size="xl"
+                        lines={2}
+                        labelClassName="[overflow-wrap:anywhere]"
                       />
                       <div className="mt-2 text-sm text-[var(--tertiary)]">
                         {value.valuedDirection}
@@ -452,26 +454,26 @@ export function PsycheValuesPage() {
                       </Button>
                     </div>
                   </div>
-                  <p className="mt-4 max-w-3xl text-sm leading-7 text-white/60">
+                  <p className="mt-4 max-w-3xl break-words text-sm leading-7 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
                     {value.description}
                   </p>
                   <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-                    <div className="rounded-[22px] bg-white/[0.04] p-4">
-                      <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                    <div className="min-w-0 rounded-[22px] bg-[var(--ui-surface-2)] p-4">
+                      <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                         Why it matters
                       </div>
-                      <div className="mt-2 text-sm leading-6 text-white/64">
+                      <div className="mt-2 break-words text-sm leading-6 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
                         {value.whyItMatters}
                       </div>
                     </div>
                     <div className="grid gap-3 md:grid-cols-3">
-                      <div className="rounded-[22px] bg-white/[0.04] p-4">
-                        <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                      <div className="min-w-0 rounded-[22px] bg-[var(--ui-surface-2)] p-4">
+                        <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                           Goals
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2">
                           {linkedGoals.length === 0 ? (
-                            <span className="text-sm text-white/44">
+                            <span className="text-sm text-[var(--ui-ink-faint)]">
                               None linked
                             </span>
                           ) : (
@@ -481,18 +483,19 @@ export function PsycheValuesPage() {
                                 kind="goal"
                                 label={goal.title}
                                 compact
+                                wrap
                               />
                             ))
                           )}
                         </div>
                       </div>
-                      <div className="rounded-[22px] bg-white/[0.04] p-4">
-                        <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                      <div className="min-w-0 rounded-[22px] bg-[var(--ui-surface-2)] p-4">
+                        <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                           Projects
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2">
                           {linkedProjects.length === 0 ? (
-                            <span className="text-sm text-white/44">
+                            <span className="text-sm text-[var(--ui-ink-faint)]">
                               None linked
                             </span>
                           ) : (
@@ -502,18 +505,19 @@ export function PsycheValuesPage() {
                                 kind="project"
                                 label={project.title}
                                 compact
+                                wrap
                               />
                             ))
                           )}
                         </div>
                       </div>
-                      <div className="rounded-[22px] bg-white/[0.04] p-4">
-                        <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                      <div className="min-w-0 rounded-[22px] bg-[var(--ui-surface-2)] p-4">
+                        <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                           Tasks
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2">
                           {linkedTasks.length === 0 ? (
-                            <span className="text-sm text-white/44">
+                            <span className="text-sm text-[var(--ui-ink-faint)]">
                               None linked
                             </span>
                           ) : (
@@ -525,6 +529,7 @@ export function PsycheValuesPage() {
                                   kind="task"
                                   label={task.title}
                                   compact
+                                  wrap
                                 />
                               ))
                           )}
@@ -536,7 +541,7 @@ export function PsycheValuesPage() {
                     {value.committedActions.map((action) => (
                       <div
                         key={action}
-                        className="rounded-[18px] bg-[rgba(110,231,183,0.08)] px-4 py-3 text-sm text-white/72"
+                        className="min-w-0 break-words rounded-[18px] bg-[color-mix(in_srgb,var(--success)_10%,var(--ui-surface-1)_90%)] px-4 py-3 text-sm text-[var(--ui-ink-medium)] [overflow-wrap:anywhere]"
                       >
                         {action}
                       </div>

@@ -29,6 +29,6 @@ export function usePsycheFocusTarget(focusId: string | null) {
 
 export function psycheFocusClass(isFocused: boolean) {
   return isFocused
-    ? "border-[rgba(125,211,252,0.28)] bg-[linear-gradient(180deg,rgba(125,211,252,0.14),rgba(255,255,255,0.06))] shadow-[0_24px_60px_rgba(56,189,248,0.14)]"
+    ? "border-[color-mix(in_srgb,var(--info)_34%,var(--ui-border-subtle)_66%)] bg-[color-mix(in_srgb,var(--info)_12%,var(--ui-surface-1)_88%)] shadow-[var(--ui-shadow-soft)]"
     : "";
 }

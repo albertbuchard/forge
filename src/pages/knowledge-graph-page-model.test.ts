@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_KNOWLEDGE_GRAPH_MAX_NODES,
+  buildKnowledgeGraphQueryFromPageState,
+  buildKnowledgeGraphQuickFilterSelectionIds,
+  parseKnowledgeGraphPageState,
+  parseKnowledgeGraphQuickFilterSelectionIds,
   resolveKnowledgeGraphFocusInteraction,
   resolveKnowledgeGraphOverlaySyncAction
 } from "@/pages/knowledge-graph-page-model";
@@ -140,6 +145,81 @@ describe("resolveKnowledgeGraphOverlaySyncAction", () => {
     ).toEqual({
       action: "none",
       nextRequestedKey: "__clear__"
+    });
+  });
+});
+
+describe("knowledge graph URL and query model", () => {
+  it("parses search params into bounded page state", () => {
+    const state = parseKnowledgeGraphPageState(
+      [
+        "view=hierarchy",
+        "focus=goal%3Agoal-1",
+        "entityKind=goal,project",
+        "entityKind=task",
+        "relationKind=goal_project",
+        "tag=urgent",
+        "owner=user-1",
+        "q=roadmap",
+        "updatedFrom=2026-01-01",
+        "updatedTo=2026-02-01",
+        "limit=99999",
+        "cross=1"
+      ].join("&")
+    );
+
+    expect(state).toMatchObject({
+      selectedView: "hierarchy",
+      focusNodeId: "goal:goal-1",
+      selectedKinds: ["goal", "project", "task"],
+      selectedRelations: ["goal_project"],
+      selectedTags: ["urgent"],
+      selectedOwners: ["user-1"],
+      queryText: "roadmap",
+      updatedFrom: "2026-01-01",
+      updatedTo: "2026-02-01",
+      showHierarchyCrossLinks: true,
+      maxNodes: MAX_KNOWLEDGE_GRAPH_MAX_NODES
+    });
+  });
+
+  it("builds a stable API query from parsed page state", () => {
+    const state = parseKnowledgeGraphPageState(
+      "q=  graph  &entityKind=task&entityKind=goal&tag=b&tag=a&owner=user-2&relationKind=task_note"
+    );
+
+    expect(buildKnowledgeGraphQueryFromPageState(state)).toEqual({
+      q: "graph",
+      entityKinds: ["goal", "task"],
+      relationKinds: ["task_note"],
+      tags: ["a", "b"],
+      owners: ["user-2"],
+      updatedFrom: null,
+      updatedTo: null,
+      limit: 2000,
+      focusNodeId: null
+    });
+  });
+
+  it("round-trips quick filter ids by facet family", () => {
+    const selectedIds = buildKnowledgeGraphQuickFilterSelectionIds({
+      entityKinds: ["goal"],
+      relationKinds: ["goal_project"],
+      tags: ["deep:work"],
+      owners: ["user-1"]
+    });
+
+    expect(selectedIds).toEqual([
+      "entity:goal",
+      "relation:goal_project",
+      "tag:deep:work",
+      "owner:user-1"
+    ]);
+    expect(parseKnowledgeGraphQuickFilterSelectionIds(selectedIds)).toEqual({
+      entityKinds: ["goal"],
+      relationKinds: ["goal_project"],
+      tags: ["deep:work"],
+      owners: ["user-1"]
     });
   });
 });

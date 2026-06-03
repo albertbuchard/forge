@@ -2,14 +2,21 @@ export {
   buildInitialPlanDraft,
   buildTargetPatchFromPlan,
   calculatePlan,
+  isWeightLossPlanConfigured,
+  validateWeightLossPlanDraft,
   WeightLossPlanDialog,
   type WeightLossPlanDraft
 } from "./weight-loss-plan-dialog";
 export {
+  buildFoodDraftFromInput,
+  buildFoodDraftFromLog,
   buildFoodLogInput,
+  buildFoodLogPatchInput,
+  buildInitialCustomFoodDraft,
   buildInitialFoodDraft,
   WeightLossFoodLogDialog,
   type WeightLossFoodDraft,
+  type WeightLossFoodLogIntent,
   type WeightLossSelectedFood
 } from "./weight-loss-food-log-dialog";
 export {

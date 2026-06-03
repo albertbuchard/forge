@@ -13,6 +13,8 @@ The feature must combine calorie balance, food logging, body trend, subjective e
 
 Use the existing OpenAI Codex OAuth / ChatGPT subscription-backed provider path already present in Forge and OpenClaw/Hermes. Do not add or default to OpenAI Platform API-key billing for v1. AI food parsing and photo interpretation must go through the existing openai-codex provider contract or a narrow extension of that contract.
 
+The guided plan flow must ask current state first, prefill every known value from Forge/iOS data, then ask the objective, generate sane default target weight and weekly rate values, then show active calories as independent evidence, and only then compute calories, macros, micronutrients, and sport-loss ranges. Active calories must never change because the user chooses lose, gain, or maintain.
+
 Carry the work through implementation, tests, OpenClaw/Hermes tool parity, generated types/OpenAPI updates, and live runtime verification.
 ```
 
@@ -38,6 +40,9 @@ The product should be honest about uncertainty without becoming boring. Show con
 - Store AI outputs as unconfirmed candidates until the user accepts them.
 - Avoid medical diagnosis. This is personal tracking, pattern discovery, and experiment support.
 - Appearance tracking must be private, user-defined, and non-shaming. Do not implement universal attractiveness rankings.
+- All questionnaires and setup/edit flows must be guided modal flows using Forge's `QuestionFlowDialog`-style components. Do not place long questionnaire forms directly on the page.
+- The weight plan must separate physiology, activity evidence, and objective math. Current state drives resting energy; HealthKit/workout/movement evidence drives active energy; the user's objective only adds a signed deficit or surplus.
+- Known height, age, sex, latest weight, HealthKit basal energy, HealthKit active energy, workout energy, and movement calories must prefill the flow when Forge already has them.
 
 ## Research Spine
 
@@ -63,6 +68,7 @@ Use the literature and product evidence below as implementation guidance:
   - ASA24 as a structured dietary recall reference: https://epi.grants.cancer.gov/asa24/
 - Use state-of-the-art app ideas without copying blindly:
   - MacroFactor expenditure inference: https://help.macrofactorapp.com/en/articles/20-expenditure
+  - MacroFactor logging requirements for expenditure inference: https://help.macrofactorapp.com/en/articles/110-how-frequently-do-i-need-to-log-my-nutrition-for-the-expenditure-algorithm-and-weekly-coaching-updates
   - Oura meal timing / metabolic context: https://support.ouraring.com/hc/en-us/articles/40264659421843-Meals
   - ZOE-style gut/metabolic personalization: https://zoe.com/
   - Cronometer-style micronutrient completeness: https://cronometer.com/
@@ -74,11 +80,14 @@ This section records the nutrition and HealthKit evidence used for the target mo
 
 Energy target formula:
 
-Forge should compute target calories in three separate steps, because basal/resting burn, active burn, and weight objective are different concepts.
+Forge should compute target calories in separate steps, because current body state, basal/resting burn, active burn, and weight objective are different concepts.
 
-1. Estimate or read resting burn. When HealthKit basal/resting energy exists, use it as measured evidence. Otherwise use Mifflin-St Jeor resting energy because it is a standard adult predictive equation: male `10 * weight_kg + 6.25 * height_cm - 5 * age + 5`; female `10 * weight_kg + 6.25 * height_cm - 5 * age - 161`. Source: Mifflin et al. and Endotext reference table: https://pubmed.ncbi.nlm.nih.gov/2305711/ and https://www.ncbi.nlm.nih.gov/sites/books/NBK278991/table/diet-treatment-obes.table12est/?report=objectonly
-2. Add active burn independently from the user's objective. HealthKit active energy, workout energy, and movement-trip calories are evidence about activity. They must not change because the user selects lose, gain, or maintain. The maintenance estimate is `resting_or_basal_kcal + active_burn_kcal`.
-3. Apply the objective delta. The planning model uses roughly `7700 kcal/kg` as a simple first-pass energy equivalent, while acknowledging that dynamic body-weight models are better over long horizons. For a weekly goal rate, `daily_delta_kcal = weekly_rate_kg * 7700 / 7`; loss is negative, gain is positive. NIH/Pennington work notes the limitations of the static 3500 kcal/lb rule and points toward dynamic models for future refinement: https://pmc.ncbi.nlm.nih.gov/articles/PMC3810417/
+1. Resolve the current state. Prefill sex, age, height, latest body weight, and recent body measurements from Forge. The latest `nutrition_body_checkins.weight_kg` is the user's editable body-weight source for this surface; HealthKit `bodyMass` must seed `weightTrend.latestWeightKg` when no nutrition check-in exists yet. If height/age/sex are missing, ask in the modal setup flow and persist them with the nutrition target profile so they can be edited later.
+2. Estimate or read resting burn. When HealthKit basal/resting energy exists, use it as measured evidence. Otherwise use Mifflin-St Jeor resting energy because it is a standard adult predictive equation: male `10 * weight_kg + 6.25 * height_cm - 5 * age + 5`; female `10 * weight_kg + 6.25 * height_cm - 5 * age - 161`. Source: Mifflin et al. and Endotext reference table: https://pubmed.ncbi.nlm.nih.gov/2305711/ and https://www.ncbi.nlm.nih.gov/sites/books/NBK278991/table/diet-treatment-obes.table12est/?report=objectonly
+3. Add active burn independently from the user's objective. HealthKit active energy, workout energy, and movement-trip calories are evidence about activity. They must not change because the user selects lose, gain, or maintain. The maintenance estimate is `resting_or_basal_kcal + active_burn_kcal`. If both HealthKit daily active energy and workout/movement fallback exist, the read model should prefer HealthKit daily active energy for the primary active-burn field and keep workout/movement values visible as source breakdown.
+4. Ask what the user wants to do. The user chooses `lose`, `gain`, or `maintain`; the UI then proposes default target weight and weekly rate values from the current weight. Do not ask for an uncontextualized target weight before asking the objective. For maintain, default target weight equals current weight and weekly rate is `0`.
+5. Apply the objective delta only after maintenance is known. The planning model uses roughly `7700 kcal/kg` as a simple first-pass energy equivalent, while acknowledging that dynamic body-weight models are better over long horizons. For a weekly goal rate, `daily_delta_kcal = weekly_rate_kg * 7700 / 7`; loss is negative, gain is positive. Therefore `target_kcal = resting_or_basal_kcal + active_burn_kcal + daily_delta_kcal`. NIH/Pennington work notes the limitations of the static 3500 kcal/lb rule and points toward dynamic models for future refinement: https://pmc.ncbi.nlm.nih.gov/articles/PMC3810417/ and https://www.niddk.nih.gov/research-funding/at-niddk/labs-branches/laboratory-biological-modeling/integrative-physiology-section/research/body-weight-planner
+6. Clamp clearly, not silently. Forge should warn when the requested loss rate implies an overly low intake. V1 uses a practical unsupervised floor of about `1200 kcal/day` for female profiles and `1500 kcal/day` for male profiles, then should explain that the requested weekly rate was slowed or the calorie target was floored. CDC/NIDDK public guidance emphasizes gradual loss of about `1-2 lb/week` and safe programs over crash targets: https://www.cdc.gov/healthy-weight-growth/losing-weight/index.html and https://www.niddk.nih.gov/health-information/weight-management/choosing-a-safe-successful-weight-loss-program
 
 Default weight-change rates:
 
@@ -89,9 +98,10 @@ For mass gain, default much slower, around `0.25% body weight/week`, because sur
 Macro targets:
 
 - Protein should be substantially above the sedentary RDA when the user is training or losing weight. ISSN's 2017 protein stand supports about `1.4-2.0 g/kg/day` for most exercising people, and higher intakes can help body composition during hypocaloric training. Forge defaults to about `2.0 g/kg` for loss, `1.8 g/kg` for gain, and `1.6 g/kg` for maintenance unless the user customizes it. Source: https://link.springer.com/article/10.1186/s12970-017-0177-8
-- Fat should not be treated as a leftover after protein. NASEM AMDR for adults is `20-35%` of energy from fat; Forge uses a practical floor of about `0.6 g/kg` and keeps the generated target in that AMDR region when possible. Source: https://www.ncbi.nlm.nih.gov/books/NBK208874/table/ttt00023/?report=objectonly
-- Carbohydrate AMDR for adults is `45-65%` of energy and the adult RDA is `130 g/day`. Forge uses carbs as remaining training fuel after protein and fat, while the UI should still expose the 130 g/day reference rather than hiding low-carb exceptions. Source: https://www.ncbi.nlm.nih.gov/books/NBK208874/table/ttt00022/?report=objectonly
-- Fiber targets should use sex/age DRI values and the common planning rule of about `14 g / 1000 kcal`; Forge should show the stricter of the generated target and the DRI target. Source: https://www.ncbi.nlm.nih.gov/books/NBK208874/table/ttt00022/?report=objectonly
+- The protein multiplier must not blindly use current body mass when that makes the target mathematically impossible or inappropriate. For loss, use the lower of current weight and target weight as the first reference. For high-BMI profiles, use an adjusted reference weight for protein and fat-floor generation: the weight at BMI 25 plus 25% of the excess above that reference. Then cap protein calories at roughly 45% of the calorie target in v1. This keeps the plan high-protein without producing a 1600 kcal protein target inside a 1200 kcal plan. Future versions can refine this with body-fat percentage or lean-mass measurements when the user provides them.
+- Fat should not be treated as a careless leftover after protein. NASEM AMDR for adults is `20-35%` of energy from fat; Forge uses a practical floor around `0.6 g/kg` and keeps the generated target in that AMDR region when possible. Source: https://www.ncbi.nlm.nih.gov/books/NBK208874/table/ttt00023/?report=objectonly
+- Carbohydrate AMDR for adults is `45-65%` of energy and the adult RDA is `130 g/day`. Forge uses carbs as remaining training fuel after protein and fat, but it must not force a `130 g` floor when that would make macro calories exceed the calorie target. The UI should show the actual plan target plus a visible `130 g/day` DRI reference/caveat. On heavy training days the plan can suggest eating back some verified active burn as carbohydrate, but this is a day-level fuel adjustment, not a change to basal metabolism. Source: https://www.ncbi.nlm.nih.gov/books/NBK208874/table/ttt00022/?report=objectonly
+- Fiber targets should keep the common planning rule of about `14 g / 1000 kcal` separate from the sex/age adult AI. For a `1500 kcal/day` plan, the energy-adjusted fiber target is about `21 g/day`; a `38 g/day` adult male AI is still useful as a reference or stretch value, but Forge should not present it as if it were derived from the low-calorie plan. Source: https://www.ncbi.nlm.nih.gov/books/NBK208874/table/ttt00022/?report=objectonly
 - Saturated fat and added sugar should be shown as ceilings, not goals. The 2025-2030 Dietary Guidelines remain the current U.S. federal guidance and emphasize real foods, limiting highly processed foods and added sugars; the longstanding practical ceiling for saturated fat remains under 10% of energy in the detailed guidance ecosystem. Current DGA entry point: https://www.fns.usda.gov/cnpp/dietary-guidelines-americans and PDF: https://cdn.realfood.gov/DGA.pdf
 
 Vitamin, mineral, and oligoelement targets:
@@ -118,9 +128,28 @@ The immediate bug was architectural, not just visual. The weight-loss read model
 
 - iOS HealthKit sync requests HealthKit activity permissions and exports basal energy, exercise time, step count, workout active energy, workout total energy, and workout-associated active-energy samples.
 - Forge stores HealthKit daily summaries in `health_daily_summaries`, workout energy in `health_workout_sessions.active_energy_kcal` and `total_energy_kcal`, and passive movement-trip calories in `movement_trips.calories_kcal`.
-- The weight-loss read model must compose those canonical sources instead of inventing a separate calorie store. Daily HealthKit active energy should be the preferred active-burn signal; workout energy plus movement-trip calories are fallback evidence; inferred TDEE from the target is only a last resort.
+- Forge also stores HealthKit body mass inside `health_daily_summaries.metrics_json.bodyMass`. The weight-loss read model must use that as the latest weight seed when no `nutrition_body_checkins.weight_kg` exists.
+- The weight-loss read model must compose those canonical sources instead of inventing a separate calorie store. Daily HealthKit active energy should be the preferred active-burn signal; workout energy plus movement-trip calories are fallback evidence; inferred TDEE from the target is only a last resort and must be labeled as target inference.
 
 The sound architecture is: iOS collects provider-native HealthKit evidence; Fastify persists it in canonical provider-neutral tables; the weight-loss read model composes the existing health/movement stores; React renders targets and confidence from that read model. React should not calculate missing active burn from scratch.
+
+Required ingestion contract:
+
+- iOS companion must request and read `HKQuantityTypeIdentifier.activeEnergyBurned`, `basalEnergyBurned`, `appleExerciseTime`, `stepCount`, `bodyMass`, and workout energy quantities when HealthKit permissions allow them.
+- The companion sync payload must carry daily active-energy and basal-energy summaries as metric records with stable keys `activeEnergyBurned` and `basalEnergyBurned`, including unit, aggregation, source, and date window.
+- Fastify must persist those records into `health_daily_summaries.metrics_json` under `summary_type='vitals'`, preserve workout energy in `health_workout_sessions`, and preserve movement-trip estimates in `movement_trips`.
+- `GET /api/v1/health/weight-loss` must expose `energyModel.sourceAvailability`, `activeBurnKcal`, `activeEnergyCalories`, `restingEnergyCalories`, `movementCaloriesKcal`, `workoutEnergyKcal`, `exerciseMinutesAverage`, `stepCountAverage`, and `weightTrend.latestWeightSource`.
+- Tests must cover the non-`n/a` path: after inserting or syncing HealthKit daily active/basal energy plus movement calories, the weight-loss overview returns those fields and the plan dialog pre-fills them. Tests must also cover the HealthKit `bodyMass` fallback so first-run setup can default to known weight before the user adds a nutrition-specific body check-in.
+
+Actionable personal metrics beyond calorie counting:
+
+- Body-composition direction: trend weight, weekly weight rate, waist-to-height ratio, waist-to-hip ratio, body-fat estimate when supplied, measurement deltas, and clothing fit.
+- Look/aesthetic metrics: user-defined private ratings for face puffiness, leanness, muscularity, posture, abdomen/bloating look, vascularity/fullness if the user enables it, and a confidence/look score that is personal rather than universal.
+- Sport-food interaction: pre-workout carbohydrate/protein window, post-workout protein/carbohydrate recovery, RPE, performance, soreness, HRV/resting-HR context, sleep context, and low-energy-availability warning when intake is repeatedly low relative to training.
+- Subjective response: hunger, fullness, cravings, energy, focus, mood, stress, sleepiness, crash score, and time relation to meal. Brief repeated ratings follow EMA/visual-analogue-style practice rather than long retrospective questionnaires.
+- Gut health: Bristol stool type, stool frequency, bloating, gas, reflux, abdominal pain, urgency, nausea, constipation, diarrhea, suspected trigger tags, and lag windows of same-meal, 2-hour, next-morning, and 24-48h.
+- Food quality: protein density, fiber density, fruit/vegetable servings when inferable, sodium/potassium, caffeine/alcohol, added sugar, saturated fat, NOVA/ultra-processed exposure, Nutri-Score/Open Food Facts fields, and micronutrient completeness when the food source supports it.
+- Pattern discovery: evidence count, lag window, effect size direction, repeated-observation strength, and confounders such as sleep, stress, alcohol, training load, cycle, travel, illness, late meals, and place.
 
 ## Core Data Model
 

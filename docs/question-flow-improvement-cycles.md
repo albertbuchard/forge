@@ -1,10 +1,126 @@
 # Forge Question Flow Improvement Cycles
 
-Latest run date: 2026-06-02
+Latest run date: 2026-06-03
 
 This report records the three-cycle evaluation for Forge agent question flows. The
 same full flow set was tested in each cycle so improvements were kept only where they
 helped the entity or specialized surface.
+
+## 2026-06-03 Automation Pass
+
+Setup verification:
+
+- Confirmed the Forge worktree was on `main` before plugin work and edits.
+- No prior automation memory existed for
+  `improvement-of-question-flows-in-forge`; this run creates it at closeout.
+- Verified OpenClaw and Hermes configs both point at
+  `/Users/omarclaw/Documents/aurel-monorepo/data/forge`; the live Forge process had
+  `/Users/omarclaw/Documents/aurel-monorepo/data/forge/forge.sqlite` open. No
+  database, data root, backup, or user data was moved, merged, deleted, or
+  overwritten.
+- Built the repo-local OpenClaw plugin and Hermes packaged runtime through
+  `node ./plugins/forge-hermes/scripts/build-package-runtime.mjs`, then reinstalled
+  OpenClaw from `./openclaw-plugin` and Hermes editable from
+  `./plugins/forge-hermes`.
+- Verified OpenClaw loads `forge-openclaw-plugin 0.2.101` from the repo-local
+  `openclaw-plugin/dist/openclaw/index.js` source path and Hermes imports
+  `forge-hermes-plugin 0.2.101` from the local editable package.
+- Verified live health, onboarding, and OpenAPI before the cycles: 42 entity catalog
+  entries, 14 read-model aliases, 23 Movement route keys, four Life Force route keys
+  under both `lifeForce` and `life_force`, 16 Workbench route keys, five shared batch
+  entity routes, 16 Movement paths, four Life Force paths, 13 Workbench paths, the
+  training-load route, the Weight Loss/nutrition route family, and 197 OpenAPI paths.
+
+Every cycle retested the full current flow set: goal, project, strategy, task,
+habit, tag, note, insight, task_run, work_adjustment, calendar_event,
+work_block_template, task_timebox, calendar_connection, preference_catalog,
+preference_catalog_item, preference_context, preference_item,
+preference_judgment, preference_signal, questionnaire_instrument,
+questionnaire_run, self_observation, sleep_session, sleep_overview,
+workout_session, sports_overview, training_load, weight_loss, wiki_page,
+movement, life_force, workbench, psyche_value, behavior_pattern, behavior,
+belief_entry, mode_profile, mode_guide_session, flashcard, trigger_report,
+event_type, and emotion_definition.
+
+Specialized route scenarios again covered all live Movement lanes for day, month,
+all-time, timeline, places, box detail, trip detail, selected-span aggregate,
+settings, settings updates, place create/update, user-box preflight/create/update/delete,
+automatic-box invalidation, stay/trip update/delete, and trip-point update/delete;
+Life Force overview, profile, weekday template, and fatigue signal; and Workbench
+flow catalog, flow detail by id or slug, flow CRUD, saved-flow execution, one-off
+execution, chat follow-up, run history, run detail, run nodes, node result, latest
+node output, published output, and box catalog.
+
+Cycle 1 tested all 46 flows after the plugin refresh with attention to whether the
+automation still covered newly added Forge health functionality. Strengths: Psyche,
+Movement, Life Force, Workbench, planning, calendar, preferences, questionnaire, and
+core health flows stayed well covered. Weakness: Weight Loss already had a playbook
+section and dedicated tools, but it was missing from the simulated full-cycle matrix,
+the live onboarding conversation playbooks, and the typed concept model. That meant a
+new agent could know the route from tool prose but not receive a first-turn question
+or cycle-level coverage.
+
+What changed in Cycle 1:
+
+- Added `Weight Loss` to the non-Psyche simulation matrix, scenario list, first-turn
+  quality assertions, and API posture checks as a dedicated health workflow rather
+  than batch CRUD.
+- Added `weight_loss` to the route posture matrix coverage and the live onboarding
+  `entityConversationPlaybooks`.
+- Added `weightLoss` to the TypeScript and OpenAPI concept model plus the overview
+  verification path.
+
+What happened after retesting Cycle 1:
+
+- The first retest found two wording gaps only: the Weight Loss playbook section
+  lacked a `Ready to review` checkpoint, and the route matrix used less explicit
+  wording than the new health-workflow assertion.
+- Added the missing readiness checkpoint and changed the route matrix wording to
+  `health read model plus dedicated nutrition write workflow`.
+- The full focused suite passed afterward: 29 tests. The change improved coverage and
+  onboarding clarity without changing normal batch CRUD or specialized-domain route
+  behavior, so it was kept.
+
+Cycle 2 retested all 46 flows with attention to API path discoverability for the
+dedicated nutrition workflow. Strengths: the Fastify routes, OpenAPI paths, Hermes
+catalog, and tool input catalog already exposed Weight Loss overview, food search,
+barcode lookup, food logs, parsing, body/appearance/subjective/gut check-ins,
+nutrition patterns, and experiments. Weakness: `verificationPaths` exposed only the
+overview, so a new agent reading onboarding could still miss the dedicated nutrition
+write and search paths unless it found them in tool prose.
+
+What changed in Cycle 2:
+
+- Added explicit Weight Loss/nutrition keys to `verificationPaths`: target, daily
+  active calories, food search, barcode lookup, food logs, food-log detail, parse,
+  body check-ins, appearance check-ins, subjective check-ins, gut check-ins, patterns,
+  experiments, and experiment detail.
+- Mirrored those keys through the TypeScript onboarding type and OpenAPI schema.
+- Added backend and simulation assertions for the nutrition route-family contract.
+
+What happened after retesting Cycle 2:
+
+- The full focused suite passed: 29 tests.
+- The change improved API discoverability for Weight Loss without treating food logs,
+  check-ins, or nutrition experiments as generic batch entities, so it was kept.
+
+Cycle 3 retested all 46 flows and route families with attention to whether onboarding
+verification paths were mechanically aligned with generated OpenAPI. Strengths: the
+specialized Movement, Life Force, and Workbench route guard already checked every
+`methodRoutes` entry against OpenAPI. Weakness: the broader `verificationPaths` map was
+not itself checked against OpenAPI, so newly added paths could drift silently.
+
+What changed in Cycle 3:
+
+- Extended the onboarding-contract test so every `verificationPaths` entry is
+  normalized from `:id` syntax to OpenAPI `{id}` syntax and checked against generated
+  OpenAPI paths.
+
+What happened after retesting Cycle 3:
+
+- The full focused suite passed: 29 tests.
+- The change improved contract truthfulness without altering user-facing wording, so
+  it was kept. Nothing was reverted.
 
 ## 2026-06-02 Automation Pass
 

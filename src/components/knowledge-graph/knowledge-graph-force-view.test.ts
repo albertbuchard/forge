@@ -9,6 +9,7 @@ import {
   reduceKnowledgeGraphSigmaEdgeAttributes,
   reduceKnowledgeGraphSigmaNodeAttributes
 } from "@/components/knowledge-graph/knowledge-graph-force-view-model";
+import { createGraphFromData } from "@/components/knowledge-graph/knowledge-graph-renderer-model";
 import type { KnowledgeGraphNode } from "@/lib/knowledge-graph-types";
 
 const baseNode: KnowledgeGraphNode = {
@@ -85,6 +86,20 @@ describe("KnowledgeGraphForceView reducers", () => {
 
     expect(centroidX).toBeCloseTo(0, 6);
     expect(centroidY).toBeCloseTo(0, 6);
+  });
+
+  it("resolves graph node colors from body theme tokens before root defaults", () => {
+    document.documentElement.style.setProperty("--forge-entity-goal-rgb", "1, 2, 3");
+    document.body.style.setProperty("--forge-entity-goal-rgb", "10, 20, 30");
+
+    try {
+      const graph = createGraphFromData([baseNode], [], new Map());
+
+      expect(graph.getNodeAttribute(baseNode.id, "color")).toBe("rgb(10, 20, 30)");
+    } finally {
+      document.documentElement.style.removeProperty("--forge-entity-goal-rgb");
+      document.body.style.removeProperty("--forge-entity-goal-rgb");
+    }
   });
 
   it("preserves sigma node position attributes while styling focused nodes", () => {

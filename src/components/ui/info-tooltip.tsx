@@ -40,13 +40,15 @@ export function InfoTooltip({
   title,
   label = "Explain this field",
   className,
-  panelClassName
+  panelClassName,
+  maxWidthPx = TOOLTIP_MAX_WIDTH_PX
 }: {
   content: ReactNode;
   title?: string;
   label?: string;
   className?: string;
   panelClassName?: string;
+  maxWidthPx?: number;
 }) {
   const [open, setOpen] = useState(false);
   const [panelStyle, setPanelStyle] = useState<CSSProperties>({});
@@ -98,7 +100,7 @@ export function InfoTooltip({
         window.innerWidth < 480
           ? window.innerWidth - TOOLTIP_GUTTER_PX * 2
           : Math.min(
-              TOOLTIP_MAX_WIDTH_PX,
+              maxWidthPx,
               window.innerWidth - TOOLTIP_GUTTER_PX * 2
             );
       const centeredLeft = rect.left + rect.width / 2 - width / 2;
@@ -126,7 +128,7 @@ export function InfoTooltip({
       window.removeEventListener("resize", positionTooltip);
       window.removeEventListener("scroll", positionTooltip, true);
     };
-  }, [open]);
+  }, [maxWidthPx, open]);
 
   useEffect(() => {
     if (!open) {

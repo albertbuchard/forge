@@ -179,7 +179,7 @@ export function EntityLinkMultiSelect({
     <div className={cn("relative grid gap-2", className)} ref={rootRef}>
       <div
         className={cn(
-          "rounded-[22px] border border-white/10 bg-white/[0.04]",
+          "rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]",
           actionBarVariant
             ? "rounded-[20px] border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3.5 py-3 shadow-[inset_0_1px_0_var(--ui-border-subtle)]"
             : "px-3 py-3"
@@ -214,7 +214,7 @@ export function EntityLinkMultiSelect({
                       "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm",
                       actionBarVariant
                         ? "border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]"
-                        : "bg-white/[0.08] text-white/78"
+                        : "border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]"
                     )}
                   >
                     <span className="max-w-full break-words whitespace-normal [overflow-wrap:anywhere]">
@@ -228,7 +228,7 @@ export function EntityLinkMultiSelect({
                     "rounded-full transition",
                     actionBarVariant
                       ? "text-[var(--ui-ink-faint)] hover:text-[var(--ui-ink-strong)]"
-                      : "text-white/50 hover:text-white"
+                      : "text-[var(--ui-ink-faint)] hover:text-[var(--ui-ink-strong)]"
                   )}
                   aria-label={`Remove ${option.label}`}
                   onClick={() => removeValue(option.value)}
@@ -244,7 +244,9 @@ export function EntityLinkMultiSelect({
           <Search
             className={cn(
               "size-4",
-              actionBarVariant ? "text-[var(--ui-ink-faint)]" : "text-white/34"
+              actionBarVariant
+                ? "text-[var(--ui-ink-faint)]"
+                : "text-[var(--ui-ink-faint)]"
             )}
           />
           <input
@@ -316,7 +318,7 @@ export function EntityLinkMultiSelect({
               "min-w-0 flex-1 bg-transparent text-sm focus:outline-none",
               actionBarVariant
                 ? "text-[var(--ui-ink-strong)] placeholder:text-[var(--ui-ink-faint)]"
-                : "text-white placeholder:text-white/34"
+                : "text-[var(--ui-ink-strong)] placeholder:text-[var(--ui-ink-faint)]"
             )}
           />
         </div>
@@ -331,8 +333,8 @@ export function EntityLinkMultiSelect({
               className={cn(
                 "z-[80] overflow-y-auto overscroll-contain rounded-[22px] p-2 [webkit-overflow-scrolling:touch]",
                 actionBarVariant
-                  ? "border border-[var(--ui-border-subtle)] bg-[color-mix(in_srgb,var(--ui-surface-1)_94%,transparent)] shadow-[0_24px_56px_rgba(4,8,18,0.16)]"
-                  : "border border-white/10 bg-[rgba(10,15,27,0.96)] shadow-[0_26px_60px_rgba(4,8,18,0.32)]",
+                  ? "border border-[var(--ui-border-subtle)] bg-[color-mix(in_srgb,var(--ui-surface-1)_94%,transparent)] shadow-[var(--ui-shadow-floating)]"
+                  : "border border-[var(--ui-border-subtle)] bg-[color-mix(in_srgb,var(--ui-surface-1)_96%,transparent)] shadow-[var(--ui-shadow-floating)]",
                 "backdrop-blur-xl"
               )}
               style={menuStyle}
@@ -348,10 +350,10 @@ export function EntityLinkMultiSelect({
                     index === highlightedIndex
                       ? actionBarVariant
                         ? "bg-[var(--ui-surface-3)] text-[var(--ui-ink-strong)]"
-                        : "bg-white/[0.1] text-white"
+                        : "bg-[var(--ui-surface-3)] text-[var(--ui-ink-strong)]"
                       : actionBarVariant
                         ? "text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
-                        : "text-white/70 hover:bg-white/[0.06] hover:text-white"
+                        : "text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                   )}
                   onMouseEnter={() => setHighlightedIndex(index)}
                   onMouseDown={(event) => event.preventDefault()}
@@ -384,7 +386,7 @@ export function EntityLinkMultiSelect({
                           "mt-1 text-xs leading-5",
                           actionBarVariant
                             ? "text-[var(--ui-ink-soft)]"
-                            : "text-white/46"
+                            : "text-[var(--ui-ink-soft)]"
                         )}
                       >
                         {option.description}
@@ -402,7 +404,7 @@ export function EntityLinkMultiSelect({
                     "mt-1 flex w-full items-center gap-2 rounded-[18px] px-3 py-2.5 text-left text-sm transition disabled:opacity-50",
                     actionBarVariant
                       ? "text-[var(--secondary)] hover:bg-[var(--ui-surface-hover)]"
-                      : "text-[var(--secondary)] hover:bg-white/[0.06]"
+                      : "text-[var(--secondary)] hover:bg-[var(--ui-surface-hover)]"
                   )}
                   onMouseDown={(event) => event.preventDefault()}
                   onPointerDown={(event) => {
@@ -427,7 +429,7 @@ export function EntityLinkMultiSelect({
                     "px-3 py-2.5 text-sm",
                     actionBarVariant
                       ? "text-[var(--ui-ink-soft)]"
-                      : "text-white/42"
+                      : "text-[var(--ui-ink-soft)]"
                   )}
                 >
                   {emptyMessage}
@@ -439,7 +441,9 @@ export function EntityLinkMultiSelect({
         : null}
 
       {createError ? (
-        <div className="text-sm text-rose-300">{createError}</div>
+        <div className="text-sm text-[color-mix(in_srgb,var(--danger)_74%,var(--ui-ink-strong)_26%)]">
+          {createError}
+        </div>
       ) : null}
     </div>
   );
