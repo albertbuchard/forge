@@ -405,7 +405,7 @@ export function OverviewPage() {
           action={
             <Link
               to="/goals"
-              className="inline-flex min-h-10 min-w-0 max-w-full items-center justify-center rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-medium whitespace-nowrap text-slate-950 transition hover:opacity-90"
+              className="inline-flex min-h-10 min-w-0 max-w-full items-center justify-center rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-medium whitespace-nowrap text-[var(--ui-ink-on-accent)] transition hover:opacity-90"
             >
               {t("common.overview.emptyAction")}
             </Link>
@@ -524,21 +524,21 @@ export function OverviewPage() {
       defaultHeight: 3,
       minWidth: 6,
       render: ({ compact }) => (
-        <div className="rounded-[24px] bg-white/[0.04] p-4">
+        <div className="rounded-[24px] bg-[var(--ui-surface-1)] p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+              <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                 Momentum summary
               </div>
-              <div className="mt-2 text-lg font-semibold text-white">
+              <div className="mt-2 text-lg font-semibold text-[var(--ui-ink-strong)]">
                 Core live metrics
               </div>
-              <div className="mt-1 text-sm leading-6 text-white/56">
+              <div className="mt-1 text-sm leading-6 text-[var(--ui-ink-soft)]">
                 Life Force, momentum, XP, and instant headroom stay grouped
                 here.
               </div>
             </div>
-            <Badge className="bg-white/[0.08] text-white/70">
+            <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
               {heroStatus}
             </Badge>
           </div>
@@ -551,9 +551,9 @@ export function OverviewPage() {
             {summaryMetrics.map((metric) => (
               <div
                 key={metric.label}
-                className="rounded-[20px] border border-white/8 bg-white/[0.04] px-4 py-3"
+                className="rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3"
               >
-                <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.16em] text-white/40">
+                <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   <span>{metric.label}</span>
                   <InfoTooltip
                     label={`Explain ${metric.label}`}
@@ -562,10 +562,10 @@ export function OverviewPage() {
                     panelClassName="normal-case tracking-normal"
                   />
                 </div>
-                <div className="mt-1 text-lg font-semibold text-white">
+                <div className="mt-1 text-lg font-semibold text-[var(--ui-ink-strong)]">
                   {metric.value}
                 </div>
-                <div className="mt-1 text-xs leading-5 text-white/54">
+                <div className="mt-1 text-xs leading-5 text-[var(--ui-ink-faint)]">
                   {metric.detail}
                 </div>
               </div>
@@ -591,7 +591,7 @@ export function OverviewPage() {
             showEditor={false}
           />
         ) : (
-          <Card className="rounded-[24px] border-white/8 bg-white/[0.04] p-5 text-sm leading-6 text-white/60">
+          <Card className="rounded-[24px] border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-5 text-sm leading-6 text-[var(--ui-ink-soft)]">
             Life Force is not configured for this user yet. Once a profile
             exists, the full capacity curve, drains, and recommendations will
             appear here.
@@ -608,45 +608,45 @@ export function OverviewPage() {
       minWidth: 6,
       render: () => (
         <div className="grid min-w-0 gap-4 xl:grid-cols-3">
-          <Card className="rounded-[24px] border-white/8 bg-white/[0.04] p-4">
+          <Card className="rounded-[24px] border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   Life Force
                 </div>
-                <div className="mt-2 text-lg font-semibold text-white">
+                <div className="mt-2 text-lg font-semibold text-[var(--ui-ink-strong)]">
                   {snapshot.lifeForce
                     ? `${Math.round(snapshot.lifeForce.remainingAp)} AP remaining`
                     : "No Life Force profile yet"}
                 </div>
               </div>
               {snapshot.lifeForce ? (
-                <Badge className="bg-white/[0.08] text-white/72">
+                <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
                   {formatLifeForceRate(snapshot.lifeForce.instantFreeApPerHour)}
                 </Badge>
               ) : null}
             </div>
-            <div className="mt-3 text-sm leading-6 text-white/58">
+            <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
               {snapshot.lifeForce
                 ? `${Math.round(snapshot.lifeForce.spentTodayAp)} / ${Math.round(snapshot.lifeForce.dailyBudgetAp)} AP spent today. Remaining ${formatLifeForceAp(snapshot.lifeForce.remainingAp)} with ${formatLifeForceRate(snapshot.lifeForce.currentDrainApPerHour)} current drain.`
                 : "Once Life Force is configured, this block will show today's budget, remaining headroom, and live drain."}
             </div>
           </Card>
 
-          <Card className="rounded-[24px] border-white/8 bg-white/[0.04] p-4">
+          <Card className="rounded-[24px] border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   Body signals
                 </div>
-                <div className="mt-2 text-lg font-semibold text-white">
+                <div className="mt-2 text-lg font-semibold text-[var(--ui-ink-strong)]">
                   {hasHealthData
                     ? "Recovery, training, and vitals"
                     : "No health data yet"}
                 </div>
               </div>
               {vitalsSummary ? (
-                <Badge className="bg-white/[0.08] text-white/72">
+                <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
                   {vitalsSummary.summary.metricCount} metrics
                 </Badge>
               ) : null}
@@ -654,15 +654,15 @@ export function OverviewPage() {
             {sleepQuery.isLoading ||
             fitnessQuery.isLoading ||
             vitalsQuery.isLoading ? (
-              <div className="mt-3 text-sm leading-6 text-white/58">
+              <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
                 Loading recent sleep, workout, and body-signal metrics…
               </div>
             ) : hasHealthData ? (
-              <div className="mt-3 grid gap-2 text-sm text-white/72">
+              <div className="mt-3 grid gap-2 text-sm text-[var(--ui-ink-soft)]">
                 {sleepSummary ? (
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span>Average sleep</span>
-                    <span className="font-medium text-white">
+                    <span className="font-medium text-[var(--ui-ink-strong)]">
                       {formatCompactDuration(sleepSummary.averageSleepSeconds)}
                     </span>
                   </div>
@@ -670,7 +670,7 @@ export function OverviewPage() {
                 {sleepSummary ? (
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span>Sleep score</span>
-                    <span className="font-medium text-white">
+                    <span className="font-medium text-[var(--ui-ink-strong)]">
                       {Math.round(sleepSummary.averageSleepScore)}
                     </span>
                   </div>
@@ -678,13 +678,13 @@ export function OverviewPage() {
                 {fitnessSummary ? (
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span>Exercise</span>
-                    <span className="font-medium text-white">
+                    <span className="font-medium text-[var(--ui-ink-strong)]">
                       {Math.round(fitnessSummary.exerciseMinutes)} min
                     </span>
                   </div>
                 ) : null}
                 {fitnessSummary ? (
-                  <div className="text-xs leading-5 text-white/54">
+                  <div className="text-xs leading-5 text-[var(--ui-ink-faint)]">
                     {fitnessSummary.topWorkoutType
                       ? `${fitnessSummary.topWorkoutType} is the top workout type right now.`
                       : "Workout imports are available when Apple Health or habit-generated sessions exist."}
@@ -695,10 +695,10 @@ export function OverviewPage() {
                     {vitalsHighlightRows.map((metric) => (
                       <div
                         key={metric.metric}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded-[14px] border border-white/8 bg-white/[0.03] px-3 py-2"
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-2"
                       >
                         <span>{metric.label}</span>
-                        <span className="font-medium text-white">
+                        <span className="font-medium text-[var(--ui-ink-strong)]">
                           {formatVitalOverviewValue(metric)}
                         </span>
                       </div>
@@ -707,27 +707,27 @@ export function OverviewPage() {
                 ) : null}
               </div>
             ) : (
-              <div className="mt-3 text-sm leading-6 text-white/58">
+              <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
                 Sleep, workout, and vitals summaries appear here as soon as
                 Forge has recent HealthKit records.
               </div>
             )}
           </Card>
 
-          <Card className="rounded-[24px] border-white/8 bg-white/[0.04] p-4">
+          <Card className="rounded-[24px] border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   Movement
                 </div>
-                <div className="mt-2 text-lg font-semibold text-white">
+                <div className="mt-2 text-lg font-semibold text-[var(--ui-ink-strong)]">
                   {hasMovementData
                     ? "Today's place balance"
                     : "No movement timeline yet"}
                 </div>
               </div>
               {hasMovementData ? (
-                <Badge className="bg-white/[0.08] text-white/72">
+                <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
                   {formatCompactDuration(
                     movementDay?.summary.totalMovingSeconds ?? 0
                   )}{" "}
@@ -736,7 +736,7 @@ export function OverviewPage() {
               ) : null}
             </div>
             {movementDayQuery.isLoading ? (
-              <div className="mt-3 text-sm leading-6 text-white/58">
+              <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
                 Loading today's stays, trips, and place balance…
               </div>
             ) : hasMovementData ? (
@@ -745,13 +745,13 @@ export function OverviewPage() {
                   {movementPlaceBreakdown.map((entry) => (
                     <Badge
                       key={entry.label}
-                      className="bg-white/[0.08] text-white/78"
+                      className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]"
                     >
                       {formatCompactDuration(entry.seconds)} at {entry.label}
                     </Badge>
                   ))}
                   {(movementDay?.summary.totalMovingSeconds ?? 0) > 0 ? (
-                    <Badge className="bg-[rgba(78,222,163,0.14)] text-[var(--secondary)]">
+                    <Badge className="bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_74%,var(--ui-ink-strong)_26%)]">
                       {formatCompactDuration(
                         movementDay?.summary.totalMovingSeconds ?? 0
                       )}{" "}
@@ -759,7 +759,7 @@ export function OverviewPage() {
                     </Badge>
                   ) : null}
                 </div>
-                <div className="text-sm leading-6 text-white/58">
+                <div className="text-sm leading-6 text-[var(--ui-ink-soft)]">
                   {movementDay?.summary.tripCount ?? 0} trip
                   {(movementDay?.summary.tripCount ?? 0) === 1
                     ? ""
@@ -771,7 +771,7 @@ export function OverviewPage() {
                 </div>
               </div>
             ) : (
-              <div className="mt-3 text-sm leading-6 text-white/58">
+              <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
                 Movement summaries appear here once the companion has synced
                 stays, trips, or known places.
               </div>
@@ -867,7 +867,7 @@ export function OverviewPage() {
             .map((goal) => (
               <div
                 key={goal.id}
-                className="group relative rounded-[20px] bg-white/[0.04] p-4 transition hover:bg-white/[0.06]"
+                className="group relative rounded-[20px] bg-[var(--ui-surface-1)] p-4 transition hover:bg-[var(--ui-surface-hover)]"
               >
                 <Link
                   to={`/goals/${goal.id}`}
@@ -882,7 +882,7 @@ export function OverviewPage() {
                       compact
                       gradient={false}
                     />
-                    <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+                    <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                       {goal.progress}%
                     </div>
                   </div>
@@ -898,7 +898,7 @@ export function OverviewPage() {
                     />
                   </div>
                   {!compact ? (
-                    <p className="mt-2 text-sm leading-6 text-white/60">
+                    <p className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                       {goal.description}
                     </p>
                   ) : null}
@@ -935,7 +935,7 @@ export function OverviewPage() {
       render: ({ compact }) => (
         <div className="grid min-w-0 gap-4 xl:grid-cols-3">
           <div className="grid min-w-0 gap-3">
-            <div className="text-[12px] uppercase tracking-[0.16em] text-white/38">
+            <div className="text-[12px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
               Projects
             </div>
             {snapshot.overview.projects
@@ -944,14 +944,14 @@ export function OverviewPage() {
                 <Link
                   key={project.id}
                   to={`/projects/${project.id}`}
-                  className="block min-w-0 max-w-full rounded-[18px] bg-white/[0.04] px-4 py-3 transition hover:bg-white/[0.06]"
+                  className="block min-w-0 max-w-full rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3 transition hover:bg-[var(--ui-surface-hover)]"
                 >
                   <div className="flex min-w-0 items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold text-white">
+                      <div className="truncate text-sm font-semibold text-[var(--ui-ink-strong)]">
                         {project.title}
                       </div>
-                      <div className="mt-1 text-sm text-white/56">
+                      <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
                         {projectLookup.get(project.id)?.status ?? "active"}
                       </div>
                     </div>
@@ -960,7 +960,7 @@ export function OverviewPage() {
                     </Badge>
                   </div>
                   {!compact ? (
-                    <div className="mt-2 text-sm leading-6 text-white/56">
+                    <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                       {project.description}
                     </div>
                   ) : null}
@@ -968,7 +968,7 @@ export function OverviewPage() {
               ))}
           </div>
           <div className="grid min-w-0 gap-3">
-            <div className="text-[12px] uppercase tracking-[0.16em] text-white/38">
+            <div className="text-[12px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
               Due habits
             </div>
             {snapshot.overview.dueHabits
@@ -978,22 +978,22 @@ export function OverviewPage() {
                   key={habit.id}
                   to="/habits"
                   aria-label={`Open habit ${habit.title}`}
-                  className="block min-w-0 max-w-full rounded-[18px] bg-white/[0.04] px-4 py-3 transition hover:bg-white/[0.06]"
+                  className="block min-w-0 max-w-full rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3 transition hover:bg-[var(--ui-surface-hover)]"
                 >
                   <div className="flex min-w-0 items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold text-white">
+                      <div className="truncate text-sm font-semibold text-[var(--ui-ink-strong)]">
                         {habit.title}
                       </div>
                       {!compact ? (
-                        <div className="mt-1 text-sm text-white/56">
+                        <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
                           {habit.description}
                         </div>
                       ) : null}
                     </div>
                     <Badge
                       wrap
-                      className="max-w-[7rem] shrink-0 bg-[rgba(78,222,163,0.14)] text-[var(--secondary)]"
+                      className="max-w-[7rem] shrink-0 bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_74%,var(--ui-ink-strong)_26%)]"
                     >
                       {habit.rewardXp} xp
                     </Badge>
@@ -1002,7 +1002,7 @@ export function OverviewPage() {
               ))}
           </div>
           <div className="grid min-w-0 gap-3">
-            <div className="text-[12px] uppercase tracking-[0.16em] text-white/38">
+            <div className="text-[12px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
               Top tasks
             </div>
             {snapshot.overview.topTasks
@@ -1011,18 +1011,18 @@ export function OverviewPage() {
                 <Link
                   key={task.id}
                   to={`/tasks/${task.id}`}
-                  className="block min-w-0 max-w-full rounded-[18px] bg-white/[0.04] px-4 py-3 transition hover:bg-white/[0.06]"
+                  className="block min-w-0 max-w-full rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3 transition hover:bg-[var(--ui-surface-hover)]"
                 >
                   <div className="flex min-w-0 items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold text-white">
+                      <div className="truncate text-sm font-semibold text-[var(--ui-ink-strong)]">
                         {task.title}
                       </div>
-                      <div className="mt-1 text-sm text-white/56">
+                      <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
                         {task.status.replaceAll("_", " ")}
                       </div>
                     </div>
-                    <Badge className="bg-white/[0.08] text-white/72">
+                    <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
                       {task.points} xp
                     </Badge>
                   </div>

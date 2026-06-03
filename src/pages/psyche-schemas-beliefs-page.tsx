@@ -176,7 +176,7 @@ function SchemaSection({
               />
             ) : null}
           </div>
-          <div className="max-w-3xl text-sm leading-6 text-white/60">
+          <div className="max-w-3xl text-sm leading-6 text-[var(--ui-ink-soft)]">
             {description}
           </div>
         </div>
@@ -207,10 +207,10 @@ function SchemaSection({
                     label={schema.title}
                     schemaType={schema.schemaType}
                   />
-                  <div className="mt-3 text-sm text-white/46">
+                  <div className="mt-3 text-sm text-[var(--ui-ink-faint)]">
                     {getSchemaFamilyLabel(schema.family)}
                   </div>
-                  <div className="mt-2 text-sm leading-6 text-white/62">
+                  <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                     {schema.description}
                   </div>
                 </div>
@@ -219,23 +219,23 @@ function SchemaSection({
                 </Badge>
               </div>
               <div className="mt-4 flex flex-wrap gap-2">
-                <Badge className="bg-white/[0.06] text-white/68">
+                <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                   {stats.beliefCount} beliefs
                 </Badge>
-                <Badge className="bg-white/[0.06] text-white/68">
+                <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                   {stats.behaviorCount} behaviors
                 </Badge>
-                <Badge className="bg-white/[0.06] text-white/68">
+                <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                   {stats.reportCount} reports
                 </Badge>
               </div>
               <div className="mt-4 grid gap-3">
                 {schemaBeliefs.length > 0 ? (
-                  <div className="rounded-[18px] bg-white/[0.04] p-4 text-sm text-white/58">
+                  <div className="rounded-[18px] bg-[var(--ui-surface-1)] p-4 text-sm text-[var(--ui-ink-soft)]">
                     {`${schemaBeliefs.length} ${schemaVisual.linkSummary}${schemaBeliefs.length === 1 ? "" : "s"} live here.`}
                   </div>
                 ) : (
-                  <div className="rounded-[18px] bg-white/[0.03] p-4 text-sm leading-6 text-white/46">
+                  <div className="rounded-[18px] bg-[var(--ui-surface-1)] p-4 text-sm leading-6 text-[var(--ui-ink-faint)]">
                     {schemaVisual.emptyCopy}
                   </div>
                 )}
@@ -243,13 +243,13 @@ function SchemaSection({
                   <button
                     key={belief.id}
                     type="button"
-                    className="rounded-[20px] bg-white/[0.04] p-4 text-left transition hover:bg-white/[0.08]"
+                    className="rounded-[20px] bg-[var(--ui-surface-1)] p-4 text-left transition hover:bg-[var(--ui-surface-2)]"
                     onClick={() => onOpenBelief(belief)}
                   >
-                    <div className="font-medium text-white">
+                    <div className="font-medium text-[var(--ui-ink-strong)]">
                       {belief.statement}
                     </div>
-                    <div className="mt-2 text-sm leading-6 text-white/60">
+                    <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                       {belief.flexibleAlternative ||
                         "No flexible alternative recorded yet."}
                     </div>
@@ -609,7 +609,7 @@ export function PsycheSchemasBeliefsPage() {
                     className={`rounded-[24px] border p-4 ${visual.cardTone}`}
                   >
                     <div className="flex items-center gap-2">
-                      <div className="text-sm font-medium text-white">
+                      <div className="text-sm font-medium text-[var(--ui-ink-strong)]">
                         {group.title}
                       </div>
                       <InfoTooltip
@@ -625,7 +625,7 @@ export function PsycheSchemasBeliefsPage() {
                           <button
                             key={schema.id}
                             type="button"
-                            className={`w-full rounded-[18px] border px-3 py-2 text-left text-sm leading-5 transition sm:w-auto sm:rounded-full ${selected ? `${visual.badgeTone} ring-1 ring-white/18` : "border-white/8 bg-white/[0.04] text-white/58 hover:bg-white/[0.08] hover:text-white"}`}
+                            className={`w-full rounded-[18px] border px-3 py-2 text-left text-sm leading-5 transition sm:w-auto sm:rounded-full ${selected ? `${visual.badgeTone} ring-1 ring-[var(--ui-ring)]` : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]"}`}
                             onClick={() => setValue({ schemaId: schema.id })}
                           >
                             {schema.title}
@@ -659,7 +659,7 @@ export function PsycheSchemasBeliefsPage() {
                 <button
                   key={kind}
                   type="button"
-                  className={`rounded-[22px] border px-4 py-4 text-left transition ${value.beliefType === kind ? "border-white/20 bg-white/[0.12] text-white" : "border-white/8 bg-white/[0.04] text-white/62 hover:bg-white/[0.07]"}`}
+                  className={`rounded-[22px] border px-4 py-4 text-left transition ${value.beliefType === kind ? "border-[var(--ui-border-strong)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-strong)]" : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] hover:bg-white/[0.07]"}`}
                   onClick={() => setValue({ beliefType: kind })}
                 >
                   {kind === "absolute"
@@ -704,7 +704,7 @@ export function PsycheSchemasBeliefsPage() {
                 setValue({ confidence: Number(event.target.value) })
               }
             />
-            <div className="text-sm text-white/48">
+            <div className="text-sm text-[var(--ui-ink-faint)]">
               {value.confidence}% grip
             </div>
           </FlowField>
@@ -909,7 +909,7 @@ export function PsycheSchemasBeliefsPage() {
           tone="violet"
         >
           {schemas.length === 0 ? (
-            <div className="text-sm text-white/56">
+            <div className="text-sm text-[var(--ui-ink-soft)]">
               Schema data is unavailable right now.
             </div>
           ) : (
@@ -964,7 +964,7 @@ export function PsycheSchemasBeliefsPage() {
               Add belief
             </Button>
             {beliefs.length === 0 ? (
-              <div className="text-sm text-white/56">
+              <div className="text-sm text-[var(--ui-ink-soft)]">
                 Your beliefs will appear here after you add the first one.
               </div>
             ) : (
@@ -977,10 +977,10 @@ export function PsycheSchemasBeliefsPage() {
                   <div
                     key={belief.id}
                     data-psyche-focus-id={belief.id}
-                    className={`rounded-[24px] border border-white/8 bg-white/[0.04] p-4 text-left transition hover:bg-white/[0.08] ${psycheFocusClass(isFocused)}`}
+                    className={`rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 text-left transition hover:bg-[var(--ui-surface-2)] ${psycheFocusClass(isFocused)}`}
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div className="font-medium text-white">
+                      <div className="font-medium text-[var(--ui-ink-strong)]">
                         {belief.statement}
                       </div>
                       <div className="flex flex-wrap items-center justify-end gap-2">
@@ -1012,7 +1012,7 @@ export function PsycheSchemasBeliefsPage() {
                         </Button>
                       </div>
                     </div>
-                    <div className="mt-2 text-sm leading-6 text-white/58">
+                    <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                       {belief.flexibleAlternative ||
                         "No flexible alternative recorded yet."}
                     </div>

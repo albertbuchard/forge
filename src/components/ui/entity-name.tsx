@@ -54,34 +54,105 @@ export function EntityName({
     return (
       <span
         className={cn(
-          "inline-flex max-w-full items-center gap-2 rounded-full border px-4 py-2 font-medium shadow-[0_10px_28px_rgba(3,8,18,0.18)]",
+          "inline-flex max-w-full items-center gap-2 rounded-full border px-4 py-2 font-medium shadow-[var(--ui-shadow-soft)]",
           visual.badgeClassName,
           className
         )}
         {...props}
       >
-        {showIcon ? <Icon className={cn("size-4 shrink-0", visual.iconClassName)} /> : null}
-        <span className={cn("min-w-0 max-w-full", lineClampClassName[lines], labelClassName)}>{label}</span>
+        {showIcon ? (
+          <Icon className={cn("size-4 shrink-0", visual.iconClassName)} />
+        ) : null}
+        <span
+          className={cn(
+            "min-w-0 max-w-full",
+            lineClampClassName[lines],
+            labelClassName
+          )}
+        >
+          {label}
+        </span>
       </span>
     );
   }
 
   if (variant === "heading") {
     return (
-      <span className={cn("inline-flex max-w-full min-w-0 items-center gap-3", className)} {...props}>
-        {showBadge ? <EntityBadge kind={kind} label={badgeLabel ?? visual.label} compact={badgeCompact} gradient={badgeGradient} className="shrink-0" /> : null}
-        {showKind && !showBadge ? <EntityBadge kind={kind} label={badgeLabel ?? visual.label} compact gradient={false} className="shrink-0" /> : null}
-        <span className={cn("min-w-0 max-w-full font-display leading-tight", headingSizeClassName[size], lineClampClassName[lines], visual.nameClassName, labelClassName)}>{label}</span>
+      <span
+        className={cn(
+          "inline-flex max-w-full min-w-0 items-center gap-3",
+          className
+        )}
+        {...props}
+      >
+        {showBadge ? (
+          <EntityBadge
+            kind={kind}
+            label={badgeLabel ?? visual.label}
+            compact={badgeCompact}
+            gradient={badgeGradient}
+            className="shrink-0"
+          />
+        ) : null}
+        {showKind && !showBadge ? (
+          <EntityBadge
+            kind={kind}
+            label={badgeLabel ?? visual.label}
+            compact
+            gradient={false}
+            className="shrink-0"
+          />
+        ) : null}
+        <span
+          className={cn(
+            "min-w-0 max-w-full font-display leading-tight",
+            headingSizeClassName[size],
+            lineClampClassName[lines],
+            visual.nameClassName,
+            labelClassName
+          )}
+        >
+          {label}
+        </span>
       </span>
     );
   }
 
   return (
-    <span className={cn("inline-flex max-w-full min-w-0 items-center gap-2", className)} {...props}>
-      {showIcon ? <Icon className={cn("size-4 shrink-0", visual.iconClassName)} /> : null}
-      {showBadge ? <EntityBadge kind={kind} label={badgeLabel ?? visual.label} compact={badgeCompact} gradient={badgeGradient} className="shrink-0" /> : null}
-      {showKind ? <span className={cn("text-sm font-medium", visual.nameClassName)}>{visual.label}</span> : null}
-      <span className={cn("min-w-0 max-w-full", lineClampClassName[lines], visual.nameClassName, labelClassName)}>{label}</span>
+    <span
+      className={cn(
+        "inline-flex max-w-full min-w-0 items-center gap-2",
+        className
+      )}
+      {...props}
+    >
+      {showIcon ? (
+        <Icon className={cn("size-4 shrink-0", visual.iconClassName)} />
+      ) : null}
+      {showBadge ? (
+        <EntityBadge
+          kind={kind}
+          label={badgeLabel ?? visual.label}
+          compact={badgeCompact}
+          gradient={badgeGradient}
+          className="shrink-0"
+        />
+      ) : null}
+      {showKind ? (
+        <span className={cn("text-sm font-medium", visual.nameClassName)}>
+          {visual.label}
+        </span>
+      ) : null}
+      <span
+        className={cn(
+          "min-w-0 max-w-full",
+          lineClampClassName[lines],
+          visual.nameClassName,
+          labelClassName
+        )}
+      >
+        {label}
+      </span>
     </span>
   );
 }
