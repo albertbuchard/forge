@@ -583,7 +583,7 @@ export function QuestionFlowDialog<TValue>({
                     </p>
                   ) : null}
                   {visibleError ? (
-                    <div className="mt-4 rounded-[20px] border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm leading-6 text-rose-100">
+                    <div className="mt-4 rounded-[20px] border border-[color-mix(in_srgb,var(--danger)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-danger-soft)] px-4 py-3 text-sm leading-6 text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]">
                       {renderDialogMessageBlock(visibleError)}
                     </div>
                   ) : null}
