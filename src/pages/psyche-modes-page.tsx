@@ -349,7 +349,7 @@ export function PsycheModesPage() {
                 <button
                   key={family}
                   type="button"
-                  className={`rounded-[22px] border px-4 py-4 text-left transition ${value.family === family ? "border-[var(--ui-border-strong)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-strong)]" : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] hover:bg-white/[0.07]"}`}
+                  className={`rounded-[22px] border px-4 py-4 text-left transition ${value.family === family ? "border-[var(--ui-border-strong)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-strong)]" : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)]"}`}
                   onClick={() => setValue({ family })}
                 >
                   {familyLabelMap[family]}
