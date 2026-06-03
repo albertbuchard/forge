@@ -34,40 +34,16 @@ import {
 import {
   Activity,
   ArrowUpRight,
-  BarChart3,
-  Bot,
-  BookCopy,
-  BrainCircuit,
-  BriefcaseBusiness,
   BatteryCharging,
-  CalendarDays,
-  Check,
   ChevronsLeft,
   ChevronsRight,
   Clock3,
-  Dumbbell,
   Flame,
-  GitBranch,
   GripVertical,
-  LayoutDashboard,
-  Map,
-  Gauge,
-  HeartPulse,
-  Network,
-  Moon,
-  NotebookPen,
-  Orbit,
-  Radar,
   RefreshCcw,
-  Repeat,
   Search,
   Settings,
-  SlidersHorizontal,
-  Target,
   Trophy,
-  Utensils,
-  UserRound,
-  Users,
   Zap
 } from "lucide-react";
 import {
@@ -91,13 +67,36 @@ import { RouteTransitionFrame } from "@/components/experience/route-transition-f
 import { SheetScaffold } from "@/components/experience/sheet-scaffold";
 import { KnowledgeGraphFocusDrawer } from "@/components/knowledge-graph/knowledge-graph-focus-drawer";
 import { CreateMenu, useForgeCreateActions } from "@/components/create-menu";
-import { PSYCHE_SECTIONS } from "@/components/psyche/psyche-section-nav";
 import { StartWorkComposer } from "@/components/start-work-composer";
+import {
+  NAV_ROUTE_REGISTRY,
+  PRIMARY_ROUTES,
+  SHELL_NAV_ROUTES,
+  getRouteDetail,
+  getRouteLabel,
+  isPsycheRoute,
+  isWikiRoute,
+  requirePrimaryRoute,
+  routeMatches,
+  type ShellRouteDefinition
+} from "@/components/shell/shell-routes";
+import {
+  shellCardClassName,
+  shellDialogContentClassName,
+  shellDialogDescriptionClassName,
+  shellDialogOverlayClassName,
+  shellDialogTitleClassName,
+  shellInteractiveActiveClassName,
+  shellInteractiveSubtleClassName,
+  shellLabelMutedClassName
+} from "@/components/shell/shell-style-tokens";
 import {
   TaskTimerRailProvider,
   TaskTimerRailBar,
   TaskTimerRailPanel
 } from "@/components/shell/task-timer-rail";
+import { UserScopeSelector } from "@/components/shell/user-scope-selector";
+export { UserScopeSelector } from "@/components/shell/user-scope-selector";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
@@ -106,7 +105,7 @@ import { ErrorState, LoadingState } from "@/components/ui/page-state";
 import { useLiveEvents } from "@/hooks/use-live-events";
 import { claimTaskRun, patchTask } from "@/lib/api";
 import { ForgeApiError } from "@/lib/api-error";
-import { I18nProvider, useI18n, type TranslationKey } from "@/lib/i18n";
+import { I18nProvider, useI18n } from "@/lib/i18n";
 import {
   formatKnowledgeGraphFocusValue,
   type KnowledgeGraphNode
@@ -292,231 +291,6 @@ function buildKnowledgeGraphSearchFromLocation(
 const ShellContext = createContext<ShellContextValue | null>(null);
 let lastKnownShellContext: ShellContextValue | null = null;
 
-type ShellRouteDefinition = {
-  id: string;
-  to: string;
-  labelKey?: TranslationKey;
-  detailKey?: TranslationKey;
-  icon: typeof LayoutDashboard;
-  label?: string;
-  detail?: string;
-};
-
-const PRIMARY_ROUTES: ShellRouteDefinition[] = [
-  {
-    id: "overview",
-    to: "/overview",
-    labelKey: "common.routeLabels.overview",
-    detailKey: "common.routeDetails.overview",
-    icon: LayoutDashboard
-  },
-  {
-    id: "life-force",
-    to: "/life-force",
-    label: "Life Force",
-    detail: "Action Point capacity, weekday curves, and instant drains",
-    icon: BatteryCharging
-  },
-  {
-    id: "goals",
-    to: "/goals",
-    labelKey: "common.routeLabels.goals",
-    detailKey: "common.routeDetails.goals",
-    icon: Target
-  },
-  {
-    id: "habits",
-    to: "/habits",
-    labelKey: "common.routeLabels.habits",
-    detailKey: "common.routeDetails.habits",
-    icon: Repeat
-  },
-  {
-    id: "projects",
-    to: "/projects",
-    labelKey: "common.routeLabels.projects",
-    detailKey: "common.routeDetails.projects",
-    icon: BriefcaseBusiness
-  },
-  {
-    id: "strategies",
-    to: "/strategies",
-    labelKey: "common.routeLabels.strategies",
-    detailKey: "common.routeDetails.strategies",
-    icon: GitBranch
-  },
-  {
-    id: "preferences",
-    to: "/preferences",
-    labelKey: "common.routeLabels.preferences",
-    detailKey: "common.routeDetails.preferences",
-    icon: SlidersHorizontal
-  },
-  {
-    id: "calendar",
-    to: "/calendar",
-    labelKey: "common.routeLabels.calendar",
-    detailKey: "common.routeDetails.calendar",
-    icon: CalendarDays
-  },
-  {
-    id: "knowledge-graph",
-    to: "/knowledge-graph",
-    label: "Knowledge Graph",
-    detail: "A living graph of Forge entities, links, and structural layers",
-    icon: Orbit
-  },
-  {
-    id: "workbench",
-    to: "/workbench",
-    label: "Workbench",
-    detail: "Global graph flows, AI tools, and published outputs",
-    icon: Network
-  },
-  {
-    id: "movement",
-    to: "/movement",
-    labelKey: "common.routeLabels.movement",
-    detailKey: "common.routeDetails.movement",
-    icon: Map
-  },
-  {
-    id: "sleep",
-    to: "/sleep",
-    labelKey: "common.routeLabels.sleep",
-    detailKey: "common.routeDetails.sleep",
-    icon: Moon
-  },
-  {
-    id: "sports",
-    to: "/sports",
-    labelKey: "common.routeLabels.sports",
-    detailKey: "common.routeDetails.sports",
-    icon: Dumbbell
-  },
-  {
-    id: "training-load",
-    to: "/training-load",
-    label: "Training Load",
-    detail:
-      "Cardiovascular load, HR zone targets, acute/chronic stress, and adaptation signals",
-    icon: Gauge
-  },
-  {
-    id: "vitals",
-    to: "/vitals",
-    label: "Vitals",
-    detail:
-      "Recovery, cardio fitness, breathing, composition, and body signals",
-    icon: HeartPulse
-  },
-  {
-    id: "weight-loss",
-    to: "/weight-loss",
-    label: "Weight Loss",
-    detail:
-      "Food logs, body composition, gut comfort, aesthetic signals, and nutrition experiments",
-    icon: Utensils
-  },
-  {
-    id: "kanban",
-    to: "/kanban",
-    labelKey: "common.routeLabels.kanban",
-    detailKey: "common.routeDetails.kanban",
-    icon: Zap
-  },
-  {
-    id: "today",
-    to: "/today",
-    labelKey: "common.routeLabels.today",
-    detailKey: "common.routeDetails.today",
-    icon: Clock3
-  },
-  {
-    id: "rewards",
-    to: "/rewards",
-    label: "Trophy Hall",
-    detail: "Forge Smith levels, streaks, trophies, and cosmetic unlocks",
-    icon: Trophy
-  },
-  {
-    id: "notes",
-    to: "/notes",
-    labelKey: "common.routeLabels.notes",
-    detailKey: "common.routeDetails.notes",
-    icon: NotebookPen
-  },
-  {
-    id: "wiki",
-    to: "/wiki",
-    labelKey: "common.routeLabels.wiki",
-    detailKey: "common.routeDetails.wiki",
-    icon: BookCopy
-  },
-  {
-    id: "psyche",
-    to: "/psyche",
-    labelKey: "common.routeLabels.psyche",
-    detailKey: "common.routeDetails.psyche",
-    icon: BrainCircuit
-  },
-  {
-    id: "activity",
-    to: "/activity",
-    labelKey: "common.routeLabels.activity",
-    detailKey: "common.routeDetails.activity",
-    icon: ArrowUpRight
-  },
-  {
-    id: "insights",
-    to: "/insights",
-    labelKey: "common.routeLabels.insights",
-    detailKey: "common.routeDetails.insights",
-    icon: Radar
-  },
-  {
-    id: "review",
-    to: "/review/weekly",
-    labelKey: "common.routeLabels.review",
-    detailKey: "common.routeDetails.review",
-    icon: BarChart3
-  },
-  {
-    id: "settings",
-    to: "/settings",
-    labelKey: "common.routeLabels.settings",
-    detailKey: "common.routeDetails.settings",
-    icon: Settings
-  }
-];
-
-const PSYCHE_SHORTCUT_ROUTES: ShellRouteDefinition[] = PSYCHE_SECTIONS.filter(
-  (route) => route.to !== "/psyche"
-).map((route) => ({
-  id: `psyche:${route.to}`,
-  to: route.to,
-  icon: route.icon,
-  label: route.label,
-  detail: "Psyche shortcut"
-}));
-
-const NAV_ROUTE_REGISTRY: ShellRouteDefinition[] = [
-  ...PRIMARY_ROUTES,
-  ...PSYCHE_SHORTCUT_ROUTES
-];
-
-const SHELL_NAV_ROUTES = PRIMARY_ROUTES.filter(
-  (route) => route.to !== "/preferences" && route.to !== "/sleep"
-);
-
-function requirePrimaryRoute(id: string) {
-  const route = PRIMARY_ROUTES.find((entry) => entry.id === id);
-  if (!route) {
-    throw new Error(`Missing primary route: ${id}`);
-  }
-  return route;
-}
-
 const DESKTOP_NAV_STORAGE_KEY = "forge.desktop-nav-layout";
 const MOBILE_NAV_STORAGE_KEY = "forge.mobile-nav-layout";
 const NAV_MIGRATION_STORAGE_KEY = "forge.nav-layout-migrations";
@@ -564,25 +338,6 @@ function buildRouteIntentLocation(
   };
 }
 
-function isWikiRoute(pathname: string) {
-  return (
-    pathname === "/wiki" ||
-    pathname.startsWith("/wiki/page/") ||
-    pathname === "/wiki/new" ||
-    pathname.startsWith("/wiki/edit/")
-  );
-}
-
-function isPsycheRoute(pathname: string) {
-  return (
-    pathname.startsWith("/psyche") ||
-    pathname === "/preferences" ||
-    pathname.startsWith("/preferences/") ||
-    pathname === "/sleep" ||
-    pathname.startsWith("/sleep/")
-  );
-}
-
 function getWikiIngestRoute(job: WikiIngestJobPayload) {
   const search = new URLSearchParams();
   if (job.job.spaceId) {
@@ -603,39 +358,6 @@ function formatActivityTimestamp(value: string) {
     hour: "2-digit",
     minute: "2-digit"
   }).format(new Date(value));
-}
-
-function sameUserScope(left: string[], right: string[]) {
-  if (left.length !== right.length) {
-    return false;
-  }
-  const leftKey = [...left].sort().join("|");
-  const rightKey = [...right].sort().join("|");
-  return leftKey === rightKey;
-}
-
-function routeMatches(pathname: string, route: ShellRouteDefinition) {
-  if (route.to === "/psyche") {
-    return isPsycheRoute(pathname);
-  }
-  return pathname === route.to || pathname.startsWith(`${route.to}/`);
-}
-
-function getRouteLabel(
-  route: ShellRouteDefinition,
-  t: (key: TranslationKey) => string
-) {
-  return route.labelKey ? t(route.labelKey) : (route.label ?? route.to);
-}
-
-function getRouteDetail(
-  route: ShellRouteDefinition,
-  t: (key: TranslationKey) => string
-) {
-  if (route.detailKey) {
-    return t(route.detailKey);
-  }
-  return route.detail ?? route.to;
 }
 
 function shouldCaptureRouteIntent(event: ReactMouseEvent) {
@@ -756,197 +478,6 @@ function writeStoredNavIds(storageKey: string, ids: string[]) {
   }
 }
 
-function getInitials(label: string) {
-  const parts = label
-    .split(/\s+/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-  if (parts.length === 0) {
-    return "??";
-  }
-  if (parts.length === 1) {
-    return parts[0].slice(0, 2).toUpperCase();
-  }
-  return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase();
-}
-
-function buildUserScopeOptions(users: UserSummary[]) {
-  const humans = users.filter((user) => user.kind === "human");
-  const bots = users.filter((user) => user.kind === "bot");
-  return [
-    {
-      id: "all",
-      label: "All",
-      shortLabel: "All",
-      description: "Show every human and bot together.",
-      userIds: [] as string[],
-      token: "ALL",
-      icon: Users
-    },
-    {
-      id: "humans",
-      label: "Humans",
-      shortLabel: "Humans",
-      description: "Focus only on human-owned work.",
-      userIds: humans.map((user) => user.id),
-      token: "HU",
-      icon: UserRound
-    },
-    {
-      id: "bots",
-      label: "Bots",
-      shortLabel: "Bots",
-      description: "Focus only on bot-owned work.",
-      userIds: bots.map((user) => user.id),
-      token: "AI",
-      icon: Bot
-    },
-    ...users.map((user) => ({
-      id: user.id,
-      label: user.displayName,
-      shortLabel: user.displayName,
-      description: `${user.kind === "human" ? "Human" : "Bot"} · ${user.handle}`,
-      userIds: [user.id],
-      token: getInitials(user.displayName),
-      icon: user.kind === "human" ? UserRound : Bot
-    }))
-  ];
-}
-
-function resolveUserScopeOption(
-  users: UserSummary[],
-  selectedUserIds: string[]
-) {
-  return (
-    buildUserScopeOptions(users).find((option) =>
-      sameUserScope(selectedUserIds, option.userIds)
-    ) ?? {
-      id: "custom",
-      label:
-        selectedUserIds.length > 1
-          ? `${selectedUserIds.length} selected`
-          : "Custom",
-      shortLabel:
-        selectedUserIds.length > 1
-          ? `${selectedUserIds.length} selected`
-          : "Custom",
-      description: "Using a custom combination of users.",
-      userIds: selectedUserIds,
-      token: selectedUserIds.length > 1 ? String(selectedUserIds.length) : "C",
-      icon: Users
-    }
-  );
-}
-
-export function UserScopeSelector({
-  users,
-  selectedUserIds,
-  onChange,
-  compact = false
-}: {
-  users: UserSummary[];
-  selectedUserIds: string[];
-  onChange: (userIds: string[]) => void;
-  compact?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const options = useMemo(() => buildUserScopeOptions(users), [users]);
-  const activeOption = useMemo(
-    () => resolveUserScopeOption(users, selectedUserIds),
-    [selectedUserIds, users]
-  );
-  const ActiveScopeIcon = activeOption.icon;
-
-  return (
-    <Dialog.Root open={open} onOpenChange={setOpen}>
-      <Dialog.Trigger asChild>
-        <button
-          type="button"
-          className={cn(
-            "shell-scope-trigger inline-flex items-center gap-2",
-            compact ? "px-2.5 text-[12px]" : "px-3.5 text-[13px]"
-          )}
-        >
-          <span className="shell-scope-avatar">
-            {activeOption.id === "all" ? (
-              <ActiveScopeIcon className="size-3.5" />
-            ) : (
-              activeOption.token
-            )}
-          </span>
-          <span
-            className={cn(
-              "truncate text-left",
-              compact ? "max-w-[7.5rem]" : "max-w-[11rem]"
-            )}
-          >
-            {activeOption.shortLabel}
-          </span>
-        </button>
-      </Dialog.Trigger>
-
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-[rgba(3,7,18,0.72)] backdrop-blur-sm" />
-        <Dialog.Content className="fixed left-1/2 top-[12vh] z-50 w-[min(40rem,calc(100vw-1.5rem))] -translate-x-1/2 rounded-[30px] border border-white/10 bg-[rgba(10,15,28,0.97)] p-4 shadow-[0_32px_90px_rgba(0,0,0,0.45)] sm:p-5">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <Dialog.Title className="font-display text-[1.25rem] tracking-[-0.04em] text-white">
-                Choose user scope
-              </Dialog.Title>
-              <Dialog.Description className="mt-1 text-[13px] leading-6 text-white/56">
-                Change which humans and bots shape the current Forge view.
-              </Dialog.Description>
-            </div>
-            <Dialog.Close asChild>
-              <ModalCloseButton aria-label="Close user scope dialog" />
-            </Dialog.Close>
-          </div>
-
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            {options.map((option) => {
-              const selected = sameUserScope(selectedUserIds, option.userIds);
-              const Icon = option.icon;
-              return (
-                <button
-                  key={option.id}
-                  type="button"
-                  className={cn(
-                    "flex items-center justify-between gap-3 rounded-[24px] border px-4 py-4 text-left transition",
-                    selected
-                      ? "border-[rgba(192,193,255,0.24)] bg-[rgba(192,193,255,0.12)] text-white"
-                      : "border-white/8 bg-white/[0.03] text-white/78 hover:bg-white/[0.06] hover:text-white"
-                  )}
-                  onClick={() => {
-                    onChange(option.userIds);
-                    setOpen(false);
-                  }}
-                >
-                  <span className="flex min-w-0 items-center gap-3">
-                    <span className="shell-scope-avatar">
-                      <Icon className="size-3.5" />
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate text-[14px] font-semibold">
-                        {option.label}
-                      </span>
-                      <span className="mt-1 block text-[12px] leading-5 text-white/52">
-                        {option.description}
-                      </span>
-                    </span>
-                  </span>
-                  {selected ? (
-                    <Check className="size-4 shrink-0 text-[var(--primary)]" />
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
-  );
-}
-
 function NavItem({
   route,
   compact = false,
@@ -973,11 +504,13 @@ function NavItem({
         }
       }}
       className={({ isActive }) =>
-        `interactive-tap flex items-center rounded-[18px] text-sm transition ${
+        cn(
+          "interactive-tap flex items-center rounded-[18px] text-sm transition",
           isActive || forceActive
-            ? "bg-white/[0.08] text-white shadow-[inset_0_0_0_1px_rgba(192,193,255,0.2)]"
-            : "text-white/60 hover:bg-white/[0.04] hover:text-white"
-        } ${compact ? "justify-center px-3 py-3.5" : "gap-3 px-4 py-3"}`
+            ? shellInteractiveActiveClassName
+            : "text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]",
+          compact ? "justify-center px-3 py-3.5" : "gap-3 px-4 py-3"
+        )
       }
     >
       <Icon className="size-4 shrink-0" />
@@ -1028,7 +561,7 @@ function MobileBottomNav({
     <>
       <nav
         data-testid="mobile-bottom-nav"
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-white/6 bg-[rgba(9,14,28,0.94)] backdrop-blur-xl lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--ui-border-subtle)] bg-[color-mix(in_srgb,var(--surface-glass)_96%,transparent)] backdrop-blur-xl lg:hidden"
         style={{
           paddingLeft:
             "max(0.75rem, calc(var(--forge-safe-area-left) + 0.75rem))",
@@ -1057,11 +590,12 @@ function MobileBottomNav({
                 }
               }}
               className={({ isActive }) =>
-                `flex min-h-11 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[12px] ${
+                cn(
+                  "flex min-h-11 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[12px]",
                   isActive || routeMatches(location.pathname, route)
-                    ? "bg-white/[0.08] text-[var(--primary)]"
-                    : "text-white/55"
-                }`
+                    ? "bg-[var(--ui-surface-active)] text-[var(--primary)]"
+                    : "text-[var(--ui-ink-soft)]"
+                )
               }
             >
               <route.icon className="size-4" />
@@ -1070,7 +604,7 @@ function MobileBottomNav({
           ))}
           <button
             type="button"
-            className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[12px] text-white/55"
+            className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[12px] text-[var(--ui-ink-soft)]"
             onClick={() => {
               if (holdTriggeredRef.current) {
                 holdTriggeredRef.current = false;
@@ -1098,7 +632,10 @@ function MobileBottomNav({
         <div className="mb-3 flex items-center justify-between gap-3">
           <button
             type="button"
-            className="inline-flex min-h-10 items-center gap-2 rounded-full bg-white/[0.05] px-3 py-2 text-sm text-white/72"
+            className={cn(
+              "inline-flex min-h-10 items-center gap-2 rounded-full px-3 py-2 text-sm",
+              shellInteractiveSubtleClassName
+            )}
             onClick={() => {
               setMoreOpen(false);
               onOpenEditor?.();
@@ -1120,11 +657,12 @@ function MobileBottomNav({
                 setMoreOpen(false);
               }}
               className={({ isActive }) =>
-                `interactive-tap flex items-center justify-between rounded-[24px] px-4 py-4 ${
+                cn(
+                  "interactive-tap flex items-center justify-between rounded-[24px] px-4 py-4",
                   isActive || routeMatches(location.pathname, route)
-                    ? "bg-white/[0.08] text-white"
-                    : "bg-white/[0.04] text-white/70"
-                }`
+                    ? shellInteractiveActiveClassName
+                    : shellInteractiveSubtleClassName
+                )
               }
             >
               <span className="flex items-center gap-3">
@@ -1133,12 +671,12 @@ function MobileBottomNav({
                   <span className="block text-base font-medium">
                     {getRouteLabel(route, t)}
                   </span>
-                  <span className="mt-1 block text-sm text-white/54">
+                  <span className="mt-1 block text-sm text-[var(--ui-ink-soft)]">
                     {getRouteDetail(route, t)}
                   </span>
                 </span>
               </span>
-              <ArrowUpRight className="size-4 text-white/35" />
+              <ArrowUpRight className="size-4 text-[var(--ui-ink-faint)]" />
             </NavLink>
           ))}
         </div>
@@ -1176,12 +714,12 @@ function SortableNavEntry({
         transform: CSS.Transform.toString(sortable.transform),
         transition: sortable.transition
       }}
-      className="flex min-h-16 items-center justify-between gap-3 rounded-[20px] bg-white/[0.04] px-4 py-3"
+      className="flex min-h-16 items-center justify-between gap-3 rounded-[20px] bg-[var(--ui-surface-1)] px-4 py-3"
     >
       <span className="flex min-w-0 items-center gap-3">
         <button
           type="button"
-          className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-white/[0.05] text-white/50 transition hover:bg-white/[0.08] hover:text-white"
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
           aria-label={`Reorder ${label}`}
           {...sortable.attributes}
           {...sortable.listeners}
@@ -1189,11 +727,11 @@ function SortableNavEntry({
           <GripVertical className="size-4" />
         </button>
         <route.icon className="size-4 shrink-0 text-[var(--primary)]" />
-        <span className="truncate text-sm text-white">{label}</span>
+        <span className="truncate text-sm text-[var(--ui-ink-strong)]">{label}</span>
       </span>
       <button
         type="button"
-        className="rounded-full bg-white/[0.05] px-3 py-1.5 text-[12px] text-white/70"
+        className="rounded-full bg-[var(--ui-surface-2)] px-3 py-1.5 text-[12px] text-[var(--ui-ink-medium)]"
         onClick={onRemove}
       >
         Remove
@@ -1286,15 +824,15 @@ function ShellNavEditor({
         {Array.from({ length: emptySlotCount }, (_, index) => (
           <div
             key={`${prefix}-empty-${index}`}
-            className="flex min-h-16 items-center justify-between gap-3 rounded-[20px] border border-dashed border-white/12 bg-white/[0.02] px-4 py-3"
+            className="flex min-h-16 items-center justify-between gap-3 rounded-[20px] border border-dashed border-[var(--ui-border-strong)] bg-[var(--ui-surface-1)] px-4 py-3"
           >
             <div>
-              <div className="text-sm text-white/44">Empty slot</div>
-              <div className="text-[12px] text-white/30">
+              <div className="text-sm text-[var(--ui-ink-faint)]">Empty slot</div>
+              <div className="text-[12px] text-[var(--ui-ink-faint)]">
                 Add a route below to fill this slot
               </div>
             </div>
-            <div className="rounded-full bg-white/[0.05] px-2.5 py-1 text-[11px] text-white/46">
+            <div className="rounded-full bg-[var(--ui-surface-2)] px-2.5 py-1 text-[11px] text-[var(--ui-ink-faint)]">
               Slot {filledRoutes.length + index + 1}
             </div>
           </div>
@@ -1339,11 +877,11 @@ function ShellNavEditor({
     >
       <div className="grid gap-5">
         <div className="grid gap-3">
-          <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+          <div className={cn("text-[11px] uppercase tracking-[0.16em]", shellLabelMutedClassName)}>
             Desktop sidebar
           </div>
-          <div className="rounded-[20px] bg-white/[0.03] p-3">
-            <div className="text-[11px] uppercase tracking-[0.14em] text-white/38">
+          <div className="rounded-[20px] bg-[var(--ui-surface-1)] p-3">
+            <div className={cn("text-[11px] uppercase tracking-[0.14em]", shellLabelMutedClassName)}>
               Metric strip position
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
@@ -1359,8 +897,8 @@ function ShellNavEditor({
                   className={cn(
                     "rounded-full px-3 py-1.5 text-[12px] transition",
                     desktopSidebarMetricsPosition === value
-                      ? "bg-[var(--primary)] text-slate-950"
-                      : "bg-white/[0.05] text-white/70 hover:bg-white/[0.08]"
+                      ? "bg-[var(--primary)] text-[var(--ui-ink-on-accent)]"
+                      : "bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)]"
                   )}
                   onClick={() => onDesktopSidebarMetricsPositionChange(value)}
                 >
@@ -1380,7 +918,7 @@ function ShellNavEditor({
           </div>
         </div>
         <div className="grid gap-3">
-          <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+          <div className={cn("text-[11px] uppercase tracking-[0.16em]", shellLabelMutedClassName)}>
             Mobile bar
           </div>
           <div className="grid gap-2">
@@ -1394,22 +932,22 @@ function ShellNavEditor({
           </div>
         </div>
         <div className="grid gap-3">
-          <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+          <div className={cn("text-[11px] uppercase tracking-[0.16em]", shellLabelMutedClassName)}>
             Available routes
           </div>
           <div className="grid gap-2">
             {availableRoutes.map((route) => (
               <div
                 key={`available-${route.id}`}
-                className="flex items-center justify-between gap-3 rounded-[20px] bg-white/[0.03] px-4 py-3"
+                className="flex items-center justify-between gap-3 rounded-[20px] bg-[var(--ui-surface-1)] px-4 py-3"
               >
                 <span className="flex items-center gap-3">
                   <route.icon className="size-4 text-[var(--primary)]" />
                   <span>
-                    <span className="block text-sm text-white">
+                    <span className="block text-sm text-[var(--ui-ink-strong)]">
                       {getRouteLabel(route, t)}
                     </span>
-                    <span className="block text-[12px] text-white/48">
+                    <span className="block text-[12px] text-[var(--ui-ink-soft)]">
                       {getRouteDetail(route, t)}
                     </span>
                   </span>
@@ -1418,7 +956,7 @@ function ShellNavEditor({
                   {!desktopNavIds.includes(route.id) ? (
                     <button
                       type="button"
-                      className="rounded-full bg-white/[0.05] px-2.5 py-1.5 text-[11px] text-white/70"
+                      className="rounded-full bg-[var(--ui-surface-2)] px-2.5 py-1.5 text-[11px] text-[var(--ui-ink-medium)]"
                       onClick={() =>
                         addToList(
                           desktopNavIds,
@@ -1433,7 +971,7 @@ function ShellNavEditor({
                   {!mobileNavIds.includes(route.id) ? (
                     <button
                       type="button"
-                      className="rounded-full bg-white/[0.05] px-2.5 py-1.5 text-[11px] text-white/70"
+                      className="rounded-full bg-[var(--ui-surface-2)] px-2.5 py-1.5 text-[11px] text-[var(--ui-ink-medium)]"
                       onClick={() =>
                         addToList(
                           mobileNavIds,
@@ -1471,14 +1009,14 @@ function ShellCommandButton({ onClick }: { onClick: () => void }) {
       <Badge
         size="sm"
         tone="meta"
-        className="ml-1 hidden bg-white/[0.06] text-white/52 xl:inline-flex"
+        className="ml-1 hidden bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] xl:inline-flex"
       >
         Shift Shift
       </Badge>
       <Badge
         size="sm"
         tone="meta"
-        className="hidden bg-white/[0.06] text-white/52 2xl:inline-flex"
+        className="hidden bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] 2xl:inline-flex"
       >
         Cmd K
       </Badge>
@@ -1802,12 +1340,12 @@ function ShellFrame({
     <div className={cn(navCollapsed ? "mt-4" : "mt-6")}>
       <div
         className={cn(
-          "rounded-[24px] bg-white/[0.04]",
+          "rounded-[24px] bg-[var(--ui-surface-1)]",
           navCollapsed ? "px-2 py-2.5" : "p-4"
         )}
       >
         {!navCollapsed ? (
-          <div className="type-label text-white/40">Live metrics</div>
+          <div className="type-label text-[var(--ui-ink-faint)]">Live metrics</div>
         ) : null}
         <div className={cn("grid", navCollapsed ? "gap-1.5" : "mt-3 gap-3")}>
           {sidebarMetrics.map((metric) => {
@@ -1816,19 +1354,19 @@ function ShellFrame({
               <div
                 key={metric.id}
                 title={`${metric.label}: ${metric.compactValue}`}
-                className="flex min-w-0 flex-col items-center gap-1 rounded-[16px] bg-white/[0.04] px-1 py-2.5 text-center"
+                className="flex min-w-0 flex-col items-center gap-1 rounded-[16px] bg-[var(--ui-surface-1)] px-1 py-2.5 text-center"
               >
-                <Icon className="size-3.5 shrink-0 text-white/42" />
-                <div className="max-w-full text-[12px] font-semibold leading-none text-white">
+                <Icon className="size-3.5 shrink-0 text-[var(--ui-ink-faint)]" />
+                <div className="max-w-full text-[12px] font-semibold leading-none text-[var(--ui-ink-strong)]">
                   {metric.compactValue}
                 </div>
               </div>
             ) : (
               <div
                 key={metric.id}
-                className="rounded-[18px] bg-white/[0.04] px-3 py-3"
+                className="rounded-[18px] bg-[var(--ui-surface-1)] px-3 py-3"
               >
-                <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.14em] text-white/42">
+                <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
                   <span>{metric.label}</span>
                   <InfoTooltip
                     label={`Explain ${metric.label}`}
@@ -1840,7 +1378,7 @@ function ShellFrame({
                     panelClassName="normal-case tracking-normal"
                   />
                 </div>
-                <div className="mt-1 text-lg font-semibold leading-tight text-white">
+                <div className="mt-1 text-lg font-semibold leading-tight text-[var(--ui-ink-strong)]">
                   {metric.expandedValue}
                 </div>
               </div>
@@ -1872,7 +1410,7 @@ function ShellFrame({
       >
         <aside
           className={cn(
-            "flex min-h-screen flex-col border-r border-white/5 py-6 backdrop-blur-xl transition-[padding,width]",
+            "flex min-h-screen flex-col border-r border-[var(--ui-border-subtle)] py-6 backdrop-blur-xl transition-[padding,width]",
             navCollapsed ? "px-3" : "px-5"
           )}
           style={{
@@ -1901,7 +1439,7 @@ function ShellFrame({
                 {t("common.shell.appMark")}
               </div>
               {!navCollapsed ? (
-                <div className="type-meta mt-2 text-white/40">
+                <div className="type-meta mt-2 text-[var(--ui-ink-faint)]">
                   Level {shell.snapshot.metrics.level}
                 </div>
               ) : null}
@@ -1968,7 +1506,7 @@ function ShellFrame({
         <div className="min-h-screen">
           <TaskTimerRailProvider>
             <header
-              className="sticky top-0 z-30 border-b border-white/5 px-6 backdrop-blur-xl"
+              className="sticky top-0 z-30 border-b border-[var(--ui-border-subtle)] px-6 backdrop-blur-xl"
               style={{
                 background:
                   "color-mix(in srgb, var(--surface-glass) 92%, transparent)",
@@ -1990,7 +1528,7 @@ function ShellFrame({
               >
                 <div className="flex min-w-0 flex-1 items-center gap-5">
                   <div
-                    className="flex shrink-0 items-center gap-2 font-display text-white"
+                    className="flex shrink-0 items-center gap-2 font-display text-[var(--ui-ink-strong)]"
                     style={{
                       fontSize: "var(--forge-shell-desktop-title-size)",
                       lineHeight: 1,
@@ -2007,7 +1545,7 @@ function ShellFrame({
                           <span>{activeHelp.purpose}</span>
                           <span>{activeHelp.primaryAction}</span>
                           {activeHelp.metricNote ? (
-                            <span className="text-white/58">
+                            <span className="text-[var(--ui-ink-soft)]">
                               {activeHelp.metricNote}
                             </span>
                           ) : null}
@@ -2065,7 +1603,7 @@ function ShellFrame({
               />
 
               <div
-                className="flex items-center justify-between gap-4 overflow-hidden border-t border-white/6"
+                className="flex items-center justify-between gap-4 overflow-hidden border-t border-[var(--ui-border-subtle)]"
                 style={{
                   opacity: "var(--forge-shell-desktop-secondary-opacity)",
                   maxHeight: "var(--forge-shell-desktop-secondary-max-height)",
@@ -2077,14 +1615,14 @@ function ShellFrame({
                 }}
               >
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  <div className="max-w-[34rem] text-[12px] leading-5 text-white/48">
+                  <div className="max-w-[34rem] text-[12px] leading-5 text-[var(--ui-ink-soft)]">
                     {activeHelp.primaryAction}
                   </div>
                   {railLinks.map((link) => (
                     <Link
                       key={link.to}
                       to={link.to}
-                      className="interactive-tap inline-flex min-h-10 min-w-max items-center justify-center rounded-full bg-white/[0.04] px-4 py-2 text-[13px] leading-none whitespace-nowrap text-white/62 transition hover:bg-white/[0.07] hover:text-white"
+                      className="interactive-tap inline-flex min-h-10 min-w-max items-center justify-center rounded-full bg-[var(--ui-surface-1)] px-4 py-2 text-[13px] leading-none whitespace-nowrap text-[var(--ui-ink-medium)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                     >
                       {link.label}
                     </Link>
@@ -2164,7 +1702,7 @@ function ShellFrame({
         <TaskTimerRailProvider>
           {!immersiveMobileSurface ? (
             <header
-              className="sticky top-0 z-30 border-b border-white/6 px-4 backdrop-blur-xl"
+              className="sticky top-0 z-30 border-b border-[var(--ui-border-subtle)] px-4 backdrop-blur-xl"
               style={{
                 background:
                   "color-mix(in srgb, var(--surface-glass) 96%, transparent)",
@@ -2186,7 +1724,7 @@ function ShellFrame({
                 <div className="flex min-w-0 items-center justify-between gap-2">
                   <div className="flex min-w-0 flex-1 items-center gap-1.5">
                     <div
-                      className="min-w-0 truncate font-display text-white"
+                      className="min-w-0 truncate font-display text-[var(--ui-ink-strong)]"
                       style={{
                         fontSize: "var(--forge-shell-mobile-title-size)",
                         willChange: "font-size"
@@ -2203,7 +1741,7 @@ function ShellFrame({
                           <span>{activeHelp.purpose}</span>
                           <span>{activeHelp.primaryAction}</span>
                           {activeHelp.metricNote ? (
-                            <span className="text-white/58">
+                            <span className="text-[var(--ui-ink-soft)]">
                               {activeHelp.metricNote}
                             </span>
                           ) : null}
@@ -2223,7 +1761,7 @@ function ShellFrame({
                       <Search className="size-4" />
                     </Button>
                     <div
-                      className="inline-flex min-h-[2.125rem] max-w-[9.5rem] items-center gap-1.5 rounded-full border border-white/8 bg-white/[0.05] px-2.5 text-[12px] font-medium text-[var(--primary)]"
+                      className="inline-flex min-h-[2.125rem] max-w-[9.5rem] items-center gap-1.5 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-2.5 text-[12px] font-medium text-[var(--primary)]"
                       title={`Level ${shell.snapshot.metrics.level} · ${shell.snapshot.metrics.totalXp} XP · ${shell.snapshot.metrics.streakDays} day streak`}
                     >
                       <Zap className="size-3.5 shrink-0" />
@@ -2272,7 +1810,7 @@ function ShellFrame({
                   willChange: "opacity, max-height, transform"
                 }}
               >
-                <div className="mt-2 text-[13px] leading-5 text-white/52">
+                <div className="mt-2 text-[13px] leading-5 text-[var(--ui-ink-soft)]">
                   {getRouteDetail(active, t)} {activeHelp.primaryAction}
                 </div>
                 <div className="mt-2">
@@ -2371,14 +1909,19 @@ function ShellFrame({
         onOpenChange={setBackgroundActivityOpen}
       >
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-50 bg-[rgba(3,7,18,0.72)] backdrop-blur-sm" />
-          <Dialog.Content className="fixed left-1/2 top-[10vh] z-50 w-[min(42rem,calc(100vw-1.5rem))] -translate-x-1/2 rounded-[30px] border border-white/10 bg-[rgba(10,15,28,0.97)] p-4 shadow-[0_32px_90px_rgba(0,0,0,0.45)] sm:p-5">
+          <Dialog.Overlay className={shellDialogOverlayClassName} />
+          <Dialog.Content
+            className={cn(
+              shellDialogContentClassName,
+              "top-[10vh] w-[min(42rem,calc(100vw-1.5rem))]"
+            )}
+          >
             <div className="flex items-start justify-between gap-4">
               <div>
-                <Dialog.Title className="font-display text-[1.25rem] tracking-[-0.04em] text-white">
+                <Dialog.Title className={shellDialogTitleClassName}>
                   Background activity
                 </Dialog.Title>
-                <Dialog.Description className="mt-1 text-[13px] leading-6 text-white/56">
+                <Dialog.Description className={shellDialogDescriptionClassName}>
                   Follow active KarpaWiki ingest jobs and reopen completed
                   reviews without leaving your current context.
                 </Dialog.Description>
@@ -2402,7 +1945,7 @@ function ShellFrame({
                   onRetry={() => void ingestJobsQuery.refetch()}
                 />
               ) : recentIngestJobs.length === 0 ? (
-                <div className="rounded-[24px] border border-dashed border-white/10 px-4 py-10 text-center text-[13px] leading-6 text-white/42">
+                <div className="rounded-[24px] border border-dashed border-[var(--ui-border-strong)] px-4 py-10 text-center text-[13px] leading-6 text-[var(--ui-ink-faint)]">
                   No background ingest jobs yet.
                 </div>
               ) : (
@@ -2416,24 +1959,24 @@ function ShellFrame({
                         key={job.job.id}
                         to={getWikiIngestRoute(job)}
                         onClick={() => setBackgroundActivityOpen(false)}
-                        className="rounded-[24px] border border-white/8 bg-white/[0.03] px-4 py-4 transition hover:bg-white/[0.06]"
+                        className="rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-4 transition hover:bg-[var(--ui-surface-hover)]"
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+                            <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                               KarpaWiki ingest
                             </div>
-                            <div className="mt-2 text-[14px] font-semibold text-white">
+                            <div className="mt-2 text-[14px] font-semibold text-[var(--ui-ink-strong)]">
                               {job.job.titleHint ||
                                 job.job.latestMessage ||
                                 "Background ingest"}
                             </div>
-                            <div className="mt-1 text-[12px] leading-5 text-white/56">
+                            <div className="mt-1 text-[12px] leading-5 text-[var(--ui-ink-soft)]">
                               {job.job.status} · {job.job.phase} ·{" "}
                               {job.job.progressPercent}% ·{" "}
                               {formatActivityTimestamp(job.job.updatedAt)}
                             </div>
-                            <div className="mt-2 text-[12px] leading-5 text-white/46">
+                            <div className="mt-2 text-[12px] leading-5 text-[var(--ui-ink-faint)]">
                               {job.job.createdPageCount} pages ·{" "}
                               {job.job.createdEntityCount} entities ·{" "}
                               {job.job.acceptedCount} accepted ·{" "}
@@ -2442,7 +1985,7 @@ function ShellFrame({
                           </div>
                           <div className="shrink-0">
                             {activeJob ? (
-                              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-white/58">
+                              <div className="inline-flex items-center gap-2 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-2 text-xs text-[var(--ui-ink-soft)]">
                                 <RefreshCcw className="size-3.5 animate-spin" />
                                 Running
                               </div>
@@ -3121,17 +2664,17 @@ export function AppShell() {
             }}
           >
             <Dialog.Portal>
-              <Dialog.Overlay className="fixed inset-0 z-[70] bg-[rgba(5,8,18,0.74)] backdrop-blur-xl" />
-              <Dialog.Content className="fixed left-1/2 top-1/2 z-[71] w-[min(92vw,34rem)] -translate-x-1/2 -translate-y-1/2 rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(16,22,36,0.98),rgba(9,13,22,0.99))] p-6 shadow-[0_32px_90px_rgba(5,8,18,0.58)]">
+              <Dialog.Overlay className="fixed inset-0 z-[70] bg-[var(--ui-overlay-backdrop)] backdrop-blur-xl" />
+              <Dialog.Content className="fixed left-1/2 top-1/2 z-[71] w-[min(92vw,34rem)] -translate-x-1/2 -translate-y-1/2 rounded-[28px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-modal)] p-6 shadow-[var(--ui-shadow-floating)]">
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
-                    <Dialog.Title className="font-display text-[1.35rem] leading-tight text-white">
+                    <Dialog.Title className="font-display text-[1.35rem] leading-tight text-[var(--ui-ink-strong)]">
                       Log today&apos;s work before closing
                     </Dialog.Title>
-                    <Dialog.Description className="mt-2 text-sm leading-6 text-white/64">
+                    <Dialog.Description className="mt-2 text-sm leading-6 text-[var(--ui-ink-medium)]">
                       Forge closes tasks from actual time worked today, not from
                       the checkbox itself. Add the time you spent on{" "}
-                      <span className="font-medium text-white">
+                      <span className="font-medium text-[var(--ui-ink-strong)]">
                         {taskCompletionPrompt?.title ?? "this task"}
                       </span>{" "}
                       today, or confirm that you did not work on it today.
@@ -3143,7 +2686,7 @@ export function AppShell() {
                 </div>
 
                 <div className="mt-5">
-                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                     Quick amounts
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -3167,9 +2710,9 @@ export function AppShell() {
                   </div>
                 </div>
 
-                <div className="mt-5 grid gap-3 rounded-[20px] bg-white/[0.04] p-4">
-                  <label className="grid gap-2 text-sm text-white/72">
-                    <span className="text-[11px] uppercase tracking-[0.16em] text-white/40">
+                <div className="mt-5 grid gap-3 rounded-[20px] bg-[var(--ui-surface-1)] p-4">
+                  <label className="grid gap-2 text-sm text-[var(--ui-ink-medium)]">
+                    <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                       Custom minutes
                     </span>
                     <input
@@ -3188,7 +2731,7 @@ export function AppShell() {
                             : current
                         );
                       }}
-                      className="h-11 rounded-[16px] border border-white/10 bg-white/[0.04] px-3 text-sm text-white outline-none transition focus:border-[var(--primary)]/40 focus:bg-white/[0.06]"
+                      className="h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 text-sm text-[var(--ui-ink-strong)] outline-none transition focus:border-[color-mix(in_srgb,var(--primary)_40%,transparent)] focus:bg-[var(--ui-surface-2)]"
                       placeholder="45"
                     />
                   </label>
@@ -3244,7 +2787,7 @@ export function AppShell() {
           </Dialog.Root>
           {knowledgeGraphOverlayFocus?.focusNode ? (
             <div className="pointer-events-none fixed inset-y-0 right-0 z-[64] hidden lg:flex lg:max-w-[min(30rem,calc(100vw-4rem))] lg:items-start lg:justify-end lg:p-4">
-              <div className="pointer-events-auto h-full w-[min(30rem,calc(100vw-4rem))] max-w-full overflow-hidden rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(8,12,20,0.82),rgba(8,12,20,0.94))] pt-[calc(var(--forge-shell-desktop-header-padding-top)+4.8rem)] shadow-[0_24px_80px_rgba(5,8,18,0.42)] backdrop-blur-xl">
+              <div className="pointer-events-auto h-full w-[min(30rem,calc(100vw-4rem))] max-w-full overflow-hidden rounded-[28px] border border-[var(--ui-border-subtle)] bg-[color-mix(in_srgb,var(--surface-glass)_94%,transparent)] pt-[calc(var(--forge-shell-desktop-header-padding-top)+4.8rem)] shadow-[var(--ui-shadow-floating)] backdrop-blur-xl">
                 <div className="h-full min-h-0 overflow-hidden">
                   <KnowledgeGraphFocusDrawer
                     focus={knowledgeGraphOverlayFocus}

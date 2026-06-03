@@ -2,7 +2,7 @@ import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 function Block({ className }: { className?: string }) {
-  return <div className={cn("surface-pulse rounded-2xl bg-white/[0.05]", className)} />;
+  return <div className={cn("surface-pulse rounded-2xl bg-[var(--ui-surface-2)]", className)} />;
 }
 
 export function SurfaceSkeleton({

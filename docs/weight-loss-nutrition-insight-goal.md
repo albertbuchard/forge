@@ -68,6 +68,60 @@ Use the literature and product evidence below as implementation guidance:
   - Cronometer-style micronutrient completeness: https://cronometer.com/
 - ChatGPT subscription and OpenAI API billing are separate; this feature must use the existing ChatGPT/Codex OAuth path, not API billing: https://help.openai.com/en/articles/9039756-managing-billing-settings-on-chatgpt-web-and-platform
 
+## Litterature
+
+This section records the nutrition and HealthKit evidence used for the target model so the product decisions stay inspectable.
+
+Energy target formula:
+
+Forge should compute target calories in three separate steps, because basal/resting burn, active burn, and weight objective are different concepts.
+
+1. Estimate or read resting burn. When HealthKit basal/resting energy exists, use it as measured evidence. Otherwise use Mifflin-St Jeor resting energy because it is a standard adult predictive equation: male `10 * weight_kg + 6.25 * height_cm - 5 * age + 5`; female `10 * weight_kg + 6.25 * height_cm - 5 * age - 161`. Source: Mifflin et al. and Endotext reference table: https://pubmed.ncbi.nlm.nih.gov/2305711/ and https://www.ncbi.nlm.nih.gov/sites/books/NBK278991/table/diet-treatment-obes.table12est/?report=objectonly
+2. Add active burn independently from the user's objective. HealthKit active energy, workout energy, and movement-trip calories are evidence about activity. They must not change because the user selects lose, gain, or maintain. The maintenance estimate is `resting_or_basal_kcal + active_burn_kcal`.
+3. Apply the objective delta. The planning model uses roughly `7700 kcal/kg` as a simple first-pass energy equivalent, while acknowledging that dynamic body-weight models are better over long horizons. For a weekly goal rate, `daily_delta_kcal = weekly_rate_kg * 7700 / 7`; loss is negative, gain is positive. NIH/Pennington work notes the limitations of the static 3500 kcal/lb rule and points toward dynamic models for future refinement: https://pmc.ncbi.nlm.nih.gov/articles/PMC3810417/
+
+Default weight-change rates:
+
+Forge should propose defaults instead of asking the user to invent everything. For fat loss, default to about `0.5% of current body weight per week`, with a practical guardrail around `0.2 kg/week` minimum and about `1% body weight/week` as the faster end for most users. NIH obesity guidance has commonly used a 500-1000 kcal/day deficit to target roughly 0.5-1 kg/week, while athlete-focused literature favors slower loss to protect performance and lean mass. Sources: https://pmc.ncbi.nlm.nih.gov/articles/PMC3447534/ and https://pubmed.ncbi.nlm.nih.gov/21558571/
+
+For mass gain, default much slower, around `0.25% body weight/week`, because surplus weight gain becomes fat-heavy quickly when the surplus is large. Forge should frame this as a starting value and update from the user's actual scale trend.
+
+Macro targets:
+
+- Protein should be substantially above the sedentary RDA when the user is training or losing weight. ISSN's 2017 protein stand supports about `1.4-2.0 g/kg/day` for most exercising people, and higher intakes can help body composition during hypocaloric training. Forge defaults to about `2.0 g/kg` for loss, `1.8 g/kg` for gain, and `1.6 g/kg` for maintenance unless the user customizes it. Source: https://link.springer.com/article/10.1186/s12970-017-0177-8
+- Fat should not be treated as a leftover after protein. NASEM AMDR for adults is `20-35%` of energy from fat; Forge uses a practical floor of about `0.6 g/kg` and keeps the generated target in that AMDR region when possible. Source: https://www.ncbi.nlm.nih.gov/books/NBK208874/table/ttt00023/?report=objectonly
+- Carbohydrate AMDR for adults is `45-65%` of energy and the adult RDA is `130 g/day`. Forge uses carbs as remaining training fuel after protein and fat, while the UI should still expose the 130 g/day reference rather than hiding low-carb exceptions. Source: https://www.ncbi.nlm.nih.gov/books/NBK208874/table/ttt00022/?report=objectonly
+- Fiber targets should use sex/age DRI values and the common planning rule of about `14 g / 1000 kcal`; Forge should show the stricter of the generated target and the DRI target. Source: https://www.ncbi.nlm.nih.gov/books/NBK208874/table/ttt00022/?report=objectonly
+- Saturated fat and added sugar should be shown as ceilings, not goals. The 2025-2030 Dietary Guidelines remain the current U.S. federal guidance and emphasize real foods, limiting highly processed foods and added sugars; the longstanding practical ceiling for saturated fat remains under 10% of energy in the detailed guidance ecosystem. Current DGA entry point: https://www.fns.usda.gov/cnpp/dietary-guidelines-americans and PDF: https://cdn.realfood.gov/DGA.pdf
+
+Vitamin, mineral, and oligoelement targets:
+
+Forge should expose a detailed daily target table for vitamins, minerals, and trace elements instead of only calories/macros. For adults who are not pregnant or lactating, the default targets should come from NASEM Dietary Reference Intakes, adjusted by sex and age where the tables differ. The target table should include vitamin A, C, D, E, K, thiamin, riboflavin, niacin, B6, folate, B12, pantothenic acid, biotin, choline, calcium, iron, magnesium, phosphorus, zinc, iodine, selenium, copper, manganese, chromium, molybdenum, fluoride, chloride, sodium ceiling, potassium, total water, linoleic acid, and alpha-linolenic acid. Sources: https://www.ncbi.nlm.nih.gov/books/NBK208874/, https://www.ncbi.nlm.nih.gov/books/NBK208874/table/ttt00018_1/?report=objectonly, https://www.ncbi.nlm.nih.gov/books/NBK208874/table/ttt00020_1/?report=objectonly, and NIH/FDA Daily Values reference: https://dsld.od.nih.gov/daily-values
+
+Hydration and sport losses:
+
+The total-water baseline is an Adequate Intake, not a rigid water-bottle prescription: about `3.7 L/day` for adult men and `2.7 L/day` for adult women from food plus beverages in temperate conditions. Source: https://www.nationalacademies.org/cdn/materials/9fb9fad7-cdf7-4adf-a89d-f1638016b70c
+
+Exercise losses must be shown as ranges. ACSM sports nutrition guidance reports sweat rates from about `0.3-2.4 L/h`, with many athletes' practical fluid plans around `0.4-0.8 L/h`, and recommends customizing by pre/post-exercise body weight. Sodium loss is highly variable; average sweat sodium is roughly around `50 mmol/L` or about `1 g/L`, and sodium is the dominant electrolyte for fluid balance. Sources: https://sky.sausport.com/wp-content/uploads/2021/02/American-College-of-Sports-Medicine_Joint-Position_Nutrition_and_Athletic_Performance_2016.pdf and https://link.springer.com/article/10.1007/s40279-017-0691-5
+
+Forge's v1 sport-loss model should therefore:
+
+- estimate training hours from active burn with a conservative `500 kcal/hour` assumption;
+- show sweat fluid as a planning range, initially `0.4-0.8 L/hour`;
+- show sodium loss as a range, initially about `500-1000 mg/L sweat`;
+- show potassium as a smaller range because sweat potassium is commonly around `2-8 mmol/L`;
+- call this "expected loss" and invite calibration by body mass before/after workouts, not call it a supplement prescription.
+
+Why movement kcal and active burn were `n/a`:
+
+The immediate bug was architectural, not just visual. The weight-loss read model returned `activeBurnKcal: null` and `movementCaloriesKcal: null` even though Forge already stored relevant evidence elsewhere:
+
+- iOS HealthKit sync requests HealthKit activity permissions and exports basal energy, exercise time, step count, workout active energy, workout total energy, and workout-associated active-energy samples.
+- Forge stores HealthKit daily summaries in `health_daily_summaries`, workout energy in `health_workout_sessions.active_energy_kcal` and `total_energy_kcal`, and passive movement-trip calories in `movement_trips.calories_kcal`.
+- The weight-loss read model must compose those canonical sources instead of inventing a separate calorie store. Daily HealthKit active energy should be the preferred active-burn signal; workout energy plus movement-trip calories are fallback evidence; inferred TDEE from the target is only a last resort.
+
+The sound architecture is: iOS collects provider-native HealthKit evidence; Fastify persists it in canonical provider-neutral tables; the weight-loss read model composes the existing health/movement stores; React renders targets and confidence from that read model. React should not calculate missing active burn from scratch.
+
 ## Core Data Model
 
 Add SQLite-backed storage for:

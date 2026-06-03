@@ -23,13 +23,13 @@ export function MetricTile({
       className={cn(
         "rounded-[22px] p-4",
         tone === "core" &&
-          "bg-[linear-gradient(180deg,rgba(29,24,48,0.95),rgba(17,17,31,0.92))]",
+          "bg-[linear-gradient(180deg,color-mix(in_srgb,var(--primary)_12%,var(--surface-panel)),color-mix(in_srgb,var(--surface-low)_92%,var(--primary)_8%))]",
         tone === "psyche" &&
-          "bg-[linear-gradient(180deg,rgba(18,31,34,0.96),rgba(13,24,27,0.94))]",
+          "bg-[linear-gradient(180deg,color-mix(in_srgb,var(--secondary)_12%,var(--surface-panel)),color-mix(in_srgb,var(--surface-low)_92%,var(--secondary)_8%))]",
         className
       )}
     >
-      <div className="flex items-center gap-1.5 font-label text-[11px] uppercase tracking-[0.18em] text-white/42">
+      <div className="flex items-center gap-1.5 font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
         <span>{label}</span>
         {help ? (
           <InfoTooltip
@@ -40,9 +40,9 @@ export function MetricTile({
           />
         ) : null}
       </div>
-      <div className="mt-3 font-display text-3xl text-white">{value}</div>
+      <div className="mt-3 font-display text-3xl text-[var(--ui-ink-strong)]">{value}</div>
       {detail ? (
-        <div className="mt-2 text-sm text-white/56">{detail}</div>
+        <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">{detail}</div>
       ) : null}
     </Card>
   );

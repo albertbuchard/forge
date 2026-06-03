@@ -7,9 +7,11 @@ import { Button } from "@/components/ui/button";
 import { EntityBadge } from "@/components/ui/entity-badge";
 import { EntityName } from "@/components/ui/entity-name";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
+import { SurfacePanel } from "@/components/ui/surface";
 import { useI18n } from "@/lib/i18n";
 import { getEntityNotesSummary } from "@/lib/note-helpers";
 import type { Goal, NotesSummaryByEntity, Tag, Task, TaskStatus } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 function getGoalTitle(task: Task, goals: Goal[], fallback: string) {
   return goals.find((goal) => goal.id === task.goalId)?.title ?? fallback;
@@ -75,14 +77,14 @@ export function DailyRunway({
   } as const;
   return (
     <div className="grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1.3fr)_minmax(17rem,0.9fr)]">
-      <div className="min-w-0 rounded-[24px] bg-white/[0.04] p-4">
+      <SurfacePanel className="min-w-0 rounded-[24px]">
         <div className="flex min-w-0 items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">{t("common.dailyRunway.runwayEyebrow")}</div>
+              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">{t("common.dailyRunway.runwayEyebrow")}</div>
               <InfoTooltip content="These are the tasks that matter most for today. Click a card to open the task details. Use Start to begin work immediately." />
             </div>
-            <h4 className="mt-2 font-display text-2xl text-white">{t("common.dailyRunway.runwayTitle")}</h4>
+            <h4 className="mt-2 font-display text-2xl text-[var(--ui-ink-strong)]">{t("common.dailyRunway.runwayTitle")}</h4>
           </div>
           <Badge className="shrink-0 text-[var(--primary)]">{t(tasks.length === 1 ? "common.dailyRunway.prioritiesOne" : "common.dailyRunway.prioritiesOther", { count: tasks.length })}</Badge>
         </div>
@@ -101,17 +103,18 @@ export function DailyRunway({
                 role="button"
                 tabIndex={0}
                 aria-pressed={isSelected}
-                className={`grid w-full gap-3 rounded-[22px] px-4 py-4 text-left transition ${
+                className={cn(
+                  "grid w-full gap-3 rounded-[22px] border px-4 py-4 text-left transition",
                   isSelected
-                    ? "bg-[linear-gradient(180deg,rgba(192,193,255,0.16),rgba(192,193,255,0.05))] shadow-[inset_0_0_0_1px_rgba(192,193,255,0.2)]"
-                    : "bg-white/[0.03] hover:bg-white/[0.06]"
-                }`}
+                    ? "border-[var(--primary)]/28 bg-[var(--ui-accent-soft)] shadow-[var(--ui-shadow-soft)]"
+                    : "border-transparent bg-[var(--ui-surface-1)] hover:border-[var(--ui-border-subtle)] hover:bg-[var(--ui-surface-hover)]"
+                )}
                 onClick={() => onSelectTask(task.id)}
                 onKeyDown={(event) => handleCardKeyDown(event, () => onSelectTask(task.id))}
               >
                 <div className="flex min-w-0 items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">
-                    <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+                    <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                       {t("common.dailyRunway.runwayItem", { index: index + 1 })}
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -136,7 +139,11 @@ export function DailyRunway({
                           gradient={false}
                         />
                       )}
-                      {task.time.activeRunCount > 0 ? <Badge className="bg-emerald-500/12 text-emerald-200">Live</Badge> : null}
+                      {task.time.activeRunCount > 0 ? (
+                        <Badge className="border-[color-mix(in_srgb,#10b981_24%,transparent)] bg-[color-mix(in_srgb,#10b981_16%,var(--ui-surface-1))] text-[color-mix(in_srgb,#10b981_80%,var(--ui-ink-strong)_20%)]">
+                          Live
+                        </Badge>
+                      ) : null}
                     </div>
                     <div className="mt-2">
                       <Link
@@ -152,7 +159,7 @@ export function DailyRunway({
                         />
                       </Link>
                     </div>
-                    <p className="mt-2 text-sm leading-6 text-white/60">{task.description || t("common.dailyRunway.noNote")}</p>
+                    <p className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">{task.description || t("common.dailyRunway.noNote")}</p>
                   </div>
                   <Badge className="shrink-0 self-start">{task.status.replaceAll("_", " ")}</Badge>
                 </div>
@@ -160,18 +167,18 @@ export function DailyRunway({
                 <div className="flex flex-wrap gap-2">
                   <Badge className="bg-[var(--primary)]/14 text-[var(--primary)]">{task.points} xp</Badge>
                   <EntityNoteCountLink entityType="task" entityId={task.id} count={noteCount} />
-                  {task.time.totalCreditedSeconds > 0 ? <Badge className="bg-white/[0.08] text-white/70">{Math.floor(task.time.totalCreditedSeconds / 60)} min tracked</Badge> : null}
-                  <Badge className="bg-white/[0.08] text-white/70">{task.effort}</Badge>
-                  <Badge className="bg-white/[0.08] text-white/70">{formatDate(task.dueDate)}</Badge>
+                  {task.time.totalCreditedSeconds > 0 ? <Badge tone="meta">{Math.floor(task.time.totalCreditedSeconds / 60)} min tracked</Badge> : null}
+                  <Badge tone="meta">{task.effort}</Badge>
+                  <Badge tone="meta">{formatDate(task.dueDate)}</Badge>
                   {taskTags.map((tag) => (
-                    <Badge key={tag.id} className="bg-white/[0.08]" style={{ color: tag.color }}>
+                    <Badge key={tag.id} className="bg-[var(--ui-surface-2)]" style={{ color: tag.color }}>
                       {tag.name}
                     </Badge>
                   ))}
                 </div>
 
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">{task.owner}</div>
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">{task.owner}</div>
                   {nextAction ? (
                     <Button
                       variant={nextAction.action === "start" ? "primary" : "secondary"}
@@ -196,20 +203,20 @@ export function DailyRunway({
             );
           })}
         </div>
-      </div>
+      </SurfacePanel>
 
-      <div className="min-w-0 rounded-[24px] bg-white/[0.04] p-4">
+      <SurfacePanel className="min-w-0 rounded-[24px]">
         <div className="flex items-center gap-2">
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">{t("common.dailyRunway.timelineEyebrow")}</div>
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">{t("common.dailyRunway.timelineEyebrow")}</div>
           <InfoTooltip content="This groups today's tasks by status, so you can see what is already moving, what is ready to start, what is blocked, and what is done." />
         </div>
-        <h4 className="mt-2 font-display text-2xl text-white">{t("common.dailyRunway.timelineTitle")}</h4>
+        <h4 className="mt-2 font-display text-2xl text-[var(--ui-ink-strong)]">{t("common.dailyRunway.timelineTitle")}</h4>
         <div className="mt-4 grid min-w-0 gap-3">
           {timeline.map((bucket) => (
-            <div key={bucket.id} className="min-w-0 overflow-hidden rounded-[20px] bg-white/[0.03] p-4">
+            <SurfacePanel key={bucket.id} muted className="min-w-0 overflow-hidden rounded-[20px]">
               <div className="flex items-center justify-between gap-3">
-                <div className="font-medium text-white">{bucket.label}</div>
-                <Badge className="bg-white/[0.08] text-white/65">{bucket.tasks.length}</Badge>
+                <div className="font-medium text-[var(--ui-ink-strong)]">{bucket.label}</div>
+                <Badge tone="meta">{bucket.tasks.length}</Badge>
               </div>
               <div className="mt-3 grid gap-2">
                 {bucket.tasks.slice(0, 3).map((task) => {
@@ -218,7 +225,7 @@ export function DailyRunway({
                     <Link
                       key={task.id}
                       to={`/tasks/${task.id}`}
-                      className="flex min-w-0 items-center justify-between gap-3 overflow-hidden rounded-[16px] bg-white/[0.03] px-3 py-3 text-left transition hover:bg-white/[0.06]"
+                      className="flex min-w-0 items-center justify-between gap-3 overflow-hidden rounded-[16px] bg-[var(--ui-surface-1)] px-3 py-3 text-left transition hover:bg-[var(--ui-surface-hover)]"
                     >
                       <div className="min-w-0 flex-1">
                         <EntityName kind="task" label={task.title} className="max-w-full" labelClassName="[overflow-wrap:anywhere]" />
@@ -231,16 +238,16 @@ export function DailyRunway({
                           />
                         </div>
                       </div>
-                      <ArrowRight className="size-4 shrink-0 text-white/35" />
+                      <ArrowRight className="size-4 shrink-0 text-[var(--ui-ink-faint)]" />
                     </Link>
                   );
                 })}
-                {bucket.tasks.length === 0 ? <div className="text-sm text-white/42">{t("common.dailyRunway.emptyBucket")}</div> : null}
+                {bucket.tasks.length === 0 ? <div className="text-sm text-[var(--ui-ink-faint)]">{t("common.dailyRunway.emptyBucket")}</div> : null}
               </div>
-            </div>
+            </SurfacePanel>
           ))}
         </div>
-      </div>
+      </SurfacePanel>
     </div>
   );
 }

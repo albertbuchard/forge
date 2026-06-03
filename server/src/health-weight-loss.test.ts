@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { buildServer } from "./app.js";
-import { closeDatabase } from "./db.js";
+import { closeDatabase, getDatabase } from "./db.js";
 
 async function issueOperatorSessionCookie(
   app: Awaited<ReturnType<typeof buildServer>>
@@ -118,6 +118,60 @@ test("weight loss overview reflects food logs and body check-ins", async () => {
     });
     assert.equal(bodyCheckin.statusCode, 201);
 
+    const today = new Date().toISOString().slice(0, 10);
+    const now = new Date().toISOString();
+    getDatabase()
+      .prepare(
+        `INSERT INTO health_daily_summaries (
+           id, user_id, date_key, summary_type, metrics_json, derived_json, source, created_at, updated_at
+         )
+         VALUES (?, 'user_operator', ?, 'vitals', ?, '{}', 'healthkit', ?, ?)`
+      )
+      .run(
+        "hds_weight_loss_energy",
+        today,
+        JSON.stringify({
+          activeEnergyBurned: {
+            metric: "activeEnergyBurned",
+            label: "Active energy",
+            category: "activity",
+            unit: "kcal",
+            displayUnit: "kcal",
+            aggregation: "cumulative",
+            total: 420,
+            sampleCount: 12
+          },
+          basalEnergyBurned: {
+            metric: "basalEnergyBurned",
+            label: "Basal energy",
+            category: "activity",
+            unit: "kcal",
+            displayUnit: "kcal",
+            aggregation: "cumulative",
+            total: 1600,
+            sampleCount: 12
+          }
+        }),
+        now,
+        now
+      );
+    getDatabase()
+      .prepare(
+        `INSERT INTO movement_trips (
+           id, external_uid, user_id, started_at, ended_at, distance_meters,
+           moving_seconds, idle_seconds, calories_kcal, created_at, updated_at
+         )
+         VALUES (?, ?, 'user_operator', ?, ?, 1200, 900, 0, 120, ?, ?)`
+      )
+      .run(
+        "trip_weight_loss_energy",
+        "trip_weight_loss_energy",
+        `${today}T10:00:00.000Z`,
+        `${today}T10:15:00.000Z`,
+        now,
+        now
+      );
+
     const overview = await app.inject({
       method: "GET",
       url: "/api/v1/health/weight-loss"
@@ -138,6 +192,7 @@ test("weight loss overview reflects food logs and body check-ins", async () => {
           estimatedTdeeKcal: number | null;
           activeBurnKcal: number | null;
           movementCaloriesKcal: number | null;
+          restingEnergyCalories: number | null;
           estimatedDailyEnergyBalanceKcal: number | null;
         };
         foodQuality: {
@@ -165,11 +220,15 @@ test("weight loss overview reflects food logs and body check-ins", async () => {
       typeof overviewBody.weightLoss.energyModel.activeBurnKcal === "number" ||
         overviewBody.weightLoss.energyModel.activeBurnKcal === null
     );
+    assert.equal(overviewBody.weightLoss.energyModel.activeBurnKcal, 420);
+    assert.equal(overviewBody.weightLoss.energyModel.restingEnergyCalories, 1600);
+    assert.equal(overviewBody.weightLoss.energyModel.estimatedTdeeKcal, 2020);
     assert.ok(
       typeof overviewBody.weightLoss.energyModel.movementCaloriesKcal ===
         "number" ||
         overviewBody.weightLoss.energyModel.movementCaloriesKcal === null
     );
+    assert.equal(overviewBody.weightLoss.energyModel.movementCaloriesKcal, 120);
     assert.equal(
       typeof overviewBody.weightLoss.energyModel
         .estimatedDailyEnergyBalanceKcal,

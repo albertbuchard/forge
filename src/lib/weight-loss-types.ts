@@ -1,8 +1,10 @@
 export type NutritionMealItemInput = {
+  foodId?: string | null;
   name: string;
   brand?: string | null;
   quantity: number;
   unit?: string | null;
+  grams?: number | null;
   calories?: number | null;
   proteinGrams?: number | null;
   carbohydrateGrams?: number | null;
@@ -96,16 +98,21 @@ export type NutritionFoodLog = {
 };
 
 export type NutritionTarget = {
+  id?: string | null;
+  userId?: string;
   calorieTarget: number;
   proteinGramsTarget: number;
   fiberGramsTarget: number;
   carbohydrateGramsTarget: number | null;
   fatGramsTarget: number | null;
   weeklyRateGoalKg: number | null;
-  goalBodyWeightKg: number | null;
+  goalBodyWeightKg?: number | null;
+  weightGoalKg?: number | null;
   dietStyle: string | null;
-  trainingGoal: string | null;
+  trainingGoal?: string | null;
+  bodyGoal?: string | null;
   notes: string | null;
+  createdAt?: string | null;
   updatedAt: string | null;
 };
 
@@ -134,7 +141,10 @@ export type NutritionFoodSearchResult = {
   alcoholGrams: number | null;
   glycemicIndex: number | null;
   novaGroup: number | null;
+  nutriScore?: string | null;
   tags: string[];
+  nutrients?: Record<string, unknown>;
+  confidence?: number | null;
 };
 
 export type NutritionCheckinInput = {

@@ -115,6 +115,18 @@ type BodyCheckinRow = {
   updated_at: string;
 };
 
+type WeightLossDailySummaryRow = {
+  date_key: string;
+  metrics_json: string;
+};
+
+type WeightLossEnergyDayRow = {
+  date_key: string;
+  active_energy_kcal: number | null;
+  total_energy_kcal: number | null;
+  movement_calories_kcal: number | null;
+};
+
 type AppearanceCheckinRow = {
   id: string;
   user_id: string;
@@ -452,6 +464,143 @@ function average(values: Array<number | null | undefined>) {
     return null;
   }
   return real.reduce((sum, value) => sum + value, 0) / real.length;
+}
+
+function metricTotal(metrics: Record<string, unknown>, key: string) {
+  const metric = metrics[key];
+  if (!metric || typeof metric !== "object") {
+    return null;
+  }
+  const record = metric as Record<string, unknown>;
+  for (const field of ["total", "average", "latest"]) {
+    const value = record[field];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function buildStoredEnergyModel(input: {
+  userId: string;
+  inferredTdee: number | null;
+  averageCalories: number;
+}) {
+  const today = new Date();
+  const start = new Date(today);
+  start.setUTCDate(today.getUTCDate() - 6);
+  const startKey = start.toISOString().slice(0, 10);
+  const dailySummaryRows = getDatabase()
+    .prepare(
+      `SELECT date_key, metrics_json
+       FROM health_daily_summaries
+       WHERE user_id = ?
+         AND summary_type = 'vitals'
+         AND date_key >= ?
+       ORDER BY date_key DESC`
+    )
+    .all(input.userId, startKey) as WeightLossDailySummaryRow[];
+  const dailyHealthKit = dailySummaryRows.map((row) => {
+    const metrics = parseJson<Record<string, unknown>>(row.metrics_json, {});
+    return {
+      dateKey: row.date_key,
+      activeEnergyKcal: metricTotal(metrics, "activeEnergyBurned"),
+      restingEnergyKcal: metricTotal(metrics, "basalEnergyBurned"),
+      exerciseMinutes: metricTotal(metrics, "appleExerciseTime"),
+      stepCount: metricTotal(metrics, "stepCount")
+    };
+  });
+  const workoutRows = getDatabase()
+    .prepare(
+      `SELECT date(started_at) AS date_key,
+              SUM(active_energy_kcal) AS active_energy_kcal,
+              SUM(total_energy_kcal) AS total_energy_kcal,
+              NULL AS movement_calories_kcal
+       FROM health_workout_sessions
+       WHERE user_id = ?
+         AND date(started_at) >= ?
+       GROUP BY date(started_at)`
+    )
+    .all(input.userId, startKey) as WeightLossEnergyDayRow[];
+  const movementRows = getDatabase()
+    .prepare(
+      `SELECT date(started_at) AS date_key,
+              NULL AS active_energy_kcal,
+              NULL AS total_energy_kcal,
+              SUM(calories_kcal) AS movement_calories_kcal
+       FROM movement_trips
+       WHERE user_id = ?
+         AND date(started_at) >= ?
+       GROUP BY date(started_at)`
+    )
+    .all(input.userId, startKey) as WeightLossEnergyDayRow[];
+  const workoutByDay = new Map(
+    workoutRows.map((row) => [
+      row.date_key,
+      n(row.active_energy_kcal) || n(row.total_energy_kcal) || null
+    ])
+  );
+  const movementByDay = new Map(
+    movementRows.map((row) => [row.date_key, n(row.movement_calories_kcal) || null])
+  );
+  const activeEnergyAverage = average(
+    dailyHealthKit.map((day) => day.activeEnergyKcal)
+  );
+  const restingEnergyAverage = average(
+    dailyHealthKit.map((day) => day.restingEnergyKcal)
+  );
+  const workoutEnergyAverage = average([...workoutByDay.values()]);
+  const movementCaloriesAverage = average([...movementByDay.values()]);
+  const fallbackActiveBurn =
+    workoutEnergyAverage != null || movementCaloriesAverage != null
+      ? n(workoutEnergyAverage) + n(movementCaloriesAverage)
+      : null;
+  const activeBurnKcal = activeEnergyAverage ?? fallbackActiveBurn;
+  const estimatedTdeeKcal =
+    activeBurnKcal != null && restingEnergyAverage != null
+      ? round(activeBurnKcal + restingEnergyAverage, 0)
+      : input.inferredTdee;
+  const hasHealthKitEnergy =
+    activeEnergyAverage != null ||
+    restingEnergyAverage != null ||
+    workoutEnergyAverage != null;
+  const hasMovementEnergy = movementCaloriesAverage != null;
+  const sourceConfidence = activeEnergyAverage != null
+    ? "healthkit_daily_active_energy"
+    : fallbackActiveBurn != null
+      ? "workout_movement_fallback"
+      : "target_inference_only";
+
+  return {
+    activeEnergyCalories: activeEnergyAverage != null ? round(activeEnergyAverage, 0) : null,
+    restingEnergyCalories: restingEnergyAverage != null ? round(restingEnergyAverage, 0) : null,
+    wearableConfidence: hasHealthKitEnergy ? "measured_directional" : "directional",
+    inferredTdee: input.inferredTdee,
+    estimatedTdeeKcal,
+    activeBurnKcal: activeBurnKcal != null ? round(activeBurnKcal, 0) : null,
+    movementCaloriesKcal:
+      movementCaloriesAverage != null ? round(movementCaloriesAverage, 0) : null,
+    workoutEnergyKcal:
+      workoutEnergyAverage != null ? round(workoutEnergyAverage, 0) : null,
+    averageCalorieIntake: input.averageCalories,
+    currentDeficitEstimate:
+      estimatedTdeeKcal != null ? round(input.averageCalories - estimatedTdeeKcal, 0) : null,
+    estimatedDailyEnergyBalanceKcal:
+      estimatedTdeeKcal != null ? round(input.averageCalories - estimatedTdeeKcal, 0) : null,
+    energySourceConfidence: sourceConfidence,
+    evidenceDays: new Set([
+      ...dailyHealthKit.map((day) => day.dateKey),
+      ...workoutRows.map((row) => row.date_key),
+      ...movementRows.map((row) => row.date_key)
+    ]).size,
+    exerciseMinutesAverage: average(dailyHealthKit.map((day) => day.exerciseMinutes)),
+    stepCountAverage: average(dailyHealthKit.map((day) => day.stepCount)),
+    sourceAvailability: {
+      healthKitDailyEnergy: hasHealthKitEnergy,
+      movementTripCalories: hasMovementEnergy,
+      workoutEnergy: workoutEnergyAverage != null
+    }
+  };
 }
 
 function resolveWriteUser(userId?: string | null) {
@@ -1519,6 +1668,11 @@ export function getWeightLossViewData(userIds?: string[]) {
     target.calorieTarget != null
       ? round(target.calorieTarget + Math.abs(n(target.weeklyRateGoalKg)) * 1100, 0)
       : null;
+  const energyModel = buildStoredEnergyModel({
+    userId,
+    inferredTdee,
+    averageCalories
+  });
 
   return {
     generatedAt,
@@ -1550,20 +1704,7 @@ export function getWeightLossViewData(userIds?: string[]) {
     },
     todayLedger,
     recentMeals: logs.slice(0, 30),
-    energyModel: {
-      activeEnergyCalories: null,
-      restingEnergyCalories: null,
-      wearableConfidence: "directional",
-      inferredTdee,
-      estimatedTdeeKcal: inferredTdee,
-      activeBurnKcal: null,
-      movementCaloriesKcal: null,
-      averageCalorieIntake: averageCalories,
-      currentDeficitEstimate:
-        inferredTdee != null ? round(averageCalories - inferredTdee, 0) : null,
-      estimatedDailyEnergyBalanceKcal:
-        inferredTdee != null ? round(averageCalories - inferredTdee, 0) : null
-    },
+    energyModel,
     weightTrend: buildWeightTrend(body),
     bodyCheckins: body,
     appearanceCheckins: appearance,
