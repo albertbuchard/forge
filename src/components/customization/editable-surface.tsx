@@ -105,7 +105,7 @@ function SurfaceWidgetCard({
         data-surface-card="true"
         className={cn(
           "min-w-0",
-          editing && "rounded-[28px] ring-1 ring-white/8 ring-inset"
+          editing && "rounded-[28px] ring-1 ring-[var(--ui-border-subtle)] ring-inset"
         )}
       >
         {children}
@@ -118,21 +118,21 @@ function SurfaceWidgetCard({
       data-surface-card="true"
       className={cn(
         "surface-grid-card flex min-w-0 flex-col gap-3 overflow-visible p-4 md:p-5",
-        editing && "ring-1 ring-white/8"
+        editing && "ring-1 ring-[var(--ui-border-subtle)]"
       )}
     >
       {preferences.titleVisible ||
       (preferences.descriptionVisible && definition.description) ? (
         <div className="min-w-0">
           {preferences.titleVisible ? (
-            <div className="truncate text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-white/40">
+            <div className="truncate text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
               {definition.title}
             </div>
           ) : null}
           {preferences.descriptionVisible &&
           definition.description &&
           !compact ? (
-            <div className="mt-1 text-[12px] leading-5 text-white/52">
+            <div className="mt-1 text-[12px] leading-5 text-[var(--ui-ink-soft)]">
               {definition.description}
             </div>
           ) : null}
@@ -168,11 +168,11 @@ function ArrangementItem({
         transform: CSS.Transform.toString(sortable.transform),
         transition: sortable.transition
       }}
-      className="flex min-w-0 items-center gap-2 rounded-[18px] border border-white/8 bg-white/[0.04] px-3 py-2.5"
+      className="flex min-w-0 items-center gap-2 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-2.5"
     >
       <button
         type="button"
-        className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-white/[0.05] text-white/50 transition hover:bg-white/[0.08] hover:text-white"
+        className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
         aria-label={`Drag ${widget.title}`}
         {...sortable.attributes}
         {...sortable.listeners}
@@ -180,11 +180,11 @@ function ArrangementItem({
         <GripVertical className="size-4" />
       </button>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium text-white">
+        <div className="truncate text-sm font-medium text-[var(--ui-ink-strong)]">
           {widget.title}
         </div>
         {widget.description ? (
-          <div className="truncate text-[12px] text-white/48">
+          <div className="truncate text-[12px] text-[var(--ui-ink-faint)]">
             {widget.description}
           </div>
         ) : null}
@@ -192,7 +192,7 @@ function ArrangementItem({
       <div className="flex shrink-0 items-center gap-1">
         <button
           type="button"
-          className="inline-flex size-8 items-center justify-center rounded-full bg-white/[0.05] text-white/60 transition hover:bg-white/[0.08] hover:text-white disabled:opacity-40"
+          className="inline-flex size-8 items-center justify-center rounded-full bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)] disabled:opacity-40"
           onClick={() => onMove(index - 1)}
           disabled={index === 0}
           aria-label={`Move ${widget.title} up`}
@@ -201,7 +201,7 @@ function ArrangementItem({
         </button>
         <button
           type="button"
-          className="inline-flex size-8 items-center justify-center rounded-full bg-white/[0.05] text-white/60 transition hover:bg-white/[0.08] hover:text-white disabled:opacity-40"
+          className="inline-flex size-8 items-center justify-center rounded-full bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)] disabled:opacity-40"
           onClick={() => onMove(index + 1)}
           disabled={index === total - 1}
           aria-label={`Move ${widget.title} down`}
@@ -213,8 +213,8 @@ function ArrangementItem({
           className={cn(
             "inline-flex h-8 items-center gap-2 rounded-full px-3 text-[12px] transition",
             preferences.fullWidth
-              ? "bg-[var(--primary)] text-slate-950"
-              : "bg-white/[0.05] text-white/72 hover:bg-white/[0.08] hover:text-white"
+              ? "bg-[var(--primary)] text-[var(--ui-ink-on-accent)]"
+              : "bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
           )}
           onClick={onToggleFullWidth}
         >
@@ -228,7 +228,7 @@ function ArrangementItem({
         {widget.removable !== false ? (
           <button
             type="button"
-            className="inline-flex h-8 items-center gap-2 rounded-full bg-white/[0.05] px-3 text-[12px] text-white/72 transition hover:bg-white/[0.08] hover:text-white"
+            className="inline-flex h-8 items-center gap-2 rounded-full bg-[var(--ui-surface-2)] px-3 text-[12px] text-[var(--ui-ink-medium)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
             onClick={onToggleHidden}
           >
             <EyeOff className="size-3.5" />
@@ -463,8 +463,8 @@ export function EditableSurface({
           collisionDetection={closestCenter}
           onDragEnd={handleDragEnd}
         >
-          <div className="grid gap-3 rounded-[24px] border border-white/8 bg-white/[0.03] p-4">
-            <div className="text-[12px] uppercase tracking-[0.16em] text-white/40">
+          <div className="grid gap-3 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+            <div className="text-[12px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
               Visible boxes
             </div>
             <SortableContext
@@ -502,7 +502,7 @@ export function EditableSurface({
             </SortableContext>
             {hiddenWidgets.length > 0 ? (
               <>
-                <div className="pt-2 text-[12px] uppercase tracking-[0.16em] text-white/40">
+                <div className="pt-2 text-[12px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   Hidden boxes
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -510,7 +510,7 @@ export function EditableSurface({
                     <button
                       key={widget.id}
                       type="button"
-                      className="rounded-full bg-white/[0.06] px-3 py-2 text-sm text-white/76 transition hover:bg-white/[0.1] hover:text-white"
+                      className="rounded-full bg-[var(--ui-surface-2)] px-3 py-2 text-sm text-[var(--ui-ink-medium)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                       onClick={() =>
                         patchWidgetPreferences(widget.id, { hidden: false })
                       }
@@ -534,7 +534,7 @@ export function EditableSurface({
                 type="button"
                 size="sm"
                 variant="secondary"
-                className="h-8 rounded-full border-white/10 bg-[rgba(30,39,69,0.82)] px-2.5 text-[12px] text-white/78 backdrop-blur-xl hover:bg-[rgba(37,47,81,0.94)] hover:text-white"
+                className="h-8 rounded-full border-[var(--ui-border-subtle)] bg-[var(--surface-glass)] px-2.5 text-[12px] text-[var(--ui-ink-medium)] backdrop-blur-xl hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                 onClick={handleReset}
               >
                 <RotateCcw className="size-3.5" />
@@ -548,8 +548,8 @@ export function EditableSurface({
               className={cn(
                 "h-8 rounded-full px-2 text-[12px] backdrop-blur-xl [&>span]:gap-1.5",
                 editing
-                  ? "bg-[var(--primary)] text-slate-950 hover:opacity-95"
-                  : "border-white/10 bg-[rgba(30,39,69,0.82)] text-white/78 hover:bg-[rgba(37,47,81,0.94)] hover:text-white"
+                  ? "bg-[var(--primary)] text-[var(--ui-ink-on-accent)] hover:opacity-95"
+                  : "border-[var(--ui-border-subtle)] bg-[var(--surface-glass)] text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
               )}
               onClick={() => setEditing((current) => !current)}
             >

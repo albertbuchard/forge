@@ -18,7 +18,7 @@ export function ProgressMeter({
         : "from-[var(--primary)] to-[rgba(192,193,255,0.45)]";
 
   return (
-    <div className={cn("h-1.5 rounded-full bg-white/[0.08]", className)}>
+    <div className={cn("h-1.5 rounded-full bg-[var(--ui-surface-2)]", className)}>
       <div className={cn("h-full rounded-full bg-gradient-to-r", fillClass)} style={{ width }} />
     </div>
   );

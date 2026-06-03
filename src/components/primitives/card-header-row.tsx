@@ -25,14 +25,14 @@ export function CardHeaderRow({
     >
       <div className="min-w-0 flex-1">
         {eyebrow ? (
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
             {eyebrow}
           </div>
         ) : null}
         <div className={cn("min-w-0", eyebrow && "mt-2")}>
-          <div className="min-w-0 text-lg text-white">{title}</div>
+          <div className="min-w-0 text-lg text-[var(--ui-ink-strong)]">{title}</div>
           {description ? (
-            <div className="mt-2 text-sm leading-6 text-white/58">
+            <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
               {description}
             </div>
           ) : null}

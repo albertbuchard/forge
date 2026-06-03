@@ -27,7 +27,7 @@ export function AmbientActivityPill({
       transition={{ duration: 0.24, ease: "easeOut" }}
       onClick={onClick}
       className={cn(
-        "surface-pulse ambient-glow inline-flex min-h-11 shrink-0 items-center gap-2.5 rounded-full border border-white/8 px-4 py-2 text-left shadow-[0_18px_40px_rgba(3,8,18,0.22)] backdrop-blur-xl transition hover:border-white/14 hover:bg-white/[0.03]",
+        "surface-pulse ambient-glow inline-flex min-h-11 shrink-0 items-center gap-2.5 rounded-full border border-[var(--ui-border-subtle)] px-4 py-2 text-left shadow-[var(--ui-shadow-soft)] backdrop-blur-xl transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]",
         onClick ? "cursor-pointer" : "cursor-default",
         className
       )}
@@ -39,11 +39,11 @@ export function AmbientActivityPill({
         className={active ? "opacity-100" : "opacity-45"}
       />
       <div className="inline-flex min-w-0 max-w-full items-center gap-2 whitespace-nowrap">
-        <span className="type-label hidden text-white/56 sm:inline">
+        <span className="type-label hidden text-[var(--ui-ink-soft)] sm:inline">
           {t("common.labels.backgroundActivity")}
         </span>
-        <span className="hidden text-white/30 sm:inline">•</span>
-        <span className="truncate text-sm text-white/80">{label}</span>
+        <span className="hidden text-[var(--ui-ink-faint)] sm:inline">•</span>
+        <span className="truncate text-sm text-[var(--ui-ink-medium)]">{label}</span>
       </div>
     </motion.button>
   );

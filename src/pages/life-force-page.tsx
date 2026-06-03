@@ -1,6 +1,7 @@
 import { LifeForceOverviewWorkspace } from "@/components/life-force/life-force-workspace";
-import { UserScopeSelector, useForgeShell } from "@/components/shell/app-shell";
+import { useForgeShell } from "@/components/shell/app-shell";
 import { PageHero } from "@/components/shell/page-hero";
+import { UserScopeSelector } from "@/components/shell/user-scope-selector";
 
 export function LifeForcePage() {
   const shell = useForgeShell();

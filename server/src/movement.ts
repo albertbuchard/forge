@@ -1476,6 +1476,83 @@ function decodeMovementTimelineCursor(rawValue?: string) {
   }
 }
 
+function metricNumber(metrics: Record<string, unknown>, key: string) {
+  const metric = metrics[key];
+  if (!metric || typeof metric !== "object") {
+    return null;
+  }
+  const record = metric as Record<string, unknown>;
+  for (const field of ["latest", "average", "total", "maximum"]) {
+    const value = record[field];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function latestKnownBodyMassKg(userId: string) {
+  const nutritionRow = getDatabase()
+    .prepare(
+      `SELECT weight_kg
+       FROM nutrition_body_checkins
+       WHERE user_id = ?
+         AND weight_kg IS NOT NULL
+       ORDER BY checked_at DESC
+       LIMIT 1`
+    )
+    .get(userId) as { weight_kg: number | null } | undefined;
+  if (nutritionRow?.weight_kg && nutritionRow.weight_kg > 0) {
+    return nutritionRow.weight_kg;
+  }
+  const summaryRows = getDatabase()
+    .prepare(
+      `SELECT metrics_json
+       FROM health_daily_summaries
+       WHERE user_id = ?
+         AND summary_type = 'vitals'
+       ORDER BY date_key DESC, updated_at DESC
+       LIMIT 14`
+    )
+    .all(userId) as Array<{ metrics_json: string }>;
+  for (const row of summaryRows) {
+    const metrics = safeJsonParse<Record<string, unknown>>(row.metrics_json, {});
+    const bodyMass = metricNumber(metrics, "bodyMass");
+    if (bodyMass != null && bodyMass > 0) {
+      return bodyMass;
+    }
+  }
+  return 80;
+}
+
+function estimateMovementActiveCalories(input: {
+  userId: string;
+  expectedMet: number | null;
+  movingSeconds: number;
+  startedAt: string;
+  endedAt: string;
+}) {
+  const met = input.expectedMet;
+  if (met == null || met <= 1) {
+    return null;
+  }
+  const seconds =
+    input.movingSeconds > 0
+      ? input.movingSeconds
+      : durationSeconds(input.startedAt, input.endedAt);
+  if (seconds <= 0) {
+    return null;
+  }
+  const bodyMassKg = latestKnownBodyMassKg(input.userId);
+  const activeMet = Math.max(0, met - 1);
+  const minutes = seconds / 60;
+  return {
+    caloriesKcal: round((activeMet * 3.5 * bodyMassKg * minutes) / 200, 0),
+    bodyMassKg,
+    model: "active_met_minus_one_v1"
+  };
+}
+
 function haversineDistanceMeters(
   left: { latitude: number; longitude: number },
   right: { latitude: number; longitude: number }
@@ -2847,6 +2924,28 @@ function upsertMovementTrip(
       parsed.activityType,
       derivedMetrics.averageSpeedMps ?? parsed.averageSpeedMps
     );
+  const estimatedCalories =
+    parsed.caloriesKcal == null
+      ? estimateMovementActiveCalories({
+          userId: pairing.user_id,
+          expectedMet: effectiveExpectedMet,
+          movingSeconds: derivedMetrics.movingSeconds,
+          startedAt: derivedMetrics.startedAt,
+          endedAt: derivedMetrics.endedAt
+        })
+      : null;
+  const effectiveCaloriesKcal =
+    parsed.caloriesKcal ?? estimatedCalories?.caloriesKcal ?? null;
+  const metadata = {
+    ...parsed.metadata,
+    ...(estimatedCalories
+      ? {
+          calorieEstimateModel: estimatedCalories.model,
+          calorieEstimateBodyMassKg: estimatedCalories.bodyMassKg,
+          calorieEstimateSource: "forge_server_ingestion"
+        }
+      : {})
+  };
   const id = existing?.id ?? `mtr_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
   getDatabase()
     .prepare(
@@ -2901,13 +3000,13 @@ function upsertMovementTrip(
       derivedMetrics.idleSeconds,
       derivedMetrics.averageSpeedMps,
       derivedMetrics.maxSpeedMps,
-      parsed.caloriesKcal,
+      effectiveCaloriesKcal,
       effectiveExpectedMet,
       JSON.stringify({}),
       JSON.stringify(uniqStrings(parsed.tags)),
       JSON.stringify(parsed.linkedEntities),
       JSON.stringify(parsed.linkedPeople),
-      JSON.stringify(parsed.metadata),
+      JSON.stringify(metadata),
       existing?.published_note_id ?? null,
       existing?.created_at ?? now,
       now

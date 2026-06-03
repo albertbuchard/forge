@@ -234,6 +234,16 @@ actor HealthSyncStore {
                 displayMultiplier: 1
             ),
             VitalMetricDefinition(
+                key: "activeEnergyBurned",
+                label: "Active energy",
+                category: "activity",
+                identifier: .activeEnergyBurned,
+                unit: .kilocalorie(),
+                displayUnit: "kcal",
+                aggregation: .cumulative,
+                displayMultiplier: 1
+            ),
+            VitalMetricDefinition(
                 key: "basalEnergyBurned",
                 label: "Basal energy",
                 category: "activity",

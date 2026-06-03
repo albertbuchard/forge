@@ -29,7 +29,7 @@ export function FieldHint({
   className?: string;
 }) {
   return (
-    <div className={cn("text-sm leading-6 text-white/50", className)}>
+    <div className={cn("text-sm leading-6 text-[var(--ui-ink-soft)]", className)}>
       {children}
     </div>
   );
@@ -64,13 +64,13 @@ export function InfoTooltip({
             data-state={open ? "open" : "closed"}
             style={panelStyle}
             className={cn(
-              "pointer-events-none fixed z-[9999] grid overflow-y-auto rounded-[8px] border border-white/10 bg-[#0c111e] px-3 py-2.5 text-left font-sans text-sm normal-case leading-6 tracking-normal text-white/74 shadow-[0_18px_48px_rgba(3,8,18,0.42)] transition",
+              "pointer-events-none fixed z-[9999] grid overflow-y-auto rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--surface-glass)] px-3 py-2.5 text-left font-sans text-sm normal-case leading-6 tracking-normal text-[var(--ui-ink-medium)] shadow-[var(--ui-shadow-floating)] backdrop-blur-xl transition",
               open ? "translate-y-0 opacity-100" : "translate-y-1 opacity-0",
               panelClassName
             )}
           >
             {title ? (
-              <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/58">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--ui-ink-soft)]">
                 {title}
               </span>
             ) : null}
@@ -156,7 +156,7 @@ export function InfoTooltip({
         aria-label={label}
         aria-describedby={open ? tooltipId : undefined}
         aria-expanded={open}
-        className="inline-flex size-5 items-center justify-center rounded-full text-white/42 transition hover:bg-white/[0.06] hover:text-white/78 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(192,193,255,0.35)]"
+        className="inline-flex size-5 items-center justify-center rounded-full text-[var(--ui-ink-faint)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-medium)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/35"
         onFocus={() => setOpen(true)}
         onBlur={() => setOpen(false)}
         onClick={() => setOpen((current) => !current)}

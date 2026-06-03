@@ -264,14 +264,14 @@ export function FlowField({
 }) {
   return (
     <label className="grid gap-2">
-      <span className="flex items-center gap-2 text-sm font-medium text-white">
+      <span className="flex items-center gap-2 text-sm font-medium text-[var(--ui-ink-strong)]">
         <span>{label}</span>
         {labelHelp ? (
           <InfoTooltip content={labelHelp} label={`Explain ${label}`} />
         ) : null}
       </span>
       {description ? (
-        <span className="text-sm leading-6 text-white/54">{description}</span>
+        <span className="text-sm leading-6 text-[var(--ui-ink-soft)]">{description}</span>
       ) : null}
       {children}
       {hint ? <FieldHint>{hint}</FieldHint> : null}
@@ -307,14 +307,14 @@ export function FlowChoiceGrid({
             className={cn(
               "rounded-[22px] border px-4 py-4 text-left transition",
               selected
-                ? "border-[rgba(192,193,255,0.28)] bg-[rgba(192,193,255,0.14)] text-white shadow-[0_18px_36px_rgba(5,12,24,0.24)]"
-                : "border-white/8 bg-white/[0.04] text-white/72 hover:bg-white/[0.07]"
+                ? "border-[var(--primary)]/28 bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)] shadow-[var(--ui-shadow-soft)]"
+                : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)]"
             )}
             onClick={() => onChange(option.value)}
           >
             <div className="font-medium">{option.label}</div>
             {option.description ? (
-              <div className="mt-2 text-sm leading-6 text-white/54">
+              <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                 {option.description}
               </div>
             ) : null}
@@ -512,11 +512,11 @@ export function QuestionFlowDialog<TValue>({
   return (
     <Dialog.Root open={open} onOpenChange={handleOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-[rgba(4,8,18,0.72)] backdrop-blur-xl" />
+        <Dialog.Overlay className="surface-overlay fixed inset-0 z-40 backdrop-blur-xl" />
         <Dialog.Content
           data-testid="question-flow-dialog"
           className={cn(
-            "fixed z-50 flex flex-col overflow-hidden border border-white/8 bg-[linear-gradient(180deg,rgba(21,28,44,0.985),rgba(12,17,30,0.985))] shadow-[0_30px_90px_rgba(3,8,18,0.45)]",
+            "surface-modal-panel fixed z-50 flex flex-col overflow-hidden border",
             isMobile
               ? "inset-x-3 bottom-3 top-4 rounded-[30px]"
               : "left-1/2 top-1/2 h-[min(52rem,calc(100vh-1rem))] w-[min(56rem,calc(100vw-1.5rem))] -translate-x-1/2 -translate-y-1/2 rounded-[34px]",
@@ -528,18 +528,18 @@ export function QuestionFlowDialog<TValue>({
             {description}
           </Dialog.Description>
 
-          <div className="sticky top-0 z-10 border-b border-white/8 bg-[rgba(12,17,30,0.9)] px-4 py-2.5 backdrop-blur-xl md:px-6">
+          <div className="sticky top-0 z-10 border-b border-[var(--ui-border-subtle)] bg-[var(--surface-glass)] px-4 py-2.5 backdrop-blur-xl md:px-6">
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.18em] text-white/42">
+                <div className="flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                   <span className="truncate">{eyebrow}</span>
                   <span className="whitespace-nowrap">
                     Step {stepIndex + 1} of {totalSteps}
                   </span>
                 </div>
-                <div className="mt-2 h-1.5 rounded-full bg-white/[0.06]">
+                <div className="mt-2 h-1.5 rounded-full bg-[var(--ui-surface-2)]">
                   <motion.div
-                    className="h-full rounded-full bg-[linear-gradient(90deg,rgba(192,193,255,0.9),rgba(125,211,252,0.82))]"
+                    className="h-full rounded-full bg-[linear-gradient(90deg,var(--primary),var(--secondary))]"
                     animate={{ width: `${progress}%` }}
                     transition={{ duration: 0.35, ease: "easeOut" }}
                   />
@@ -572,11 +572,11 @@ export function QuestionFlowDialog<TValue>({
                       {step.eyebrow}
                     </div>
                   ) : null}
-                  <h3 className="mt-1.5 font-display text-[clamp(1.45rem,2.15vw,2rem)] leading-tight text-white">
+                  <h3 className="mt-1.5 font-display text-[clamp(1.45rem,2.15vw,2rem)] leading-tight text-[var(--ui-ink-strong)]">
                     {step.title}
                   </h3>
                   {step.description ? (
-                    <p className="mt-1.5 max-w-3xl text-sm leading-6 text-white/58">
+                    <p className="mt-1.5 max-w-3xl text-sm leading-6 text-[var(--ui-ink-soft)]">
                       {step.description}
                     </p>
                   ) : null}
@@ -593,9 +593,9 @@ export function QuestionFlowDialog<TValue>({
             </AnimatePresence>
           </div>
 
-          <div className="sticky bottom-0 border-t border-white/8 bg-[rgba(12,17,30,0.92)] px-4 pt-2.5 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur-xl md:px-6 md:pb-3">
+          <div className="sticky bottom-0 border-t border-[var(--ui-border-subtle)] bg-[var(--surface-glass)] px-4 pt-2.5 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur-xl md:px-6 md:pb-3">
             <div className="flex flex-wrap items-center justify-end gap-2 sm:justify-between">
-              <div className="hidden min-w-0 shrink text-[12px] text-white/45 sm:block">
+              <div className="hidden min-w-0 shrink text-[12px] text-[var(--ui-ink-faint)] sm:block">
                 <span className="truncate whitespace-nowrap">
                   Step {stepIndex + 1}/{totalSteps}
                 </span>
