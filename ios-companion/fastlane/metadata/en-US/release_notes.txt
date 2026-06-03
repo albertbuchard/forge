@@ -1,4 +1,4 @@
-Forge Companion 1.0.75 ships the new Forge watchOS command surface and the
+Forge Companion 1.0.76 ships the new Forge watchOS command surface and the
 updated Forge plugin runtime.
 
 The Watch app now uses a wrist-first control model: the Digital Crown selects
