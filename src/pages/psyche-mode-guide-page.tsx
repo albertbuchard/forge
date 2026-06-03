@@ -6,9 +6,16 @@ import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { EmptyState, ErrorState, LoadingState } from "@/components/ui/page-state";
+import {
+  EmptyState,
+  ErrorState,
+  LoadingState
+} from "@/components/ui/page-state";
 import { createModeGuideSession, listModeGuideSessions } from "@/lib/api";
-import { collectQueryCollectionState, retryQueryCollection } from "@/lib/query-collection";
+import {
+  collectQueryCollectionState,
+  retryQueryCollection
+} from "@/lib/query-collection";
 import { modeGuideSessionSchema } from "@/lib/psyche-schemas";
 import type { ModeGuideSessionInput } from "@/lib/psyche-types";
 
@@ -80,13 +87,16 @@ export function PsycheModeGuidePage() {
       return createModeGuideSession(payload);
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["forge-psyche-mode-guide-sessions"] });
+      await queryClient.invalidateQueries({
+        queryKey: ["forge-psyche-mode-guide-sessions"]
+      });
     }
   });
 
   const routeQueries = [sessionsQuery] as const;
   const routeState = collectQueryCollectionState(routeQueries);
-  const latestSession = guideMutation.data?.session ?? sessionsQuery.data?.sessions?.[0];
+  const latestSession =
+    guideMutation.data?.session ?? sessionsQuery.data?.sessions?.[0];
 
   if (routeState.isLoading) {
     return (
@@ -99,7 +109,13 @@ export function PsycheModeGuidePage() {
   }
 
   if (routeState.error) {
-    return <ErrorState eyebrow="Mode guide" error={routeState.error} onRetry={() => void retryQueryCollection(routeQueries)} />;
+    return (
+      <ErrorState
+        eyebrow="Mode guide"
+        error={routeState.error}
+        onRetry={() => void retryQueryCollection(routeQueries)}
+      />
+    );
   }
 
   return (
@@ -118,33 +134,65 @@ export function PsycheModeGuidePage() {
       <PsycheSectionNav />
 
       <section className="grid gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-        <Card className="bg-[linear-gradient(180deg,rgba(16,20,30,0.96),rgba(11,15,24,0.94))]">
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">Guided questionnaire</div>
-          <form className="mt-4 grid gap-5" onSubmit={form.handleSubmit(async (values) => guideMutation.mutateAsync(values))}>
+        <Card className="bg-[var(--ui-surface-section)]">
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+            Guided questionnaire
+          </div>
+          <form
+            className="mt-4 grid gap-5"
+            onSubmit={form.handleSubmit(async (values) =>
+              guideMutation.mutateAsync(values)
+            )}
+          >
             <label className="grid gap-2">
               <span className="text-sm text-[var(--ui-ink-soft)]">Prompt</span>
-              <input className="w-full rounded-2xl border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3 text-sm text-[var(--ui-ink-strong)] outline-none placeholder:text-[var(--ui-ink-strong)]/35" {...form.register("summary")} />
+              <input
+                className="w-full rounded-2xl border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3 text-sm text-[var(--ui-ink-strong)] outline-none placeholder:text-[var(--ui-ink-muted)]"
+                {...form.register("summary")}
+              />
             </label>
 
-            <Card className="rounded-[24px] bg-[rgba(248,113,113,0.08)] p-4">
-              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-rose-100/80">When the pressure rose, what coping move dominated?</div>
+            <Card className="rounded-[24px] bg-[var(--ui-danger-soft)] p-4">
+              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]">
+                When the pressure rose, what coping move dominated?
+              </div>
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 {OPTIONS.copingResponse.map((option) => (
-                  <label key={option.value} className="flex items-center gap-3 rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3">
-                    <input type="radio" value={option.value} {...form.register("copingResponse")} />
-                    <span className="text-[var(--ui-ink-medium)]">{option.label}</span>
+                  <label
+                    key={option.value}
+                    className="flex items-center gap-3 rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3"
+                  >
+                    <input
+                      type="radio"
+                      value={option.value}
+                      {...form.register("copingResponse")}
+                    />
+                    <span className="text-[var(--ui-ink-medium)]">
+                      {option.label}
+                    </span>
                   </label>
                 ))}
               </div>
             </Card>
 
-            <Card className="rounded-[24px] bg-[rgba(196,181,253,0.08)] p-4">
-              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-violet-100/80">Which child state felt closest?</div>
+            <Card className="rounded-[24px] bg-[color-mix(in_srgb,var(--primary)_8%,var(--ui-surface-1)_92%)] p-4">
+              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--primary)]">
+                Which child state felt closest?
+              </div>
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 {OPTIONS.childState.map((option) => (
-                  <label key={option.value} className="flex items-center gap-3 rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3">
-                    <input type="radio" value={option.value} {...form.register("childState")} />
-                    <span className="text-[var(--ui-ink-medium)]">{option.label}</span>
+                  <label
+                    key={option.value}
+                    className="flex items-center gap-3 rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3"
+                  >
+                    <input
+                      type="radio"
+                      value={option.value}
+                      {...form.register("childState")}
+                    />
+                    <span className="text-[var(--ui-ink-medium)]">
+                      {option.label}
+                    </span>
                   </label>
                 ))}
               </div>
@@ -152,24 +200,46 @@ export function PsycheModeGuidePage() {
 
             <div className="grid gap-4 md:grid-cols-2">
               <Card className="rounded-[24px] bg-[var(--ui-surface-1)] p-4">
-                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">What was the critic like?</div>
+                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+                  What was the critic like?
+                </div>
                 <div className="mt-3 grid gap-2">
                   {OPTIONS.criticStyle.map((option) => (
-                    <label key={option.value} className="flex items-center gap-3 rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3">
-                      <input type="radio" value={option.value} {...form.register("criticStyle")} />
-                      <span className="text-[var(--ui-ink-medium)]">{option.label}</span>
+                    <label
+                      key={option.value}
+                      className="flex items-center gap-3 rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3"
+                    >
+                      <input
+                        type="radio"
+                        value={option.value}
+                        {...form.register("criticStyle")}
+                      />
+                      <span className="text-[var(--ui-ink-medium)]">
+                        {option.label}
+                      </span>
                     </label>
                   ))}
                 </div>
               </Card>
 
               <Card className="rounded-[24px] bg-[var(--ui-surface-1)] p-4">
-                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">What healthy contact was still reachable?</div>
+                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+                  What healthy contact was still reachable?
+                </div>
                 <div className="mt-3 grid gap-2">
                   {OPTIONS.healthyContact.map((option) => (
-                    <label key={option.value} className="flex items-center gap-3 rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3">
-                      <input type="radio" value={option.value} {...form.register("healthyContact")} />
-                      <span className="text-[var(--ui-ink-medium)]">{option.label}</span>
+                    <label
+                      key={option.value}
+                      className="flex items-center gap-3 rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3"
+                    >
+                      <input
+                        type="radio"
+                        value={option.value}
+                        {...form.register("healthyContact")}
+                      />
+                      <span className="text-[var(--ui-ink-medium)]">
+                        {option.label}
+                      </span>
                     </label>
                   ))}
                 </div>
@@ -181,8 +251,10 @@ export function PsycheModeGuidePage() {
         </Card>
 
         <div className="grid gap-5">
-          <Card className="bg-[linear-gradient(180deg,rgba(15,21,34,0.96),rgba(10,15,23,0.94))]">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">Latest reading</div>
+          <Card className="bg-[var(--ui-surface-section)]">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+              Latest reading
+            </div>
             {!latestSession ? (
               <div className="mt-4">
                 <EmptyState
@@ -194,13 +266,24 @@ export function PsycheModeGuidePage() {
             ) : (
               <div className="mt-4 grid gap-3">
                 {latestSession.results.map((result) => (
-                  <div key={`${result.family}:${result.label}`} className="rounded-[22px] bg-[var(--ui-surface-1)] p-4">
+                  <div
+                    key={`${result.family}:${result.label}`}
+                    className="rounded-[22px] bg-[var(--ui-surface-1)] p-4"
+                  >
                     <div className="flex items-center justify-between gap-3">
-                      <div className="font-medium text-[var(--ui-ink-strong)]">{result.label}</div>
-                      <Badge className="text-[var(--ui-ink-medium)]">{Math.round(result.confidence * 100)}%</Badge>
+                      <div className="font-medium text-[var(--ui-ink-strong)]">
+                        {result.label}
+                      </div>
+                      <Badge className="text-[var(--ui-ink-medium)]">
+                        {Math.round(result.confidence * 100)}%
+                      </Badge>
                     </div>
-                    <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">{result.family.replaceAll("_", " ")}</div>
-                    <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-medium)]">{result.reasoning}</div>
+                    <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
+                      {result.family.replaceAll("_", " ")}
+                    </div>
+                    <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-medium)]">
+                      {result.reasoning}
+                    </div>
                   </div>
                 ))}
                 <Link to="/psyche/modes">
@@ -211,7 +294,9 @@ export function PsycheModeGuidePage() {
           </Card>
 
           <Card>
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">Session history</div>
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+              Session history
+            </div>
             <div className="mt-4 grid gap-3">
               {(sessionsQuery.data?.sessions ?? []).length === 0 ? (
                 <EmptyState
@@ -221,11 +306,19 @@ export function PsycheModeGuidePage() {
                 />
               ) : (
                 (sessionsQuery.data?.sessions ?? []).map((session) => (
-                  <div key={session.id} className="rounded-[20px] bg-[var(--ui-surface-1)] p-4">
-                    <div className="font-medium text-[var(--ui-ink-strong)]">{session.summary}</div>
+                  <div
+                    key={session.id}
+                    className="rounded-[20px] bg-[var(--ui-surface-1)] p-4"
+                  >
+                    <div className="font-medium text-[var(--ui-ink-strong)]">
+                      {session.summary}
+                    </div>
                     <div className="mt-3 flex flex-wrap gap-2">
                       {session.results.map((result) => (
-                        <Badge key={`${session.id}:${result.label}`} className="text-[var(--ui-ink-medium)]">
+                        <Badge
+                          key={`${session.id}:${result.label}`}
+                          className="text-[var(--ui-ink-medium)]"
+                        >
                           {result.label}
                         </Badge>
                       ))}
