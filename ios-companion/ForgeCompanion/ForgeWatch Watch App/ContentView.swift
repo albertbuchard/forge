@@ -2,8 +2,9 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject private var appModel: WatchAppModel
-    @State private var crownValue = 0.0
+    @StateObject private var navigation = WatchNavigationModel()
     @State private var selectedHabit: ForgeWatchHabitSummary?
+    @State private var selectedCommand: WatchCommandModalItem?
 
     private let surfaces = WatchSurface.allCases
 
@@ -15,20 +16,22 @@ struct ContentView: View {
                 header
 
                 WatchSurfacePager(
-                    surface: appModel.selectedSurface,
+                    surface: navigation.selectedSurface,
+                    navigation: navigation,
                     bootstrap: appModel.bootstrap,
                     onHabitTap: { selectedHabit = $0 },
+                    onCommandTap: { selectedCommand = $0 },
                     onCommand: appModel.queueCommand,
                     onCapture: appModel.queueCaptureEvent
                 )
-                .id(appModel.selectedSurface)
+                .id(navigation.selectedSurface)
                 .transition(.opacity.combined(with: .scale(scale: 0.97)))
             }
             .padding(.horizontal, 8)
             .padding(.top, 2)
         }
         .digitalCrownRotation(
-            $crownValue,
+            $navigation.crownValue,
             from: 0,
             through: Double(max(0, surfaces.count - 1)),
             by: 1,
@@ -38,27 +41,33 @@ struct ContentView: View {
         )
         .onAppear {
             appModel.consumePendingLaunchDestination()
-            crownValue = Double(surfaceIndex(appModel.selectedSurface))
+            navigation.selectSurface(appModel.selectedSurface)
         }
-        .onChange(of: crownValue) { _, value in
-            let index = min(max(Int(value.rounded()), 0), surfaces.count - 1)
+        .onChange(of: navigation.crownValue) { _, value in
             withAnimation(.snappy(duration: 0.22)) {
-                appModel.selectedSurface = surfaces[index]
+                navigation.selectSurfaceFromCrown(value)
             }
         }
         .onChange(of: appModel.selectedSurface) { _, surface in
-            crownValue = Double(surfaceIndex(surface))
+            navigation.selectSurface(surface)
+        }
+        .onChange(of: navigation.selectedSurface) { _, surface in
+            appModel.selectedSurface = surface
+            navigation.crownValue = Double(surfaceIndex(surface))
         }
         .sheet(item: $selectedHabit) { habit in
             WatchHabitActionView(habit: habit)
                 .environmentObject(appModel)
+        }
+        .sheet(item: $selectedCommand) { item in
+            WatchCommandModalView(item: item)
         }
     }
 
     private var header: some View {
         HStack(alignment: .center, spacing: 8) {
             VStack(alignment: .leading, spacing: 1) {
-                Text(surfaceTitle(appModel.selectedSurface))
+                Text(surfaceTitle(navigation.selectedSurface))
                     .font(.system(size: 18, weight: .bold, design: .rounded))
                     .foregroundStyle(WatchTheme.textPrimary)
                     .lineLimit(1)
@@ -71,7 +80,7 @@ struct ContentView: View {
 
             Spacer(minLength: 4)
 
-            Text("\(surfaceIndex(appModel.selectedSurface) + 1)/\(surfaces.count)")
+            Text("\(surfaceIndex(navigation.selectedSurface) + 1)/\(surfaces.count)")
                 .font(.system(size: 10, weight: .bold, design: .rounded))
                 .foregroundStyle(WatchTheme.accent)
                 .padding(.horizontal, 8)
@@ -91,10 +100,107 @@ struct ContentView: View {
     }
 }
 
+@MainActor
+private final class WatchNavigationModel: ObservableObject {
+    @Published var selectedSurface: WatchSurface = .now
+    @Published var crownValue = 0.0
+
+    private var selectedCardIndexes: [WatchSurface: Int] = [:]
+    private var cardCounts: [WatchSurface: Int] = [:]
+    private let surfaces = WatchSurface.allCases
+
+    func selectSurface(_ surface: WatchSurface) {
+        selectedSurface = surface
+        crownValue = Double(surfaceIndex(surface))
+        clampCardIndex(for: surface)
+    }
+
+    func selectSurfaceFromCrown(_ value: Double) {
+        let index = min(max(Int(value.rounded()), 0), surfaces.count - 1)
+        selectSurface(surfaces[index])
+    }
+
+    func cardIndexBinding(for surface: WatchSurface) -> Binding<Int> {
+        Binding(
+            get: { [weak self] in self?.selectedCardIndexes[surface] ?? 0 },
+            set: { [weak self] value in self?.setCardIndex(value, for: surface) }
+        )
+    }
+
+    func registerCardCount(_ count: Int, for surface: WatchSurface) {
+        cardCounts[surface] = max(1, count)
+        clampCardIndex(for: surface)
+    }
+
+    private func setCardIndex(_ value: Int, for surface: WatchSurface) {
+        let maxIndex = max(0, (cardCounts[surface] ?? 1) - 1)
+        selectedCardIndexes[surface] = min(max(value, 0), maxIndex)
+    }
+
+    private func clampCardIndex(for surface: WatchSurface) {
+        setCardIndex(selectedCardIndexes[surface] ?? 0, for: surface)
+    }
+
+    private func surfaceIndex(_ surface: WatchSurface) -> Int {
+        surfaces.firstIndex(of: surface) ?? 0
+    }
+}
+
+private struct WatchCommandModalAction: Identifiable {
+    let id: String
+    let title: String
+    let systemImage: String
+    let tint: Color
+    let perform: () -> Void
+}
+
+private struct WatchCommandModalItem: Identifiable {
+    let id: String
+    let title: String
+    let subtitle: String
+    let actions: [WatchCommandModalAction]
+}
+
+private struct WatchCommandModalView: View {
+    @Environment(\.dismiss) private var dismiss
+    let item: WatchCommandModalItem
+
+    var body: some View {
+        WatchSurfaceBackground()
+            .overlay {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(item.title)
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .foregroundStyle(WatchTheme.textPrimary)
+                        .lineLimit(3)
+                    Text(item.subtitle)
+                        .font(.system(size: 10, weight: .medium, design: .rounded))
+                        .foregroundStyle(WatchTheme.textMuted)
+                        .lineLimit(2)
+
+                    ForEach(item.actions) { action in
+                        Button {
+                            action.perform()
+                            dismiss()
+                        } label: {
+                            Label(action.title, systemImage: action.systemImage)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(action.tint)
+                    }
+                }
+                .padding(10)
+            }
+    }
+}
+
 private struct WatchSurfacePager: View {
     let surface: WatchSurface
+    @ObservedObject var navigation: WatchNavigationModel
     let bootstrap: ForgeWatchBootstrap
     let onHabitTap: (ForgeWatchHabitSummary) -> Void
+    let onCommandTap: (WatchCommandModalItem) -> Void
     let onCommand: (ForgeWatchActionKind, [String: String]) -> Void
     let onCapture: (String, String?, ForgeWatchLinkedContext, [String: String]) -> Void
 
@@ -102,40 +208,172 @@ private struct WatchSurfacePager: View {
         Group {
             switch surface {
             case .now:
-                NowSurface(bootstrap: bootstrap, onCommand: onCommand)
+                NowSurface(
+                    bootstrap: bootstrap,
+                    selection: navigation.cardIndexBinding(for: surface),
+                    onCommandTap: onCommandTap,
+                    onCommand: onCommand
+                )
             case .work:
-                WorkSurface(work: bootstrap.work, onCommand: onCommand)
+                WorkSurface(
+                    work: bootstrap.work,
+                    selection: navigation.cardIndexBinding(for: surface),
+                    onCommandTap: onCommandTap,
+                    onCommand: onCommand
+                )
             case .habits:
-                HabitSurface(habits: bootstrap.habits, onHabitTap: onHabitTap)
+                HabitSurface(
+                    habits: bootstrap.habits,
+                    selection: navigation.cardIndexBinding(for: surface),
+                    onHabitTap: onHabitTap
+                )
             case .goals:
-                GoalSurface(goals: bootstrap.goals ?? [], projects: bootstrap.projects ?? [])
+                GoalSurface(
+                    goals: bootstrap.goals ?? [],
+                    projects: bootstrap.projects ?? [],
+                    selection: navigation.cardIndexBinding(for: surface)
+                )
             case .today:
-                TodaySurface(today: bootstrap.today, onCommand: onCommand)
+                TodaySurface(
+                    today: bootstrap.today,
+                    selection: navigation.cardIndexBinding(for: surface),
+                    onCommandTap: onCommandTap,
+                    onCommand: onCommand
+                )
             case .health:
-                HealthSurface(health: bootstrap.health)
+                HealthSurface(health: bootstrap.health, selection: navigation.cardIndexBinding(for: surface))
             case .movement:
-                MovementSurface(movement: bootstrap.movement)
+                MovementSurface(movement: bootstrap.movement, selection: navigation.cardIndexBinding(for: surface))
             case .psyche:
-                PsycheSurface(psyche: bootstrap.psyche, onCapture: onCapture)
+                PsycheSurface(
+                    psyche: bootstrap.psyche,
+                    selection: navigation.cardIndexBinding(for: surface),
+                    onCapture: onCapture
+                )
             case .inbox:
-                InboxSurface(prompts: bootstrap.inbox?.prompts ?? bootstrap.pendingPrompts, onCapture: onCapture)
+                InboxSurface(
+                    prompts: bootstrap.inbox?.prompts ?? bootstrap.pendingPrompts,
+                    selection: navigation.cardIndexBinding(for: surface),
+                    onCapture: onCapture
+                )
             case .sync:
                 SyncSurface(sync: bootstrap.sync)
             }
         }
         .animation(.snappy(duration: 0.24), value: surface)
+        .onAppear {
+            navigation.registerCardCount(cardCount, for: surface)
+        }
+        .onChange(of: cardCount) { _, count in
+            navigation.registerCardCount(count, for: surface)
+        }
+    }
+
+    private var cardCount: Int {
+        switch surface {
+        case .now:
+            return 1 + ((bootstrap.now?.currentRun ?? bootstrap.work?.currentRun) == nil ? 0 : 1)
+        case .work:
+            return max(1, (bootstrap.work?.lanes.count ?? 0) + (bootstrap.work?.currentRun == nil ? 0 : 1))
+        case .habits:
+            return max(1, bootstrap.habits.count)
+        case .goals:
+            return max(1, (bootstrap.goals?.count ?? 0) + (bootstrap.projects?.count ?? 0))
+        case .today:
+            return max(1, 1 + (bootstrap.today?.dueTasks.count ?? 0))
+        case .health:
+            return max(1, 1 + (bootstrap.health?.lastWorkout == nil ? 0 : 1))
+        case .movement:
+            return max(
+                1,
+                1 + (bootstrap.movement?.latestTrip == nil ? 0 : 1) + (bootstrap.movement?.latestStay == nil ? 0 : 1)
+            )
+        case .psyche:
+            return 3
+        case .inbox:
+            return max(1, (bootstrap.inbox?.prompts ?? bootstrap.pendingPrompts).count)
+        case .sync:
+            return 1
+        }
     }
 }
 
 private struct SurfaceCarousel<Content: View>: View {
-    @ViewBuilder let content: Content
+    @Binding var selection: Int
+    let count: Int
+    private let content: () -> Content
+
+    init(selection: Binding<Int>, count: Int, @ViewBuilder content: @escaping () -> Content) {
+        self._selection = selection
+        self.count = count
+        self.content = content
+    }
 
     var body: some View {
-        TabView {
-            content
+        TabView(selection: $selection) {
+            content()
         }
         .tabViewStyle(.carousel)
+        .onAppear(perform: clampSelection)
+        .onChange(of: count) { _, _ in clampSelection() }
     }
+
+    private func clampSelection() {
+        selection = min(max(selection, 0), max(0, count - 1))
+    }
+}
+
+private func taskCommandModal(
+    task: ForgeWatchTaskSummary,
+    onCommand: @escaping (ForgeWatchActionKind, [String: String]) -> Void
+) -> WatchCommandModalItem {
+    WatchCommandModalItem(
+        id: "task:\(task.id)",
+        title: task.title,
+        subtitle: task.status.replacingOccurrences(of: "_", with: " ").capitalized,
+        actions: [
+            WatchCommandModalAction(id: "start", title: "Start", systemImage: "play.fill", tint: WatchTheme.success) {
+                onCommand(.taskRunStart, ["taskId": task.id])
+            },
+            WatchCommandModalAction(id: "focus", title: "Focus", systemImage: "scope", tint: WatchTheme.accent) {
+                onCommand(.taskStatusUpdate, ["taskId": task.id, "status": "focus"])
+            },
+            WatchCommandModalAction(id: "progress", title: "In progress", systemImage: "arrow.right.circle.fill", tint: WatchTheme.accent) {
+                onCommand(.taskStatusUpdate, ["taskId": task.id, "status": "in_progress"])
+            },
+            WatchCommandModalAction(id: "blocked", title: "Blocked", systemImage: "exclamationmark.triangle.fill", tint: .orange) {
+                onCommand(.taskStatusUpdate, ["taskId": task.id, "status": "blocked"])
+            },
+            WatchCommandModalAction(id: "done", title: "Done", systemImage: "checkmark.circle.fill", tint: WatchTheme.success) {
+                onCommand(.taskStatusUpdate, ["taskId": task.id, "status": "done"])
+            }
+        ]
+    )
+}
+
+private func runCommandModal(
+    run: ForgeWatchTaskRunSummary,
+    onCommand: @escaping (ForgeWatchActionKind, [String: String]) -> Void
+) -> WatchCommandModalItem {
+    WatchCommandModalItem(
+        id: "run:\(run.id)",
+        title: run.taskTitle,
+        subtitle: "Active run · \(formatSeconds(run.creditedSeconds)) credited",
+        actions: [
+            WatchCommandModalAction(id: "heartbeat", title: "Keep alive", systemImage: "arrow.clockwise", tint: WatchTheme.accent) {
+                onCommand(.taskRunHeartbeat, ["runId": run.id])
+            },
+            WatchCommandModalAction(id: "focus", title: "Focus", systemImage: "scope", tint: WatchTheme.accent) {
+                onCommand(.taskRunFocus, ["runId": run.id])
+            },
+            WatchCommandModalAction(id: "complete", title: "Complete", systemImage: "checkmark.circle.fill", tint: WatchTheme.success) {
+                onCommand(.taskRunComplete, ["runId": run.id])
+            },
+            WatchCommandModalAction(id: "pause", title: "Pause", systemImage: "pause.fill", tint: .orange) {
+                onCommand(.taskRunRelease, ["runId": run.id])
+            }
+        ]
+    )
 }
 
 private struct DenseMetric: View {
@@ -182,10 +420,13 @@ private struct EmptySurfaceCard: View {
 
 private struct NowSurface: View {
     let bootstrap: ForgeWatchBootstrap
+    @Binding var selection: Int
+    let onCommandTap: (WatchCommandModalItem) -> Void
     let onCommand: (ForgeWatchActionKind, [String: String]) -> Void
 
     var body: some View {
-        SurfaceCarousel {
+        let run = bootstrap.now?.currentRun ?? bootstrap.work?.currentRun
+        SurfaceCarousel(selection: $selection, count: run == nil ? 1 : 2) {
             WatchCard {
                 VStack(alignment: .leading, spacing: 9) {
                     Text("Command Center")
@@ -197,23 +438,29 @@ private struct NowSurface: View {
                     }
                     if let task = bootstrap.now?.nextTask ?? bootstrap.work?.nextTask {
                         Divider().background(WatchTheme.border)
-                        Text(task.title)
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundStyle(WatchTheme.textPrimary)
-                            .lineLimit(3)
                         Button {
-                            onCommand(.taskRunStart, ["taskId": task.id])
+                            onCommandTap(taskCommandModal(task: task, onCommand: onCommand))
                         } label: {
-                            Label("Start", systemImage: "play.fill")
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(task.title)
+                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(WatchTheme.textPrimary)
+                                    .lineLimit(3)
+                                Label("Tap for task actions", systemImage: "ellipsis.circle")
+                                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                                    .foregroundStyle(WatchTheme.accent)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(WatchTheme.accent)
+                        .buttonStyle(.plain)
                     }
                 }
             }
+            .tag(0)
 
-            if let run = bootstrap.now?.currentRun ?? bootstrap.work?.currentRun {
-                RunCard(run: run, onCommand: onCommand)
+            if let run {
+                RunCard(run: run, onCommandTap: onCommandTap, onCommand: onCommand)
+                    .tag(1)
             }
         }
     }
@@ -221,16 +468,21 @@ private struct NowSurface: View {
 
 private struct WorkSurface: View {
     let work: ForgeWatchWorkSnapshot?
+    @Binding var selection: Int
+    let onCommandTap: (WatchCommandModalItem) -> Void
     let onCommand: (ForgeWatchActionKind, [String: String]) -> Void
 
     var body: some View {
         if let work {
-            SurfaceCarousel {
+            SurfaceCarousel(selection: $selection, count: max(1, work.lanes.count + (work.currentRun == nil ? 0 : 1))) {
+                let runOffset = work.currentRun == nil ? 0 : 1
                 if let current = work.currentRun {
-                    RunCard(run: current, onCommand: onCommand)
+                    RunCard(run: current, onCommandTap: onCommandTap, onCommand: onCommand)
+                        .tag(0)
                 }
-                ForEach(work.lanes) { lane in
-                    LaneCard(lane: lane, onCommand: onCommand)
+                ForEach(Array(work.lanes.enumerated()), id: \.element.id) { index, lane in
+                    LaneCard(lane: lane, onCommandTap: onCommandTap, onCommand: onCommand)
+                        .tag(index + runOffset)
                 }
             }
         } else {
@@ -241,47 +493,39 @@ private struct WorkSurface: View {
 
 private struct RunCard: View {
     let run: ForgeWatchTaskRunSummary
+    let onCommandTap: (WatchCommandModalItem) -> Void
     let onCommand: (ForgeWatchActionKind, [String: String]) -> Void
 
     var body: some View {
-        WatchCard {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Active Run")
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundStyle(WatchTheme.accent)
-                Text(run.taskTitle)
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
-                    .foregroundStyle(WatchTheme.textPrimary)
-                    .lineLimit(3)
-                HStack(spacing: 8) {
-                    DenseMetric(title: "Credited", value: formatSeconds(run.creditedSeconds), tint: WatchTheme.success)
-                    DenseMetric(title: "Mode", value: run.timerMode.capitalized, tint: WatchTheme.accent)
+        Button {
+            onCommandTap(runCommandModal(run: run, onCommand: onCommand))
+        } label: {
+            WatchCard {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Active Run")
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .foregroundStyle(WatchTheme.accent)
+                    Text(run.taskTitle)
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .foregroundStyle(WatchTheme.textPrimary)
+                        .lineLimit(3)
+                    HStack(spacing: 8) {
+                        DenseMetric(title: "Credited", value: formatSeconds(run.creditedSeconds), tint: WatchTheme.success)
+                        DenseMetric(title: "Mode", value: run.timerMode.capitalized, tint: WatchTheme.accent)
+                    }
+                    Label("Tap for run actions", systemImage: "ellipsis.circle")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundStyle(WatchTheme.accent)
                 }
-                HStack {
-                    Button {
-                        onCommand(.taskRunHeartbeat, ["runId": run.id])
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    Button {
-                        onCommand(.taskRunComplete, ["runId": run.id])
-                    } label: {
-                        Image(systemName: "checkmark")
-                    }
-                    Button {
-                        onCommand(.taskRunRelease, ["runId": run.id])
-                    } label: {
-                        Image(systemName: "pause.fill")
-                    }
-                }
-                .buttonStyle(.bordered)
             }
         }
+        .buttonStyle(.plain)
     }
 }
 
 private struct LaneCard: View {
     let lane: ForgeWatchWorkLane
+    let onCommandTap: (WatchCommandModalItem) -> Void
     let onCommand: (ForgeWatchActionKind, [String: String]) -> Void
 
     var body: some View {
@@ -298,31 +542,21 @@ private struct LaneCard: View {
                 }
 
                 ForEach(lane.tasks.prefix(3)) { task in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(task.title)
-                            .font(.system(size: 11, weight: .semibold, design: .rounded))
-                            .foregroundStyle(WatchTheme.textPrimary)
-                            .lineLimit(2)
-                        HStack {
-                            Button {
-                                onCommand(.taskRunStart, ["taskId": task.id])
-                            } label: {
-                                Image(systemName: "play.fill")
-                            }
-                            Button {
-                                onCommand(.taskStatusUpdate, ["taskId": task.id, "status": "focus"])
-                            } label: {
-                                Image(systemName: "scope")
-                            }
-                            Button {
-                                onCommand(.taskStatusUpdate, ["taskId": task.id, "status": "done"])
-                            } label: {
-                                Image(systemName: "checkmark")
-                            }
+                    Button {
+                        onCommandTap(taskCommandModal(task: task, onCommand: onCommand))
+                    } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(task.title)
+                                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                .foregroundStyle(WatchTheme.textPrimary)
+                                .lineLimit(2)
+                            Label(task.status.replacingOccurrences(of: "_", with: " ").capitalized, systemImage: "ellipsis.circle")
+                                .font(.system(size: 9, weight: .bold, design: .rounded))
+                                .foregroundStyle(WatchTheme.accent)
                         }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(WatchTheme.accent)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    .buttonStyle(.plain)
                     Divider().background(WatchTheme.border)
                 }
             }
@@ -332,14 +566,15 @@ private struct LaneCard: View {
 
 private struct HabitSurface: View {
     let habits: [ForgeWatchHabitSummary]
+    @Binding var selection: Int
     let onHabitTap: (ForgeWatchHabitSummary) -> Void
 
     var body: some View {
         if habits.isEmpty {
             EmptySurfaceCard(title: "No habits loaded", message: "Forge will send active habits to the watch after the next iPhone refresh.")
         } else {
-            SurfaceCarousel {
-                ForEach(habits) { habit in
+            SurfaceCarousel(selection: $selection, count: habits.count) {
+                ForEach(Array(habits.enumerated()), id: \.element.id) { index, habit in
                     Button {
                         onHabitTap(habit)
                     } label: {
@@ -364,6 +599,7 @@ private struct HabitSurface: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .tag(index)
                 }
             }
         }
@@ -373,40 +609,48 @@ private struct HabitSurface: View {
 private struct GoalSurface: View {
     let goals: [ForgeWatchGoalSummary]
     let projects: [ForgeWatchProjectSummary]
+    @Binding var selection: Int
 
     var body: some View {
-        SurfaceCarousel {
-            ForEach(goals) { goal in
-                WatchCard {
-                    VStack(alignment: .leading, spacing: 7) {
-                        Text(goal.horizon.capitalized)
-                            .font(.system(size: 10, weight: .bold, design: .rounded))
-                            .foregroundStyle(WatchTheme.accent)
-                        Text(goal.title)
-                            .font(.system(size: 15, weight: .bold, design: .rounded))
-                            .foregroundStyle(WatchTheme.textPrimary)
-                            .lineLimit(4)
-                        Text("\(goal.targetPoints) target pts")
-                            .font(.system(size: 11, weight: .medium, design: .rounded))
-                            .foregroundStyle(WatchTheme.textMuted)
-                    }
-                }
-            }
-            ForEach(projects) { project in
-                WatchCard {
-                    VStack(alignment: .leading, spacing: 7) {
-                        Text(project.workflowStatus.capitalized)
-                            .font(.system(size: 10, weight: .bold, design: .rounded))
-                            .foregroundStyle(WatchTheme.success)
-                        Text(project.title)
-                            .font(.system(size: 15, weight: .bold, design: .rounded))
-                            .foregroundStyle(WatchTheme.textPrimary)
-                            .lineLimit(4)
-                        HStack {
-                            DenseMetric(title: "Open", value: "\(project.openTaskCount)", tint: WatchTheme.accent)
-                            DenseMetric(title: "Runs", value: "\(project.activeRunCount)", tint: WatchTheme.success)
+        let count = goals.count + projects.count
+        if count == 0 {
+            EmptySurfaceCard(title: "No goals loaded", message: "The iPhone bridge will send active goals and projects after Forge refreshes.")
+        } else {
+            SurfaceCarousel(selection: $selection, count: count) {
+                ForEach(Array(goals.enumerated()), id: \.element.id) { index, goal in
+                    WatchCard {
+                        VStack(alignment: .leading, spacing: 7) {
+                            Text(goal.horizon.capitalized)
+                                .font(.system(size: 10, weight: .bold, design: .rounded))
+                                .foregroundStyle(WatchTheme.accent)
+                            Text(goal.title)
+                                .font(.system(size: 15, weight: .bold, design: .rounded))
+                                .foregroundStyle(WatchTheme.textPrimary)
+                                .lineLimit(4)
+                            Text("\(goal.targetPoints) target pts")
+                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .foregroundStyle(WatchTheme.textMuted)
                         }
                     }
+                    .tag(index)
+                }
+                ForEach(Array(projects.enumerated()), id: \.element.id) { index, project in
+                    WatchCard {
+                        VStack(alignment: .leading, spacing: 7) {
+                            Text(project.workflowStatus.capitalized)
+                                .font(.system(size: 10, weight: .bold, design: .rounded))
+                                .foregroundStyle(WatchTheme.success)
+                            Text(project.title)
+                                .font(.system(size: 15, weight: .bold, design: .rounded))
+                                .foregroundStyle(WatchTheme.textPrimary)
+                                .lineLimit(4)
+                            HStack {
+                                DenseMetric(title: "Open", value: "\(project.openTaskCount)", tint: WatchTheme.accent)
+                                DenseMetric(title: "Runs", value: "\(project.activeRunCount)", tint: WatchTheme.success)
+                            }
+                        }
+                    }
+                    .tag(goals.count + index)
                 }
             }
         }
@@ -415,11 +659,13 @@ private struct GoalSurface: View {
 
 private struct TodaySurface: View {
     let today: ForgeWatchTodaySnapshot?
+    @Binding var selection: Int
+    let onCommandTap: (WatchCommandModalItem) -> Void
     let onCommand: (ForgeWatchActionKind, [String: String]) -> Void
 
     var body: some View {
         if let today {
-            SurfaceCarousel {
+            SurfaceCarousel(selection: $selection, count: 1 + today.dueTasks.count) {
                 WatchCard {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(today.dateKey)
@@ -431,22 +677,25 @@ private struct TodaySurface: View {
                         }
                     }
                 }
-                ForEach(today.dueTasks) { task in
-                    WatchCard {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(task.title)
-                                .font(.system(size: 14, weight: .bold, design: .rounded))
-                                .foregroundStyle(WatchTheme.textPrimary)
-                                .lineLimit(4)
-                            Button {
-                                onCommand(.taskRunStart, ["taskId": task.id])
-                            } label: {
-                                Label("Start", systemImage: "play.fill")
+                .tag(0)
+                ForEach(Array(today.dueTasks.enumerated()), id: \.element.id) { index, task in
+                    Button {
+                        onCommandTap(taskCommandModal(task: task, onCommand: onCommand))
+                    } label: {
+                        WatchCard {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(task.title)
+                                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                                    .foregroundStyle(WatchTheme.textPrimary)
+                                    .lineLimit(4)
+                                Label("Tap for task actions", systemImage: "ellipsis.circle")
+                                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                                    .foregroundStyle(WatchTheme.accent)
                             }
-                            .buttonStyle(.borderedProminent)
-                            .tint(WatchTheme.accent)
                         }
                     }
+                    .buttonStyle(.plain)
+                    .tag(index + 1)
                 }
             }
         } else {
@@ -457,10 +706,11 @@ private struct TodaySurface: View {
 
 private struct HealthSurface: View {
     let health: ForgeWatchHealthSnapshot?
+    @Binding var selection: Int
 
     var body: some View {
         if let health {
-            SurfaceCarousel {
+            SurfaceCarousel(selection: $selection, count: health.lastWorkout == nil ? 1 : 2) {
                 WatchCard {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Health")
@@ -472,6 +722,7 @@ private struct HealthSurface: View {
                         }
                     }
                 }
+                .tag(0)
                 if let workout = health.lastWorkout {
                     WatchCard {
                         VStack(alignment: .leading, spacing: 7) {
@@ -485,6 +736,7 @@ private struct HealthSurface: View {
                             }
                         }
                     }
+                    .tag(1)
                 }
             }
         } else {
@@ -495,10 +747,14 @@ private struct HealthSurface: View {
 
 private struct MovementSurface: View {
     let movement: ForgeWatchMovementSnapshot?
+    @Binding var selection: Int
 
     var body: some View {
         if let movement {
-            SurfaceCarousel {
+            SurfaceCarousel(
+                selection: $selection,
+                count: 1 + (movement.latestTrip == nil ? 0 : 1) + (movement.latestStay == nil ? 0 : 1)
+            ) {
                 WatchCard {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Movement")
@@ -510,11 +766,14 @@ private struct MovementSurface: View {
                         }
                     }
                 }
+                .tag(0)
                 if let trip = movement.latestTrip {
                     SegmentCard(title: "Latest trip", segment: trip)
+                        .tag(1)
                 }
                 if let stay = movement.latestStay {
                     SegmentCard(title: "Latest stay", segment: stay)
+                        .tag(movement.latestTrip == nil ? 1 : 2)
                 }
             }
         } else {
@@ -548,33 +807,38 @@ private struct SegmentCard: View {
 
 private struct PsycheSurface: View {
     let psyche: ForgeWatchPsycheSnapshot?
+    @Binding var selection: Int
     let onCapture: (String, String?, ForgeWatchLinkedContext, [String: String]) -> Void
 
     var body: some View {
-        SurfaceCarousel {
+        SurfaceCarousel(selection: $selection, count: 3) {
             ChoiceCard(title: "Emotion", options: psyche?.emotionOptions ?? []) { choice in
                 onCapture("emotion_check_in", nil, .empty, ["emotion": choice])
             }
+            .tag(0)
             ChoiceCard(title: "Trigger", options: psyche?.triggerOptions ?? []) { choice in
                 onCapture("trigger_capture", nil, .empty, ["trigger": choice])
             }
+            .tag(1)
             ChoiceCard(title: "Routine", options: psyche?.routinePromptOptions ?? []) { choice in
                 onCapture("routine_check", nil, .empty, ["routine": choice])
             }
+            .tag(2)
         }
     }
 }
 
 private struct InboxSurface: View {
     let prompts: [ForgeWatchPrompt]
+    @Binding var selection: Int
     let onCapture: (String, String?, ForgeWatchLinkedContext, [String: String]) -> Void
 
     var body: some View {
         if prompts.isEmpty {
             EmptySurfaceCard(title: "Inbox clear", message: "No watch-sized prompts are waiting.")
         } else {
-            SurfaceCarousel {
-                ForEach(prompts) { prompt in
+            SurfaceCarousel(selection: $selection, count: prompts.count) {
+                ForEach(Array(prompts.enumerated()), id: \.element.id) { index, prompt in
                     WatchCard {
                         VStack(alignment: .leading, spacing: 7) {
                             Text(prompt.title)
@@ -593,6 +857,7 @@ private struct InboxSurface: View {
                             }
                         }
                     }
+                    .tag(index)
                 }
             }
         }

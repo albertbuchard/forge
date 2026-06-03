@@ -9209,9 +9209,19 @@ test("watch action batch records idempotent command receipts and replays accepte
           }
         },
         {
-          id: "watch-action-status-1",
+          id: "watch-action-blocked-1",
           kind: "task_status_update",
           createdAt: "2026-04-07T08:02:00.000Z",
+          payload: {
+            taskId,
+            status: "blocked",
+            note: "Blocked from the watch."
+          }
+        },
+        {
+          id: "watch-action-status-1",
+          kind: "task_status_update",
+          createdAt: "2026-04-07T08:03:00.000Z",
           payload: {
             taskId,
             status: "done",
@@ -9236,7 +9246,7 @@ test("watch action batch records idempotent command receipts and replays accepte
       };
       watch: { schemaVersion: number; surfaces: Array<{ id: string }> };
     };
-    assert.equal(actionBody.receipt.processedCount, 3);
+    assert.equal(actionBody.receipt.processedCount, 4);
     assert.equal(actionBody.receipt.replayedCount, 0);
     assert.equal(actionBody.receipt.failedCount, 0);
     assert.equal(
@@ -9263,7 +9273,7 @@ test("watch action batch records idempotent command receipts and replays accepte
       };
     };
     assert.equal(replayBody.receipt.processedCount, 0);
-    assert.equal(replayBody.receipt.replayedCount, 3);
+    assert.equal(replayBody.receipt.replayedCount, 4);
     assert.equal(replayBody.receipt.failedCount, 0);
     assert.equal(replayBody.receipt.receipts[0]?.status, "replayed");
 

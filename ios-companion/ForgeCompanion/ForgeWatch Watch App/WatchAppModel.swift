@@ -7,7 +7,7 @@ import WatchKit
 @MainActor
 final class WatchAppModel: NSObject, ObservableObject {
     @Published var bootstrap: ForgeWatchBootstrap
-    @Published var selectedSurface: WatchSurface = .habits
+    @Published var selectedSurface: WatchSurface = .now
     @Published var lastStatusMessage = "Waiting for iPhone"
 
     private let defaults = ForgeWatchStorage.sharedDefaults()
