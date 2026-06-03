@@ -544,7 +544,6 @@ def configure_manual_release_signing_if_available!
     team_id: ENV.fetch("FORGE_APPLE_TEAM_ID", "KZ65F7924F"),
     code_sign_identity: "Apple Distribution",
     build_configurations: ["Release"],
-    sdk: "iphoneos*",
     targets: selected_profiles.keys
   )
 
