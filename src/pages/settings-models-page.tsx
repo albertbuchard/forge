@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Bot,
+  DatabaseZap,
   ExternalLink,
   KeyRound,
   PlugZap,
@@ -16,8 +17,11 @@ import { Card } from "@/components/ui/card";
 import { ErrorState, LoadingState } from "@/components/ui/page-state";
 import {
   deleteAiModelConnection,
+  deleteWikiProfile,
+  createWikiEmbeddingProfile,
   getOpenAiCodexOauthSession,
   getSettings,
+  getWikiSettings,
   patchSettings,
   saveAiModelConnection,
   startOpenAiCodexOauth,
@@ -83,6 +87,16 @@ export function SettingsModelsPage() {
   const [basicChatModel, setBasicChatModel] = useState("gpt-5.4-mini");
   const [wikiConnectionId, setWikiConnectionId] = useState("");
   const [wikiModel, setWikiModel] = useState("gpt-5.4-mini");
+  const [embeddingLabel, setEmbeddingLabel] = useState("Fast wiki search");
+  const [embeddingModel, setEmbeddingModel] = useState(
+    "text-embedding-3-small"
+  );
+  const [embeddingBaseUrl, setEmbeddingBaseUrl] = useState(
+    "https://api.openai.com/v1"
+  );
+  const [embeddingApiKey, setEmbeddingApiKey] = useState("");
+  const [chunkSize, setChunkSize] = useState("1200");
+  const [chunkOverlap, setChunkOverlap] = useState("200");
   const [manualOauthCode, setManualOauthCode] = useState("");
   const [oauthSessionId, setOauthSessionId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -90,6 +104,11 @@ export function SettingsModelsPage() {
   const settingsQuery = useQuery({
     queryKey: ["forge-settings"],
     queryFn: getSettings
+  });
+
+  const wikiSettingsQuery = useQuery({
+    queryKey: ["forge-wiki-settings"],
+    queryFn: getWikiSettings
   });
 
   const oauthSessionQuery = useQuery({
@@ -112,6 +131,8 @@ export function SettingsModelsPage() {
 
   const invalidateSettings = async () => {
     await queryClient.invalidateQueries({ queryKey: ["forge-settings"] });
+    await queryClient.invalidateQueries({ queryKey: ["forge-wiki-settings"] });
+    await queryClient.invalidateQueries({ queryKey: ["forge-wiki-search"] });
     await queryClient.invalidateQueries({
       queryKey: ["forge-openai-codex-oauth", oauthSessionId]
     });
@@ -163,6 +184,27 @@ export function SettingsModelsPage() {
 
   const deleteConnectionMutation = useMutation({
     mutationFn: deleteAiModelConnection,
+    onSuccess: invalidateSettings
+  });
+
+  const createEmbeddingMutation = useMutation({
+    mutationFn: () =>
+      createWikiEmbeddingProfile({
+        label: embeddingLabel.trim(),
+        model: embeddingModel.trim(),
+        baseUrl: embeddingBaseUrl.trim(),
+        apiKey: embeddingApiKey.trim() || undefined,
+        chunkSize: Number(chunkSize),
+        chunkOverlap: Number(chunkOverlap)
+      }),
+    onSuccess: async () => {
+      setEmbeddingApiKey("");
+      await invalidateSettings();
+    }
+  });
+
+  const deleteEmbeddingMutation = useMutation({
+    mutationFn: (profileId: string) => deleteWikiProfile("embedding", profileId),
     onSuccess: invalidateSettings
   });
 
@@ -223,11 +265,22 @@ export function SettingsModelsPage() {
       settings.modelSettings.forgeAgent.basicChat.connectionId ?? ""
     );
     setBasicChatModel(settings.modelSettings.forgeAgent.basicChat.model);
-    setWikiConnectionId(settings.modelSettings.forgeAgent.wiki.connectionId ?? "");
+    setWikiConnectionId(
+      settings.modelSettings.forgeAgent.wiki.provider === "openai-codex"
+        ? (settings.modelSettings.forgeAgent.wiki.connectionId ?? "")
+        : ""
+    );
     setWikiModel(settings.modelSettings.forgeAgent.wiki.model);
   }, [settingsQuery.data]);
 
   const connections = settingsQuery.data?.settings.modelSettings.connections ?? [];
+  const codexOauthConnections = connections.filter(
+    (connection) =>
+      connection.provider === "openai-codex" && connection.authMode === "oauth"
+  );
+  const connectedCodexOauthConnections = codexOauthConnections.filter(
+    (connection) => connection.hasStoredCredential
+  );
   const oauthSession: OpenAiCodexOauthSession | null =
     oauthSessionQuery.data?.session ?? null;
 
@@ -314,16 +367,23 @@ export function SettingsModelsPage() {
           </label>
 
           <label className="grid gap-2 rounded-[20px] bg-white/[0.04] p-4">
-            <span className="text-sm text-white/72">KarpaWiki model connection</span>
+            <span className="text-sm text-white/72">
+              KarpaWiki Codex OAuth connection
+            </span>
             <select
               className="rounded-[16px] border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white"
               value={wikiConnectionId}
               onChange={(event) => setWikiConnectionId(event.target.value)}
             >
-              <option value="">No external connection</option>
-              {connections.map((connection) => (
-                <option key={connection.id} value={connection.id}>
-                  {connection.label} ({connection.agentLabel})
+              <option value="">No Codex OAuth connection</option>
+              {codexOauthConnections.map((connection) => (
+                <option
+                  key={connection.id}
+                  value={connection.id}
+                  disabled={!connection.hasStoredCredential}
+                >
+                  {connection.label} ({connection.accountLabel ?? connection.agentLabel})
+                  {connection.hasStoredCredential ? "" : " · needs OAuth"}
                 </option>
               ))}
             </select>
@@ -333,6 +393,10 @@ export function SettingsModelsPage() {
               onChange={(event) => setWikiModel(event.target.value)}
               placeholder="Model"
             />
+            <span className="text-xs leading-5 text-white/50">
+              KarpaWiki smart ingest uses ChatGPT/Codex OAuth only. It does not
+              use metered OpenAI Platform API keys.
+            </span>
           </label>
         </div>
 
@@ -352,9 +416,137 @@ export function SettingsModelsPage() {
           </Badge>
           <Badge className="bg-white/[0.06] text-white/78">
             {settings.modelSettings.forgeAgent.wiki.connectionLabel
-              ? `KarpaWiki: ${settings.modelSettings.forgeAgent.wiki.connectionLabel}`
-              : "KarpaWiki: no external model selected"}
+              ? `KarpaWiki OAuth: ${settings.modelSettings.forgeAgent.wiki.connectionLabel}`
+              : "KarpaWiki: no Codex OAuth model selected"}
           </Badge>
+          {connectedCodexOauthConnections.length === 0 ? (
+            <Badge className="bg-amber-400/12 text-amber-100">
+              Add OpenAI Codex OAuth before smart ingest
+            </Badge>
+          ) : null}
+        </div>
+      </Card>
+
+      <Card className="grid gap-4">
+        <div className="flex items-center gap-3">
+          <DatabaseZap className="size-4 text-[var(--secondary)]" />
+          <div>
+            <div className="text-sm text-white">KarpaWiki embeddings</div>
+            <div className="text-xs leading-5 text-white/52">
+              Semantic search profiles live with model settings. They remain
+              optional; KarpaWiki text search and entity-linked search still
+              work without embeddings.
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,0.9fr)]">
+          <div className="grid gap-3">
+            {wikiSettingsQuery.isLoading ? (
+              <div className="rounded-[20px] border border-dashed border-white/10 bg-white/[0.02] px-4 py-5 text-sm leading-6 text-white/58">
+                Loading embedding profiles.
+              </div>
+            ) : null}
+            {wikiSettingsQuery.isError ? (
+              <div className="rounded-[20px] border border-rose-300/22 bg-rose-400/10 px-4 py-5 text-sm leading-6 text-rose-100">
+                Could not load KarpaWiki embedding profiles.
+              </div>
+            ) : null}
+            {wikiSettingsQuery.data?.settings.embeddingProfiles.length === 0 ? (
+              <div className="rounded-[20px] border border-dashed border-white/10 bg-white/[0.02] px-4 py-5 text-sm leading-6 text-white/58">
+                No embedding profile yet. Add one only if you want semantic
+                wiki search in addition to exact search and links.
+              </div>
+            ) : null}
+            {wikiSettingsQuery.data?.settings.embeddingProfiles.map((profile) => (
+              <div
+                key={profile.id}
+                className="grid gap-2 rounded-[18px] bg-white/[0.04] px-4 py-4"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-white">{profile.label}</div>
+                    <div className="mt-1 text-xs text-white/46">
+                      {profile.model} · {profile.baseUrl}
+                    </div>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    pending={deleteEmbeddingMutation.isPending}
+                    pendingLabel="Deleting"
+                    onClick={() =>
+                      void deleteEmbeddingMutation.mutateAsync(profile.id)
+                    }
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Badge className="bg-white/[0.06] text-white/78">
+                    chunk {profile.chunkSize}
+                  </Badge>
+                  <Badge className="bg-white/[0.06] text-white/78">
+                    overlap {profile.chunkOverlap}
+                  </Badge>
+                  <Badge className="bg-white/[0.06] text-white/78">
+                    {profile.enabled ? "enabled" : "disabled"}
+                  </Badge>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid gap-3 rounded-[20px] bg-white/[0.03] p-4">
+            <input
+              className="rounded-[16px] border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white"
+              value={embeddingLabel}
+              onChange={(event) => setEmbeddingLabel(event.target.value)}
+              placeholder="Profile label"
+            />
+            <input
+              className="rounded-[16px] border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white"
+              value={embeddingModel}
+              onChange={(event) => setEmbeddingModel(event.target.value)}
+              placeholder="Embedding model"
+            />
+            <input
+              className="rounded-[16px] border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white"
+              value={embeddingBaseUrl}
+              onChange={(event) => setEmbeddingBaseUrl(event.target.value)}
+              placeholder="Embedding base URL"
+            />
+            <input
+              className="rounded-[16px] border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white"
+              value={embeddingApiKey}
+              onChange={(event) => setEmbeddingApiKey(event.target.value)}
+              placeholder="Embedding API key (optional)"
+              type="password"
+            />
+            <div className="grid gap-3 md:grid-cols-2">
+              <input
+                className="rounded-[16px] border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white"
+                value={chunkSize}
+                onChange={(event) => setChunkSize(event.target.value)}
+                placeholder="Chunk size"
+                type="number"
+              />
+              <input
+                className="rounded-[16px] border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white"
+                value={chunkOverlap}
+                onChange={(event) => setChunkOverlap(event.target.value)}
+                placeholder="Chunk overlap"
+                type="number"
+              />
+            </div>
+            <Button
+              pending={createEmbeddingMutation.isPending}
+              pendingLabel="Saving"
+              disabled={!embeddingLabel.trim() || !embeddingModel.trim()}
+              onClick={() => void createEmbeddingMutation.mutateAsync()}
+            >
+              Save embedding profile
+            </Button>
+          </div>
         </div>
       </Card>
 

@@ -136,15 +136,15 @@ export function WorkbenchPage() {
           <button
             key={flow.id}
             type="button"
-            className="rounded-[26px] border border-white/8 bg-[linear-gradient(180deg,rgba(20,28,46,0.92),rgba(10,16,29,0.96))] p-5 text-left transition hover:border-white/12 hover:bg-[linear-gradient(180deg,rgba(24,34,55,0.94),rgba(12,18,34,0.98))]"
+            className="rounded-[26px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-section)] p-5 text-left transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]"
             onClick={() => navigate(`/workbench/${flow.id}`)}
           >
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <div className="truncate text-lg font-semibold text-white">
+                <div className="truncate text-lg font-semibold text-[var(--ui-ink-strong)]">
                   {flow.title}
                 </div>
-                <div className="mt-1 line-clamp-2 text-sm leading-6 text-white/54">
+                <div className="mt-1 line-clamp-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                   {flow.description || "No description yet."}
                 </div>
               </div>

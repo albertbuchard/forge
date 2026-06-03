@@ -22,19 +22,54 @@ import {
   getScreenTimeMonth,
   getScreenTimeSettings
 } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 type ScreenTimeView = "day" | "month" | "all_time";
 
-function captureFreshnessClass(freshness: "empty" | "fresh" | "stale" | "unavailable") {
+const panelClass =
+  "min-w-0 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)] p-5 shadow-[var(--card-shadow)]";
+const subCardClass =
+  "min-w-0 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4";
+const roomyCardClass =
+  "min-w-0 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-5";
+const labelClass =
+  "font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]";
+const smallLabelClass =
+  "font-label text-[10px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]";
+const mutedTextClass = "text-[var(--ui-ink-soft)]";
+const badgeClass =
+  "border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]";
+const infoBadgeClass =
+  "border border-[color-mix(in_srgb,var(--info)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-info-soft)] text-[color-mix(in_srgb,var(--info)_74%,var(--ui-ink-strong)_26%)]";
+const chartGridStroke = "var(--ui-border-subtle)";
+const chartAxisStroke = "var(--ui-ink-faint)";
+const chartPrimaryStroke =
+  "color-mix(in_srgb,var(--success)_82%,var(--primary)_18%)";
+const chartPrimaryFill = "color-mix(in_srgb,var(--success)_18%,transparent)";
+const chartInfoStroke = "color-mix(in_srgb,var(--info)_86%,var(--primary)_14%)";
+const chartInfoFill = "color-mix(in_srgb,var(--info)_16%,transparent)";
+const chartNeutralStroke = "var(--ui-ink-strong)";
+const chartNeutralFill =
+  "color-mix(in_srgb,var(--ui-ink-strong)_12%,transparent)";
+const tooltipStyle = {
+  background: "var(--ui-surface-modal)",
+  border: "1px solid var(--ui-border-subtle)",
+  borderRadius: "8px",
+  color: "var(--ui-ink-strong)"
+};
+
+function captureFreshnessClass(
+  freshness: "empty" | "fresh" | "stale" | "unavailable"
+) {
   switch (freshness) {
     case "fresh":
-      return "bg-[rgba(110,231,183,0.12)] text-[var(--tertiary)]";
+      return "border border-[color-mix(in_srgb,var(--success)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_74%,var(--ui-ink-strong)_26%)]";
     case "stale":
-      return "bg-[rgba(255,196,114,0.12)] text-[rgba(255,220,163,0.96)]";
+      return "border border-[color-mix(in_srgb,var(--warning)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_74%,var(--ui-ink-strong)_26%)]";
     case "unavailable":
-      return "bg-[rgba(255,115,115,0.12)] text-[rgba(255,171,171,0.96)]";
+      return "border border-[color-mix(in_srgb,var(--danger)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-danger-soft)] text-[color-mix(in_srgb,var(--danger)_74%,var(--ui-ink-strong)_26%)]";
     default:
-      return "bg-white/[0.06] text-white/72";
+      return badgeClass;
   }
 }
 
@@ -115,7 +150,8 @@ export function PsycheScreenTimePage() {
   });
   const allTimeQuery = useQuery({
     queryKey: ["forge-screen-time-all-time"],
-    queryFn: () => getScreenTimeAllTime().then((response) => response.screenTime)
+    queryFn: () =>
+      getScreenTimeAllTime().then((response) => response.screenTime)
   });
 
   const isLoading =
@@ -128,7 +164,10 @@ export function PsycheScreenTimePage() {
   }
 
   const error =
-    settingsQuery.error ?? dayQuery.error ?? monthQuery.error ?? allTimeQuery.error;
+    settingsQuery.error ??
+    dayQuery.error ??
+    monthQuery.error ??
+    allTimeQuery.error;
   if (
     error ||
     !settingsQuery.data ||
@@ -170,10 +209,10 @@ export function PsycheScreenTimePage() {
         description="Apple-compliant device activity, hourly usage, and reflective phone context woven into Psyche."
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <Badge tone="default" className="bg-white/[0.06] text-white/78">
+            <Badge tone="default" className={badgeClass}>
               {settings.authorizationStatus.replaceAll("_", " ")}
             </Badge>
-            <Badge tone="default" className="bg-white/[0.06] text-white/78">
+            <Badge tone="default" className={badgeClass}>
               {settings.captureState.replaceAll("_", " ")}
             </Badge>
             <Badge
@@ -182,7 +221,7 @@ export function PsycheScreenTimePage() {
             >
               {settings.captureFreshness}
             </Badge>
-            <Badge tone="default" className="bg-white/[0.06] text-white/78">
+            <Badge tone="default" className={badgeClass}>
               {settings.syncEnabled ? "Sync on" : "Sync paused"}
             </Badge>
           </div>
@@ -191,14 +230,14 @@ export function PsycheScreenTimePage() {
 
       <PsycheSectionNav />
 
-      <Card className="rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(12,18,34,0.96),rgba(8,13,24,0.92))] p-5">
+      <Card className={panelClass}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/40">
-              Reflective device activity
-            </div>
-            <div className="mt-2 max-w-3xl text-sm text-white/58">
-              Forge treats Screen Time as reflective evidence, not as fake exact foreground traces. Movement overlap is estimated from hourly bins and stays truthful about that.
+            <div className={labelClass}>Reflective device activity</div>
+            <div className={cn("mt-2 max-w-3xl text-sm", mutedTextClass)}>
+              Forge treats Screen Time as reflective evidence, not as fake exact
+              foreground traces. Movement overlap is estimated from hourly bins
+              and stays truthful about that.
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -208,8 +247,8 @@ export function PsycheScreenTimePage() {
                 variant="ghost"
                 className={
                   view === option
-                    ? "h-9 rounded-full border border-[rgba(110,231,183,0.2)] bg-[rgba(110,231,183,0.12)] px-4 text-[var(--tertiary)]"
-                    : "h-9 rounded-full border border-white/10 bg-white/[0.04] px-4 text-white/70"
+                    ? "h-9 rounded-full border border-[color-mix(in_srgb,var(--success)_35%,var(--ui-border-subtle)_65%)] bg-[var(--ui-success-soft)] px-4 text-[color-mix(in_srgb,var(--success)_76%,var(--ui-ink-strong)_24%)]"
+                    : "h-9 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 text-[var(--ui-ink-soft)]"
                 }
                 onClick={() => setView(option)}
               >
@@ -219,61 +258,63 @@ export function PsycheScreenTimePage() {
           </div>
         </div>
 
-	        <div className="mt-5 grid gap-3 md:grid-cols-3">
-	          <Card className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4">
-            <div className="font-label text-[10px] uppercase tracking-[0.18em] text-white/38">
-              Today on screen
-            </div>
-            <div className="mt-3 font-display text-4xl text-white">
+        <div className="mt-5 grid gap-3 md:grid-cols-3">
+          <Card className={subCardClass}>
+            <div className={smallLabelClass}>Today on screen</div>
+            <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
               {durationLabel(day.summary.totalActivitySeconds)}
             </div>
-            <div className="mt-2 text-sm text-white/56">
+            <div className={cn("mt-2 text-sm", mutedTextClass)}>
               Across {day.summary.activeHourCount} active hours.
             </div>
           </Card>
-          <Card className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4">
-            <div className="font-label text-[10px] uppercase tracking-[0.18em] text-white/38">
-              Pickups today
-            </div>
-            <div className="mt-3 font-display text-4xl text-white">
+          <Card className={subCardClass}>
+            <div className={smallLabelClass}>Pickups today</div>
+            <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
               {day.summary.pickupCount}
             </div>
-            <div className="mt-2 text-sm text-white/56">
-              First pickup {day.summary.firstPickupAt ? new Date(day.summary.firstPickupAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "not captured"}.
+            <div className={cn("mt-2 text-sm", mutedTextClass)}>
+              First pickup{" "}
+              {day.summary.firstPickupAt
+                ? new Date(day.summary.firstPickupAt).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit"
+                  })
+                : "not captured"}
+              .
             </div>
           </Card>
-	          <Card className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4">
-	            <div className="font-label text-[10px] uppercase tracking-[0.18em] text-white/38">
-	              Capture health
-	            </div>
-	            <div className="mt-3 text-lg text-white">
-                {settings.captureFreshness === "fresh"
+          <Card className={subCardClass}>
+            <div className={smallLabelClass}>Capture health</div>
+            <div className="mt-3 text-lg text-[var(--ui-ink-strong)]">
+              {settings.captureFreshness === "fresh"
+                ? settings.captureAgeHours !== null
+                  ? `Updated ${settings.captureAgeHours.toFixed(1)}h ago`
+                  : "Fresh capture"
+                : settings.captureFreshness === "stale"
                   ? settings.captureAgeHours !== null
-                    ? `Updated ${settings.captureAgeHours.toFixed(1)}h ago`
-                    : "Fresh capture"
-                  : settings.captureFreshness === "stale"
-                    ? settings.captureAgeHours !== null
-                      ? `Last refresh ${settings.captureAgeHours.toFixed(1)}h ago`
-                      : "Capture is stale"
-                    : settings.captureFreshness === "unavailable"
-                      ? "Unavailable"
-                      : "Waiting for capture"}
-	            </div>
-	            <div className="mt-2 text-sm text-white/56">
-                {settings.capturedDayCount} days, {settings.capturedHourCount} hourly slices, {settings.captureWindowDays} day window.
-	            </div>
-	          </Card>
-	        </div>
+                    ? `Last refresh ${settings.captureAgeHours.toFixed(1)}h ago`
+                    : "Capture is stale"
+                  : settings.captureFreshness === "unavailable"
+                    ? "Unavailable"
+                    : "Waiting for capture"}
+            </div>
+            <div className={cn("mt-2 text-sm", mutedTextClass)}>
+              {settings.capturedDayCount} days, {settings.capturedHourCount}{" "}
+              hourly slices, {settings.captureWindowDays} day window.
+            </div>
+          </Card>
+        </div>
 
-        <Card className="rounded-[28px] border border-white/8 bg-white/[0.03] p-4">
+        <Card className={cn("mt-3", subCardClass)}>
           <div className="flex flex-wrap items-center gap-2">
-            <Badge tone="default" className="bg-white/[0.06] text-white/74">
+            <Badge tone="default" className={badgeClass}>
               {captureSource}
             </Badge>
-            <Badge tone="default" className="bg-white/[0.06] text-white/74">
+            <Badge tone="default" className={badgeClass}>
               Hourly model
             </Badge>
-            <Badge tone="default" className="bg-white/[0.06] text-white/74">
+            <Badge tone="default" className={badgeClass}>
               {captureRangeLabel(
                 settings.lastCaptureStartedAt,
                 settings.lastCaptureEndedAt,
@@ -281,46 +322,40 @@ export function PsycheScreenTimePage() {
               )}
             </Badge>
             {topFocus.map((label) => (
-              <Badge key={label} tone="default" className="bg-[rgba(114,204,255,0.12)] text-white/78">
+              <Badge key={label} tone="default" className={infoBadgeClass}>
                 {label}
               </Badge>
             ))}
           </div>
         </Card>
-	      </Card>
+      </Card>
 
       {view === "day" ? (
         <section className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
-          <Card className="rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(13,20,36,0.96),rgba(8,13,24,0.9))] p-5">
-            <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/40">
-              Hourly rhythm
-            </div>
-            <div className="mt-2 text-sm text-white/58">
+          <Card className={panelClass}>
+            <div className={labelClass}>Hourly rhythm</div>
+            <div className={cn("mt-2 text-sm", mutedTextClass)}>
               Activity, pickups, and notification pressure across the day.
             </div>
             <div className="mt-5 h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={day.hourlySegments}>
-                  <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
+                  <CartesianGrid stroke={chartGridStroke} vertical={false} />
                   <XAxis
                     dataKey="hourIndex"
                     tickFormatter={dayHourLabel}
-                    stroke="rgba(255,255,255,0.34)"
+                    stroke={chartAxisStroke}
                     tickLine={false}
                     axisLine={false}
                   />
                   <YAxis
-                    stroke="rgba(255,255,255,0.34)"
+                    stroke={chartAxisStroke}
                     tickLine={false}
                     axisLine={false}
                     tickFormatter={(value) => durationLabel(Number(value))}
                   />
                   <Tooltip
-                    contentStyle={{
-                      background: "rgba(8,12,20,0.96)",
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      borderRadius: "18px"
-                    }}
+                    contentStyle={tooltipStyle}
                     formatter={(value, name) =>
                       tooltipMetricFormatter(value, String(name))
                     }
@@ -329,15 +364,15 @@ export function PsycheScreenTimePage() {
                   <Area
                     type="monotone"
                     dataKey="totalActivitySeconds"
-                    stroke="rgba(110,231,183,0.96)"
-                    fill="rgba(110,231,183,0.18)"
+                    stroke={chartPrimaryStroke}
+                    fill={chartPrimaryFill}
                     strokeWidth={2}
                   />
                   <Area
                     type="monotone"
                     dataKey="pickupCount"
-                    stroke="rgba(114,204,255,0.9)"
-                    fill="rgba(114,204,255,0.12)"
+                    stroke={chartInfoStroke}
+                    fill={chartInfoFill}
                     strokeWidth={1.6}
                   />
                 </AreaChart>
@@ -346,22 +381,23 @@ export function PsycheScreenTimePage() {
           </Card>
 
           <div className="space-y-4">
-            <Card className="rounded-[28px] border border-white/8 bg-white/[0.04] p-5">
-              <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/40">
-                Top apps
-              </div>
+            <Card className={roomyCardClass}>
+              <div className={labelClass}>Top apps</div>
               <div className="mt-4 space-y-3">
                 {day.topApps.slice(0, 6).map((app) => (
-                  <div key={app.id} className="flex items-center justify-between gap-3">
+                  <div
+                    key={app.id}
+                    className="flex items-center justify-between gap-3"
+                  >
                     <div className="min-w-0">
-                      <div className="truncate text-sm font-medium text-white">
+                      <div className="truncate text-sm font-medium text-[var(--ui-ink-strong)]">
                         {app.displayName || app.bundleIdentifier}
                       </div>
-                      <div className="truncate text-xs text-white/48">
+                      <div className="truncate text-xs text-[var(--ui-ink-faint)]">
                         {app.categoryLabel || app.bundleIdentifier}
                       </div>
                     </div>
-                    <div className="text-sm text-white/68">
+                    <div className="text-sm text-[var(--ui-ink-soft)]">
                       {durationLabel(app.totalActivitySeconds)}
                     </div>
                   </div>
@@ -369,14 +405,17 @@ export function PsycheScreenTimePage() {
               </div>
             </Card>
 
-            <Card className="rounded-[28px] border border-white/8 bg-white/[0.04] p-5">
-              <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/40">
-                Top categories
-              </div>
+            <Card className={roomyCardClass}>
+              <div className={labelClass}>Top categories</div>
               <div className="mt-4 flex flex-wrap gap-2">
                 {day.topCategories.slice(0, 8).map((category) => (
-                  <Badge key={category.id} tone="default" className="bg-white/[0.06] text-white/74">
-                    {category.categoryLabel} · {durationLabel(category.totalActivitySeconds)}
+                  <Badge
+                    key={category.id}
+                    tone="default"
+                    className={badgeClass}
+                  >
+                    {category.categoryLabel} ·{" "}
+                    {durationLabel(category.totalActivitySeconds)}
                   </Badge>
                 ))}
               </div>
@@ -387,22 +426,26 @@ export function PsycheScreenTimePage() {
 
       {view === "month" ? (
         <section className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
-          <Card className="rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(13,20,36,0.96),rgba(8,13,24,0.9))] p-5">
-            <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/40">
-              Monthly drift
-            </div>
+          <Card className={panelClass}>
+            <div className={labelClass}>Monthly drift</div>
             <div className="mt-5 h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={month.days}>
-                  <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
-                  <XAxis dataKey="dateKey" stroke="rgba(255,255,255,0.34)" tickLine={false} axisLine={false} />
-                  <YAxis stroke="rgba(255,255,255,0.34)" tickLine={false} axisLine={false} tickFormatter={(value) => durationLabel(Number(value))} />
+                  <CartesianGrid stroke={chartGridStroke} vertical={false} />
+                  <XAxis
+                    dataKey="dateKey"
+                    stroke={chartAxisStroke}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis
+                    stroke={chartAxisStroke}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(value) => durationLabel(Number(value))}
+                  />
                   <Tooltip
-                    contentStyle={{
-                      background: "rgba(8,12,20,0.96)",
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      borderRadius: "18px"
-                    }}
+                    contentStyle={tooltipStyle}
                     formatter={(value, name) =>
                       tooltipMetricFormatter(value, String(name))
                     }
@@ -410,8 +453,8 @@ export function PsycheScreenTimePage() {
                   <Area
                     type="monotone"
                     dataKey="totalActivitySeconds"
-                    stroke="rgba(255,255,255,0.94)"
-                    fill="rgba(255,255,255,0.12)"
+                    stroke={chartNeutralStroke}
+                    fill={chartNeutralFill}
                     strokeWidth={2}
                   />
                 </AreaChart>
@@ -419,11 +462,9 @@ export function PsycheScreenTimePage() {
             </div>
           </Card>
 
-          <Card className="rounded-[28px] border border-white/8 bg-white/[0.04] p-5">
-            <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/40">
-              Month summary
-            </div>
-            <div className="mt-4 space-y-3 text-sm text-white/70">
+          <Card className={roomyCardClass}>
+            <div className={labelClass}>Month summary</div>
+            <div className="mt-4 space-y-3 text-sm text-[var(--ui-ink-soft)]">
               <div className="flex items-center justify-between gap-3">
                 <span>Total activity</span>
                 <span>{durationLabel(month.totals.totalActivitySeconds)}</span>
@@ -447,22 +488,27 @@ export function PsycheScreenTimePage() {
 
       {view === "all_time" ? (
         <section className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
-          <Card className="rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(13,20,36,0.96),rgba(8,13,24,0.9))] p-5">
-            <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/40">
-              Weekday pattern
-            </div>
+          <Card className={panelClass}>
+            <div className={labelClass}>Weekday pattern</div>
             <div className="mt-5 h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={allTime.weekdayPattern}>
-                  <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
-                  <XAxis dataKey="weekday" tickFormatter={weekdayLabel} stroke="rgba(255,255,255,0.34)" tickLine={false} axisLine={false} />
-                  <YAxis stroke="rgba(255,255,255,0.34)" tickLine={false} axisLine={false} tickFormatter={(value) => durationLabel(Number(value))} />
+                  <CartesianGrid stroke={chartGridStroke} vertical={false} />
+                  <XAxis
+                    dataKey="weekday"
+                    tickFormatter={weekdayLabel}
+                    stroke={chartAxisStroke}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis
+                    stroke={chartAxisStroke}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(value) => durationLabel(Number(value))}
+                  />
                   <Tooltip
-                    contentStyle={{
-                      background: "rgba(8,12,20,0.96)",
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      borderRadius: "18px"
-                    }}
+                    contentStyle={tooltipStyle}
                     formatter={(value, name) =>
                       tooltipMetricFormatter(value, String(name))
                     }
@@ -471,8 +517,8 @@ export function PsycheScreenTimePage() {
                   <Area
                     type="monotone"
                     dataKey="averageActivitySeconds"
-                    stroke="rgba(114,204,255,0.96)"
-                    fill="rgba(114,204,255,0.16)"
+                    stroke={chartInfoStroke}
+                    fill={chartInfoFill}
                     strokeWidth={2}
                   />
                 </AreaChart>
@@ -481,22 +527,24 @@ export function PsycheScreenTimePage() {
           </Card>
 
           <div className="space-y-4">
-            <Card className="rounded-[28px] border border-white/8 bg-white/[0.04] p-5">
-              <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/40">
-                Lifetime summary
-              </div>
-              <div className="mt-4 space-y-3 text-sm text-white/70">
+            <Card className={roomyCardClass}>
+              <div className={labelClass}>Lifetime summary</div>
+              <div className="mt-4 space-y-3 text-sm text-[var(--ui-ink-soft)]">
                 <div className="flex items-center justify-between gap-3">
                   <span>Days captured</span>
                   <span>{allTime.summary.dayCount}</span>
                 </div>
                 <div className="flex items-center justify-between gap-3">
                   <span>Total activity</span>
-                  <span>{durationLabel(allTime.summary.totalActivitySeconds)}</span>
+                  <span>
+                    {durationLabel(allTime.summary.totalActivitySeconds)}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between gap-3">
                   <span>Average per day</span>
-                  <span>{durationLabel(allTime.summary.averageDailyActivitySeconds)}</span>
+                  <span>
+                    {durationLabel(allTime.summary.averageDailyActivitySeconds)}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between gap-3">
                   <span>Total pickups</span>
@@ -504,14 +552,17 @@ export function PsycheScreenTimePage() {
                 </div>
               </div>
             </Card>
-            <Card className="rounded-[28px] border border-white/8 bg-white/[0.04] p-5">
-              <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/40">
-                Dominant categories
-              </div>
+            <Card className={roomyCardClass}>
+              <div className={labelClass}>Dominant categories</div>
               <div className="mt-4 flex flex-wrap gap-2">
                 {allTime.topCategories.slice(0, 10).map((category) => (
-                  <Badge key={category.id} tone="default" className="bg-white/[0.06] text-white/74">
-                    {category.categoryLabel} · {durationLabel(category.totalActivitySeconds)}
+                  <Badge
+                    key={category.id}
+                    tone="default"
+                    className={badgeClass}
+                  >
+                    {category.categoryLabel} ·{" "}
+                    {durationLabel(category.totalActivitySeconds)}
                   </Badge>
                 ))}
               </div>

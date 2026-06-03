@@ -62,15 +62,15 @@ export function SelectMenu<TValue extends string>({
   }, [open]);
 
   return (
-    <div className={cn("relative", className)} ref={rootRef}>
-      <div className="mb-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-white/42">
+    <div className={cn("relative min-w-0 max-w-full", className)} ref={rootRef}>
+      <div className="mb-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
         {label}
       </div>
       <button
         ref={buttonRef}
         type="button"
         className={cn(
-          "flex min-h-11 w-full min-w-[15rem] items-center justify-between gap-3 rounded-[18px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))] px-4 py-2.5 text-left shadow-[0_16px_32px_rgba(15,23,42,0.18)] transition hover:border-white/14 hover:bg-[linear-gradient(180deg,rgba(255,255,255,0.11),rgba(255,255,255,0.05))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(192,193,255,0.45)]",
+          "flex min-h-11 w-full min-w-0 items-center justify-between gap-3 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-2.5 text-left shadow-[var(--ui-shadow-soft)] transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--primary)_45%,transparent)] sm:min-w-[15rem]",
           triggerClassName
         )}
         aria-haspopup="listbox"
@@ -79,19 +79,19 @@ export function SelectMenu<TValue extends string>({
         onClick={() => setOpen((current) => !current)}
       >
         <div className="min-w-0">
-          <div className="truncate text-sm font-medium text-white">
+          <div className="truncate text-sm font-medium text-[var(--ui-ink-strong)]">
             {selectedOption?.label ?? value}
           </div>
           {selectedOption?.description ? (
-            <div className="truncate text-xs text-white/48">
+            <div className="truncate text-xs text-[var(--ui-ink-faint)]">
               {selectedOption.description}
             </div>
           ) : null}
         </div>
         <ChevronDown
           className={cn(
-            "size-4 shrink-0 text-white/48 transition",
-            open && "rotate-180 text-white/72"
+            "size-4 shrink-0 text-[var(--ui-ink-faint)] transition",
+            open && "rotate-180 text-[var(--ui-ink-medium)]"
           )}
         />
       </button>
@@ -102,7 +102,7 @@ export function SelectMenu<TValue extends string>({
           role="listbox"
           aria-label={label}
           className={cn(
-            "absolute left-0 top-[calc(100%+0.6rem)] z-30 w-full overflow-hidden rounded-[22px] border border-white/8 bg-[linear-gradient(180deg,rgba(20,28,42,0.98),rgba(12,17,30,0.98))] p-2 shadow-[0_28px_64px_rgba(3,8,18,0.42)] backdrop-blur-xl",
+            "absolute left-0 top-[calc(100%+0.6rem)] z-30 w-full overflow-hidden rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-modal)] p-2 shadow-[var(--ui-shadow-floating)] backdrop-blur-xl",
             menuClassName
           )}
         >
@@ -118,8 +118,8 @@ export function SelectMenu<TValue extends string>({
                   className={cn(
                     "flex w-full items-start justify-between gap-3 rounded-[16px] px-3 py-2.5 text-left transition",
                     selected
-                      ? "bg-[rgba(192,193,255,0.14)] text-white"
-                      : "text-white/74 hover:bg-white/[0.06] hover:text-white"
+                      ? "bg-[var(--ui-surface-active)] text-[var(--ui-ink-strong)]"
+                      : "text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                   )}
                   onClick={() => {
                     onChange(option.value);
@@ -129,7 +129,7 @@ export function SelectMenu<TValue extends string>({
                   <div className="min-w-0">
                     <div className="text-sm font-medium">{option.label}</div>
                     {option.description ? (
-                      <div className="mt-0.5 text-xs text-white/44">
+                      <div className="mt-0.5 text-xs text-[var(--ui-ink-faint)]">
                         {option.description}
                       </div>
                     ) : null}
@@ -137,7 +137,7 @@ export function SelectMenu<TValue extends string>({
                   <Check
                     className={cn(
                       "mt-0.5 size-4 shrink-0 transition",
-                      selected ? "text-white" : "opacity-0"
+                      selected ? "text-[var(--ui-ink-strong)]" : "opacity-0"
                     )}
                   />
                 </button>

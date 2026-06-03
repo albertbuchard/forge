@@ -1,9 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { AiSurfaceWorkspace } from "@/components/customization/ai-surface-workspace";
-import {
-  type SurfaceWidgetDefinition
-} from "@/components/customization/editable-surface";
+import { type SurfaceWidgetDefinition } from "@/components/customization/editable-surface";
 import { PillCluster } from "@/components/primitives/pill-cluster";
 import { SectionGrid } from "@/components/primitives/section-grid";
 import {
@@ -591,57 +589,60 @@ export function ProjectsPage() {
       minWidth: 6,
       render: ({ compact }) => (
         <ProjectsSearchResultsBox>
-          <div className="grid gap-4">
-          <ProjectSearchBar
-            query={searchQuery}
-            onQueryChange={setSearchQuery}
-            options={searchOptions}
-            selectedOptionIds={selectedSearchOptionIds}
-            onSelectedOptionIdsChange={setSelectedSearchOptionIds}
-            resultSummary={resultSummary}
-          />
-          <ProjectCollectionFilters
-            value={collectionFilter}
-            counts={collectionCounts}
-            onChange={setCollectionFilter}
-          />
-          {visibleProjects.length === 0 ? (
-            <Card>
-              <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/42">
-                No matching projects
-              </div>
-              <div className="mt-3 text-sm leading-6 text-white/58">
-                Nothing in this project collection matches the current search
-                and chips.
-              </div>
-            </Card>
-          ) : compact ? (
-            <div className="grid gap-3">
-              {visibleProjects.slice(0, 5).map((project) => (
-                <Link
-                  key={project.id}
-                  to={`/projects/${project.id}`}
-                  className="rounded-[18px] bg-white/[0.04] px-4 py-3 transition hover:bg-white/[0.06]"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold text-white">
-                        {project.title}
+          <div className="grid min-w-0 gap-4">
+            <ProjectSearchBar
+              query={searchQuery}
+              onQueryChange={setSearchQuery}
+              options={searchOptions}
+              selectedOptionIds={selectedSearchOptionIds}
+              onSelectedOptionIdsChange={setSelectedSearchOptionIds}
+              resultSummary={resultSummary}
+            />
+            <ProjectCollectionFilters
+              value={collectionFilter}
+              counts={collectionCounts}
+              onChange={setCollectionFilter}
+            />
+            {visibleProjects.length === 0 ? (
+              <Card>
+                <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/42">
+                  No matching projects
+                </div>
+                <div className="mt-3 text-sm leading-6 text-white/58">
+                  Nothing in this project collection matches the current search
+                  and chips.
+                </div>
+              </Card>
+            ) : compact ? (
+              <div className="grid min-w-0 gap-3">
+                {visibleProjects.slice(0, 5).map((project) => (
+                  <Link
+                    key={project.id}
+                    to={`/projects/${project.id}`}
+                    className="block min-w-0 max-w-full rounded-[18px] bg-white/[0.04] px-4 py-3 transition hover:bg-white/[0.06]"
+                  >
+                    <div className="flex min-w-0 items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-white">
+                          {project.title}
+                        </div>
+                        <div className="truncate text-sm text-white/54">
+                          {project.goalTitle}
+                        </div>
                       </div>
-                      <div className="text-sm text-white/54">
-                        {project.goalTitle}
-                      </div>
+                      <Badge
+                        wrap
+                        className="max-w-[7rem] shrink-0 bg-white/[0.08] text-white/72"
+                      >
+                        {project.earnedPoints} xp
+                      </Badge>
                     </div>
-                    <Badge className="shrink-0 bg-white/[0.08] text-white/72">
-                      {project.earnedPoints} xp
-                    </Badge>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          ) : (
-            projectCards
-          )}
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              projectCards
+            )}
           </div>
         </ProjectsSearchResultsBox>
       )
@@ -659,40 +660,40 @@ export function ProjectsPage() {
         return (
           <ProjectsSummaryBox>
             <div className="grid gap-3">
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-              <Card className="p-4">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
-                  Active
-                </div>
-                <div className="mt-2 font-display text-4xl text-white">
-                  {collectionCounts.active}
-                </div>
-              </Card>
-              <Card className="p-4">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
-                  Finished
-                </div>
-                <div className="mt-2 font-display text-4xl text-white">
-                  {collectionCounts.completed}
-                </div>
-              </Card>
-            </div>
-            {spotlight ? (
-              <Card className="p-4">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
-                  Spotlight
-                </div>
-                <div className="mt-3 text-base font-semibold text-white">
-                  {spotlight.title}
-                </div>
-                <div className="mt-2 text-sm leading-6 text-white/56">
-                  {spotlight.description}
-                </div>
-                <div className="mt-3">
-                  <ProgressMeter value={spotlight.progress} />
-                </div>
-              </Card>
-            ) : null}
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                <Card className="p-4">
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                    Active
+                  </div>
+                  <div className="mt-2 font-display text-4xl text-white">
+                    {collectionCounts.active}
+                  </div>
+                </Card>
+                <Card className="p-4">
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                    Finished
+                  </div>
+                  <div className="mt-2 font-display text-4xl text-white">
+                    {collectionCounts.completed}
+                  </div>
+                </Card>
+              </div>
+              {spotlight ? (
+                <Card className="p-4">
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                    Spotlight
+                  </div>
+                  <div className="mt-3 text-base font-semibold text-white">
+                    {spotlight.title}
+                  </div>
+                  <div className="mt-2 text-sm leading-6 text-white/56">
+                    {spotlight.description}
+                  </div>
+                  <div className="mt-3">
+                    <ProgressMeter value={spotlight.progress} />
+                  </div>
+                </Card>
+              ) : null}
             </div>
           </ProjectsSummaryBox>
         );

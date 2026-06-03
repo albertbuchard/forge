@@ -408,7 +408,7 @@ still knowing the exact write/read family before it acts.
   user wants training-load trends, acute/chronic ratio, HR zone distribution,
   threshold exposure, VO2max/resting-HR context, or optimization targets before
   deciding whether a specific `workout_session` needs notes or links.
-- `weight_loss`: nutrition and body-composition health surface. Use
+- `weight_loss`: health read model plus dedicated nutrition write workflow. Use
   `forge_get_weight_loss_overview` or `/api/v1/health/weight-loss` when the user
   wants calorie balance, food quality, protein/fiber targets, training fuel,
   body trend, aesthetic look, subjective energy, cravings, gut comfort,
@@ -1615,6 +1615,12 @@ Route note:
   Use `/api/v1/health/weight-loss` or `forge_get_weight_loss_overview` for the
   overview. Do not invent generic batch entities for food logs or body check-ins
   when the dedicated tools exist.
+
+Ready to review when:
+
+- the food, body, training-fuel, gut, craving, appearance, energy, or experiment
+  question is clear enough to choose the overview, log, check-in, or experiment
+  path
 
 Preferred opening question:
 

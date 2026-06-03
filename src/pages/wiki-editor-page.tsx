@@ -933,7 +933,6 @@ export function WikiEditorPage() {
                         }
                         placeholder="Search parent page"
                         emptyMessage="No matching pages."
-                        className="[&_.max-w-\\[16rem\\]]:max-w-full"
                       />
                     </label>
 

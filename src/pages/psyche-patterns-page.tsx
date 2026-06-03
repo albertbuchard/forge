@@ -439,11 +439,11 @@ export function PsychePatternsPage() {
       render: (value, setValue) => (
         <>
           {sourceObservationNoteId ? (
-            <div className="rounded-[22px] border border-[rgba(110,231,183,0.18)] bg-[rgba(110,231,183,0.08)] p-4">
-              <div className="text-[11px] uppercase tracking-[0.16em] text-[rgba(110,231,183,0.82)]">
+            <div className="rounded-[22px] border border-[color-mix(in_srgb,var(--tertiary)_24%,var(--ui-border-subtle)_76%)] bg-[color-mix(in_srgb,var(--tertiary)_10%,var(--ui-surface-1)_90%)] p-4">
+              <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--tertiary)]">
                 Source observation
               </div>
-              <div className="mt-2 text-sm leading-6 text-white/78">
+              <div className="mt-2 break-words text-sm leading-6 text-[var(--ui-ink-medium)] [overflow-wrap:anywhere]">
                 {sourceObservationQuery.isLoading
                   ? "Loading the saved observation note..."
                   : sourceObservationQuery.data?.note
@@ -794,7 +794,7 @@ export function PsychePatternsPage() {
                 <div
                   key={pattern.id}
                   data-psyche-focus-id={pattern.id}
-                  className={`min-w-0 rounded-[28px] border border-white/8 bg-white/[0.04] p-5 transition ${psycheFocusClass(isFocused)}`}
+                  className={`min-w-0 rounded-[28px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-5 transition ${psycheFocusClass(isFocused)}`}
                 >
                   <div className="flex min-w-0 flex-wrap items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
@@ -803,8 +803,10 @@ export function PsychePatternsPage() {
                         label={pattern.title}
                         variant="heading"
                         size="xl"
+                        lines={2}
+                        labelClassName="[overflow-wrap:anywhere]"
                       />
-                      <div className="mt-2 max-w-3xl text-sm leading-7 text-white/58">
+                      <div className="mt-2 max-w-3xl break-words text-sm leading-7 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
                         {pattern.description}
                       </div>
                     </div>
@@ -831,38 +833,38 @@ export function PsychePatternsPage() {
                     </div>
                   </div>
                   <div className="mt-5 grid min-w-0 gap-3 xl:grid-cols-4">
-                    <div className="min-w-0 rounded-[22px] bg-white/[0.04] p-4">
-                      <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                    <div className="min-w-0 rounded-[22px] bg-[var(--ui-surface-2)] p-4">
+                      <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                         Cue
                       </div>
-                      <div className="mt-3 text-sm leading-6 text-white/68">
+                      <div className="mt-3 break-words text-sm leading-6 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
                         {pattern.cueContexts[0] ?? "No cue captured yet."}
                       </div>
                     </div>
-                    <div className="min-w-0 rounded-[22px] bg-[rgba(251,113,133,0.08)] p-4">
-                      <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                    <div className="min-w-0 rounded-[22px] bg-[color-mix(in_srgb,var(--danger)_10%,var(--ui-surface-1)_90%)] p-4">
+                      <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                         Loop
                       </div>
-                      <div className="mt-3 text-sm leading-6 text-white/68">
+                      <div className="mt-3 break-words text-sm leading-6 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
                         {pattern.targetBehavior}
                       </div>
                     </div>
-                    <div className="min-w-0 rounded-[22px] bg-[rgba(251,191,36,0.08)] p-4">
-                      <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                    <div className="min-w-0 rounded-[22px] bg-[color-mix(in_srgb,var(--warning)_10%,var(--ui-surface-1)_90%)] p-4">
+                      <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                         Short-term relief / long-term cost
                       </div>
-                      <div className="mt-3 text-sm leading-6 text-white/68">
+                      <div className="mt-3 break-words text-sm leading-6 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
                         {pattern.shortTermPayoff || "No payoff note yet."}
                       </div>
-                      <div className="mt-2 text-sm leading-6 text-white/52">
+                      <div className="mt-2 break-words text-sm leading-6 text-[var(--ui-ink-faint)] [overflow-wrap:anywhere]">
                         {pattern.longTermCost || "No long-term cost note yet."}
                       </div>
                     </div>
-                    <div className="min-w-0 rounded-[22px] bg-[rgba(110,231,183,0.08)] p-4">
-                      <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                    <div className="min-w-0 rounded-[22px] bg-[color-mix(in_srgb,var(--success)_10%,var(--ui-surface-1)_90%)] p-4">
+                      <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                         Return path
                       </div>
-                      <div className="mt-3 text-sm leading-6 text-white/68">
+                      <div className="mt-3 break-words text-sm leading-6 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
                         {pattern.preferredResponse}
                       </div>
                     </div>
@@ -874,6 +876,7 @@ export function PsychePatternsPage() {
                         kind="value"
                         label={value.title}
                         compact
+                        wrap
                       />
                     ))}
                     {linkedModes.map((mode) => (
@@ -882,12 +885,13 @@ export function PsychePatternsPage() {
                         kind="mode"
                         label={mode.title}
                         compact
+                        wrap
                       />
                     ))}
                     {pattern.linkedModeLabels.map((label) => (
                       <Badge
                         key={`legacy-${label}`}
-                        className="text-violet-100"
+                        className="whitespace-normal break-words text-[color-mix(in_srgb,var(--primary)_66%,var(--ui-ink-strong)_34%)] [overflow-wrap:anywhere]"
                       >
                         {label}
                       </Badge>
@@ -911,6 +915,7 @@ export function PsychePatternsPage() {
                         kind="belief"
                         label={belief.statement}
                         compact
+                        wrap
                       />
                     ))}
                   </div>

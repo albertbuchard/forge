@@ -15,10 +15,10 @@ type OrbitNode = {
 };
 
 const toneClassMap: Record<NonNullable<OrbitNode["tone"]>, string> = {
-  mint: "border-emerald-300/24 bg-[rgba(16,185,129,0.12)] text-emerald-100",
-  sky: "border-sky-300/24 bg-[rgba(56,189,248,0.12)] text-sky-100",
-  violet: "border-violet-300/24 bg-[rgba(167,139,250,0.12)] text-violet-100",
-  rose: "border-rose-300/24 bg-[rgba(251,113,133,0.12)] text-rose-100"
+  mint: "border-[color-mix(in_srgb,var(--success)_28%,var(--ui-border-subtle)_72%)] bg-[color-mix(in_srgb,var(--success)_12%,var(--ui-surface-1)_88%)] text-[color-mix(in_srgb,var(--success)_62%,var(--ui-ink-strong)_38%)]",
+  sky: "border-[color-mix(in_srgb,var(--info)_28%,var(--ui-border-subtle)_72%)] bg-[color-mix(in_srgb,var(--info)_12%,var(--ui-surface-1)_88%)] text-[color-mix(in_srgb,var(--info)_62%,var(--ui-ink-strong)_38%)]",
+  violet: "border-[color-mix(in_srgb,var(--primary)_28%,var(--ui-border-subtle)_72%)] bg-[color-mix(in_srgb,var(--primary)_12%,var(--ui-surface-1)_88%)] text-[color-mix(in_srgb,var(--primary)_62%,var(--ui-ink-strong)_38%)]",
+  rose: "border-[color-mix(in_srgb,var(--danger)_28%,var(--ui-border-subtle)_72%)] bg-[color-mix(in_srgb,var(--danger)_12%,var(--ui-surface-1)_88%)] text-[color-mix(in_srgb,var(--danger)_62%,var(--ui-ink-strong)_38%)]"
 };
 
 type PackedOrbitNode = OrbitNode & {
@@ -165,28 +165,51 @@ export function OrbitMap({
   );
 
   return (
-    <section className="overflow-hidden rounded-[32px] border border-white/8 bg-[radial-gradient(circle_at_top,rgba(110,231,183,0.14),transparent_42%),linear-gradient(180deg,rgba(15,30,34,0.98),rgba(10,21,25,0.98))] px-4 py-4 shadow-[0_24px_70px_rgba(4,8,18,0.28)] lg:px-5">
+    <section className="overflow-hidden rounded-[32px] border border-[var(--ui-border-subtle)] bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--success)_12%,transparent),transparent_42%),var(--ui-surface-section)] px-4 py-4 shadow-[var(--card-shadow)] lg:px-5">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[rgba(110,231,183,0.8)]">Reflective map</div>
-          <h2 className="mt-2 font-display text-[clamp(1.35rem,2.3vw,2rem)] leading-none text-white">{title}</h2>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-white/60">{description}</p>
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--success)]">Reflective map</div>
+          <h2 className="mt-2 break-words font-display text-[clamp(1.35rem,2.3vw,2rem)] leading-none text-[var(--ui-ink-strong)]">{title}</h2>
+          <p className="mt-2 max-w-2xl break-words text-sm leading-6 text-[var(--ui-ink-soft)]">{description}</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <div className="inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2">
-            <span className="text-xs uppercase tracking-[0.18em] text-white/38">{centerLabel}</span>
-            <span className="text-sm font-medium text-white">{centerValue}</span>
+          <div className="inline-flex min-w-0 items-center gap-3 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-2">
+            <span className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">{centerLabel}</span>
+            <span className="min-w-0 break-words text-sm font-medium text-[var(--ui-ink-strong)]">{centerValue}</span>
           </div>
           {action ? <div className="shrink-0">{action}</div> : null}
         </div>
       </div>
 
-      <div ref={frameRef} className="relative min-h-[20rem] overflow-hidden rounded-[30px] border border-white/6 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.05),transparent_42%)] lg:min-h-[22rem]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(110,231,183,0.08),transparent_32%),linear-gradient(180deg,transparent,rgba(8,13,24,0.24))]" />
+      <div className="grid gap-3 md:hidden">
+        {denseNodes.map((node) => (
+          <Link
+            key={node.id}
+            to={node.href}
+            className={cn(
+              "block min-w-0 rounded-[20px] border px-4 py-3 shadow-[var(--ui-shadow-soft)] transition hover:bg-[var(--ui-surface-hover)]",
+              toneClassMap[node.tone ?? "mint"]
+            )}
+          >
+            <div className="break-words text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)] [overflow-wrap:anywhere]">
+              {node.label}
+            </div>
+            <div className="mt-1.5 break-words font-medium text-[var(--ui-ink-strong)] [overflow-wrap:anywhere]">
+              {node.title}
+            </div>
+            <div className="mt-1.5 break-words text-sm leading-5 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
+              {node.detail}
+            </div>
+          </Link>
+        ))}
+      </div>
+
+      <div ref={frameRef} className="relative hidden min-h-[20rem] overflow-hidden rounded-[30px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] md:block lg:min-h-[22rem]">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,color-mix(in_srgb,var(--success)_8%,transparent),transparent_32%),var(--ui-surface-section)]" />
         {[112, 168, 224].map((ring) => (
           <div
             key={ring}
-            className="absolute left-1/2 top-1/2 rounded-full border border-white/[0.05]"
+            className="absolute left-1/2 top-1/2 rounded-full border border-[var(--ui-border-subtle)]"
             style={{
               width: `${ring * 2}px`,
               height: `${ring * 2}px`,
@@ -194,10 +217,10 @@ export function OrbitMap({
             }}
           />
         ))}
-        <div className="absolute inset-1/2 size-32 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/10 bg-[radial-gradient(circle,rgba(255,255,255,0.08),rgba(255,255,255,0.02))] shadow-[0_0_0_18px_rgba(255,255,255,0.02),0_0_0_56px_rgba(255,255,255,0.015)]">
+        <div className="absolute inset-1/2 size-32 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] shadow-[var(--card-shadow)]">
           <div className="flex h-full flex-col items-center justify-center text-center">
-            <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">{centerLabel}</div>
-            <div className="mt-2 font-display text-2xl text-white">{centerValue}</div>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">{centerLabel}</div>
+            <div className="mt-2 font-display text-2xl text-[var(--ui-ink-strong)]">{centerValue}</div>
           </div>
         </div>
 
@@ -215,13 +238,13 @@ export function OrbitMap({
               <Link
                 to={node.href}
                 className={cn(
-                  "block rounded-[22px] border px-3.5 py-3 shadow-[0_18px_38px_rgba(4,8,18,0.28)] backdrop-blur-sm transition hover:-translate-y-0.5 hover:bg-white/[0.1] hover:shadow-[0_24px_44px_rgba(4,8,18,0.34)]",
+                  "block min-w-0 rounded-[22px] border px-3.5 py-3 shadow-[var(--ui-shadow-soft)] backdrop-blur-sm transition hover:-translate-y-0.5 hover:bg-[var(--ui-surface-hover)]",
                   toneClassMap[node.tone ?? "mint"]
                 )}
               >
-                <div className="text-[11px] uppercase tracking-[0.16em] text-white/45">{node.label}</div>
-                <div className="mt-1.5 font-medium text-white">{node.title}</div>
-                <div className="mt-1.5 text-sm leading-5 text-white/62">{node.detail}</div>
+                <div className="break-words text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)] [overflow-wrap:anywhere]">{node.label}</div>
+                <div className="mt-1.5 break-words font-medium text-[var(--ui-ink-strong)] [overflow-wrap:anywhere]">{node.title}</div>
+                <div className="mt-1.5 break-words text-sm leading-5 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">{node.detail}</div>
               </Link>
             </motion.div>
           );

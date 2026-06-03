@@ -4,8 +4,24 @@ import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { EmptyState, ErrorState, LoadingState } from "@/components/ui/page-state";
+import {
+  EmptyState,
+  ErrorState,
+  LoadingState
+} from "@/components/ui/page-state";
 import { getQuestionnaireRun } from "@/lib/api";
+import { cn } from "@/lib/utils";
+
+const sectionLabelClass =
+  "font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]";
+const panelCardClass =
+  "min-w-0 overflow-hidden border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)]";
+const ledgerCardClass =
+  "min-w-0 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-4";
+const selectedBadgeClass =
+  "border border-[color-mix(in_srgb,var(--success)_36%,var(--ui-border-subtle)_64%)] bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_70%,var(--ui-ink-strong)_30%)]";
+const idleBadgeClass =
+  "border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]";
 
 export function PsycheQuestionnaireRunDetailPage() {
   const { runId = "" } = useParams();
@@ -36,7 +52,9 @@ export function PsycheQuestionnaireRunDetailPage() {
   }
 
   const detail = runQuery.data;
-  const answersById = new Map(detail.answers.map((answer) => [answer.itemId, answer]));
+  const answersById = new Map(
+    detail.answers.map((answer) => [answer.itemId, answer])
+  );
 
   return (
     <div className="grid gap-5">
@@ -58,10 +76,8 @@ export function PsycheQuestionnaireRunDetailPage() {
       />
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(18rem,1.1fr)]">
-        <Card className="bg-[linear-gradient(180deg,rgba(16,24,34,0.98),rgba(10,15,24,0.96))]">
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/42">
-            Stored scores
-          </div>
+        <Card className={panelCardClass}>
+          <div className={sectionLabelClass}>Stored scores</div>
           {detail.scores.length === 0 ? (
             <div className="mt-4">
               <EmptyState
@@ -73,22 +89,19 @@ export function PsycheQuestionnaireRunDetailPage() {
           ) : (
             <div className="mt-4 grid gap-3">
               {detail.scores.map((score) => (
-                <div
-                  key={score.scoreKey}
-                  className="rounded-[22px] border border-white/8 bg-white/[0.03] px-4 py-4"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-medium text-white">
+                <div key={score.scoreKey} className={ledgerCardClass}>
+                  <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="break-words text-sm font-medium text-[var(--ui-ink-strong)] [overflow-wrap:anywhere]">
                         {score.label}
                       </div>
                       {score.bandLabel ? (
-                        <div className="mt-2 text-xs uppercase tracking-[0.16em] text-[rgba(110,231,183,0.74)]">
+                        <div className="mt-2 break-words text-xs uppercase tracking-[0.16em] text-[color-mix(in_srgb,var(--success)_74%,var(--ui-ink-strong)_26%)] [overflow-wrap:anywhere]">
                           {score.bandLabel}
                         </div>
                       ) : null}
                     </div>
-                    <div className="text-right text-lg font-semibold text-white">
+                    <div className="min-w-0 break-words text-right text-lg font-semibold text-[var(--ui-ink-strong)] [overflow-wrap:anywhere]">
                       {score.valueText ?? score.valueNumeric ?? "—"}
                     </div>
                   </div>
@@ -98,19 +111,14 @@ export function PsycheQuestionnaireRunDetailPage() {
           )}
         </Card>
 
-        <Card className="bg-[linear-gradient(180deg,rgba(15,23,33,0.98),rgba(9,15,23,0.96))]">
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/42">
-            Answer ledger
-          </div>
+        <Card className={panelCardClass}>
+          <div className={sectionLabelClass}>Answer ledger</div>
           <div className="mt-4 grid gap-3">
             {detail.version.definition.items.map((item) => {
               const answer = answersById.get(item.id);
               return (
-                <div
-                  key={item.id}
-                  className="rounded-[20px] border border-white/8 bg-white/[0.03] px-4 py-4"
-                >
-                  <div className="text-sm font-medium leading-6 text-white">
+                <div key={item.id} className={ledgerCardClass}>
+                  <div className="break-words text-sm font-medium leading-6 text-[var(--ui-ink-strong)] [overflow-wrap:anywhere]">
                     {item.prompt}
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -119,11 +127,10 @@ export function PsycheQuestionnaireRunDetailPage() {
                       return (
                         <Badge
                           key={`${item.id}-${option.key}`}
-                          className={
-                            selected
-                              ? "bg-[rgba(110,231,183,0.16)] text-[rgba(187,247,208,0.94)]"
-                              : "bg-white/[0.05] text-white/54"
-                          }
+                          className={cn(
+                            "max-w-full break-words [overflow-wrap:anywhere]",
+                            selected ? selectedBadgeClass : idleBadgeClass
+                          )}
                         >
                           {option.label}
                         </Badge>

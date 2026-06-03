@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, ArrowRight, CheckCircle2, LoaderCircle } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
+  LoaderCircle
+} from "lucide-react";
 import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,6 +25,17 @@ import type {
   QuestionnaireSection
 } from "@/lib/questionnaire-types";
 import { cn } from "@/lib/utils";
+
+const sectionLabelClass =
+  "font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]";
+const optionButtonClass =
+  "min-w-0 rounded-[8px] border px-5 py-5 text-left transition";
+const compactOptionButtonClass =
+  "min-w-0 rounded-[8px] border px-3 py-3 text-sm transition";
+const selectedOptionClass =
+  "border-[color-mix(in_srgb,var(--success)_42%,var(--ui-border-subtle)_58%)] bg-[var(--ui-success-soft)] text-[var(--ui-ink-strong)]";
+const idleOptionClass =
+  "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-2)]";
 
 function toAnswer(
   item: QuestionnaireItem,
@@ -95,7 +111,10 @@ export function PsycheQuestionnaireRunPage() {
   const visibility = useMemo(
     () =>
       runDetail
-        ? getQuestionnaireVisibilityState(runDetail.version.definition, runDetail.answers)
+        ? getQuestionnaireVisibilityState(
+            runDetail.version.definition,
+            runDetail.answers
+          )
         : {
             visibleItemIds: new Set<string>(),
             visibleSectionIds: new Set<string>(),
@@ -128,12 +147,11 @@ export function PsycheQuestionnaireRunPage() {
   const currentSection = visibleSections[currentIndex] ?? null;
   const currentItem =
     runDetail?.version.definition.presentationMode === "single_question"
-      ? visibleItems[currentIndex] ?? null
+      ? (visibleItems[currentIndex] ?? null)
       : null;
-  const requiredAnswered =
-    visibleItems.every(
-      (item) => !item.required || answerMap.has(item.id)
-    );
+  const requiredAnswered = visibleItems.every(
+    (item) => !item.required || answerMap.has(item.id)
+  );
 
   const persistProgressOnly = async (progressIndex: number) => {
     if (!runDetail) {
@@ -169,7 +187,9 @@ export function PsycheQuestionnaireRunPage() {
       if (!current) {
         return current;
       }
-      const filtered = current.answers.filter((entry) => entry.itemId !== item.id);
+      const filtered = current.answers.filter(
+        (entry) => entry.itemId !== item.id
+      );
       return {
         ...current,
         run: {
@@ -194,16 +214,6 @@ export function PsycheQuestionnaireRunPage() {
     });
   };
 
-  if (startMutation.isPending || !runDetail) {
-    return (
-      <LoadingState
-        eyebrow="Questionnaire run"
-        title="Preparing guided run"
-        description="Opening the current questionnaire version, loading any draft answers, and restoring your place."
-      />
-    );
-  }
-
   if (startMutation.isError) {
     return (
       <ErrorState
@@ -214,7 +224,18 @@ export function PsycheQuestionnaireRunPage() {
     );
   }
 
-  const progress = progressCount > 0 ? ((currentIndex + 1) / progressCount) * 100 : 0;
+  if (startMutation.isPending || !runDetail) {
+    return (
+      <LoadingState
+        eyebrow="Questionnaire run"
+        title="Preparing guided run"
+        description="Opening the current questionnaire version, loading any draft answers, and restoring your place."
+      />
+    );
+  }
+
+  const progress =
+    progressCount > 0 ? ((currentIndex + 1) / progressCount) * 100 : 0;
 
   return (
     <div className="grid gap-5">
@@ -230,18 +251,16 @@ export function PsycheQuestionnaireRunPage() {
         }
       />
 
-      <Card className="overflow-hidden bg-[linear-gradient(180deg,rgba(15,23,34,0.98),rgba(8,13,20,0.98))] p-0">
-        <div className="border-b border-white/8 px-5 py-4">
+      <Card className="min-w-0 overflow-hidden border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)] p-0">
+        <div className="border-b border-[var(--ui-border-subtle)] px-5 py-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/42">
-                Progress
-              </div>
-              <div className="mt-2 text-sm text-white/72">
+            <div className="min-w-0">
+              <div className={sectionLabelClass}>Progress</div>
+              <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
                 Step {currentIndex + 1} of {progressCount}
               </div>
             </div>
-            <div className="flex items-center gap-2 text-sm text-white/56">
+            <div className="flex items-center gap-2 text-sm text-[var(--ui-ink-soft)]">
               {patchMutation.isPending ? (
                 <>
                   <LoaderCircle className="size-4 animate-spin" />
@@ -255,21 +274,22 @@ export function PsycheQuestionnaireRunPage() {
               )}
             </div>
           </div>
-          <div className="mt-3 h-1.5 rounded-full bg-white/[0.06]">
+          <div className="mt-3 h-1.5 rounded-full bg-[var(--ui-surface-2)]">
             <div
-              className="h-full rounded-full bg-[linear-gradient(90deg,rgba(110,231,183,0.92),rgba(125,211,252,0.86))] transition-[width] duration-300"
+              className="h-full rounded-full bg-[linear-gradient(90deg,var(--success),var(--info))] transition-[width] duration-300"
               style={{ width: `${progress}%` }}
             />
           </div>
         </div>
 
-        {runDetail.version.definition.presentationMode === "single_question" && currentItem ? (
+        {runDetail.version.definition.presentationMode === "single_question" &&
+        currentItem ? (
           <div className="px-5 py-6 sm:px-6">
-            <div className="mx-auto max-w-3xl">
-              <div className="font-display text-[clamp(1.7rem,3vw,2.4rem)] leading-tight text-white">
+            <div className="mx-auto grid max-w-3xl gap-6">
+              <div className="min-w-0 break-words font-display text-[clamp(1.7rem,3vw,2.4rem)] leading-tight text-[var(--ui-ink-strong)] [overflow-wrap:anywhere]">
                 {currentItem.prompt}
               </div>
-              <div className="mt-6 grid gap-3">
+              <div className="grid gap-3">
                 {currentItem.options.map((option) => {
                   const selected = answerMap.get(currentItem.id) === option.key;
                   return (
@@ -277,26 +297,33 @@ export function PsycheQuestionnaireRunPage() {
                       key={option.key}
                       type="button"
                       className={cn(
-                        "rounded-[24px] border px-5 py-5 text-left transition",
-                        selected
-                          ? "border-[rgba(110,231,183,0.35)] bg-[rgba(110,231,183,0.14)] text-white"
-                          : "border-white/8 bg-white/[0.03] text-white/74 hover:bg-white/[0.06]"
+                        optionButtonClass,
+                        selected ? selectedOptionClass : idleOptionClass
                       )}
                       onClick={() =>
                         void updateAnswer(currentItem, option.key, currentIndex)
                       }
                     >
-                      <div className="text-base font-medium">{option.label}</div>
+                      <div className="break-words text-base font-medium [overflow-wrap:anywhere]">
+                        {option.label}
+                      </div>
+                      {option.description ? (
+                        <div className="mt-2 break-words text-sm leading-6 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
+                          {option.description}
+                        </div>
+                      ) : null}
                     </button>
                   );
                 })}
               </div>
 
-              <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <Button
                   variant="secondary"
                   disabled={currentIndex === 0}
-                  onClick={() => void persistProgressOnly(Math.max(0, currentIndex - 1))}
+                  onClick={() =>
+                    void persistProgressOnly(Math.max(0, currentIndex - 1))
+                  }
                 >
                   <ArrowLeft className="mr-2 size-4" />
                   Previous
@@ -328,53 +355,60 @@ export function PsycheQuestionnaireRunPage() {
           <div className="px-5 py-6 sm:px-6">
             <div className="mx-auto max-w-5xl">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[rgba(110,231,183,0.72)]">
+                <div className="min-w-0">
+                  <div className={sectionLabelClass}>
                     {currentSection.title}
                   </div>
                   {currentSection.description ? (
-                    <div className="mt-2 text-sm text-white/56">
+                    <div className="mt-2 break-words text-sm text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
                       {currentSection.description}
                     </div>
                   ) : null}
                 </div>
-                <Badge className="bg-white/[0.08] text-white/78">
+                <Badge className="shrink-0 border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                   {currentSection.itemIds.length} items
                 </Badge>
               </div>
 
               <div className="mt-6 grid gap-4">
                 {currentSection.itemIds.map((itemId) => {
-                  const item = visibleItems.find((entry) => entry.id === itemId);
+                  const item = visibleItems.find(
+                    (entry) => entry.id === itemId
+                  );
                   if (!item) {
                     return null;
                   }
                   return (
                     <div
                       key={item.id}
-                      className="rounded-[24px] border border-white/8 bg-white/[0.03] px-4 py-4"
+                      className="min-w-0 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-4"
                     >
-                      <div className="text-sm leading-6 text-white">
+                      <div className="break-words text-sm leading-6 text-[var(--ui-ink-strong)] [overflow-wrap:anywhere]">
                         {item.prompt}
                       </div>
                       <div className="mt-4 grid gap-2 md:grid-cols-3 xl:grid-cols-6">
                         {item.options.map((option) => {
-                          const selected = answerMap.get(item.id) === option.key;
+                          const selected =
+                            answerMap.get(item.id) === option.key;
                           return (
                             <button
                               key={option.key}
                               type="button"
                               className={cn(
-                                "rounded-[18px] border px-3 py-3 text-sm transition",
-                                selected
-                                  ? "border-[rgba(110,231,183,0.35)] bg-[rgba(110,231,183,0.14)] text-white"
-                                  : "border-white/8 bg-white/[0.03] text-white/66 hover:bg-white/[0.06]"
+                                compactOptionButtonClass,
+                                selected ? selectedOptionClass : idleOptionClass
                               )}
                               onClick={() =>
-                                void updateAnswer(item, option.key, currentIndex)
+                                void updateAnswer(
+                                  item,
+                                  option.key,
+                                  currentIndex
+                                )
                               }
                             >
-                              {option.label}
+                              <span className="break-words [overflow-wrap:anywhere]">
+                                {option.label}
+                              </span>
                             </button>
                           );
                         })}
@@ -388,7 +422,9 @@ export function PsycheQuestionnaireRunPage() {
                 <Button
                   variant="secondary"
                   disabled={currentIndex === 0}
-                  onClick={() => void persistProgressOnly(Math.max(0, currentIndex - 1))}
+                  onClick={() =>
+                    void persistProgressOnly(Math.max(0, currentIndex - 1))
+                  }
                 >
                   <ArrowLeft className="mr-2 size-4" />
                   Previous section

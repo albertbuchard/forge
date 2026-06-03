@@ -535,7 +535,7 @@ export function PsycheReportsPage() {
           <div className="grid gap-4 md:grid-cols-2">
             <FlowField label="Event type">
               <select
-                className="rounded-[22px] border border-white/8 bg-white/6 px-4 py-3 text-sm text-white"
+                className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3 text-sm text-[var(--ui-ink-strong)]"
                 value={value.eventTypeId}
                 onChange={(event) =>
                   setValue({ eventTypeId: event.target.value })
@@ -664,17 +664,17 @@ export function PsycheReportsPage() {
           </div>
           <div className="grid gap-4 md:grid-cols-3">
             {value.linkedGoalIds.length > 0 ? (
-              <div className="rounded-[18px] bg-white/[0.04] px-4 py-3 text-sm text-white/62">
+              <div className="rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3 text-sm text-[var(--ui-ink-soft)]">
                 Linked to {value.linkedGoalIds.length} goal tension
               </div>
             ) : null}
             {value.linkedProjectIds.length > 0 ? (
-              <div className="rounded-[18px] bg-white/[0.04] px-4 py-3 text-sm text-white/62">
+              <div className="rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3 text-sm text-[var(--ui-ink-soft)]">
                 Linked to {value.linkedProjectIds.length} project tension
               </div>
             ) : null}
             {value.linkedTaskIds.length > 0 ? (
-              <div className="rounded-[18px] bg-white/[0.04] px-4 py-3 text-sm text-white/62">
+              <div className="rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3 text-sm text-[var(--ui-ink-soft)]">
                 Linked to {value.linkedTaskIds.length} task tension
               </div>
             ) : null}
@@ -758,7 +758,7 @@ export function PsycheReportsPage() {
                       className={`rounded-[24px] border p-4 ${visual.cardTone}`}
                     >
                       <div className="flex items-center gap-2">
-                        <div className="text-sm font-medium text-white">
+                        <div className="text-sm font-medium text-[var(--ui-ink-strong)]">
                           {group.title}
                         </div>
                         <InfoTooltip
@@ -780,7 +780,7 @@ export function PsycheReportsPage() {
                             <button
                               key={schema.id}
                               type="button"
-                              className={`rounded-full border px-3 py-2 text-sm transition ${selected ? `${visual.badgeTone} ring-1 ring-white/18` : "border-white/8 bg-white/[0.04] text-white/58 hover:bg-white/[0.08] hover:text-white"}`}
+                              className={`rounded-full border px-3 py-2 text-sm transition ${selected ? `${visual.badgeTone} ring-1 ring-[color-mix(in_srgb,var(--primary)_28%,transparent)]` : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]"}`}
                               onClick={() =>
                                 setValue({
                                   schemaLinks: toggleSchemaSelection(
@@ -922,21 +922,23 @@ export function PsycheReportsPage() {
             reports.map((report) => (
               <div
                 key={report.id}
-                className="rounded-[28px] border border-white/8 bg-white/[0.04] p-5 transition hover:bg-white/[0.07]"
+                className="min-w-0 max-w-full rounded-[28px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-5 transition hover:bg-[var(--ui-surface-hover)]"
               >
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div>
+                <div className="grid min-w-0 gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
+                  <div className="min-w-0">
                     <EntityName
                       kind="report"
                       label={report.title}
                       variant="heading"
                       size="xl"
+                      lines={2}
+                      className="w-full"
                     />
-                    <div className="mt-2 text-sm text-white/54">
+                    <div className="mt-2 min-w-0 break-words text-sm text-[var(--ui-ink-faint)] [overflow-wrap:anywhere]">
                       {report.customEventType || report.eventSituation}
                     </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2 md:justify-end">
                     {report.user ? (
                       <UserBadge user={report.user} compact />
                     ) : null}
@@ -954,34 +956,34 @@ export function PsycheReportsPage() {
                     <Badge>{report.status}</Badge>
                     <Link
                       to={`/psyche/reports/${report.id}`}
-                      className="inline-flex min-h-10 items-center rounded-full bg-white/[0.08] px-3 py-2 text-sm text-white transition hover:bg-white/[0.12]"
+                      className="inline-flex min-h-10 max-w-full items-center rounded-full bg-[var(--ui-surface-2)] px-3 py-2 text-sm text-[var(--ui-ink-strong)] transition hover:bg-[var(--ui-surface-hover)]"
                     >
                       Open report
                     </Link>
                   </div>
                 </div>
-                <div className="mt-5 grid gap-3 xl:grid-cols-4">
-                  <div className="rounded-[20px] bg-white/[0.04] p-4">
-                    <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                <div className="mt-5 grid min-w-0 gap-3 xl:grid-cols-4">
+                  <div className="min-w-0 rounded-[20px] bg-[var(--ui-surface-1)] p-4">
+                    <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                       Spark
                     </div>
-                    <div className="mt-3 text-sm leading-6 text-white/66">
+                    <div className="mt-3 break-words text-sm leading-6 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
                       {report.eventSituation}
                     </div>
                   </div>
-                  <div className="rounded-[20px] bg-[rgba(110,231,183,0.08)] p-4">
-                    <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                  <div className="min-w-0 rounded-[20px] bg-[var(--ui-success-soft)] p-4">
+                    <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                       Wave
                     </div>
-                    <div className="mt-3 text-sm leading-6 text-white/66">
+                    <div className="mt-3 break-words text-sm leading-6 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
                       {report.emotions[0]?.label ?? "No emotion captured yet"}
                     </div>
                   </div>
-                  <div className="rounded-[20px] bg-[rgba(196,181,253,0.08)] p-4">
-                    <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                  <div className="min-w-0 rounded-[20px] bg-[var(--ui-info-soft)] p-4">
+                    <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                       Lens
                     </div>
-                    <div className="mt-3">
+                    <div className="mt-3 min-w-0">
                       {report.schemaLinks[0] ? (
                         (() => {
                           const schema = findSchemaForLink(
@@ -995,23 +997,23 @@ export function PsycheReportsPage() {
                               compact
                             />
                           ) : (
-                            <div className="text-sm leading-6 text-white/66">
+                            <div className="break-words text-sm leading-6 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
                               {report.schemaLinks[0]}
                             </div>
                           );
                         })()
                       ) : (
-                        <div className="text-sm leading-6 text-white/66">
+                        <div className="break-words text-sm leading-6 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
                           No schema link yet
                         </div>
                       )}
                     </div>
                   </div>
-                  <div className="rounded-[20px] bg-[rgba(251,191,36,0.08)] p-4">
-                    <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                  <div className="min-w-0 rounded-[20px] bg-[var(--ui-warning-soft)] p-4">
+                    <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                       Pivot
                     </div>
-                    <div className="mt-3 text-sm leading-6 text-white/66">
+                    <div className="mt-3 break-words text-sm leading-6 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
                       {report.nextMoves[0] ?? "No next move yet"}
                     </div>
                   </div>

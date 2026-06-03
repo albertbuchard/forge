@@ -367,7 +367,11 @@ export function NotesPage() {
       ...shell.snapshot.tags.map((tag) => ({
         value: encodeLinkedValue("tag", tag.id),
         label: tag.name,
-        description: formatOwnedEntityDescription(tag.description, tag.user, tag.kind),
+        description: formatOwnedEntityDescription(
+          tag.description,
+          tag.user,
+          tag.kind
+        ),
         searchText: buildOwnedEntitySearchText(
           [tag.name, tag.kind, tag.description],
           tag
@@ -377,7 +381,11 @@ export function NotesPage() {
       ...((valuesQuery.data?.values ?? []).map((value) => ({
         value: encodeLinkedValue("psyche_value", value.id),
         label: value.title,
-        description: formatOwnedEntityDescription(value.description, value.user, "Psyche value"),
+        description: formatOwnedEntityDescription(
+          value.description,
+          value.user,
+          "Psyche value"
+        ),
         searchText: buildOwnedEntitySearchText(
           [value.title, value.description, value.valuedDirection],
           value
@@ -704,54 +712,54 @@ export function NotesPage() {
       />
 
       <section className="grid gap-4 lg:grid-cols-4">
-        <Card className="border-[var(--primary)]/16 shadow-[0_0_0_1px_rgba(245,158,11,0.08)]">
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+        <Card className="border-[var(--primary)]/16 shadow-[var(--card-shadow)]">
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
             Quick note default
           </div>
           <div className="mt-3 font-display text-4xl text-[var(--primary)]">
             {formatLifeForceAp(estimateQuickNoteActionPointLoad().totalAp)}
           </div>
-          <div className="mt-2 text-sm text-white/58">
+          <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
             Standalone notes count as a tiny Action Point impulse unless a
             richer active work context already covers them.
           </div>
         </Card>
         <Card>
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
             Notes created today
           </div>
-          <div className="mt-3 font-display text-4xl text-white">
+          <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
             {formatLifeForceAp(todayNoteAp)}
           </div>
-          <div className="mt-2 text-sm text-white/58">
+          <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
             Visible notes created today in this workspace at the default quick
             note cost.
           </div>
         </Card>
         <Card>
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
             Life Force sync
           </div>
-          <div className="mt-3 text-2xl font-display text-white">
+          <div className="mt-3 text-2xl font-display text-[var(--ui-ink-strong)]">
             {lifeForceQuery.data
               ? `${formatLifeForceAp(lifeForceQuery.data.spentTodayAp)} / ${formatLifeForceAp(lifeForceQuery.data.dailyBudgetAp)}`
               : "Loading..."}
           </div>
-          <div className="mt-2 text-sm text-white/58">
+          <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
             Notes participate in the same Action Point ledger as tasks, habits,
             movement, and calendar work.
           </div>
         </Card>
         <Card>
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
             Instant headroom
           </div>
-          <div className="mt-3 text-2xl font-display text-white">
+          <div className="mt-3 text-2xl font-display text-[var(--ui-ink-strong)]">
             {lifeForceQuery.data
               ? formatLifeForceRate(lifeForceQuery.data.instantFreeApPerHour)
               : "Loading..."}
           </div>
-          <div className="mt-2 text-sm text-white/58">
+          <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
             Useful when deciding whether to just capture a quick note or stay
             inside a heavier work stream.
           </div>
@@ -760,196 +768,201 @@ export function NotesPage() {
 
       <NoteFiltersBox>
         <Card className="grid gap-4">
-        <NoteFilterInput
-          entityOptions={entityFilterOptions}
-          selectedEntityValues={selectedEntityValues}
-          onSelectedEntityValuesChange={setSelectedEntityValues}
-          selectedTextTerms={selectedTextTerms}
-          onSelectedTextTermsChange={setSelectedTextTerms}
-        />
+          <NoteFilterInput
+            entityOptions={entityFilterOptions}
+            selectedEntityValues={selectedEntityValues}
+            onSelectedEntityValuesChange={setSelectedEntityValues}
+            selectedTextTerms={selectedTextTerms}
+            onSelectedTextTermsChange={setSelectedTextTerms}
+          />
 
-        <NoteTagsInput
-          value={selectedTagValues}
-          onChange={setSelectedTagValues}
-          placeholder="Filter by memory tag or custom note tag"
-        />
+          <NoteTagsInput
+            value={selectedTagValues}
+            onChange={setSelectedTagValues}
+            placeholder="Filter by memory tag or custom note tag"
+          />
 
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(12rem,0.38fr)_minmax(12rem,0.38fr)]">
-          <Input
-            value={author}
-            onChange={(event) => setAuthor(event.target.value)}
-            placeholder="Filter by author"
-          />
-          <Input
-            type="date"
-            value={updatedFrom}
-            onChange={(event) => setUpdatedFrom(event.target.value)}
-          />
-          <Input
-            type="date"
-            value={updatedTo}
-            onChange={(event) => setUpdatedTo(event.target.value)}
-          />
-        </div>
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(12rem,0.38fr)_minmax(12rem,0.38fr)]">
+            <Input
+              value={author}
+              onChange={(event) => setAuthor(event.target.value)}
+              placeholder="Filter by author"
+            />
+            <Input
+              type="date"
+              value={updatedFrom}
+              onChange={(event) => setUpdatedFrom(event.target.value)}
+            />
+            <Input
+              type="date"
+              value={updatedTo}
+              onChange={(event) => setUpdatedTo(event.target.value)}
+            />
+          </div>
         </Card>
       </NoteFiltersBox>
 
       {composerOpen ? (
         <NoteComposerBox>
           <Card className="grid gap-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/42">
-                New note
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="font-label text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
+                  New note
+                </div>
+                <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
+                  Notes are independent Markdown entities. Link them to one or
+                  more real records, add memory-system or custom tags, and
+                  optionally make them ephemeral with an automatic destroy time.
+                  Standalone notes default to{" "}
+                  {formatLifeForceAp(
+                    estimateQuickNoteActionPointLoad().totalAp
+                  )}
+                  .
+                </div>
               </div>
-              <div className="mt-2 text-sm leading-6 text-white/58">
-                Notes are independent Markdown entities. Link them to one or
-                more real records, add memory-system or custom tags, and
-                optionally make them ephemeral with an automatic destroy time.
-                Standalone notes default to{" "}
-                {formatLifeForceAp(estimateQuickNoteActionPointLoad().totalAp)}.
-              </div>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setComposerOpen(false);
+                  setComposerDraft(toDraft(null, selectedEntityValues));
+                }}
+              >
+                Cancel
+              </Button>
             </div>
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setComposerOpen(false);
-                setComposerDraft(toDraft(null, selectedEntityValues));
-              }}
-            >
-              Cancel
-            </Button>
-          </div>
 
-          <Textarea
-            value={composerDraft.contentMarkdown}
-            onChange={(event) =>
-              setComposerDraft((current) => ({
-                ...current,
-                contentMarkdown: event.target.value
-              }))
-            }
-            className="min-h-[16rem]"
-            placeholder="Write the note in Markdown. This can be as short as a handoff line or as long as a wiki page."
-          />
-
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
-            <Input
-              value={composerDraft.author}
+            <Textarea
+              value={composerDraft.contentMarkdown}
               onChange={(event) =>
                 setComposerDraft((current) => ({
                   ...current,
-                  author: event.target.value
+                  contentMarkdown: event.target.value
                 }))
               }
-              placeholder="Optional author"
+              className="min-h-[16rem]"
+              placeholder="Write the note in Markdown. This can be as short as a handoff line or as long as a wiki page."
             />
-            <EntityLinkMultiSelect
-              options={entityLinkOptions}
-              selectedValues={composerDraft.linkedValues}
-              onChange={(values) =>
-                setComposerDraft((current) => ({
-                  ...current,
-                  linkedValues: values
-                }))
-              }
-              placeholder="Link this note to strategies, goals, projects, tasks, habits, or human/bot-owned records"
-              emptyMessage="No matching entities found yet."
-            />
-          </div>
 
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-            <NoteTagsInput
-              value={composerDraft.tags}
-              onChange={(tags) =>
-                setComposerDraft((current) => ({ ...current, tags }))
-              }
-            />
-            <div className="grid gap-3 rounded-[22px] bg-white/[0.03] p-4">
-              <div>
-                <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/42">
-                  Ephemeral auto-destroy
-                </div>
-                <div className="mt-2 text-xs leading-5 text-white/48">
-                  Set an exact destroy time or a relative delay. Leaving both
-                  blank keeps the note durable.
-                </div>
-              </div>
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
               <Input
-                type="datetime-local"
-                value={composerDraft.destroyAtInput}
+                value={composerDraft.author}
                 onChange={(event) =>
                   setComposerDraft((current) => ({
                     ...current,
-                    destroyAtInput: event.target.value
+                    author: event.target.value
                   }))
                 }
+                placeholder="Optional author"
               />
-              <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_10rem]">
+              <EntityLinkMultiSelect
+                options={entityLinkOptions}
+                selectedValues={composerDraft.linkedValues}
+                onChange={(values) =>
+                  setComposerDraft((current) => ({
+                    ...current,
+                    linkedValues: values
+                  }))
+                }
+                placeholder="Link this note to strategies, goals, projects, tasks, habits, or human/bot-owned records"
+                emptyMessage="No matching entities found yet."
+              />
+            </div>
+
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+              <NoteTagsInput
+                value={composerDraft.tags}
+                onChange={(tags) =>
+                  setComposerDraft((current) => ({ ...current, tags }))
+                }
+              />
+              <div className="grid gap-3 rounded-[22px] bg-[var(--ui-surface-1)] p-4">
+                <div>
+                  <div className="font-label text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
+                    Ephemeral auto-destroy
+                  </div>
+                  <div className="mt-2 text-xs leading-5 text-[var(--ui-ink-soft)]">
+                    Set an exact destroy time or a relative delay. Leaving both
+                    blank keeps the note durable.
+                  </div>
+                </div>
                 <Input
-                  type="number"
-                  min="1"
-                  value={composerDraft.destroyDelayValue}
+                  type="datetime-local"
+                  value={composerDraft.destroyAtInput}
                   onChange={(event) =>
                     setComposerDraft((current) => ({
                       ...current,
-                      destroyDelayValue: event.target.value
+                      destroyAtInput: event.target.value
                     }))
                   }
-                  placeholder="Destroy after"
                 />
-                <select
-                  className="rounded-[14px] border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white"
-                  value={composerDraft.destroyDelayUnit}
-                  onChange={(event) =>
-                    setComposerDraft((current) => ({
-                      ...current,
-                      destroyDelayUnit: event.target
-                        .value as NoteDestroyDelayUnit
-                    }))
-                  }
-                >
-                  <option value="hours">Hours</option>
-                  <option value="days">Days</option>
-                </select>
+                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_10rem]">
+                  <Input
+                    type="number"
+                    min="1"
+                    value={composerDraft.destroyDelayValue}
+                    onChange={(event) =>
+                      setComposerDraft((current) => ({
+                        ...current,
+                        destroyDelayValue: event.target.value
+                      }))
+                    }
+                    placeholder="Destroy after"
+                  />
+                  <select
+                    className="rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-3 text-sm text-[var(--ui-ink-strong)]"
+                    value={composerDraft.destroyDelayUnit}
+                    onChange={(event) =>
+                      setComposerDraft((current) => ({
+                        ...current,
+                        destroyDelayUnit: event.target
+                          .value as NoteDestroyDelayUnit
+                      }))
+                    }
+                  >
+                    <option value="hours">Hours</option>
+                    <option value="days">Days</option>
+                  </select>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="rounded-[22px] bg-white/[0.03] p-4">
-            <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/42">
-              Preview
+            <div className="rounded-[22px] bg-[var(--ui-surface-1)] p-4">
+              <div className="font-label text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
+                Preview
+              </div>
+              <div className="mt-3">
+                {composerDraft.contentMarkdown.trim() ? (
+                  <NoteMarkdown markdown={composerDraft.contentMarkdown} />
+                ) : (
+                  <div className="text-sm text-[var(--ui-ink-faint)]">
+                    Markdown preview appears here.
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="mt-3">
-              {composerDraft.contentMarkdown.trim() ? (
-                <NoteMarkdown markdown={composerDraft.contentMarkdown} />
-              ) : (
-                <div className="text-sm text-white/42">
-                  Markdown preview appears here.
-                </div>
-              )}
-            </div>
-          </div>
 
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button
-              pending={createMutation.isPending}
-              pendingLabel="Saving"
-              disabled={
-                composerDraft.contentMarkdown.trim().length === 0 ||
-                composerDraft.linkedValues.length === 0
-              }
-              onClick={() => void createMutation.mutateAsync(composerDraft)}
-            >
-              Save note
-            </Button>
-          </div>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button
+                pending={createMutation.isPending}
+                pendingLabel="Saving"
+                disabled={
+                  composerDraft.contentMarkdown.trim().length === 0 ||
+                  composerDraft.linkedValues.length === 0
+                }
+                onClick={() => void createMutation.mutateAsync(composerDraft)}
+              >
+                Save note
+              </Button>
+            </div>
           </Card>
         </NoteComposerBox>
       ) : null}
 
       {notesQuery.isLoading ? (
-        <Card className="text-sm text-white/58">Loading notes…</Card>
+        <Card className="text-sm text-[var(--ui-ink-soft)]">
+          Loading notes…
+        </Card>
       ) : visibleNotes.length === 0 ? (
         <EmptyState
           eyebrow="Notes"
@@ -959,269 +972,275 @@ export function NotesPage() {
       ) : (
         <NotesLibraryBox>
           <div className="grid gap-3">
-          {visibleNotes.map((note) => {
-            const primaryLink = getPrimaryNavigableLink(note);
-            const href = primaryLink
-              ? getEntityRoute(primaryLink.entityType, primaryLink.entityId)
-              : null;
-            const isEditing =
-              editingNoteId === note.id && editingDraft !== null;
-            return (
-              <Card key={note.id} className="min-w-0 overflow-hidden p-5">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-xs uppercase tracking-[0.16em] text-white/38">
-                      {(note.author ?? "Unknown author").toString()} •{" "}
-                      {new Date(note.updatedAt).toLocaleString()}
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Badge
-                        className="bg-[var(--primary)]/12 text-[var(--primary)]"
-                        wrap
-                      >
-                        {formatLifeForceAp(
-                          estimateQuickNoteActionPointLoad(note).totalAp
-                        )}{" "}
-                        quick note
-                      </Badge>
-                      {note.links.map((link) => (
+            {visibleNotes.map((note) => {
+              const primaryLink = getPrimaryNavigableLink(note);
+              const href = primaryLink
+                ? getEntityRoute(primaryLink.entityType, primaryLink.entityId)
+                : null;
+              const isEditing =
+                editingNoteId === note.id && editingDraft !== null;
+              return (
+                <Card key={note.id} className="min-w-0 overflow-hidden p-5">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-xs uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
+                        {(note.author ?? "Unknown author").toString()} •{" "}
+                        {new Date(note.updatedAt).toLocaleString()}
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
                         <Badge
-                          key={`${note.id}-${link.entityType}-${link.entityId}-${link.anchorKey ?? ""}`}
-                          className="bg-white/[0.08] text-white/68"
+                          className="bg-[var(--primary)]/12 text-[var(--primary)]"
                           wrap
                         >
-                          {formatEntityTypeLabel(link.entityType)}
-                          {link.anchorKey
-                            ? ` · ${formatAnchorKeyLabel(link.anchorKey)}`
-                            : ""}
+                          {formatLifeForceAp(
+                            estimateQuickNoteActionPointLoad(note).totalAp
+                          )}{" "}
+                          quick note
                         </Badge>
-                      ))}
-                      {(note.tags ?? []).map((tag) => (
-                        <Badge
-                          key={`${note.id}-tag-${tag}`}
-                          className="bg-cyan-400/10 text-cyan-50"
-                          wrap
-                        >
-                          {tag}
-                        </Badge>
-                      ))}
-                      {note.destroyAt ? (
-                        <Badge className="bg-amber-400/10 text-amber-100" wrap>
-                          Ephemeral · deletes{" "}
-                          {new Date(note.destroyAt).toLocaleString()}
-                        </Badge>
-                      ) : null}
+                        {note.links.map((link) => (
+                          <Badge
+                            key={`${note.id}-${link.entityType}-${link.entityId}-${link.anchorKey ?? ""}`}
+                            className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-soft)]"
+                            wrap
+                          >
+                            {formatEntityTypeLabel(link.entityType)}
+                            {link.anchorKey
+                              ? ` · ${formatAnchorKeyLabel(link.anchorKey)}`
+                              : ""}
+                          </Badge>
+                        ))}
+                        {(note.tags ?? []).map((tag) => (
+                          <Badge
+                            key={`${note.id}-tag-${tag}`}
+                            className="border-[var(--info)]/20 bg-[var(--ui-info-soft)] text-[color-mix(in_srgb,var(--info)_78%,var(--ui-ink-strong)_22%)]"
+                            wrap
+                          >
+                            {tag}
+                          </Badge>
+                        ))}
+                        {note.destroyAt ? (
+                          <Badge
+                            className="border-[var(--warning)]/20 bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]"
+                            wrap
+                          >
+                            Ephemeral · deletes{" "}
+                            {new Date(note.destroyAt).toLocaleString()}
+                          </Badge>
+                        ) : null}
+                      </div>
                     </div>
+                    <button
+                      type="button"
+                      className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-2 text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-3)] hover:text-[var(--ui-ink-strong)]"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        const rect =
+                          event.currentTarget.getBoundingClientRect();
+                        setMenuState({
+                          noteId: note.id,
+                          position: {
+                            x: rect.right - 8,
+                            y: rect.bottom + 8
+                          }
+                        });
+                      }}
+                      aria-label={`Open actions for note ${note.id}`}
+                    >
+                      <MoreHorizontal className="size-4" />
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    className="rounded-full border border-white/8 bg-white/[0.04] p-2 text-white/58 transition hover:bg-white/[0.08] hover:text-white"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      const rect = event.currentTarget.getBoundingClientRect();
-                      setMenuState({
-                        noteId: note.id,
-                        position: {
-                          x: rect.right - 8,
-                          y: rect.bottom + 8
-                        }
-                      });
-                    }}
-                    aria-label={`Open actions for note ${note.id}`}
-                  >
-                    <MoreHorizontal className="size-4" />
-                  </button>
-                </div>
 
-                {isEditing ? (
-                  <div className="mt-4 grid gap-4">
-                    <Textarea
-                      value={editingDraft.contentMarkdown}
-                      onChange={(event) =>
-                        setEditingDraft((current) =>
-                          current
-                            ? {
-                                ...current,
-                                contentMarkdown: event.target.value
-                              }
-                            : current
-                        )
-                      }
-                      className="min-h-[14rem]"
-                    />
-
-                    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
-                      <Input
-                        value={editingDraft.author}
+                  {isEditing ? (
+                    <div className="mt-4 grid gap-4">
+                      <Textarea
+                        value={editingDraft.contentMarkdown}
                         onChange={(event) =>
                           setEditingDraft((current) =>
                             current
-                              ? { ...current, author: event.target.value }
+                              ? {
+                                  ...current,
+                                  contentMarkdown: event.target.value
+                                }
                               : current
                           )
                         }
-                        placeholder="Optional author"
+                        className="min-h-[14rem]"
                       />
-                      <EntityLinkMultiSelect
-                        options={entityLinkOptions}
-                        selectedValues={editingDraft.linkedValues}
-                        onChange={(values) =>
-                          setEditingDraft((current) =>
-                            current
-                              ? { ...current, linkedValues: values }
-                              : current
-                          )
-                        }
-                        placeholder="Update the linked entities"
-                        emptyMessage="No matching entities found yet."
-                      />
-                    </div>
 
-                    <div className="grid gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-                      <NoteTagsInput
-                        value={editingDraft.tags}
-                        onChange={(tags) =>
-                          setEditingDraft((current) =>
-                            current ? { ...current, tags } : current
-                          )
-                        }
-                      />
-                      <div className="grid gap-3 rounded-[22px] bg-white/[0.03] p-4">
-                        <div>
-                          <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/42">
-                            Ephemeral auto-destroy
-                          </div>
-                          <div className="mt-2 text-xs leading-5 text-white/48">
-                            Set an exact destroy time or a relative delay.
-                            Leaving both blank keeps the note durable.
-                          </div>
-                        </div>
+                      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
                         <Input
-                          type="datetime-local"
-                          value={editingDraft.destroyAtInput}
+                          value={editingDraft.author}
                           onChange={(event) =>
                             setEditingDraft((current) =>
                               current
-                                ? {
-                                    ...current,
-                                    destroyAtInput: event.target.value
-                                  }
+                                ? { ...current, author: event.target.value }
                                 : current
                             )
                           }
+                          placeholder="Optional author"
                         />
-                        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_10rem]">
+                        <EntityLinkMultiSelect
+                          options={entityLinkOptions}
+                          selectedValues={editingDraft.linkedValues}
+                          onChange={(values) =>
+                            setEditingDraft((current) =>
+                              current
+                                ? { ...current, linkedValues: values }
+                                : current
+                            )
+                          }
+                          placeholder="Update the linked entities"
+                          emptyMessage="No matching entities found yet."
+                        />
+                      </div>
+
+                      <div className="grid gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+                        <NoteTagsInput
+                          value={editingDraft.tags}
+                          onChange={(tags) =>
+                            setEditingDraft((current) =>
+                              current ? { ...current, tags } : current
+                            )
+                          }
+                        />
+                        <div className="grid gap-3 rounded-[22px] bg-[var(--ui-surface-1)] p-4">
+                          <div>
+                            <div className="font-label text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
+                              Ephemeral auto-destroy
+                            </div>
+                            <div className="mt-2 text-xs leading-5 text-[var(--ui-ink-soft)]">
+                              Set an exact destroy time or a relative delay.
+                              Leaving both blank keeps the note durable.
+                            </div>
+                          </div>
                           <Input
-                            type="number"
-                            min="1"
-                            value={editingDraft.destroyDelayValue}
+                            type="datetime-local"
+                            value={editingDraft.destroyAtInput}
                             onChange={(event) =>
                               setEditingDraft((current) =>
                                 current
                                   ? {
                                       ...current,
-                                      destroyDelayValue: event.target.value
+                                      destroyAtInput: event.target.value
                                     }
                                   : current
                               )
                             }
-                            placeholder="Destroy after"
                           />
-                          <select
-                            className="rounded-[14px] border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white"
-                            value={editingDraft.destroyDelayUnit}
-                            onChange={(event) =>
-                              setEditingDraft((current) =>
-                                current
-                                  ? {
-                                      ...current,
-                                      destroyDelayUnit: event.target
-                                        .value as NoteDestroyDelayUnit
-                                    }
-                                  : current
-                              )
-                            }
-                          >
-                            <option value="hours">Hours</option>
-                            <option value="days">Days</option>
-                          </select>
+                          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_10rem]">
+                            <Input
+                              type="number"
+                              min="1"
+                              value={editingDraft.destroyDelayValue}
+                              onChange={(event) =>
+                                setEditingDraft((current) =>
+                                  current
+                                    ? {
+                                        ...current,
+                                        destroyDelayValue: event.target.value
+                                      }
+                                    : current
+                                )
+                              }
+                              placeholder="Destroy after"
+                            />
+                            <select
+                              className="rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-3 text-sm text-[var(--ui-ink-strong)]"
+                              value={editingDraft.destroyDelayUnit}
+                              onChange={(event) =>
+                                setEditingDraft((current) =>
+                                  current
+                                    ? {
+                                        ...current,
+                                        destroyDelayUnit: event.target
+                                          .value as NoteDestroyDelayUnit
+                                      }
+                                    : current
+                                )
+                              }
+                            >
+                              <option value="hours">Hours</option>
+                              <option value="days">Days</option>
+                            </select>
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="rounded-[22px] bg-white/[0.03] p-4">
-                      <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/42">
-                        Preview
+                      <div className="rounded-[22px] bg-[var(--ui-surface-1)] p-4">
+                        <div className="font-label text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
+                          Preview
+                        </div>
+                        <div className="mt-3">
+                          {editingDraft.contentMarkdown.trim() ? (
+                            <NoteMarkdown
+                              markdown={editingDraft.contentMarkdown}
+                            />
+                          ) : (
+                            <div className="text-sm text-[var(--ui-ink-faint)]">
+                              No content yet.
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div className="mt-3">
-                        {editingDraft.contentMarkdown.trim() ? (
-                          <NoteMarkdown
-                            markdown={editingDraft.contentMarkdown}
-                          />
-                        ) : (
-                          <div className="text-sm text-white/42">
-                            No content yet.
-                          </div>
-                        )}
+
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          onClick={() => {
+                            setEditingNoteId(null);
+                            setEditingDraft(null);
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          pending={patchMutation.isPending}
+                          pendingLabel="Saving"
+                          disabled={
+                            editingDraft.contentMarkdown.trim().length === 0 ||
+                            editingDraft.linkedValues.length === 0
+                          }
+                          onClick={() =>
+                            void patchMutation.mutateAsync({
+                              noteId: note.id,
+                              draft: editingDraft
+                            })
+                          }
+                        >
+                          Save changes
+                        </Button>
                       </div>
                     </div>
-
-                    <div className="flex flex-wrap justify-end gap-2">
-                      <Button
-                        variant="ghost"
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        className="mt-4 w-full text-left"
                         onClick={() => {
-                          setEditingNoteId(null);
-                          setEditingDraft(null);
+                          if (href) {
+                            navigate(
+                              href.includes("#") ? href : `${href}#notes`
+                            );
+                          }
                         }}
+                        disabled={!href}
                       >
-                        Cancel
-                      </Button>
-                      <Button
-                        pending={patchMutation.isPending}
-                        pendingLabel="Saving"
-                        disabled={
-                          editingDraft.contentMarkdown.trim().length === 0 ||
-                          editingDraft.linkedValues.length === 0
-                        }
-                        onClick={() =>
-                          void patchMutation.mutateAsync({
-                            noteId: note.id,
-                            draft: editingDraft
-                          })
-                        }
-                      >
-                        Save changes
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      className="mt-4 w-full text-left"
-                      onClick={() => {
-                        if (href) {
-                          navigate(href.includes("#") ? href : `${href}#notes`);
-                        }
-                      }}
-                      disabled={!href}
-                    >
-                      <NoteMarkdown
-                        markdown={note.contentMarkdown}
-                        className="line-clamp-none"
-                      />
-                    </button>
-                    {href ? (
-                      <div className="mt-4 inline-flex text-xs uppercase tracking-[0.16em] text-[var(--secondary)]">
-                        Open linked record
-                      </div>
-                    ) : null}
-                  </>
-                )}
-              </Card>
-            );
-          })}
+                        <NoteMarkdown
+                          markdown={note.contentMarkdown}
+                          className="line-clamp-none"
+                        />
+                      </button>
+                      {href ? (
+                        <div className="mt-4 inline-flex text-xs uppercase tracking-[0.16em] text-[var(--secondary)]">
+                          Open linked record
+                        </div>
+                      ) : null}
+                    </>
+                  )}
+                </Card>
+              );
+            })}
           </div>
         </NotesLibraryBox>
       )}

@@ -2,8 +2,14 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { getDatabase, runInTransaction } from "./db.js";
 import { getSettings } from "./repositories/settings.js";
-import { getDefaultUser, resolveUserForMutation } from "./repositories/users.js";
-import type { LlmManager, WikiLlmProfileLike } from "./managers/platform/llm-manager.js";
+import {
+  getDefaultUser,
+  resolveUserForMutation
+} from "./repositories/users.js";
+import type {
+  LlmManager,
+  WikiLlmProfileLike
+} from "./managers/platform/llm-manager.js";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -127,6 +133,16 @@ type WeightLossEnergyDayRow = {
   movement_calories_kcal: number | null;
 };
 
+type DailyEnergyOverrideRow = {
+  id: string;
+  user_id: string;
+  day_key: string;
+  active_calories_kcal: number;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+};
+
 type AppearanceCheckinRow = {
   id: string;
   user_id: string;
@@ -239,42 +255,45 @@ const linksSchema = z
   )
   .default([]);
 
-const mealItemInputSchema = z.preprocess((value) => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return value;
-  }
-  const record = value as Record<string, unknown>;
-  return {
-    ...record,
-    calories: record.calories ?? record.caloriesKcal,
-    proteinGrams: record.proteinGrams ?? record.proteinG,
-    carbohydrateGrams: record.carbohydrateGrams ?? record.carbsG,
-    fatGrams: record.fatGrams ?? record.fatG,
-    fiberGrams: record.fiberGrams ?? record.fiberG,
-    sugarGrams: record.sugarGrams ?? record.sugarG,
-    alcoholGrams: record.alcoholGrams ?? record.alcoholG
-  };
-}, z.object({
-  id: z.string().trim().min(1).optional(),
-  foodId: z.string().trim().min(1).nullable().optional(),
-  name: z.string().trim().min(1),
-  quantity: z.coerce.number().positive().default(1),
-  unit: z.string().trim().min(1).default("serving"),
-  grams: optionalNumberSchema,
-  calories: optionalNumberSchema,
-  proteinGrams: optionalNumberSchema,
-  carbohydrateGrams: optionalNumberSchema,
-  fatGrams: optionalNumberSchema,
-  fiberGrams: optionalNumberSchema,
-  sugarGrams: optionalNumberSchema,
-  sodiumMg: optionalNumberSchema,
-  potassiumMg: optionalNumberSchema,
-  caffeineMg: optionalNumberSchema,
-  alcoholGrams: optionalNumberSchema,
-  tags: tagsSchema,
-  nutrients: z.record(z.string(), z.unknown()).default({}),
-  confidence: z.coerce.number().min(0).max(1).default(0.65)
-}));
+const mealItemInputSchema = z.preprocess(
+  (value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return value;
+    }
+    const record = value as Record<string, unknown>;
+    return {
+      ...record,
+      calories: record.calories ?? record.caloriesKcal,
+      proteinGrams: record.proteinGrams ?? record.proteinG,
+      carbohydrateGrams: record.carbohydrateGrams ?? record.carbsG,
+      fatGrams: record.fatGrams ?? record.fatG,
+      fiberGrams: record.fiberGrams ?? record.fiberG,
+      sugarGrams: record.sugarGrams ?? record.sugarG,
+      alcoholGrams: record.alcoholGrams ?? record.alcoholG
+    };
+  },
+  z.object({
+    id: z.string().trim().min(1).optional(),
+    foodId: z.string().trim().min(1).nullable().optional(),
+    name: z.string().trim().min(1),
+    quantity: z.coerce.number().positive().default(1),
+    unit: z.string().trim().min(1).default("serving"),
+    grams: optionalNumberSchema,
+    calories: optionalNumberSchema,
+    proteinGrams: optionalNumberSchema,
+    carbohydrateGrams: optionalNumberSchema,
+    fatGrams: optionalNumberSchema,
+    fiberGrams: optionalNumberSchema,
+    sugarGrams: optionalNumberSchema,
+    sodiumMg: optionalNumberSchema,
+    potassiumMg: optionalNumberSchema,
+    caffeineMg: optionalNumberSchema,
+    alcoholGrams: optionalNumberSchema,
+    tags: tagsSchema,
+    nutrients: z.record(z.string(), z.unknown()).default({}),
+    confidence: z.coerce.number().min(0).max(1).default(0.65)
+  })
+);
 
 export const nutritionFoodSearchSchema = z.object({
   query: z.string().trim().min(1),
@@ -297,6 +316,18 @@ export const nutritionTargetUpdateSchema = z.object({
   weeklyRateGoalKg: optionalNumberSchema,
   dietStyle: z.string().trim().default(""),
   bodyGoal: z.string().trim().default(""),
+  notes: z.string().trim().default("")
+});
+
+export const nutritionDailyActiveCaloriesUpdateSchema = z.object({
+  userId: z.string().trim().min(1).optional(),
+  dayKey: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  activeCaloriesKcal: z
+    .union([z.null(), z.coerce.number().finite().min(0)])
+    .optional(),
   notes: z.string().trim().default("")
 });
 
@@ -399,7 +430,9 @@ export const nutritionExperimentCreateSchema = z.object({
   userId: z.string().trim().min(1).optional(),
   hypothesisId: z.string().trim().min(1).nullable().optional(),
   title: z.string().trim().min(1),
-  status: z.enum(["planned", "running", "complete", "paused"]).default("planned"),
+  status: z
+    .enum(["planned", "running", "complete", "paused"])
+    .default("planned"),
   baselineStart: z.string().trim().nullable().optional(),
   baselineEnd: z.string().trim().nullable().optional(),
   interventionStart: z.string().trim().nullable().optional(),
@@ -410,8 +443,9 @@ export const nutritionExperimentCreateSchema = z.object({
   resultSummary: z.string().trim().default("")
 });
 
-export const nutritionExperimentPatchSchema =
-  nutritionExperimentCreateSchema.omit({ userId: true }).partial();
+export const nutritionExperimentPatchSchema = nutritionExperimentCreateSchema
+  .omit({ userId: true })
+  .partial();
 
 export const nutritionParseRequestSchema = z.object({
   text: z.string().trim().min(1),
@@ -458,7 +492,8 @@ function round(value: number, digits = 1) {
 
 function average(values: Array<number | null | undefined>) {
   const real = values.filter(
-    (value): value is number => typeof value === "number" && Number.isFinite(value)
+    (value): value is number =>
+      typeof value === "number" && Number.isFinite(value)
   );
   if (real.length === 0) {
     return null;
@@ -481,14 +516,72 @@ function metricTotal(metrics: Record<string, unknown>, key: string) {
   return null;
 }
 
+function parsePlanNoteNumber(notes: string | null | undefined, key: string) {
+  if (!notes) {
+    return null;
+  }
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = notes.match(new RegExp(`${escapedKey}=([^;]+)`));
+  const parsed = Number(match?.[1]?.trim());
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function estimateStepActiveCaloriesKcal(input: {
+  stepCount: number | null;
+  weightKg: number | null;
+}) {
+  if (
+    input.stepCount == null ||
+    input.stepCount <= 0 ||
+    input.weightKg == null ||
+    input.weightKg <= 0
+  ) {
+    return null;
+  }
+
+  const estimatedKilometers = (input.stepCount * 0.762) / 1000;
+  return estimatedKilometers * input.weightKg * 0.57;
+}
+
+function mapDailyEnergyOverride(row: DailyEnergyOverrideRow | undefined) {
+  if (!row) {
+    return null;
+  }
+  return {
+    id: row.id,
+    userId: row.user_id,
+    dayKey: row.day_key,
+    activeCaloriesKcal: row.active_calories_kcal,
+    notes: row.notes,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function getDailyEnergyOverride(userId: string, dateKey: string) {
+  const row = getDatabase()
+    .prepare(
+      `SELECT *
+       FROM nutrition_daily_energy_overrides
+       WHERE user_id = ?
+         AND day_key = ?`
+    )
+    .get(userId, dateKey) as DailyEnergyOverrideRow | undefined;
+  return mapDailyEnergyOverride(row);
+}
+
 function buildStoredEnergyModel(input: {
   userId: string;
   inferredTdee: number | null;
   averageCalories: number;
+  defaultActiveCalories: number | null;
+  latestWeightKg: number | null;
+  dailyActiveOverride: ReturnType<typeof mapDailyEnergyOverride>;
 }) {
   const today = new Date();
   const start = new Date(today);
   start.setUTCDate(today.getUTCDate() - 6);
+  const todayKey = today.toISOString().slice(0, 10);
   const startKey = start.toISOString().slice(0, 10);
   const dailySummaryRows = getDatabase()
     .prepare(
@@ -541,7 +634,10 @@ function buildStoredEnergyModel(input: {
     ])
   );
   const movementByDay = new Map(
-    movementRows.map((row) => [row.date_key, n(row.movement_calories_kcal) || null])
+    movementRows.map((row) => [
+      row.date_key,
+      n(row.movement_calories_kcal) || null
+    ])
   );
   const activeEnergyAverage = average(
     dailyHealthKit.map((day) => day.activeEnergyKcal)
@@ -556,6 +652,78 @@ function buildStoredEnergyModel(input: {
       ? n(workoutEnergyAverage) + n(movementCaloriesAverage)
       : null;
   const activeBurnKcal = activeEnergyAverage ?? fallbackActiveBurn;
+  const baselineActiveCalories =
+    input.defaultActiveCalories ?? activeBurnKcal ?? 0;
+  const todayHealthKitActive =
+    dailyHealthKit.find((day) => day.dateKey === todayKey)?.activeEnergyKcal ??
+    null;
+  const todayStepCount =
+    dailyHealthKit.find((day) => day.dateKey === todayKey)?.stepCount ?? null;
+  const todayWorkoutEnergy = workoutByDay.get(todayKey) ?? null;
+  const todayMovementCalories = movementByDay.get(todayKey) ?? null;
+  const todayWorkoutMovementCalories =
+    todayWorkoutEnergy != null || todayMovementCalories != null
+      ? n(todayWorkoutEnergy) + n(todayMovementCalories)
+      : null;
+  const todayStepEstimatedCalories = estimateStepActiveCaloriesKcal({
+    stepCount: todayStepCount,
+    weightKg: input.latestWeightKg
+  });
+  const todayFallbackPartCount = [
+    todayWorkoutEnergy,
+    todayMovementCalories,
+    todayStepEstimatedCalories
+  ].filter((value) => value != null).length;
+  const todayFallbackActiveCalories =
+    todayFallbackPartCount > 0
+      ? n(todayWorkoutEnergy) +
+        n(todayMovementCalories) +
+        n(todayStepEstimatedCalories)
+      : null;
+  const todayObservedActiveCalories =
+    todayHealthKitActive ?? todayFallbackActiveCalories;
+  const todayFallbackSource = (() => {
+    if (
+      todayWorkoutEnergy != null &&
+      todayMovementCalories != null &&
+      todayStepEstimatedCalories != null
+    ) {
+      return "today_workout_movement_step_energy";
+    }
+    if (todayWorkoutEnergy != null && todayStepEstimatedCalories != null) {
+      return "today_workout_step_energy";
+    }
+    if (todayMovementCalories != null && todayStepEstimatedCalories != null) {
+      return "today_movement_step_energy";
+    }
+    if (todayWorkoutEnergy != null && todayMovementCalories != null) {
+      return "today_workout_movement_energy";
+    }
+    if (todayWorkoutEnergy != null) {
+      return "today_workout_energy";
+    }
+    if (todayMovementCalories != null) {
+      return "today_movement_trip_calories";
+    }
+    if (todayStepEstimatedCalories != null) {
+      return "today_step_estimate";
+    }
+    return "default_active_calories";
+  })();
+  const todayActiveSource =
+    input.dailyActiveOverride != null
+      ? "user_override"
+      : todayHealthKitActive != null
+        ? "today_healthkit_active_energy"
+        : todayFallbackActiveCalories != null
+          ? todayFallbackSource
+          : "default_active_calories";
+  const todayActiveCalories =
+    input.dailyActiveOverride?.activeCaloriesKcal ??
+    todayObservedActiveCalories ??
+    baselineActiveCalories;
+  const todayTargetAdjustmentKcal =
+    todayActiveCalories - baselineActiveCalories;
   const estimatedTdeeKcal =
     activeBurnKcal != null && restingEnergyAverage != null
       ? round(activeBurnKcal + restingEnergyAverage, 0)
@@ -565,35 +733,68 @@ function buildStoredEnergyModel(input: {
     restingEnergyAverage != null ||
     workoutEnergyAverage != null;
   const hasMovementEnergy = movementCaloriesAverage != null;
-  const sourceConfidence = activeEnergyAverage != null
-    ? "healthkit_daily_active_energy"
-    : fallbackActiveBurn != null
-      ? "workout_movement_fallback"
-      : "target_inference_only";
+  const sourceConfidence =
+    activeEnergyAverage != null
+      ? "healthkit_daily_active_energy"
+      : fallbackActiveBurn != null
+        ? "workout_movement_fallback"
+        : "target_inference_only";
 
   return {
-    activeEnergyCalories: activeEnergyAverage != null ? round(activeEnergyAverage, 0) : null,
-    restingEnergyCalories: restingEnergyAverage != null ? round(restingEnergyAverage, 0) : null,
-    wearableConfidence: hasHealthKitEnergy ? "measured_directional" : "directional",
+    activeEnergyCalories:
+      activeEnergyAverage != null ? round(activeEnergyAverage, 0) : null,
+    restingEnergyCalories:
+      restingEnergyAverage != null ? round(restingEnergyAverage, 0) : null,
+    wearableConfidence: hasHealthKitEnergy
+      ? "measured_directional"
+      : "directional",
     inferredTdee: input.inferredTdee,
     estimatedTdeeKcal,
     activeBurnKcal: activeBurnKcal != null ? round(activeBurnKcal, 0) : null,
+    baselineActiveCaloriesKcal: round(baselineActiveCalories, 0),
+    todayActiveCaloriesKcal: round(todayActiveCalories, 0),
+    todayObservedActiveCaloriesKcal:
+      todayObservedActiveCalories != null
+        ? round(todayObservedActiveCalories, 0)
+        : null,
+    todayActiveCaloriesSource: todayActiveSource,
+    todayTargetAdjustmentKcal: round(todayTargetAdjustmentKcal, 0),
+    todayWorkoutEnergyKcal:
+      todayWorkoutEnergy != null ? round(todayWorkoutEnergy, 0) : null,
+    todayMovementCaloriesKcal:
+      todayMovementCalories != null ? round(todayMovementCalories, 0) : null,
+    todayHealthKitActiveCaloriesKcal:
+      todayHealthKitActive != null ? round(todayHealthKitActive, 0) : null,
+    todayStepCount: todayStepCount != null ? round(todayStepCount, 0) : null,
+    todayStepEstimatedCaloriesKcal:
+      todayStepEstimatedCalories != null
+        ? round(todayStepEstimatedCalories, 0)
+        : null,
+    todayActiveOverride: input.dailyActiveOverride,
     movementCaloriesKcal:
-      movementCaloriesAverage != null ? round(movementCaloriesAverage, 0) : null,
+      movementCaloriesAverage != null
+        ? round(movementCaloriesAverage, 0)
+        : null,
     workoutEnergyKcal:
       workoutEnergyAverage != null ? round(workoutEnergyAverage, 0) : null,
     averageCalorieIntake: input.averageCalories,
     currentDeficitEstimate:
-      estimatedTdeeKcal != null ? round(input.averageCalories - estimatedTdeeKcal, 0) : null,
+      estimatedTdeeKcal != null
+        ? round(input.averageCalories - estimatedTdeeKcal, 0)
+        : null,
     estimatedDailyEnergyBalanceKcal:
-      estimatedTdeeKcal != null ? round(input.averageCalories - estimatedTdeeKcal, 0) : null,
+      estimatedTdeeKcal != null
+        ? round(input.averageCalories - estimatedTdeeKcal, 0)
+        : null,
     energySourceConfidence: sourceConfidence,
     evidenceDays: new Set([
       ...dailyHealthKit.map((day) => day.dateKey),
       ...workoutRows.map((row) => row.date_key),
       ...movementRows.map((row) => row.date_key)
     ]).size,
-    exerciseMinutesAverage: average(dailyHealthKit.map((day) => day.exerciseMinutes)),
+    exerciseMinutesAverage: average(
+      dailyHealthKit.map((day) => day.exerciseMinutes)
+    ),
     stepCountAverage: average(dailyHealthKit.map((day) => day.stepCount)),
     sourceAvailability: {
       healthKitDailyEnergy: hasHealthKitEnergy,
@@ -612,6 +813,39 @@ function resolveReadUser(userIds?: string[]) {
 }
 
 function mapFood(row: FoodCatalogRow) {
+  const nutrients = parseJson<JsonRecord>(row.nutrients_json, {});
+  const servingGrams =
+    row.serving_grams ??
+    (row.source === "open_food_facts"
+      ? parseGramQuantity(row.serving_label)
+      : null);
+  const openFoodFactsNutrient = (
+    currentValue: number | null,
+    per100gKey: string,
+    perServingKey: string,
+    multiplier = 1
+  ) => {
+    if (row.source !== "open_food_facts") {
+      return currentValue;
+    }
+    const perServing = nutrients[perServingKey];
+    if (typeof perServing === "number" && Number.isFinite(perServing)) {
+      return round(perServing * multiplier, multiplier === 1 ? 1 : 0);
+    }
+    const per100g = nutrients[per100gKey];
+    if (
+      typeof per100g === "number" &&
+      Number.isFinite(per100g) &&
+      servingGrams != null
+    ) {
+      return round(
+        (per100g * servingGrams * multiplier) / 100,
+        multiplier === 1 ? 1 : 0
+      );
+    }
+    return currentValue;
+  };
+
   return {
     id: row.id,
     source: row.source,
@@ -620,21 +854,46 @@ function mapFood(row: FoodCatalogRow) {
     name: row.name,
     brand: row.brand,
     servingLabel: row.serving_label,
-    servingGrams: row.serving_grams,
-    calories: row.calories,
-    proteinGrams: row.protein_grams,
-    carbohydrateGrams: row.carbohydrate_grams,
-    fatGrams: row.fat_grams,
-    fiberGrams: row.fiber_grams,
-    sugarGrams: row.sugar_grams,
-    sodiumMg: row.sodium_mg,
+    servingGrams,
+    calories: openFoodFactsNutrient(
+      row.calories,
+      "energy-kcal_100g",
+      "energy-kcal_serving"
+    ),
+    proteinGrams: openFoodFactsNutrient(
+      row.protein_grams,
+      "proteins_100g",
+      "proteins_serving"
+    ),
+    carbohydrateGrams: openFoodFactsNutrient(
+      row.carbohydrate_grams,
+      "carbohydrates_100g",
+      "carbohydrates_serving"
+    ),
+    fatGrams: openFoodFactsNutrient(row.fat_grams, "fat_100g", "fat_serving"),
+    fiberGrams: openFoodFactsNutrient(
+      row.fiber_grams,
+      "fiber_100g",
+      "fiber_serving"
+    ),
+    sugarGrams: openFoodFactsNutrient(
+      row.sugar_grams,
+      "sugars_100g",
+      "sugars_serving"
+    ),
+    sodiumMg: openFoodFactsNutrient(
+      row.sodium_mg,
+      "sodium_100g",
+      "sodium_serving",
+      1000
+    ),
     potassiumMg: row.potassium_mg,
     caffeineMg: row.caffeine_mg,
     alcoholGrams: row.alcohol_grams,
     novaGroup: row.nova_group,
     nutriScore: row.nutri_score,
     tags: parseJson<string[]>(row.tags_json, []),
-    nutrients: parseJson<JsonRecord>(row.nutrients_json, {}),
+    nutrients,
     confidence: row.confidence,
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -713,7 +972,10 @@ function mapTarget(row: NutritionTargetRow | undefined, userId: string) {
 
 function sumItems(items: Array<ReturnType<typeof mapItem>>) {
   return {
-    calories: round(items.reduce((sum, item) => sum + n(item.calories), 0), 0),
+    calories: round(
+      items.reduce((sum, item) => sum + n(item.calories), 0),
+      0
+    ),
     proteinGrams: round(
       items.reduce((sum, item) => sum + n(item.proteinGrams), 0),
       1
@@ -722,7 +984,10 @@ function sumItems(items: Array<ReturnType<typeof mapItem>>) {
       items.reduce((sum, item) => sum + n(item.carbohydrateGrams), 0),
       1
     ),
-    fatGrams: round(items.reduce((sum, item) => sum + n(item.fatGrams), 0), 1),
+    fatGrams: round(
+      items.reduce((sum, item) => sum + n(item.fatGrams), 0),
+      1
+    ),
     fiberGrams: round(
       items.reduce((sum, item) => sum + n(item.fiberGrams), 0),
       1
@@ -731,7 +996,10 @@ function sumItems(items: Array<ReturnType<typeof mapItem>>) {
       items.reduce((sum, item) => sum + n(item.sugarGrams), 0),
       1
     ),
-    sodiumMg: round(items.reduce((sum, item) => sum + n(item.sodiumMg), 0), 0),
+    sodiumMg: round(
+      items.reduce((sum, item) => sum + n(item.sodiumMg), 0),
+      0
+    ),
     potassiumMg: round(
       items.reduce((sum, item) => sum + n(item.potassiumMg), 0),
       0
@@ -782,7 +1050,10 @@ function listFoodLogs(userId: string, limit = 120) {
   return rows.map((row) => mapFoodLog(row, itemsByLog.get(row.id) ?? []));
 }
 
-function insertMealItem(logId: string, input: z.infer<typeof mealItemInputSchema>) {
+function insertMealItem(
+  logId: string,
+  input: z.infer<typeof mealItemInputSchema>
+) {
   const now = nowIso();
   const id = input.id ?? newId("meal_item");
   getDatabase()
@@ -986,6 +1257,50 @@ export function updateNutritionTarget(input: unknown) {
   );
 }
 
+export function updateNutritionDailyActiveCalories(input: unknown) {
+  const parsed = nutritionDailyActiveCaloriesUpdateSchema.parse(input);
+  const userId = resolveWriteUser(parsed.userId);
+  const dateKey = parsed.dayKey ?? new Date().toISOString().slice(0, 10);
+  const now = nowIso();
+
+  if (parsed.activeCaloriesKcal == null) {
+    getDatabase()
+      .prepare(
+        `DELETE FROM nutrition_daily_energy_overrides
+         WHERE user_id = ?
+           AND day_key = ?`
+      )
+      .run(userId, dateKey);
+    return { override: null, dayKey: dateKey };
+  }
+
+  const id = newId("daily_energy");
+  getDatabase()
+    .prepare(
+      `INSERT INTO nutrition_daily_energy_overrides (
+        id, user_id, day_key, active_calories_kcal, notes, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(user_id, day_key) DO UPDATE SET
+        active_calories_kcal = excluded.active_calories_kcal,
+        notes = excluded.notes,
+        updated_at = excluded.updated_at`
+    )
+    .run(
+      id,
+      userId,
+      dateKey,
+      parsed.activeCaloriesKcal,
+      parsed.notes,
+      now,
+      now
+    );
+
+  return {
+    override: getDailyEnergyOverride(userId, dateKey),
+    dayKey: dateKey
+  };
+}
+
 export function createNutritionBodyCheckin(input: unknown) {
   const parsed = nutritionBodyCheckinCreateSchema.parse(input);
   const userId = resolveWriteUser(parsed.userId);
@@ -1184,7 +1499,9 @@ export function patchNutritionExperiment(experimentId: string, input: unknown) {
       parsed.baselineStart !== undefined
         ? parsed.baselineStart
         : existing.baseline_start,
-      parsed.baselineEnd !== undefined ? parsed.baselineEnd : existing.baseline_end,
+      parsed.baselineEnd !== undefined
+        ? parsed.baselineEnd
+        : existing.baseline_end,
       parsed.interventionStart !== undefined
         ? parsed.interventionStart
         : existing.intervention_start,
@@ -1200,11 +1517,9 @@ export function patchNutritionExperiment(experimentId: string, input: unknown) {
       nowIso(),
       experimentId
     );
-  return (
-    getDatabase()
-      .prepare(`SELECT * FROM nutrition_experiments WHERE id = ?`)
-      .get(experimentId) as ExperimentRow
-  );
+  return getDatabase()
+    .prepare(`SELECT * FROM nutrition_experiments WHERE id = ?`)
+    .get(experimentId) as ExperimentRow;
 }
 
 function listBodyCheckins(userId: string, limit = 30) {
@@ -1386,7 +1701,10 @@ function listExperiments(userId: string, limit = 20) {
 
 function buildTodayLedger(
   logs: ReturnType<typeof listFoodLogs>,
-  target: ReturnType<typeof mapTarget>
+  target: ReturnType<typeof mapTarget>,
+  dynamicTargetCalories: number,
+  activeAdjustmentCalories: number,
+  activeCaloriesSource: string
 ) {
   const today = new Date().toISOString().slice(0, 10);
   const todayLogs = logs.filter((log) => log.dayKey === today);
@@ -1416,8 +1734,11 @@ function buildTodayLedger(
     dateKey: today,
     meals: todayLogs,
     totals,
-    targetCalories: target.calorieTarget,
-    calorieDelta: round(totals.calories - n(target.calorieTarget), 0),
+    plannedTargetCalories: target.calorieTarget,
+    targetCalories: dynamicTargetCalories,
+    activeAdjustmentCalories,
+    activeCaloriesSource,
+    calorieDelta: round(totals.calories - dynamicTargetCalories, 0),
     proteinCoverage:
       n(target.proteinGramsTarget) > 0
         ? round(totals.proteinGrams / n(target.proteinGramsTarget), 2)
@@ -1432,15 +1753,43 @@ function buildTodayLedger(
   };
 }
 
-function buildWeightTrend(body: ReturnType<typeof listBodyCheckins>) {
+function latestHealthKitBodyMass(userId: string) {
+  const rows = getDatabase()
+    .prepare(
+      `SELECT date_key, metrics_json
+       FROM health_daily_summaries
+       WHERE user_id = ?
+         AND summary_type = 'vitals'
+       ORDER BY date_key DESC
+       LIMIT 30`
+    )
+    .all(userId) as WeightLossDailySummaryRow[];
+  for (const row of rows) {
+    const metrics = parseJson<Record<string, unknown>>(row.metrics_json, {});
+    const bodyMassKg = metricTotal(metrics, "bodyMass");
+    if (bodyMassKg != null && bodyMassKg > 0) {
+      return {
+        weightKg: round(bodyMassKg, 2),
+        checkedAt: `${row.date_key}T12:00:00.000Z`
+      };
+    }
+  }
+  return null;
+}
+
+function buildWeightTrend(
+  userId: string,
+  body: ReturnType<typeof listBodyCheckins>
+) {
   const withWeight = body
     .filter((entry) => typeof entry.weightKg === "number")
     .slice()
     .reverse();
   const latest = withWeight.at(-1) ?? null;
+  const healthKitFallback = latest ? null : latestHealthKitBodyMass(userId);
   const previous = withWeight.length > 1 ? withWeight.at(-2)! : null;
   const first = withWeight[0] ?? null;
-  const latestWeight = latest?.weightKg ?? null;
+  const latestWeight = latest?.weightKg ?? healthKitFallback?.weightKg ?? null;
   const deltaFromPrevious =
     latestWeight != null && previous?.weightKg != null
       ? round(latestWeight - previous.weightKg, 2)
@@ -1451,7 +1800,12 @@ function buildWeightTrend(body: ReturnType<typeof listBodyCheckins>) {
       : null;
   return {
     latestWeightKg: latestWeight,
-    latestCheckedAt: latest?.checkedAt ?? null,
+    latestCheckedAt: latest?.checkedAt ?? healthKitFallback?.checkedAt ?? null,
+    latestWeightSource: latest
+      ? "nutrition_body_checkin"
+      : healthKitFallback
+        ? "healthkit_body_mass"
+        : null,
     deltaFromPreviousKg: deltaFromPrevious,
     deltaFromFirstKg: deltaFromFirst,
     trendWeightKg:
@@ -1460,17 +1814,30 @@ function buildWeightTrend(body: ReturnType<typeof listBodyCheckins>) {
             average(withWeight.slice(-7).map((entry) => entry.weightKg)) ?? 0,
             2
           )
-        : null,
+        : (healthKitFallback?.weightKg ?? null),
     weeklyRateKg:
       withWeight.length >= 2 && first && latest
         ? round(
-            ((latest.weightKg! - first.weightKg!) /
+            (latest.weightKg! - first.weightKg!) /
               Math.max(
                 1,
                 (new Date(latest.checkedAt).getTime() -
                   new Date(first.checkedAt).getTime()) /
                   (7 * 24 * 60 * 60 * 1000)
-              )),
+              ),
+            2
+          )
+        : null,
+    sevenDayRateKg:
+      withWeight.length >= 2 && first && latest
+        ? round(
+            (latest.weightKg! - first.weightKg!) /
+              Math.max(
+                1,
+                (new Date(latest.checkedAt).getTime() -
+                  new Date(first.checkedAt).getTime()) /
+                  (7 * 24 * 60 * 60 * 1000)
+              ),
             2
           )
         : null,
@@ -1489,11 +1856,13 @@ function buildFoodQuality(logs: ReturnType<typeof listFoodLogs>) {
   }
   const total = Math.max(1, items.length);
   const calorieBase = Math.max(1, totals.calories / 1000);
-  const highProteinShare = round((tagCounts.get("high_protein") ?? 0) / total, 2);
+  const highProteinShare = round(
+    (tagCounts.get("high_protein") ?? 0) / total,
+    2
+  );
   const highFiberShare = round((tagCounts.get("high_fiber") ?? 0) / total, 2);
   const ultraProcessedShare = round(
-    ((tagCounts.get("ultra_processed") ?? 0) +
-      (tagCounts.get("nova_4") ?? 0)) /
+    ((tagCounts.get("ultra_processed") ?? 0) + (tagCounts.get("nova_4") ?? 0)) /
       total,
     2
   );
@@ -1515,8 +1884,10 @@ function buildFoodQuality(logs: ReturnType<typeof listFoodLogs>) {
             1
           )
         : null,
-    proteinPer1000Kcal: items.length > 0 ? round(totals.proteinGrams / calorieBase, 1) : null,
-    fiberPer1000Kcal: items.length > 0 ? round(totals.fiberGrams / calorieBase, 1) : null,
+    proteinPer1000Kcal:
+      items.length > 0 ? round(totals.proteinGrams / calorieBase, 1) : null,
+    fiberPer1000Kcal:
+      items.length > 0 ? round(totals.fiberGrams / calorieBase, 1) : null,
     highProteinShare,
     highFiberShare,
     ultraProcessedShare,
@@ -1531,7 +1902,9 @@ function buildFoodQuality(logs: ReturnType<typeof listFoodLogs>) {
   };
 }
 
-function buildSubjectiveSummary(checkins: ReturnType<typeof listSubjectiveCheckins>) {
+function buildSubjectiveSummary(
+  checkins: ReturnType<typeof listSubjectiveCheckins>
+) {
   return {
     checkinCount: checkins.length,
     averageEnergy: average(checkins.map((entry) => entry.energy)),
@@ -1545,7 +1918,9 @@ function buildSubjectiveSummary(checkins: ReturnType<typeof listSubjectiveChecki
 function buildGutSummary(checkins: ReturnType<typeof listGutCheckins>) {
   const averageBloating = average(checkins.map((entry) => entry.bloating));
   const averageReflux = average(checkins.map((entry) => entry.reflux));
-  const averageAbdominalPain = average(checkins.map((entry) => entry.abdominalPain));
+  const averageAbdominalPain = average(
+    checkins.map((entry) => entry.abdominalPain)
+  );
   const discomfortAverage = average([
     averageBloating,
     averageReflux,
@@ -1557,7 +1932,9 @@ function buildGutSummary(checkins: ReturnType<typeof listGutCheckins>) {
     averageReflux,
     averageAbdominalPain,
     gutComfortScore:
-      discomfortAverage == null ? null : round(Math.max(0, 10 - discomfortAverage), 1),
+      discomfortAverage == null
+        ? null
+        : round(Math.max(0, 10 - discomfortAverage), 1),
     bristolDistribution: [1, 2, 3, 4, 5, 6, 7].map((type) => ({
       type,
       count: checkins.filter((entry) => entry.bristolStoolType === type).length
@@ -1573,16 +1950,21 @@ function buildGeneratedHypotheses(
   appearance: ReturnType<typeof listAppearanceCheckins>
 ) {
   const cards = [];
-  const lateMeals = logs.filter((log) => new Date(log.loggedAt).getHours() >= 21);
+  const lateMeals = logs.filter(
+    (log) => new Date(log.loggedAt).getHours() >= 21
+  );
   const lowEnergy = subjective.filter(
     (entry) => typeof entry.energy === "number" && entry.energy <= 4
   );
   const gutSymptoms = gut.filter(
     (entry) =>
-      n(entry.bloating) >= 6 || n(entry.reflux) >= 6 || n(entry.abdominalPain) >= 6
+      n(entry.bloating) >= 6 ||
+      n(entry.reflux) >= 6 ||
+      n(entry.abdominalPain) >= 6
   );
   const puffiness = appearance.filter(
-    (entry) => typeof entry.facePuffiness === "number" && entry.facePuffiness >= 6
+    (entry) =>
+      typeof entry.facePuffiness === "number" && entry.facePuffiness >= 6
   );
   if (lateMeals.length >= 2 && puffiness.length >= 1) {
     cards.push({
@@ -1641,6 +2023,7 @@ function buildGeneratedHypotheses(
 export function getWeightLossViewData(userIds?: string[]) {
   const generatedAt = new Date().toISOString();
   const userId = resolveReadUser(userIds);
+  const todayKey = generatedAt.slice(0, 10);
   const targetRow = getDatabase()
     .prepare(`SELECT * FROM nutrition_targets WHERE user_id = ?`)
     .get(userId) as NutritionTargetRow | undefined;
@@ -1658,7 +2041,7 @@ export function getWeightLossViewData(userIds?: string[]) {
     appearance
   );
   const experiments = listExperiments(userId);
-  const todayLedger = buildTodayLedger(logs, target);
+  const weightTrend = buildWeightTrend(userId, body);
   const recentLogs = logs.slice(0, 14);
   const recentTotals = sumItems(recentLogs.flatMap((log) => log.items));
   const trackedDays = new Set(logs.map((log) => log.dayKey)).size;
@@ -1666,13 +2049,35 @@ export function getWeightLossViewData(userIds?: string[]) {
     trackedDays > 0 ? round(recentTotals.calories / trackedDays, 0) : 0;
   const inferredTdee =
     target.calorieTarget != null
-      ? round(target.calorieTarget + Math.abs(n(target.weeklyRateGoalKg)) * 1100, 0)
+      ? round(
+          target.calorieTarget + Math.abs(n(target.weeklyRateGoalKg)) * 1100,
+          0
+        )
       : null;
+  const defaultActiveCalories = parsePlanNoteNumber(
+    target.notes,
+    "activity_kcal"
+  );
+  const dailyActiveOverride = getDailyEnergyOverride(userId, todayKey);
   const energyModel = buildStoredEnergyModel({
     userId,
     inferredTdee,
-    averageCalories
+    averageCalories,
+    defaultActiveCalories,
+    latestWeightKg: weightTrend.latestWeightKg,
+    dailyActiveOverride
   });
+  const todayTargetCalories = Math.max(
+    0,
+    round(target.calorieTarget + energyModel.todayTargetAdjustmentKcal, 0)
+  );
+  const todayLedger = buildTodayLedger(
+    logs,
+    target,
+    todayTargetCalories,
+    energyModel.todayTargetAdjustmentKcal,
+    energyModel.todayActiveCaloriesSource
+  );
 
   return {
     generatedAt,
@@ -1682,14 +2087,15 @@ export function getWeightLossViewData(userIds?: string[]) {
       loggedMealCount: logs.length,
       trackedDays,
       todayCalories: todayLedger.totals.calories,
-      targetCalories: target.calorieTarget,
+      targetCalories: todayLedger.targetCalories,
       todayCalorieDelta: todayLedger.calorieDelta,
       averageCalories,
       inferredTdee,
       proteinCoverage: todayLedger.proteinCoverage,
       fiberCoverage: todayLedger.fiberCoverage,
-      unconfirmedCount: logs.filter((log) => log.confirmationState !== "confirmed")
-        .length,
+      unconfirmedCount: logs.filter(
+        (log) => log.confirmationState !== "confirmed"
+      ).length,
       hypothesisCount: storedHypotheses.length + generatedHypotheses.length,
       dataQualityScore: round(
         Math.min(
@@ -1705,7 +2111,7 @@ export function getWeightLossViewData(userIds?: string[]) {
     todayLedger,
     recentMeals: logs.slice(0, 30),
     energyModel,
-    weightTrend: buildWeightTrend(body),
+    weightTrend,
     bodyCheckins: body,
     appearanceCheckins: appearance,
     foodQuality: buildFoodQuality(logs),
@@ -1858,6 +2264,59 @@ function readOffNutrient(product: JsonRecord, key: string) {
   return typeof value === "number" ? value : null;
 }
 
+function parseGramQuantity(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+  if (typeof value !== "string") {
+    return null;
+  }
+  const match = value
+    .toLowerCase()
+    .replace(",", ".")
+    .match(/(\d+(?:\.\d+)?)\s*(kg|g|gram|grams|ml|l)\b/);
+  if (!match) {
+    return null;
+  }
+  const quantity = Number(match[1]);
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    return null;
+  }
+  const unit = match[2];
+  return unit === "kg" || unit === "l" ? quantity * 1000 : quantity;
+}
+
+function openFoodFactsServingGrams(product: JsonRecord) {
+  const servingSizeGrams = parseGramQuantity(product.serving_size);
+  if (servingSizeGrams != null) {
+    return servingSizeGrams;
+  }
+  const servingQuantity = parseGramQuantity(product.serving_quantity);
+  if (servingQuantity != null) {
+    return servingQuantity;
+  }
+  return null;
+}
+
+function openFoodFactsServingNutrient(
+  product: JsonRecord,
+  per100gKey: string,
+  perServingKey: string,
+  servingGrams: number | null
+) {
+  const perServing = readOffNutrient(product, perServingKey);
+  if (perServing != null) {
+    return perServing;
+  }
+  const per100g = readOffNutrient(product, per100gKey);
+  if (per100g == null) {
+    return null;
+  }
+  return servingGrams != null
+    ? round((per100g * servingGrams) / 100, 1)
+    : per100g;
+}
+
 function mapOpenFoodFactsProduct(product: JsonRecord) {
   const code = typeof product.code === "string" ? product.code : "";
   const name =
@@ -1875,25 +2334,68 @@ function mapOpenFoodFactsProduct(product: JsonRecord) {
     nova === 4 ? "ultra_processed" : null,
     nova ? `nova_${nova}` : null
   ].filter((tag): tag is string => Boolean(tag));
+  const servingGrams = openFoodFactsServingGrams(product);
+  const servingLabel =
+    typeof product.serving_size === "string" && product.serving_size.trim()
+      ? product.serving_size.trim()
+      : servingGrams != null
+        ? `${servingGrams} g`
+        : "100 g";
+  const sodiumServingGrams = openFoodFactsServingNutrient(
+    product,
+    "sodium_100g",
+    "sodium_serving",
+    servingGrams
+  );
   return cacheFood({
     source: "open_food_facts",
     sourceId: code,
     barcode: code,
     name,
     brand:
-      typeof product.brands === "string" ? product.brands.split(",")[0]!.trim() : "",
-    servingLabel:
-      typeof product.serving_size === "string" ? product.serving_size : "",
-    calories: readOffNutrient(product, "energy-kcal_100g"),
-    proteinGrams: readOffNutrient(product, "proteins_100g"),
-    carbohydrateGrams: readOffNutrient(product, "carbohydrates_100g"),
-    fatGrams: readOffNutrient(product, "fat_100g"),
-    fiberGrams: readOffNutrient(product, "fiber_100g"),
-    sugarGrams: readOffNutrient(product, "sugars_100g"),
+      typeof product.brands === "string"
+        ? product.brands.split(",")[0]!.trim()
+        : "",
+    servingLabel,
+    servingGrams: servingGrams ?? 100,
+    calories: openFoodFactsServingNutrient(
+      product,
+      "energy-kcal_100g",
+      "energy-kcal_serving",
+      servingGrams
+    ),
+    proteinGrams: openFoodFactsServingNutrient(
+      product,
+      "proteins_100g",
+      "proteins_serving",
+      servingGrams
+    ),
+    carbohydrateGrams: openFoodFactsServingNutrient(
+      product,
+      "carbohydrates_100g",
+      "carbohydrates_serving",
+      servingGrams
+    ),
+    fatGrams: openFoodFactsServingNutrient(
+      product,
+      "fat_100g",
+      "fat_serving",
+      servingGrams
+    ),
+    fiberGrams: openFoodFactsServingNutrient(
+      product,
+      "fiber_100g",
+      "fiber_serving",
+      servingGrams
+    ),
+    sugarGrams: openFoodFactsServingNutrient(
+      product,
+      "sugars_100g",
+      "sugars_serving",
+      servingGrams
+    ),
     sodiumMg:
-      readOffNutrient(product, "sodium_100g") != null
-        ? readOffNutrient(product, "sodium_100g")! * 1000
-        : null,
+      sodiumServingGrams != null ? round(sodiumServingGrams * 1000, 0) : null,
     novaGroup: nova,
     nutriScore:
       typeof product.nutriscore_grade === "string"
@@ -1935,13 +2437,17 @@ async function lookupOpenFoodFactsBarcode(barcode: string) {
     return [];
   }
   const payload = (await response.json()) as { product?: JsonRecord };
-  const food = payload.product ? mapOpenFoodFactsProduct(payload.product) : null;
+  const food = payload.product
+    ? mapOpenFoodFactsProduct(payload.product)
+    : null;
   return food ? [food] : [];
 }
 
 function mapFdcFood(food: JsonRecord) {
   const sourceId =
-    typeof food.fdcId === "number" ? String(food.fdcId) : String(food.fdcId ?? "");
+    typeof food.fdcId === "number"
+      ? String(food.fdcId)
+      : String(food.fdcId ?? "");
   const name =
     typeof food.description === "string" ? food.description.trim() : "";
   if (!sourceId || !name) {
@@ -2014,12 +2520,14 @@ export async function searchNutritionFoods(input: unknown) {
     local.length >= parsed.limit
       ? []
       : [
-          ...(await searchOpenFoodFacts(parsed.query, parsed.limit - local.length).catch(
-            () => []
-          )),
-          ...(await searchFoodDataCentral(parsed.query, parsed.limit - local.length).catch(
-            () => []
-          ))
+          ...(await searchOpenFoodFacts(
+            parsed.query,
+            parsed.limit - local.length
+          ).catch(() => [])),
+          ...(await searchFoodDataCentral(
+            parsed.query,
+            parsed.limit - local.length
+          ).catch(() => []))
         ].filter((food) => {
           const key = `${food.source}:${food.sourceId}`;
           if (seen.has(key)) {
@@ -2037,15 +2545,16 @@ export async function searchNutritionFoods(input: unknown) {
 export async function lookupNutritionBarcode(input: unknown) {
   const parsed = nutritionBarcodeLookupSchema.parse(input);
   const local = localFoodSearch(parsed.barcode, parsed.limit);
-  const barcodeMatches = local.filter((food) => food.barcode === parsed.barcode);
+  const barcodeMatches = local.filter(
+    (food) => food.barcode === parsed.barcode
+  );
   if (barcodeMatches.length > 0) {
     const foods = barcodeMatches.slice(0, parsed.limit);
     return { food: foods[0] ?? null, foods };
   }
-  const foods = (await lookupOpenFoodFactsBarcode(parsed.barcode).catch(() => [])).slice(
-    0,
-    parsed.limit
-  );
+  const foods = (
+    await lookupOpenFoodFactsBarcode(parsed.barcode).catch(() => [])
+  ).slice(0, parsed.limit);
   return { food: foods[0] ?? null, foods };
 }
 
@@ -2062,7 +2571,9 @@ function extractJsonObject(text: string) {
   return trimmed;
 }
 
-function getNutritionCodexProfile(connectionId?: string | null): WikiLlmProfileLike | null {
+function getNutritionCodexProfile(
+  connectionId?: string | null
+): WikiLlmProfileLike | null {
   const settings = getSettings();
   const selectedConnectionId =
     connectionId?.trim() ||
@@ -2154,10 +2665,12 @@ Known targets:
 ${JSON.stringify(context.target)}
 
 Recent meals:
-${JSON.stringify(context.recentMeals.slice(0, 8).map((meal) => ({
-  mealLabel: meal.mealLabel,
-  items: meal.items.map((item) => item.name)
-})))}
+${JSON.stringify(
+  context.recentMeals.slice(0, 8).map((meal) => ({
+    mealLabel: meal.mealLabel,
+    items: meal.items.map((item) => item.name)
+  }))
+)}
 
 Return this JSON shape:
 {

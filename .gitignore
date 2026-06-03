@@ -39,6 +39,7 @@ ios-companion/fastlane/test_output/
 forge-companion-post-fix.png
 forge-companion-post-fix-2.png
 forge-companion-post-fix-3.png
+.tmp-*.png
 # Keep publishable plugin manifests and bundled runtime assets trackable.
 !openclaw-plugin/package.json
 !openclaw-plugin/openclaw.plugin.json

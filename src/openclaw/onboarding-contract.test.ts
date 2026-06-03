@@ -102,6 +102,7 @@ async function loadOnboardingPayload() {
       string,
       string | Record<string, string> | boolean
     >;
+    verificationPaths: Record<string, string>;
     recommendedPluginTools?: Record<string, string[]>;
     connectionGuides?: {
       openclaw?: {
@@ -1555,6 +1556,15 @@ describe("forge onboarding contract", () => {
           `${entityName} action route ${route} should exist in OpenAPI`
         ).toBe(true);
       }
+    }
+
+    for (const [routeName, route] of Object.entries(
+      onboarding.verificationPaths
+    )) {
+      expect(
+        openApiPaths.has(normalizeRouteTemplate(route)),
+        `verification path ${routeName} (${route}) should exist in OpenAPI`
+      ).toBe(true);
     }
   });
 

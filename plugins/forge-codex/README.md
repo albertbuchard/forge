@@ -34,7 +34,21 @@ The current PM contract it should understand is:
 - `completionReport = { modifiedFiles[], workSummary, linkedGitRefIds[] }`
 - direct work on `main` by default
 
-The MCP server is launched by [`./scripts/run-mcp.sh`](./scripts/run-mcp.sh), which starts the bundled MCP bridge and reuses the built Forge OpenClaw tool registrations from the packaged runtime.
+The MCP server is launched by [`./scripts/run-mcp.sh`](./scripts/run-mcp.sh),
+which starts the bundled MCP bridge and reuses the built Forge OpenClaw tool
+registrations from the packaged runtime. When this script is run from the Forge
+checkout it defaults to source-backed development mode:
+
+- `FORGE_OPENCLAW_DEV=1`
+- `FORGE_DEV_WEB_ORIGIN=http://127.0.0.1:3027/forge/`
+- `FORGE_BASE_PATH=/forge/`
+- `FORGE_PORT=4317`
+- shared monorepo data root when `../../data/forge` exists
+
+In that mode the `4317` runtime must serve `/forge/` through the Vite dev app,
+so `http://127.0.0.1:4317/forge/weight-loss` should contain
+`/forge/@vite/client` and `/forge/src/main.tsx`, not a packaged
+`/forge/assets/index-*.js` bundle.
 
 The MCP bridge now reports the live plugin version from the Codex plugin
 manifest instead of a stale hard-coded server version, so Codex and Forge stay
@@ -63,6 +77,8 @@ are developing or debugging the adapter directly:
 codex mcp add forge \
   --env FORGE_ORIGIN=http://127.0.0.1 \
   --env FORGE_PORT=4317 \
+  --env FORGE_OPENCLAW_DEV=1 \
+  --env FORGE_DEV_WEB_ORIGIN=http://127.0.0.1:3027/forge/ \
   --env FORGE_ACTOR_LABEL=codex \
   --env FORGE_TIMEOUT_MS=15000 \
   -- /bin/zsh /absolute/path/to/forge/plugins/forge-codex/scripts/run-mcp.sh
@@ -79,6 +95,9 @@ Environment variables:
 - `FORGE_ACTOR_LABEL`
 - `FORGE_TIMEOUT_MS`
 - `FORGE_DATA_ROOT`
+- `FORGE_OPENCLAW_DEV`
+- `FORGE_DEV_WEB_ORIGIN`
+- `FORGE_BASE_PATH`
 - `FORGE_MCP_TEXT_CONTENT_LIMIT_BYTES`
 - `FORGE_MCP_STRUCTURED_CONTENT_LIMIT_BYTES`
 

@@ -1,26 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  CheckCircle2,
-  Cloud,
-  Pencil,
-  ExternalLink,
-  KeyRound,
-  Link2,
-  RefreshCcw
-} from "lucide-react";
-import {
-  FlowChoiceGrid,
-  FlowField,
   QuestionFlowDialog,
   type QuestionFlowStep
 } from "@/components/flows/question-flow-dialog";
-import { CalendarSetupGuide } from "@/components/calendar/calendar-setup-guide";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { InfoTooltip } from "@/components/ui/info-tooltip";
-import { Input } from "@/components/ui/input";
-import { readCalendarDisplayName } from "@/lib/calendar-name-deduper";
+import { CalendarConnectionCredentialsStep } from "@/components/calendar/calendar-connection-credentials-step";
+import {
+  CalendarConnectionDiscoveryStep,
+  CalendarConnectionProviderStep,
+  CalendarConnectionReviewStep
+} from "@/components/calendar/calendar-connection-flow-steps";
 import { ForgeApiError } from "@/lib/api-error";
 import {
   discoverCalendarConnection,
@@ -36,7 +25,6 @@ import {
 } from "@/lib/api";
 import type {
   CalendarDiscoveryPayload,
-  CalendarConnectionStatus,
   MacOSCalendarAccessStatus,
   MacOSLocalCalendarDiscoveryPayload,
   CalendarProvider,
@@ -45,298 +33,32 @@ import type {
   MicrosoftCalendarAuthSettings,
   MicrosoftCalendarOauthSession
 } from "@/lib/types";
+import {
+  OAUTH_SESSION_POLL_INTERVAL_MS,
+  buildGoogleClientIdMissingMessage,
+  buildGoogleRouteErrorMessage,
+  buildGoogleSettingsDraft,
+  buildMicrosoftSettingsDraft,
+  createDraft,
+  describeGoogleRouteRequirement,
+  isLoopbackHostname,
+  normalizeGoogleSettingsDraft,
+  normalizeLabel,
+  normalizeMicrosoftSettingsDraft,
+  sameGoogleSettingsDraft,
+  sameMicrosoftSettingsDraft,
+  sanitizeGoogleSetupMessage,
+  validateGoogleSettingsDraft,
+  validateMicrosoftSettingsDraft,
+  type ConnectionDraft,
+  type ExistingCalendarConnection,
+  type GooglePopupMessage,
+  type GoogleSettingsDraft,
+  type MicrosoftPopupMessage,
+  type MicrosoftSettingsDraft
+} from "@/components/calendar/calendar-connection-flow-model";
 
-type ConnectionDraft = {
-  provider: CalendarProvider;
-  label: string;
-  serverUrl: string;
-  username: string;
-  password: string;
-  selectedCalendarUrls: string[];
-  forgeCalendarUrl: string | null;
-  createForgeCalendar: boolean;
-  sourceId: string | null;
-  replaceConnectionIds: string[];
-};
-
-type ExistingCalendarConnection = {
-  id: string;
-  label: string;
-  provider: CalendarProvider;
-  status: CalendarConnectionStatus;
-  accountLabel?: string;
-  forgeCalendarId?: string | null;
-  config?: Record<string, string | number | boolean | null>;
-};
-
-type GooglePopupMessage = {
-  type?: string;
-  sessionId?: string;
-  status?: string;
-};
-
-type MicrosoftPopupMessage = {
-  type?: string;
-  sessionId?: string;
-  status?: string;
-};
-
-type MicrosoftSettingsDraft = {
-  clientId: string;
-  tenantId: string;
-  redirectUri: string;
-};
-
-type GoogleSettingsDraft = {
-  clientId: string;
-  clientSecret: string;
-};
-
-const MICROSOFT_CALLBACK_PATH = "/api/v1/calendar/oauth/microsoft/callback";
-const MICROSOFT_CLIENT_ID_PATTERN =
-  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
-const OAUTH_SESSION_POLL_INTERVAL_MS = 1000;
-
-const PROVIDER_DEFAULTS: Record<
-  CalendarProvider,
-  { label: string; serverUrl: string }
-> = {
-  google: {
-    label: "Primary Google",
-    serverUrl: ""
-  },
-  apple: {
-    label: "Primary Apple",
-    serverUrl: "https://caldav.icloud.com"
-  },
-  microsoft: {
-    label: "Primary Exchange Online",
-    serverUrl: ""
-  },
-  macos_local: {
-    label: "Calendars On This Mac",
-    serverUrl: "forge-macos-local://eventkit/"
-  },
-  caldav: {
-    label: "Primary CalDAV",
-    serverUrl: "https://caldav.example.com"
-  }
-};
-
-function createDraft(provider: CalendarProvider): ConnectionDraft {
-  return {
-    provider,
-    label: PROVIDER_DEFAULTS[provider].label,
-    serverUrl: PROVIDER_DEFAULTS[provider].serverUrl,
-    username: "",
-    password: "",
-    selectedCalendarUrls: [],
-    forgeCalendarUrl: null,
-    createForgeCalendar: false,
-    sourceId: null,
-    replaceConnectionIds: []
-  };
-}
-
-function normalizeLabel(provider: CalendarProvider, label: string) {
-  const trimmed = label.trim();
-  return trimmed.length > 0 ? trimmed : PROVIDER_DEFAULTS[provider].label;
-}
-
-function buildMicrosoftSettingsDraft(
-  microsoftSetup: MicrosoftCalendarAuthSettings
-): MicrosoftSettingsDraft {
-  return {
-    clientId: microsoftSetup.clientId,
-    tenantId: microsoftSetup.tenantId,
-    redirectUri: microsoftSetup.redirectUri
-  };
-}
-
-function buildGoogleSettingsDraft(
-  googleSetup: GoogleCalendarAuthSettings
-): GoogleSettingsDraft {
-  return {
-    clientId: googleSetup.storedClientId ?? "",
-    clientSecret: googleSetup.storedClientSecret ?? ""
-  };
-}
-
-function sanitizeGoogleSetupMessage(message: string) {
-  return message
-    .replace(
-      /\s*No GOOGLE_CLIENT_SECRET is used in this local PKCE flow\./gi,
-      ""
-    )
-    .replace(/\s{2,}/g, " ")
-    .trim();
-}
-
-function buildGoogleClientIdMissingMessage() {
-  return [
-    "Google OAuth credentials are not set for this Forge install.",
-    "- Save a Google desktop-app client ID and client secret below for this Forge install.",
-    "- Or rely on the packaged or environment defaults for the Forge runtime."
-  ].join("\n");
-}
-
-function buildGoogleRouteErrorMessage(
-  routeMessage: string,
-  allowedOrigins: string[]
-) {
-  return [
-    routeMessage,
-    `- Open Forge from a local browser on the host running Forge.`,
-    `- Use one of these local addresses: ${allowedOrigins.join(", ")}.`
-  ].join("\n");
-}
-
-function normalizeGoogleSettingsDraft(
-  draft: GoogleSettingsDraft
-): GoogleSettingsDraft {
-  return {
-    clientId: (draft.clientId ?? "").trim(),
-    clientSecret: (draft.clientSecret ?? "").trim()
-  };
-}
-
-function sameGoogleSettingsDraft(
-  left: GoogleSettingsDraft,
-  right: GoogleSettingsDraft
-) {
-  return (
-    left.clientId.trim() === right.clientId.trim() &&
-    left.clientSecret.trim() === right.clientSecret.trim()
-  );
-}
-
-function validateGoogleSettingsDraft(draft: GoogleSettingsDraft) {
-  const normalized = normalizeGoogleSettingsDraft(draft);
-  const issues: Partial<Record<keyof GoogleSettingsDraft, string>> = {};
-  const hasClientId = normalized.clientId.length > 0;
-  const hasClientSecret = normalized.clientSecret.length > 0;
-
-  if (hasClientId !== hasClientSecret) {
-    const message =
-      "When overriding Google OAuth credentials, save the client ID and client secret together, or clear both to use the bundled defaults.";
-    if (!hasClientId) {
-      issues.clientId = message;
-    }
-    if (!hasClientSecret) {
-      issues.clientSecret = message;
-    }
-  }
-
-  return {
-    normalized,
-    issues,
-    isValid: Object.keys(issues).length === 0
-  };
-}
-
-function normalizeMicrosoftSettingsDraft(
-  draft: MicrosoftSettingsDraft
-): MicrosoftSettingsDraft {
-  return {
-    clientId: draft.clientId.trim(),
-    tenantId: draft.tenantId.trim() || "common",
-    redirectUri: draft.redirectUri.trim()
-  };
-}
-
-function validateMicrosoftSettingsDraft(draft: MicrosoftSettingsDraft) {
-  const normalized = normalizeMicrosoftSettingsDraft(draft);
-  const issues: Partial<Record<keyof MicrosoftSettingsDraft, string>> = {};
-
-  if (!normalized.clientId) {
-    issues.clientId = "Microsoft client ID is required.";
-  } else if (!MICROSOFT_CLIENT_ID_PATTERN.test(normalized.clientId)) {
-    issues.clientId = "Use the Microsoft app registration client ID GUID.";
-  }
-
-  if (!normalized.redirectUri) {
-    issues.redirectUri = "Redirect URI is required.";
-  } else {
-    try {
-      const url = new URL(normalized.redirectUri);
-      if (url.protocol !== "http:" && url.protocol !== "https:") {
-        issues.redirectUri = "Redirect URI must use http or https.";
-      } else if (url.pathname !== MICROSOFT_CALLBACK_PATH) {
-        issues.redirectUri = `Redirect URI must end with ${MICROSOFT_CALLBACK_PATH}.`;
-      }
-    } catch {
-      issues.redirectUri = "Redirect URI must be a full URL.";
-    }
-  }
-
-  return {
-    normalized,
-    issues,
-    isValid: Object.keys(issues).length === 0
-  };
-}
-
-function sameMicrosoftSettingsDraft(
-  left: MicrosoftSettingsDraft,
-  right: MicrosoftSettingsDraft
-) {
-  return (
-    left.clientId.trim() === right.clientId.trim() &&
-    left.tenantId.trim() === right.tenantId.trim() &&
-    left.redirectUri.trim() === right.redirectUri.trim()
-  );
-}
-
-function isLoopbackHostname(hostname: string) {
-  return hostname === "127.0.0.1" || hostname === "localhost";
-}
-
-function isTailscaleHostname(hostname: string) {
-  return hostname.endsWith(".ts.net");
-}
-
-export function describeGoogleRouteRequirement(input: {
-  currentOrigin: string;
-  appBaseUrl: string;
-  redirectUri: string;
-  allowedOrigins: string[];
-  isLocalOnly: boolean;
-}) {
-  const allowedLocalOrigins = input.allowedOrigins.filter((origin) => {
-    try {
-      return isLoopbackHostname(new URL(origin).hostname);
-    } catch {
-      return false;
-    }
-  });
-
-  const redirectHostname = (() => {
-    try {
-      return new URL(input.redirectUri).hostname;
-    } catch {
-      return "";
-    }
-  })();
-  let currentHostname = "";
-  try {
-    currentHostname = new URL(input.currentOrigin).hostname;
-  } catch {
-    currentHostname = "";
-  }
-
-  if (
-    isTailscaleHostname(currentHostname) &&
-    isLoopbackHostname(redirectHostname)
-  ) {
-    return `Google sign-in has to start from a local browser on the host running Forge. Forge is currently open through Tailscale at ${input.currentOrigin}, but Google sends the callback to localhost on the device that opens the popup. On a phone or another computer, that callback goes to that device instead of the Forge host.`;
-  }
-
-  if (input.isLocalOnly) {
-    return `Google sign-in has to start from a local browser on the host running Forge. Google sends the callback to localhost, so if Forge is opened remotely, the callback goes to the other device instead of the Forge host.`;
-  }
-
-  return `Google sign-in is only enabled from the configured Forge host for this deployment. Open Forge on ${input.appBaseUrl}. Current browser origin: ${input.currentOrigin}.`;
-}
+export { describeGoogleRouteRequirement } from "@/components/calendar/calendar-connection-flow-model";
 
 export function CalendarConnectionFlowDialog({
   open,
@@ -1184,106 +906,18 @@ export function CalendarConnectionFlowDialog({
         description:
           "macOS local uses EventKit to access the calendars already configured on this Mac, Apple uses autodiscovery from caldav.icloud.com, Google uses a localhost Authorization Code + PKCE flow, Exchange Online uses guided Microsoft sign-in in read-only mode, and custom CalDAV stays available for everything else.",
         render: (value, setValue) => (
-          <div className="grid gap-5">
-            <FlowField
-              label="Provider"
-              description="Each setup path is guided. Forge discovers calendars before anything is saved."
-            >
-              <FlowChoiceGrid
-                value={value.provider}
-                onChange={(next) => {
-                  setDiscovery(null);
-                  setMacosDiscovery(null);
-                  setSubmitError(null);
-                  setMicrosoftSetupMessage(null);
-                  resetGoogleSession();
-                  resetMicrosoftSession();
-                  setValue(createDraft(next as CalendarProvider));
-                }}
-                options={[
-                  {
-                    value: "google",
-                    label: "Google Calendar",
-                    description:
-                      "Use Google sign-in with Authorization Code + PKCE, let Forge exchange the code on the backend, and store a per-user refresh token server-side."
-                  },
-                  {
-                    value: "apple",
-                    label: "Apple Calendar",
-                    description:
-                      "Start from https://caldav.icloud.com and autodiscover calendars with your app password."
-                  },
-                  {
-                    value: "microsoft",
-                    label: "Exchange Online",
-                    description:
-                      "Save the Microsoft app registration fields in Settings, then sign in with Microsoft and mirror selected Exchange Online calendars in read-only mode."
-                  },
-                  {
-                    value: "macos_local",
-                    label: "Calendars On This Mac",
-                    description:
-                      "Use EventKit to access the calendars already configured in Calendar.app on this host machine and avoid reconnecting those same accounts manually."
-                  },
-                  {
-                    value: "caldav",
-                    label: "Custom CalDAV",
-                    description:
-                      "Use a CalDAV base URL for Nextcloud, Fastmail, Baikal, and other compatible providers."
-                  }
-                ]}
-              />
-            </FlowField>
-
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4">
-                <div className="flex items-center gap-3 text-white">
-                  <Cloud className="size-4 text-[var(--primary)]" />
-                  <div className="font-medium">Dedicated write calendar</div>
-                </div>
-                <p className="mt-3 text-sm leading-6 text-white/60">
-                  {value.provider === "microsoft" ? (
-                    "Exchange Online is read-only for now. Forge mirrors selected calendars into Forge, but it does not publish work blocks or owned timeboxes back to Microsoft."
-                  ) : (
-                    <>
-                      Forge writes work blocks and owned timeboxes into a
-                      dedicated calendar named{" "}
-                      <span className="font-medium text-white">Forge</span>.
-                    </>
-                  )}
-                </p>
-              </div>
-              <div className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4">
-                <div className="flex items-center gap-3 text-white">
-                  <KeyRound className="size-4 text-[var(--primary)]" />
-                  <div className="font-medium">Discovery first</div>
-                </div>
-                <p className="mt-3 text-sm leading-6 text-white/60">
-                  {value.provider === "google"
-                    ? "Forge opens a Google sign-in popup, exchanges the authorization code on the backend, stores a per-user refresh token, and then discovers the writable calendars for that account."
-                    : value.provider === "macos_local"
-                      ? "Forge asks macOS for Calendar access, discovers the host calendars grouped by account source, and replaces overlapping remote connections instead of keeping two copies."
-                      : value.provider === "microsoft"
-                        ? "Forge starts a Microsoft sign-in popup, then discovers the calendars available to that account before you choose what to mirror."
-                        : "Forge discovers the actual calendar collections before you choose which ones to mirror and which one should receive owned timeboxes."}
-                </p>
-              </div>
-            </div>
-
-            <div className="rounded-[24px] border border-white/8 bg-white/[0.03] p-4">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
-                Setup guide
-              </div>
-              <p className="mt-2 text-sm leading-6 text-white/60">
-                These are the exact setup steps for the selected provider. They
-                stay inside this guided flow so Settings can stay focused on
-                connection health and actions.
-              </p>
-              <div className="mt-4">
-                <CalendarSetupGuide provider={value.provider} compact />
-              </div>
-            </div>
-          </div>
+          <CalendarConnectionProviderStep
+            value={value}
+            onProviderChange={(provider) => {
+              setDiscovery(null);
+              setMacosDiscovery(null);
+              setSubmitError(null);
+              setMicrosoftSetupMessage(null);
+              resetGoogleSession();
+              resetMicrosoftSession();
+              setValue(createDraft(provider));
+            }}
+          />
         )
       },
       {
@@ -1310,619 +944,60 @@ export function CalendarConnectionFlowDialog({
                   ? "Forge uses the Microsoft client ID, tenant, and redirect URI saved in Settings -> Calendar, then runs a guided popup sign-in."
                   : "Forge stores the secrets securely, then discovers the available calendars before anything is saved.",
         render: (value, setValue) => (
-          <div className="grid gap-4">
-            <FlowField
-              label="Connection label"
-              description="This is the readable label Forge shows in settings and the calendar health cards."
-            >
-              <Input
-                value={value.label}
-                onChange={(event) => setValue({ label: event.target.value })}
-                placeholder={PROVIDER_DEFAULTS[value.provider].label}
-              />
-            </FlowField>
-
-            {value.provider === "macos_local" ? (
-              <div className="grid gap-4">
-                <div className="rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(20,32,48,0.98),rgba(11,18,30,0.98))] p-5">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <div className="font-medium text-white">
-                        macOS Calendar access
-                      </div>
-                      <p className="mt-2 max-w-2xl text-sm leading-6 text-white/60">
-                        Forge uses EventKit to read and write the calendars
-                        already configured in Calendar.app on this Mac. Grant
-                        Calendar full access, then discover the available
-                        account sources.
-                      </p>
-                    </div>
-                    <Badge
-                      className={
-                        macosStatus === "full_access"
-                          ? "bg-emerald-500/16 text-emerald-100"
-                          : "bg-white/[0.08] text-white/72"
-                      }
-                    >
-                      {macosStatus === "full_access"
-                        ? "Full access"
-                        : macosStatus.replaceAll("_", " ")}
-                    </Badge>
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap items-center gap-3">
-                    <Button
-                      type="button"
-                      onClick={() => void macosAccessMutation.mutateAsync()}
-                      pending={macosAccessMutation.isPending}
-                      pendingLabel="Waiting for macOS"
-                    >
-                      <KeyRound className="size-4" />
-                      Request Calendar access
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={() => void macosStatusMutation.mutateAsync()}
-                      pending={macosStatusMutation.isPending}
-                      pendingLabel="Checking"
-                    >
-                      <RefreshCcw className="size-4" />
-                      Check access
-                    </Button>
-                    <Button
-                      type="button"
-                      onClick={() => void discoveryMutation.mutateAsync()}
-                      disabled={macosStatus !== "full_access"}
-                      pending={discoveryMutation.isPending}
-                      pendingLabel="Discovering"
-                    >
-                      <RefreshCcw className="size-4" />
-                      Discover host calendars
-                    </Button>
-                  </div>
-
-                  {macosDiscovery?.sources?.length ? (
-                    <div className="mt-5 grid gap-3">
-                      <div className="text-sm font-medium text-white">
-                        Host calendar sources
-                      </div>
-                      {macosDiscovery.sources.map((source) => {
-                        const selected = value.sourceId === source.sourceId;
-                        return (
-                          <button
-                            key={source.sourceId}
-                            type="button"
-                            className={`rounded-[20px] border px-4 py-3 text-left transition ${
-                              selected
-                                ? "border-[var(--primary)]/40 bg-[var(--primary)]/12 text-white"
-                                : "border-white/8 bg-white/[0.04] text-white/72 hover:bg-white/[0.07]"
-                            }`}
-                            onClick={() => {
-                              setValue({ sourceId: source.sourceId });
-                              applyDiscoveryPayload({
-                                provider: "macos_local",
-                                accountLabel: source.accountLabel,
-                                serverUrl: value.serverUrl,
-                                principalUrl: null,
-                                homeUrl: null,
-                                calendars: source.calendars
-                              });
-                            }}
-                          >
-                            <div className="font-medium">
-                              {source.accountLabel || source.sourceTitle}
-                            </div>
-                            <div className="mt-1 text-sm text-white/56">
-                              {source.sourceType} · {source.calendars.length}{" "}
-                              calendars
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            ) : value.provider === "google" ? (
-              <div className="grid gap-4">
-                <div className="rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(20,32,48,0.98),rgba(11,18,30,0.98))] p-5">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <div className="font-medium text-white">
-                        How Google sign-in works
-                      </div>
-                      <p className="mt-2 max-w-2xl text-sm leading-6 text-white/60">
-                        Start the popup from the host running Forge. Google
-                        returns to Forge on localhost, Forge completes the PKCE
-                        exchange on the backend, then Forge discovers the
-                        calendars for that account.
-                      </p>
-                    </div>
-                    <Badge className="bg-emerald-500/16 text-emerald-100">
-                      Auth code + PKCE
-                    </Badge>
-                  </div>
-
-                  <div className="mt-4 rounded-[18px] bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/68">
-                    <div>
-                      Forge runtime:{" "}
-                      <span className="font-medium text-white">
-                        {activeGoogleSetup.appBaseUrl}
-                      </span>
-                    </div>
-                    <div className="break-all">
-                      Redirect URI:{" "}
-                      <span className="font-medium text-white">
-                        {activeGoogleSetup.redirectUri}
-                      </span>
-                    </div>
-                    <div className="break-all">
-                      Redirect origin:{" "}
-                      <span className="font-medium text-white">
-                        {googleRedirectOrigin || "Unavailable"}
-                      </span>
-                    </div>
-                    <div>
-                      Allowed local browser origins:{" "}
-                      <span className="font-medium text-white">
-                        {activeGoogleSetup.allowedOrigins.join(", ")}
-                      </span>
-                    </div>
-                    <div className="break-all">
-                      Detected browser origin:{" "}
-                      <span className="font-medium text-white">
-                        {currentBrowserOrigin || "Unavailable"}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 rounded-[18px] bg-white/[0.04] p-4">
-                    {!googleClientIdEditing ? (
-                      <div className="grid gap-3">
-                        <div className="grid min-w-0 gap-3">
-                          <div className="flex min-w-0 items-center justify-between gap-3">
-                            <div className="min-w-0 flex-1">
-                              <div className="flex min-w-0 items-center gap-2">
-                                <span className="truncate font-medium text-white">
-                                  Google OAuth client
-                                </span>
-                                <Badge
-                                  className={
-                                    activeGoogleSetup.storedClientId ||
-                                    "" ||
-                                    activeGoogleSetup.storedClientSecret ||
-                                    ""
-                                      ? "bg-emerald-500/16 text-emerald-100"
-                                      : "bg-white/[0.08] text-white/72"
-                                  }
-                                >
-                                  {activeGoogleSetup.storedClientId ||
-                                  "" ||
-                                  activeGoogleSetup.storedClientSecret ||
-                                  ""
-                                    ? "Stored on server"
-                                    : "Using packaged default"}
-                                </Badge>
-                                <InfoTooltip
-                                  content="Forge ships with a packaged Google desktop OAuth client by default. Save both fields only when this Forge install should use a different client ID and client secret pair."
-                                  label="Explain Google OAuth client"
-                                  className="shrink-0"
-                                />
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              aria-label="Edit Google OAuth client"
-                              className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-white/72 transition hover:bg-white/[0.12] hover:text-white"
-                              onClick={() => {
-                                setGoogleSetupMessage(null);
-                                setGoogleClientIdEditing(true);
-                              }}
-                            >
-                              <Pencil className="size-4" />
-                            </button>
-                          </div>
-                        </div>
-
-                        <FlowField
-                          label="Effective client ID"
-                          description="This is the Google desktop-app client ID Forge will use right now."
-                        >
-                          <div className="flex min-h-11 min-w-0 items-center overflow-hidden rounded-[18px] border border-white/8 bg-black/20 px-4 text-sm text-white/38">
-                            <span
-                              className="block min-w-0 truncate"
-                              title={activeGoogleSetup.clientId}
-                            >
-                              {activeGoogleSetup.clientId}
-                            </span>
-                          </div>
-                        </FlowField>
-
-                        <FlowField
-                          label="Effective client secret"
-                          description="Forge uses this value on the local backend when exchanging and refreshing Google tokens."
-                        >
-                          <div className="flex min-h-11 min-w-0 items-center overflow-hidden rounded-[18px] border border-white/8 bg-black/20 px-4 text-sm text-white/38">
-                            <span
-                              className="block min-w-0 truncate"
-                              title={activeGoogleSetup.clientSecret || ""}
-                            >
-                              {activeGoogleSetup.clientSecret || ""}
-                            </span>
-                          </div>
-                        </FlowField>
-                      </div>
-                    ) : (
-                      <div className="grid gap-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div className="font-medium text-white">
-                              Google OAuth override
-                            </div>
-                            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/60">
-                              Save both the client ID and client secret only
-                              when this Forge install should use a different
-                              Google desktop OAuth app than the packaged
-                              default.
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            aria-label="Done editing Google OAuth client"
-                            className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-white/72 transition hover:bg-white/[0.12] hover:text-white"
-                            onClick={() => {
-                              setGoogleSetupMessage(null);
-                              const savedDraft =
-                                buildGoogleSettingsDraft(activeGoogleSetup);
-                              setGoogleSettingsDraft(savedDraft);
-                              setGoogleClientIdEditing(false);
-                            }}
-                          >
-                            <CheckCircle2 className="size-4" />
-                          </button>
-                        </div>
-
-                        <FlowField
-                          label="Client ID"
-                          description="Override the packaged Google desktop-app client ID for this Forge install."
-                        >
-                          <Input
-                            aria-label="Client ID"
-                            value={googleSettingsDraft.clientId}
-                            onChange={(event) => {
-                              setGoogleSetupMessage(null);
-                              setGoogleSettingsDraft({
-                                ...googleSettingsDraft,
-                                clientId: event.target.value
-                              });
-                            }}
-                            placeholder="1234567890-abcdef.apps.googleusercontent.com"
-                          />
-                          {googleValidation.issues.clientId ? (
-                            <p className="mt-2 text-sm text-rose-200">
-                              {googleValidation.issues.clientId}
-                            </p>
-                          ) : null}
-                        </FlowField>
-
-                        <FlowField
-                          label="Client secret"
-                          description="Override the packaged Google desktop-app client secret for this Forge install."
-                        >
-                          <Input
-                            aria-label="Client secret"
-                            value={googleSettingsDraft.clientSecret}
-                            onChange={(event) => {
-                              setGoogleSetupMessage(null);
-                              setGoogleSettingsDraft({
-                                ...googleSettingsDraft,
-                                clientSecret: event.target.value
-                              });
-                            }}
-                            placeholder="GOCSPX-..."
-                          />
-                          {googleValidation.issues.clientSecret ? (
-                            <p className="mt-2 text-sm text-rose-200">
-                              {googleValidation.issues.clientSecret}
-                            </p>
-                          ) : null}
-                        </FlowField>
-
-                        <div className="flex flex-wrap items-center gap-3">
-                          <Button
-                            type="button"
-                            onClick={() =>
-                              void saveGoogleSettingsMutation.mutateAsync(
-                                googleSettingsDraft
-                              )
-                            }
-                            disabled={
-                              !hasUnsavedGoogleSettings ||
-                              !googleValidation.isValid
-                            }
-                            pending={saveGoogleSettingsMutation.isPending}
-                            pendingLabel="Saving"
-                          >
-                            Save Google OAuth override
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            onClick={() => {
-                              setGoogleSetupMessage(null);
-                              setGoogleSettingsDraft({
-                                clientId: "",
-                                clientSecret: ""
-                              });
-                            }}
-                            disabled={
-                              saveGoogleSettingsMutation.isPending ||
-                              (!savedGoogleSettingsDraft.clientId &&
-                                !savedGoogleSettingsDraft.clientSecret &&
-                                googleSettingsDraft.clientId.length === 0 &&
-                                googleSettingsDraft.clientSecret.length === 0)
-                            }
-                          >
-                            {savedGoogleSettingsDraft.clientId ||
-                            savedGoogleSettingsDraft.clientSecret
-                              ? "Clear override"
-                              : "Use packaged default"}
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {googleSetupMessage ? (
-                    <div className="mt-4 rounded-[18px] border border-white/10 bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/72">
-                      {googleSetupMessage}
-                    </div>
-                  ) : null}
-
-                  <div className="mt-4 rounded-[18px] border border-sky-400/20 bg-sky-400/10 px-4 py-3 text-sm leading-6 text-sky-50">
-                    If you open Forge on a phone or another remote route, Google
-                    redirects to localhost on that other device instead of back
-                    to Forge.
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap items-center gap-3">
-                    <Button
-                      type="button"
-                      onClick={() => void startGoogleFlow()}
-                      disabled={
-                        !activeGoogleSetup.isReadyForPairing ||
-                        !googlePairingAllowedFromCurrentOrigin ||
-                        hasUnsavedGoogleSettings ||
-                        saveGoogleSettingsMutation.isPending
-                      }
-                      pending={googleSession?.status === "pending"}
-                      pendingLabel="Waiting for Google"
-                    >
-                      <ExternalLink className="size-4" />
-                      {googleSession?.status === "authorized"
-                        ? "Sign in again"
-                        : "Sign in with Google"}
-                    </Button>
-                    {googleSession?.accountLabel ? (
-                      <Badge className="bg-emerald-500/16 text-emerald-100">
-                        <CheckCircle2 className="mr-1 size-3.5" />
-                        {googleSession.accountLabel}
-                      </Badge>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            ) : value.provider === "microsoft" ? (
-              <div className="grid gap-4">
-                <div className="rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(20,32,48,0.98),rgba(11,18,30,0.98))] p-5">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <div className="font-medium text-white">
-                        Guided Microsoft setup
-                      </div>
-                      <p className="mt-2 max-w-2xl text-sm leading-6 text-white/60">
-                        Save the Microsoft app registration details for this
-                        Forge instance here, optionally test them, then continue
-                        into the Microsoft sign-in popup. Exchange Online stays
-                        read-only for now.
-                      </p>
-                    </div>
-                    <Badge className="bg-sky-400/12 text-sky-100">
-                      Read only
-                    </Badge>
-                  </div>
-
-                  <div className="mt-4 grid gap-4 md:grid-cols-2">
-                    <FlowField
-                      label="Microsoft client ID"
-                      description="Use the Application (client) ID from the Microsoft Entra app registration for this Forge instance."
-                    >
-                      <Input
-                        value={microsoftSettingsDraft.clientId}
-                        onChange={(event) => {
-                          setMicrosoftSetupMessage(null);
-                          setMicrosoftSettingsDraft((current) => ({
-                            ...current,
-                            clientId: event.target.value
-                          }));
-                        }}
-                        placeholder="00000000-0000-0000-0000-000000000000"
-                      />
-                      {microsoftValidation.issues.clientId ? (
-                        <div className="text-sm text-rose-300">
-                          {microsoftValidation.issues.clientId}
-                        </div>
-                      ) : null}
-                    </FlowField>
-
-                    <FlowField
-                      label="Tenant / authority"
-                      description="Use common unless you need a tenant-specific authority."
-                    >
-                      <Input
-                        value={microsoftSettingsDraft.tenantId}
-                        onChange={(event) => {
-                          setMicrosoftSetupMessage(null);
-                          setMicrosoftSettingsDraft((current) => ({
-                            ...current,
-                            tenantId: event.target.value
-                          }));
-                        }}
-                        placeholder="common"
-                      />
-                    </FlowField>
-                  </div>
-
-                  <FlowField
-                    label="Redirect URI"
-                    description="Register this exact Forge callback URI in the Microsoft app registration."
-                  >
-                    <Input
-                      value={microsoftSettingsDraft.redirectUri}
-                      onChange={(event) => {
-                        setMicrosoftSetupMessage(null);
-                        setMicrosoftSettingsDraft((current) => ({
-                          ...current,
-                          redirectUri: event.target.value
-                        }));
-                      }}
-                      placeholder="http://127.0.0.1:4317/api/v1/calendar/oauth/microsoft/callback"
-                    />
-                    {microsoftValidation.issues.redirectUri ? (
-                      <div className="text-sm text-rose-300">
-                        {microsoftValidation.issues.redirectUri}
-                      </div>
-                    ) : null}
-                  </FlowField>
-
-                  <div className="mt-4 rounded-[18px] bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/68">
-                    Forge saves the client ID, tenant, and redirect URI for this
-                    local instance, then handles Microsoft sign-in in a popup.
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap items-center gap-3">
-                    <Button
-                      type="button"
-                      onClick={() =>
-                        void saveMicrosoftSettingsMutation.mutateAsync(
-                          microsoftSettingsDraft
-                        )
-                      }
-                      disabled={!microsoftValidation.isValid}
-                      pending={saveMicrosoftSettingsMutation.isPending}
-                      pendingLabel="Saving"
-                    >
-                      Save Microsoft settings
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={() =>
-                        void testMicrosoftSettingsMutation.mutateAsync(
-                          microsoftSettingsDraft
-                        )
-                      }
-                      disabled={!microsoftValidation.isValid}
-                      pending={testMicrosoftSettingsMutation.isPending}
-                      pendingLabel="Testing"
-                    >
-                      Test Microsoft configuration
-                    </Button>
-                    <Button
-                      type="button"
-                      onClick={() => void startMicrosoftFlow()}
-                      disabled={
-                        !microsoftValidation.isValid ||
-                        hasUnsavedMicrosoftSettings ||
-                        saveMicrosoftSettingsMutation.isPending
-                      }
-                      pending={microsoftSession?.status === "pending"}
-                      pendingLabel="Waiting for Microsoft"
-                    >
-                      <ExternalLink className="size-4" />
-                      {microsoftSession?.status === "authorized"
-                        ? "Sign in again"
-                        : "Sign in with Microsoft"}
-                    </Button>
-                    {microsoftSession?.accountLabel ? (
-                      <Badge className="bg-emerald-500/16 text-emerald-100">
-                        <CheckCircle2 className="mr-1 size-3.5" />
-                        {microsoftSession.accountLabel}
-                      </Badge>
-                    ) : null}
-                  </div>
-
-                  <div className="mt-4 grid gap-3 md:grid-cols-2">
-                    <div className="rounded-[18px] bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/68">
-                      Save before sign-in. The Microsoft popup always uses the
-                      latest saved client ID, tenant, and redirect URI.
-                    </div>
-                    <div className="rounded-[18px] bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/68">
-                      After sign-in, Forge will let you choose which Exchange
-                      Online calendars to mirror into the Calendar page.
-                    </div>
-                  </div>
-
-                  {microsoftSetupMessage ? (
-                    <div className="mt-4 rounded-[18px] border border-white/10 bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/72">
-                      {microsoftSetupMessage}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            ) : (
-              <>
-                {value.provider === "caldav" ? (
-                  <FlowField
-                    label="CalDAV base URL"
-                    description="Use the account-level CalDAV server URL, not an individual calendar collection URL."
-                  >
-                    <Input
-                      value={value.serverUrl}
-                      onChange={(event) =>
-                        setValue({ serverUrl: event.target.value })
-                      }
-                      placeholder="https://caldav.example.com"
-                    />
-                  </FlowField>
-                ) : null}
-
-                {value.provider === "apple" ? (
-                  <FlowField label="Apple CalDAV base URL">
-                    <Input value="https://caldav.icloud.com" disabled />
-                  </FlowField>
-                ) : null}
-
-                <FlowField label="Account email or username">
-                  <Input
-                    value={value.username}
-                    onChange={(event) =>
-                      setValue({ username: event.target.value })
-                    }
-                    placeholder="operator@example.com"
-                  />
-                </FlowField>
-
-                <FlowField
-                  label={
-                    value.provider === "apple"
-                      ? "App-specific password"
-                      : "Password or app password"
-                  }
-                >
-                  <Input
-                    type="password"
-                    value={value.password}
-                    onChange={(event) =>
-                      setValue({ password: event.target.value })
-                    }
-                    placeholder="Password"
-                  />
-                </FlowField>
-              </>
-            )}
-          </div>
+          <CalendarConnectionCredentialsStep
+            value={value}
+            setValue={setValue}
+            macosStatus={macosStatus}
+            macosDiscovery={macosDiscovery}
+            requestMacosAccess={() => void macosAccessMutation.mutateAsync()}
+            requestMacosAccessPending={macosAccessMutation.isPending}
+            checkMacosStatus={() => void macosStatusMutation.mutateAsync()}
+            checkMacosStatusPending={macosStatusMutation.isPending}
+            runDiscovery={() => void discoveryMutation.mutateAsync()}
+            discoveryPending={discoveryMutation.isPending}
+            applyMacosSource={applyDiscoveryPayload}
+            activeGoogleSetup={activeGoogleSetup}
+            googleRedirectOrigin={googleRedirectOrigin}
+            currentBrowserOrigin={currentBrowserOrigin}
+            googleClientIdEditing={googleClientIdEditing}
+            setGoogleClientIdEditing={setGoogleClientIdEditing}
+            googleSettingsDraft={googleSettingsDraft}
+            setGoogleSettingsDraft={setGoogleSettingsDraft}
+            savedGoogleSettingsDraft={savedGoogleSettingsDraft}
+            googleValidation={googleValidation}
+            hasUnsavedGoogleSettings={hasUnsavedGoogleSettings}
+            saveGoogleSettings={(nextDraft) =>
+              void saveGoogleSettingsMutation.mutateAsync(nextDraft)
+            }
+            saveGoogleSettingsPending={saveGoogleSettingsMutation.isPending}
+            googleSetupMessage={googleSetupMessage}
+            setGoogleSetupMessage={setGoogleSetupMessage}
+            startGoogleFlow={() => void startGoogleFlow()}
+            googlePairingAllowedFromCurrentOrigin={
+              googlePairingAllowedFromCurrentOrigin
+            }
+            googleSession={googleSession}
+            microsoftSettingsDraft={microsoftSettingsDraft}
+            setMicrosoftSettingsDraft={setMicrosoftSettingsDraft}
+            microsoftValidation={microsoftValidation}
+            hasUnsavedMicrosoftSettings={hasUnsavedMicrosoftSettings}
+            saveMicrosoftSettings={(nextDraft) =>
+              void saveMicrosoftSettingsMutation.mutateAsync(nextDraft)
+            }
+            saveMicrosoftSettingsPending={
+              saveMicrosoftSettingsMutation.isPending
+            }
+            testMicrosoftSettings={(nextDraft) =>
+              void testMicrosoftSettingsMutation.mutateAsync(nextDraft)
+            }
+            testMicrosoftSettingsPending={
+              testMicrosoftSettingsMutation.isPending
+            }
+            microsoftSetupMessage={microsoftSetupMessage}
+            setMicrosoftSetupMessage={setMicrosoftSetupMessage}
+            startMicrosoftFlow={() => void startMicrosoftFlow()}
+            microsoftSession={microsoftSession}
+          />
         )
       },
       {
@@ -1940,292 +1015,28 @@ export function CalendarConnectionFlowDialog({
                 ? `Select the calendars Forge should mirror into the Calendar page. Forge already writes work blocks and timeboxes through ${sharedForgeWriteTargetLabel}.`
                 : "Select the calendars Forge should mirror into the Calendar page, then choose the calendar Forge should write into for work blocks and timeboxes.",
         render: (value, setValue) => (
-          <div className="grid gap-4">
-            {value.provider === "google" ? (
-              <div className="flex flex-wrap items-center gap-3">
-                <Button
-                  type="button"
-                  onClick={() => void startGoogleFlow()}
-                  disabled={
-                    !activeGoogleSetup.isReadyForPairing ||
-                    !googlePairingAllowedFromCurrentOrigin
-                  }
-                  pending={googleSession?.status === "pending"}
-                  pendingLabel="Waiting for Google"
-                >
-                  <ExternalLink className="size-4" />
-                  {googleSession?.status === "authorized"
-                    ? "Reconnect Google"
-                    : "Sign in with Google"}
-                </Button>
-                {discovery ? (
-                  <Badge className="bg-white/[0.08] text-white/74">
-                    {discovery.calendars.length} discovered
-                  </Badge>
-                ) : null}
-              </div>
-            ) : value.provider === "microsoft" ? (
-              <div className="flex flex-wrap items-center gap-3">
-                <Button
-                  type="button"
-                  onClick={() => void startMicrosoftFlow()}
-                  disabled={
-                    !microsoftValidation.isValid ||
-                    hasUnsavedMicrosoftSettings ||
-                    saveMicrosoftSettingsMutation.isPending
-                  }
-                  pending={microsoftSession?.status === "pending"}
-                  pendingLabel="Waiting for Microsoft"
-                >
-                  <ExternalLink className="size-4" />
-                  {microsoftSession?.status === "authorized"
-                    ? "Reconnect Microsoft"
-                    : "Sign in with Microsoft"}
-                </Button>
-                {discovery ? (
-                  <Badge className="bg-white/[0.08] text-white/74">
-                    {discovery.calendars.length} discovered
-                  </Badge>
-                ) : null}
-              </div>
-            ) : (
-              <div className="flex flex-wrap items-center gap-3">
-                <Button
-                  pending={discoveryMutation.isPending}
-                  pendingLabel="Discovering"
-                  onClick={() => void discoveryMutation.mutateAsync()}
-                  disabled={
-                    value.provider === "macos_local" &&
-                    macosStatus !== "full_access"
-                  }
-                >
-                  <RefreshCcw className="size-4" />
-                  {value.provider === "macos_local"
-                    ? "Discover host calendars"
-                    : "Discover calendars"}
-                </Button>
-                {discovery ? (
-                  <Badge className="bg-white/[0.08] text-white/74">
-                    {discovery.calendars.length} discovered
-                  </Badge>
-                ) : null}
-              </div>
-            )}
-
-            {discovery ? (
-              <>
-                <div className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4 text-sm leading-6 text-white/64">
-                  {value.provider === "macos_local"
-                    ? "Discovered through the host calendar store"
-                    : "Discovered through"}{" "}
-                  <span className="font-medium text-white">
-                    {discovery.serverUrl}
-                  </span>
-                  {discovery.homeUrl ? (
-                    <>
-                      {" "}
-                      · home set{" "}
-                      <span className="font-medium text-white">
-                        {discovery.homeUrl}
-                      </span>
-                    </>
-                  ) : null}
-                </div>
-
-                {value.provider !== "microsoft" &&
-                sharedForgeWriteTargetLabel ? (
-                  <div className="rounded-[24px] border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm leading-6 text-emerald-50">
-                    Forge already writes work blocks and owned timeboxes through{" "}
-                    <span className="font-medium text-white">
-                      {sharedForgeWriteTargetLabel}
-                    </span>
-                    . This connection only needs a mirror selection.
-                  </div>
-                ) : null}
-
-                <div className="grid gap-3">
-                  {discovery.calendars.map((calendar) => {
-                    const selected = value.selectedCalendarUrls.includes(
-                      calendar.url
-                    );
-                    const isWriteTarget =
-                      value.forgeCalendarUrl === calendar.url;
-                    return (
-                      <div
-                        key={calendar.url}
-                        className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4"
-                      >
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div>
-                            <div className="font-medium text-white">
-                              {readCalendarDisplayName(calendar)}
-                            </div>
-                            <div className="mt-1 text-sm text-white/56">
-                              {calendar.timezone || "No timezone exposed"} ·{" "}
-                              {calendar.url}
-                            </div>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            {calendar.isForgeCandidate ? (
-                              <Badge className="bg-[var(--primary)]/14 text-[var(--primary)]">
-                                Forge match
-                              </Badge>
-                            ) : null}
-                            {calendar.isPrimary ? (
-                              <Badge className="bg-white/[0.08] text-white/74">
-                                Primary
-                              </Badge>
-                            ) : null}
-                          </div>
-                        </div>
-
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setValue({
-                                selectedCalendarUrls: selected
-                                  ? value.selectedCalendarUrls.filter(
-                                      (entry) => entry !== calendar.url
-                                    )
-                                  : [
-                                      ...value.selectedCalendarUrls,
-                                      calendar.url
-                                    ]
-                              })
-                            }
-                            className={`rounded-full px-3 py-2 text-sm transition ${
-                              selected
-                                ? "bg-[var(--primary)]/18 text-[var(--primary)] shadow-[inset_0_0_0_1px_rgba(192,193,255,0.24)]"
-                                : "bg-white/[0.05] text-white/62 hover:bg-white/[0.08]"
-                            }`}
-                          >
-                            {selected ? "Mirrored" : "Mirror into Forge"}
-                          </button>
-                          {value.provider !== "microsoft" &&
-                          !sharedForgeWriteTargetLabel ? (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setValue({
-                                  forgeCalendarUrl: calendar.url,
-                                  createForgeCalendar: false
-                                })
-                              }
-                              className={`rounded-full px-3 py-2 text-sm transition ${
-                                isWriteTarget
-                                  ? "bg-emerald-500/18 text-emerald-100 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.28)]"
-                                  : "bg-white/[0.05] text-white/62 hover:bg-white/[0.08]"
-                              }`}
-                            >
-                              {isWriteTarget
-                                ? "Forge writes here"
-                                : "Use for Forge writes"}
-                            </button>
-                          ) : (
-                            <Badge
-                              className={
-                                value.provider === "microsoft"
-                                  ? "bg-sky-400/12 text-sky-100"
-                                  : "bg-white/[0.08] text-white/74"
-                              }
-                            >
-                              {value.provider === "microsoft"
-                                ? "Read only"
-                                : "Shared target elsewhere"}
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {value.provider !== "microsoft" &&
-                !sharedForgeWriteTargetLabel ? (
-                  <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] p-4">
-                    <div className="font-medium text-white">
-                      No Forge calendar yet?
-                    </div>
-                    <p className="mt-2 text-sm leading-6 text-white/60">
-                      If none of the discovered calendars should receive
-                      Forge-owned work blocks and timeboxes, let Forge create a
-                      dedicated calendar named{" "}
-                      <span className="font-medium text-white">Forge</span>.
-                    </p>
-                    <div className="mt-4">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setValue({
-                            forgeCalendarUrl: null,
-                            createForgeCalendar: !value.createForgeCalendar
-                          })
-                        }
-                        className={`rounded-full px-3 py-2 text-sm transition ${
-                          value.createForgeCalendar
-                            ? "bg-emerald-500/18 text-emerald-100 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.28)]"
-                            : "bg-white/[0.05] text-white/62 hover:bg-white/[0.08]"
-                        }`}
-                      >
-                        {value.createForgeCalendar
-                          ? "Forge will create one"
-                          : "Create a new Forge calendar"}
-                      </button>
-                    </div>
-                  </div>
-                ) : value.provider === "microsoft" ? (
-                  <div className="rounded-[24px] border border-sky-400/20 bg-sky-400/10 p-4 text-sm leading-6 text-sky-50">
-                    Exchange Online is connected through Microsoft Graph in
-                    read-only mode. Forge will mirror the calendars you select
-                    here, but it will keep work blocks and owned timeboxes local
-                    or publish them through another writable provider.
-                  </div>
-                ) : (
-                  <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] p-4 text-sm leading-6 text-white/60">
-                    Forge will keep{" "}
-                    <span className="font-medium text-white">
-                      {sharedForgeWriteTargetLabel}
-                    </span>{" "}
-                    as the canonical write target instead of creating another
-                    Forge calendar on this connection.
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] px-4 py-6 text-sm leading-6 text-white/58">
-                {value.provider === "google" ? (
-                  <>
-                    Start the guided Google sign-in first. Forge will bring the
-                    discovered Google calendars back here as soon as the popup
-                    completes.
-                  </>
-                ) : value.provider === "microsoft" ? (
-                  <>
-                    Start the guided Microsoft sign-in first. Forge will bring
-                    the discovered Exchange Online calendars back here as soon
-                    as the popup completes.
-                  </>
-                ) : (
-                  <>
-                    {value.provider === "macos_local" ? (
-                      "Grant macOS Calendar access and discover the host calendars first. If Calendar.app already aggregates Google, Exchange, or iCloud for this Mac, Forge will pick them up here without reconnecting those accounts."
-                    ) : (
-                      <>
-                        Discover calendars after entering the credentials. For
-                        Apple, Forge starts from{" "}
-                        <span className="font-medium text-white">
-                          https://caldav.icloud.com
-                        </span>{" "}
-                        and resolves the principal plus calendar home
-                        automatically.
-                      </>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
-          </div>
+          <CalendarConnectionDiscoveryStep
+            value={value}
+            setValue={setValue}
+            discovery={discovery}
+            startGoogleFlow={() => void startGoogleFlow()}
+            startMicrosoftFlow={() => void startMicrosoftFlow()}
+            activeGoogleSetup={activeGoogleSetup}
+            googlePairingAllowedFromCurrentOrigin={
+              googlePairingAllowedFromCurrentOrigin
+            }
+            googleSession={googleSession}
+            microsoftValidation={microsoftValidation}
+            hasUnsavedMicrosoftSettings={hasUnsavedMicrosoftSettings}
+            saveMicrosoftSettingsPending={
+              saveMicrosoftSettingsMutation.isPending
+            }
+            microsoftSession={microsoftSession}
+            discoveryPending={discoveryMutation.isPending}
+            runDiscovery={() => void discoveryMutation.mutateAsync()}
+            macosStatus={macosStatus}
+            sharedForgeWriteTargetLabel={sharedForgeWriteTargetLabel}
+          />
         )
       },
       {
@@ -2235,88 +1046,12 @@ export function CalendarConnectionFlowDialog({
         description:
           "This keeps the sync model explicit before the provider connection is saved.",
         render: (value) => (
-          <div className="grid gap-4">
-            {value.provider === "macos_local" && value.sourceId ? (
-              <div className="rounded-[20px] border border-white/8 bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/70">
-                Selected host source:{" "}
-                <span className="font-medium text-white">
-                  {macosDiscovery?.sources.find(
-                    (source) => source.sourceId === value.sourceId
-                  )?.accountLabel ??
-                    macosDiscovery?.sources.find(
-                      (source) => source.sourceId === value.sourceId
-                    )?.sourceTitle ??
-                    value.sourceId}
-                </span>
-              </div>
-            ) : null}
-            <div className="rounded-[26px] border border-white/8 bg-[linear-gradient(180deg,rgba(21,31,42,0.96),rgba(10,16,26,0.96))] p-5">
-              <div className="flex items-center gap-3">
-                <div className="rounded-[18px] bg-[var(--primary)]/14 p-3 text-[var(--primary)]">
-                  <Link2 className="size-4" />
-                </div>
-                <div>
-                  <div className="font-display text-xl text-white">
-                    {normalizeLabel(value.provider, value.label)}
-                  </div>
-                  <div className="mt-1 text-sm text-white/58">
-                    {value.provider === "google"
-                      ? "Google Calendar"
-                      : value.provider === "macos_local"
-                        ? "Calendars On This Mac"
-                        : value.provider === "apple"
-                          ? "Apple Calendar"
-                          : value.provider === "microsoft"
-                            ? "Exchange Online"
-                            : "Custom CalDAV"}
-                  </div>
-                </div>
-              </div>
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                <div className="rounded-[20px] bg-white/[0.04] px-4 py-3 text-sm text-white/72">
-                  Mirrored calendars:{" "}
-                  <span className="font-medium text-white">
-                    {value.selectedCalendarUrls.length}
-                  </span>
-                </div>
-                <div className="rounded-[20px] bg-white/[0.04] px-4 py-3 text-sm text-white/72">
-                  Forge writes:{" "}
-                  <span className="font-medium text-white">
-                    {value.provider === "microsoft"
-                      ? "read only"
-                      : value.forgeCalendarUrl
-                        ? "existing calendar"
-                        : value.createForgeCalendar
-                          ? "new Forge calendar"
-                          : sharedForgeWriteTargetLabel
-                            ? `shared target via ${sharedForgeWriteTargetLabel}`
-                            : "not selected"}
-                  </span>
-                </div>
-              </div>
-              {value.replaceConnectionIds.length > 0 ? (
-                <div className="mt-4 rounded-[20px] border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm leading-6 text-amber-50">
-                  Forge will replace {value.replaceConnectionIds.length} older
-                  overlapping connection
-                  {value.replaceConnectionIds.length === 1 ? "" : "s"} for this
-                  same calendar account so only one visible copy remains.
-                  {existingConnections
-                    .filter((connection) =>
-                      value.replaceConnectionIds.includes(connection.id)
-                    )
-                    .map((connection) => connection.label)
-                    .join(", ")
-                    ? ` ${existingConnections
-                        .filter((connection) =>
-                          value.replaceConnectionIds.includes(connection.id)
-                        )
-                        .map((connection) => connection.label)
-                        .join(", ")}.`
-                    : ""}
-                </div>
-              ) : null}
-            </div>
-          </div>
+          <CalendarConnectionReviewStep
+            value={value}
+            macosDiscovery={macosDiscovery}
+            existingConnections={existingConnections}
+            sharedForgeWriteTargetLabel={sharedForgeWriteTargetLabel}
+          />
         )
       }
     ],

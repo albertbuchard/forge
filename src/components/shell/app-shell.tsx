@@ -1,19 +1,4 @@
 import {
-  DndContext,
-  PointerSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-  type DragEndEvent
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  arrayMove,
-  useSortable,
-  verticalListSortingStrategy
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import {
   createContext,
   useContext,
   useEffect,
@@ -21,10 +6,8 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type MouseEvent as ReactMouseEvent,
   type ReactNode
 } from "react";
-import * as Dialog from "@radix-ui/react-dialog";
 import {
   useIsFetching,
   useIsMutating,
@@ -32,23 +15,15 @@ import {
   useQueryClient
 } from "@tanstack/react-query";
 import {
-  Activity,
-  ArrowUpRight,
-  BatteryCharging,
   ChevronsLeft,
   ChevronsRight,
-  Clock3,
-  Flame,
   GripVertical,
   RefreshCcw,
   Search,
-  Settings,
-  Trophy,
   Zap
 } from "lucide-react";
 import {
   Link,
-  NavLink,
   UNSAFE_LocationContext,
   useLocation,
   useNavigate,
@@ -64,32 +39,48 @@ import {
 import { GamificationAssetSetupDialog } from "@/components/gamification/gamification-asset-setup-dialog";
 import { ActionBar } from "@/components/experience/action-bar";
 import { RouteTransitionFrame } from "@/components/experience/route-transition-frame";
-import { SheetScaffold } from "@/components/experience/sheet-scaffold";
 import { KnowledgeGraphFocusDrawer } from "@/components/knowledge-graph/knowledge-graph-focus-drawer";
 import { CreateMenu, useForgeCreateActions } from "@/components/create-menu";
 import { StartWorkComposer } from "@/components/start-work-composer";
 import {
+  buildKnowledgeGraphSearchFromLocation,
+  buildRouteIntentLocation,
+  buildRoutePathKey,
+  buildStartTaskNowInput,
+  formatCompactNumber,
+  getKnowledgeGraphNodeNotesHref,
+  getRouteTransitionKey,
+  sameSelectedUserIds,
+  sanitizeSelectedUserIds
+} from "@/components/shell/shell-model";
+export {
+  buildStartTaskNowInput,
+  sanitizeSelectedUserIds
+} from "@/components/shell/shell-model";
+import {
+  MobileBottomNav,
+  NavItem,
+  ShellNavEditor,
+  useShellNavigationState
+} from "@/components/shell/shell-navigation";
+import { ShellBackgroundActivityDialog } from "@/components/shell/shell-background-activity-dialog";
+import {
   NAV_ROUTE_REGISTRY,
   PRIMARY_ROUTES,
-  SHELL_NAV_ROUTES,
   getRouteDetail,
   getRouteLabel,
   isPsycheRoute,
-  isWikiRoute,
-  requirePrimaryRoute,
-  routeMatches,
-  type ShellRouteDefinition
+  routeMatches
 } from "@/components/shell/shell-routes";
 import {
-  shellCardClassName,
-  shellDialogContentClassName,
-  shellDialogDescriptionClassName,
-  shellDialogOverlayClassName,
-  shellDialogTitleClassName,
-  shellInteractiveActiveClassName,
-  shellInteractiveSubtleClassName,
-  shellLabelMutedClassName
-} from "@/components/shell/shell-style-tokens";
+  SidebarMetricsPanel,
+  buildSidebarMetrics
+} from "@/components/shell/shell-sidebar-metrics";
+export { buildSidebarMetrics } from "@/components/shell/shell-sidebar-metrics";
+import {
+  TaskCompletionWorkLogDialog,
+  type TaskCompletionPromptState
+} from "@/components/shell/task-completion-work-log-dialog";
 import {
   TaskTimerRailProvider,
   TaskTimerRailBar,
@@ -100,19 +91,13 @@ export { UserScopeSelector } from "@/components/shell/user-scope-selector";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
-import { ModalCloseButton } from "@/components/ui/modal-close-button";
 import { ErrorState, LoadingState } from "@/components/ui/page-state";
 import { useLiveEvents } from "@/hooks/use-live-events";
 import { claimTaskRun, patchTask } from "@/lib/api";
 import { ForgeApiError } from "@/lib/api-error";
 import { I18nProvider, useI18n } from "@/lib/i18n";
-import {
-  formatKnowledgeGraphFocusValue,
-  type KnowledgeGraphNode
-} from "@/lib/knowledge-graph-types";
-import { formatLifeForceRate } from "@/lib/life-force-display";
-import { getEntityNotesHref } from "@/lib/note-helpers";
-import { getSurfaceHelp, SHELL_METRIC_HELP } from "@/lib/surface-help";
+import type { KnowledgeGraphNode } from "@/lib/knowledge-graph-types";
+import { getSurfaceHelp } from "@/lib/surface-help";
 import { cn } from "@/lib/utils";
 import { isShellRouteReady } from "@/features/shell/route-readiness";
 import {
@@ -134,9 +119,7 @@ import type {
   CalendarSchedulingRules,
   ForgeSnapshot,
   SettingsPayload,
-  TaskRun,
-  UserSummary,
-  WikiIngestJobPayload
+  TaskRun
 } from "@/lib/types";
 import {
   useClaimTaskRunMutation,
@@ -208,791 +191,8 @@ type ShellContextValue = {
   }) => void;
 };
 
-function sameSelectedUserIds(left: string[], right: string[]) {
-  return (
-    left.length === right.length &&
-    left.every((entry, index) => entry === right[index])
-  );
-}
-
-export function sanitizeSelectedUserIds(
-  selectedUserIds: string[],
-  users: UserSummary[]
-) {
-  if (selectedUserIds.length === 0 || users.length === 0) {
-    return selectedUserIds;
-  }
-  const validUserIds = new Set(users.map((user) => user.id));
-  return selectedUserIds.filter((userId) => validUserIds.has(userId));
-}
-
-export function buildStartTaskNowInput(
-  actor: string,
-  options: {
-    timerMode?: "planned" | "unlimited";
-    plannedDurationSeconds?: number | null;
-  } = {}
-) {
-  const timerMode = options.timerMode ?? "unlimited";
-  const plannedDurationSeconds =
-    options.plannedDurationSeconds === undefined
-      ? timerMode === "planned"
-        ? 20 * 60
-        : null
-      : options.plannedDurationSeconds;
-  return {
-    actor,
-    timerMode,
-    plannedDurationSeconds,
-    isCurrent: true,
-    leaseTtlSeconds: 1800,
-    note: ""
-  };
-}
-
-function getKnowledgeGraphNodeNotesHref(node: KnowledgeGraphNode) {
-  switch (node.entityType) {
-    case "workbench_flow":
-    case "workbench_surface":
-    case "wiki_space":
-      return null;
-    default:
-      return getEntityNotesHref(node.entityType, node.entityId);
-  }
-}
-
-function buildKnowledgeGraphSearchFromLocation(
-  location: RouterLocation,
-  node: KnowledgeGraphNode | null,
-  extras?: Record<string, string | null>
-) {
-  const next = new URLSearchParams(location.search);
-  if (!node) {
-    next.delete("focus");
-  } else {
-    next.set(
-      "focus",
-      formatKnowledgeGraphFocusValue(node.entityType, node.entityId)
-    );
-  }
-  if (extras) {
-    for (const [key, value] of Object.entries(extras)) {
-      if (value === null) {
-        next.delete(key);
-      } else {
-        next.set(key, value);
-      }
-    }
-  }
-  const query = next.toString();
-  return query ? `?${query}` : "";
-}
-
 const ShellContext = createContext<ShellContextValue | null>(null);
 let lastKnownShellContext: ShellContextValue | null = null;
-
-const DESKTOP_NAV_STORAGE_KEY = "forge.desktop-nav-layout";
-const MOBILE_NAV_STORAGE_KEY = "forge.mobile-nav-layout";
-const NAV_MIGRATION_STORAGE_KEY = "forge.nav-layout-migrations";
-const DESKTOP_SIDEBAR_METRICS_POSITION_STORAGE_KEY =
-  "forge.desktop-sidebar-metrics-position";
-const DESKTOP_KNOWLEDGE_GRAPH_MIGRATION = "desktop-knowledge-graph-default-v1";
-const MOBILE_KNOWLEDGE_GRAPH_MIGRATION = "mobile-knowledge-graph-default-v1";
-
-function formatCompactNumber(value: number) {
-  return new Intl.NumberFormat("en", {
-    notation: "compact",
-    maximumFractionDigits: value >= 1000 ? 1 : 0
-  }).format(value);
-}
-
-function getRouteTransitionKey(pathname: string) {
-  if (pathname === "/wiki" || pathname.startsWith("/wiki/page/")) {
-    return "/wiki";
-  }
-
-  if (pathname === "/wiki/new" || pathname.startsWith("/wiki/edit/")) {
-    return "/wiki/editor";
-  }
-
-  return pathname;
-}
-
-function buildRoutePathKey(
-  location: Pick<RouterLocation, "pathname" | "search" | "hash">
-) {
-  return `${location.pathname}${location.search}${location.hash}`;
-}
-
-function buildRouteIntentLocation(
-  currentLocation: RouterLocation,
-  to: string
-): RouterLocation {
-  const target = new URL(to, "http://forge.local");
-  return {
-    ...currentLocation,
-    pathname: target.pathname,
-    search: target.search,
-    hash: target.hash,
-    key: `intent:${target.pathname}${target.search}${target.hash}`
-  };
-}
-
-function getWikiIngestRoute(job: WikiIngestJobPayload) {
-  const search = new URLSearchParams();
-  if (job.job.spaceId) {
-    search.set("spaceId", job.job.spaceId);
-  }
-  search.set("ingest", "1");
-  search.set("ingestJobId", job.job.id);
-  return {
-    pathname: "/wiki",
-    search: `?${search.toString()}`
-  };
-}
-
-function formatActivityTimestamp(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(new Date(value));
-}
-
-function shouldCaptureRouteIntent(event: ReactMouseEvent) {
-  return (
-    !event.defaultPrevented &&
-    event.button === 0 &&
-    !event.metaKey &&
-    !event.altKey &&
-    !event.ctrlKey &&
-    !event.shiftKey
-  );
-}
-
-function readStoredNavIds(storageKey: string, defaults: string[]) {
-  if (typeof window === "undefined") {
-    return defaults;
-  }
-  try {
-    const raw = window.localStorage.getItem(storageKey);
-    if (!raw) {
-      return defaults;
-    }
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) {
-      return defaults;
-    }
-    const validIds = new Set(NAV_ROUTE_REGISTRY.map((route) => route.id));
-    const filtered = parsed.filter(
-      (entry): entry is string =>
-        typeof entry === "string" && validIds.has(entry)
-    );
-    const resolved = filtered.length > 0 ? filtered : defaults;
-    const readMigrationState = () => {
-      try {
-        const rawMigrations = window.localStorage.getItem(
-          NAV_MIGRATION_STORAGE_KEY
-        );
-        if (!rawMigrations) {
-          return {} as Record<string, boolean>;
-        }
-        const parsedMigrations = JSON.parse(rawMigrations) as unknown;
-        return parsedMigrations &&
-          typeof parsedMigrations === "object" &&
-          !Array.isArray(parsedMigrations)
-          ? (parsedMigrations as Record<string, boolean>)
-          : ({} as Record<string, boolean>);
-      } catch {
-        return {} as Record<string, boolean>;
-      }
-    };
-    const writeMigrationState = (nextState: Record<string, boolean>) => {
-      try {
-        window.localStorage.setItem(
-          NAV_MIGRATION_STORAGE_KEY,
-          JSON.stringify(nextState)
-        );
-      } catch {
-        return;
-      }
-    };
-    const applyKnowledgeGraphMigration = (
-      ids: string[],
-      migrationKey: string,
-      insertAfterId: string
-    ) => {
-      const migrationState = readMigrationState();
-      if (migrationState[migrationKey]) {
-        return ids;
-      }
-      const nextIds = ids.includes("knowledge-graph")
-        ? ids
-        : (() => {
-            const insertIndex = ids.indexOf(insertAfterId);
-            if (insertIndex < 0) {
-              return [...ids, "knowledge-graph"];
-            }
-            return [
-              ...ids.slice(0, insertIndex + 1),
-              "knowledge-graph",
-              ...ids.slice(insertIndex + 1)
-            ];
-          })();
-      writeMigrationState({
-        ...migrationState,
-        [migrationKey]: true
-      });
-      return nextIds;
-    };
-
-    if (storageKey === DESKTOP_NAV_STORAGE_KEY) {
-      return applyKnowledgeGraphMigration(
-        resolved,
-        DESKTOP_KNOWLEDGE_GRAPH_MIGRATION,
-        "calendar"
-      );
-    }
-    if (storageKey === MOBILE_NAV_STORAGE_KEY) {
-      return applyKnowledgeGraphMigration(
-        resolved,
-        MOBILE_KNOWLEDGE_GRAPH_MIGRATION,
-        "notes"
-      );
-    }
-    return resolved;
-  } catch {
-    return defaults;
-  }
-}
-
-function writeStoredNavIds(storageKey: string, ids: string[]) {
-  if (typeof window === "undefined") {
-    return;
-  }
-  try {
-    window.localStorage.setItem(storageKey, JSON.stringify(ids));
-  } catch {
-    return;
-  }
-}
-
-function NavItem({
-  route,
-  compact = false,
-  onRouteIntent
-}: {
-  route: ShellRouteDefinition;
-  compact?: boolean;
-  onRouteIntent?: (to: string) => void;
-}) {
-  const { t } = useI18n();
-  const location = useLocation();
-  const label = getRouteLabel(route, t);
-  const Icon = route.icon;
-  const forceActive = routeMatches(location.pathname, route);
-
-  return (
-    <NavLink
-      to={route.to}
-      title={compact ? label : undefined}
-      aria-label={label}
-      onClick={(event) => {
-        if (shouldCaptureRouteIntent(event)) {
-          onRouteIntent?.(route.to);
-        }
-      }}
-      className={({ isActive }) =>
-        cn(
-          "interactive-tap flex items-center rounded-[18px] text-sm transition",
-          isActive || forceActive
-            ? shellInteractiveActiveClassName
-            : "text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]",
-          compact ? "justify-center px-3 py-3.5" : "gap-3 px-4 py-3"
-        )
-      }
-    >
-      <Icon className="size-4 shrink-0" />
-      {!compact ? <span>{label}</span> : null}
-    </NavLink>
-  );
-}
-
-function MobileBottomNav({
-  routes,
-  onOpenEditor,
-  onRouteIntent
-}: {
-  routes: ShellRouteDefinition[];
-  onOpenEditor?: () => void;
-  onRouteIntent?: (to: string) => void;
-}) {
-  const [moreOpen, setMoreOpen] = useState(false);
-  const { t } = useI18n();
-  const location = useLocation();
-  const holdTimerRef = useRef<number | null>(null);
-  const holdTriggeredRef = useRef(false);
-  const visibleRoutes = routes.slice(0, 4);
-  const moreRoutes = NAV_ROUTE_REGISTRY.filter(
-    (route) => !visibleRoutes.some((entry) => entry.id === route.id)
-  );
-
-  function startHold() {
-    holdTriggeredRef.current = false;
-    if (holdTimerRef.current !== null) {
-      window.clearTimeout(holdTimerRef.current);
-    }
-    holdTimerRef.current = window.setTimeout(() => {
-      holdTriggeredRef.current = true;
-      setMoreOpen(false);
-      onOpenEditor?.();
-    }, 520);
-  }
-
-  function endHold() {
-    if (holdTimerRef.current !== null) {
-      window.clearTimeout(holdTimerRef.current);
-      holdTimerRef.current = null;
-    }
-  }
-
-  return (
-    <>
-      <nav
-        data-testid="mobile-bottom-nav"
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--ui-border-subtle)] bg-[color-mix(in_srgb,var(--surface-glass)_96%,transparent)] backdrop-blur-xl lg:hidden"
-        style={{
-          paddingLeft:
-            "max(0.75rem, calc(var(--forge-safe-area-left) + 0.75rem))",
-          paddingRight:
-            "max(0.75rem, calc(var(--forge-safe-area-right) + 0.75rem))",
-          paddingTop: "0.75rem",
-          paddingBottom: "calc(var(--forge-safe-area-bottom) + 0.75rem)"
-        }}
-      >
-        <div className="grid grid-cols-5 gap-2">
-          {visibleRoutes.map((route) => (
-            <NavLink
-              key={route.id}
-              to={route.to}
-              onPointerDown={startHold}
-              onPointerUp={endHold}
-              onPointerLeave={endHold}
-              onClick={(event) => {
-                if (holdTriggeredRef.current) {
-                  event.preventDefault();
-                  holdTriggeredRef.current = false;
-                  return;
-                }
-                if (shouldCaptureRouteIntent(event)) {
-                  onRouteIntent?.(route.to);
-                }
-              }}
-              className={({ isActive }) =>
-                cn(
-                  "flex min-h-11 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[12px]",
-                  isActive || routeMatches(location.pathname, route)
-                    ? "bg-[var(--ui-surface-active)] text-[var(--primary)]"
-                    : "text-[var(--ui-ink-soft)]"
-                )
-              }
-            >
-              <route.icon className="size-4" />
-              <span>{getRouteLabel(route, t)}</span>
-            </NavLink>
-          ))}
-          <button
-            type="button"
-            className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[12px] text-[var(--ui-ink-soft)]"
-            onClick={() => {
-              if (holdTriggeredRef.current) {
-                holdTriggeredRef.current = false;
-                return;
-              }
-              setMoreOpen(true);
-            }}
-            onPointerDown={startHold}
-            onPointerUp={endHold}
-            onPointerLeave={endHold}
-          >
-            <Settings className="size-4" />
-            <span>{t("common.shell.more")}</span>
-          </button>
-        </div>
-      </nav>
-
-      <SheetScaffold
-        open={moreOpen}
-        onOpenChange={setMoreOpen}
-        eyebrow={t("common.shell.moreRoutesEyebrow")}
-        title={t("common.shell.moreRoutesTitle")}
-        description={t("common.shell.moreRoutesDescription")}
-      >
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <button
-            type="button"
-            className={cn(
-              "inline-flex min-h-10 items-center gap-2 rounded-full px-3 py-2 text-sm",
-              shellInteractiveSubtleClassName
-            )}
-            onClick={() => {
-              setMoreOpen(false);
-              onOpenEditor?.();
-            }}
-          >
-            <GripVertical className="size-4" />
-            Customize navigation
-          </button>
-        </div>
-        <div className="grid gap-3">
-          {moreRoutes.map((route) => (
-            <NavLink
-              key={route.id}
-              to={route.to}
-              onClick={(event) => {
-                if (shouldCaptureRouteIntent(event)) {
-                  onRouteIntent?.(route.to);
-                }
-                setMoreOpen(false);
-              }}
-              className={({ isActive }) =>
-                cn(
-                  "interactive-tap flex items-center justify-between rounded-[24px] px-4 py-4",
-                  isActive || routeMatches(location.pathname, route)
-                    ? shellInteractiveActiveClassName
-                    : shellInteractiveSubtleClassName
-                )
-              }
-            >
-              <span className="flex items-center gap-3">
-                <route.icon className="size-4 text-[var(--primary)]" />
-                <span>
-                  <span className="block text-base font-medium">
-                    {getRouteLabel(route, t)}
-                  </span>
-                  <span className="mt-1 block text-sm text-[var(--ui-ink-soft)]">
-                    {getRouteDetail(route, t)}
-                  </span>
-                </span>
-              </span>
-              <ArrowUpRight className="size-4 text-[var(--ui-ink-faint)]" />
-            </NavLink>
-          ))}
-        </div>
-      </SheetScaffold>
-    </>
-  );
-}
-
-function moveNavEntry(values: string[], fromId: string, toId: string) {
-  const fromIndex = values.indexOf(fromId);
-  const toIndex = values.indexOf(toId);
-  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
-    return values;
-  }
-  return arrayMove(values, fromIndex, toIndex);
-}
-
-function SortableNavEntry({
-  route,
-  prefix,
-  label,
-  onRemove
-}: {
-  route: ShellRouteDefinition;
-  prefix: string;
-  label: string;
-  onRemove: () => void;
-}) {
-  const sortable = useSortable({ id: `${prefix}:${route.id}` });
-
-  return (
-    <div
-      ref={sortable.setNodeRef}
-      style={{
-        transform: CSS.Transform.toString(sortable.transform),
-        transition: sortable.transition
-      }}
-      className="flex min-h-16 items-center justify-between gap-3 rounded-[20px] bg-[var(--ui-surface-1)] px-4 py-3"
-    >
-      <span className="flex min-w-0 items-center gap-3">
-        <button
-          type="button"
-          className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
-          aria-label={`Reorder ${label}`}
-          {...sortable.attributes}
-          {...sortable.listeners}
-        >
-          <GripVertical className="size-4" />
-        </button>
-        <route.icon className="size-4 shrink-0 text-[var(--primary)]" />
-        <span className="truncate text-sm text-[var(--ui-ink-strong)]">{label}</span>
-      </span>
-      <button
-        type="button"
-        className="rounded-full bg-[var(--ui-surface-2)] px-3 py-1.5 text-[12px] text-[var(--ui-ink-medium)]"
-        onClick={onRemove}
-      >
-        Remove
-      </button>
-    </div>
-  );
-}
-
-function ShellNavEditor({
-  open,
-  onOpenChange,
-  desktopNavIds,
-  onDesktopNavIdsChange,
-  desktopSidebarMetricsPosition,
-  onDesktopSidebarMetricsPositionChange,
-  mobileNavIds,
-  onMobileNavIdsChange
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  desktopNavIds: string[];
-  onDesktopNavIdsChange: (ids: string[]) => void;
-  desktopSidebarMetricsPosition: "above" | "below";
-  onDesktopSidebarMetricsPositionChange: (position: "above" | "below") => void;
-  mobileNavIds: string[];
-  onMobileNavIdsChange: (ids: string[]) => void;
-}) {
-  const { t } = useI18n();
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 6 }
-    })
-  );
-  const availableRoutes = NAV_ROUTE_REGISTRY.filter(
-    (route) =>
-      !desktopNavIds.includes(route.id) || !mobileNavIds.includes(route.id)
-  );
-  const desktopSlotCount = 10;
-  const mobileSlotCount = 4;
-
-  function renderSlots(
-    ids: string[],
-    slotCount: number,
-    onChange: (ids: string[]) => void,
-    minimum: number,
-    prefix: string
-  ) {
-    const filledRoutes = ids
-      .map((id) => NAV_ROUTE_REGISTRY.find((entry) => entry.id === id) ?? null)
-      .filter((route): route is ShellRouteDefinition => route !== null);
-    const emptySlotCount = Math.max(0, slotCount - filledRoutes.length);
-
-    return (
-      <div className="grid gap-2">
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={(event: DragEndEvent) => {
-            const activeId = String(event.active.id);
-            const overId = event.over ? String(event.over.id) : null;
-            if (!overId) {
-              return;
-            }
-            onChange(
-              moveNavEntry(
-                ids,
-                activeId.replace(`${prefix}:`, ""),
-                overId.replace(`${prefix}:`, "")
-              )
-            );
-          }}
-        >
-          <SortableContext
-            items={filledRoutes.map((route) => `${prefix}:${route.id}`)}
-            strategy={verticalListSortingStrategy}
-          >
-            {filledRoutes.map((route) => (
-              <SortableNavEntry
-                key={`${prefix}-${route.id}`}
-                route={route}
-                prefix={prefix}
-                label={getRouteLabel(route, t)}
-                onRemove={() =>
-                  removeFromList(ids, route.id, onChange, minimum)
-                }
-              />
-            ))}
-          </SortableContext>
-        </DndContext>
-        {Array.from({ length: emptySlotCount }, (_, index) => (
-          <div
-            key={`${prefix}-empty-${index}`}
-            className="flex min-h-16 items-center justify-between gap-3 rounded-[20px] border border-dashed border-[var(--ui-border-strong)] bg-[var(--ui-surface-1)] px-4 py-3"
-          >
-            <div>
-              <div className="text-sm text-[var(--ui-ink-faint)]">Empty slot</div>
-              <div className="text-[12px] text-[var(--ui-ink-faint)]">
-                Add a route below to fill this slot
-              </div>
-            </div>
-            <div className="rounded-full bg-[var(--ui-surface-2)] px-2.5 py-1 text-[11px] text-[var(--ui-ink-faint)]">
-              Slot {filledRoutes.length + index + 1}
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  function addToList(
-    current: string[],
-    nextId: string,
-    onChange: (ids: string[]) => void,
-    maxItems?: number
-  ) {
-    if (current.includes(nextId)) {
-      return;
-    }
-    const next = [...current, nextId];
-    onChange(maxItems ? next.slice(0, maxItems) : next);
-  }
-
-  function removeFromList(
-    current: string[],
-    id: string,
-    onChange: (ids: string[]) => void,
-    minimum = 1
-  ) {
-    const next = current.filter((entry) => entry !== id);
-    if (next.length < minimum) {
-      return;
-    }
-    onChange(next);
-  }
-
-  return (
-    <SheetScaffold
-      open={open}
-      onOpenChange={onOpenChange}
-      eyebrow="Navigation"
-      title="Customize navigation"
-      description="Add or remove main routes, Psyche shortcuts, and the Workbench flow workspace."
-    >
-      <div className="grid gap-5">
-        <div className="grid gap-3">
-          <div className={cn("text-[11px] uppercase tracking-[0.16em]", shellLabelMutedClassName)}>
-            Desktop sidebar
-          </div>
-          <div className="rounded-[20px] bg-[var(--ui-surface-1)] p-3">
-            <div className={cn("text-[11px] uppercase tracking-[0.14em]", shellLabelMutedClassName)}>
-              Metric strip position
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {(
-                [
-                  ["above", "Above navigation"],
-                  ["below", "Below navigation"]
-                ] as const
-              ).map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  className={cn(
-                    "rounded-full px-3 py-1.5 text-[12px] transition",
-                    desktopSidebarMetricsPosition === value
-                      ? "bg-[var(--primary)] text-[var(--ui-ink-on-accent)]"
-                      : "bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)]"
-                  )}
-                  onClick={() => onDesktopSidebarMetricsPositionChange(value)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="grid gap-2">
-            {renderSlots(
-              desktopNavIds,
-              desktopSlotCount,
-              onDesktopNavIdsChange,
-              4,
-              "desktop"
-            )}
-          </div>
-        </div>
-        <div className="grid gap-3">
-          <div className={cn("text-[11px] uppercase tracking-[0.16em]", shellLabelMutedClassName)}>
-            Mobile bar
-          </div>
-          <div className="grid gap-2">
-            {renderSlots(
-              mobileNavIds,
-              mobileSlotCount,
-              onMobileNavIdsChange,
-              2,
-              "mobile"
-            )}
-          </div>
-        </div>
-        <div className="grid gap-3">
-          <div className={cn("text-[11px] uppercase tracking-[0.16em]", shellLabelMutedClassName)}>
-            Available routes
-          </div>
-          <div className="grid gap-2">
-            {availableRoutes.map((route) => (
-              <div
-                key={`available-${route.id}`}
-                className="flex items-center justify-between gap-3 rounded-[20px] bg-[var(--ui-surface-1)] px-4 py-3"
-              >
-                <span className="flex items-center gap-3">
-                  <route.icon className="size-4 text-[var(--primary)]" />
-                  <span>
-                    <span className="block text-sm text-[var(--ui-ink-strong)]">
-                      {getRouteLabel(route, t)}
-                    </span>
-                    <span className="block text-[12px] text-[var(--ui-ink-soft)]">
-                      {getRouteDetail(route, t)}
-                    </span>
-                  </span>
-                </span>
-                <div className="flex items-center gap-2">
-                  {!desktopNavIds.includes(route.id) ? (
-                    <button
-                      type="button"
-                      className="rounded-full bg-[var(--ui-surface-2)] px-2.5 py-1.5 text-[11px] text-[var(--ui-ink-medium)]"
-                      onClick={() =>
-                        addToList(
-                          desktopNavIds,
-                          route.id,
-                          onDesktopNavIdsChange
-                        )
-                      }
-                    >
-                      + Sidebar
-                    </button>
-                  ) : null}
-                  {!mobileNavIds.includes(route.id) ? (
-                    <button
-                      type="button"
-                      className="rounded-full bg-[var(--ui-surface-2)] px-2.5 py-1.5 text-[11px] text-[var(--ui-ink-medium)]"
-                      onClick={() =>
-                        addToList(
-                          mobileNavIds,
-                          route.id,
-                          onMobileNavIdsChange,
-                          4
-                        )
-                      }
-                    >
-                      + Mobile
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </SheetScaffold>
-  );
-}
 
 function ShellCommandButton({ onClick }: { onClick: () => void }) {
   const { t } = useI18n();
@@ -1001,7 +201,7 @@ function ShellCommandButton({ onClick }: { onClick: () => void }) {
     <Button
       variant="secondary"
       size="sm"
-      className="min-w-[8.25rem] px-3.5"
+      className="min-w-0 px-3.5"
       onClick={onClick}
     >
       <Search className="size-4" />
@@ -1087,54 +287,24 @@ function ShellFrame({
   const [actionBarOpen, setActionBarOpen] = useState(false);
   const [backgroundActivityOpen, setBackgroundActivityOpen] = useState(false);
   const shellRootRef = useRef<HTMLDivElement | null>(null);
-  const [navCollapsed, setNavCollapsed] = useState(false);
-  const [desktopNavIds, setDesktopNavIds] = useState<string[]>(() =>
-    readStoredNavIds(DESKTOP_NAV_STORAGE_KEY, [
-      ...SHELL_NAV_ROUTES.map((route) => route.id)
-    ])
-  );
-  const [mobileNavIds, setMobileNavIds] = useState<string[]>(() =>
-    readStoredNavIds(MOBILE_NAV_STORAGE_KEY, [
-      requirePrimaryRoute("overview").id,
-      requirePrimaryRoute("today").id,
-      requirePrimaryRoute("kanban").id,
-      requirePrimaryRoute("notes").id,
-      requirePrimaryRoute("knowledge-graph").id
-    ])
-  );
-  const [navEditorOpen, setNavEditorOpen] = useState(false);
-  const [desktopSidebarMetricsPosition, setDesktopSidebarMetricsPosition] =
-    useState<"above" | "below">(() => {
-      if (typeof window === "undefined") {
-        return "above";
-      }
-      try {
-        const stored = window.localStorage.getItem(
-          DESKTOP_SIDEBAR_METRICS_POSITION_STORAGE_KEY
-        );
-        return stored === "below" ? "below" : "above";
-      } catch {
-        return "above";
-      }
-    });
-  const autoCollapseAppliedRef = useRef(false);
-  const preAutoCollapseRef = useRef(false);
-  const skipNavPersistenceRef = useRef(false);
+  const {
+    navCollapsed,
+    setNavCollapsed,
+    desktopNavIds,
+    setDesktopNavIds,
+    mobileNavIds,
+    setMobileNavIds,
+    desktopRoutes,
+    mobileRoutes,
+    navEditorOpen,
+    setNavEditorOpen,
+    desktopSidebarMetricsPosition,
+    setDesktopSidebarMetricsPosition
+  } = useShellNavigationState(routeLocation.pathname);
   const isPsyche = isPsycheRoute(routeLocation.pathname);
-  const wikiSurface = isWikiRoute(routeLocation.pathname);
-  const psycheSurface = isPsycheRoute(routeLocation.pathname);
-  const workbenchSurface = routeLocation.pathname.startsWith("/workbench");
   const knowledgeGraphSurface =
     routeLocation.pathname.startsWith("/knowledge-graph");
-  const autoCollapseSurface =
-    wikiSurface || psycheSurface || workbenchSurface || knowledgeGraphSurface;
   const immersiveMobileSurface = false;
-  const desktopRoutes = desktopNavIds
-    .map((id) => NAV_ROUTE_REGISTRY.find((route) => route.id === id) ?? null)
-    .filter((route): route is ShellRouteDefinition => route !== null);
-  const mobileRoutes = mobileNavIds
-    .map((id) => NAV_ROUTE_REGISTRY.find((route) => route.id === id) ?? null)
-    .filter((route): route is ShellRouteDefinition => route !== null);
   const fetching = useIsFetching();
   const mutating = useIsMutating();
   const pendingRtkRequests = useAppSelector(selectPendingRtkRequestCount);
@@ -1237,74 +407,6 @@ function ShellFrame({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem("forge.desktop-nav-collapsed");
-      if (stored === "true") {
-        setNavCollapsed(true);
-      }
-    } catch {
-      return;
-    }
-  }, []);
-
-  useEffect(() => {
-    if (skipNavPersistenceRef.current) {
-      skipNavPersistenceRef.current = false;
-      return;
-    }
-    try {
-      window.localStorage.setItem(
-        "forge.desktop-nav-collapsed",
-        String(navCollapsed)
-      );
-    } catch {
-      return;
-    }
-  }, [navCollapsed]);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(
-        DESKTOP_SIDEBAR_METRICS_POSITION_STORAGE_KEY,
-        desktopSidebarMetricsPosition
-      );
-    } catch {
-      return;
-    }
-  }, [desktopSidebarMetricsPosition]);
-
-  useEffect(() => {
-    writeStoredNavIds(DESKTOP_NAV_STORAGE_KEY, desktopNavIds);
-  }, [desktopNavIds]);
-
-  useEffect(() => {
-    writeStoredNavIds(MOBILE_NAV_STORAGE_KEY, mobileNavIds);
-  }, [mobileNavIds]);
-
-  useEffect(() => {
-    if (autoCollapseSurface) {
-      if (!autoCollapseAppliedRef.current) {
-        preAutoCollapseRef.current = navCollapsed;
-        autoCollapseAppliedRef.current = true;
-        if (!navCollapsed) {
-          skipNavPersistenceRef.current = true;
-          setNavCollapsed(true);
-        }
-      }
-      return;
-    }
-
-    if (!autoCollapseAppliedRef.current) {
-      return;
-    }
-    autoCollapseAppliedRef.current = false;
-    if (navCollapsed !== preAutoCollapseRef.current) {
-      skipNavPersistenceRef.current = true;
-      setNavCollapsed(preAutoCollapseRef.current);
-    }
-  }, [autoCollapseSurface, navCollapsed]);
-
   useShellCollapseController(shellRootRef);
   const shellRootStyle = useMemo(
     () =>
@@ -1336,59 +438,6 @@ function ShellFrame({
       }) as CSSProperties,
     []
   );
-  const sidebarMetricsPanel = (
-    <div className={cn(navCollapsed ? "mt-4" : "mt-6")}>
-      <div
-        className={cn(
-          "rounded-[24px] bg-[var(--ui-surface-1)]",
-          navCollapsed ? "px-2 py-2.5" : "p-4"
-        )}
-      >
-        {!navCollapsed ? (
-          <div className="type-label text-[var(--ui-ink-faint)]">Live metrics</div>
-        ) : null}
-        <div className={cn("grid", navCollapsed ? "gap-1.5" : "mt-3 gap-3")}>
-          {sidebarMetrics.map((metric) => {
-            const Icon = metric.icon;
-            return navCollapsed ? (
-              <div
-                key={metric.id}
-                title={`${metric.label}: ${metric.compactValue}`}
-                className="flex min-w-0 flex-col items-center gap-1 rounded-[16px] bg-[var(--ui-surface-1)] px-1 py-2.5 text-center"
-              >
-                <Icon className="size-3.5 shrink-0 text-[var(--ui-ink-faint)]" />
-                <div className="max-w-full text-[12px] font-semibold leading-none text-[var(--ui-ink-strong)]">
-                  {metric.compactValue}
-                </div>
-              </div>
-            ) : (
-              <div
-                key={metric.id}
-                className="rounded-[18px] bg-[var(--ui-surface-1)] px-3 py-3"
-              >
-                <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
-                  <span>{metric.label}</span>
-                  <InfoTooltip
-                    label={`Explain ${metric.label}`}
-                    title={metric.label}
-                    content={
-                      SHELL_METRIC_HELP[metric.id] ??
-                      "This is a live Forge shell metric for the selected user scope."
-                    }
-                    panelClassName="normal-case tracking-normal"
-                  />
-                </div>
-                <div className="mt-1 text-lg font-semibold leading-tight text-[var(--ui-ink-strong)]">
-                  {metric.expandedValue}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-
   return (
     <div ref={shellRootRef} className="min-h-screen" style={shellRootStyle}>
       <ActionBar
@@ -1483,9 +532,12 @@ function ShellFrame({
             {!navCollapsed ? "Customize nav" : null}
           </Button>
 
-          {desktopSidebarMetricsPosition === "above"
-            ? sidebarMetricsPanel
-            : null}
+          {desktopSidebarMetricsPosition === "above" ? (
+            <SidebarMetricsPanel
+              metrics={sidebarMetrics}
+              collapsed={navCollapsed}
+            />
+          ) : null}
 
           <div className={cn("grid gap-2", navCollapsed ? "mt-6" : "mt-8")}>
             {desktopRoutes.map((route) => (
@@ -1498,9 +550,12 @@ function ShellFrame({
             ))}
           </div>
 
-          {desktopSidebarMetricsPosition === "below"
-            ? sidebarMetricsPanel
-            : null}
+          {desktopSidebarMetricsPosition === "below" ? (
+            <SidebarMetricsPanel
+              metrics={sidebarMetrics}
+              collapsed={navCollapsed}
+            />
+          ) : null}
         </aside>
 
         <div className="min-h-screen">
@@ -1580,7 +635,7 @@ function ShellFrame({
                   <Button
                     variant="secondary"
                     size="sm"
-                    className="min-w-[7.25rem] px-3.5"
+                    className="min-w-0 px-3.5"
                     onClick={() => void shell.refresh()}
                   >
                     <RefreshCcw className="size-4" />
@@ -1622,7 +677,7 @@ function ShellFrame({
                     <Link
                       key={link.to}
                       to={link.to}
-                      className="interactive-tap inline-flex min-h-10 min-w-max items-center justify-center rounded-full bg-[var(--ui-surface-1)] px-4 py-2 text-[13px] leading-none whitespace-nowrap text-[var(--ui-ink-medium)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
+                      className="interactive-tap inline-flex min-h-10 min-w-0 max-w-full items-center justify-center rounded-full bg-[var(--ui-surface-1)] px-4 py-2 text-center text-[13px] leading-tight text-[var(--ui-ink-medium)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)] sm:whitespace-nowrap"
                     >
                       {link.label}
                     </Link>
@@ -1904,105 +959,15 @@ function ShellFrame({
         />
       </div>
 
-      <Dialog.Root
+      <ShellBackgroundActivityDialog
         open={backgroundActivityOpen}
         onOpenChange={setBackgroundActivityOpen}
-      >
-        <Dialog.Portal>
-          <Dialog.Overlay className={shellDialogOverlayClassName} />
-          <Dialog.Content
-            className={cn(
-              shellDialogContentClassName,
-              "top-[10vh] w-[min(42rem,calc(100vw-1.5rem))]"
-            )}
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <Dialog.Title className={shellDialogTitleClassName}>
-                  Background activity
-                </Dialog.Title>
-                <Dialog.Description className={shellDialogDescriptionClassName}>
-                  Follow active KarpaWiki ingest jobs and reopen completed
-                  reviews without leaving your current context.
-                </Dialog.Description>
-              </div>
-              <Dialog.Close asChild>
-                <ModalCloseButton aria-label="Close background activity dialog" />
-              </Dialog.Close>
-            </div>
-
-            <div className="mt-4 max-h-[65vh] overflow-y-auto">
-              {ingestJobsQuery.isLoading ? (
-                <LoadingState
-                  eyebrow="Background"
-                  title="Loading activity"
-                  description="Checking the latest queued and completed ingest jobs."
-                />
-              ) : ingestJobsQuery.isError ? (
-                <ErrorState
-                  eyebrow="Background"
-                  error={ingestJobsQuery.error}
-                  onRetry={() => void ingestJobsQuery.refetch()}
-                />
-              ) : recentIngestJobs.length === 0 ? (
-                <div className="rounded-[24px] border border-dashed border-[var(--ui-border-strong)] px-4 py-10 text-center text-[13px] leading-6 text-[var(--ui-ink-faint)]">
-                  No background ingest jobs yet.
-                </div>
-              ) : (
-                <div className="grid gap-3">
-                  {recentIngestJobs.map((job) => {
-                    const activeJob = ["queued", "processing"].includes(
-                      job.job.status
-                    );
-                    return (
-                      <Link
-                        key={job.job.id}
-                        to={getWikiIngestRoute(job)}
-                        onClick={() => setBackgroundActivityOpen(false)}
-                        className="rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-4 transition hover:bg-[var(--ui-surface-hover)]"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
-                              KarpaWiki ingest
-                            </div>
-                            <div className="mt-2 text-[14px] font-semibold text-[var(--ui-ink-strong)]">
-                              {job.job.titleHint ||
-                                job.job.latestMessage ||
-                                "Background ingest"}
-                            </div>
-                            <div className="mt-1 text-[12px] leading-5 text-[var(--ui-ink-soft)]">
-                              {job.job.status} · {job.job.phase} ·{" "}
-                              {job.job.progressPercent}% ·{" "}
-                              {formatActivityTimestamp(job.job.updatedAt)}
-                            </div>
-                            <div className="mt-2 text-[12px] leading-5 text-[var(--ui-ink-faint)]">
-                              {job.job.createdPageCount} pages ·{" "}
-                              {job.job.createdEntityCount} entities ·{" "}
-                              {job.job.acceptedCount} accepted ·{" "}
-                              {job.job.rejectedCount} rejected
-                            </div>
-                          </div>
-                          <div className="shrink-0">
-                            {activeJob ? (
-                              <div className="inline-flex items-center gap-2 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-2 text-xs text-[var(--ui-ink-soft)]">
-                                <RefreshCcw className="size-3.5 animate-spin" />
-                                Running
-                              </div>
-                            ) : (
-                              <Badge tone="meta">{job.job.phase}</Badge>
-                            )}
-                          </div>
-                        </div>
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+        isLoading={ingestJobsQuery.isLoading}
+        isError={ingestJobsQuery.isError}
+        error={ingestJobsQuery.error}
+        onRetry={() => void ingestJobsQuery.refetch()}
+        recentIngestJobs={recentIngestJobs}
+      />
 
       <CreateMenu
         className="fixed z-40 lg:bottom-6 lg:right-6"
@@ -2034,13 +999,8 @@ export function AppShell() {
     projectId?: string | null;
   }>({});
   const [startWorkError, setStartWorkError] = useState<string | null>(null);
-  const [taskCompletionPrompt, setTaskCompletionPrompt] = useState<{
-    taskId: string;
-    title: string;
-    status: "done";
-    customMinutes: string;
-    error: string | null;
-  } | null>(null);
+  const [taskCompletionPrompt, setTaskCompletionPrompt] =
+    useState<TaskCompletionPromptState | null>(null);
   const [xpNotice, setXpNotice] = useState<{
     deltaXp: number;
     totalXp: number;
@@ -2655,136 +1615,13 @@ export function AppShell() {
               )}
             </div>
           </ShellFrame>
-          <Dialog.Root
-            open={taskCompletionPrompt !== null}
-            onOpenChange={(open) => {
-              if (!open) {
-                setTaskCompletionPrompt(null);
-              }
+          <TaskCompletionWorkLogDialog
+            prompt={taskCompletionPrompt}
+            setPrompt={setTaskCompletionPrompt}
+            onSubmit={(completedTodayWorkSeconds) => {
+              void submitCompletionPrompt(completedTodayWorkSeconds);
             }}
-          >
-            <Dialog.Portal>
-              <Dialog.Overlay className="fixed inset-0 z-[70] bg-[var(--ui-overlay-backdrop)] backdrop-blur-xl" />
-              <Dialog.Content className="fixed left-1/2 top-1/2 z-[71] w-[min(92vw,34rem)] -translate-x-1/2 -translate-y-1/2 rounded-[28px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-modal)] p-6 shadow-[var(--ui-shadow-floating)]">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <Dialog.Title className="font-display text-[1.35rem] leading-tight text-[var(--ui-ink-strong)]">
-                      Log today&apos;s work before closing
-                    </Dialog.Title>
-                    <Dialog.Description className="mt-2 text-sm leading-6 text-[var(--ui-ink-medium)]">
-                      Forge closes tasks from actual time worked today, not from
-                      the checkbox itself. Add the time you spent on{" "}
-                      <span className="font-medium text-[var(--ui-ink-strong)]">
-                        {taskCompletionPrompt?.title ?? "this task"}
-                      </span>{" "}
-                      today, or confirm that you did not work on it today.
-                    </Dialog.Description>
-                  </div>
-                  <ModalCloseButton
-                    onClick={() => setTaskCompletionPrompt(null)}
-                  />
-                </div>
-
-                <div className="mt-5">
-                  <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
-                    Quick amounts
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {[
-                      { label: "5m", seconds: 5 * 60 },
-                      { label: "15m", seconds: 15 * 60 },
-                      { label: "30m", seconds: 30 * 60 },
-                      { label: "1h", seconds: 60 * 60 },
-                      { label: "2h", seconds: 2 * 60 * 60 }
-                    ].map((entry) => (
-                      <Button
-                        key={entry.label}
-                        variant="secondary"
-                        onClick={() => {
-                          void submitCompletionPrompt(entry.seconds);
-                        }}
-                      >
-                        {entry.label}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="mt-5 grid gap-3 rounded-[20px] bg-[var(--ui-surface-1)] p-4">
-                  <label className="grid gap-2 text-sm text-[var(--ui-ink-medium)]">
-                    <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
-                      Custom minutes
-                    </span>
-                    <input
-                      type="number"
-                      min={0}
-                      step={5}
-                      value={taskCompletionPrompt?.customMinutes ?? ""}
-                      onChange={(event) => {
-                        setTaskCompletionPrompt((current) =>
-                          current
-                            ? {
-                                ...current,
-                                customMinutes: event.target.value,
-                                error: null
-                              }
-                            : current
-                        );
-                      }}
-                      className="h-11 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 text-sm text-[var(--ui-ink-strong)] outline-none transition focus:border-[color-mix(in_srgb,var(--primary)_40%,transparent)] focus:bg-[var(--ui-surface-2)]"
-                      placeholder="45"
-                    />
-                  </label>
-                  {taskCompletionPrompt?.error ? (
-                    <div className="text-sm text-rose-200">
-                      {taskCompletionPrompt.error}
-                    </div>
-                  ) : null}
-                </div>
-
-                <div className="mt-5 flex flex-wrap justify-end gap-3">
-                  <Button
-                    variant="secondary"
-                    onClick={() => setTaskCompletionPrompt(null)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      void submitCompletionPrompt(0);
-                    }}
-                  >
-                    No work today
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      if (!taskCompletionPrompt) {
-                        return;
-                      }
-                      const minutes = Number(
-                        taskCompletionPrompt.customMinutes
-                      );
-                      if (!Number.isFinite(minutes) || minutes < 0) {
-                        setTaskCompletionPrompt((current) =>
-                          current
-                            ? {
-                                ...current,
-                                error: "Enter a valid number of minutes."
-                              }
-                            : current
-                        );
-                        return;
-                      }
-                      void submitCompletionPrompt(Math.round(minutes * 60));
-                    }}
-                  >
-                    Close with logged time
-                  </Button>
-                </div>
-              </Dialog.Content>
-            </Dialog.Portal>
-          </Dialog.Root>
+          />
           {knowledgeGraphOverlayFocus?.focusNode ? (
             <div className="pointer-events-none fixed inset-y-0 right-0 z-[64] hidden lg:flex lg:max-w-[min(30rem,calc(100vw-4rem))] lg:items-start lg:justify-end lg:p-4">
               <div className="pointer-events-auto h-full w-[min(30rem,calc(100vw-4rem))] max-w-full overflow-hidden rounded-[28px] border border-[var(--ui-border-subtle)] bg-[color-mix(in_srgb,var(--surface-glass)_94%,transparent)] pt-[calc(var(--forge-shell-desktop-header-padding-top)+4.8rem)] shadow-[var(--ui-shadow-floating)] backdrop-blur-xl">
@@ -2851,64 +1688,4 @@ export function useForgeShell() {
     throw new Error("Forge shell context is unavailable.");
   }
   return resolvedContext;
-}
-
-export function buildSidebarMetrics(
-  snapshot: ForgeSnapshot,
-  t: ReturnType<typeof useI18n>["t"]
-) {
-  return [
-    {
-      id: "ap",
-      label: "AP",
-      compactValue: snapshot.lifeForce
-        ? String(Math.round(snapshot.lifeForce.remainingAp))
-        : "0",
-      expandedValue: snapshot.lifeForce
-        ? `${Math.round(snapshot.lifeForce.remainingAp)} AP left`
-        : "AP unavailable",
-      icon: BatteryCharging
-    },
-    {
-      id: "instant-ap",
-      label: "Instant AP/h",
-      compactValue: snapshot.lifeForce
-        ? String(Number(snapshot.lifeForce.instantFreeApPerHour.toFixed(1)))
-        : "0",
-      expandedValue: snapshot.lifeForce
-        ? formatLifeForceRate(snapshot.lifeForce.instantFreeApPerHour)
-        : "0 AP/h",
-      icon: Clock3
-    },
-    {
-      id: "streak",
-      label: t("common.shell.momentum.streak"),
-      compactValue: String(snapshot.metrics.streakDays),
-      expandedValue: t(
-        snapshot.metrics.streakDays === 1
-          ? "common.shell.momentum.streakBadgeOne"
-          : "common.shell.momentum.streakBadgeOther",
-        {
-          count: snapshot.metrics.streakDays
-        }
-      ),
-      icon: Flame
-    },
-    {
-      id: "xp",
-      label: t("common.shell.momentum.xp"),
-      compactValue: String(snapshot.metrics.totalXp),
-      expandedValue: `${snapshot.metrics.totalXp} XP`,
-      icon: Zap
-    },
-    {
-      id: "momentum",
-      label: t("common.shell.momentum.momentum"),
-      compactValue: `${snapshot.metrics.momentumScore}%`,
-      expandedValue: t("common.shell.momentum.liveMomentum", {
-        count: snapshot.metrics.momentumScore
-      }),
-      icon: Activity
-    }
-  ] as const;
 }

@@ -18,10 +18,14 @@ function buildOptions(tags: string[]): EntityLinkOption[] {
     description: preset.description,
     searchText: `${preset.label} ${preset.description}`,
     badge: (
-      <Badge className="bg-cyan-400/10 text-cyan-50">{preset.label}</Badge>
+      <Badge className="border border-[color-mix(in_srgb,var(--info)_32%,var(--ui-border-subtle)_68%)] bg-[var(--ui-info-soft)] text-[color-mix(in_srgb,var(--info)_74%,var(--ui-ink-strong)_26%)]">
+        {preset.label}
+      </Badge>
     ),
     menuBadge: (
-      <Badge className="bg-cyan-400/10 text-cyan-50">{preset.label}</Badge>
+      <Badge className="border border-[color-mix(in_srgb,var(--info)_32%,var(--ui-border-subtle)_68%)] bg-[var(--ui-info-soft)] text-[color-mix(in_srgb,var(--info)_74%,var(--ui-ink-strong)_26%)]">
+        {preset.label}
+      </Badge>
     )
   })) satisfies EntityLinkOption[];
 
@@ -32,8 +36,16 @@ function buildOptions(tags: string[]): EntityLinkOption[] {
       label: tag,
       description: "Custom note tag",
       searchText: tag,
-      badge: <Badge className="bg-white/[0.08] text-white/78">{tag}</Badge>,
-      menuBadge: <Badge className="bg-white/[0.08] text-white/78">{tag}</Badge>
+      badge: (
+        <Badge className="border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
+          {tag}
+        </Badge>
+      ),
+      menuBadge: (
+        <Badge className="border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
+          {tag}
+        </Badge>
+      )
     })) satisfies EntityLinkOption[];
 
   return [...presetOptions, ...customOptions];
@@ -67,9 +79,15 @@ export function NoteTagsInput({
           label: tag,
           description: "Custom note tag",
           searchText: tag,
-          badge: <Badge className="bg-white/[0.08] text-white/78">{tag}</Badge>,
+          badge: (
+            <Badge className="border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
+              {tag}
+            </Badge>
+          ),
           menuBadge: (
-            <Badge className="bg-white/[0.08] text-white/78">{tag}</Badge>
+            <Badge className="border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
+              {tag}
+            </Badge>
           )
         } satisfies EntityLinkOption;
       }}

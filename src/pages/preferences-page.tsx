@@ -1,18 +1,10 @@
-import * as Dialog from "@radix-ui/react-dialog";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Compass,
   GitCompareArrows,
-  History,
-  Map,
   Plus,
   Search,
-  SlidersHorizontal,
-  Sparkles,
-  TableProperties,
-  Trash2,
-  X
+  Trash2
 } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { PsycheSectionNav } from "@/components/psyche/psyche-section-nav";
@@ -49,392 +41,40 @@ import {
   submitPreferenceSignal
 } from "@/lib/api";
 import type {
-  CrudEntityType,
-  ForgeSnapshot,
   PreferenceCatalog,
   PreferenceCatalogItem,
   PreferenceContext,
   PreferenceDimensionId,
-  PreferenceDimensionSummary,
   PreferenceDomain,
-  PreferenceItemScore,
   PreferenceItemStatus,
-  PreferenceSignalType,
-  PreferenceWorkspacePayload,
-  UserSummary
+  PreferenceSignalType
 } from "@/lib/types";
 import {
-  buildOwnedEntitySearchText,
-  formatUserSummaryLine,
   getSingleSelectedUserId
 } from "@/lib/user-ownership";
 import { cn } from "@/lib/utils";
-
-const TABS = [
-  { id: "overview", label: "Overview", icon: Compass },
-  { id: "map", label: "Map", icon: Map },
-  { id: "table", label: "Table", icon: TableProperties },
-  { id: "history", label: "History", icon: History },
-  { id: "contexts", label: "Contexts", icon: SlidersHorizontal },
-  { id: "concepts", label: "Concepts", icon: Sparkles }
-] as const;
-
-const FORGE_GAME_DOMAINS = new Set<PreferenceDomain>([
-  "projects",
-  "tasks",
-  "strategies",
-  "habits"
-]);
-
-const DOMAIN_OPTIONS: Array<{
-  value: PreferenceDomain;
-  label: string;
-  description: string;
-  mode: "forge" | "concept";
-}> = [
-  {
-    value: "projects",
-    label: "Projects",
-    description: "Goals and projects already living in Forge.",
-    mode: "forge"
-  },
-  {
-    value: "tasks",
-    label: "Tasks",
-    description: "Execution-level work choices inside Forge.",
-    mode: "forge"
-  },
-  {
-    value: "strategies",
-    label: "Strategies",
-    description: "Plan shapes and sequencing choices in Forge.",
-    mode: "forge"
-  },
-  {
-    value: "habits",
-    label: "Habits",
-    description: "Recurring behaviors and routines from Forge.",
-    mode: "forge"
-  },
-  {
-    value: "activities",
-    label: "Activities",
-    description: "Movement, leisure, and social setting concepts.",
-    mode: "concept"
-  },
-  {
-    value: "food",
-    label: "Food",
-    description: "Cuisine, meal mood, and drink preferences.",
-    mode: "concept"
-  },
-  {
-    value: "places",
-    label: "Places",
-    description: "Living environments, venues, and trip shapes.",
-    mode: "concept"
-  },
-  {
-    value: "countries",
-    label: "Countries",
-    description: "Country-level attraction and lifestyle fit.",
-    mode: "concept"
-  },
-  {
-    value: "fashion",
-    label: "Fashion",
-    description: "Silhouette, material, and palette preferences.",
-    mode: "concept"
-  },
-  {
-    value: "people",
-    label: "People",
-    description: "Presence, body-type, and conversation preferences.",
-    mode: "concept"
-  },
-  {
-    value: "media",
-    label: "Media",
-    description: "Film, reading, and music taste.",
-    mode: "concept"
-  },
-  {
-    value: "tools",
-    label: "Tools",
-    description: "Workflow and capture preferences.",
-    mode: "concept"
-  },
-  {
-    value: "custom",
-    label: "Custom",
-    description: "General-purpose concept libraries you control.",
-    mode: "concept"
-  }
-];
-
-const DIMENSION_LABELS: Record<PreferenceDimensionId, string> = {
-  novelty: "Novelty",
-  simplicity: "Simplicity",
-  rigor: "Rigor",
-  aesthetics: "Aesthetics",
-  depth: "Depth",
-  structure: "Structure",
-  familiarity: "Familiarity",
-  surprise: "Surprise"
-};
-
-const DEFAULT_DIMENSIONS: Record<PreferenceDimensionId, number> = {
-  novelty: 0,
-  simplicity: 0,
-  rigor: 0,
-  aesthetics: 0,
-  depth: 0,
-  structure: 0,
-  familiarity: 0,
-  surprise: 0
-};
-
-const STATUS_CLASSES: Record<PreferenceItemStatus, string> = {
-  liked: "bg-emerald-500/12 text-emerald-200",
-  disliked: "bg-rose-500/12 text-rose-200",
-  uncertain: "bg-white/[0.08] text-white/70",
-  vetoed: "bg-rose-500/15 text-rose-100",
-  bookmarked: "bg-sky-500/12 text-sky-200",
-  favorite: "bg-amber-500/12 text-amber-200",
-  must_have: "bg-indigo-500/15 text-indigo-100",
-  neutral: "bg-white/[0.08] text-white/70"
-};
-
-const SIGNAL_OPTIONS: Array<{
-  signalType: PreferenceSignalType;
-  label: string;
-}> = [
-  { signalType: "favorite", label: "Favorite" },
-  { signalType: "must_have", label: "Must-have" },
-  { signalType: "bookmark", label: "Bookmark" },
-  { signalType: "compare_later", label: "Later" },
-  { signalType: "neutral", label: "Neutral" },
-  { signalType: "veto", label: "Veto" }
-];
-
-type PreferencesTab = (typeof TABS)[number]["id"];
-
-type CandidateEntity = {
-  entityType: CrudEntityType;
-  entityId: string;
-  domain: PreferenceDomain;
-  label: string;
-  description: string;
-  user: UserSummary | null | undefined;
-  searchText: string;
-  href: string | null;
-};
-
-function normalizeText(value: string) {
-  return value.trim().toLowerCase();
-}
-
-function formatPercent(value: number) {
-  return `${Math.round(value * 100)}%`;
-}
-
-function buildCandidateEntities(snapshot: ForgeSnapshot): CandidateEntity[] {
-  return [
-    ...snapshot.goals.map((goal) => ({
-      entityType: "goal" as const,
-      entityId: goal.id,
-      domain: "projects" as const,
-      label: goal.title,
-      description: goal.description,
-      user: goal.user,
-      href: `/goals/${goal.id}`,
-      searchText: buildOwnedEntitySearchText(
-        [goal.title, goal.description, goal.status, goal.horizon],
-        goal
-      )
-    })),
-    ...snapshot.dashboard.projects.map((project) => ({
-      entityType: "project" as const,
-      entityId: project.id,
-      domain: "projects" as const,
-      label: project.title,
-      description: project.description,
-      user: project.user,
-      href: `/projects/${project.id}`,
-      searchText: buildOwnedEntitySearchText(
-        [project.title, project.description, project.status, project.goalTitle],
-        project
-      )
-    })),
-    ...snapshot.tasks.map((task) => ({
-      entityType: "task" as const,
-      entityId: task.id,
-      domain: "tasks" as const,
-      label: task.title,
-      description: task.description,
-      user: task.user,
-      href: `/tasks/${task.id}`,
-      searchText: buildOwnedEntitySearchText(
-        [task.title, task.description, task.status, task.priority, task.owner],
-        task
-      )
-    })),
-    ...snapshot.strategies.map((strategy) => ({
-      entityType: "strategy" as const,
-      entityId: strategy.id,
-      domain: "strategies" as const,
-      label: strategy.title,
-      description: strategy.overview || strategy.endStateDescription,
-      user: strategy.user,
-      href: `/strategies/${strategy.id}`,
-      searchText: buildOwnedEntitySearchText(
-        [
-          strategy.title,
-          strategy.overview,
-          strategy.endStateDescription,
-          strategy.status
-        ],
-        strategy
-      )
-    })),
-    ...snapshot.habits.map((habit) => ({
-      entityType: "habit" as const,
-      entityId: habit.id,
-      domain: "habits" as const,
-      label: habit.title,
-      description: habit.description,
-      user: habit.user,
-      href: null,
-      searchText: buildOwnedEntitySearchText(
-        [habit.title, habit.description, habit.status, habit.frequency],
-        habit
-      )
-    }))
-  ];
-}
-
-function getSourceEntityHref(
-  entityType: CrudEntityType | null | undefined,
-  entityId: string | null | undefined
-) {
-  if (!entityType || !entityId) {
-    return null;
-  }
-  if (entityType === "goal") {
-    return `/goals/${entityId}`;
-  }
-  if (entityType === "project") {
-    return `/projects/${entityId}`;
-  }
-  if (entityType === "task") {
-    return `/tasks/${entityId}`;
-  }
-  if (entityType === "strategy") {
-    return `/strategies/${entityId}`;
-  }
-  return null;
-}
-
-function getScoreStatus(score: PreferenceItemScore) {
-  return score.manualStatus ?? score.status;
-}
-
-function resolveSelectedTab(searchValue: string | null): PreferencesTab {
-  if (searchValue && TABS.some((tab) => tab.id === searchValue)) {
-    return searchValue as PreferencesTab;
-  }
-  return "overview";
-}
-
-function buildGameHeadline(workspace: PreferenceWorkspacePayload) {
-  if (workspace.summary.totalItems < 2) {
-    return {
-      title: "Forge does not know enough yet.",
-      description:
-        "Start the game so Forge can ask a few clean comparisons and build a real preference model."
-    };
-  }
-  if (workspace.summary.averageConfidence < 0.28) {
-    return {
-      title: "Forge has a rough sketch, not a stable read.",
-      description:
-        "There is some signal, but the model still needs more rounds before its preferences are trustworthy."
-    };
-  }
-  return {
-    title: "This is what Forge currently thinks.",
-    description:
-      "The summary below is the current best model for this user, this domain, and the active context."
-  };
-}
-
-function DimensionBar({ summary }: { summary: PreferenceDimensionSummary }) {
-  const leaning = Math.max(-1, Math.min(1, summary.leaning));
-  const offset = ((leaning + 1) / 2) * 100;
-  return (
-    <div className="grid gap-1">
-      <div className="flex items-center justify-between gap-3 text-xs text-white/56">
-        <span>{DIMENSION_LABELS[summary.dimensionId]}</span>
-        <span>
-          {summary.movement > 0.08
-            ? "Rising"
-            : summary.movement < -0.08
-              ? "Falling"
-              : "Stable"}{" "}
-          · {formatPercent(summary.confidence)}
-        </span>
-      </div>
-      <div className="relative h-2 rounded-full bg-white/[0.08]">
-        <div className="absolute inset-y-0 left-1/2 w-px bg-white/10" />
-        <div
-          className={cn(
-            "absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/12",
-            leaning >= 0 ? "bg-emerald-300" : "bg-rose-300"
-          )}
-          style={{ left: `${offset}%` }}
-        />
-      </div>
-      <div className="flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.12em] text-white/38">
-        <span>
-          {leaning >= 0 ? "Leans toward" : "Leans away from"}{" "}
-          {DIMENSION_LABELS[summary.dimensionId].toLowerCase()}
-        </span>
-        <span>Context {formatPercent(summary.contextSensitivity)}</span>
-      </div>
-    </div>
-  );
-}
-
-function ComparisonCard({
-  title,
-  description,
-  sideLabel,
-  onClick
-}: {
-  title: string;
-  description: string;
-  sideLabel: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      className="grid min-h-[220px] gap-4 rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.07),rgba(255,255,255,0.03))] p-5 text-left transition hover:border-[var(--primary)]/40 hover:bg-[linear-gradient(180deg,rgba(192,193,255,0.14),rgba(255,255,255,0.05))]"
-      onClick={onClick}
-    >
-      <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
-        {sideLabel}
-      </div>
-      <div className="font-display text-3xl text-white">{title}</div>
-      <div className="max-w-[36ch] text-sm leading-6 text-white/56">
-        {description || "Choose the one that feels more right."}
-      </div>
-      <div className="mt-auto text-sm text-[var(--primary)]">
-        Click this card
-      </div>
-    </button>
-  );
-}
+import {
+  DEFAULT_DIMENSIONS,
+  DIMENSION_LABELS,
+  DimensionBar,
+  FORGE_GAME_DOMAINS,
+  STATUS_CLASSES,
+  buildCandidateEntities,
+  buildGameHeadline,
+  formatPercent,
+  getScoreStatus,
+  getSourceEntityHref,
+  normalizeText,
+  resolveSelectedTab
+} from "@/components/preferences/preferences-workspace-model";
+import {
+  PreferenceGameDialog,
+  type PreferenceGameState
+} from "@/components/preferences/preference-game-dialog";
+import {
+  PreferenceWorkspaceControls,
+  PreferenceWorkspaceTabNav
+} from "@/components/preferences/preference-workspace-chrome";
 
 export function PreferencesPage() {
   const shell = useForgeShell();
@@ -445,11 +85,7 @@ export function PreferencesPage() {
   const [conceptSearchQuery, setConceptSearchQuery] = useState("");
   const [mergeSourceContextId, setMergeSourceContextId] = useState("");
   const [mergeTargetContextId, setMergeTargetContextId] = useState("");
-  const [gameState, setGameState] = useState<{
-    open: boolean;
-    phase: "domain" | "catalog" | "play";
-    domain: PreferenceDomain;
-  }>({
+  const [gameState, setGameState] = useState<PreferenceGameState>({
     open: false,
     phase: "domain",
     domain: ((searchParams.get("domain") as PreferenceDomain | null) ??
@@ -1101,8 +737,6 @@ export function PreferencesPage() {
     selectedScore?.item?.sourceEntityType ?? null,
     selectedScore?.item?.sourceEntityId ?? null
   );
-  const nextPair = activeGameWorkspace?.compare.nextPair ?? null;
-
   return (
     <>
       <div className="grid gap-5">
@@ -1128,104 +762,19 @@ export function PreferencesPage() {
 
         <PsycheSectionNav />
 
-        <Card className="grid gap-4">
-          <div className="grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
-            <div className="grid gap-2">
-              <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
-                Active user
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <select
-                  value={selectedUserId}
-                  onChange={(event) =>
-                    updateSearchParams({
-                      userId: event.target.value,
-                      contextId: null,
-                      focusItem: null
-                    })
-                  }
-                  className="min-h-10 rounded-[18px] border border-white/8 bg-white/[0.05] px-3 text-sm text-white outline-none"
-                >
-                  {shell.snapshot.users.map((entry) => (
-                    <option key={entry.id} value={entry.id}>
-                      {entry.displayName} · {entry.kind}
-                    </option>
-                  ))}
-                </select>
-                <UserBadge user={user} />
-                <div className="text-sm text-white/54">
-                  {formatUserSummaryLine(user)}
-                </div>
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
-                Domain
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {DOMAIN_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    className={cn(
-                      "rounded-full border px-3 py-2 text-sm transition",
-                      option.value === selectedDomain
-                        ? "border-[var(--primary)] bg-[var(--primary)]/14 text-white"
-                        : "border-white/8 bg-white/[0.04] text-white/62 hover:bg-white/[0.08]"
-                    )}
-                    onClick={() =>
-                      updateSearchParams({
-                        domain: option.value,
-                        contextId: null,
-                        focusItem: null
-                      })
-                    }
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-              <div className="text-sm text-white/48">
-                {
-                  DOMAIN_OPTIONS.find((entry) => entry.value === selectedDomain)
-                    ?.description
-                }
-              </div>
-            </div>
-          </div>
+        <PreferenceWorkspaceControls
+          users={shell.snapshot.users}
+          user={user}
+          selectedUserId={selectedUserId}
+          selectedDomain={selectedDomain}
+          workspace={workspace}
+          onPatchSearch={updateSearchParams}
+        />
 
-          <div className="flex flex-wrap items-center gap-2 text-sm text-white/50">
-            <Badge className="bg-white/[0.08] text-white/70">
-              {workspace.selectedContext.name}
-            </Badge>
-            <span>{workspace.selectedContext.shareMode}</span>
-            <span>·</span>
-            <span>{workspace.compare.pendingCount} queued comparisons</span>
-            <span>·</span>
-            <span>
-              {workspace.libraries.totalCatalogItems} concept items ready
-            </span>
-          </div>
-        </Card>
-
-        <div className="flex flex-wrap gap-2">
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              className={cn(
-                "inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm transition",
-                tab.id === selectedTab
-                  ? "border-[var(--primary)] bg-[var(--primary)]/14 text-white"
-                  : "border-white/8 bg-white/[0.04] text-white/62 hover:bg-white/[0.08]"
-              )}
-              onClick={() => updateSearchParams({ tab: tab.id })}
-            >
-              <tab.icon className="size-4" />
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        <PreferenceWorkspaceTabNav
+          selectedTab={selectedTab}
+          onSelectTab={(tab) => updateSearchParams({ tab })}
+        />
 
         {selectedTab === "overview" ? (
           <div className="grid gap-5">
@@ -1336,20 +885,20 @@ export function PreferencesPage() {
                     Open full map
                   </Link>
                 </div>
-                <div className="relative min-h-[340px] overflow-hidden rounded-[24px] border border-white/8 bg-[radial-gradient(circle_at_top,rgba(87,196,138,0.18),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(255,104,130,0.14),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01))]">
-                  <div className="absolute inset-x-0 top-1/2 h-px bg-white/8" />
-                  <div className="absolute inset-y-0 left-1/2 w-px bg-white/8" />
+                <div className="relative min-h-[340px] overflow-hidden rounded-[24px] border border-[var(--ui-border-subtle)] bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--success)_18%,transparent),transparent_35%),radial-gradient(circle_at_bottom_right,color-mix(in_srgb,var(--danger)_14%,transparent),transparent_30%),var(--ui-surface-section)]">
+                  <div className="absolute inset-x-0 top-1/2 h-px bg-[var(--ui-border-subtle)]" />
+                  <div className="absolute inset-y-0 left-1/2 w-px bg-[var(--ui-border-subtle)]" />
                   {workspace.map.map((point) => (
                     <button
                       key={point.itemId}
                       type="button"
                       className={cn(
-                        "absolute -translate-x-1/2 -translate-y-1/2 rounded-full border px-2 py-1 text-[11px] shadow-[0_10px_25px_rgba(5,8,16,0.32)] transition hover:scale-[1.04]",
+                        "absolute -translate-x-1/2 -translate-y-1/2 rounded-full border px-2 py-1 text-[11px] shadow-[var(--ui-shadow-soft)] transition hover:scale-[1.04]",
                         point.itemId === selectedScore?.itemId
-                          ? "border-white/30 bg-white/16 text-white"
+                          ? "border-[var(--ui-border-strong)] bg-[var(--ui-surface-active)] text-[var(--ui-ink-strong)]"
                           : point.score >= 0
-                            ? "border-emerald-300/30 bg-emerald-500/14 text-emerald-100"
-                            : "border-rose-300/30 bg-rose-500/14 text-rose-100"
+                            ? "border-[color-mix(in_srgb,var(--success)_34%,transparent)] bg-[var(--ui-success-soft)] text-[var(--success)]"
+                            : "border-[color-mix(in_srgb,var(--danger)_34%,transparent)] bg-[var(--ui-danger-soft)] text-[var(--danger)]"
                       )}
                       style={{
                         left: `${50 + point.x * 30}%`,
@@ -1517,13 +1066,13 @@ export function PreferencesPage() {
                   Click a point to inspect why Forge believes it belongs there.
                 </div>
               </div>
-              <div className="text-sm text-white/52">
+            <div className="text-sm text-[var(--ui-ink-soft)]">
                 {workspace.map.length} plotted items
               </div>
             </div>
-            <div className="relative min-h-[520px] overflow-hidden rounded-[24px] border border-white/8 bg-[radial-gradient(circle_at_20%_20%,rgba(87,196,138,0.2),transparent_25%),radial-gradient(circle_at_80%_80%,rgba(255,104,130,0.2),transparent_26%),linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01))]">
-              <div className="absolute inset-x-0 top-1/2 h-px bg-white/8" />
-              <div className="absolute inset-y-0 left-1/2 w-px bg-white/8" />
+            <div className="relative min-h-[520px] overflow-hidden rounded-[24px] border border-[var(--ui-border-subtle)] bg-[radial-gradient(circle_at_20%_20%,color-mix(in_srgb,var(--success)_20%,transparent),transparent_25%),radial-gradient(circle_at_80%_80%,color-mix(in_srgb,var(--danger)_20%,transparent),transparent_26%),var(--ui-surface-section)]">
+              <div className="absolute inset-x-0 top-1/2 h-px bg-[var(--ui-border-subtle)]" />
+              <div className="absolute inset-y-0 left-1/2 w-px bg-[var(--ui-border-subtle)]" />
               {workspace.map.map((point) => (
                 <button
                   key={point.itemId}
@@ -1531,10 +1080,10 @@ export function PreferencesPage() {
                   className={cn(
                     "absolute -translate-x-1/2 -translate-y-1/2 rounded-full border px-3 py-1 text-xs transition hover:scale-[1.04]",
                     point.itemId === selectedScore?.itemId
-                      ? "border-white/30 bg-white/16 text-white"
+                      ? "border-[var(--ui-border-strong)] bg-[var(--ui-surface-active)] text-[var(--ui-ink-strong)]"
                       : point.score >= 0
-                        ? "border-emerald-300/30 bg-emerald-500/14 text-emerald-100"
-                        : "border-rose-300/30 bg-rose-500/14 text-rose-100"
+                        ? "border-[color-mix(in_srgb,var(--success)_34%,transparent)] bg-[var(--ui-success-soft)] text-[var(--success)]"
+                        : "border-[color-mix(in_srgb,var(--danger)_34%,transparent)] bg-[var(--ui-danger-soft)] text-[var(--danger)]"
                   )}
                   style={{
                     left: `${50 + point.x * 34}%`,
@@ -1932,7 +1481,7 @@ export function PreferencesPage() {
                         {context.shareMode}
                       </Badge>
                       {!context.active ? (
-                        <Badge className="bg-amber-500/12 text-amber-200">
+                        <Badge className="bg-[var(--ui-warning-soft)] text-[var(--warning)]">
                           Inactive
                         </Badge>
                       ) : null}
@@ -2576,8 +2125,8 @@ export function PreferencesPage() {
         ) : null}
       </div>
 
-      <Dialog.Root
-        open={gameState.open}
+      <PreferenceGameDialog
+        state={gameState}
         onOpenChange={(open) => {
           if (!open) {
             setGameError(null);
@@ -2587,241 +2136,24 @@ export function PreferencesPage() {
             open
           }));
         }}
-      >
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-40 bg-[rgba(4,8,18,0.74)] backdrop-blur-xl" />
-          <Dialog.Content className="fixed inset-x-4 bottom-4 top-4 z-50 overflow-y-auto rounded-[32px] border border-white/10 bg-[linear-gradient(180deg,rgba(17,24,39,0.98),rgba(10,14,24,0.98))] shadow-[0_30px_90px_rgba(3,8,18,0.45)] md:inset-x-10 lg:left-1/2 lg:right-auto lg:w-[min(72rem,calc(100vw-3rem))] lg:-translate-x-1/2">
-            <Dialog.Title className="sr-only">Preference game</Dialog.Title>
-            <Dialog.Description className="sr-only">
-              Start comparison rounds from a Forge domain or concept list.
-            </Dialog.Description>
-
-            <div className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-white/8 bg-[rgba(10,14,24,0.92)] px-5 py-4 backdrop-blur-xl">
-              <div>
-                <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
-                  Preference game
-                </div>
-                <div className="mt-1 font-display text-2xl text-white">
-                  {gameState.phase === "domain"
-                    ? "Choose a domain"
-                    : gameState.phase === "catalog"
-                      ? "Choose a concept list"
-                      : "Pick the better fit"}
-                </div>
-              </div>
-              <Dialog.Close asChild>
-                <button
-                  type="button"
-                  aria-label="Close preference game"
-                  className="rounded-full bg-white/6 p-2 text-white/65 transition hover:bg-white/10 hover:text-white"
-                >
-                  <X className="size-4" />
-                </button>
-              </Dialog.Close>
-            </div>
-
-            <div className="grid gap-5 px-5 py-5">
-              {gameError ? (
-                <div className="rounded-[18px] border border-rose-400/25 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
-                  {gameError}
-                </div>
-              ) : null}
-
-              {gameState.phase === "domain" ? (
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  {DOMAIN_OPTIONS.map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      className="rounded-[24px] border border-white/8 bg-white/[0.04] px-5 py-5 text-left transition hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10"
-                      onClick={() =>
-                        void handleGameDomainSelection(option.value)
-                      }
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="font-medium text-white">
-                          {option.label}
-                        </div>
-                        <Badge className="bg-white/[0.08] text-white/70">
-                          {option.mode === "forge" ? "Forge" : "Concept"}
-                        </Badge>
-                      </div>
-                      <div className="mt-2 text-sm leading-6 text-white/56">
-                        {option.description}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-
-              {gameState.phase === "catalog" ? (
-                <div className="grid gap-4">
-                  <div className="text-sm text-white/58">
-                    Pick the concept list Forge should draw from. You do not
-                    need to assemble the items yourself.
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Search className="size-4 text-white/38" />
-                    <Input
-                      value={conceptSearchQuery}
-                      onChange={(event) =>
-                        setConceptSearchQuery(event.target.value)
-                      }
-                      placeholder="Search concept lists"
-                    />
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    {filteredCatalogs.length > 0 ? (
-                      filteredCatalogs.map((catalog) => (
-                        <button
-                          key={catalog.id}
-                          type="button"
-                          className="rounded-[24px] border border-white/8 bg-white/[0.04] px-5 py-5 text-left transition hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/10"
-                          onClick={() =>
-                            void startCatalogGame(gameState.domain, catalog.id)
-                          }
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="font-medium text-white">
-                              {catalog.title}
-                            </div>
-                            <Badge className="bg-white/[0.08] text-white/70">
-                              {catalog.items.length} items
-                            </Badge>
-                          </div>
-                          <div className="mt-2 text-sm leading-6 text-white/56">
-                            {catalog.description || "No description yet."}
-                          </div>
-                        </button>
-                      ))
-                    ) : (
-                      <div className="rounded-[24px] bg-white/[0.04] px-5 py-6 text-sm text-white/58">
-                        No concept list matches that search yet.
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : null}
-
-              {gameState.phase === "play" ? (
-                <div className="grid gap-5">
-                  {gameLoading || gameWorkspaceQuery.isLoading ? (
-                    <LoadingState
-                      eyebrow="Preference game"
-                      title="Preparing the next round"
-                      description="Forge is lining up comparison candidates."
-                    />
-                  ) : nextPair ? (
-                    <>
-                      <div className="flex flex-wrap items-center gap-2 text-sm text-white/52">
-                        <Badge className="bg-white/[0.08] text-white/70">
-                          {DOMAIN_OPTIONS.find(
-                            (entry) => entry.value === gameState.domain
-                          )?.label ?? gameState.domain}
-                        </Badge>
-                        <span>{activeGameWorkspace?.selectedContext.name}</span>
-                        <span>·</span>
-                        <span>
-                          {activeGameWorkspace?.compare.pendingCount ?? 0}{" "}
-                          queued comparisons
-                        </span>
-                      </div>
-
-                      <div className="grid gap-4 lg:grid-cols-2">
-                        <ComparisonCard
-                          title={nextPair.left.label}
-                          description={nextPair.left.description}
-                          sideLabel="Left"
-                          onClick={() => void handleGameJudgment("left", 1)}
-                        />
-                        <ComparisonCard
-                          title={nextPair.right.label}
-                          description={nextPair.right.description}
-                          sideLabel="Right"
-                          onClick={() => void handleGameJudgment("right", 1)}
-                        />
-                      </div>
-
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          onClick={() => void handleGameJudgment("left", 1)}
-                        >
-                          Left
-                        </Button>
-                        <Button
-                          onClick={() => void handleGameJudgment("right", 1)}
-                        >
-                          Right
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          onClick={() => void handleGameJudgment("left", 1.75)}
-                        >
-                          Strong left
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          onClick={() => void handleGameJudgment("right", 1.75)}
-                        >
-                          Strong right
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          onClick={() => void handleGameJudgment("tie", 1)}
-                        >
-                          Tie
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          onClick={() => void handleGameJudgment("skip", 1)}
-                        >
-                          Skip
-                        </Button>
-                      </div>
-
-                      <div className="grid gap-4 rounded-[24px] border border-white/8 bg-white/[0.03] px-4 py-4 lg:grid-cols-2">
-                        {[nextPair.left, nextPair.right].map((item) => (
-                          <div key={item.id} className="grid gap-3">
-                            <div className="font-medium text-white">
-                              {item.label}
-                            </div>
-                            <div className="text-sm text-white/56">
-                              Quick signals
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              {SIGNAL_OPTIONS.map((signal) => (
-                                <Button
-                                  key={`${item.id}-${signal.signalType}`}
-                                  variant="secondary"
-                                  size="sm"
-                                  onClick={() =>
-                                    void handleGameSignal(
-                                      item.id,
-                                      signal.signalType
-                                    )
-                                  }
-                                >
-                                  {signal.label}
-                                </Button>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  ) : (
-                    <EmptyState
-                      eyebrow="Preference game"
-                      title="No pair is ready yet"
-                      description="Forge needs more items in this domain before it can keep asking comparisons."
-                    />
-                  )}
-                </div>
-              ) : null}
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+        error={gameError}
+        loading={gameLoading}
+        workspaceLoading={gameWorkspaceQuery.isLoading}
+        activeWorkspace={activeGameWorkspace}
+        conceptSearchQuery={conceptSearchQuery}
+        onConceptSearchQueryChange={setConceptSearchQuery}
+        filteredCatalogs={filteredCatalogs}
+        onSelectDomain={(domain) => void handleGameDomainSelection(domain)}
+        onStartCatalogGame={(domain, catalogId) =>
+          void startCatalogGame(domain, catalogId)
+        }
+        onJudge={(outcome, strength) =>
+          void handleGameJudgment(outcome, strength)
+        }
+        onSignal={(itemId, signalType) =>
+          void handleGameSignal(itemId, signalType)
+        }
+      />
     </>
   );
 }

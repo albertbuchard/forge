@@ -287,42 +287,88 @@ function SessionSignalTable({
   sessions: TrainingLoadViewData["sessionSignals"];
 }) {
   return (
-    <div className="overflow-hidden rounded-[8px] border border-white/8">
-      <div className="grid grid-cols-[88px_minmax(118px,1fr)_64px_72px_72px] bg-white/[0.045] px-3 py-2 text-[10px] uppercase tracking-[0.16em] text-white/42">
-        <div>Date</div>
-        <div>Session</div>
-        <div>Load</div>
-        <div>Z4+Z5</div>
-        <div>HR</div>
-      </div>
-      <div className="max-h-[370px] overflow-auto">
+    <>
+      <div className="grid gap-3 md:hidden">
         {sessions.slice(0, 20).map((session) => (
           <div
             key={session.id}
-            className="grid grid-cols-[88px_minmax(118px,1fr)_64px_72px_72px] border-t border-white/6 px-3 py-2 text-[12px] text-white/66"
+            className="rounded-[8px] border border-white/8 bg-white/[0.035] p-3"
           >
-            <div className="text-white/52">{session.dateKey.slice(5)}</div>
-            <div className="min-w-0">
-              <div className="truncate text-white/86">
-                {session.workoutTypeLabel}
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-medium text-white/86">
+                  {session.workoutTypeLabel}
+                </div>
+                <div className="mt-1 text-[11px] text-white/46">
+                  {session.dateKey.slice(5)} ·{" "}
+                  {numberLabel(session.durationMinutes, 0)}m ·{" "}
+                  {session.confidence}
+                </div>
               </div>
-              <div className="mt-0.5 text-[10px] text-white/42">
-                {numberLabel(session.durationMinutes, 0)}m ·{" "}
-                {session.confidence}
+              <Badge tone="meta">
+                {numberLabel(session.trainingLoad, 0)} load
+              </Badge>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-[12px] text-white/62">
+              <div className="rounded-[8px] bg-white/[0.04] px-2 py-1.5">
+                <div className="text-[10px] uppercase tracking-[0.14em] text-white/38">
+                  Z4+Z5
+                </div>
+                <div className="mt-0.5 text-white">
+                  {pct(session.highIntensityPercentage)}
+                </div>
               </div>
-            </div>
-            <div className="text-white">
-              {numberLabel(session.trainingLoad, 0)}
-            </div>
-            <div>{pct(session.highIntensityPercentage)}</div>
-            <div>
-              {session.averageHr ? Math.round(session.averageHr) : "n/a"}
-              {session.maxHr ? `/${Math.round(session.maxHr)}` : ""}
+              <div className="rounded-[8px] bg-white/[0.04] px-2 py-1.5">
+                <div className="text-[10px] uppercase tracking-[0.14em] text-white/38">
+                  HR
+                </div>
+                <div className="mt-0.5 text-white">
+                  {session.averageHr ? Math.round(session.averageHr) : "n/a"}
+                  {session.maxHr ? `/${Math.round(session.maxHr)}` : ""}
+                </div>
+              </div>
             </div>
           </div>
         ))}
       </div>
-    </div>
+
+      <div className="hidden overflow-hidden rounded-[8px] border border-white/8 md:block">
+        <div className="grid grid-cols-[88px_minmax(118px,1fr)_64px_72px_72px] bg-white/[0.045] px-3 py-2 text-[10px] uppercase tracking-[0.16em] text-white/42">
+          <div>Date</div>
+          <div>Session</div>
+          <div>Load</div>
+          <div>Z4+Z5</div>
+          <div>HR</div>
+        </div>
+        <div className="max-h-[370px] overflow-auto">
+          {sessions.slice(0, 20).map((session) => (
+            <div
+              key={session.id}
+              className="grid grid-cols-[88px_minmax(118px,1fr)_64px_72px_72px] border-t border-white/6 px-3 py-2 text-[12px] text-white/66"
+            >
+              <div className="text-white/52">{session.dateKey.slice(5)}</div>
+              <div className="min-w-0">
+                <div className="truncate text-white/86">
+                  {session.workoutTypeLabel}
+                </div>
+                <div className="mt-0.5 text-[10px] text-white/42">
+                  {numberLabel(session.durationMinutes, 0)}m ·{" "}
+                  {session.confidence}
+                </div>
+              </div>
+              <div className="text-white">
+                {numberLabel(session.trainingLoad, 0)}
+              </div>
+              <div>{pct(session.highIntensityPercentage)}</div>
+              <div>
+                {session.averageHr ? Math.round(session.averageHr) : "n/a"}
+                {session.maxHr ? `/${Math.round(session.maxHr)}` : ""}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
   );
 }
 

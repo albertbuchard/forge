@@ -94,7 +94,7 @@ export function PageHero({
   const hasHeaderMeta = Boolean(entityVisual || resolvedEyebrow || badge);
   return (
     <header
-      className="relative min-w-0 w-full max-w-full overflow-visible border-b border-white/6 px-5 py-5 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end lg:px-7 lg:py-6"
+      className="relative min-w-0 w-full max-w-full overflow-visible border-b border-[var(--ui-border-subtle)] px-5 py-5 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end lg:px-7 lg:py-6"
       style={{
         background: "var(--hero-gradient)",
         paddingTop: "var(--forge-shell-hero-padding-top)",
@@ -108,13 +108,13 @@ export function PageHero({
             "radial-gradient(circle at top right, color-mix(in srgb, var(--forge-body-ambient-primary) 94%, transparent), transparent 34%)"
         }}
       />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-white/10" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[var(--ui-border-strong)]" />
       <div className="relative min-w-0 w-full max-w-full">
         {hasHeaderMeta ? (
-          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 text-[11px] font-medium uppercase tracking-[0.2em] text-white/40">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 text-[11px] font-medium uppercase tracking-[0.2em] text-[var(--ui-ink-faint)]">
             {entityVisual && Icon ? (
               <span
-                className="inline-flex items-center gap-2 text-white/56"
+                className="inline-flex items-center gap-2 text-[var(--ui-ink-soft)]"
                 aria-label={entityVisual.label}
                 title={entityVisual.label}
               >
@@ -130,7 +130,7 @@ export function PageHero({
             {badge ? (
               <Badge
                 tone="signal"
-                className="h-8 overflow-visible rounded-full border border-white/8 bg-white/[0.04] px-3 text-[11px] font-medium tracking-[0.14em] text-white/80 uppercase"
+                className="h-8 overflow-visible rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 text-[11px] font-medium tracking-[0.14em] text-[var(--ui-ink-medium)] uppercase"
               >
                 {badge}
               </Badge>
@@ -144,7 +144,7 @@ export function PageHero({
           )}
         >
           <div
-            className="min-w-0 text-[clamp(1.85rem,3.5vw,4rem)] font-medium leading-[0.92] text-white"
+            className="min-w-0 text-[clamp(1.85rem,3.5vw,4rem)] font-medium leading-[0.92] text-[var(--ui-ink-strong)]"
             style={{
               transform:
                 "translateY(var(--forge-shell-hero-title-translate-y)) scale(var(--forge-shell-hero-title-scale))",
@@ -167,7 +167,7 @@ export function PageHero({
           ) : null}
         </div>
         <div
-          className="mt-2 min-w-0 max-w-3xl text-[14px] leading-6 text-white/58 sm:text-[15px]"
+          className="mt-2 min-w-0 max-w-3xl text-[14px] leading-6 text-[var(--ui-ink-soft)] sm:text-[15px]"
           style={{
             opacity: "var(--forge-shell-hero-description-opacity)",
             transform:

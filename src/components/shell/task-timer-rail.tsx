@@ -1,6 +1,23 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { CheckCheck, Clock3, GitBranch, GitPullRequest, PauseCircle, Play, Square, Timer } from "lucide-react";
+import {
+  CheckCheck,
+  Clock3,
+  GitBranch,
+  GitPullRequest,
+  PauseCircle,
+  Play,
+  Square,
+  Timer
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -8,14 +25,24 @@ import type { Task, TaskRun, TimeAccountingMode } from "@/lib/types";
 
 /* ── Shared expand state via context ── */
 
-type RailExpandState = { expanded: boolean; setExpanded: (v: boolean | ((p: boolean) => boolean)) => void };
-const RailExpandCtx = createContext<RailExpandState>({ expanded: false, setExpanded: () => {} });
+type RailExpandState = {
+  expanded: boolean;
+  setExpanded: (v: boolean | ((p: boolean) => boolean)) => void;
+};
+const RailExpandCtx = createContext<RailExpandState>({
+  expanded: false,
+  setExpanded: () => {}
+});
 
-export function TaskTimerRailProvider({ children }: { children: React.ReactNode }) {
+export function TaskTimerRailProvider({
+  children
+}: {
+  children: React.ReactNode;
+}) {
   const [expanded, setExpanded] = useState(false);
   const openedAtMsRef = useRef(0);
 
-  /* Auto-collapse on scroll down */
+  /* Collapse automatically on scroll down */
   useEffect(() => {
     if (!expanded) return;
     openedAtMsRef.current = performance.now();
@@ -32,7 +59,11 @@ export function TaskTimerRailProvider({ children }: { children: React.ReactNode 
     return () => window.removeEventListener("scroll", handleScroll);
   }, [expanded]);
 
-  return <RailExpandCtx.Provider value={{ expanded, setExpanded }}>{children}</RailExpandCtx.Provider>;
+  return (
+    <RailExpandCtx.Provider value={{ expanded, setExpanded }}>
+      {children}
+    </RailExpandCtx.Provider>
+  );
 }
 
 /* ── Types ── */
@@ -65,7 +96,8 @@ function formatDuration(totalSeconds: number): string {
   const hours = Math.floor(safeSeconds / 3600);
   const minutes = Math.floor((safeSeconds % 3600) / 60);
   const seconds = safeSeconds % 60;
-  if (hours > 0) return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  if (hours > 0)
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
@@ -78,12 +110,17 @@ function buildLiveRunViews(
 ): LiveRunView[] {
   const activeCount = Math.max(1, runs.length);
   const generatedAtMs = Date.parse(generatedAt);
-  const deltaSeconds = Number.isFinite(generatedAtMs) ? Math.max(0, Math.floor((nowMs - generatedAtMs) / 1000)) : 0;
+  const deltaSeconds = Number.isFinite(generatedAtMs)
+    ? Math.max(0, Math.floor((nowMs - generatedAtMs) / 1000))
+    : 0;
 
   return runs
     .map((run) => {
       const task = tasks.find((entry) => entry.id === run.taskId);
-      const wallSeconds = run.status === "active" ? run.elapsedWallSeconds + deltaSeconds : run.elapsedWallSeconds;
+      const wallSeconds =
+        run.status === "active"
+          ? run.elapsedWallSeconds + deltaSeconds
+          : run.elapsedWallSeconds;
       const creditedExtra =
         run.status !== "active"
           ? 0
@@ -103,19 +140,37 @@ function buildLiveRunViews(
         run.timerMode === "planned" && run.plannedDurationSeconds !== null
           ? Math.max(0, wallSeconds - run.plannedDurationSeconds)
           : 0;
-      return { run, title: task?.title ?? run.taskTitle, wallSeconds, creditedSeconds, remainingSeconds, overtimeSeconds };
+      return {
+        run,
+        title: task?.title ?? run.taskTitle,
+        wallSeconds,
+        creditedSeconds,
+        remainingSeconds,
+        overtimeSeconds
+      };
     })
-    .sort((left, right) => Number(right.run.isCurrent) - Number(left.run.isCurrent));
+    .sort(
+      (left, right) => Number(right.run.isCurrent) - Number(left.run.isCurrent)
+    );
 }
 
-function useLiveRuns(runs: TaskRun[], tasks: Task[], generatedAt: string, timeAccountingMode: TimeAccountingMode) {
+function useLiveRuns(
+  runs: TaskRun[],
+  tasks: Task[],
+  generatedAt: string,
+  timeAccountingMode: TimeAccountingMode
+) {
   const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
     if (runs.length === 0) return;
     const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [runs.length]);
-  return useMemo(() => buildLiveRunViews(runs, tasks, generatedAt, timeAccountingMode, nowMs), [generatedAt, nowMs, runs, tasks, timeAccountingMode]);
+  return useMemo(
+    () =>
+      buildLiveRunViews(runs, tasks, generatedAt, timeAccountingMode, nowMs),
+    [generatedAt, nowMs, runs, tasks, timeAccountingMode]
+  );
 }
 
 /* ────────────────────────────────────────────────────────
@@ -124,22 +179,43 @@ function useLiveRuns(runs: TaskRun[], tasks: Task[], generatedAt: string, timeAc
  * ──────────────────────────────────────────────────────── */
 
 export function TaskTimerRailBar({
-  runs, tasks, generatedAt, timeAccountingMode, pending, onOpenStartWork, onPause, onFocus
-}: Pick<TaskTimerRailProps, "runs" | "tasks" | "generatedAt" | "timeAccountingMode" | "pending" | "onOpenStartWork" | "onPause" | "onFocus">) {
+  runs,
+  tasks,
+  generatedAt,
+  timeAccountingMode,
+  pending,
+  onOpenStartWork,
+  onPause,
+  onFocus
+}: Pick<
+  TaskTimerRailProps,
+  | "runs"
+  | "tasks"
+  | "generatedAt"
+  | "timeAccountingMode"
+  | "pending"
+  | "onOpenStartWork"
+  | "onPause"
+  | "onFocus"
+>) {
   const { expanded, setExpanded } = useContext(RailExpandCtx);
   const liveRuns = useLiveRuns(runs, tasks, generatedAt, timeAccountingMode);
   const current = liveRuns.find((e) => e.run.isCurrent) ?? liveRuns[0] ?? null;
-  const secondary = current ? liveRuns.filter((e) => e.run.id !== current.run.id) : [];
+  const secondary = current
+    ? liveRuns.filter((e) => e.run.id !== current.run.id)
+    : [];
 
   /* No active work */
   if (!current) {
     return (
-      <div className="flex min-h-[2.125rem] min-w-0 items-center gap-1.5 rounded-full border border-white/8 bg-white/[0.04] py-1 pl-2.5 pr-1">
-        <Timer className="size-3.5 shrink-0 text-white/48" />
-        <span className="truncate text-[12px] text-white/48">No active work</span>
+      <div className="flex min-h-[2.125rem] min-w-0 items-center gap-1.5 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] py-1 pl-2.5 pr-1">
+        <Timer className="size-3.5 shrink-0 text-[var(--ui-ink-faint)]" />
+        <span className="truncate text-[12px] text-[var(--ui-ink-faint)]">
+          No active work
+        </span>
         <button
           type="button"
-          className="ml-auto inline-flex h-[1.5rem] shrink-0 items-center rounded-full bg-white/10 px-2 text-[11px] font-medium text-white transition hover:bg-white/15"
+          className="ml-auto inline-flex h-[1.5rem] shrink-0 items-center rounded-full bg-[var(--ui-surface-active)] px-2 text-[11px] font-medium text-[var(--ui-ink-strong)] transition hover:bg-[var(--ui-surface-hover)]"
           onClick={onOpenStartWork}
         >
           Start work
@@ -154,7 +230,7 @@ export function TaskTimerRailBar({
   return (
     <div
       className={cn(
-        "flex min-h-[2.125rem] min-w-0 items-center rounded-full border border-white/8 bg-white/[0.04] transition-colors",
+        "flex min-h-[2.125rem] min-w-0 items-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] transition-colors",
         expanded && "border-[var(--primary)]/25 bg-[var(--primary)]/[0.06]"
       )}
     >
@@ -163,12 +239,16 @@ export function TaskTimerRailBar({
         type="button"
         aria-expanded={expanded}
         aria-label={expanded ? "Collapse work details" : "Expand work details"}
-        className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-l-full py-1 pl-2.5 pr-2 transition-colors hover:bg-white/[0.04]"
+        className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-l-full py-1 pl-2.5 pr-2 transition-colors hover:bg-[var(--ui-surface-hover)]"
         onClick={() => setExpanded((p: boolean) => !p)}
       >
         <Timer className="size-3.5 shrink-0 text-[var(--primary)]" />
-        <span className="truncate text-[12px] font-medium text-white">{current.title}</span>
-        <span className="shrink-0 text-[11px] tabular-nums text-white/44">{formatDuration(current.creditedSeconds)}</span>
+        <span className="truncate text-[12px] font-medium text-[var(--ui-ink-strong)]">
+          {current.title}
+        </span>
+        <span className="shrink-0 text-[11px] tabular-nums text-[var(--ui-ink-faint)]">
+          {formatDuration(current.creditedSeconds)}
+        </span>
       </button>
 
       {/* ── Right: action buttons ── */}
@@ -188,7 +268,7 @@ export function TaskTimerRailBar({
           type="button"
           title="Stop"
           disabled={pending}
-          className="inline-flex size-6 items-center justify-center rounded-full text-white/50 transition hover:bg-white/[0.1] hover:text-white disabled:pointer-events-none disabled:opacity-70"
+          className="inline-flex size-6 items-center justify-center rounded-full text-[var(--ui-ink-faint)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)] disabled:pointer-events-none disabled:opacity-70"
           onClick={() => void onPause(current.run.id)}
         >
           <Square className="size-2.5 fill-current" />
@@ -197,7 +277,7 @@ export function TaskTimerRailBar({
           type="button"
           title="Start new work"
           disabled={pending}
-          className="inline-flex size-6 items-center justify-center rounded-full text-white/50 transition hover:bg-white/[0.1] hover:text-white disabled:pointer-events-none disabled:opacity-70"
+          className="inline-flex size-6 items-center justify-center rounded-full text-[var(--ui-ink-faint)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)] disabled:pointer-events-none disabled:opacity-70"
           onClick={() => onOpenStartWork()}
         >
           <Play className="size-2.5 fill-current" />
@@ -214,12 +294,22 @@ export function TaskTimerRailBar({
  * ──────────────────────────────────────────────────────── */
 
 export function TaskTimerRailPanel({
-  runs, tasks, generatedAt, timeAccountingMode, pending, onOpenStartWork, onFocus, onPause, onComplete
+  runs,
+  tasks,
+  generatedAt,
+  timeAccountingMode,
+  pending,
+  onOpenStartWork,
+  onFocus,
+  onPause,
+  onComplete
 }: TaskTimerRailProps) {
   const { expanded } = useContext(RailExpandCtx);
   const liveRuns = useLiveRuns(runs, tasks, generatedAt, timeAccountingMode);
   const current = liveRuns.find((e) => e.run.isCurrent) ?? liveRuns[0] ?? null;
-  const secondary = current ? liveRuns.filter((e) => e.run.id !== current.run.id) : [];
+  const secondary = current
+    ? liveRuns.filter((e) => e.run.id !== current.run.id)
+    : [];
 
   const splitHint =
     timeAccountingMode === "split" && liveRuns.length > 1
@@ -243,29 +333,43 @@ export function TaskTimerRailPanel({
           transition={{ duration: 0.25, ease: "easeOut" }}
           className="overflow-hidden"
         >
-          <div className="mt-2 rounded-2xl border border-white/8 bg-[linear-gradient(180deg,rgba(192,193,255,0.10),rgba(192,193,255,0.03))] p-4">
+          <div className="mt-2 rounded-2xl border border-[var(--ui-border-subtle)] bg-[var(--ui-accent-soft)] p-4">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge tone="signal" className="text-white/82">Current task</Badge>
-                  <Badge tone="meta">{current.run.timerMode === "planned" ? "Planned timer" : "Unlimited timer"}</Badge>
+                  <Badge tone="signal">Current task</Badge>
+                  <Badge tone="meta">
+                    {current.run.timerMode === "planned"
+                      ? "Planned timer"
+                      : "Unlimited timer"}
+                  </Badge>
                   {splitHint ? <Badge tone="meta">{splitHint}</Badge> : null}
                 </div>
-                <div className="mt-3 text-xl font-medium text-white md:text-2xl">{current.title}</div>
-                <div className="mt-2 flex flex-wrap gap-4 text-sm text-white/62">
-                  <span>{formatDuration(current.creditedSeconds)} credited</span>
+                <div className="mt-3 text-xl font-medium text-[var(--ui-ink-strong)] md:text-2xl">
+                  {current.title}
+                </div>
+                <div className="mt-2 flex flex-wrap gap-4 text-sm text-[var(--ui-ink-soft)]">
+                  <span>
+                    {formatDuration(current.creditedSeconds)} credited
+                  </span>
                   <span>{formatDuration(current.wallSeconds)} wall time</span>
                   {current.run.timerMode === "planned" ? (
                     current.overtimeSeconds > 0 ? (
-                      <span className="text-amber-200">+{formatDuration(current.overtimeSeconds)} overtime</span>
+                      <span className="text-[color-mix(in_srgb,var(--warning)_76%,var(--ui-ink-strong)_24%)]">
+                        +{formatDuration(current.overtimeSeconds)} overtime
+                      </span>
                     ) : (
-                      <span>{formatDuration(current.remainingSeconds ?? 0)} remaining</span>
+                      <span>
+                        {formatDuration(current.remainingSeconds ?? 0)}{" "}
+                        remaining
+                      </span>
                     )
                   ) : (
                     <span>Unlimited session</span>
                   )}
                 </div>
-                {current.run.gitContext?.branch || current.run.gitContext?.pullRequestNumber ? (
+                {current.run.gitContext?.branch ||
+                current.run.gitContext?.pullRequestNumber ? (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {current.run.gitContext?.branch ? (
                       <Badge tone="meta">
@@ -284,15 +388,29 @@ export function TaskTimerRailPanel({
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <Button variant="secondary" pending={pending} pendingLabel="Opening" onClick={onOpenStartWork}>
+                <Button
+                  variant="secondary"
+                  pending={pending}
+                  pendingLabel="Opening"
+                  onClick={onOpenStartWork}
+                >
                   <Timer className="size-4" />
                   Start work
                 </Button>
-                <Button variant="secondary" pending={pending} pendingLabel="Pausing" onClick={() => void onPause(current.run.id)}>
+                <Button
+                  variant="secondary"
+                  pending={pending}
+                  pendingLabel="Pausing"
+                  onClick={() => void onPause(current.run.id)}
+                >
                   <PauseCircle className="size-4" />
                   Pause
                 </Button>
-                <Button pending={pending} pendingLabel="Completing" onClick={() => void onComplete(current.run.id)}>
+                <Button
+                  pending={pending}
+                  pendingLabel="Completing"
+                  onClick={() => void onComplete(current.run.id)}
+                >
                   <CheckCheck className="size-4" />
                   Complete
                 </Button>
@@ -306,19 +424,27 @@ export function TaskTimerRailPanel({
                     key={entry.run.id}
                     type="button"
                     className={cn(
-                      "flex items-center justify-between gap-3 rounded-2xl bg-white/[0.04] px-4 py-3 text-left transition hover:bg-white/[0.08]",
+                      "flex items-center justify-between gap-3 rounded-2xl bg-[var(--ui-surface-1)] px-4 py-3 text-left transition hover:bg-[var(--ui-surface-hover)]",
                       pending && "pointer-events-none opacity-70"
                     )}
                     onClick={() => void onFocus(entry.run.id)}
                   >
                     <div className="min-w-0">
-                      <div className="truncate text-sm font-medium text-white/88">{entry.title}</div>
-                      <div className="mt-1 flex flex-wrap gap-3 text-[12px] text-white/48">
-                        <span>{formatDuration(entry.creditedSeconds)} credited</span>
-                        <span>{entry.run.timerMode === "planned" ? "planned" : "unlimited"}</span>
+                      <div className="truncate text-sm font-medium text-[var(--ui-ink-strong)]">
+                        {entry.title}
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-3 text-[12px] text-[var(--ui-ink-faint)]">
+                        <span>
+                          {formatDuration(entry.creditedSeconds)} credited
+                        </span>
+                        <span>
+                          {entry.run.timerMode === "planned"
+                            ? "planned"
+                            : "unlimited"}
+                        </span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 text-[12px] text-white/42">
+                    <div className="flex items-center gap-2 text-[12px] text-[var(--ui-ink-faint)]">
                       <Clock3 className="size-3.5" />
                       Switch
                     </div>

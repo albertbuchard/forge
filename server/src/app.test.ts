@@ -18960,6 +18960,7 @@ test("settings and local agent token management persist through the versioned AP
           movement: string;
           lifeForce: string;
           workbench: string;
+          weightLoss: string;
           psyche: string;
         };
         psycheSubmoduleModel: {
@@ -19200,6 +19201,10 @@ test("settings and local agent token management persist through the versioned AP
     assert.match(
       onboardingBody.onboarding.conceptModel.workbench,
       /graph-flow execution system/i
+    );
+    assert.match(
+      onboardingBody.onboarding.conceptModel.weightLoss,
+      /nutrition, body-composition/i
     );
     assert.match(onboardingBody.onboarding.conceptModel.psyche, /sensitive/);
     assert.match(
@@ -19787,6 +19792,45 @@ test("settings and local agent token management persist through the versioned AP
     assert.equal(
       onboardingBody.onboarding.verificationPaths.workbenchLatestNodeOutput,
       "/api/v1/workbench/flows/:id/nodes/:nodeId/output"
+    );
+    assert.equal(
+      onboardingBody.onboarding.verificationPaths.trainingLoad,
+      "/api/v1/health/training-load"
+    );
+    assert.equal(
+      onboardingBody.onboarding.verificationPaths.weightLoss,
+      "/api/v1/health/weight-loss"
+    );
+    assert.equal(
+      onboardingBody.onboarding.verificationPaths.weightLossFoodLogs,
+      "/api/v1/health/weight-loss/food-logs"
+    );
+    assert.equal(
+      onboardingBody.onboarding.verificationPaths.weightLossParse,
+      "/api/v1/health/weight-loss/parse"
+    );
+    assert.equal(
+      onboardingBody.onboarding.verificationPaths.weightLossBodyCheckins,
+      "/api/v1/health/weight-loss/body-checkins"
+    );
+    assert.equal(
+      onboardingBody.onboarding.verificationPaths.weightLossGutCheckins,
+      "/api/v1/health/weight-loss/gut-checkins"
+    );
+    assert.equal(
+      onboardingBody.onboarding.verificationPaths.weightLossExperiments,
+      "/api/v1/health/weight-loss/experiments"
+    );
+    const weightLossPlaybook =
+      onboardingBody.onboarding.entityConversationPlaybooks.find(
+        (playbook) => playbook.focus === "weight_loss"
+      );
+    assert.ok(weightLossPlaybook);
+    assert.match(weightLossPlaybook.openingQuestion, /food-body link/i);
+    assert.ok(
+      weightLossPlaybook.askSequence.some((step) =>
+        /dedicated nutrition tools/i.test(step)
+      )
     );
     const movementSurface =
       onboardingBody.onboarding.entityRouteModel.specializedDomainSurfaces

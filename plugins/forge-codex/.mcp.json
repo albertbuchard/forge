@@ -9,6 +9,9 @@
       "env": {
         "FORGE_ORIGIN": "http://127.0.0.1",
         "FORGE_PORT": "4317",
+        "FORGE_OPENCLAW_DEV": "1",
+        "FORGE_DEV_WEB_ORIGIN": "http://127.0.0.1:3027/forge/",
+        "FORGE_BASE_PATH": "/forge/",
         "FORGE_ACTOR_LABEL": "codex",
         "FORGE_TIMEOUT_MS": "15000"
       }

@@ -99,23 +99,23 @@ export function FacetedTokenSearch({
   return (
     <div
       className={cn(
-        "rounded-[28px] border border-white/8 bg-[linear-gradient(135deg,rgba(19,30,42,0.92),rgba(9,15,24,0.98))] shadow-[0_30px_80px_rgba(3,8,18,0.28)]",
+        "rounded-[28px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)] shadow-[var(--card-shadow)]",
         minimal
-          ? "overflow-hidden rounded-full border-white/10 bg-[rgba(8,12,20,0.82)] px-3 py-1.5 shadow-[0_18px_50px_rgba(0,0,0,0.26)] backdrop-blur"
+          ? "overflow-hidden rounded-full border-[var(--ui-border-subtle)] bg-[color-mix(in_srgb,var(--ui-surface-1)_88%,transparent)] px-3 py-1.5 shadow-[var(--ui-shadow-soft)] backdrop-blur"
           : compact
             ? "rounded-[24px] p-2.5"
             : "p-4 sm:p-5"
       )}
     >
       <div className={cn("flex flex-wrap items-start justify-between gap-3", minimal && "hidden")}>
-        <div>
+        <div className="min-w-0">
           {title.trim().length > 0 ? (
-            <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
+            <div className="break-words font-label text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-faint)] [overflow-wrap:anywhere]">
               {title}
             </div>
           ) : null}
           {description.trim().length > 0 ? (
-            <div className="mt-2 max-w-3xl text-sm leading-6 text-white/62">
+            <div className="mt-2 max-w-3xl break-words text-sm leading-6 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
               {description}
             </div>
           ) : null}
@@ -125,7 +125,7 @@ export function FacetedTokenSearch({
             type="button"
             onClick={clearFilters}
             className={cn(
-              "rounded-full border border-white/8 bg-white/[0.04] text-white/62 transition hover:bg-white/[0.08] hover:text-white",
+              "rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]",
               compact ? "px-2.5 py-1.5 text-[11px]" : "px-3 py-2 text-sm"
             )}
           >
@@ -136,7 +136,7 @@ export function FacetedTokenSearch({
 
       <div
         className={cn(
-          "rounded-[24px] border border-white/8 bg-white/[0.04]",
+          "rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]",
           minimal
             ? "rounded-full border-0 bg-transparent px-0 py-0"
             : compact
@@ -150,16 +150,16 @@ export function FacetedTokenSearch({
               <span
                 key={option.id}
                 className={cn(
-                  "inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.06]",
-                  minimal ? "max-w-full shrink-0 border-white/10 bg-white/[0.08] px-2 py-0.5" : compact ? "px-2 py-0.5" : "px-2.5 py-1.5"
+                  "inline-flex min-w-0 items-center gap-2 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]",
+                  minimal ? "max-w-full shrink-0 px-2 py-0.5" : compact ? "px-2 py-0.5" : "px-2.5 py-1.5"
                 )}
               >
                 {option.badge ?? (
-                  <span className="text-sm text-white/78">{option.label}</span>
+                  <span className="min-w-0 break-words text-sm text-[var(--ui-ink-medium)] [overflow-wrap:anywhere]">{option.label}</span>
                 )}
                 <button
                   type="button"
-                  className="rounded-full text-white/52 transition hover:text-white"
+                  className="shrink-0 rounded-full text-[var(--ui-ink-faint)] transition hover:text-[var(--ui-ink-strong)]"
                   onClick={() => removeOption(option.id)}
                   aria-label={`Remove ${option.label}`}
                 >
@@ -172,7 +172,7 @@ export function FacetedTokenSearch({
 
         <div className="relative">
               <div className={cn("flex items-center", minimal ? "gap-2 whitespace-nowrap" : compact ? "gap-2" : "gap-3")}>
-                <Search className={cn("text-white/36", compact ? "size-3.5" : "size-4")} />
+                <Search className={cn("text-[var(--ui-ink-faint)]", compact ? "size-3.5" : "size-4")} />
                 <input
               value={query}
               onChange={(event) => {
@@ -219,7 +219,7 @@ export function FacetedTokenSearch({
               }}
               placeholder={placeholder}
                   className={cn(
-                    "min-w-0 flex-1 bg-transparent text-white placeholder:text-white/34 focus:outline-none",
+                    "min-w-0 flex-1 bg-transparent text-[var(--ui-ink-strong)] placeholder:text-[var(--ui-ink-faint)] focus:outline-none",
                     minimal ? "text-[12px]" : compact ? "text-[12px]" : "text-sm"
                   )}
                 />
@@ -227,7 +227,7 @@ export function FacetedTokenSearch({
                   <button
                     type="button"
                     onClick={clearFilters}
-                    className="inline-flex size-6 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-white/62 transition hover:text-white"
+                    className="inline-flex size-6 items-center justify-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:text-[var(--ui-ink-strong)]"
                     aria-label={clearLabel}
                   >
                     <X className="size-3.5" />
@@ -242,7 +242,7 @@ export function FacetedTokenSearch({
                       setOpen(false);
                     }}
                     className={cn(
-                      "inline-flex items-center justify-center rounded-full border border-white/10 bg-white/[0.08] text-white/72 transition hover:bg-white/[0.14] hover:text-white",
+                      "inline-flex items-center justify-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]",
                       minimal ? "size-6" : compact ? "size-7" : "size-8"
                     )}
                     aria-label={submitLabel}
@@ -255,7 +255,7 @@ export function FacetedTokenSearch({
 
           {open ? (
             <div className={cn(
-              "absolute top-full z-20 w-full border border-white/8 bg-[rgba(8,13,24,0.96)] shadow-[0_26px_60px_rgba(4,8,18,0.32)] backdrop-blur-xl",
+              "absolute top-full z-20 w-full border border-[var(--ui-border-subtle)] bg-[color-mix(in_srgb,var(--ui-surface-1)_96%,transparent)] shadow-[var(--ui-shadow-floating)] backdrop-blur-xl",
               compact ? "mt-1.5 rounded-[18px] p-1.5" : "mt-2 rounded-[22px] p-2"
             )}>
               {filteredOptions.length > 0 ? (
@@ -267,19 +267,19 @@ export function FacetedTokenSearch({
                       "flex w-full items-start justify-between gap-3 text-left transition",
                       compact ? "rounded-[14px] px-2.5 py-2" : "rounded-[18px] px-3 py-2.5",
                       index === highlightedIndex
-                        ? "bg-white/[0.1] text-white"
-                        : "text-white/70 hover:bg-white/[0.06] hover:text-white"
+                        ? "bg-[var(--ui-surface-3)] text-[var(--ui-ink-strong)]"
+                        : "text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                     )}
                     onMouseEnter={() => setHighlightedIndex(index)}
                     onMouseDown={(event) => event.preventDefault()}
                     onClick={() => addOption(option.id)}
                   >
                     <div className="min-w-0">
-                      <div className={cn("truncate font-medium", compact ? "text-[12px]" : "text-sm")}>
+                      <div className={cn("break-words font-medium [overflow-wrap:anywhere]", compact ? "text-[12px]" : "text-sm")}>
                         {option.badge ?? option.label}
                       </div>
                       {option.description ? (
-                        <div className={cn("mt-1 text-white/46", compact ? "text-[11px] leading-[1.125rem]" : "text-xs leading-5")}>
+                        <div className={cn("mt-1 break-words text-[var(--ui-ink-faint)] [overflow-wrap:anywhere]", compact ? "text-[11px] leading-[1.125rem]" : "text-xs leading-5")}>
                           {option.description}
                         </div>
                       ) : null}
@@ -287,7 +287,7 @@ export function FacetedTokenSearch({
                   </button>
                 ))
               ) : (
-                <div className={cn("text-white/42", compact ? "px-2.5 py-2 text-[12px]" : "px-3 py-2.5 text-sm")}>
+                <div className={cn("break-words text-[var(--ui-ink-faint)] [overflow-wrap:anywhere]", compact ? "px-2.5 py-2 text-[12px]" : "px-3 py-2.5 text-sm")}>
                   {emptyStateMessage}
                 </div>
               )}
@@ -297,7 +297,7 @@ export function FacetedTokenSearch({
       </div>
 
       {!hideSummary ? (
-        <div className={cn("text-white/52", compact ? "mt-2 text-xs" : "mt-3 text-sm")}>
+        <div className={cn("break-words text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]", compact ? "mt-2 text-xs" : "mt-3 text-sm")}>
           {resultSummary}
         </div>
       ) : null}

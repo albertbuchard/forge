@@ -105,6 +105,7 @@ describe("question flow simulation cycles", () => {
     "Sleep Overview",
     "Sports Overview",
     "Training Load",
+    "Weight Loss",
     "Calendar Overview",
     "Calendar Connection",
     "Preference Judgment",
@@ -171,6 +172,8 @@ describe("question flow simulation cycles", () => {
       "Review recent workouts to understand whether training load is helping or draining me.",
     "Training Load":
       "Review cardiovascular zones and acute load to decide whether to push or recover this week.",
+    "Weight Loss":
+      "Review the food, body, training-fuel, and gut-comfort picture before logging a meal or starting a small experiment.",
     "Calendar Overview":
       "Review this week before deciding whether to create a timebox or event.",
     "Calendar Connection":
@@ -224,7 +227,12 @@ describe("question flow simulation cycles", () => {
 
   const expectedApiPosture: Record<
     (typeof nonPsycheSections)[number] | (typeof psycheSections)[number],
-    "batch" | "specializedCrud" | "action" | "specializedDomain" | "readModel"
+    | "batch"
+    | "specializedCrud"
+    | "action"
+    | "specializedDomain"
+    | "readModel"
+    | "healthWorkflow"
   > = {
     Goal: "batch",
     Project: "batch",
@@ -248,6 +256,7 @@ describe("question flow simulation cycles", () => {
     "Sleep Overview": "readModel",
     "Sports Overview": "readModel",
     "Training Load": "readModel",
+    "Weight Loss": "healthWorkflow",
     "Calendar Overview": "readModel",
     "Calendar Connection": "specializedCrud",
     "Preference Judgment": "action",
@@ -361,6 +370,7 @@ describe("question flow simulation cycles", () => {
     "sleep_overview",
     "sports_overview",
     "training_load",
+    "weight_loss",
     "movement",
     "life_force",
     "workbench"
@@ -736,6 +746,11 @@ describe("question flow simulation cycles", () => {
         expect(sectionSlice).toMatch(/read-model-only|overview route|overview read/i);
         continue;
       }
+      if (posture === "healthWorkflow") {
+        expect(sectionSlice).toMatch(/health read model|dedicated nutrition/i);
+        expect(sectionSlice).toMatch(/forge_get_weight_loss_overview/);
+        continue;
+      }
       expect(posture, `${section} posture`).toBe("batch");
       expect(entityPlaybook).toMatch(/shared batch entity routes by default/i);
     }
@@ -749,6 +764,7 @@ describe("question flow simulation cycles", () => {
     expect(matrix).toMatch(/action workflow/i);
     expect(matrix).toMatch(/note-backed workflow/i);
     expect(matrix).toMatch(/read-model-only health surface/i);
+    expect(matrix).toMatch(/health read model plus dedicated nutrition write workflow/i);
     expect(matrix).toMatch(/specialized domain surface/i);
     expect(matrix).toMatch(/dedicated movement routes/i);
     expect(matrix).toMatch(/dedicated Life Force routes/i);
@@ -1063,7 +1079,15 @@ describe("question flow simulation cycles", () => {
     expect(onboardingSource).toMatch(/focus:\s*"operator_overview"[\s\S]*forge_get_operator_overview/i);
     expect(onboardingSource).toMatch(/focus:\s*"operator_context"[\s\S]*forge_get_operator_context/i);
     expect(onboardingSource).toMatch(/focus:\s*"calendar_overview"[\s\S]*forge_get_calendar_overview/i);
-    expect(typeSource).toMatch(/conceptModel:[\s\S]*movement: string;[\s\S]*lifeForce: string;[\s\S]*workbench: string;/);
+    expect(typeSource).toMatch(
+      /conceptModel:[\s\S]*movement: string;[\s\S]*lifeForce: string;[\s\S]*workbench: string;[\s\S]*weightLoss: string;/
+    );
+    expect(typeSource).toMatch(
+      /verificationPaths:[\s\S]*trainingLoad: string;[\s\S]*weightLoss: string;/
+    );
+    expect(typeSource).toMatch(
+      /verificationPaths:[\s\S]*weightLossFoodLogs: string;[\s\S]*weightLossExperimentDetail: string;/
+    );
     expect(typeSource).toMatch(
       /psycheSubmoduleModel:[\s\S]*modeGuideSession: string;[\s\S]*flashcard: string;[\s\S]*eventType: string;/i
     );
@@ -1209,16 +1233,17 @@ describe("question flow simulation cycles", () => {
 
   it("cycle 3 report retest: durable automation report covers this full run", () => {
     const report = readRepoFile("docs/question-flow-improvement-cycles.md");
-    const latestRun = getSectionSlice(report, "2026-06-02 Automation Pass");
+    const latestRun = getSectionSlice(report, "2026-06-03 Automation Pass");
 
-    expect(report).toMatch(/Latest run date: 2026-06-02/);
+    expect(report).toMatch(/Latest run date: 2026-06-03/);
     expect(latestRun).toMatch(/data\/forge\/forge\.sqlite/i);
-    expect(latestRun).toMatch(/repo-local dist/i);
-    expect(latestRun).toMatch(/forge-hermes-plugin 0\.2\.99/i);
-    expect(latestRun).toMatch(/42 entity catalog entries/i);
-    expect(latestRun).toMatch(/training_load/i);
+    expect(latestRun).toMatch(/repo-local[\s\S]*openclaw-plugin\/dist\/openclaw\/index\.js/i);
+    expect(latestRun).toMatch(/forge-hermes-plugin 0\.2\.101/i);
+    expect(latestRun).toMatch(/42 entity catalog\s+entries/i);
+    expect(latestRun).toMatch(/197 OpenAPI paths/i);
+    expect(latestRun).toMatch(/training_load[\s\S]*weight_loss/i);
     expect(latestRun).toMatch(
-      /goal, project, strategy,\s+task, habit,\s+tag, note, insight, task_run, work_adjustment/i
+      /goal, project, strategy, task,\s+habit, tag, note, insight, task_run, work_adjustment/i
     );
     expect(latestRun).toMatch(
       /preference_catalog[\s\S]*preference_catalog_item[\s\S]*preference_context[\s\S]*preference_item[\s\S]*preference_judgment[\s\S]*preference_signal/i
@@ -1226,18 +1251,18 @@ describe("question flow simulation cycles", () => {
     expect(latestRun).toMatch(
       /psyche_value[\s\S]*behavior_pattern[\s\S]*behavior[\s\S]*belief_entry[\s\S]*mode_profile[\s\S]*mode_guide_session[\s\S]*flashcard[\s\S]*trigger_report[\s\S]*event_type[\s\S]*emotion_definition/i
     );
-    expect(latestRun).toMatch(/training_load/i);
+    expect(latestRun).toMatch(/training_load[\s\S]*weight_loss/i);
     expect(latestRun).toMatch(/Movement[\s\S]*Life Force[\s\S]*Workbench/i);
     expect(latestRun).toMatch(
-      /Cycle 1[\s\S]*Mixed-intent sequencing/i
+      /Cycle 1[\s\S]*Weight Loss[\s\S]*simulated full-cycle matrix/i
     );
     expect(latestRun).toMatch(
-      /Cycle 2[\s\S]*Search-before-write and existing-record disambiguation/i
+      /Cycle 2[\s\S]*explicit Weight Loss\/nutrition keys/i
     );
     expect(latestRun).toMatch(
-      /Cycle 3[\s\S]*Destructive and replacement actions/i
+      /Cycle 3[\s\S]*verificationPaths[\s\S]*OpenAPI/i
     );
-    expect(latestRun).toMatch(/39 tests/i);
+    expect(latestRun).toMatch(/29 tests/i);
     expect(latestRun).toMatch(/What happened after retesting/i);
   });
 });

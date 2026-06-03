@@ -67,7 +67,7 @@ import { createManagerRuntime } from "./managers/runtime.js";
 import { isManagerError } from "./managers/type-guards.js";
 import { buildCompanionPairingTransport, getCompanionIrohStatus, stopCompanionIroh } from "./services/companion-iroh.js";
 import { createCompanionPairingSession, createCompanionPairingSessionSchema, createSleepSession, createSleepSessionSchema, createWorkoutSession, createWorkoutSessionSchema, deleteSleepSession, deleteWorkoutSession, getCompanionPairingSessionById, getCompanionOverview, getFitnessViewData, getSleepSessionById, getSleepSessionDetailById, getSleepTimelineOverlaysForRange, getSleepViewData, getTrainingLoadViewData, getVitalsViewData, getHealthZoneProfileForUser, getMobileHealthSyncSessionStatus, getWorkoutSessionById, getWorkoutSessionDetailById, heartbeatCompanionPairing, heartbeatCompanionPairingSchema, healthZoneProfilePatchSchema, abortMobileHealthSyncSession, completeMobileHealthSyncSession, ingestMobileHealthSync, ingestMobileHealthSyncChunk, mobileHealthSyncChunkSchema, mobileHealthSyncSessionCompleteSchema, mobileHealthSyncSessionStartSchema, mobileHealthSyncSchema, patchHealthZoneProfileForUser, patchCompanionPairingSourceState, patchCompanionPairingSourceStateSchema, companionSourceKeySchema, requireValidPairing, startMobileHealthSyncSession, revokeAllCompanionPairingSessions, revokeAllCompanionPairingSessionsSchema, revokeCompanionPairingSession, updateMobileCompanionSourceState, updateMobileCompanionSourceStateSchema, verifyCompanionPairing, verifyCompanionPairingSchema, updateSleepMetadata, updateSleepMetadataSchema, updateWorkoutMetadata, updateWorkoutMetadataSchema } from "./health.js";
-import { createNutritionAppearanceCheckin, createNutritionBodyCheckin, createNutritionExperiment, createNutritionFoodLog, createNutritionGutCheckin, createNutritionSubjectiveCheckin, deleteNutritionFoodLog, getWeightLossViewData, lookupNutritionBarcode, nutritionAppearanceCheckinCreateSchema, nutritionBarcodeLookupSchema, nutritionBodyCheckinCreateSchema, nutritionExperimentCreateSchema, nutritionExperimentPatchSchema, nutritionFoodLogCreateSchema, nutritionFoodLogPatchSchema, nutritionFoodSearchSchema, nutritionGutCheckinCreateSchema, nutritionParseRequestSchema, nutritionSubjectiveCheckinCreateSchema, nutritionTargetUpdateSchema, parseNutritionFoodLogWithChatGpt, patchNutritionExperiment, patchNutritionFoodLog, searchNutritionFoods, updateNutritionTarget } from "./health-weight-loss.js";
+import { createNutritionAppearanceCheckin, createNutritionBodyCheckin, createNutritionExperiment, createNutritionFoodLog, createNutritionGutCheckin, createNutritionSubjectiveCheckin, deleteNutritionFoodLog, getWeightLossViewData, lookupNutritionBarcode, nutritionAppearanceCheckinCreateSchema, nutritionBarcodeLookupSchema, nutritionBodyCheckinCreateSchema, nutritionExperimentCreateSchema, nutritionExperimentPatchSchema, nutritionFoodLogCreateSchema, nutritionFoodLogPatchSchema, nutritionFoodSearchSchema, nutritionGutCheckinCreateSchema, nutritionParseRequestSchema, nutritionSubjectiveCheckinCreateSchema, nutritionDailyActiveCaloriesUpdateSchema, nutritionTargetUpdateSchema, parseNutritionFoodLogWithChatGpt, patchNutritionExperiment, patchNutritionFoodLog, searchNutritionFoods, updateNutritionDailyActiveCalories, updateNutritionTarget } from "./health-weight-loss.js";
 import { analyzeMovementUserBoxPreflight, createMovementUserBox, createMovementPlace, deleteMovementUserBox, getMovementAllTimeSummary, getMovementBoxDetail, getMovementDayDetail, getMovementMobileBootstrap, getMovementTimeline, getMovementSelectionAggregate, getMovementSettings, getMovementTripDetail, getMovementMonthSummary, invalidateAutomaticMovementBox, listMovementPlaces, movementAutomaticBoxInvalidateSchema, movementMobileBootstrapSchema, movementMobilePlaceMutationSchema, movementMobileStayPatchSchema, movementMobileUserBoxCreateSchema, movementMobileUserBoxPreflightSchema, movementMobileUserBoxPatchSchema, movementMobileAutomaticBoxInvalidateSchema, movementMobileTimelineSchema, movementPlaceMutationSchema, movementPlacePatchSchema, movementSelectionAggregateSchema, movementStayPatchSchema, movementTripPatchSchema, movementUserBoxCreateSchema, movementUserBoxPreflightSchema, movementUserBoxPatchSchema, movementSettingsPatchSchema, movementTimelineQuerySchema, movementTripPointPatchSchema, deleteMovementStay, deleteMovementTrip, deleteMovementTripPoint, updateMovementPlace, updateMovementSettings, updateMovementStay, updateMovementTrip, updateMovementUserBox, updateMovementTripPoint, resolveMovementTimelineSegmentForBox } from "./movement.js";
 import { getScreenTimeAllTimeSummary, getScreenTimeDayDetail, getScreenTimeMonthSummary, getScreenTimeSettings, screenTimeSettingsPatchSchema, updateScreenTimeSettings } from "./screen-time.js";
 import { assertWatchReady, buildWatchBootstrap, ingestWatchCommandBatch, ingestWatchCaptureBatch, mobileWatchBootstrapSchema, mobileWatchCommandBatchSchema, mobileWatchCaptureBatchSchema, mobileWatchHabitCheckInSchema } from "./watch-mobile.js";
@@ -3409,6 +3409,18 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
         ]
     },
     {
+        focus: "weight_loss",
+        openingQuestion: "What food-body link are you trying to test or understand right now?",
+        coachingGoal: "Review nutrition, body-composition, sport-fueling, appearance, gut-comfort, craving, and subjective-energy evidence before logging or changing anything.",
+        askSequence: [
+            "Ask whether the question is fat-loss pace, food intake, protein/fiber sufficiency, sport fuel, visual look, water retention, cravings, gut comfort, energy, or one meal reaction.",
+            "Use forge_get_weight_loss_overview before asking the user to reconstruct recent food, weight, workouts, or subjective state from memory.",
+            "Use forge_parse_food_log_with_chatgpt only for rough meal text or photo descriptions through Forge's configured openai-codex ChatGPT subscription connection, not a metered OpenAI Platform API path.",
+            "Use the dedicated nutrition tools for food logs, body check-ins, appearance check-ins, subjective food effects, gut check-ins, nutrition patterns, and N-of-1 experiments instead of generic batch CRUD.",
+            "Ask for the one outcome metric that would make a nutrition experiment interpretable before turning repeated observations into a hypothesis."
+        ]
+    },
+    {
         focus: "preference_catalog",
         openingQuestion: "What decision or taste question should this catalog help with?",
         coachingGoal: "Define a useful comparison pool rather than a list with no decision purpose.",
@@ -4021,7 +4033,9 @@ function buildPlaybookRouteInfo(focus) {
             ? `Mutation: ${guide.preferredMutationPath}.`
             : null,
         guide?.preferredReadPath ? `Read: ${guide.preferredReadPath}.` : null,
-        guide?.preferredMutationTool ? `Tool: ${guide.preferredMutationTool}.` : null,
+        guide?.preferredMutationTool
+            ? `Tool: ${guide.preferredMutationTool}.`
+            : null,
         `Entity type: ${focus}.`
     ]
         .filter(Boolean)
@@ -4696,6 +4710,7 @@ function buildAgentOnboardingPayload(request) {
             movement: "Forge Movement is the first-class mobility surface. It is a timeline of stays and trips: stays capture time spent in the same place, and trips capture travel between places. Use it for time-in-place questions, travel-history review, specific stay or trip edits, selected-span aggregates, known places, and links to other Forge records rather than pretending stays and trips are normal batch CRUD entities.",
             lifeForce: "Life Force is Forge's energy-budget and fatigue model. Read it through the dedicated life-force state and update it through focused profile, weekday-template, and fatigue-signal routes rather than generic entity CRUD.",
             workbench: "Workbench is Forge's graph-flow execution system. Treat flows, runs, published outputs, node results, and latest-node-output reads as a dedicated API family instead of a normal entity-batch surface.",
+            weightLoss: "Weight Loss is Forge's nutrition, body-composition, sport-fueling, appearance, gut-comfort, craving, and subjective-energy surface. Read it through the health overview route and use the dedicated nutrition tools for food logs, body check-ins, appearance check-ins, subjective effects, gut check-ins, and N-of-1 experiments instead of inventing batch CRUD records.",
             psyche: "Forge Psyche is the reflective domain for values, patterns, behaviors, beliefs, modes, flashcards, and trigger reports. It is sensitive and should be handled deliberately."
         },
         psycheSubmoduleModel: {
@@ -4961,7 +4976,12 @@ function buildAgentOnboardingPayload(request) {
                     classification: "specialized_domain_surface",
                     aliases: ["life_force", "life-force", "Life Force"],
                     summary: "Dedicated life-force API. Use it to read the current energy budget, drains, recommendations, and warnings, then patch only the parts that are meant to be user-controlled.",
-                    routeKeys: ["overview", "profile", "weekdayTemplate", "fatigueSignal"],
+                    routeKeys: [
+                        "overview",
+                        "profile",
+                        "weekdayTemplate",
+                        "fatigueSignal"
+                    ],
                     routeSelectionQuestions: [
                         "Is the user trying to understand the overview, change durable profile assumptions, change a weekday curve, or log a right-now fatigue signal?",
                         "What planning decision should the overview or correction change: workload, recovery, timeboxes, meetings, or task choice?",
@@ -4998,7 +5018,12 @@ function buildAgentOnboardingPayload(request) {
                     classification: "specialized_domain_surface",
                     aliases: ["lifeForce", "life-force", "Life Force"],
                     summary: "Alias for the dedicated Life Force API keyed to the entity-style name `life_force`. Use the same overview, profile, weekday-template, and fatigue-signal routes as `lifeForce`.",
-                    routeKeys: ["overview", "profile", "weekdayTemplate", "fatigueSignal"],
+                    routeKeys: [
+                        "overview",
+                        "profile",
+                        "weekdayTemplate",
+                        "fatigueSignal"
+                    ],
                     routeSelectionQuestions: [
                         "Is the user trying to understand the overview, change durable profile assumptions, change a weekday curve, or log a right-now fatigue signal?",
                         "What planning decision should the overview or correction change: workload, recovery, timeboxes, meetings, or task choice?",
@@ -5274,7 +5299,21 @@ function buildAgentOnboardingPayload(request) {
             psycheSchemaCatalog: "/api/v1/psyche/schema-catalog",
             psycheEventTypes: "/api/v1/psyche/event-types",
             psycheEmotions: "/api/v1/psyche/emotions",
-            weightLoss: "/api/v1/health/weight-loss"
+            weightLoss: "/api/v1/health/weight-loss",
+            weightLossTarget: "/api/v1/health/weight-loss/target",
+            weightLossDailyActiveCalories: "/api/v1/health/weight-loss/daily-active-calories",
+            weightLossFoodsSearch: "/api/v1/health/weight-loss/foods/search",
+            weightLossFoodsBarcode: "/api/v1/health/weight-loss/foods/barcode",
+            weightLossFoodLogs: "/api/v1/health/weight-loss/food-logs",
+            weightLossFoodLogDetail: "/api/v1/health/weight-loss/food-logs/:id",
+            weightLossParse: "/api/v1/health/weight-loss/parse",
+            weightLossBodyCheckins: "/api/v1/health/weight-loss/body-checkins",
+            weightLossAppearanceCheckins: "/api/v1/health/weight-loss/appearance-checkins",
+            weightLossSubjectiveCheckins: "/api/v1/health/weight-loss/subjective-checkins",
+            weightLossGutCheckins: "/api/v1/health/weight-loss/gut-checkins",
+            weightLossPatterns: "/api/v1/health/weight-loss/patterns",
+            weightLossExperiments: "/api/v1/health/weight-loss/experiments",
+            weightLossExperimentDetail: "/api/v1/health/weight-loss/experiments/:id"
         },
         recommendedPluginTools: {
             bootstrap: ["forge_get_operator_overview"],
@@ -5643,7 +5682,9 @@ function resolveEffectiveReadScope(query, auth) {
             : [...tokenUserIds]
         : requestedUserIds;
     return {
-        userIds: effectiveUserIds !== undefined ? Array.from(new Set(effectiveUserIds)) : undefined,
+        userIds: effectiveUserIds !== undefined
+            ? Array.from(new Set(effectiveUserIds))
+            : undefined,
         enforceUserIds: tokenUserIds.length > 0,
         projectIds: auth.token?.scopePolicy.projectIds ?? [],
         tagIds: auth.token?.scopePolicy.tagIds ?? []
@@ -5678,8 +5719,7 @@ function applyProjectScope(projects, scope) {
         return projects;
     }
     return projects.filter((project) => {
-        if (scope.projectIds.length > 0 &&
-            !scope.projectIds.includes(project.id)) {
+        if (scope.projectIds.length > 0 && !scope.projectIds.includes(project.id)) {
             return false;
         }
         if (scope.tagIds.length > 0 &&
@@ -5775,8 +5815,10 @@ function buildV1Context(scope = {
     });
     const projects = applyProjectScope(listProjectSummaries({ userIds: scopedUserIdsForReads }), scope);
     const tasks = applyTaskScope(filterOwnedEntities("task", listTasks(), scopedUserIdsForReads), scope);
-    const goals = applyGoalScope(filterOwnedEntities("goal", listGoals(), scopedUserIdsForReads), scope, new Set([...projects.map((project) => project.goalId), ...tasks.map((task) => task.goalId)]
-        .filter((value) => typeof value === "string" && value.length > 0)));
+    const goals = applyGoalScope(filterOwnedEntities("goal", listGoals(), scopedUserIdsForReads), scope, new Set([
+        ...projects.map((project) => project.goalId),
+        ...tasks.map((task) => task.goalId)
+    ].filter((value) => typeof value === "string" && value.length > 0)));
     const habits = applyHabitScope(filterOwnedEntities("habit", listHabits(), scopedUserIdsForReads), scope, new Set(goals.map((goal) => goal.id)), new Set(tasks.map((task) => task.id)));
     const strategies = applyStrategyScope(listStrategies({ userIds: scopedUserIdsForReads }), scope, new Set(goals.map((goal) => goal.id)));
     const dashboard = getDashboard({ userIds: scopedUserIdsForReads });
@@ -5822,7 +5864,11 @@ function buildV1Context(scope = {
             validScopedUserIds !== undefined &&
             validScopedUserIds.length === 0
             ? []
-            : listTaskRuns({ active: true, limit: 25, userIds: scopedUserIdsForReads }),
+            : listTaskRuns({
+                active: true,
+                limit: 25,
+                userIds: scopedUserIdsForReads
+            }),
         activity: dashboard.recentActivity,
         lifeForce: buildLifeForcePayload(now, scopedUserIdsForReads)
     };
@@ -5897,8 +5943,10 @@ function buildOperatorContext(scope = {
         status: "active",
         userIds: scopedUserIdsForReads
     }), scope).filter((project) => project.activeTaskCount > 0 || project.completedTaskCount > 0);
-    const goals = applyGoalScope(filterOwnedEntities("goal", listGoals(), scopedUserIdsForReads), scope, new Set([...activeProjects.map((project) => project.goalId), ...tasks.map((task) => task.goalId)]
-        .filter((value) => typeof value === "string" && value.length > 0)));
+    const goals = applyGoalScope(filterOwnedEntities("goal", listGoals(), scopedUserIdsForReads), scope, new Set([
+        ...activeProjects.map((project) => project.goalId),
+        ...tasks.map((task) => task.goalId)
+    ].filter((value) => typeof value === "string" && value.length > 0)));
     const scopedHabits = applyHabitScope(dueHabits, scope, new Set(goals.map((goal) => goal.id)), new Set(tasks.map((task) => task.id))).slice(0, 12);
     const focusTasks = tasks.filter((task) => task.status === "focus" || task.status === "in_progress");
     const recommendedNextTask = focusTasks[0] ??
@@ -6283,7 +6331,9 @@ function compactOperatorContext(context) {
                 tasks: tasks.slice(0, 5).map(compactTask)
             }
         ])),
-        recentActivity: context.recentActivity.slice(0, 10).map(compactActivityEvent),
+        recentActivity: context.recentActivity
+            .slice(0, 10)
+            .map(compactActivityEvent),
         recentTaskRuns: context.recentTaskRuns.slice(0, 8).map(compactTaskRun),
         recommendedNextTask: context.recommendedNextTask
             ? compactTask(context.recommendedNextTask)
@@ -6339,7 +6389,9 @@ function compactFitness(fitness) {
         typeBreakdown: fitness.typeBreakdown.slice(0, 8),
         sessions: fitness.sessions.slice(0, 8).map((session) => ({
             id: session.id,
-            title: compactText(session.plannedContext || session.workoutTypeLabel || session.workoutType, 100),
+            title: compactText(session.plannedContext ||
+                session.workoutTypeLabel ||
+                session.workoutType, 100),
             workoutType: session.workoutType,
             workoutTypeLabel: session.workoutTypeLabel,
             activityFamily: session.activityFamily,
@@ -6494,7 +6546,9 @@ function compactPsyche(psyche) {
             summaryFields: ["eventSituation", "customEventType"]
         })),
         schemaPressure: psyche.schemaPressure,
-        committedActions: psyche.committedActions.slice(0, 12).map((action) => compactText(action, 120)),
+        committedActions: psyche.committedActions
+            .slice(0, 12)
+            .map((action) => compactText(action, 120)),
         detailRoute: "/api/v1/psyche/overview"
     };
 }
@@ -6672,7 +6726,9 @@ function buildOperatorOverview(request) {
     const canReadPsyche = auth.token
         ? hasTokenScope(auth.token, "psyche.read")
         : true;
-    const requestedDetailMode = typeof request.query?.detail === "string" ? request.query.detail : "compact";
+    const requestedDetailMode = typeof request.query?.detail === "string"
+        ? request.query.detail
+        : "compact";
     const warnings = canReadPsyche
         ? []
         : [
@@ -6686,8 +6742,10 @@ function buildOperatorOverview(request) {
     const yesterdayRange = localDayRange(addDays(now, -1));
     const projects = applyProjectScope(listProjectSummaries({ userIds }), readScope);
     const tasks = applyTaskScope(filterOwnedEntities("task", listTasks(), userIds), readScope);
-    const goals = applyGoalScope(filterOwnedEntities("goal", listGoals(), userIds), readScope, new Set([...projects.map((project) => project.goalId), ...tasks.map((task) => task.goalId)]
-        .filter((value) => typeof value === "string" && value.length > 0)));
+    const goals = applyGoalScope(filterOwnedEntities("goal", listGoals(), userIds), readScope, new Set([
+        ...projects.map((project) => project.goalId),
+        ...tasks.map((task) => task.goalId)
+    ].filter((value) => typeof value === "string" && value.length > 0)));
     const habits = applyHabitScope(filterOwnedEntities("habit", listHabits(), userIds), readScope, new Set(goals.map((goal) => goal.id)), new Set(tasks.map((task) => task.id)));
     const operator = compactOperatorContext(buildOperatorContext(readScope));
     const overview = getOverviewContext(now, { userIds });
@@ -6699,7 +6757,9 @@ function buildOperatorOverview(request) {
     const vitals = compactVitals(getVitalsViewData(userIds));
     const weightLoss = compactWeightLoss(getWeightLossViewData(userIds));
     const lifeForce = compactLifeForce(buildLifeForcePayload(now, userIds));
-    const psyche = canReadPsyche ? compactPsyche(getPsycheOverview(userIds)) : null;
+    const psyche = canReadPsyche
+        ? compactPsyche(getPsycheOverview(userIds))
+        : null;
     const onboarding = compactOnboardingPayload(buildAgentOnboardingPayload(request));
     const calendar = compactCalendarForDays(readCalendarOverview({
         from: yesterdayRange.from,
@@ -6737,8 +6797,7 @@ function buildOperatorOverview(request) {
                 goals: goals.length,
                 activeGoals: goals.filter((goal) => goal.status === "active").length,
                 projects: projects.length,
-                activeProjects: projects.filter((project) => project.status === "active")
-                    .length,
+                activeProjects: projects.filter((project) => project.status === "active").length,
                 tasks: tasks.length,
                 focusTasks: tasks.filter((task) => task.status === "focus" || task.status === "in_progress").length,
                 habits: habits.length
@@ -7285,7 +7344,9 @@ export async function buildServer(options = {}) {
         };
     });
     app.post("/api/v1/doctor/fixes", async (request) => {
-        requireScopedAccess(request.headers, ["write"], { route: "/api/v1/doctor/fixes" });
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/doctor/fixes"
+        });
         const parsed = z
             .object({
             fixIds: z.array(z.string().min(1)).optional(),
@@ -7474,6 +7535,12 @@ export async function buildServer(options = {}) {
         return {
             target: updateNutritionTarget(nutritionTargetUpdateSchema.parse(request.body ?? {}))
         };
+    });
+    app.patch("/api/v1/health/weight-loss/daily-active-calories", async (request) => {
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/health/weight-loss/daily-active-calories"
+        });
+        return updateNutritionDailyActiveCalories(nutritionDailyActiveCaloriesUpdateSchema.parse(request.body ?? {}));
     });
     app.post("/api/v1/health/weight-loss/foods/search", async (request) => ({
         ...(await searchNutritionFoods(nutritionFoodSearchSchema.parse(request.body ?? {})))
@@ -7675,7 +7742,8 @@ export async function buildServer(options = {}) {
         const parsed = movementTimelineQuerySchema.parse(request.query ?? {});
         const userIds = parsed.userIds.length > 0
             ? parsed.userIds
-            : (resolveScopedUserIds(request.query) ?? []);
+            : (resolveScopedUserIds(request.query) ??
+                []);
         const movement = getMovementTimeline({
             ...parsed,
             userIds
@@ -7735,7 +7803,9 @@ export async function buildServer(options = {}) {
         };
     });
     app.post("/api/v1/movement/user-boxes/preflight", async (request) => {
-        requireScopedAccess(request.headers, ["write"], { route: "/api/v1/movement/user-boxes/preflight" });
+        requireScopedAccess(request.headers, ["write"], {
+            route: "/api/v1/movement/user-boxes/preflight"
+        });
         const userId = resolveScopedUserIds(request.query)?.[0] ??
             getDefaultUser().id;
         return {
@@ -7764,7 +7834,9 @@ export async function buildServer(options = {}) {
         const userId = resolveScopedUserIds(request.query)?.[0] ??
             getDefaultUser().id;
         const { id } = request.params;
-        const result = deleteMovementUserBox(id, toActivityContext(auth), { userId });
+        const result = deleteMovementUserBox(id, toActivityContext(auth), {
+            userId
+        });
         if (!result) {
             reply.code(404);
             return { error: "Movement user box not found" };
@@ -7783,7 +7855,8 @@ export async function buildServer(options = {}) {
         }
         reply.code(201);
         return {
-            box: resolveMovementTimelineSegmentForBox(userId, result.box.id) ?? result.box
+            box: resolveMovementTimelineSegmentForBox(userId, result.box.id) ??
+                result.box
         };
     });
     app.patch("/api/v1/movement/stays/:id", async (request, reply) => {
@@ -7998,7 +8071,8 @@ export async function buildServer(options = {}) {
             source: "system"
         });
         return {
-            box: resolveMovementTimelineSegmentForBox(pairing.user_id, created.id) ?? created
+            box: resolveMovementTimelineSegmentForBox(pairing.user_id, created.id) ??
+                created
         };
     });
     app.post("/api/v1/mobile/movement/user-boxes/preflight", async (request) => {
@@ -8055,8 +8129,7 @@ export async function buildServer(options = {}) {
         }
         reply.code(201);
         return {
-            box: resolveMovementTimelineSegmentForBox(pairing.user_id, result.box.id) ??
-                result.box
+            box: resolveMovementTimelineSegmentForBox(pairing.user_id, result.box.id) ?? result.box
         };
     });
     app.patch("/api/v1/mobile/movement/stays/:id", async (request, reply) => {

@@ -203,7 +203,12 @@ export function syncForgeManagedWikiProfile(secrets) {
         .get();
     const connectionId = settings?.forge_wiki_connection_id?.trim() ?? "";
     const fallbackModel = settings?.forge_wiki_model?.trim() || "gpt-5.4-mini";
-    const connection = connectionId ? getAiModelConnectionById(connectionId) : null;
+    const requestedConnection = connectionId
+        ? getAiModelConnectionById(connectionId)
+        : null;
+    const connection = requestedConnection?.provider === "openai-codex"
+        ? requestedConnection
+        : null;
     const row = connectionId
         ? getDatabase()
             .prepare(`SELECT secret_id
@@ -214,18 +219,16 @@ export function syncForgeManagedWikiProfile(secrets) {
     upsertWikiLlmProfile({
         id: FORGE_MANAGED_WIKI_PROFILE_ID,
         label: "Forge wiki ingest",
-        provider: connection?.provider === "openai-compatible"
-            ? "openai-compatible"
-            : connection?.provider === "openai-codex"
-                ? "openai-codex"
-                : "openai-responses",
-        baseUrl: connection?.baseUrl ?? DEFAULT_OPENAI_BASE_URL,
+        provider: "openai-codex",
+        baseUrl: connection?.baseUrl ?? DEFAULT_OPENAI_CODEX_BASE_URL,
         model: connection?.model ?? fallbackModel,
-        secretId: row?.secret_id ?? null,
+        secretId: connection ? (row?.secret_id ?? null) : null,
         enabled: true,
         metadata: {
             managedBySettings: true,
-            connectionId: connection?.id ?? null
+            connectionId: connection?.id ?? null,
+            authMode: "oauth",
+            billing: "chatgpt-codex-oauth"
         }
     }, secrets);
 }

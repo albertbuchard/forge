@@ -169,6 +169,20 @@ const STEPS: Array<{
   { id: "publish", label: "Publish", icon: Rocket }
 ];
 
+const fieldLabelClass = "text-sm font-medium text-[var(--ui-ink-medium)]";
+const fieldControlClass =
+  "min-w-0 max-w-full rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3 text-sm text-[var(--ui-ink-strong)] outline-none transition placeholder:text-[var(--ui-ink-faint)] focus:border-[color-mix(in_srgb,var(--primary)_45%,var(--ui-border-strong)_55%)] focus:bg-[var(--ui-surface-2)]";
+const jsonTextareaClass = cn(
+  fieldControlClass,
+  "resize-y whitespace-pre-wrap break-words font-mono leading-6 [overflow-wrap:anywhere]"
+);
+const mutedLabelClass =
+  "font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]";
+const metricCardClass =
+  "min-w-0 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-4";
+const inlineCodeClass =
+  "mx-1 rounded-[6px] bg-[var(--ui-surface-2)] px-1.5 py-0.5 text-xs text-[var(--ui-ink-strong)] [overflow-wrap:anywhere]";
+
 export function PsycheQuestionnaireBuilderPage() {
   const { instrumentId } = useParams();
   const navigate = useNavigate();
@@ -237,12 +251,14 @@ export function PsycheQuestionnaireBuilderPage() {
     }
   });
 
+  const questionnaireForDraft = detailQuery.data?.instrument;
+
   useEffect(() => {
     if (!instrumentId) {
       setState(toBuilderState(null));
       return;
     }
-    const instrument = detailQuery.data?.instrument;
+    const instrument = questionnaireForDraft;
     if (!instrument) {
       return;
     }
@@ -251,7 +267,7 @@ export function PsycheQuestionnaireBuilderPage() {
       return;
     }
     setState(toBuilderState(instrument));
-  }, [detailQuery.data?.instrument, instrumentId, prepareDraftMutation]);
+  }, [instrumentId, prepareDraftMutation.isPending, questionnaireForDraft]);
 
   const pageTitle = instrumentId ? "Edit questionnaire" : "Build questionnaire";
   const detail = detailQuery.data?.instrument ?? null;
@@ -324,86 +340,88 @@ export function PsycheQuestionnaireBuilderPage() {
 
       <PsycheSectionNav />
 
-      <Card className="bg-[linear-gradient(180deg,rgba(15,23,34,0.98),rgba(8,13,20,0.98))]">
+      <Card className="border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)]">
         <div className="grid gap-3 md:grid-cols-4">
           {STEPS.map((entry) => (
             <button
               key={entry.id}
               type="button"
               className={cn(
-                "rounded-[22px] border px-4 py-4 text-left transition",
+                "min-w-0 rounded-[8px] border px-4 py-4 text-left transition",
                 step === entry.id
-                  ? "border-[rgba(110,231,183,0.24)] bg-[rgba(110,231,183,0.12)] text-white"
-                  : "border-white/8 bg-white/[0.03] text-white/64 hover:bg-white/[0.05]"
+                  ? "border-[color-mix(in_srgb,var(--success)_42%,var(--ui-border-subtle)_58%)] bg-[var(--ui-success-soft)] text-[var(--ui-ink-strong)]"
+                  : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-2)]"
               )}
               onClick={() => setStep(entry.id)}
             >
-              <entry.icon className="size-4" />
-              <div className="mt-3 text-sm font-medium">{entry.label}</div>
+              <entry.icon className="size-4 shrink-0" />
+              <div className="mt-3 min-w-0 break-words text-sm font-medium">
+                {entry.label}
+              </div>
             </button>
           ))}
         </div>
       </Card>
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(18rem,0.9fr)]">
-        <Card className="bg-[linear-gradient(180deg,rgba(16,24,34,0.98),rgba(10,15,24,0.96))]">
+        <Card className="min-w-0 border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)]">
           {step === "metadata" ? (
             <div className="grid gap-4">
               <label className="grid gap-2">
-                <span className="text-sm text-white/72">Title</span>
+                <span className={fieldLabelClass}>Title</span>
                 <input
                   value={state.title}
                   onChange={(event) => setState((current) => ({ ...current, title: event.target.value }))}
-                  className="rounded-[18px] border border-white/8 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none"
+                  className={fieldControlClass}
                 />
               </label>
               <label className="grid gap-2">
-                <span className="text-sm text-white/72">Subtitle</span>
+                <span className={fieldLabelClass}>Subtitle</span>
                 <input
                   value={state.subtitle}
                   onChange={(event) => setState((current) => ({ ...current, subtitle: event.target.value }))}
-                  className="rounded-[18px] border border-white/8 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none"
+                  className={fieldControlClass}
                 />
               </label>
               <label className="grid gap-2">
-                <span className="text-sm text-white/72">Description</span>
+                <span className={fieldLabelClass}>Description</span>
                 <textarea
                   value={state.description}
                   onChange={(event) => setState((current) => ({ ...current, description: event.target.value }))}
-                  className="min-h-28 rounded-[18px] border border-white/8 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none"
+                  className={cn(fieldControlClass, "min-h-28 resize-y")}
                 />
               </label>
               <div className="grid gap-4 md:grid-cols-2">
                 <label className="grid gap-2">
-                  <span className="text-sm text-white/72">Aliases</span>
+                  <span className={fieldLabelClass}>Aliases</span>
                   <input
                     value={state.aliases}
                     onChange={(event) => setState((current) => ({ ...current, aliases: event.target.value }))}
-                    className="rounded-[18px] border border-white/8 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none"
+                    className={fieldControlClass}
                   />
                 </label>
                 <label className="grid gap-2">
-                  <span className="text-sm text-white/72">Symptom domains</span>
+                  <span className={fieldLabelClass}>Symptom domains</span>
                   <input
                     value={state.symptomDomains}
                     onChange={(event) =>
                       setState((current) => ({ ...current, symptomDomains: event.target.value }))
                     }
-                    className="rounded-[18px] border border-white/8 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none"
+                    className={fieldControlClass}
                   />
                 </label>
               </div>
               <div className="grid gap-4 md:grid-cols-3">
                 <label className="grid gap-2">
-                  <span className="text-sm text-white/72">Tags</span>
+                  <span className={fieldLabelClass}>Tags</span>
                   <input
                     value={state.tags}
                     onChange={(event) => setState((current) => ({ ...current, tags: event.target.value }))}
-                    className="rounded-[18px] border border-white/8 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none"
+                    className={fieldControlClass}
                   />
                 </label>
                 <label className="grid gap-2">
-                  <span className="text-sm text-white/72">Source class</span>
+                  <span className={fieldLabelClass}>Source class</span>
                   <select
                     value={state.sourceClass}
                     onChange={(event) =>
@@ -412,7 +430,7 @@ export function PsycheQuestionnaireBuilderPage() {
                         sourceClass: event.target.value as QuestionnaireSourceClass
                       }))
                     }
-                    className="rounded-[18px] border border-white/8 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none"
+                    className={fieldControlClass}
                   >
                     {[
                       "public_domain",
@@ -429,7 +447,7 @@ export function PsycheQuestionnaireBuilderPage() {
                   </select>
                 </label>
                 <label className="grid gap-2">
-                  <span className="text-sm text-white/72">Availability</span>
+                  <span className={fieldLabelClass}>Availability</span>
                   <select
                     value={state.availability}
                     onChange={(event) =>
@@ -438,7 +456,7 @@ export function PsycheQuestionnaireBuilderPage() {
                         availability: event.target.value as QuestionnaireAvailability
                       }))
                     }
-                    className="rounded-[18px] border border-white/8 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none"
+                    className={fieldControlClass}
                   >
                     {["open", "free_clinician", "custom"].map((value) => (
                       <option key={value} value={value}>
@@ -452,19 +470,19 @@ export function PsycheQuestionnaireBuilderPage() {
           ) : null}
 
           {step === "structure" ? (
-            <div className="grid gap-2">
-              <span className="text-sm text-white/72">Definition JSON</span>
-              <div className="text-sm leading-6 text-white/56">
+            <div className="grid min-w-0 gap-2">
+              <span className={fieldLabelClass}>Definition JSON</span>
+              <div className="min-w-0 break-words text-sm leading-6 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
                 Items and sections can declare
-                <code className="mx-1 rounded bg-white/[0.06] px-1.5 py-0.5 text-xs text-white">
+                <code className={inlineCodeClass}>
                   visibility.script
                 </code>
                 rules such as
-                <code className="mx-1 rounded bg-white/[0.06] px-1.5 py-0.5 text-xs text-white">
+                <code className={inlineCodeClass}>
                   audit_1 &gt; 0
                 </code>
                 or
-                <code className="mx-1 rounded bg-white/[0.06] px-1.5 py-0.5 text-xs text-white">
+                <code className={inlineCodeClass}>
                   answered(question_12) and option(question_12) == "yes"
                 </code>
                 .
@@ -472,7 +490,7 @@ export function PsycheQuestionnaireBuilderPage() {
               <textarea
                 value={state.definitionJson}
                 onChange={(event) => setState((current) => ({ ...current, definitionJson: event.target.value }))}
-                className="min-h-[32rem] rounded-[18px] border border-white/8 bg-white/[0.04] px-4 py-3 font-mono text-sm text-white outline-none"
+                className={cn(jsonTextareaClass, "min-h-[32rem]")}
               />
             </div>
           ) : null}
@@ -480,19 +498,19 @@ export function PsycheQuestionnaireBuilderPage() {
           {step === "scoring" ? (
             <div className="grid gap-4">
               <label className="grid gap-2">
-                <span className="text-sm text-white/72">Scoring JSON</span>
+                <span className={fieldLabelClass}>Scoring JSON</span>
                 <textarea
                   value={state.scoringJson}
                   onChange={(event) => setState((current) => ({ ...current, scoringJson: event.target.value }))}
-                  className="min-h-[24rem] rounded-[18px] border border-white/8 bg-white/[0.04] px-4 py-3 font-mono text-sm text-white outline-none"
+                  className={cn(jsonTextareaClass, "min-h-[24rem]")}
                 />
               </label>
               <label className="grid gap-2">
-                <span className="text-sm text-white/72">Provenance JSON</span>
+                <span className={fieldLabelClass}>Provenance JSON</span>
                 <textarea
                   value={state.provenanceJson}
                   onChange={(event) => setState((current) => ({ ...current, provenanceJson: event.target.value }))}
-                  className="min-h-[16rem] rounded-[18px] border border-white/8 bg-white/[0.04] px-4 py-3 font-mono text-sm text-white outline-none"
+                  className={cn(jsonTextareaClass, "min-h-[16rem]")}
                 />
               </label>
             </div>
@@ -501,42 +519,42 @@ export function PsycheQuestionnaireBuilderPage() {
           {step === "publish" ? (
             <div className="grid gap-4">
               <label className="grid gap-2">
-                <span className="text-sm text-white/72">Version label</span>
+                <span className={fieldLabelClass}>Version label</span>
                 <input
                   value={state.label}
                   onChange={(event) => setState((current) => ({ ...current, label: event.target.value }))}
-                  className="rounded-[18px] border border-white/8 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none"
+                  className={fieldControlClass}
                 />
               </label>
               {parsedPreview ? (
                 <div className="grid gap-3 md:grid-cols-3">
-                  <div className="rounded-[20px] border border-white/8 bg-white/[0.03] px-4 py-4">
-                    <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+                  <div className={metricCardClass}>
+                    <div className={mutedLabelClass}>
                       Items
                     </div>
-                    <div className="mt-2 text-2xl font-semibold text-white">
+                    <div className="mt-2 text-2xl font-semibold text-[var(--ui-ink-strong)]">
                       {parsedPreview.definition.items.length}
                     </div>
                   </div>
-                  <div className="rounded-[20px] border border-white/8 bg-white/[0.03] px-4 py-4">
-                    <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+                  <div className={metricCardClass}>
+                    <div className={mutedLabelClass}>
                       Sections
                     </div>
-                    <div className="mt-2 text-2xl font-semibold text-white">
+                    <div className="mt-2 text-2xl font-semibold text-[var(--ui-ink-strong)]">
                       {parsedPreview.definition.sections.length}
                     </div>
                   </div>
-                  <div className="rounded-[20px] border border-white/8 bg-white/[0.03] px-4 py-4">
-                    <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+                  <div className={metricCardClass}>
+                    <div className={mutedLabelClass}>
                       Scores
                     </div>
-                    <div className="mt-2 text-2xl font-semibold text-white">
+                    <div className="mt-2 text-2xl font-semibold text-[var(--ui-ink-strong)]">
                       {parsedPreview.scoring.scores.length}
                     </div>
                   </div>
                 </div>
               ) : null}
-              <p className="text-sm leading-6 text-white/58">
+              <p className="text-sm leading-6 text-[var(--ui-ink-soft)]">
                 Publishing freezes the current draft into an immutable version for
                 future runs. Past run history will always keep the version it was
                 scored against.
@@ -546,8 +564,8 @@ export function PsycheQuestionnaireBuilderPage() {
         </Card>
 
         <div className="grid gap-4">
-          <Card className="bg-[linear-gradient(180deg,rgba(14,21,31,0.98),rgba(9,14,22,0.96))]">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/42">
+          <Card className="min-w-0 border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)]">
+            <div className={mutedLabelClass}>
               Draft posture
             </div>
             {detail?.isSystem ? (
@@ -560,10 +578,10 @@ export function PsycheQuestionnaireBuilderPage() {
               </div>
             ) : (
               <div className="mt-4 grid gap-2">
-                <Badge className="w-fit bg-white/[0.08] text-white/78">
+                <Badge className="w-fit border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                   {detail?.draftVersion ? "Draft available" : "New draft"}
                 </Badge>
-                <div className="text-sm leading-6 text-white/60">
+                <div className="break-words text-sm leading-6 text-[var(--ui-ink-soft)]">
                   Save updates whenever the metadata or JSON changes, then publish
                   once the definition is ready for scoring and longitudinal history.
                 </div>
@@ -571,8 +589,8 @@ export function PsycheQuestionnaireBuilderPage() {
             )}
           </Card>
 
-          <Card className="bg-[linear-gradient(180deg,rgba(15,23,33,0.98),rgba(9,15,23,0.96))]">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/42">
+          <Card className="min-w-0 border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)]">
+            <div className={mutedLabelClass}>
               Actions
             </div>
             <div className="mt-4 grid gap-3">
@@ -589,7 +607,7 @@ export function PsycheQuestionnaireBuilderPage() {
                 </Button>
               ) : null}
               {jsonError ? (
-                <div className="rounded-[18px] border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+                <div className="break-words rounded-[8px] border border-[var(--danger)]/20 bg-[var(--ui-danger-soft)] px-4 py-3 text-sm text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]">
                   {jsonError}
                 </div>
               ) : null}

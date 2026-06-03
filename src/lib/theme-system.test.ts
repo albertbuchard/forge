@@ -60,5 +60,14 @@ describe("theme system", () => {
     expect(
       document.documentElement.style.getPropertyValue("--surface-panel")
     ).toBe("#1f2335");
+    expect(
+      document.documentElement.style.getPropertyValue("--canvas")
+    ).toBe(theme.canvas);
+    expect(
+      document.documentElement.style.getPropertyValue("--ui-accent")
+    ).toBe(theme.primary);
+    expect(
+      document.documentElement.style.getPropertyValue("--ui-ink")
+    ).toBe(theme.ink);
   });
 });

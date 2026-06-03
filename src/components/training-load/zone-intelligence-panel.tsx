@@ -277,7 +277,48 @@ export function ZoneIntelligencePanel({
           </ChartBox>
         </div>
 
-        <div className="mt-4 overflow-x-auto rounded-[8px] border border-white/8">
+        <div className="mt-4 grid gap-3 md:hidden">
+          {tableBuckets.map((bucket) => (
+            <div
+              key={bucket.bucketKey}
+              className="rounded-[8px] border border-white/8 bg-white/[0.035] p-3"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-white">
+                    {bucket.bucketKey}
+                  </div>
+                  <div className="mt-1 text-xs leading-5 text-white/50">
+                    Load {bucket.trainingLoad} · {bucket.loadPerMinute}{" "}
+                    TRIMP/min
+                  </div>
+                </div>
+                <Badge tone="meta">{bucket.confidence}</Badge>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-[12px] min-[360px]:grid-cols-3">
+                {ZONE_ORDER.map((zone) => (
+                  <div
+                    key={zone}
+                    className="rounded-[8px] bg-white/[0.04] px-2 py-1.5"
+                  >
+                    <div className="text-[10px] uppercase tracking-[0.12em] text-white/42">
+                      {ZONE_LABELS[zone]}
+                    </div>
+                    <div className="mt-0.5 text-white/72">
+                      {bucket.zoneMinutes[zone]} min
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 text-xs leading-5 text-white/50">
+                {bucket.hardDayCount} hard day
+                {bucket.hardDayCount === 1 ? "" : "s"} in this block.
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 hidden overflow-x-auto rounded-[8px] border border-white/8 md:block">
           <div className="grid min-w-[760px] grid-cols-[96px_72px_72px_repeat(6,64px)_72px_80px] bg-white/[0.045] px-3 py-2 text-[10px] uppercase tracking-[0.14em] text-white/42">
             <div>Block</div>
             <div>Load</div>

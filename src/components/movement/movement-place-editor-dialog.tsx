@@ -54,21 +54,21 @@ export function MovementPlaceEditorDialog({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-[rgba(3,7,18,0.74)] backdrop-blur-sm" />
-        <Dialog.Content className="fixed left-1/2 top-[8vh] z-50 w-[min(32rem,calc(100vw-1.25rem))] -translate-x-1/2 rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(8,14,28,0.98),rgba(10,16,30,0.95))] p-5 shadow-[0_32px_90px_rgba(0,0,0,0.45)]">
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-[var(--ui-overlay-backdrop)] backdrop-blur-sm" />
+        <Dialog.Content className="fixed left-1/2 top-[8vh] z-50 w-[min(32rem,calc(100vw-1.25rem))] -translate-x-1/2 rounded-[30px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-modal)] p-5 shadow-[var(--ui-shadow-floating)]">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <Dialog.Title className="font-display text-[1.3rem] tracking-[-0.05em] text-white">
+              <Dialog.Title className="font-display text-[1.3rem] tracking-normal text-[var(--ui-ink-strong)]">
                 {place ? `Edit ${place.label}` : "New known place"}
               </Dialog.Title>
-              <Dialog.Description className="mt-1 text-sm text-white/58">
+              <Dialog.Description className="mt-1 text-sm text-[var(--ui-ink-soft)]">
                 Define life landmarks once so the companion and web views can reason about stays and trips consistently.
               </Dialog.Description>
             </div>
             <Dialog.Close asChild>
               <button
                 type="button"
-                className="rounded-full border border-white/10 bg-white/[0.04] p-2 text-white/64 transition hover:bg-white/[0.08] hover:text-white"
+                className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-2 text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
               >
                 <X className="size-4" />
               </button>
@@ -133,7 +133,7 @@ export function MovementPlaceEditorDialog({
             <Button
               variant="ghost"
               onClick={() => onOpenChange(false)}
-              className="border border-white/10 bg-white/[0.04]"
+              className="border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]"
             >
               Cancel
             </Button>

@@ -1,13 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
-import {
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis
-} from "recharts";
 import { CopyPlus, Play, SquarePen } from "lucide-react";
 import { PsycheSectionNav } from "@/components/psyche/psyche-section-nav";
 import { PageHero } from "@/components/shell/page-hero";
@@ -16,6 +8,101 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/page-state";
 import { getQuestionnaire } from "@/lib/api";
+import type { QuestionnaireInstrumentDetail } from "@/lib/questionnaire-types";
+
+const sectionLabelClass =
+  "font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]";
+const metricCardClass =
+  "min-w-0 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-4";
+const metricLabelClass =
+  "text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]";
+const metricValueClass =
+  "mt-2 break-words text-sm font-medium text-[var(--ui-ink-strong)] [overflow-wrap:anywhere]";
+const detailLinkClass =
+  "block min-w-0 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-4 transition hover:bg-[var(--ui-surface-2)]";
+
+function HistorySparkline({
+  history
+}: {
+  history: QuestionnaireInstrumentDetail["history"];
+}) {
+  const data = [...history]
+    .reverse()
+    .filter((entry) => typeof entry.primaryScore === "number");
+  if (data.length === 0) {
+    return null;
+  }
+  const values = data.map((entry) => Number(entry.primaryScore));
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = Math.max(1, max - min);
+  const points = data.map((entry, index) => {
+    const x = data.length === 1 ? 50 : 8 + (index / (data.length - 1)) * 84;
+    const y = 84 - ((Number(entry.primaryScore) - min) / span) * 68;
+    return {
+      x,
+      y,
+      label: new Date(entry.completedAt).toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric"
+      }),
+      score: Number(entry.primaryScore)
+    };
+  });
+  const linePoints = points.map((point) => `${point.x},${point.y}`).join(" ");
+
+  return (
+    <div className="mt-4 min-w-0 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3">
+      <svg
+        viewBox="0 0 100 100"
+        role="img"
+        aria-label="Questionnaire score history"
+        className="h-56 w-full overflow-visible"
+        preserveAspectRatio="none"
+      >
+        {[16, 50, 84].map((y) => (
+          <line
+            key={y}
+            x1="6"
+            x2="94"
+            y1={y}
+            y2={y}
+            stroke="var(--ui-border-subtle)"
+            strokeWidth="0.6"
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
+        <polyline
+          fill="none"
+          points={linePoints}
+          stroke="var(--success)"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2.5"
+          vectorEffect="non-scaling-stroke"
+        />
+        {points.map((point) => (
+          <g key={`${point.label}-${point.score}-${point.x}`}>
+            <circle
+              cx={point.x}
+              cy={point.y}
+              r="2.8"
+              fill="var(--ui-surface-section)"
+              stroke="var(--success)"
+              strokeWidth="1.4"
+              vectorEffect="non-scaling-stroke"
+            />
+            <title>{`${point.label}: ${point.score}`}</title>
+          </g>
+        ))}
+      </svg>
+      <div className="mt-2 flex min-w-0 flex-wrap justify-between gap-2 text-xs text-[var(--ui-ink-faint)]">
+        <span>Oldest {points[0]?.label}</span>
+        <span>Latest {points.at(-1)?.label}</span>
+      </div>
+    </div>
+  );
+}
 
 export function PsycheQuestionnaireDetailPage() {
   const { instrumentId = "" } = useParams();
@@ -86,32 +173,32 @@ export function PsycheQuestionnaireDetailPage() {
       <PsycheSectionNav />
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(18rem,0.95fr)]">
-        <Card className="bg-[linear-gradient(180deg,rgba(15,23,34,0.98),rgba(9,14,22,0.96))]">
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[rgba(110,231,183,0.74)]">
+        <Card className="min-w-0 border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)]">
+          <div className={sectionLabelClass}>
             Guided definition
           </div>
           <div className="mt-4 grid gap-4 md:grid-cols-3">
-            <div className="rounded-[22px] bg-white/[0.04] px-4 py-4">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+            <div className={metricCardClass}>
+              <div className={metricLabelClass}>
                 Flow
               </div>
-              <div className="mt-2 text-sm text-white/84">
+              <div className={metricValueClass}>
                 {instrument.presentationMode.replaceAll("_", " ")}
               </div>
             </div>
-            <div className="rounded-[22px] bg-white/[0.04] px-4 py-4">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+            <div className={metricCardClass}>
+              <div className={metricLabelClass}>
                 Response style
               </div>
-              <div className="mt-2 text-sm text-white/84">
+              <div className={metricValueClass}>
                 {instrument.responseStyle.replaceAll("_", " ")}
               </div>
             </div>
-            <div className="rounded-[22px] bg-white/[0.04] px-4 py-4">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+            <div className={metricCardClass}>
+              <div className={metricLabelClass}>
                 Version
               </div>
-              <div className="mt-2 text-sm text-white/84">
+              <div className={metricValueClass}>
                 {instrument.currentVersionNumber ? `v${instrument.currentVersionNumber}` : "Draft"}
               </div>
             </div>
@@ -119,27 +206,27 @@ export function PsycheQuestionnaireDetailPage() {
 
           {version ? (
             <>
-              <p className="mt-5 text-sm leading-6 text-white/62">
+              <p className="mt-5 break-words text-sm leading-6 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
                 {version.definition.instructions}
               </p>
               <div className="mt-5 grid gap-3">
                 {version.definition.sections.map((section) => (
                   <div
                     key={section.id}
-                    className="rounded-[22px] border border-white/8 bg-white/[0.03] px-4 py-4"
+                    className="min-w-0 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-4"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-medium text-white">
+                      <div className="min-w-0">
+                        <div className="break-words text-sm font-medium text-[var(--ui-ink-strong)] [overflow-wrap:anywhere]">
                           {section.title}
                         </div>
                         {section.description ? (
-                          <div className="mt-1 text-sm text-white/54">
+                          <div className="mt-1 break-words text-sm text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
                             {section.description}
                           </div>
                         ) : null}
                       </div>
-                      <Badge className="bg-white/[0.08] text-white/78">
+                      <Badge className="shrink-0 border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                         {section.itemIds.length} items
                       </Badge>
                     </div>
@@ -151,19 +238,22 @@ export function PsycheQuestionnaireDetailPage() {
         </Card>
 
         <div className="grid gap-4">
-          <Card className="bg-[linear-gradient(180deg,rgba(17,25,34,0.98),rgba(10,15,24,0.96))]">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/42">
+          <Card className="min-w-0 border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)]">
+            <div className={sectionLabelClass}>
               Provenance
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
-              <Badge className="bg-[rgba(125,211,252,0.12)] text-sky-100/88">
+              <Badge className="border border-[var(--ui-border-subtle)] bg-[var(--ui-info-soft)] text-[color-mix(in_srgb,var(--info)_76%,var(--ui-ink-strong)_24%)]">
                 {instrument.sourceClass.replaceAll("_", " ")}
               </Badge>
-              <Badge className="bg-[rgba(192,193,255,0.12)] text-white/84">
+              <Badge className="border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                 {instrument.availability.replaceAll("_", " ")}
               </Badge>
               {instrument.symptomDomains.map((domain) => (
-                <Badge key={domain} className="bg-white/[0.06] text-white/72">
+                <Badge
+                  key={domain}
+                  className="max-w-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]"
+                >
                   {domain}
                 </Badge>
               ))}
@@ -177,12 +267,12 @@ export function PsycheQuestionnaireDetailPage() {
                     href={source.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="rounded-[20px] border border-white/8 bg-white/[0.03] px-4 py-4 transition hover:bg-white/[0.05]"
+                    className={detailLinkClass}
                   >
-                    <div className="text-sm font-medium text-white">
+                    <div className="break-words text-sm font-medium text-[var(--ui-ink-strong)] [overflow-wrap:anywhere]">
                       {source.label}
                     </div>
-                    <div className="mt-2 text-sm leading-6 text-white/56">
+                    <div className="mt-2 break-words text-sm leading-6 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
                       {source.citation}
                     </div>
                   </a>
@@ -191,8 +281,8 @@ export function PsycheQuestionnaireDetailPage() {
             ) : null}
           </Card>
 
-          <Card className="bg-[linear-gradient(180deg,rgba(15,23,33,0.98),rgba(9,15,23,0.96))]">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/42">
+          <Card className="min-w-0 border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)]">
+            <div className={sectionLabelClass}>
               History over time
             </div>
             {instrument.history.length === 0 ? (
@@ -205,62 +295,29 @@ export function PsycheQuestionnaireDetailPage() {
               </div>
             ) : (
               <>
-                <div className="mt-4 h-56">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={[...instrument.history].reverse()}>
-                      <XAxis
-                        dataKey="completedAt"
-                        tickFormatter={(value) =>
-                          new Date(value).toLocaleDateString(undefined, {
-                            month: "short",
-                            day: "numeric"
-                          })
-                        }
-                        stroke="rgba(255,255,255,0.38)"
-                      />
-                      <YAxis stroke="rgba(255,255,255,0.38)" />
-                      <Tooltip
-                        contentStyle={{
-                          background: "rgba(10,15,24,0.96)",
-                          border: "1px solid rgba(255,255,255,0.08)",
-                          borderRadius: 18
-                        }}
-                        labelFormatter={(value) =>
-                          new Date(String(value)).toLocaleString()
-                        }
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="primaryScore"
-                        stroke="rgba(110,231,183,0.95)"
-                        strokeWidth={3}
-                        dot={{ r: 4 }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
+                <HistorySparkline history={instrument.history} />
                 <div className="mt-4 grid gap-3">
                   {instrument.history.slice(0, 5).map((entry) => (
                     <Link
                       key={entry.runId}
                       to={`/psyche/questionnaire-runs/${entry.runId}`}
-                      className="rounded-[20px] border border-white/8 bg-white/[0.03] px-4 py-4 transition hover:bg-white/[0.05]"
+                      className={detailLinkClass}
                     >
                       <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                          <div className="text-sm font-medium text-white">
+                        <div className="min-w-0">
+                          <div className="break-words text-sm font-medium text-[var(--ui-ink-strong)] [overflow-wrap:anywhere]">
                             {entry.primaryScoreLabel || "Primary score"}
                           </div>
-                          <div className="mt-1 text-sm text-white/56">
+                          <div className="mt-1 break-words text-sm text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
                             {new Date(entry.completedAt).toLocaleString()}
                           </div>
                         </div>
-                        <div className="text-right">
-                          <div className="text-lg font-semibold text-white">
+                        <div className="shrink-0 text-right">
+                          <div className="text-lg font-semibold text-[var(--ui-ink-strong)]">
                             {entry.primaryScore ?? "—"}
                           </div>
                           {entry.bandLabel ? (
-                            <div className="text-xs uppercase tracking-[0.16em] text-[rgba(110,231,183,0.78)]">
+                            <div className="max-w-[10rem] break-words text-xs uppercase tracking-[0.16em] text-[color-mix(in_srgb,var(--success)_76%,var(--ui-ink-strong)_24%)] [overflow-wrap:anywhere]">
                               {entry.bandLabel}
                             </div>
                           ) : null}

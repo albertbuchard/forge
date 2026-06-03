@@ -422,12 +422,12 @@ export function EntityNotesSurface({
     setDraft: (draft: LinkDraft) => void,
     optionsPrefix: string
   ) => (
-    <div className="rounded-[20px] bg-white/[0.03] p-4">
+    <div className="min-w-0 rounded-[20px] bg-[var(--ui-surface-1)] p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+        <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
           Linked entities
         </div>
-        <Badge className="bg-white/[0.08] text-white/68">
+        <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
           {links.length} linked
         </Badge>
       </div>
@@ -437,20 +437,20 @@ export function EntityNotesSurface({
           return (
             <div
               key={`${optionsPrefix}-${link.entityType}-${link.entityId}-${link.anchorKey ?? ""}`}
-              className="inline-flex items-center gap-2 rounded-full bg-white/[0.08] px-3 py-2 text-sm text-white/72"
+              className="inline-flex max-w-full items-center gap-2 rounded-full bg-[var(--ui-surface-2)] px-3 py-2 text-sm text-[var(--ui-ink-medium)]"
             >
-              <span>
+              <span className="min-w-0 break-words [overflow-wrap:anywhere]">
                 {formatEntityTypeLabel(link.entityType)} · {getLinkLabel(link)}
               </span>
               {link.anchorKey ? (
-                <span className="rounded-full bg-white/[0.08] px-2 py-0.5 text-[11px] text-white/54">
+                <span className="shrink-0 rounded-full bg-[var(--ui-surface-3)] px-2 py-0.5 text-[11px] text-[var(--ui-ink-soft)]">
                   {formatAnchorKeyLabel(link.anchorKey)}
                 </span>
               ) : null}
               <button
                 type="button"
                 disabled={!removable}
-                className="text-white/44 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+                className="shrink-0 text-[var(--ui-ink-faint)] transition hover:text-[var(--ui-ink-strong)] disabled:cursor-not-allowed disabled:opacity-30"
                 onClick={() =>
                   setLinks(
                     links.filter((candidate) => !sameLink(candidate, link))
@@ -466,7 +466,7 @@ export function EntityNotesSurface({
       </div>
       <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,11rem)_minmax(0,1fr)_auto]">
         <select
-          className="rounded-[14px] bg-white/[0.06] px-3 py-3 text-white"
+          className="rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-3 text-[var(--ui-ink-strong)] outline-none transition focus:border-[var(--ui-border-strong)]"
           value={draft.entityType}
           onChange={(event) =>
             setDraft({
@@ -503,7 +503,7 @@ export function EntityNotesSurface({
           ))}
         </select>
         <select
-          className="min-w-0 rounded-[14px] bg-white/[0.06] px-3 py-3 text-white"
+          className="min-w-0 rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-3 text-[var(--ui-ink-strong)] outline-none transition focus:border-[var(--ui-border-strong)]"
           value={draft.entityId}
           onChange={(event) =>
             setDraft({ ...draft, entityId: event.target.value })
@@ -514,11 +514,13 @@ export function EntityNotesSurface({
               ? "Choose linked item"
               : "No linked items available"}
           </option>
-          {(entityOptionsByType[draft.entityType] ?? []).map((option: { id: string; label: string }) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
+          {(entityOptionsByType[draft.entityType] ?? []).map(
+            (option: { id: string; label: string }) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            )
+          )}
         </select>
         <Button
           variant="secondary"
@@ -546,14 +548,14 @@ export function EntityNotesSurface({
       <div className={compact ? "p-4" : undefined}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
               {title}
             </div>
-            <div className="mt-2 text-sm leading-6 text-white/60">
+            <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
               {description}
             </div>
             {currentAnchorLabel ? (
-              <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-white/[0.05] px-3 py-2 text-xs text-white/64">
+              <div className="mt-3 inline-flex max-w-full items-center gap-2 rounded-full bg-[var(--ui-surface-1)] px-3 py-2 text-xs text-[var(--ui-ink-soft)]">
                 <span>Pinned to {currentAnchorLabel}</span>
                 {currentAnchorHelp ? (
                   <InfoTooltip
@@ -565,7 +567,7 @@ export function EntityNotesSurface({
             ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Badge className="bg-white/[0.08] text-white/72">
+            <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
               {formatNotesCountLabel(visibleNotes.length)}
             </Badge>
             {!composerOpen ? (
@@ -581,8 +583,8 @@ export function EntityNotesSurface({
           </div>
         </div>
 
-        <div className="mt-4 flex items-center gap-2 rounded-[22px] border border-white/8 bg-white/[0.04] px-3 py-3">
-          <Search className="size-4 text-white/34" />
+        <div className="mt-4 flex items-center gap-2 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-3">
+          <Search className="size-4 text-[var(--ui-ink-faint)]" />
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -592,9 +594,9 @@ export function EntityNotesSurface({
         </div>
 
         {composerOpen ? (
-          <div className="mt-4 rounded-[24px] border border-white/8 bg-white/[0.04] p-4">
+          <div className="mt-4 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-sm text-white/70">
+              <div className="flex items-center gap-2 text-sm text-[var(--ui-ink-medium)]">
                 <Plus className="size-4 text-[var(--secondary)]" />
                 Add note
               </div>
@@ -611,15 +613,15 @@ export function EntityNotesSurface({
             </div>
             <div className="mt-3">
               {composerPreviewOpen ? (
-                <div className="rounded-[20px] bg-[rgba(9,14,25,0.78)] p-4">
-                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                <div className="rounded-[20px] bg-[var(--ui-surface-2)] p-4">
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                     Preview
                   </div>
                   <div className="mt-3">
                     {composerValue.trim() ? (
                       <NoteMarkdown markdown={composerValue} />
                     ) : (
-                      <div className="text-sm leading-6 text-white/42">
+                      <div className="text-sm leading-6 text-[var(--ui-ink-faint)]">
                         Markdown preview appears here once you have note
                         content.
                       </div>
@@ -659,12 +661,12 @@ export function EntityNotesSurface({
             </div>
             <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
               <NoteTagsInput value={composerTags} onChange={setComposerTags} />
-              <div className="grid gap-3 rounded-[20px] bg-white/[0.03] p-4">
+              <div className="grid gap-3 rounded-[20px] bg-[var(--ui-surface-1)] p-4">
                 <div>
-                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                     Ephemeral auto-destroy
                   </div>
-                  <div className="mt-2 text-xs leading-5 text-white/46">
+                  <div className="mt-2 text-xs leading-5 text-[var(--ui-ink-faint)]">
                     Set an exact destroy time or a relative delay. Leaving both
                     blank keeps the note durable.
                   </div>
@@ -687,7 +689,7 @@ export function EntityNotesSurface({
                     placeholder="Destroy after"
                   />
                   <select
-                    className="rounded-[14px] border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white"
+                    className="rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-3 text-sm text-[var(--ui-ink-strong)] outline-none transition focus:border-[var(--ui-border-strong)]"
                     value={composerDestroyDelayUnit}
                     onChange={(event) =>
                       setComposerDestroyDelayUnit(
@@ -736,12 +738,12 @@ export function EntityNotesSurface({
 
         <div className="mt-4 grid gap-3">
           {notesQuery.isLoading ? (
-            <div className="rounded-[20px] bg-white/[0.04] p-4 text-sm text-white/56">
+            <div className="rounded-[20px] bg-[var(--ui-surface-1)] p-4 text-sm text-[var(--ui-ink-soft)]">
               Loading notes…
             </div>
           ) : null}
           {!notesQuery.isLoading && visibleNotes.length === 0 ? (
-            <div className="rounded-[20px] bg-white/[0.04] p-4 text-sm text-white/56">
+            <div className="rounded-[20px] bg-[var(--ui-surface-1)] p-4 text-sm text-[var(--ui-ink-soft)]">
               No notes are linked here yet.
             </div>
           ) : null}
@@ -755,11 +757,11 @@ export function EntityNotesSurface({
             return (
               <article
                 key={note.id}
-                className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4"
+                className="min-w-0 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="text-xs uppercase tracking-[0.16em] text-white/38">
+                    <div className="break-words text-xs uppercase tracking-[0.16em] text-[var(--ui-ink-faint)] [overflow-wrap:anywhere]">
                       {(note.author ?? "Unknown author").toString()} •{" "}
                       {new Date(note.updatedAt).toLocaleString()}
                     </div>
@@ -767,7 +769,7 @@ export function EntityNotesSurface({
                       {linkedElsewhere.map((link) => (
                         <Badge
                           key={`${note.id}-${link.entityType}-${link.entityId}-${link.anchorKey ?? ""}`}
-                          className="bg-white/[0.08] text-white/68"
+                          className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]"
                           wrap
                         >
                           {formatEntityTypeLabel(link.entityType)} ·{" "}
@@ -780,14 +782,17 @@ export function EntityNotesSurface({
                       {(note.tags ?? []).map((tag) => (
                         <Badge
                           key={`${note.id}-tag-${tag}`}
-                          className="bg-cyan-400/10 text-cyan-50"
+                          className="bg-[var(--ui-info-soft)] text-[color-mix(in_srgb,var(--info)_78%,var(--ui-ink-strong)_22%)]"
                           wrap
                         >
                           {tag}
                         </Badge>
                       ))}
                       {note.destroyAt ? (
-                        <Badge className="bg-amber-400/10 text-amber-100" wrap>
+                        <Badge
+                          className="bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]"
+                          wrap
+                        >
                           Ephemeral · deletes{" "}
                           {new Date(note.destroyAt).toLocaleString()}
                         </Badge>
@@ -797,7 +802,7 @@ export function EntityNotesSurface({
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      className="inline-flex size-9 items-center justify-center rounded-full bg-white/[0.06] text-white/60 transition hover:bg-white/[0.1] hover:text-white"
+                      className="inline-flex size-9 items-center justify-center rounded-full bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                       onClick={() => {
                         setEditingNoteId(note.id);
                         setEditingValue(note.contentMarkdown);
@@ -819,7 +824,7 @@ export function EntityNotesSurface({
                     </button>
                     <button
                       type="button"
-                      className="inline-flex size-9 items-center justify-center rounded-full bg-rose-500/10 text-rose-200 transition hover:bg-rose-500/16"
+                      className="inline-flex size-9 items-center justify-center rounded-full bg-[var(--ui-danger-soft)] text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)] transition hover:bg-[color-mix(in_srgb,var(--danger)_18%,var(--ui-surface-hover)_82%)]"
                       onClick={() => {
                         void deleteMutation.mutateAsync(note.id);
                       }}
@@ -847,15 +852,15 @@ export function EntityNotesSurface({
                     </div>
                     <div className="mt-3">
                       {editingPreviewOpen ? (
-                        <div className="rounded-[20px] bg-[rgba(9,14,25,0.78)] p-4">
-                          <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                        <div className="rounded-[20px] bg-[var(--ui-surface-2)] p-4">
+                          <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                             Preview
                           </div>
                           <div className="mt-3">
                             {editingValue.trim() ? (
                               <NoteMarkdown markdown={editingValue} />
                             ) : (
-                              <div className="text-sm text-white/42">
+                              <div className="text-sm text-[var(--ui-ink-faint)]">
                                 No content yet.
                               </div>
                             )}
@@ -876,12 +881,12 @@ export function EntityNotesSurface({
                         value={editingTags}
                         onChange={setEditingTags}
                       />
-                      <div className="grid gap-3 rounded-[20px] bg-white/[0.03] p-4">
+                      <div className="grid gap-3 rounded-[20px] bg-[var(--ui-surface-1)] p-4">
                         <div>
-                          <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                          <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                             Ephemeral auto-destroy
                           </div>
-                          <div className="mt-2 text-xs leading-5 text-white/46">
+                          <div className="mt-2 text-xs leading-5 text-[var(--ui-ink-faint)]">
                             Set an exact destroy time or a relative delay.
                             Leaving both blank keeps the note durable.
                           </div>
@@ -904,7 +909,7 @@ export function EntityNotesSurface({
                             placeholder="Destroy after"
                           />
                           <select
-                            className="rounded-[14px] border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white"
+                            className="rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-3 text-sm text-[var(--ui-ink-strong)] outline-none transition focus:border-[var(--ui-border-strong)]"
                             value={editingDestroyDelayUnit}
                             onChange={(event) =>
                               setEditingDestroyDelayUnit(

@@ -50,7 +50,7 @@ export type NutritionFoodLogInput = {
   enjoymentScore?: number | null;
   socialContext?: string | null;
   locationContext?: string | null;
-  notes?: string | null;
+  notes?: string;
   items: NutritionMealItemInput[];
 };
 
@@ -215,9 +215,10 @@ export type NutritionExperimentInput = {
   successCriteria?: string | null;
 };
 
-export type NutritionExperimentPatchInput = Partial<NutritionExperimentInput> & {
-  conclusion?: string | null;
-};
+export type NutritionExperimentPatchInput =
+  Partial<NutritionExperimentInput> & {
+    conclusion?: string | null;
+  };
 
 export type WeightLossViewData = {
   userId: string;
@@ -250,7 +251,10 @@ export type WeightLossViewData = {
       caffeineMg: number;
       alcoholGrams: number;
     };
+    plannedTargetCalories: number;
     targetCalories: number;
+    activeAdjustmentCalories: number;
+    activeCaloriesSource: string;
     calorieDelta: number;
     proteinCoverage: number | null;
     fiberCoverage: number | null;
@@ -259,8 +263,58 @@ export type WeightLossViewData = {
   recentMeals: NutritionFoodLog[];
   bodyCheckins: Array<Record<string, unknown>>;
   appearanceCheckins: Array<Record<string, unknown>>;
-  energyModel: Record<string, unknown>;
-  weightTrend: Record<string, unknown>;
+  energyModel: {
+    activeEnergyCalories: number | null;
+    restingEnergyCalories: number | null;
+    wearableConfidence: string;
+    inferredTdee: number | null;
+    estimatedTdeeKcal: number | null;
+    activeBurnKcal: number | null;
+    baselineActiveCaloriesKcal: number;
+    todayActiveCaloriesKcal: number;
+    todayObservedActiveCaloriesKcal: number | null;
+    todayActiveCaloriesSource: string;
+    todayTargetAdjustmentKcal: number;
+    todayWorkoutEnergyKcal: number | null;
+    todayMovementCaloriesKcal: number | null;
+    todayHealthKitActiveCaloriesKcal: number | null;
+    todayStepCount: number | null;
+    todayStepEstimatedCaloriesKcal: number | null;
+    todayActiveOverride: {
+      id: string;
+      userId: string;
+      dayKey: string;
+      activeCaloriesKcal: number;
+      notes: string;
+      createdAt: string;
+      updatedAt: string;
+    } | null;
+    movementCaloriesKcal: number | null;
+    workoutEnergyKcal: number | null;
+    averageCalorieIntake: number;
+    currentDeficitEstimate: number | null;
+    estimatedDailyEnergyBalanceKcal: number | null;
+    energySourceConfidence: string;
+    evidenceDays: number;
+    exerciseMinutesAverage: number | null;
+    stepCountAverage: number | null;
+    sourceAvailability: {
+      healthKitDailyEnergy: boolean;
+      movementTripCalories: boolean;
+      workoutEnergy: boolean;
+    };
+  };
+  weightTrend: {
+    latestWeightKg: number | null;
+    latestCheckedAt: string | null;
+    latestWeightSource: string | null;
+    deltaFromPreviousKg: number | null;
+    deltaFromFirstKg: number | null;
+    trendWeightKg: number | null;
+    weeklyRateKg: number | null;
+    sevenDayRateKg: number | null;
+    waistToHeightRatio: number | null;
+  };
   foodQuality: Record<string, unknown>;
   trainingFuel: Record<string, unknown>;
   subjective: Record<string, unknown>;

@@ -62,7 +62,7 @@ export function WeightLossExperimentsPanel({
   return (
     <Card className="grid content-start gap-4 border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-5">
       <div className="flex items-center gap-3">
-        <div className="rounded-2xl bg-[color-mix(in_srgb,#06b6d4_16%,transparent)] p-2.5 text-[color-mix(in_srgb,#06b6d4_78%,var(--ui-ink-strong)_22%)]">
+        <div className="rounded-2xl bg-[var(--ui-info-soft)] p-2.5 text-[color-mix(in_srgb,var(--info)_78%,var(--ui-ink-strong)_22%)]">
           <FlaskConical className="size-5" />
         </div>
         <div>

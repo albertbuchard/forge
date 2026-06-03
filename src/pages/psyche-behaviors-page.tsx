@@ -59,6 +59,7 @@ import {
   formatOwnedEntityOptionLabel,
   getSingleSelectedUserId
 } from "@/lib/user-ownership";
+import { cn } from "@/lib/utils";
 
 const DEFAULT_BEHAVIOR_INPUT: BehaviorInput = {
   kind: "away",
@@ -435,7 +436,12 @@ export function PsycheBehaviorsPage() {
                 <button
                   key={kind}
                   type="button"
-                  className={`rounded-[22px] border px-4 py-4 text-left transition ${value.kind === kind ? "border-white/20 bg-white/[0.12] text-white" : "border-white/8 bg-white/[0.04] text-white/62 hover:bg-white/[0.07]"}`}
+                  className={cn(
+                    "rounded-[8px] border px-4 py-4 text-left transition",
+                    value.kind === kind
+                      ? "border-[color-mix(in_srgb,var(--primary)_40%,var(--ui-border-subtle)_60%)] bg-[color-mix(in_srgb,var(--primary)_12%,var(--ui-surface-1)_88%)] text-[var(--ui-ink-strong)]"
+                      : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
+                  )}
                   onClick={() => setValue({ kind })}
                 >
                   {kindTitleMap[kind]}
@@ -655,10 +661,10 @@ export function PsycheBehaviorsPage() {
           {(["away", "committed", "recovery"] as const).map((kind) => (
             <div
               key={kind}
-              className="grid gap-3 rounded-[24px] bg-white/[0.04] p-4"
+              className="grid min-w-0 gap-3 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4"
             >
               <div className="flex items-center justify-between gap-3">
-                <div className="font-medium text-white">
+                <div className="font-medium text-[var(--ui-ink-strong)]">
                   {kindTitleMap[kind]}
                 </div>
                 <Badge>{grouped[kind].length}</Badge>
@@ -689,11 +695,14 @@ export function PsycheBehaviorsPage() {
                   <div
                     key={behavior.id}
                     data-psyche-focus-id={behavior.id}
-                    className={`rounded-[22px] border border-white/8 bg-white/[0.04] p-4 text-left transition hover:bg-white/[0.08] ${psycheFocusClass(focusedBehaviorId === behavior.id)}`}
+                    className={cn(
+                      "min-w-0 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4 text-left transition hover:bg-[var(--ui-surface-hover)]",
+                      psycheFocusClass(focusedBehaviorId === behavior.id)
+                    )}
                   >
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="flex flex-wrap items-center gap-2">
-                        <div className="font-medium text-white">
+                        <div className="font-medium text-[var(--ui-ink-strong)]">
                           {behavior.title}
                         </div>
                         {behavior.user ? (
@@ -725,10 +734,10 @@ export function PsycheBehaviorsPage() {
                         </Button>
                       </div>
                     </div>
-                    <div className="mt-2 text-sm leading-6 text-white/58">
+                    <div className="mt-2 break-words text-sm leading-6 text-[var(--ui-ink-soft)]">
                       {behavior.description}
                     </div>
-                    <div className="mt-3 text-sm text-white/46">
+                    <div className="mt-3 break-words text-sm text-[var(--ui-ink-faint)]">
                       {behavior.replacementMove ||
                         behavior.repairPlan ||
                         "No recovery step recorded yet."}
