@@ -277,6 +277,7 @@ const mealItemInputSchema = z.preprocess(
     id: z.string().trim().min(1).optional(),
     foodId: z.string().trim().min(1).nullable().optional(),
     name: z.string().trim().min(1),
+    brand: z.string().trim().nullable().optional(),
     quantity: z.coerce.number().positive().default(1),
     unit: z.string().trim().min(1).default("serving"),
     grams: optionalNumberSchema,
@@ -295,6 +296,40 @@ const mealItemInputSchema = z.preprocess(
     confidence: z.coerce.number().min(0).max(1).default(0.65)
   })
 );
+
+type MealItemInput = z.infer<typeof mealItemInputSchema>;
+
+const requiredNutritionFields = [
+  "calories",
+  "proteinGrams",
+  "carbohydrateGrams",
+  "fatGrams"
+] as const;
+
+function hasNutritionValue(
+  value: number | null | undefined
+): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function missingRequiredNutritionFields(input: MealItemInput) {
+  return requiredNutritionFields.filter(
+    (field) => !hasNutritionValue(input[field])
+  );
+}
+
+function nutritionRequirementError(path: Array<string | number>, name: string) {
+  return new z.ZodError([
+    {
+      code: z.ZodIssueCode.custom,
+      path,
+      message:
+        `Food item "${name}" must include calories, proteinGrams, ` +
+        "carbohydrateGrams, and fatGrams. Search Forge/public nutrition " +
+        "sources first, or add a custom food only after researching those facts."
+    }
+  ]);
+}
 
 export const nutritionFoodSearchSchema = z.object({
   query: z.string().trim().min(1),
@@ -972,6 +1007,118 @@ function mapFood(row: FoodCatalogRow) {
   };
 }
 
+function getFoodCatalogById(foodId: string) {
+  const row = getDatabase()
+    .prepare(`SELECT * FROM nutrition_food_catalog WHERE id = ?`)
+    .get(foodId) as FoodCatalogRow | undefined;
+  return row ? mapFood(row) : null;
+}
+
+function normalizeCustomFoodToken(value: string | null | undefined) {
+  return (value ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function customFoodServingKey(input: MealItemInput) {
+  if (hasNutritionValue(input.grams) && input.grams > 0) {
+    return `${round(input.grams, 1)}g`;
+  }
+  return `${round(input.quantity, 3)}-${normalizeCustomFoodToken(input.unit) || "serving"}`;
+}
+
+function customFoodSourceId(input: MealItemInput) {
+  const nameKey = normalizeCustomFoodToken(input.name);
+  const brandKey = normalizeCustomFoodToken(input.brand ?? "");
+  return [nameKey, brandKey, customFoodServingKey(input)]
+    .filter(Boolean)
+    .join(":");
+}
+
+function cacheCustomFood(input: MealItemInput) {
+  return cacheFood({
+    source: "custom",
+    sourceId: customFoodSourceId(input),
+    name: input.name,
+    brand: input.brand ?? "",
+    servingLabel:
+      input.unit && input.unit !== "serving"
+        ? `${input.quantity} ${input.unit}`
+        : "1 serving",
+    servingGrams: input.grams ?? null,
+    calories: input.calories,
+    proteinGrams: input.proteinGrams,
+    carbohydrateGrams: input.carbohydrateGrams,
+    fatGrams: input.fatGrams,
+    fiberGrams: input.fiberGrams ?? null,
+    sugarGrams: input.sugarGrams ?? null,
+    sodiumMg: input.sodiumMg ?? null,
+    potassiumMg: input.potassiumMg ?? null,
+    tags: Array.from(new Set(["custom", ...input.tags])),
+    nutrients: {
+      ...input.nutrients,
+      customFood: true,
+      nutritionBasis: "agent_or_user_supplied"
+    },
+    confidence: input.confidence
+  });
+}
+
+function resolveMealItemForInsert(
+  input: MealItemInput,
+  options: { cacheConfirmedCustomFood: boolean }
+) {
+  let item = input;
+  if (input.foodId) {
+    const food = getFoodCatalogById(input.foodId);
+    if (!food) {
+      throw new z.ZodError([
+        {
+          code: z.ZodIssueCode.custom,
+          path: ["items", "foodId"],
+          message: `Food catalog item ${input.foodId} was not found. Search foods again before logging.`
+        }
+      ]);
+    }
+    item = {
+      ...input,
+      name: input.name || food.name,
+      calories: input.calories ?? food.calories ?? undefined,
+      proteinGrams: input.proteinGrams ?? food.proteinGrams ?? undefined,
+      carbohydrateGrams:
+        input.carbohydrateGrams ?? food.carbohydrateGrams ?? undefined,
+      fatGrams: input.fatGrams ?? food.fatGrams ?? undefined,
+      fiberGrams: input.fiberGrams ?? food.fiberGrams ?? undefined,
+      sugarGrams: input.sugarGrams ?? food.sugarGrams ?? undefined,
+      sodiumMg: input.sodiumMg ?? food.sodiumMg ?? undefined,
+      potassiumMg: input.potassiumMg ?? food.potassiumMg ?? undefined,
+      caffeineMg: input.caffeineMg ?? food.caffeineMg ?? undefined,
+      alcoholGrams: input.alcoholGrams ?? food.alcoholGrams ?? undefined,
+      nutrients:
+        Object.keys(input.nutrients).length > 0
+          ? input.nutrients
+          : food.nutrients,
+      confidence: input.confidence ?? food.confidence
+    };
+  }
+
+  const missing = missingRequiredNutritionFields(item);
+  if (missing.length > 0) {
+    throw nutritionRequirementError(["items"], item.name);
+  }
+
+  if (!item.foodId && options.cacheConfirmedCustomFood) {
+    const customFood = cacheCustomFood(item);
+    item = { ...item, foodId: customFood.id };
+  }
+
+  return item;
+}
+
 function mapItem(row: MealItemRow) {
   return {
     id: row.id,
@@ -1124,10 +1271,12 @@ function listFoodLogs(userId: string, limit = 120) {
 
 function insertMealItem(
   logId: string,
-  input: z.infer<typeof mealItemInputSchema>
+  input: MealItemInput,
+  options: { cacheConfirmedCustomFood: boolean }
 ) {
+  const item = resolveMealItemForInsert(input, options);
   const now = nowIso();
-  const id = input.id ?? newId("meal_item");
+  const id = item.id ?? newId("meal_item");
   getDatabase()
     .prepare(
       `INSERT INTO nutrition_meal_items (
@@ -1140,27 +1289,67 @@ function insertMealItem(
     .run(
       id,
       logId,
-      input.foodId ?? null,
-      input.name,
-      input.quantity,
-      input.unit,
-      input.grams ?? null,
-      input.calories ?? null,
-      input.proteinGrams ?? null,
-      input.carbohydrateGrams ?? null,
-      input.fatGrams ?? null,
-      input.fiberGrams ?? null,
-      input.sugarGrams ?? null,
-      input.sodiumMg ?? null,
-      input.potassiumMg ?? null,
-      input.caffeineMg ?? null,
-      input.alcoholGrams ?? null,
-      jsonString(input.tags),
-      jsonString(input.nutrients),
-      input.confidence,
+      item.foodId ?? null,
+      item.name,
+      item.quantity,
+      item.unit,
+      item.grams ?? null,
+      item.calories ?? null,
+      item.proteinGrams ?? null,
+      item.carbohydrateGrams ?? null,
+      item.fatGrams ?? null,
+      item.fiberGrams ?? null,
+      item.sugarGrams ?? null,
+      item.sodiumMg ?? null,
+      item.potassiumMg ?? null,
+      item.caffeineMg ?? null,
+      item.alcoholGrams ?? null,
+      jsonString(item.tags),
+      jsonString(item.nutrients),
+      item.confidence,
       now,
       now
     );
+}
+
+function cacheConfirmedCustomMealItems(logId: string) {
+  const rows = readMealItems([logId]).get(logId) ?? [];
+  for (const row of rows) {
+    if (row.food_id) {
+      continue;
+    }
+    const item = resolveMealItemForInsert(
+      {
+        id: row.id,
+        foodId: null,
+        name: row.name,
+        quantity: row.quantity,
+        unit: row.unit,
+        grams: row.grams ?? undefined,
+        calories: row.calories ?? undefined,
+        proteinGrams: row.protein_grams ?? undefined,
+        carbohydrateGrams: row.carbohydrate_grams ?? undefined,
+        fatGrams: row.fat_grams ?? undefined,
+        fiberGrams: row.fiber_grams ?? undefined,
+        sugarGrams: row.sugar_grams ?? undefined,
+        sodiumMg: row.sodium_mg ?? undefined,
+        potassiumMg: row.potassium_mg ?? undefined,
+        caffeineMg: row.caffeine_mg ?? undefined,
+        alcoholGrams: row.alcohol_grams ?? undefined,
+        tags: parseJson<string[]>(row.tags_json, []),
+        nutrients: parseJson<JsonRecord>(row.nutrients_json, {}),
+        confidence: row.confidence
+      },
+      { cacheConfirmedCustomFood: true }
+    );
+    getDatabase()
+      .prepare(
+        `UPDATE nutrition_meal_items
+         SET food_id = ?, updated_at = ?
+         WHERE id = ?`
+      )
+      .run(item.foodId ?? null, nowIso(), row.id);
+  }
 }
 
 export function createNutritionFoodLog(input: unknown) {
@@ -1199,7 +1388,9 @@ export function createNutritionFoodLog(input: unknown) {
         now
       );
     for (const item of parsed.items) {
-      insertMealItem(id, item);
+      insertMealItem(id, item, {
+        cacheConfirmedCustomFood: parsed.confirmationState === "confirmed"
+      });
     }
   });
   return getNutritionFoodLogById(id)!;
@@ -1213,6 +1404,8 @@ export function patchNutritionFoodLog(logId: string, input: unknown) {
   }
   const nextLoggedAt = parsed.loggedAt ?? existing.loggedAt;
   const nextDayKey = normalizeDayKey(parsed.dayKey, nextLoggedAt);
+  const nextConfirmationState =
+    parsed.confirmationState ?? existing.confirmationState;
   const now = nowIso();
   runInTransaction(() => {
     getDatabase()
@@ -1228,7 +1421,7 @@ export function patchNutritionFoodLog(logId: string, input: unknown) {
         nextLoggedAt,
         parsed.mealLabel ?? existing.mealLabel,
         parsed.source ?? existing.source,
-        parsed.confirmationState ?? existing.confirmationState,
+        nextConfirmationState,
         parsed.notes ?? existing.notes,
         parsed.placeId !== undefined ? parsed.placeId : existing.placeId,
         parsed.stayId !== undefined ? parsed.stayId : existing.stayId,
@@ -1246,8 +1439,12 @@ export function patchNutritionFoodLog(logId: string, input: unknown) {
         .prepare(`DELETE FROM nutrition_meal_items WHERE log_id = ?`)
         .run(logId);
       for (const item of parsed.items) {
-        insertMealItem(logId, item);
+        insertMealItem(logId, item, {
+          cacheConfirmedCustomFood: nextConfirmationState === "confirmed"
+        });
       }
+    } else if (nextConfirmationState === "confirmed") {
+      cacheConfirmedCustomMealItems(logId);
     }
   });
   return getNutritionFoodLogById(logId)!;

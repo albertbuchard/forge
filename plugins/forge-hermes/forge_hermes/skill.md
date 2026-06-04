@@ -277,6 +277,12 @@ When Hermes is trying to find the right wiki record, use these search patterns:
 6. Use the health tools for sleep, sports, training load, weight loss, nutrition, gut, subjective-energy, and appearance review:
    `forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_get_training_load_overview`, `forge_get_weight_loss_overview`, `forge_update_sleep_session`, `forge_update_workout_session`, `forge_search_foods`, `forge_search_nutrition_foods`, `forge_lookup_nutrition_barcode`, `forge_log_food`, `forge_parse_food_log_with_chatgpt`, `forge_log_body_checkin`, `forge_log_appearance_checkin`, `forge_log_subjective_food_effect`, `forge_log_gut_checkin`, `forge_get_nutrition_patterns`, `forge_start_nutrition_experiment`, `forge_update_nutrition_experiment`.
    Food parsing must use Forge's configured `openai-codex` ChatGPT subscription connection, not a metered OpenAI Platform API path.
+   For food logging, search Forge's nutrition catalog first and pass a matching
+   result as `item.foodId` to `forge_log_food`. If no result matches and a custom
+   food is needed, research calories plus protein, carbohydrate, and fat on the
+   internet or another reliable public nutrition source before logging it.
+   Custom/no-`foodId` items must include `caloriesKcal`, `proteinG`, `carbsG`,
+   and `fatG`; do not save name-only custom foods.
 7. Movement, Life Force, and Workbench are specialized Forge API surfaces rather than simple batch entities. When Hermes needs those domains, read `forge_get_agent_onboarding`, choose the route from `entityRouteModel.specializedDomainSurfaces`, and use `forge_call_movement_route`, `forge_call_life_force_route`, or `forge_call_workbench_route` when the route-key tools are available.
 8. Treat narrow calendar helpers as convenience helpers, not the default architecture:
    `forge_create_work_block_template` and `forge_create_task_timebox` are fine, but Hermes should still prefer the generic batch entity routes when practical.

@@ -251,6 +251,8 @@ Nutrition targets must include all macros plus a detailed daily vitamin, mineral
 
 The insight layer must connect food to Forge context: workouts, movement places, sleep, vitals, Psyche observations, notes, calendar events, projects/tasks, energy, focus, cravings, gut symptoms, and private user-defined appearance metrics. AI food parsing uses the existing ChatGPT/Codex OAuth path, stores candidates as unconfirmed until accepted, and must not default to OpenAI Platform API billing.
 
+Food logging must preserve reusable nutrition facts instead of creating name-only meal fragments. Forge keeps a local nutrition food catalog that includes public-source cache entries and user custom foods. Agents and UI flows should search that catalog before logging; when a match exists, they pass the catalog `foodId` into the food log so the same food can be reused. If no match exists, a custom food may be created only with at least calories plus protein, carbohydrate, and fat for the stated serving. Agents should research those nutrition facts from reliable internet or public nutrition sources before saving a custom food when the user does not provide them.
+
 ### 13. Gamification Achievement Contract
 
 - Trophies are permanent achievements earned from meaningful Forge behavior, not decorative XP badges.

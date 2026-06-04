@@ -4290,6 +4290,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
       "Ask whether the question is fat-loss pace, food intake, protein/fiber sufficiency, sport fuel, visual look, water retention, cravings, gut comfort, energy, or one meal reaction.",
       "Use forge_get_weight_loss_overview before asking the user to reconstruct recent food, weight, workouts, or subjective state from memory.",
       "Use forge_parse_food_log_with_chatgpt only for rough meal text or photo descriptions through Forge's configured openai-codex ChatGPT subscription connection, not a metered OpenAI Platform API path.",
+      "Before forge_log_food, search foods or barcode lookup first; reuse a matching result with item.foodId, and create custom/no-foodId items only with researched calories, protein, carbohydrate, and fat.",
       "Use the dedicated nutrition tools for food logs, body check-ins, appearance check-ins, subjective food effects, gut check-ins, nutrition patterns, and N-of-1 experiments instead of generic batch CRUD.",
       "Ask for the one outcome metric that would make a nutrition experiment interpretable before turning repeated observations into a hypothesis."
     ]
@@ -5274,9 +5275,39 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     notes: [
       "The API path is /api/v1/health/weight-loss and the UI route is /weight-loss.",
       "Use the dedicated nutrition logging tools for food, body, appearance, subjective, gut, and experiment mutations.",
+      "Before logging a custom food, search the local/public nutrition catalog; if there is no match, research calories and macros from reliable internet nutrition sources before creating the custom item.",
       "Food parsing uses Forge's configured openai-codex ChatGPT subscription connection, not the metered OpenAI Platform API."
     ],
     example: '{"userIds":["user_operator"]}'
+  },
+  {
+    toolName: "forge_search_foods | forge_search_nutrition_foods",
+    summary:
+      "Search Forge's local custom/cache database plus Open Food Facts and USDA-backed public nutrition sources before logging a food item.",
+    whenToUse:
+      "Use before forge_log_food whenever the user names a food, brand, meal component, or custom food that might already exist.",
+    inputShape: "{ query: string, limit?: number, userIds?: string[] }",
+    requiredFields: ["query"],
+    notes: [
+      "Reuse a returned food by passing its id as item.foodId to forge_log_food.",
+      "The local results include custom foods previously added to Forge, so this prevents duplicate custom-food records.",
+      "If no result is good enough, research nutrition facts on the internet before creating a custom item."
+    ],
+    example: '{"query":"Greek yogurt 2%","limit":5}'
+  },
+  {
+    toolName: "forge_lookup_nutrition_barcode",
+    summary:
+      "Lookup a packaged food by barcode before logging it, using Forge's nutrition catalog adapters.",
+    whenToUse:
+      "Use when the user gives a barcode or a packaged-food photo/label includes one.",
+    inputShape: "{ barcode: string, userIds?: string[] }",
+    requiredFields: ["barcode"],
+    notes: [
+      "Reuse the returned food by passing its id as item.foodId to forge_log_food.",
+      "If barcode lookup fails, search by name and brand before creating a custom food."
+    ],
+    example: '{"barcode":"737628064502"}'
   },
   {
     toolName: "forge_parse_food_log_with_chatgpt",
@@ -5302,14 +5333,17 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     whenToUse:
       "Use for confirmed manual entries, search/barcode-selected foods, or corrected ChatGPT candidates.",
     inputShape:
-      "{ mealLabel?: string, loggedAt?: string, source?: string, confirmationState?: string, notes?: string, items: Array<{ name, quantity, unit?, caloriesKcal?, proteinG?, carbsG?, fatG?, fiberG?, tags? }>, userIds?: string[] }",
+      "{ mealLabel?: string, loggedAt?: string, source?: string, confirmationState?: string, notes?: string, items: Array<{ foodId?, name, quantity, unit?, caloriesKcal?, proteinG?, carbsG?, fatG?, fiberG?, tags? }>, userIds?: string[] }",
     requiredFields: ["items"],
     notes: [
+      "Always call forge_search_foods/forge_search_nutrition_foods or barcode lookup first and pass item.foodId when there is a good match.",
+      "If item.foodId is omitted, Forge creates or reuses a local custom food. Custom foods must include caloriesKcal, proteinG, carbsG, and fatG; name-only custom foods are rejected.",
+      "If the user does not know those nutrition facts, look them up on the internet from a reliable source before calling forge_log_food, or log a candidate only after estimating all four required values.",
       "Prefer confirmed entries when the user gave concrete amounts.",
       "Use candidate entries for rough estimates that need later correction."
     ],
     example:
-      '{"mealLabel":"post-workout","items":[{"name":"Greek yogurt","quantity":250,"unit":"g","caloriesKcal":180,"proteinG":25}]}'
+      '{"mealLabel":"post-workout","items":[{"foodId":"food_123","name":"Greek yogurt","quantity":250,"unit":"g"}]}'
   },
   {
     toolName:
@@ -5801,7 +5835,7 @@ function buildAgentOnboardingPayload(request: {
       workbench:
         "Workbench is Forge's graph-flow execution system. Treat flows, runs, published outputs, node results, and latest-node-output reads as a dedicated API family instead of a normal entity-batch surface.",
       weightLoss:
-        "Weight Loss is Forge's nutrition, body-composition, sport-fueling, appearance, gut-comfort, craving, and subjective-energy surface. Read it through the health overview route and use the dedicated nutrition tools for food logs, body check-ins, appearance check-ins, subjective effects, gut check-ins, and N-of-1 experiments instead of inventing batch CRUD records.",
+        "Weight Loss is Forge's nutrition, body-composition, sport-fueling, appearance, gut-comfort, craving, and subjective-energy surface. Read it through the health overview route and use the dedicated nutrition tools for food logs, reusable searched/custom food catalog entries, body check-ins, appearance check-ins, subjective effects, gut check-ins, and N-of-1 experiments instead of inventing batch CRUD records.",
       psyche:
         "Forge Psyche is the reflective domain for values, patterns, behaviors, beliefs, modes, flashcards, and trigger reports. It is sensitive and should be handled deliberately."
     },

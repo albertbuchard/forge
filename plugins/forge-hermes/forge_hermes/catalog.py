@@ -403,6 +403,7 @@ NOTE_INPUT = object_schema(
 
 NUTRITION_MEAL_ITEM = object_schema(
     {
+        "foodId": optional_nullable_string("Existing nutrition_food_catalog id from forge_search_foods/forge_search_nutrition_foods."),
         "name": {"type": "string", "minLength": 1},
         "brand": optional_nullable_string("Optional brand."),
         "quantity": {"type": "number", "minimum": 0},
@@ -423,8 +424,8 @@ NUTRITION_FOOD_LOG = object_schema(
         "userIds": array_schema({"type": "string"}, "Optional user ownership scope."),
         "loggedAt": optional_string("Optional ISO logged-at timestamp."),
         "mealLabel": optional_nullable_string("Optional meal label."),
-        "source": {"enum": ["manual", "barcode", "chatgpt", "photo", "import"]},
-        "confirmationState": {"enum": ["candidate", "confirmed", "corrected", "rejected"]},
+        "source": {"enum": ["manual", "search", "barcode", "chatgpt", "photo", "saved_meal"]},
+        "confirmationState": {"enum": ["candidate", "confirmed", "needs_review", "discarded"]},
         "satietyScore": {"anyOf": [{"type": "number"}, {"type": "null"}]},
         "hungerBefore": {"anyOf": [{"type": "number"}, {"type": "null"}]},
         "hungerAfter": {"anyOf": [{"type": "number"}, {"type": "null"}]},
@@ -933,7 +934,7 @@ TOOL_CATALOG: List[ToolSpec] = [
     },
     {
         "name": "forge_log_food",
-        "description": "Create a confirmed or candidate food log with explicit food items, calories, macros, quality tags, hunger, satiety, cravings, and context.",
+        "description": "Create a confirmed or candidate food log. Search first and pass foodId when reusing a catalog food; for custom foods without foodId, caloriesKcal, proteinG, carbsG, and fatG are required.",
         "parameters": NUTRITION_FOOD_LOG,
         "method": "POST",
         "path_builder": lambda args: nutrition_scoped_path("/api/v1/health/weight-loss/food-logs", args),

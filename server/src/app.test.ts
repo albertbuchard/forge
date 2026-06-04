@@ -11600,6 +11600,19 @@ test("openapi document exposes schema-backed versioned contracts", async () => {
     assert.ok(body.paths?.["/api/v1/health/weight-loss/food-logs/{id}"]);
     assert.ok(body.paths?.["/api/v1/health/weight-loss/parse"]);
     assert.ok(body.components?.schemas?.WeightLossViewData);
+    const mealItemInputSchema = body.components?.schemas
+      ?.NutritionMealItemInput as
+      | {
+          description?: string;
+          properties?: Record<string, unknown>;
+        }
+      | undefined;
+    assert.ok(mealItemInputSchema?.properties?.foodId);
+    assert.match(mealItemInputSchema?.description ?? "", /custom food/i);
+    assert.match(
+      mealItemInputSchema?.description ?? "",
+      /calories, proteinGrams, carbohydrateGrams, and fatGrams/i
+    );
     assert.ok(body.paths?.["/api/v1/habits"]);
     assert.ok(body.paths?.["/api/v1/habits/{id}"]);
     assert.ok(body.paths?.["/api/v1/habits/{id}/check-ins"]);
@@ -19732,6 +19745,23 @@ test("settings and local agent token management persist through the versioned AP
         (tool) => tool.toolName === "forge_create_calendar_event"
       )
     );
+    const foodSearchTool = onboardingBody.onboarding.toolInputCatalog.find(
+      (tool) =>
+        tool.toolName === "forge_search_foods | forge_search_nutrition_foods"
+    );
+    assert.ok(foodSearchTool);
+    const foodSearchNotes =
+      (foodSearchTool as { notes?: string[] }).notes ?? [];
+    assert.match(foodSearchNotes.join(" "), /custom foods/i);
+    assert.match(foodSearchNotes.join(" "), /item\.foodId/i);
+    const logFoodTool = onboardingBody.onboarding.toolInputCatalog.find(
+      (tool) => tool.toolName === "forge_log_food"
+    );
+    assert.ok(logFoodTool);
+    assert.match(logFoodTool.inputShape, /foodId/);
+    const logFoodNotes = (logFoodTool as { notes?: string[] }).notes ?? [];
+    assert.match(logFoodNotes.join(" "), /name-only custom foods are rejected/i);
+    assert.match(logFoodNotes.join(" "), /internet/i);
     const startRunTool = onboardingBody.onboarding.toolInputCatalog.find(
       (tool) => tool.toolName === "forge_start_task_run"
     );
@@ -19868,6 +19898,9 @@ test("settings and local agent token management persist through the versioned AP
       weightLossPlaybook.askSequence.some((step) =>
         /dedicated nutrition tools/i.test(step)
       )
+    );
+    assert.ok(
+      weightLossPlaybook.askSequence.some((step) => /foodId/i.test(step))
     );
     const movementSurface =
       onboardingBody.onboarding.entityRouteModel.specializedDomainSurfaces

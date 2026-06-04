@@ -5286,7 +5286,9 @@ export function buildOpenApiDocument() {
         type: "object",
         additionalProperties: false,
         required: ["name", "quantity"],
+        description: "Meal item input. Pass foodId from /foods/search or /foods/barcode when reusing a catalog food. If foodId is omitted, Forge treats the item as a custom food and requires calories, proteinGrams, carbohydrateGrams, and fatGrams.",
         properties: {
+            foodId: nullable({ type: "string" }),
             name: { type: "string" },
             brand: nullable({ type: "string" }),
             quantity: { type: "number" },
@@ -5926,6 +5928,7 @@ export function buildOpenApiDocument() {
                 post: {
                     tags: ["Health"],
                     summary: "Search nutrition foods across local and public catalogs",
+                    description: "Searches Forge's local nutrition_food_catalog first, including custom foods, then public Open Food Facts and USDA-backed sources. Reuse returned ids as NutritionMealItemInput.foodId before creating a new custom food.",
                     requestBody: {
                         content: {
                             "application/json": {

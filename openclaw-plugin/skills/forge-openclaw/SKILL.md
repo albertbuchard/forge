@@ -208,6 +208,13 @@ Health rule:
   `forge_log_appearance_checkin`, `forge_log_subjective_food_effect`,
   `forge_log_gut_checkin`, `forge_get_nutrition_patterns`,
   `forge_start_nutrition_experiment`, and `forge_update_nutrition_experiment`.
+  Before logging food, search Forge's nutrition catalog first. If a result matches,
+  pass that result's `id` as `item.foodId` to `forge_log_food` so Forge reuses the
+  local/custom food database instead of creating a duplicate. If no result matches
+  and you are creating a custom food, look up nutrition facts on the internet or
+  another reliable public nutrition source before logging it. Custom/no-`foodId`
+  items must include at least calories plus protein, carbohydrate, and fat
+  (`caloriesKcal`, `proteinG`, `carbsG`, `fatG`); never save a name-only food.
   `forge_parse_food_log_with_chatgpt` must use Forge's configured `openai-codex`
   ChatGPT subscription connection, not a metered OpenAI Platform API path.
 - In `forge_get_agent_onboarding.entityRouteModel.readModelOnlySurfaces`, operator,
@@ -702,7 +709,7 @@ Use the health tools when the request is about sleep or sports review:
 - `forge_get_training_load_overview` to inspect cardiovascular load, HR zone balance, zone-time buckets, smart training modes, acute/chronic stress, high-intensity pressure, VO2max context, next-workout guidance, and training target fit
 - `forge_get_weight_loss_overview` to inspect calorie balance, protein/fiber targets, body trend, food quality, training fuel, subjective energy, gut comfort, aesthetic look, hypotheses, and experiments
 - `forge_parse_food_log_with_chatgpt` to convert rough meal text or a photo description into a candidate food log through the configured `openai-codex` ChatGPT subscription connection
-- `forge_log_food`, `forge_log_body_checkin`, `forge_log_appearance_checkin`, `forge_log_subjective_food_effect`, and `forge_log_gut_checkin` to preserve the user's food, body-composition, visual-look, energy/craving/performance, and gut-health evidence
+- `forge_log_food`, `forge_log_body_checkin`, `forge_log_appearance_checkin`, `forge_log_subjective_food_effect`, and `forge_log_gut_checkin` to preserve the user's food, body-composition, visual-look, energy/craving/performance, and gut-health evidence. For `forge_log_food`, search first and reuse `item.foodId`; custom/no-`foodId` items require calories plus protein, carbohydrate, and fat, researched before logging when the user does not provide them.
 - `forge_get_nutrition_patterns`, `forge_start_nutrition_experiment`, and `forge_update_nutrition_experiment` to turn repeated food/body observations into testable N-of-1 hypotheses
 - `forge_update_sleep_session` to add sleep-quality notes, tags, or links back to Forge entities after review
 - `forge_update_workout_session` to add subjective effort, mood, meaning, tags, or links on one workout after review
