@@ -1,16 +1,12 @@
-Forge Companion 1.0.81 fixes the watchOS companion data path so surfaces are
-fed by Forge backend snapshots instead of empty placeholder cards.
+Forge Companion 1.0.82 fixes HealthKit sync recovery when uploads are
+interrupted before Forge accepts any chunks.
 
-Habits, Psyche, and Work now use horizontal card paging inside each surface.
-Habits can be marked from the Watch, Work shows individual tasks from the
-Kanban snapshot, and Psyche questions are derived from Forge's backend event,
-emotion, value, behavior, and mode definitions.
+Interrupted sleep, movement, and historical workout uploads now reset cleanly
+and retry instead of surfacing stale empty-session errors.
 
-Psyche choices now project back into Forge as canonical self-observation notes
-or trigger reports, so Watch entries are visible in Forge rather than staying
-as local-only captures.
+Historical workout import now treats an empty upload as complete only when the
+Forge backend agrees all workout evidence is already present. Missing heart
+rate, time-series, or route evidence still remains eligible for replay.
 
-The iPhone relay now refreshes backend snapshots for valid paired watches even
-when the pairing predates the newer watch-ready capability, preserves the last
-good snapshot while pairing is warming up, and retries queued Watch actions
-until Forge confirms them.
+The Forge web view also ignores benign cancelled navigations so normal reloads
+do not leave the companion status stuck on an error.

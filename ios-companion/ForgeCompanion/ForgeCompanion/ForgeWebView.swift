@@ -133,6 +133,12 @@ struct ForgeWebView: UIViewRepresentable {
             self.lastReloadToken = parent.reloadToken
         }
 
+        private func isBenignNavigationCancellation(_ error: Error) -> Bool {
+            let nsError = error as NSError
+            return nsError.domain == NSURLErrorDomain &&
+                nsError.code == URLError.cancelled.rawValue
+        }
+
         func updateViewState(isLoading: Bool, errorMessage: String?) {
             companionDebugLog(
                 "ForgeWebView",
@@ -191,6 +197,13 @@ struct ForgeWebView: UIViewRepresentable {
             didFail navigation: WKNavigation!,
             withError error: Error
         ) {
+            if isBenignNavigationCancellation(error) {
+                companionDebugLog(
+                    "ForgeWebView",
+                    "didFail ignored cancelled navigation url=\(webView.url?.absoluteString ?? "nil")"
+                )
+                return
+            }
             companionDebugLog(
                 "ForgeWebView",
                 "didFail url=\(webView.url?.absoluteString ?? "nil") error=\(error.localizedDescription)"
@@ -203,6 +216,13 @@ struct ForgeWebView: UIViewRepresentable {
             didFailProvisionalNavigation navigation: WKNavigation!,
             withError error: Error
         ) {
+            if isBenignNavigationCancellation(error) {
+                companionDebugLog(
+                    "ForgeWebView",
+                    "didFailProvisionalNavigation ignored cancelled navigation url=\(webView.url?.absoluteString ?? "nil")"
+                )
+                return
+            }
             companionDebugLog(
                 "ForgeWebView",
                 "didFailProvisionalNavigation url=\(webView.url?.absoluteString ?? "nil") error=\(error.localizedDescription)"
