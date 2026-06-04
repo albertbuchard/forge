@@ -60,9 +60,12 @@ platform :ios do
     testflight_groups = Array(config.dig(:release, :testflight_groups))
       .map { |group| group.to_s.strip }
       .reject(&:empty?)
-    upload_to_testflight(
+    upload_to_testflight_with_reconciliation!(
+      config: config,
       api_key: api_key,
-      ipa: ipa_path,
+      ipa_path: ipa_path,
+      marketing_version: config.dig(:version, :marketing).to_s,
+      build_number: build_number,
       changelog: release_notes_text(config),
       groups: testflight_groups.empty? ? nil : testflight_groups,
       notify_external_testers: config.dig(:release, :notify_external_testers) == true,
@@ -292,6 +295,75 @@ def verify_app_store_connect_app!(config:)
   app = Spaceship::ConnectAPI.get_apps(filter: { bundleId: app_identifier }, limit: 1).first
   UI.user_error!("No App Store Connect app record found for #{app_identifier}") unless app
   app
+end
+
+def upload_to_testflight_with_reconciliation!(
+  config:,
+  api_key:,
+  ipa_path:,
+  marketing_version:,
+  build_number:,
+  changelog:,
+  groups:,
+  notify_external_testers:,
+  skip_submission:,
+  skip_waiting_for_build_processing:
+)
+  upload_to_testflight(
+    api_key: api_key,
+    ipa: ipa_path,
+    changelog: changelog,
+    groups: groups,
+    notify_external_testers: notify_external_testers,
+    skip_submission: skip_submission,
+    skip_waiting_for_build_processing: skip_waiting_for_build_processing
+  )
+rescue StandardError => error
+  unless app_store_upload_may_have_been_accepted?(error: error, build_number: build_number)
+    raise
+  end
+
+  UI.important("App Store Connect upload returned an ambiguous/duplicate response. Checking whether build #{marketing_version} (#{build_number}) was accepted.")
+  build = wait_for_app_store_connect_build(
+    config: config,
+    marketing_version: marketing_version,
+    build_number: build_number
+  )
+  raise unless build
+
+  UI.success("App Store Connect already has build #{marketing_version} (#{build_number}) with processing state #{build.processing_state}. Treating upload as complete.")
+  build
+end
+
+def app_store_upload_may_have_been_accepted?(error:, build_number:)
+  message = error.message.to_s
+  return true if message.include?("UPDATE buildUploadFiles CHECKSUM") && message.include?("status code 500")
+  return true if message.include?("ENTITY_ERROR.ATTRIBUTE.INVALID.DUPLICATE") && message.include?("previously uploaded version")
+  return true if message.include?("bundle version must be higher") && message.include?(build_number.to_s)
+
+  false
+end
+
+def wait_for_app_store_connect_build(config:, marketing_version:, build_number:)
+  app = verify_app_store_connect_app!(config: config)
+  return nil unless app
+
+  12.times do |attempt|
+    build = Spaceship::ConnectAPI::Build.all(
+      app_id: app.id,
+      version: marketing_version,
+      build_number: build_number.to_s,
+      platform: "IOS",
+      processing_states: "PROCESSING,FAILED,INVALID,VALID",
+      limit: 10
+    ).first
+    return build if build
+
+    UI.message("Build #{marketing_version} (#{build_number}) is not visible in App Store Connect yet; retry #{attempt + 1}/12.")
+    sleep(20)
+  end
+
+  nil
 end
 
 def read_build_setting(target_name:, key:)
