@@ -29,6 +29,7 @@ Forge should stay modern and production-grade:
 - generated OpenAPI
 - OpenClaw, Hermes, and Codex adapter surfaces
 - Swift iPhone companion
+- SwiftUI watchOS companion command surface
 - optional GitHub Release-hosted gamification art packs installed into the local Forge data root
 
 Forge should also make progress feel alive through a selected-user-first gamified layer. XP, levels, streaks, trophies, cosmetic unlocks, and the Forge Smith mascot should be grounded in the existing auditable reward ledger, not in a disconnected points game. The mascot should feel like a dramatic blacksmith mentor: visually enchanting, sometimes wise, sometimes stern, and forceful enough to make streak drift visible without becoming unsafe or cruel.
@@ -62,6 +63,8 @@ Forge also already has existing project and strategy models, user ownership, tas
 Forge also already has a real health layer. Sleep in particular now needs to stay canonical-night-first across the iPhone companion, backend, and web app: one overnight session per wake-date as the main product object, with raw platform segments preserved underneath for drill-down instead of leaking transport fragments into the main UI.
 
 Forge workout imports also now need to stay provider-native underneath but canonical in the product surface. Apple Health and HealthKit data should flow through one provider-neutral workout adapter contract so the iPhone companion, Fastify backend, OpenAPI schema, and React sports UI all agree on friendly activity labels, activity families, source provenance, and preserved metrics/events/components for drill-down. Workout sync is raw-evidence-first: Forge should preserve workout-associated heart-rate timelines, other HealthKit quantity timelines, route points, events, activities, and scalar summaries locally before deriving HRR zones, training load, HR coverage, and route summaries for the Sports cockpit.
+
+Forge's watchOS companion is a wrist-first command and logging surface, not a miniature web app and not a standalone data owner. It uses Swift 5, SwiftUI, WatchConnectivity, WidgetKit/App Intents, compact Fastify snapshots, and idempotent SQLite-backed command receipts. The Digital Crown selects the active Forge surface, horizontal card navigation selects the entity or subcomponent inside that surface, and taps open short action modals for work, habits, goals/projects, today, health, movement, Psyche, inbox, sync, and now. The iPhone companion remains the relay owner for pairing credentials, backend calls, retry queues, and snapshot refreshes; deep editing remains in the Forge web and iPhone surfaces.
 
 Before this pass, however, the project-management hierarchy was still too shallow and too task-centric. The product did not yet fully expose the explicit `Goal -> Strategy -> Project -> Strategy -> Issue -> Task -> Subtask` stack across backend, UI, skills, and docs.
 

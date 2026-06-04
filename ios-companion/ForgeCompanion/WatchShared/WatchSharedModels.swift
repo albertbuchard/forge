@@ -8,6 +8,7 @@ enum ForgeWatchStorage {
     nonisolated static let pendingLaunchDestinationKey = "forge_watch_pending_launch_destination"
     nonisolated static let actionMessageKey = "forge_watch_action_message"
     nonisolated static let ackMessageKey = "forge_watch_ack_message"
+    nonisolated static let syncRequestMessageKey = "forge_watch_sync_request_message"
     nonisolated static let bootstrapContextKey = "forge_watch_bootstrap_context"
 
     nonisolated static func sharedDefaults() -> UserDefaults {
@@ -324,7 +325,30 @@ struct ForgeWatchOutboundEnvelope: Codable, Identifiable, Hashable {
 struct ForgeWatchAckEnvelope: Codable, Hashable {
     let actionId: String
     let processedAt: String
+    let status: String?
+    let error: [String: String]?
     let bootstrap: ForgeWatchBootstrap?
+}
+
+struct ForgeWatchCommandReceipt: Codable, Hashable {
+    let actionId: String
+    let kind: String
+    let status: String
+    let processedAt: String
+}
+
+struct ForgeWatchCommandBatchReceipt: Codable, Hashable {
+    let receivedCount: Int
+    let processedCount: Int
+    let replayedCount: Int
+    let failedCount: Int
+    let receipts: [ForgeWatchCommandReceipt]
+}
+
+struct ForgeWatchControlRequest: Codable, Hashable {
+    let id: String
+    let createdAt: String
+    let reason: String
 }
 
 enum ForgeWatchLaunchDestination: String, Codable, CaseIterable {

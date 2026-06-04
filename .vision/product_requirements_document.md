@@ -22,6 +22,7 @@ Forge is built as a production-grade monorepo application with:
 - generated OpenAPI
 - OpenClaw, Hermes, and Codex adapter layers
 - Swift iPhone companion
+- Swift 5 / SwiftUI watchOS companion command surface
 - provider-neutral health adapters spanning Swift ingestion, Fastify normalization, and React read models
 - Iroh-first mobile pairing: Fastify starts the repo-owned Rust `companion-iroh` host, creates a one-time payload with the desktop node id, pairing token, relay hint, and ALPN `forge-companion/1`, and keeps manual HTTP/TCP or Tailscale routing as an explicit advanced option
 - Apache-2.0 licensing for Forge-owned public code so open-source releases remain permissive, patent-explicit, and compatible with future closed-source commercial Forge forks
@@ -202,6 +203,14 @@ Agent skills must default to:
 Agent runtime identity is separate from Forge user ownership. OpenClaw, Hermes, and Codex each need one stable agent identity per machine/runtime installation, derived from provider, machine/data root, and persona rather than volatile session keys, cron IDs, WhatsApp threads, PIDs, or timestamps. Runtime sessions are history under that identity. Agent identities can link to one or several Forge users, including bot users with their own Kanban ownership, so spawned subagents are modeled as users or linked actors instead of duplicate top-level agents.
 
 Separate code review and final audit skills are not part of this Forge PM workflow and should remain Codex concerns instead.
+
+### 9A. watchOS Companion Command Surface
+
+The watchOS companion is a wrist-first command and logging surface for the main Forge domains, not a second Forge data model. Its production stack is Swift 5, SwiftUI, WatchConnectivity, WidgetKit/App Intents, compact Fastify snapshot endpoints, SQLite-backed command receipts, and the React/TypeScript Forge runtime as the canonical deep-editing surface. The iPhone companion owns pairing credentials, transport selection, backend calls, durable retry queues, and refreshed snapshot publishing.
+
+The watch interaction grammar is fixed: the Digital Crown moves between main surfaces, left/right card navigation moves within the selected surface, and tapping a card opens a short action modal. Required surfaces are Now, Work/Kanban, Habits, Goals/Projects, Today, Health, Movement, Psyche, Inbox, and Sync. Every surface must provide a useful fast action or capture fallback even when its rich snapshot is temporarily empty.
+
+Watch mutations flow through compact, idempotent command batches rather than direct watch networking. Work actions use the existing task and task-run semantics: start, heartbeat, focus, complete, release, and status moves across `backlog`, `focus`, `in_progress`, `blocked`, and `done`. Habit actions preserve canonical `done`/`missed` storage while using polarity-aware watch labels such as Done/Missed for positive habits and Resisted/Performed for negative habits. Capture events for movement, Psyche, inbox prompts, health annotations, and moment notes carry stable dedupe keys so replay cannot duplicate user data.
 
 ### 10. Documentation Contract
 

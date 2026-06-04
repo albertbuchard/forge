@@ -713,6 +713,12 @@ struct ForgeSyncClient {
     }
 
     private struct WatchCommandBatchEnvelope: Decodable {
+        let receipt: ForgeWatchCommandBatchReceipt
+        let watch: ForgeWatchBootstrap
+    }
+
+    struct WatchCommandBatchResult {
+        let receipt: ForgeWatchCommandBatchReceipt
         let watch: ForgeWatchBootstrap
     }
 
@@ -2165,7 +2171,7 @@ struct ForgeSyncClient {
         device: ForgeWatchDeviceDescriptor,
         envelopes: [ForgeWatchOutboundEnvelope],
         pairing: PairingPayload
-    ) async throws -> ForgeWatchBootstrap {
+    ) async throws -> WatchCommandBatchResult {
         companionDebugLog(
             "ForgeSyncClient",
             "submitWatchCommandBatch start commands=\(envelopes.count)"
@@ -2233,9 +2239,9 @@ struct ForgeSyncClient {
         )
         companionDebugLog(
             "ForgeSyncClient",
-            "submitWatchCommandBatch success commands=\(commands.count)"
+            "submitWatchCommandBatch success commands=\(commands.count) processed=\(envelope.receipt.processedCount) replayed=\(envelope.receipt.replayedCount) failed=\(envelope.receipt.failedCount)"
         )
-        return envelope.watch
+        return WatchCommandBatchResult(receipt: envelope.receipt, watch: envelope.watch)
     }
 
     private func sendRequest<Body: Encodable, Response: Decodable>(

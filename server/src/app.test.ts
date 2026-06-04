@@ -9241,6 +9241,17 @@ test("watch action batch records idempotent command receipts and replays accepte
             status: "done",
             note: "Moved from the watch."
           }
+        },
+        {
+          id: "watch-action-capture-1",
+          kind: "capture_event",
+          createdAt: "2026-04-07T08:04:00.000Z",
+          payload: {
+            eventType: "emotion_check_in",
+            recordedAt: "2026-04-07T08:04:00.000Z",
+            emotion: "Focused",
+            surface: "psyche"
+          }
         }
       ]
     };
@@ -9260,7 +9271,7 @@ test("watch action batch records idempotent command receipts and replays accepte
       };
       watch: { schemaVersion: number; surfaces: Array<{ id: string }> };
     };
-    assert.equal(actionBody.receipt.processedCount, 4);
+    assert.equal(actionBody.receipt.processedCount, 5);
     assert.equal(actionBody.receipt.replayedCount, 0);
     assert.equal(actionBody.receipt.failedCount, 0);
     assert.equal(
@@ -9287,7 +9298,7 @@ test("watch action batch records idempotent command receipts and replays accepte
       };
     };
     assert.equal(replayBody.receipt.processedCount, 0);
-    assert.equal(replayBody.receipt.replayedCount, 4);
+    assert.equal(replayBody.receipt.replayedCount, 5);
     assert.equal(replayBody.receipt.failedCount, 0);
     assert.equal(replayBody.receipt.receipts[0]?.status, "replayed");
 
@@ -9317,6 +9328,18 @@ test("watch action batch records idempotent command receipts and replays accepte
       )
       .get(taskId) as { status: string };
     assert.equal(taskState.status, "done");
+
+    const captureRow = getDatabase()
+      .prepare(
+        `SELECT payload_json
+         FROM watch_capture_events
+         WHERE dedupe_key = ?`
+      )
+      .get("watch-action-capture-1") as { payload_json: string };
+    assert.deepEqual(JSON.parse(captureRow.payload_json), {
+      emotion: "Focused",
+      surface: "psyche"
+    });
   } finally {
     await app.close();
     closeDatabase();

@@ -104,6 +104,7 @@ final class WatchAppModel: NSObject, ObservableObject {
         session.delegate = self
         session.activate()
         flushPendingActions()
+        requestPhoneRefresh(reason: "watch_launch")
     }
 
     func consumePendingLaunchDestination() {
@@ -141,6 +142,28 @@ final class WatchAppModel: NSObject, ObservableObject {
                     ])
                 }
             }
+        }
+    }
+
+    func requestPhoneRefresh(reason: String = "manual") {
+        guard previewMode == false, WCSession.isSupported() else { return }
+        let request = ForgeWatchControlRequest(
+            id: UUID().uuidString,
+            createdAt: ISO8601DateFormatter().string(from: Date()),
+            reason: reason
+        )
+        guard let data = try? encoder.encode(request) else { return }
+        lastStatusMessage = "Asking iPhone to sync"
+        if WCSession.default.isReachable {
+            WCSession.default.sendMessageData(data, replyHandler: nil) { [weak self] error in
+                Task { @MainActor in
+                    self?.lastStatusMessage = "Phone sync request failed: \(error.localizedDescription)"
+                }
+            }
+        } else {
+            WCSession.default.transferUserInfo([
+                ForgeWatchStorage.syncRequestMessageKey: data
+            ])
         }
     }
 
@@ -293,6 +316,19 @@ final class WatchAppModel: NSObject, ObservableObject {
         saveQueue(queue)
         lastStatusMessage = queue.isEmpty ? "Synced to iPhone" : "Still sending \(queue.count)"
     }
+
+    private func applyAck(_ ack: ForgeWatchAckEnvelope) {
+        removeQueuedAction(id: ack.actionId)
+        if let bootstrap = ack.bootstrap {
+            saveBootstrap(bootstrap)
+        }
+        if ack.status == "failed" {
+            lastStatusMessage = "Forge rejected one action"
+            WKInterfaceDevice.current().play(.failure)
+        } else {
+            WKInterfaceDevice.current().play(.success)
+        }
+    }
 }
 
 extension WatchAppModel: WCSessionDelegate {
@@ -307,6 +343,7 @@ extension WatchAppModel: WCSessionDelegate {
             } else {
                 self.lastStatusMessage = activationState == .activated ? "Connected to iPhone" : "Waiting for iPhone"
                 self.flushPendingActions()
+                self.requestPhoneRefresh(reason: "activation")
             }
         }
     }
@@ -316,6 +353,7 @@ extension WatchAppModel: WCSessionDelegate {
         Task { @MainActor in
             if isReachable {
                 self.flushPendingActions()
+                self.requestPhoneRefresh(reason: "reachable")
             }
         }
     }
@@ -342,10 +380,7 @@ extension WatchAppModel: WCSessionDelegate {
         guard let data = userInfo[ForgeWatchStorage.ackMessageKey] as? Data else { return }
         Task { @MainActor in
             if let ack = try? self.decoder.decode(ForgeWatchAckEnvelope.self, from: data) {
-                self.removeQueuedAction(id: ack.actionId)
-                if let bootstrap = ack.bootstrap {
-                    self.saveBootstrap(bootstrap)
-                }
+                self.applyAck(ack)
             }
         }
     }
@@ -353,10 +388,7 @@ extension WatchAppModel: WCSessionDelegate {
     nonisolated func session(_ session: WCSession, didReceiveMessageData messageData: Data) {
         Task { @MainActor in
             if let ack = try? self.decoder.decode(ForgeWatchAckEnvelope.self, from: messageData) {
-                self.removeQueuedAction(id: ack.actionId)
-                if let bootstrap = ack.bootstrap {
-                    self.saveBootstrap(bootstrap)
-                }
+                self.applyAck(ack)
             }
         }
     }
