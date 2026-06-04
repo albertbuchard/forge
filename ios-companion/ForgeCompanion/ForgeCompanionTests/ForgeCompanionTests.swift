@@ -262,7 +262,7 @@ final class ForgeCompanionTests: XCTestCase {
             device: ForgeWatchDeviceDescriptor(
                 name: "Omar Watch",
                 platform: "watchos",
-                appVersion: "1.0.77",
+                appVersion: "1.0.78",
                 sourceDevice: "Apple Watch"
             ),
             kind: .taskStatusUpdate,

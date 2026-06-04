@@ -1046,7 +1046,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Forge;
 				INFOPLIST_KEY_CFBundleIconName = AppIcon;
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.albertbuchard.ForgeCompanion;
-				MARKETING_VERSION = 1.0.77;
+				MARKETING_VERSION = 1.0.78;
 				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.watchkitapp;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -1121,7 +1121,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Forge;
 				INFOPLIST_KEY_CFBundleIconName = AppIcon;
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.albertbuchard.ForgeCompanion;
-				MARKETING_VERSION = 1.0.77;
+				MARKETING_VERSION = 1.0.78;
 				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.watchkitapp;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -1163,7 +1163,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.77;
+				MARKETING_VERSION = 1.0.78;
 				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.watchkitapp.ForgeWatch;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -1204,7 +1204,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.77;
+				MARKETING_VERSION = 1.0.78;
 				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.watchkitapp.ForgeWatch;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -1260,7 +1260,7 @@
 					"$(inherited)",
 					"$(SRCROOT)/RustBridge/build/$(PLATFORM_NAME)-$(CURRENT_ARCH)",
 				);
-				MARKETING_VERSION = 1.0.77;
+				MARKETING_VERSION = 1.0.78;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-lforge_companion_iroh",
@@ -1340,7 +1340,7 @@
 					"$(inherited)",
 					"$(SRCROOT)/RustBridge/build/$(PLATFORM_NAME)-$(CURRENT_ARCH)",
 				);
-				MARKETING_VERSION = 1.0.77;
+				MARKETING_VERSION = 1.0.78;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-lforge_companion_iroh",
