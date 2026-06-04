@@ -1,4 +1,4 @@
-# Forge WatchOS Companion Command Surface Goal
+# Forge watchOS Companion Command Surface Goal
 
 ## Copy/Paste Goal Prompt
 
@@ -21,6 +21,14 @@ The target interaction grammar is:
 The implementation must be architecture-first. Do not bolt more views onto the existing carousel. Replace it with a shared navigation model, shared snapshot contract, shared command envelope, reusable card/action primitives, and backend endpoints that wrap existing Forge domain functions.
 
 The goal is end-to-end, not a code-only spike. The run must audit the existing code, implement the watch command surface, test it, validate the release package, commit the intended changes on `main`, push `main`, and ship the new iOS companion build to TestFlight. If the implementation changes plugin-facing contracts, bundled skills, onboarding payloads, OpenClaw route mirrors, Hermes tools, or Codex adapter surfaces, the affected plugin packages must be rebuilt, verified, and released through the documented Forge release flow.
+
+## Goal Runner Contract
+
+This is the file to use as the source of truth for a new `/goal` run. The runner must not treat the watch as a decorative widget, a four-tab capture app, or a second Forge data model. The watch is a wrist-first command surface backed by compact backend snapshots and idempotent command batches. The core grammar is fixed: the Digital Crown chooses the active Forge surface vertically, left/right paging chooses the selected card or entity inside that surface, and tapping opens a compact modal with the actions available for that card.
+
+The implementation must cover the full surface list in this document: Now, Work/Kanban, Habits, Goals/Projects, Today, Health, Movement, Psyche, Inbox, and Sync. Each surface should be information-rich enough to make decisions from the wrist without forcing the user into the phone for basic control. Deep editing, long reading, graph exploration, wiki authoring, planning documents, and complex forms stay in the web app or iPhone companion.
+
+The release obligation is also fixed. The run is not complete at “it builds locally.” It must verify the backend, iPhone bridge, Watch app, release metadata, archive/IPA contents, local Forge runtime health, and the documented TestFlight upload path. Plugin releases are required only when plugin-facing contracts, bundled skills, onboarding payloads, OpenClaw route mirrors, Hermes tools, Codex adapter behavior, or package metadata changed; when they are not required, the run must state why.
 
 ## Current Code Findings
 
