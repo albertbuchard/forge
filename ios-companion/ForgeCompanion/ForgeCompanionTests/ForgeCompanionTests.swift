@@ -3215,6 +3215,60 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertNil(reason)
     }
 
+    func testHealthSyncCompletionPolicyRefusesEmptyChunkSessionCompletion() {
+        XCTAssertFalse(
+            CompanionAppModel.HealthSyncSessionCompletionPolicy.canCompleteChunkedSession(
+                expectedRecordCount: 0,
+                acceptedChunkCount: 0
+            )
+        )
+        XCTAssertFalse(
+            CompanionAppModel.HealthSyncSessionCompletionPolicy.canCompleteChunkedSession(
+                expectedRecordCount: 10,
+                acceptedChunkCount: 0
+            )
+        )
+        XCTAssertTrue(
+            CompanionAppModel.HealthSyncSessionCompletionPolicy.canCompleteChunkedSession(
+                expectedRecordCount: 10,
+                acceptedChunkCount: 1
+            )
+        )
+    }
+
+    func testHistoricalImportPolicyTreatsBackendCompleteEmptyUploadAsComplete() {
+        XCTAssertTrue(
+            CompanionAppModel.HealthSyncSessionCompletionPolicy.shouldTreatHistoricalImportAsAlreadyComplete(
+                expectedUploadRecordCount: 0,
+                acceptedChunkCount: 0,
+                backendUploadedWorkoutCount: 1_051,
+                backendIncompleteWorkoutCount: 0,
+                discoveredHealthKitWorkoutCount: 1_051
+            )
+        )
+    }
+
+    func testHistoricalImportPolicyDoesNotHideMissingEvidence() {
+        XCTAssertFalse(
+            CompanionAppModel.HealthSyncSessionCompletionPolicy.shouldTreatHistoricalImportAsAlreadyComplete(
+                expectedUploadRecordCount: 0,
+                acceptedChunkCount: 0,
+                backendUploadedWorkoutCount: 900,
+                backendIncompleteWorkoutCount: 151,
+                discoveredHealthKitWorkoutCount: 1_051
+            )
+        )
+        XCTAssertFalse(
+            CompanionAppModel.HealthSyncSessionCompletionPolicy.shouldTreatHistoricalImportAsAlreadyComplete(
+                expectedUploadRecordCount: 250,
+                acceptedChunkCount: 0,
+                backendUploadedWorkoutCount: 900,
+                backendIncompleteWorkoutCount: 0,
+                discoveredHealthKitWorkoutCount: 1_051
+            )
+        )
+    }
+
     func testActiveHealthSyncCheckpointPersistsFrozenWindowAndProgress() throws {
         let windowEnd = makeDate("2026-05-25T20:19:12.377Z")
         let checkpoint = ActiveHealthSyncCheckpoint(

@@ -500,6 +500,10 @@ struct ForgeSyncClient {
             chunkPayloadEncoding == "payload_json_base64" ||
                 (acceptedPayloadEncodings ?? []).contains("payload_json_base64")
         }
+
+        var acceptedChunkCount: Int {
+            max(progress?.chunkCount ?? 0, receivedChunkIds.count)
+        }
     }
 
     struct HealthSyncChunkProgress: Decodable {

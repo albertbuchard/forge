@@ -358,6 +358,37 @@ final class CompanionAppModel: ObservableObject {
         }
     }
 
+    enum HealthSyncSessionCompletionPolicy {
+        static func canCompleteChunkedSession(
+            expectedRecordCount: Int,
+            acceptedChunkCount: Int
+        ) -> Bool {
+            acceptedChunkCount > 0
+        }
+
+        static func shouldTreatHistoricalImportAsAlreadyComplete(
+            expectedUploadRecordCount: Int,
+            acceptedChunkCount: Int,
+            backendUploadedWorkoutCount: Int,
+            backendIncompleteWorkoutCount: Int,
+            discoveredHealthKitWorkoutCount: Int?
+        ) -> Bool {
+            guard expectedUploadRecordCount == 0, acceptedChunkCount == 0 else {
+                return false
+            }
+            guard backendIncompleteWorkoutCount == 0 else {
+                return false
+            }
+            guard backendUploadedWorkoutCount > 0 else {
+                return discoveredHealthKitWorkoutCount == 0
+            }
+            guard let discoveredHealthKitWorkoutCount else {
+                return true
+            }
+            return backendUploadedWorkoutCount >= discoveredHealthKitWorkoutCount
+        }
+    }
+
     private struct SimulatorPairingResponse: Decodable {
         let qrPayload: PairingPayload
     }
@@ -375,6 +406,10 @@ final class CompanionAppModel: ObservableObject {
         var rawHeartRateDatapoints = 0
         var rawTimeSeriesDatapoints = 0
         var routePoints = 0
+
+        var expectedUploadRecordCount: Int {
+            workouts + rawTimeSeriesDatapoints + routePoints
+        }
     }
 
     private struct BackendWorkoutImportSnapshot {
@@ -1904,6 +1939,17 @@ final class CompanionAppModel: ObservableObject {
                 backgroundScheduler.schedule()
                 return false
             }
+            if Self.isRetryableHealthSyncTransportInterruption(error) {
+                companionDebugLog(
+                    "CompanionAppModel",
+                    "performSync paused trigger=\(trigger) retryableTransport error=\(error.localizedDescription)"
+                )
+                lastSyncMessage = "Forge sync paused because the connection was interrupted. It will retry automatically."
+                latestError = nil
+                refreshSyncState()
+                backgroundScheduler.schedule()
+                return false
+            }
             let failureReason = nsError.userInfo[NSLocalizedFailureReasonErrorKey] as? String
             if Self.isHealthSyncChunkChecksumMismatch(error) || Self.isHealthSyncMissingRequiredChunks(error) {
                 let message = Self.isHealthSyncMissingRequiredChunks(error)
@@ -2021,6 +2067,7 @@ final class CompanionAppModel: ObservableObject {
             startHealthSyncTransferTelemetry()
 
             let initialSnapshot = Self.backendWorkoutImportSnapshot(from: session)
+            var latestBackendWorkoutSnapshot = initialSnapshot
             var backendUploadedWorkoutExternalUids = initialSnapshot.uploadedWorkoutExternalUids
             applyBackendWorkoutImportSnapshot(
                 initialSnapshot,
@@ -2093,6 +2140,7 @@ final class CompanionAppModel: ObservableObject {
                     session = refreshedSession
                     if let workoutImportState = refreshedSession.workoutImportState {
                         let snapshot = Self.backendWorkoutImportSnapshot(from: workoutImportState)
+                        latestBackendWorkoutSnapshot = snapshot
                         backendUploadedWorkoutExternalUids = snapshot.uploadedWorkoutExternalUids
                         await MainActor.run {
                             self?.applyBackendWorkoutImportSnapshot(
@@ -2134,6 +2182,46 @@ final class CompanionAppModel: ObservableObject {
                 return
             }
 
+            session = try await syncClient.refreshHealthSyncSessionStatus(
+                uploadSession: session,
+                pairing: pairing
+            )
+            if let workoutImportState = session.workoutImportState {
+                latestBackendWorkoutSnapshot = Self.backendWorkoutImportSnapshot(from: workoutImportState)
+                applyBackendWorkoutImportSnapshot(
+                    latestBackendWorkoutSnapshot,
+                    requiresBackfill: true,
+                    announceProgress: false
+                )
+            }
+            let acceptedChunkCount = session.acceptedChunkCount
+            if HealthSyncSessionCompletionPolicy.shouldTreatHistoricalImportAsAlreadyComplete(
+                expectedUploadRecordCount: workoutStats.expectedUploadRecordCount,
+                acceptedChunkCount: acceptedChunkCount,
+                backendUploadedWorkoutCount: latestBackendWorkoutSnapshot.uploadedWorkoutCount,
+                backendIncompleteWorkoutCount: latestBackendWorkoutSnapshot.incompleteWorkoutCount,
+                discoveredHealthKitWorkoutCount: workoutStreamResult.totalWorkouts
+            ) {
+                await syncClient.abortHealthSyncSession(uploadSession: session, pairing: pairing)
+                markWorkoutBackfillCompleted(at: Date())
+                lastSyncMessage =
+                    "Historical workout import already complete: \(latestBackendWorkoutSnapshot.uploadedWorkoutCount) workouts accounted for"
+                backgroundScheduler.schedule(activeSync: false, reason: "historical workout import already complete")
+                companionDebugLog(
+                    "CompanionAppModel",
+                    "historical workout import already complete backendUploaded=\(latestBackendWorkoutSnapshot.uploadedWorkoutCount) healthKitTotal=\(workoutStreamResult.totalWorkouts)"
+                )
+                stopHealthSyncTransferTelemetry()
+                return
+            }
+            guard HealthSyncSessionCompletionPolicy.canCompleteChunkedSession(
+                expectedRecordCount: workoutStats.expectedUploadRecordCount,
+                acceptedChunkCount: acceptedChunkCount
+            ) else {
+                await syncClient.abortHealthSyncSession(uploadSession: session, pairing: pairing)
+                throw Self.noAcceptedHealthSyncChunksError()
+            }
+
             var expectedCounts: [String: Int] = [:]
             expectedCounts["workout_summaries"] = workoutStats.workouts
             expectedCounts["workout_time_series"] = workoutStats.rawTimeSeriesDatapoints
@@ -2164,6 +2252,9 @@ final class CompanionAppModel: ObservableObject {
             applyHealthSyncChunkErrorDiagnostics(error)
             if Self.isProtectedHealthDataInaccessible(error) {
                 lastSyncMessage = "Waiting for device unlock to import workout history"
+            } else if Self.isRetryableHealthSyncTransportInterruption(error) {
+                lastSyncMessage = "Workout history import paused after an interrupted upload. Forge will retry later."
+                latestError = nil
             } else {
                 lastSyncMessage = "Workout history import paused. Forge will retry later."
                 latestError = error.localizedDescription
@@ -2393,6 +2484,35 @@ final class CompanionAppModel: ObservableObject {
             expectedCounts["workout_summaries"] = workoutStats.workouts
             expectedCounts["workout_time_series"] = workoutStats.rawTimeSeriesDatapoints
             expectedCounts["workout_routes"] = workoutStats.routePoints
+            let expectedRecordCount = expectedCounts.values.reduce(0, +)
+            let acceptedChunkCount = acceptedChunkCount(for: session)
+            if HealthSyncSessionCompletionPolicy.canCompleteChunkedSession(
+                expectedRecordCount: expectedRecordCount,
+                acceptedChunkCount: acceptedChunkCount
+            ) == false {
+                await syncClient.abortHealthSyncSession(uploadSession: session, pairing: pairing)
+                clearActiveHealthSyncCheckpoint()
+                backgroundScheduler.schedule(activeSync: false, reason: "health sync empty chunk session")
+                if expectedRecordCount == 0 {
+                    companionDebugLog(
+                        "CompanionAppModel",
+                        "health sync had no chunk records; falling back to direct sync payload"
+                    )
+                    let receipt = try await syncClient.pushHealthSync(
+                        payload: buildResult.payload,
+                        pairing: pairing
+                    )
+                    stopHealthSyncTransferTelemetry()
+                    return HealthSyncRunResult(
+                        receipt: receipt,
+                        payloadSummary: payloadSummary,
+                        healthDataDeferred: healthDataDeferred,
+                        completedWorkoutBackfill: false,
+                        requiresWorkoutEvidenceReplay: requiresWorkoutEvidenceReplay
+                    )
+                }
+                throw Self.noAcceptedHealthSyncChunksError()
+            }
             let receipt = try await syncClient.completeHealthSyncSession(
                 uploadSession: session,
                 pairing: pairing,
@@ -2421,7 +2541,15 @@ final class CompanionAppModel: ObservableObject {
                 )
                 lastSyncMessage = "Waiting for device unlock to read HealthKit again"
             } else if let uploadSession = recoveryContext.uploadSession {
-                if Self.isHealthSyncChunkChecksumMismatch(error) || Self.isHealthSyncMissingRequiredChunks(error) {
+                let acceptedChunkCount = acceptedChunkCount(for: uploadSession)
+                if Self.isRetryableHealthSyncTransportInterruption(error), acceptedChunkCount == 0 {
+                    await syncClient.abortHealthSyncSession(uploadSession: uploadSession, pairing: pairing)
+                    clearActiveHealthSyncCheckpoint()
+                    backgroundScheduler.schedule(activeSync: false, reason: "health sync interrupted before accepted chunks")
+                    lastSyncMessage = "Sync paused before Forge accepted data. Retry starts a clean session."
+                    healthSyncLegacyFallbackReason =
+                        "Last upload session was reset after an interrupted first chunk"
+                } else if Self.isHealthSyncChunkChecksumMismatch(error) || Self.isHealthSyncMissingRequiredChunks(error) {
                     await syncClient.abortHealthSyncSession(uploadSession: uploadSession, pairing: pairing)
                     clearActiveHealthSyncCheckpoint()
                     lastSyncMessage = Self.isHealthSyncMissingRequiredChunks(error)
@@ -2534,6 +2662,18 @@ final class CompanionAppModel: ObservableObject {
             "CompanionAppModel",
             "health sync backend workout state uploaded=\(snapshot.uploadedWorkoutCount) existing=\(snapshot.existingWorkoutCount) incomplete=\(snapshot.incompleteWorkoutCount) staleEvidenceVersion=\(snapshot.staleEvidenceVersionWorkoutCount) incompleteIds=\(snapshot.incompleteWorkoutExternalUids.count)"
         )
+    }
+
+    private func acceptedChunkCount(
+        for session: ForgeSyncClient.HealthSyncUploadSession
+    ) -> Int {
+        let checkpointCount: Int
+        if activeHealthSyncCheckpoint?.syncSessionId == session.syncSessionId {
+            checkpointCount = activeHealthSyncCheckpoint?.lastReceivedChunkCount ?? 0
+        } else {
+            checkpointCount = 0
+        }
+        return max(session.acceptedChunkCount, checkpointCount)
     }
 
     private func startHealthSyncTransferTelemetry() {
@@ -2745,6 +2885,49 @@ final class CompanionAppModel: ObservableObject {
                 nsError.localizedDescription.contains("missing_required_chunks") ||
                 failureReason?.contains("missing_required_chunks") == true
             )
+    }
+
+    private static func isRetryableHealthSyncTransportInterruption(_ error: Error) -> Bool {
+        if error is CancellationError {
+            return true
+        }
+        let nsError = error as NSError
+        let failureReason = nsError.userInfo[NSLocalizedFailureReasonErrorKey] as? String
+        if failureReason?.contains("healthkit_sync_no_accepted_chunks_retryable") == true {
+            return true
+        }
+        if nsError.domain == "Swift.CancellationError" {
+            return true
+        }
+        if nsError.domain == NSURLErrorDomain {
+            switch nsError.code {
+            case URLError.timedOut.rawValue,
+                 URLError.cancelled.rawValue,
+                 URLError.networkConnectionLost.rawValue,
+                 URLError.notConnectedToInternet.rawValue,
+                 URLError.cannotConnectToHost.rawValue,
+                 URLError.cannotFindHost.rawValue,
+                 URLError.dnsLookupFailed.rawValue:
+                return true
+            default:
+                return false
+            }
+        }
+        if nsError.domain == "ForgeIrohTransport", nsError.code == URLError.timedOut.rawValue {
+            return true
+        }
+        return nsError.localizedDescription == "The request timed out."
+    }
+
+    private static func noAcceptedHealthSyncChunksError() -> NSError {
+        NSError(
+            domain: "CompanionAppModel",
+            code: 3,
+            userInfo: [
+                NSLocalizedDescriptionKey: "No HealthKit sync chunks were accepted before finalization.",
+                NSLocalizedFailureReasonErrorKey: "healthkit_sync_no_accepted_chunks_retryable"
+            ]
+        )
     }
 
     private static func isProtectedHealthDataInaccessible(_ error: Error) -> Bool {
