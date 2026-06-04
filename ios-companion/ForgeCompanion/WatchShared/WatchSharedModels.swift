@@ -214,9 +214,33 @@ struct ForgeWatchMovementSnapshot: Codable, Hashable {
 }
 
 struct ForgeWatchPsycheSnapshot: Codable, Hashable {
+    struct Option: Codable, Identifiable, Hashable {
+        let id: String
+        let label: String
+        let subtitle: String
+        let payload: [String: String]
+    }
+
+    struct Question: Codable, Identifiable, Hashable {
+        let id: String
+        let title: String
+        let prompt: String
+        let eventType: String
+        let options: [Option]
+    }
+
+    struct RecentReport: Codable, Identifiable, Hashable {
+        let id: String
+        let title: String
+        let occurredAt: String?
+        let status: String
+    }
+
     let emotionOptions: [String]
     let triggerOptions: [String]
     let routinePromptOptions: [String]
+    let questions: [Question]?
+    let recentReports: [RecentReport]?
 }
 
 struct ForgeWatchInboxSnapshot: Codable, Hashable {

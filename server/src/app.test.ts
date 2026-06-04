@@ -8568,7 +8568,7 @@ test("movement user-box preflight and save allow overlapping manual boxes with l
   }
 });
 
-test("watch bootstrap serves compact habit state and watch habit check-ins preserve canonical streak semantics", async () => {
+test("watch bootstrap serves compact habit state for legacy pairings and watch habit check-ins preserve canonical streak semantics", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-watch-bootstrap-")
   );
@@ -8669,7 +8669,7 @@ test("watch bootstrap serves compact habit state and watch habit check-ins prese
       },
       payload: {
         userId: "user_operator",
-        capabilities: ["watch-ready"]
+        capabilities: ["healthkit.sleep"]
       }
     });
     assert.equal(pairingResponse.statusCode, 201);
@@ -9331,15 +9331,65 @@ test("watch action batch records idempotent command receipts and replays accepte
 
     const captureRow = getDatabase()
       .prepare(
-        `SELECT payload_json
+        `SELECT payload_json, projection_status, projection_details_json
          FROM watch_capture_events
          WHERE dedupe_key = ?`
       )
-      .get("watch-action-capture-1") as { payload_json: string };
+      .get("watch-action-capture-1") as {
+        payload_json: string;
+        projection_status: string;
+        projection_details_json: string;
+      };
     assert.deepEqual(JSON.parse(captureRow.payload_json), {
       emotion: "Focused",
       surface: "psyche"
     });
+    assert.equal(captureRow.projection_status, "projected");
+    assert.equal(
+      (JSON.parse(captureRow.projection_details_json) as { target: string })
+        .target,
+      "psyche_observation_note"
+    );
+
+    const watchNote = getDatabase()
+      .prepare(
+        `SELECT content_markdown, tags_json, frontmatter_json
+         FROM notes
+         WHERE author = 'Apple Watch'
+         ORDER BY created_at DESC
+         LIMIT 1`
+      )
+      .get() as {
+        content_markdown: string;
+        tags_json: string;
+        frontmatter_json: string;
+      };
+    assert.match(watchNote.content_markdown, /Emotion: Focused/);
+    assert.ok((JSON.parse(watchNote.tags_json) as string[]).includes("psyche"));
+    assert.equal(
+      (JSON.parse(watchNote.frontmatter_json) as { observedAt: string })
+        .observedAt,
+      "2026-04-07T08:04:00.000Z"
+    );
+
+    const calendarResponse = await app.inject({
+      method: "GET",
+      url:
+        "/api/v1/psyche/self-observation/calendar" +
+        "?from=2026-04-07T00:00:00.000Z&to=2026-04-08T00:00:00.000Z&userIds=user_operator",
+      headers: { cookie: operatorCookie }
+    });
+    assert.equal(calendarResponse.statusCode, 200, calendarResponse.body);
+    const calendarBody = calendarResponse.json() as {
+      calendar: {
+        observations: Array<{ note: { contentMarkdown: string } }>;
+      };
+    };
+    assert.ok(
+      calendarBody.calendar.observations.some((observation) =>
+        observation.note.contentMarkdown.includes("Emotion: Focused")
+      )
+    );
   } finally {
     await app.close();
     closeDatabase();
