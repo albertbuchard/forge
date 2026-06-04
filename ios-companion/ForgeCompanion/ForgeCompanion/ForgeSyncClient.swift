@@ -404,9 +404,11 @@ struct ForgeSyncClient {
 
     struct HealthSyncWorkoutImportState: Decodable {
         let alreadyUploadedWorkoutExternalUids: [String]
+        let incompleteWorkoutExternalUids: [String]?
         let alreadyUploadedWorkoutCount: Int
         let existingWorkoutCount: Int?
         let incompleteWorkoutCount: Int?
+        let staleEvidenceVersionWorkoutCount: Int?
         let heartRateSampleCount: Int?
         let timeSeriesSampleCount: Int?
         let routePointCount: Int?

@@ -13,7 +13,7 @@ function buildLocation(pathname: string): Location {
     hash: "",
     state: null,
     key: pathname,
-    unstable_mask: undefined
+    mask: undefined
   };
 }
 

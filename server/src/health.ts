@@ -4447,6 +4447,7 @@ function expectedWorkoutEvidenceCounts(derived: Record<string, unknown>) {
     expectedTimeSeriesSamples,
     expectedHeartRateSamples,
     expectedRoutePoints,
+    rawEvidenceVersion,
     hasCurrentRawEvidenceVersion:
       rawEvidenceVersion === CURRENT_WORKOUT_RAW_EVIDENCE_VERSION,
     hasEvidenceMetadata:
@@ -4501,7 +4502,9 @@ function mobileHealthWorkoutImportState(userId: string) {
   }>;
 
   const alreadyUploadedWorkoutExternalUids: string[] = [];
+  const incompleteWorkoutExternalUids: string[] = [];
   let incompleteWorkoutCount = 0;
+  let staleEvidenceVersionWorkoutCount = 0;
   let timeSeriesSampleCount = 0;
   let heartRateSampleCount = 0;
   let routePointCount = 0;
@@ -4515,28 +4518,33 @@ function mobileHealthWorkoutImportState(userId: string) {
     const actualTimeSeriesCount = Math.max(0, row.time_series_count ?? 0);
     const actualHeartRateCount = Math.max(0, row.heart_rate_count ?? 0);
     const actualRoutePointCount = Math.max(0, row.route_point_count ?? 0);
-    const evidenceComplete = evidenceCounts.hasEvidenceMetadata
-      ? evidenceCounts.hasCurrentRawEvidenceVersion &&
-        actualTimeSeriesCount >= evidenceCounts.expectedTimeSeriesSamples &&
+    const evidenceCountsComplete = evidenceCounts.hasEvidenceMetadata
+      ? actualTimeSeriesCount >= evidenceCounts.expectedTimeSeriesSamples &&
         actualHeartRateCount >= evidenceCounts.expectedHeartRateSamples &&
         actualRoutePointCount >= evidenceCounts.expectedRoutePoints
       : false;
 
-    if (evidenceComplete) {
+    if (evidenceCountsComplete) {
       alreadyUploadedWorkoutExternalUids.push(row.external_uid.toLowerCase());
       timeSeriesSampleCount += actualTimeSeriesCount;
       heartRateSampleCount += actualHeartRateCount;
       routePointCount += actualRoutePointCount;
+      if (!evidenceCounts.hasCurrentRawEvidenceVersion) {
+        staleEvidenceVersionWorkoutCount += 1;
+      }
     } else {
       incompleteWorkoutCount += 1;
+      incompleteWorkoutExternalUids.push(row.external_uid.toLowerCase());
     }
   }
 
   return {
     alreadyUploadedWorkoutExternalUids,
+    incompleteWorkoutExternalUids,
     alreadyUploadedWorkoutCount: alreadyUploadedWorkoutExternalUids.length,
     existingWorkoutCount: rows.length,
     incompleteWorkoutCount,
+    staleEvidenceVersionWorkoutCount,
     timeSeriesSampleCount,
     heartRateSampleCount,
     routePointCount,

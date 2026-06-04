@@ -379,9 +379,11 @@ final class CompanionAppModel: ObservableObject {
 
     private struct BackendWorkoutImportSnapshot {
         let uploadedWorkoutExternalUids: Set<String>
+        let incompleteWorkoutExternalUids: Set<String>
         let uploadedWorkoutCount: Int
         let existingWorkoutCount: Int
         let incompleteWorkoutCount: Int
+        let staleEvidenceVersionWorkoutCount: Int
         let heartRateSampleCount: Int
         let timeSeriesSampleCount: Int
         let routePointCount: Int
@@ -2479,11 +2481,16 @@ final class CompanionAppModel: ObservableObject {
         let uploadedWorkoutExternalUids = Set(
             state?.alreadyUploadedWorkoutExternalUids.map { $0.lowercased() } ?? []
         )
+        let incompleteWorkoutExternalUids = Set(
+            state?.incompleteWorkoutExternalUids?.map { $0.lowercased() } ?? []
+        )
         return BackendWorkoutImportSnapshot(
             uploadedWorkoutExternalUids: uploadedWorkoutExternalUids,
+            incompleteWorkoutExternalUids: incompleteWorkoutExternalUids,
             uploadedWorkoutCount: state?.alreadyUploadedWorkoutCount ?? uploadedWorkoutExternalUids.count,
             existingWorkoutCount: state?.existingWorkoutCount ?? uploadedWorkoutExternalUids.count,
             incompleteWorkoutCount: state?.incompleteWorkoutCount ?? 0,
+            staleEvidenceVersionWorkoutCount: state?.staleEvidenceVersionWorkoutCount ?? 0,
             heartRateSampleCount: state?.heartRateSampleCount ?? 0,
             timeSeriesSampleCount: state?.timeSeriesSampleCount ?? 0,
             routePointCount: state?.routePointCount ?? 0
@@ -2525,7 +2532,7 @@ final class CompanionAppModel: ObservableObject {
         }
         companionDebugLog(
             "CompanionAppModel",
-            "health sync backend workout state uploaded=\(snapshot.uploadedWorkoutCount) existing=\(snapshot.existingWorkoutCount) incomplete=\(snapshot.incompleteWorkoutCount)"
+            "health sync backend workout state uploaded=\(snapshot.uploadedWorkoutCount) existing=\(snapshot.existingWorkoutCount) incomplete=\(snapshot.incompleteWorkoutCount) staleEvidenceVersion=\(snapshot.staleEvidenceVersionWorkoutCount) incompleteIds=\(snapshot.incompleteWorkoutExternalUids.count)"
         )
     }
 
@@ -2611,6 +2618,14 @@ final class CompanionAppModel: ObservableObject {
             resumedChunks: 0
         )
         update(&status)
+        if let totalWorkouts = status.totalWorkouts {
+            status.uploadedWorkoutSummaries = min(
+                max(0, status.uploadedWorkoutSummaries),
+                max(0, totalWorkouts)
+            )
+        } else {
+            status.uploadedWorkoutSummaries = max(0, status.uploadedWorkoutSummaries)
+        }
         historicalWorkoutImportStatus = status
     }
 
