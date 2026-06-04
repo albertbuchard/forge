@@ -472,6 +472,69 @@ test("custom nutrition foods require calories and macros and are cached for reus
       .get("Albert's custom toast") as { count: number };
     assert.equal(customRows.count, 1);
 
+    const createGramCustom = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/weight-loss/food-logs",
+      headers: { cookie },
+      payload: {
+        mealLabel: "Reusable gram custom food",
+        source: "manual",
+        confirmationState: "confirmed",
+        items: [
+          {
+            name: "Albert gram bowl",
+            quantity: 180,
+            unit: "g",
+            grams: 180,
+            calories: 360,
+            proteinGrams: 30,
+            carbohydrateGrams: 42,
+            fatGrams: 12
+          }
+        ]
+      }
+    });
+    assert.equal(createGramCustom.statusCode, 201);
+    const gramCustomBody = createGramCustom.json() as {
+      log: { items: Array<{ foodId: string | null }> };
+    };
+    const gramCustomFoodId = gramCustomBody.log.items[0]?.foodId;
+    assert.ok(gramCustomFoodId);
+
+    const reuseHalfGramCustom = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/weight-loss/food-logs",
+      headers: { cookie },
+      payload: {
+        mealLabel: "Reuse half gram custom food",
+        source: "search",
+        confirmationState: "confirmed",
+        items: [
+          {
+            foodId: gramCustomFoodId,
+            name: "Albert gram bowl",
+            quantity: 90,
+            unit: "g"
+          }
+        ]
+      }
+    });
+    assert.equal(reuseHalfGramCustom.statusCode, 201);
+    const reuseHalfGramBody = reuseHalfGramCustom.json() as {
+      log: {
+        totals: {
+          calories: number;
+          proteinGrams: number;
+          carbohydrateGrams: number;
+          fatGrams: number;
+        };
+      };
+    };
+    assert.equal(reuseHalfGramBody.log.totals.calories, 180);
+    assert.equal(reuseHalfGramBody.log.totals.proteinGrams, 15);
+    assert.equal(reuseHalfGramBody.log.totals.carbohydrateGrams, 21);
+    assert.equal(reuseHalfGramBody.log.totals.fatGrams, 6);
+
     const candidateCustom = await app.inject({
       method: "POST",
       url: "/api/v1/health/weight-loss/food-logs",

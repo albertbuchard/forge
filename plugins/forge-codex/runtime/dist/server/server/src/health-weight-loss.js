@@ -605,6 +605,36 @@ function getFoodCatalogById(foodId) {
         .get(foodId);
     return row ? mapFood(row) : null;
 }
+function consumedGramQuantity(input) {
+    if (hasNutritionValue(input.grams) && input.grams > 0) {
+        return input.grams;
+    }
+    const unit = normalizeCustomFoodToken(input.unit);
+    if (hasNutritionValue(input.quantity) &&
+        input.quantity > 0 &&
+        ["g", "gram", "grams"].includes(unit)) {
+        return input.quantity;
+    }
+    return null;
+}
+function catalogScaleFactor(input, food) {
+    const consumedGrams = consumedGramQuantity(input);
+    if (consumedGrams != null &&
+        hasNutritionValue(food.servingGrams) &&
+        food.servingGrams > 0) {
+        return consumedGrams / food.servingGrams;
+    }
+    const unit = normalizeCustomFoodToken(input.unit);
+    if (hasNutritionValue(input.quantity) &&
+        input.quantity > 0 &&
+        (!unit || ["serving", "servings"].includes(unit))) {
+        return input.quantity;
+    }
+    return 1;
+}
+function scaledCatalogNutrition(value, scaleFactor) {
+    return hasNutritionValue(value) ? round(value * scaleFactor, 2) : undefined;
+}
 function normalizeCustomFoodToken(value) {
     return (value ?? "")
         .trim()
@@ -667,19 +697,27 @@ function resolveMealItemForInsert(input, options) {
                 }
             ]);
         }
+        const scaleFactor = catalogScaleFactor(input, food);
         item = {
             ...input,
             name: input.name || food.name,
-            calories: input.calories ?? food.calories ?? undefined,
-            proteinGrams: input.proteinGrams ?? food.proteinGrams ?? undefined,
-            carbohydrateGrams: input.carbohydrateGrams ?? food.carbohydrateGrams ?? undefined,
-            fatGrams: input.fatGrams ?? food.fatGrams ?? undefined,
-            fiberGrams: input.fiberGrams ?? food.fiberGrams ?? undefined,
-            sugarGrams: input.sugarGrams ?? food.sugarGrams ?? undefined,
-            sodiumMg: input.sodiumMg ?? food.sodiumMg ?? undefined,
-            potassiumMg: input.potassiumMg ?? food.potassiumMg ?? undefined,
-            caffeineMg: input.caffeineMg ?? food.caffeineMg ?? undefined,
-            alcoholGrams: input.alcoholGrams ?? food.alcoholGrams ?? undefined,
+            calories: input.calories ?? scaledCatalogNutrition(food.calories, scaleFactor),
+            proteinGrams: input.proteinGrams ??
+                scaledCatalogNutrition(food.proteinGrams, scaleFactor),
+            carbohydrateGrams: input.carbohydrateGrams ??
+                scaledCatalogNutrition(food.carbohydrateGrams, scaleFactor),
+            fatGrams: input.fatGrams ?? scaledCatalogNutrition(food.fatGrams, scaleFactor),
+            fiberGrams: input.fiberGrams ??
+                scaledCatalogNutrition(food.fiberGrams, scaleFactor),
+            sugarGrams: input.sugarGrams ??
+                scaledCatalogNutrition(food.sugarGrams, scaleFactor),
+            sodiumMg: input.sodiumMg ?? scaledCatalogNutrition(food.sodiumMg, scaleFactor),
+            potassiumMg: input.potassiumMg ??
+                scaledCatalogNutrition(food.potassiumMg, scaleFactor),
+            caffeineMg: input.caffeineMg ??
+                scaledCatalogNutrition(food.caffeineMg, scaleFactor),
+            alcoholGrams: input.alcoholGrams ??
+                scaledCatalogNutrition(food.alcoholGrams, scaleFactor),
             nutrients: Object.keys(input.nutrients).length > 0
                 ? input.nutrients
                 : food.nutrients,

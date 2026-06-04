@@ -4988,6 +4988,7 @@
               "movement",
               "lifeForce",
               "workbench",
+              "weightLoss",
               "psyche"
             ],
             "properties": {
@@ -5046,6 +5047,9 @@
                 "type": "string"
               },
               "workbench": {
+                "type": "string"
+              },
+              "weightLoss": {
                 "type": "string"
               },
               "psyche": {
@@ -5625,6 +5629,22 @@
               "weeklyReview",
               "sleepOverview",
               "sportsOverview",
+              "trainingLoad",
+              "weightLoss",
+              "weightLossTarget",
+              "weightLossDailyActiveCalories",
+              "weightLossFoodsSearch",
+              "weightLossFoodsBarcode",
+              "weightLossFoodLogs",
+              "weightLossFoodLogDetail",
+              "weightLossParse",
+              "weightLossBodyCheckins",
+              "weightLossAppearanceCheckins",
+              "weightLossSubjectiveCheckins",
+              "weightLossGutCheckins",
+              "weightLossPatterns",
+              "weightLossExperiments",
+              "weightLossExperimentDetail",
               "lifeForce",
               "lifeForceProfile",
               "lifeForceWeekdayTemplate",
@@ -5681,6 +5701,54 @@
                 "type": "string"
               },
               "sportsOverview": {
+                "type": "string"
+              },
+              "trainingLoad": {
+                "type": "string"
+              },
+              "weightLoss": {
+                "type": "string"
+              },
+              "weightLossTarget": {
+                "type": "string"
+              },
+              "weightLossDailyActiveCalories": {
+                "type": "string"
+              },
+              "weightLossFoodsSearch": {
+                "type": "string"
+              },
+              "weightLossFoodsBarcode": {
+                "type": "string"
+              },
+              "weightLossFoodLogs": {
+                "type": "string"
+              },
+              "weightLossFoodLogDetail": {
+                "type": "string"
+              },
+              "weightLossParse": {
+                "type": "string"
+              },
+              "weightLossBodyCheckins": {
+                "type": "string"
+              },
+              "weightLossAppearanceCheckins": {
+                "type": "string"
+              },
+              "weightLossSubjectiveCheckins": {
+                "type": "string"
+              },
+              "weightLossGutCheckins": {
+                "type": "string"
+              },
+              "weightLossPatterns": {
+                "type": "string"
+              },
+              "weightLossExperiments": {
+                "type": "string"
+              },
+              "weightLossExperimentDetail": {
                 "type": "string"
               },
               "lifeForce": {
@@ -8826,7 +8894,18 @@
           "name",
           "quantity"
         ],
+        "description": "Meal item input. Pass foodId from /foods/search or /foods/barcode when reusing a catalog food. If foodId is omitted, Forge treats the item as a custom food and requires calories, proteinGrams, carbohydrateGrams, and fatGrams.",
         "properties": {
+          "foodId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "name": {
             "type": "string"
           },
@@ -8847,6 +8926,16 @@
             "anyOf": [
               {
                 "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "grams": {
+            "anyOf": [
+              {
+                "type": "number"
               },
               {
                 "type": "null"
@@ -9164,7 +9253,18 @@
                 "name",
                 "quantity"
               ],
+              "description": "Meal item input. Pass foodId from /foods/search or /foods/barcode when reusing a catalog food. If foodId is omitted, Forge treats the item as a custom food and requires calories, proteinGrams, carbohydrateGrams, and fatGrams.",
               "properties": {
+                "foodId": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "name": {
                   "type": "string"
                 },
@@ -9185,6 +9285,16 @@
                   "anyOf": [
                     {
                       "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "grams": {
+                  "anyOf": [
+                    {
+                      "type": "number"
                     },
                     {
                       "type": "null"
@@ -12725,12 +12835,78 @@
         "operationId": "patchhealth_weight_loss_target"
       }
     },
+    "/api/v1/health/weight-loss/daily-active-calories": {
+      "patch": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Set or clear the user-edited active calorie allowance for one weight-loss day",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "userId": {
+                    "type": "string"
+                  },
+                  "dayKey": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  },
+                  "activeCaloriesKcal": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "minimum": 0
+                  },
+                  "notes": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated daily active calorie override",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "dayKey"
+                  ],
+                  "properties": {
+                    "dayKey": {
+                      "type": "string"
+                    },
+                    "override": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "patchhealth_weight_loss_daily_active_calories"
+      }
+    },
     "/api/v1/health/weight-loss/foods/search": {
       "post": {
         "tags": [
           "Health"
         ],
         "summary": "Search nutrition foods across local and public catalogs",
+        "description": "Searches Forge's local nutrition_food_catalog first, including custom foods, then public Open Food Facts and USDA-backed sources. Reuse returned ids as NutritionMealItemInput.foodId before creating a new custom food.",
         "requestBody": {
           "content": {
             "application/json": {
