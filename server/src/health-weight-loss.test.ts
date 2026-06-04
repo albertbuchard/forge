@@ -42,6 +42,8 @@ test("weight loss overview reflects food logs and body check-ins", async () => {
             unit: "g",
             calories: 180,
             proteinGrams: 25,
+            carbohydrateGrams: 9,
+            fatGrams: 4,
             fiberGrams: 0,
             tags: ["high-protein"]
           },
@@ -50,7 +52,9 @@ test("weight loss overview reflects food logs and body check-ins", async () => {
             quantity: 120,
             unit: "g",
             calories: 70,
+            proteinGrams: 1,
             carbohydrateGrams: 16,
+            fatGrams: 0,
             fiberGrams: 5,
             tags: ["fiber"]
           }
@@ -64,7 +68,7 @@ test("weight loss overview reflects food logs and body check-ins", async () => {
       };
     };
     assert.equal(createLogBody.log.totals.calories, 250);
-    assert.equal(createLogBody.log.totals.proteinGrams, 25);
+    assert.equal(createLogBody.log.totals.proteinGrams, 26);
     assert.equal(createLogBody.log.totals.fiberGrams, 5);
 
     const savedMealLog = await app.inject({
@@ -82,14 +86,18 @@ test("weight loss overview reflects food logs and body check-ins", async () => {
             quantity: 250,
             unit: "g",
             calories: 180,
-            proteinGrams: 25
+            proteinGrams: 25,
+            carbohydrateGrams: 9,
+            fatGrams: 4
           },
           {
             name: "Berries",
             quantity: 120,
             unit: "g",
             calories: 70,
+            proteinGrams: 1,
             carbohydrateGrams: 16,
+            fatGrams: 0,
             fiberGrams: 5
           }
         ]
@@ -251,7 +259,7 @@ test("weight loss overview reflects food logs and body check-ins", async () => {
       };
     };
     assert.equal(overviewBody.weightLoss.todayLedger.totals.calories, 500);
-    assert.equal(overviewBody.weightLoss.todayLedger.totals.proteinGrams, 50);
+    assert.equal(overviewBody.weightLoss.todayLedger.totals.proteinGrams, 52);
     assert.equal(overviewBody.weightLoss.todayLedger.totals.fiberGrams, 10);
     assert.equal(overviewBody.weightLoss.todayLedger.meals.length, 2);
     assert.equal(
@@ -344,6 +352,171 @@ test("weight loss overview reflects food logs and body check-ins", async () => {
   }
 });
 
+test("custom nutrition foods require calories and macros and are cached for reuse", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-weight-loss-custom-food-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: false });
+
+  try {
+    const cookie = await issueOperatorSessionCookie(app);
+    const invalidCustom = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/weight-loss/food-logs",
+      headers: { cookie },
+      payload: {
+        mealLabel: "Name only",
+        source: "manual",
+        confirmationState: "confirmed",
+        items: [{ name: "Albert's custom toast", quantity: 1 }]
+      }
+    });
+    assert.equal(invalidCustom.statusCode, 400);
+    assert.match(invalidCustom.body, /calories, proteinGrams/i);
+
+    const createCustom = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/weight-loss/food-logs",
+      headers: { cookie },
+      payload: {
+        mealLabel: "Reusable custom food",
+        source: "manual",
+        confirmationState: "confirmed",
+        items: [
+          {
+            name: "Albert's custom toast",
+            quantity: 1,
+            unit: "serving",
+            calories: 310,
+            proteinGrams: 19,
+            carbohydrateGrams: 34,
+            fatGrams: 11,
+            fiberGrams: 7,
+            tags: ["custom_test"]
+          }
+        ]
+      }
+    });
+    assert.equal(createCustom.statusCode, 201);
+    const createdBody = createCustom.json() as {
+      log: { items: Array<{ foodId: string | null }> };
+    };
+    const customFoodId = createdBody.log.items[0]?.foodId;
+    assert.ok(customFoodId);
+
+    const searchCustom = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/weight-loss/foods/search",
+      payload: { query: "custom toast", limit: 5 }
+    });
+    assert.equal(searchCustom.statusCode, 200);
+    const searchBody = searchCustom.json() as {
+      foods: Array<{
+        id: string;
+        source: string;
+        calories: number | null;
+        proteinGrams: number | null;
+        carbohydrateGrams: number | null;
+        fatGrams: number | null;
+      }>;
+    };
+    const customFood = searchBody.foods.find((food) => food.id === customFoodId);
+    assert.ok(customFood);
+    assert.equal(customFood.source, "custom");
+    assert.equal(customFood.calories, 310);
+    assert.equal(customFood.proteinGrams, 19);
+    assert.equal(customFood.carbohydrateGrams, 34);
+    assert.equal(customFood.fatGrams, 11);
+
+    const reuseCustom = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/weight-loss/food-logs",
+      headers: { cookie },
+      payload: {
+        mealLabel: "Reuse custom food",
+        source: "search",
+        confirmationState: "confirmed",
+        items: [
+          {
+            foodId: customFoodId,
+            name: "Albert's custom toast",
+            quantity: 1
+          }
+        ]
+      }
+    });
+    assert.equal(reuseCustom.statusCode, 201);
+    const reuseBody = reuseCustom.json() as {
+      log: {
+        totals: {
+          calories: number;
+          proteinGrams: number;
+          carbohydrateGrams: number;
+          fatGrams: number;
+        };
+        items: Array<{ foodId: string | null }>;
+      };
+    };
+    assert.equal(reuseBody.log.items[0]?.foodId, customFoodId);
+    assert.equal(reuseBody.log.totals.calories, 310);
+    assert.equal(reuseBody.log.totals.proteinGrams, 19);
+    assert.equal(reuseBody.log.totals.carbohydrateGrams, 34);
+    assert.equal(reuseBody.log.totals.fatGrams, 11);
+
+    const customRows = getDatabase()
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM nutrition_food_catalog
+         WHERE source = 'custom' AND name = ?`
+      )
+      .get("Albert's custom toast") as { count: number };
+    assert.equal(customRows.count, 1);
+
+    const candidateCustom = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/weight-loss/food-logs",
+      headers: { cookie },
+      payload: {
+        mealLabel: "Candidate custom food",
+        source: "chatgpt",
+        confirmationState: "candidate",
+        items: [
+          {
+            name: "Albert candidate oats",
+            quantity: 1,
+            unit: "bowl",
+            calories: 420,
+            proteinGrams: 24,
+            carbohydrateGrams: 58,
+            fatGrams: 10
+          }
+        ]
+      }
+    });
+    assert.equal(candidateCustom.statusCode, 201);
+    const candidateBody = candidateCustom.json() as {
+      log: { id: string; items: Array<{ foodId: string | null }> };
+    };
+    assert.equal(candidateBody.log.items[0]?.foodId, null);
+
+    const confirmCandidate = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/health/weight-loss/food-logs/${candidateBody.log.id}`,
+      headers: { cookie },
+      payload: { confirmationState: "confirmed" }
+    });
+    assert.equal(confirmCandidate.statusCode, 200);
+    const confirmedBody = confirmCandidate.json() as {
+      log: { items: Array<{ foodId: string | null }> };
+    };
+    assert.ok(confirmedBody.log.items[0]?.foodId);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("weight loss ledger and active override are scoped to the requested local day", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-weight-loss-day-scope-")
@@ -372,7 +545,9 @@ test("weight loss ledger and active override are scoped to the requested local d
             unit: "grams",
             grams: 200,
             calories: 160,
-            proteinGrams: 18
+            proteinGrams: 18,
+            carbohydrateGrams: 12,
+            fatGrams: 3
           }
         ]
       }
@@ -529,7 +704,10 @@ test("weight loss energy gap averages intake over the same recent log window", a
               name: "Measured food",
               quantity: 1,
               unit: "serving",
-              calories: 100
+              calories: 100,
+              proteinGrams: 8,
+              carbohydrateGrams: 12,
+              fatGrams: 3
             }
           ]
         }

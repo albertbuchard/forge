@@ -415,7 +415,10 @@ still knowing the exact write/read family before it acts.
   hypotheses, or nutrition experiments. Use `forge_parse_food_log_with_chatgpt`
   for rough meal text/photo descriptions through the configured `openai-codex`
   ChatGPT subscription connection, then use `forge_log_food` and the body,
-  appearance, subjective, gut, and experiment tools for durable evidence.
+  appearance, subjective, gut, and experiment tools for durable evidence. Search
+  foods first and reuse returned `foodId` values. If a custom food is needed,
+  research calories plus protein, carbohydrate, and fat from reliable internet
+  nutrition sources before logging; name-only custom foods are invalid.
 - `movement`: specialized domain surface. Use the dedicated movement routes for day,
   month, all-time, timeline, places, trip detail, selection aggregates, manual
   overlays, and repair actions.
@@ -1598,7 +1601,11 @@ Arc:
 4. Use `forge_log_food`, `forge_log_body_checkin`,
    `forge_log_appearance_checkin`, `forge_log_subjective_food_effect`, and
    `forge_log_gut_checkin` to preserve the user's actual evidence.
-5. Use `forge_get_nutrition_patterns`, `forge_start_nutrition_experiment`, and
+5. For `forge_log_food`, call `forge_search_foods` or barcode lookup first. Reuse
+   a matching result through `item.foodId`. If there is no match, create a custom
+   food only after researching calories, protein, carbohydrate, and fat; include
+   `caloriesKcal`, `proteinG`, `carbsG`, and `fatG` in the item.
+6. Use `forge_get_nutrition_patterns`, `forge_start_nutrition_experiment`, and
    `forge_update_nutrition_experiment` when repeated observations should become
    an N-of-1 test instead of vague advice.
 
@@ -1607,6 +1614,8 @@ Helpful follow-up lanes:
 - whether the decision is weight trend, protein/fiber sufficiency, sport fuel,
   visual look, water retention, gut comfort, cravings, or energy
 - whether a meal should be confirmed precisely or logged as a candidate estimate
+- whether a searched/catalog food can be reused by `foodId` or whether a researched
+  custom food with calories and macros is needed
 - which outcome metric should define a nutrition experiment before interpreting it
 
 Route note:
@@ -1614,7 +1623,9 @@ Route note:
 - `weight_loss` is a health read model plus dedicated nutrition write workflow.
   Use `/api/v1/health/weight-loss` or `forge_get_weight_loss_overview` for the
   overview. Do not invent generic batch entities for food logs or body check-ins
-  when the dedicated tools exist.
+  when the dedicated tools exist. Food search reads Forge's local custom/cache
+  database plus public nutrition catalogs. `forge_log_food` rejects custom items
+  without calories, protein, carbohydrate, and fat.
 
 Ready to review when:
 

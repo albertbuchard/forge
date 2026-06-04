@@ -242,6 +242,9 @@ Required sections:
   - saved meals
   - photo
   - manual entry
+  - custom food creation only after search; custom entries must include calories,
+    protein, carbohydrate, and fat for the serving so they can be reused from the
+    local food catalog instead of becoming name-only meal fragments
 - Body board:
   - weight trend
   - waist and measurement trends
@@ -418,6 +421,9 @@ The goal is complete when:
 - A user can log food by text, search, barcode, manual entry, saved meal, and photo/candidate flow.
 - Food logs remain editable and deletable.
 - Food lookup uses USDA FoodData Central and Open Food Facts with local caching.
+- Forge keeps a local custom food database inside `nutrition_food_catalog`; custom
+  foods are searchable/reusable by `foodId`, deduped by normalized serving identity,
+  and cannot be saved without calories plus protein, carbohydrate, and fat.
 - AI parsing uses the existing ChatGPT/Codex OAuth backend path only.
 - No new default OpenAI API billing path exists for this feature.
 - Unconfirmed AI candidates do not distort final metrics until accepted.

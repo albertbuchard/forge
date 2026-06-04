@@ -322,6 +322,7 @@ const healthLinkInputSchema = () =>
   });
 const nutritionMealItemInputSchema = () =>
   Type.Object({
+    foodId: Type.Optional(optionalNullableString()),
     name: Type.String({ minLength: 1 }),
     brand: optionalNullableString(),
     quantity: Type.Number({ minimum: 0 }),
@@ -361,18 +362,19 @@ const nutritionFoodLogSchema = () =>
     source: Type.Optional(
       Type.Union([
         Type.Literal("manual"),
+        Type.Literal("search"),
         Type.Literal("barcode"),
         Type.Literal("chatgpt"),
         Type.Literal("photo"),
-        Type.Literal("import")
+        Type.Literal("saved_meal")
       ])
     ),
     confirmationState: Type.Optional(
       Type.Union([
         Type.Literal("candidate"),
         Type.Literal("confirmed"),
-        Type.Literal("corrected"),
-        Type.Literal("rejected")
+        Type.Literal("needs_review"),
+        Type.Literal("discarded")
       ])
     ),
     satietyScore: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
@@ -1196,7 +1198,7 @@ export function registerForgePluginTools(
     name: "forge_log_food",
     label: "Forge Log Food",
     description:
-      "Create a confirmed or candidate food log with explicit meal items, calories, macros, quality tags, hunger, satiety, cravings, and context.",
+      "Create a confirmed or candidate food log. Search first and pass foodId when reusing a catalog food; for custom foods without foodId, caloriesKcal, proteinG, carbsG, and fatG are required.",
     parameters: nutritionFoodLogSchema(),
     async execute(_toolCallId, params) {
       const typed = params as Record<string, unknown>;

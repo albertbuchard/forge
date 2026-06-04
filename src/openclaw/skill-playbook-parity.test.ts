@@ -104,6 +104,9 @@ describe("forge skill playbook parity", () => {
     expect(openclawSkill).toMatch(/forge_adjust_work_minutes/);
     expect(openclawSkill).toMatch(/forge_submit_preferences_judgment/);
     expect(openclawSkill).toMatch(/forge_submit_preferences_signal/);
+    expect(openclawSkill).toMatch(/item\.foodId/);
+    expect(openclawSkill).toMatch(/caloriesKcal[\s\S]*proteinG[\s\S]*carbsG[\s\S]*fatG/);
+    expect(openclawSkill).toMatch(/never save a name-only food/i);
     expect(openclawSkill).toMatch(/Batch CRUD is the default for simple entities|shared batch entity tools/i);
     expect(openclawSkill).toMatch(/four major stored-entity surfaces and three specialized domain surfaces/i);
     expect(openclawSkill).toMatch(/specialized domain surfaces are Movement, Life Force, and Workbench/i);
@@ -250,12 +253,16 @@ describe("forge skill playbook parity", () => {
     expect(hermesSkill).toMatch(/four major stored-entity surfaces and three specialized domain surfaces/i);
     expect(hermesSkill).toMatch(/specialized domain surfaces are Movement,[\s\S]*Life Force,[\s\S]*Workbench/i);
     expect(hermesSkill).toMatch(/dedicated route families instead of[\s\S]*batch CRUD/i);
+    expect(hermesSkill).toMatch(/item\.foodId/);
+    expect(hermesSkill).toMatch(/name-only custom foods/i);
     expect(codexSkill).toMatch(/\/forge\/v1\/movement/i);
     expect(codexSkill).toMatch(/forge_adjust_work_minutes/);
     expect(codexSkill).toMatch(/preference_judgment/i);
     expect(codexSkill).toMatch(/preference_signal/i);
     expect(codexSkill).toMatch(/specialized Movement, Life Force, and Workbench domain surfaces/i);
     expect(codexSkill).toMatch(/Movement, Life Force, and Workbench use dedicated route[\s\S]*batch CRUD/i);
+    expect(codexSkill).toMatch(/item\.foodId/);
+    expect(codexSkill).toMatch(/name-only custom foods/i);
 
     for (const skill of [openclawSkill, hermesSkill, codexSkill]) {
       expect(skill).toMatch(/flashcard/);
@@ -270,6 +277,9 @@ describe("forge skill playbook parity", () => {
     expect(readRepoFile("skills/forge-openclaw/psyche_entity_playbooks.md")).toMatch(
       /Hypotheses are not decorative reassurance[\s\S]*Do not make the user supply every interpretation alone/i
     );
+    expect(
+      readRepoFile("skills/forge-openclaw/entity_conversation_playbooks.md")
+    ).toMatch(/custom food[\s\S]*calories plus protein, carbohydrate, and fat/i);
   });
 
   it("keeps OpenClaw's exact tool list aligned with the current curated tool surface", () => {

@@ -342,6 +342,12 @@ Surface rule:
     `forge_update_nutrition_experiment`. Food parsing must use Forge's
     configured `openai-codex` ChatGPT subscription connection, not a metered
     OpenAI Platform API path.
+    For food logging, search Forge's nutrition catalog first and pass a matching
+    result as `item.foodId` to `forge_log_food`. If no result matches and a custom
+    food is needed, research calories plus protein, carbohydrate, and fat on the
+    internet or another reliable public nutrition source before logging it.
+    Custom/no-`foodId` items must include `caloriesKcal`, `proteinG`, `carbsG`,
+    and `fatG`; do not save name-only custom foods.
     The training-load read model includes zone-time buckets, Combat/Base/Endurance
     smart modes, next-week targets, and next-workout guidance.
 13. Movement, Life Force, and Workbench are specialized Forge API surfaces rather
