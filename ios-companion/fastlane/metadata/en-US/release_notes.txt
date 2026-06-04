@@ -1,19 +1,16 @@
-Forge Companion 1.0.80 improves the watchOS command surface and keeps the
-historical HealthKit evidence replay fix from 1.0.78. This build also makes
-the TestFlight release lane resilient to App Store Connect partial uploads.
+Forge Companion 1.0.81 fixes the watchOS companion data path so surfaces are
+fed by Forge backend snapshots instead of empty placeholder cards.
 
-Historical workouts whose heart-rate, time-series, and route evidence was already
-uploaded are no longer treated as missing just because they used an older raw
-evidence contract. Truly missing evidence remains replayable, but completed
-workouts should not restart the historical import on app launch.
+Habits, Psyche, and Work now use horizontal card paging inside each surface.
+Habits can be marked from the Watch, Work shows individual tasks from the
+Kanban snapshot, and Psyche questions are derived from Forge's backend event,
+emotion, value, behavior, and mode definitions.
 
-The Watch app now opens into a clear Forge surface navigator: the Digital Crown
-moves between Now, Work, Habits, Goals, Today, Health, Movement, Psyche, Inbox,
-and Sync, while horizontal paging selects the current card inside each surface.
-Every surface now has a fast action or logging path instead of leaving the user
-stuck on one command page.
+Psyche choices now project back into Forge as canonical self-observation notes
+or trigger reports, so Watch entries are visible in Forge rather than staying
+as local-only captures.
 
-The Watch asks the iPhone to refresh and relay automatically when it opens or
-regains connectivity. The iPhone now acknowledges only backend-confirmed watch
-commands, keeps unacknowledged actions queued for retry, and applies fresh
-snapshots from backend receipts.
+The iPhone relay now refreshes backend snapshots for valid paired watches even
+when the pairing predates the newer watch-ready capability, preserves the last
+good snapshot while pairing is warming up, and retries queued Watch actions
+until Forge confirms them.

@@ -6,11 +6,12 @@ import { updateWorkoutMetadata } from "./health.js";
 import { canonicalizeMovementCategoryTags, listMovementPlaces, normalizeMovementCategoryTag, updateMovementPlace } from "./movement.js";
 import { createHabitCheckIn, listHabits } from "./repositories/habits.js";
 import { listGoals } from "./repositories/goals.js";
+import { createNote } from "./repositories/notes.js";
 import { listProjectSummaries } from "./services/projects.js";
 import { listTasks, updateTask } from "./repositories/tasks.js";
 import { claimTaskRun, completeTaskRun, focusTaskRun, heartbeatTaskRun, listTaskRuns, releaseTaskRun } from "./repositories/task-runs.js";
+import { createTriggerReport, listBehaviorPatterns, listBehaviors, listEmotionDefinitions, listEventTypes, listModeProfiles, listPsycheValues, listTriggerReports } from "./repositories/psyche.js";
 import { formatLocalDateKey } from "../../src/lib/date-keys.js";
-const watchCapability = "watch-ready";
 const watchHistoryStateSchema = z.enum(["aligned", "unaligned", "unknown"]);
 const watchPromptKindSchema = z.enum([
     "new_place",
@@ -414,7 +415,164 @@ function buildPendingPrompts(userId) {
     });
     return prompts.slice(0, 8);
 }
-function projectionForStoredEvent(event) {
+function stringPayloadValue(payload, key) {
+    const value = payload[key];
+    return typeof value === "string" ? value.trim() : "";
+}
+function createWatchObservationNote(pairing, event, options) {
+    return createNote({
+        kind: "evidence",
+        title: options.title,
+        slug: "",
+        spaceId: "",
+        parentSlug: null,
+        indexOrder: 0,
+        showInIndex: false,
+        aliases: [],
+        summary: "",
+        contentMarkdown: options.contentLines
+            .filter((line) => line.trim().length > 0)
+            .join("\n") || options.title,
+        author: "Apple Watch",
+        tags: ["watch", "psyche", "Self-observation", ...(options.tags ?? [])],
+        links: options.links ?? [],
+        destroyAt: null,
+        sourcePath: "",
+        frontmatter: {
+            observedAt: event.recordedAt,
+            watchEventType: event.eventType,
+            watchPromptId: event.promptId ?? null
+        },
+        revisionHash: "",
+        lastSyncedAt: null,
+        userId: pairing.user_id
+    }, { source: "system", actor: "Apple Watch" });
+}
+function projectPsycheEvent(pairing, event) {
+    if (event.eventType === "trigger_capture") {
+        const trigger = stringPayloadValue(event.payload, "trigger");
+        const eventTypeLabel = stringPayloadValue(event.payload, "eventTypeLabel");
+        const eventTypeId = stringPayloadValue(event.payload, "eventTypeId") || null;
+        const emotion = stringPayloadValue(event.payload, "emotion");
+        const outcome = stringPayloadValue(event.payload, "outcome");
+        const intensity = stringPayloadValue(event.payload, "intensity");
+        const situation = stringPayloadValue(event.payload, "situation") ||
+            stringPayloadValue(event.payload, "choice") ||
+            trigger ||
+            eventTypeLabel ||
+            "Watch trigger observation";
+        const report = createTriggerReport({
+            title: trigger ? `Watch trigger: ${trigger}` : "Watch trigger observation",
+            status: "draft",
+            eventTypeId,
+            customEventType: eventTypeId ? "" : eventTypeLabel || trigger || "Watch trigger",
+            eventSituation: situation,
+            occurredAt: event.recordedAt,
+            emotions: emotion
+                ? [
+                    {
+                        emotionDefinitionId: stringPayloadValue(event.payload, "emotionId") || null,
+                        label: emotion,
+                        intensity: intensity ? Number(intensity) || 0 : 0,
+                        note: "Captured from Apple Watch."
+                    }
+                ]
+                : [],
+            thoughts: [],
+            behaviors: outcome
+                ? [
+                    {
+                        text: outcome,
+                        mode: "",
+                        behaviorId: stringPayloadValue(event.payload, "behaviorId") || null
+                    }
+                ]
+                : [],
+            consequences: {
+                selfShortTerm: [],
+                selfLongTerm: [],
+                othersShortTerm: [],
+                othersLongTerm: []
+            },
+            linkedPatternIds: stringPayloadValue(event.payload, "patternId")
+                ? [stringPayloadValue(event.payload, "patternId")]
+                : [],
+            linkedValueIds: stringPayloadValue(event.payload, "valueId")
+                ? [stringPayloadValue(event.payload, "valueId")]
+                : [],
+            linkedGoalIds: [],
+            linkedProjectIds: [],
+            linkedTaskIds: [],
+            linkedBehaviorIds: stringPayloadValue(event.payload, "behaviorId")
+                ? [stringPayloadValue(event.payload, "behaviorId")]
+                : [],
+            linkedBeliefIds: [],
+            linkedModeIds: stringPayloadValue(event.payload, "modeId")
+                ? [stringPayloadValue(event.payload, "modeId")]
+                : [],
+            modeOverlays: [],
+            schemaLinks: [],
+            modeTimeline: [],
+            nextMoves: [],
+            userId: pairing.user_id
+        }, { source: "system", actor: "Apple Watch" });
+        const note = createWatchObservationNote(pairing, event, {
+            title: "Watch trigger observation",
+            contentLines: [
+                `Trigger: ${trigger || eventTypeLabel || "unspecified"}`,
+                emotion ? `Emotion: ${emotion}` : "",
+                outcome ? `Outcome: ${outcome}` : "",
+                situation ? `Situation: ${situation}` : ""
+            ],
+            links: [{ entityType: "trigger_report", entityId: report.id, anchorKey: null }],
+            tags: ["trigger"]
+        });
+        return {
+            status: "projected",
+            details: {
+                target: "psyche_trigger_report",
+                reportId: report.id,
+                noteId: note.id
+            }
+        };
+    }
+    if (event.eventType === "emotion_check_in" ||
+        event.eventType === "routine_check" ||
+        event.eventType === "mark_moment") {
+        const emotion = stringPayloadValue(event.payload, "emotion");
+        const routine = stringPayloadValue(event.payload, "routine");
+        const surface = stringPayloadValue(event.payload, "surface");
+        const note = createWatchObservationNote(pairing, event, {
+            title: event.eventType === "emotion_check_in"
+                ? "Watch emotion check-in"
+                : event.eventType === "routine_check"
+                    ? "Watch routine check"
+                    : "Watch moment",
+            contentLines: [
+                emotion ? `Emotion: ${emotion}` : "",
+                routine ? `Routine: ${routine}` : "",
+                surface ? `Surface: ${surface}` : "",
+                stringPayloadValue(event.payload, "choice")
+                    ? `Choice: ${stringPayloadValue(event.payload, "choice")}`
+                    : ""
+            ],
+            tags: [event.eventType.replaceAll("_", "-")]
+        });
+        return {
+            status: "projected",
+            details: {
+                target: "psyche_observation_note",
+                noteId: note.id
+            }
+        };
+    }
+    return null;
+}
+function projectionForStoredEvent(pairing, event) {
+    const psycheProjection = projectPsycheEvent(pairing, event);
+    if (psycheProjection) {
+        return psycheProjection;
+    }
     if (event.eventType === "place_label" && event.linkedContext.placeId) {
         const nextLabel = typeof event.payload.label === "string" ? event.payload.label.trim() : "";
         const categoryCandidate = Array.isArray(event.payload.categoryTags)
@@ -512,10 +670,11 @@ function projectionForStoredEvent(event) {
     };
 }
 export function assertWatchReady(pairing) {
-    const capabilities = safeJsonParse(pairing.capability_flags_json, []);
-    if (!capabilities.includes(watchCapability)) {
-        throw new HttpError(403, "watch_pairing_not_enabled", "This companion pairing is not allowed to serve watch data.");
-    }
+    // Any valid mobile pairing can receive a compact watch snapshot. Older
+    // pairings were created before the explicit `watch-ready` capability existed;
+    // rejecting them leaves the installed watch app permanently empty even though
+    // the same pairing token can already sync HealthKit and movement data.
+    void pairing;
 }
 function compactTask(task) {
     return {
@@ -735,6 +894,151 @@ function buildSyncSnapshot(pairing) {
         actionReceiptCount: actionReceiptCount.count
     };
 }
+function compactOption(option, payload = {}) {
+    const label = (option.label ?? option.title ?? "").trim();
+    return {
+        id: option.id ?? label,
+        label,
+        subtitle: (option.category ?? option.description ?? "").trim(),
+        payload
+    };
+}
+function compactFallbackOptions(labels, payloadKey) {
+    return labels.map((label) => ({
+        id: label,
+        label,
+        subtitle: "",
+        payload: { [payloadKey]: label }
+    }));
+}
+function buildWatchPsycheSnapshot(pairing) {
+    const userIds = pairing.user_id === "user_operator" ? undefined : [pairing.user_id];
+    const owned = (items) => userIds ? items.filter((item) => item.userId == null || userIds.includes(item.userId)) : items;
+    const events = owned(listEventTypes())
+        .slice(0, 8)
+        .map((eventType) => compactOption(eventType, {
+        eventTypeId: eventType.id,
+        eventTypeLabel: eventType.label
+    }))
+        .filter((option) => option.label.length > 0);
+    const emotions = owned(listEmotionDefinitions())
+        .slice(0, 10)
+        .map((emotion) => compactOption(emotion, {
+        emotionId: emotion.id,
+        emotion: emotion.label
+    }))
+        .filter((option) => option.label.length > 0);
+    const values = owned(listPsycheValues())
+        .slice(0, 8)
+        .map((value) => compactOption(value, {
+        valueId: value.id,
+        value: value.title
+    }))
+        .filter((option) => option.label.length > 0);
+    const patterns = owned(listBehaviorPatterns())
+        .slice(0, 8)
+        .map((pattern) => compactOption(pattern, {
+        patternId: pattern.id,
+        trigger: pattern.title
+    }))
+        .filter((option) => option.label.length > 0);
+    const behaviors = owned(listBehaviors())
+        .slice(0, 8)
+        .map((behavior) => compactOption(behavior, {
+        behaviorId: behavior.id,
+        behavior: behavior.title
+    }))
+        .filter((option) => option.label.length > 0);
+    const modes = owned(listModeProfiles())
+        .slice(0, 8)
+        .map((mode) => compactOption(mode, {
+        modeId: mode.id,
+        mode: mode.title
+    }))
+        .filter((option) => option.label.length > 0);
+    const recentReports = owned(listTriggerReports(6)).map((report) => ({
+        id: report.id,
+        title: report.title,
+        occurredAt: report.occurredAt,
+        status: report.status
+    }));
+    return {
+        emotionOptions,
+        triggerOptions,
+        routinePromptOptions,
+        questions: [
+            {
+                id: "event",
+                title: "What happened?",
+                prompt: "Pick the closest event type.",
+                eventType: "trigger_capture",
+                options: events.length > 0
+                    ? events
+                    : compactFallbackOptions(triggerOptions.slice(0, 6), "eventTypeLabel")
+            },
+            {
+                id: "emotion",
+                title: "Emotion",
+                prompt: "What emotion is present?",
+                eventType: "emotion_check_in",
+                options: emotions.length > 0
+                    ? emotions
+                    : compactFallbackOptions(emotionOptions.slice(0, 6), "emotion")
+            },
+            {
+                id: "pattern",
+                title: "Pattern",
+                prompt: "Does this match a known loop?",
+                eventType: "trigger_capture",
+                options: patterns.length > 0
+                    ? patterns
+                    : compactFallbackOptions(triggerOptions.slice(0, 6), "trigger")
+            },
+            {
+                id: "outcome",
+                title: "Urge outcome",
+                prompt: "What did you do with the urge?",
+                eventType: "trigger_capture",
+                options: compactFallbackOptions(["Resisted", "Indulged", "Delayed", "Repaired"], "outcome")
+            },
+            {
+                id: "value",
+                title: "Value",
+                prompt: "Which value is this about?",
+                eventType: "mark_moment",
+                options: values.length > 0
+                    ? values
+                    : compactFallbackOptions(["Health", "Work", "Love", "Courage"], "value")
+            },
+            {
+                id: "mode",
+                title: "Mode",
+                prompt: "Which mode is active?",
+                eventType: "trigger_capture",
+                options: modes.length > 0
+                    ? modes
+                    : compactFallbackOptions(["Protected", "Avoidant", "Driven", "Connected"], "mode")
+            },
+            {
+                id: "behavior",
+                title: "Behavior",
+                prompt: "What behavior showed up?",
+                eventType: "trigger_capture",
+                options: behaviors.length > 0
+                    ? behaviors
+                    : compactFallbackOptions(["Avoided", "Approached", "Scrolled", "Asked"], "behavior")
+            },
+            {
+                id: "routine",
+                title: "Routine",
+                prompt: "Log one daily signal.",
+                eventType: "routine_check",
+                options: compactFallbackOptions(routinePromptOptions.slice(0, 6), "routine")
+            }
+        ],
+        recentReports
+    };
+}
 function buildWatchSurfaces() {
     return [
         { id: "now", title: "Now", icon: "sparkle" },
@@ -805,11 +1109,7 @@ export function buildWatchBootstrap(pairing, options) {
         today,
         health: buildHealthSnapshot(pairing.user_id),
         movement: buildMovementSnapshot(pairing.user_id),
-        psyche: {
-            emotionOptions,
-            triggerOptions,
-            routinePromptOptions
-        },
+        psyche: buildWatchPsycheSnapshot(pairing),
         inbox: {
             prompts: pendingPrompts
         },
@@ -856,7 +1156,7 @@ export function ingestWatchCaptureBatch(pairing, input) {
             const receivedAt = nowIso();
             insert.run(id, pairing.id, pairing.user_id, event.dedupeKey, parsed.device.sourceDevice, event.eventType, event.promptId, event.recordedAt, receivedAt, JSON.stringify(event.linkedContext), JSON.stringify(event.payload), "stored", "{}", receivedAt);
             storedCount += 1;
-            const projection = projectionForStoredEvent(event);
+            const projection = projectionForStoredEvent(pairing, event);
             updateProjection.run(projection.status, JSON.stringify(projection.details), id);
             if (projection.status === "projected") {
                 projectedCount += 1;

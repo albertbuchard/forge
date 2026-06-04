@@ -39,9 +39,8 @@ final class WatchSessionManager: NSObject, ObservableObject {
     }
 
     func refreshBootstrapIfPossible(reason: String) async {
-        guard let pairing = pairingProvider?(), pairing.capabilities.contains("watch-ready") else {
+        guard let pairing = pairingProvider?() else {
             lastStatusMessage = "Watch bridge waiting for pairing"
-            saveBootstrap(.empty)
             return
         }
         guard watchTransportAvailable(for: WCSession.default) else {
@@ -231,6 +230,7 @@ extension WatchSessionManager: WCSessionDelegate {
         let watchAvailable = session.isPaired && session.isWatchAppInstalled
         Task { @MainActor in
             if isReachable, watchAvailable {
+                await self.refreshBootstrapIfPossible(reason: "watch-reachable")
                 await self.processPendingQueue()
             }
         }

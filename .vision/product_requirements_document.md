@@ -212,6 +212,8 @@ The watch interaction grammar is fixed: the Digital Crown moves between main sur
 
 Watch mutations flow through compact, idempotent command batches rather than direct watch networking. Work actions use the existing task and task-run semantics: start, heartbeat, focus, complete, release, and status moves across `backlog`, `focus`, `in_progress`, `blocked`, and `done`. Habit actions preserve canonical `done`/`missed` storage while using polarity-aware watch labels such as Done/Missed for positive habits and Resisted/Performed for negative habits. Capture events for movement, Psyche, inbox prompts, health annotations, and moment notes carry stable dedupe keys so replay cannot duplicate user data.
 
+Watch snapshots must be data-backed. A valid mobile pairing must receive compact watch data even if it was created before newer capability flags such as `watch-ready`; the bridge must not overwrite cached watch state with an empty snapshot merely because it is waiting for pairing or transport. Psyche watch prompts must be derived from Forge's actual event types, emotion definitions, values, behavior patterns, behaviors, modes, and recent trigger reports when those records exist. Watch Psyche captures should project into the canonical Psyche surfaces: trigger captures create trigger reports plus linked observed notes, and emotion/routine/moment captures create note-backed self-observation calendar entries.
+
 ### 10. Documentation Contract
 
 Public docs, GitHub Pages docs, README, and agent-facing docs must all explain:

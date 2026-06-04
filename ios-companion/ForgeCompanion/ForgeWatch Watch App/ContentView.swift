@@ -224,7 +224,10 @@ private struct WatchSurfacePager: View {
         case .now:
             return 1 + ((bootstrap.now?.currentRun ?? bootstrap.work?.currentRun) == nil ? 0 : 1)
         case .work:
-            return max(1, (bootstrap.work?.lanes.count ?? 0) + (bootstrap.work?.currentRun == nil ? 0 : 1))
+            return max(
+                1,
+                flattenedWorkTasks(bootstrap.work).count + (bootstrap.work?.currentRun == nil ? 0 : 1)
+            )
         case .habits:
             return max(1, bootstrap.habits.count)
         case .goals:
@@ -239,13 +242,45 @@ private struct WatchSurfacePager: View {
                 1 + (bootstrap.movement?.latestTrip == nil ? 0 : 1) + (bootstrap.movement?.latestStay == nil ? 0 : 1)
             )
         case .psyche:
-            return 4
+            return max(1, psycheCardCount(bootstrap.psyche))
         case .inbox:
             return max(1, (bootstrap.inbox?.prompts ?? bootstrap.pendingPrompts).count)
         case .sync:
             return 1
         }
     }
+}
+
+private func flattenedWorkTasks(_ work: ForgeWatchWorkSnapshot?) -> [ForgeWatchTaskSummary] {
+    guard let work else { return [] }
+    var seen = Set<String>()
+    var tasks: [ForgeWatchTaskSummary] = []
+    if let nextTask = work.nextTask, seen.insert(nextTask.id).inserted {
+        tasks.append(nextTask)
+    }
+    for lane in work.lanes {
+        for task in lane.tasks where seen.insert(task.id).inserted {
+            tasks.append(task)
+        }
+    }
+    return tasks
+}
+
+private func psycheCardCount(_ psyche: ForgeWatchPsycheSnapshot?) -> Int {
+    let questionCount: Int
+    if let questions = psyche?.questions, questions.isEmpty == false {
+        questionCount = questions.count
+    } else if let psyche {
+        questionCount = [
+            psyche.emotionOptions.isEmpty == false,
+            psyche.triggerOptions.isEmpty == false,
+            psyche.routinePromptOptions.isEmpty == false
+        ].filter { $0 }.count
+    } else {
+        questionCount = 0
+    }
+    let hasRecent = (psyche?.recentReports?.isEmpty == false) ? 1 : 0
+    return questionCount + hasRecent
 }
 
 private func taskCommandModal(
@@ -379,14 +414,26 @@ private struct WorkSurface: View {
 
     var body: some View {
         if let work {
-            SurfaceCarousel(selection: $selection, count: max(1, work.lanes.count + (work.currentRun == nil ? 0 : 1))) {
+            let tasks = flattenedWorkTasks(work)
+            let count = max(1, tasks.count + (work.currentRun == nil ? 0 : 1))
+            SurfaceCarousel(selection: $selection, count: count) {
                 let runOffset = work.currentRun == nil ? 0 : 1
                 if let current = work.currentRun {
                     RunCard(run: current, onCommandTap: onCommandTap, onCommand: onCommand)
                         .tag(0)
                 }
-                ForEach(Array(work.lanes.enumerated()), id: \.element.id) { index, lane in
-                    LaneCard(lane: lane, onCommandTap: onCommandTap, onCommand: onCommand)
+                if tasks.isEmpty, work.currentRun == nil {
+                    EmptySurfaceCard(
+                        title: "No open tasks",
+                        message: "Forge has no current watch-sized work. Refresh when you expect a task to appear.",
+                        actionTitle: "Refresh work",
+                        systemImage: "arrow.clockwise",
+                        action: onRefresh
+                    )
+                    .tag(0)
+                }
+                ForEach(Array(tasks.enumerated()), id: \.element.id) { index, task in
+                    TaskCard(task: task, onCommandTap: onCommandTap, onCommand: onCommand)
                         .tag(index + runOffset)
                 }
             }
@@ -398,6 +445,59 @@ private struct WorkSurface: View {
                 systemImage: "arrow.clockwise",
                 action: onRefresh
             )
+        }
+    }
+}
+
+private struct TaskCard: View {
+    let task: ForgeWatchTaskSummary
+    let onCommandTap: (WatchCommandModalItem) -> Void
+    let onCommand: (ForgeWatchActionKind, [String: String]) -> Void
+
+    var body: some View {
+        Button {
+            onCommandTap(taskCommandModal(task: task, onCommand: onCommand))
+        } label: {
+            WatchCard {
+                VStack(alignment: .leading, spacing: 7) {
+                    HStack(spacing: 6) {
+                        Text(task.status.replacingOccurrences(of: "_", with: " ").capitalized)
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .foregroundStyle(statusTint(task.status))
+                            .lineLimit(1)
+                        Spacer(minLength: 4)
+                        Text(task.priority.capitalized)
+                            .font(.system(size: 9, weight: .bold, design: .rounded))
+                            .foregroundStyle(WatchTheme.textMuted)
+                            .lineLimit(1)
+                    }
+                    Text(task.title)
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .foregroundStyle(WatchTheme.textPrimary)
+                        .lineLimit(4)
+                    HStack(spacing: 8) {
+                        DenseMetric(title: "Pts", value: "\(task.points)", tint: WatchTheme.accent)
+                        DenseMetric(title: "Energy", value: task.energy.isEmpty ? "--" : task.energy.capitalized, tint: WatchTheme.success)
+                    }
+                    Label("Tap to start or move", systemImage: "ellipsis.circle")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundStyle(WatchTheme.accent)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func statusTint(_ status: String) -> Color {
+        switch status {
+        case "focus", "in_progress":
+            return WatchTheme.accent
+        case "blocked":
+            return .orange
+        case "done":
+            return WatchTheme.success
+        default:
+            return WatchTheme.textMuted
         }
     }
 }
@@ -806,32 +906,160 @@ private struct PsycheSurface: View {
     let onCapture: (String, String?, ForgeWatchLinkedContext, [String: String]) -> Void
 
     var body: some View {
-        let emotions = nonEmpty(psyche?.emotionOptions, fallback: ["Calm", "Focused", "Tired", "Tense"])
-        let triggers = nonEmpty(psyche?.triggerOptions, fallback: ["Urge", "Rumination", "Avoidance", "Victory"])
-        let routines = nonEmpty(psyche?.routinePromptOptions, fallback: ["Medication taken?", "Meal?", "Sunlight?", "Wind-down?"])
-        SurfaceCarousel(selection: $selection, count: 4) {
-            ChoiceCard(title: "Emotion", options: emotions) { choice in
-                onCapture("emotion_check_in", nil, .empty, ["emotion": choice])
+        let questions = questionCards
+        let hasRecent = psyche?.recentReports?.isEmpty == false
+        SurfaceCarousel(selection: $selection, count: max(1, questions.count + (hasRecent ? 1 : 0))) {
+            if questions.isEmpty {
+                EmptySurfaceCard(
+                    title: "Psyche not loaded",
+                    message: "Ask the iPhone bridge to fetch the Psyche definitions from Forge.",
+                    actionTitle: "Mark moment",
+                    systemImage: "bookmark.fill",
+                    action: {
+                        onCapture("mark_moment", nil, .empty, ["surface": "psyche"])
+                    }
+                )
+                .tag(0)
             }
-            .tag(0)
-            ChoiceCard(title: "Trigger", options: triggers) { choice in
-                onCapture("trigger_capture", nil, .empty, ["trigger": choice])
+            ForEach(Array(questions.enumerated()), id: \.element.id) { index, question in
+                PsycheQuestionCard(question: question) { option in
+                    var payload = option.payload
+                    payload["questionId"] = question.id
+                    payload["choice"] = option.label
+                    payload["surface"] = "psyche"
+                    onCapture(question.eventType, question.id, .empty, payload)
+                }
+                .tag(index)
             }
-            .tag(1)
-            ChoiceCard(title: "Urge", options: ["Resisted", "Indulged"]) { choice in
-                onCapture("trigger_capture", nil, .empty, ["trigger": "Urge", "outcome": choice])
+            if hasRecent {
+                PsycheRecentReportCard(reports: psyche?.recentReports ?? [])
+                    .tag(questions.count)
             }
-            .tag(2)
-            ChoiceCard(title: "Routine", options: routines) { choice in
-                onCapture("routine_check", nil, .empty, ["routine": choice])
-            }
-            .tag(3)
         }
     }
 
-    private func nonEmpty(_ options: [String]?, fallback: [String]) -> [String] {
-        guard let options, options.isEmpty == false else { return fallback }
-        return options
+    private var questionCards: [ForgeWatchPsycheSnapshot.Question] {
+        if let questions = psyche?.questions, questions.isEmpty == false {
+            return questions
+        }
+
+        guard let psyche else { return [] }
+        return [
+            legacyQuestion(
+                id: "emotion",
+                title: "Emotion",
+                prompt: "What emotion is present?",
+                eventType: "emotion_check_in",
+                labels: psyche.emotionOptions,
+                payloadKey: "emotion"
+            ),
+            legacyQuestion(
+                id: "trigger",
+                title: "Trigger",
+                prompt: "What happened?",
+                eventType: "trigger_capture",
+                labels: psyche.triggerOptions,
+                payloadKey: "trigger"
+            ),
+            legacyQuestion(
+                id: "routine",
+                title: "Routine",
+                prompt: "Log one daily signal.",
+                eventType: "routine_check",
+                labels: psyche.routinePromptOptions,
+                payloadKey: "routine"
+            )
+        ].filter { $0.options.isEmpty == false }
+    }
+
+    private func legacyQuestion(
+        id: String,
+        title: String,
+        prompt: String,
+        eventType: String,
+        labels: [String],
+        payloadKey: String
+    ) -> ForgeWatchPsycheSnapshot.Question {
+        ForgeWatchPsycheSnapshot.Question(
+            id: id,
+            title: title,
+            prompt: prompt,
+            eventType: eventType,
+            options: labels.prefix(6).map { label in
+                ForgeWatchPsycheSnapshot.Option(
+                    id: label,
+                    label: label,
+                    subtitle: "",
+                    payload: [payloadKey: label]
+                )
+            }
+        )
+    }
+}
+
+private struct PsycheQuestionCard: View {
+    let question: ForgeWatchPsycheSnapshot.Question
+    let onSelect: (ForgeWatchPsycheSnapshot.Option) -> Void
+
+    var body: some View {
+        WatchCard {
+            VStack(alignment: .leading, spacing: 7) {
+                Text(question.title)
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundStyle(WatchTheme.textPrimary)
+                    .lineLimit(2)
+                Text(question.prompt)
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .foregroundStyle(WatchTheme.textMuted)
+                    .lineLimit(2)
+                ForEach(question.options.prefix(4)) { option in
+                    Button {
+                        onSelect(option)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(option.label)
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .lineLimit(1)
+                            if option.subtitle.isEmpty == false {
+                                Text(option.subtitle)
+                                    .font(.system(size: 9, weight: .medium, design: .rounded))
+                                    .foregroundStyle(WatchTheme.textMuted)
+                                    .lineLimit(1)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+        }
+    }
+}
+
+private struct PsycheRecentReportCard: View {
+    let reports: [ForgeWatchPsycheSnapshot.RecentReport]
+
+    var body: some View {
+        WatchCard {
+            VStack(alignment: .leading, spacing: 7) {
+                Text("Recent Psyche")
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundStyle(WatchTheme.textPrimary)
+                ForEach(reports.prefix(4)) { report in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(report.title)
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundStyle(WatchTheme.textPrimary)
+                            .lineLimit(2)
+                        Text(report.status.capitalized)
+                            .font(.system(size: 9, weight: .bold, design: .rounded))
+                            .foregroundStyle(WatchTheme.textMuted)
+                            .lineLimit(1)
+                    }
+                    Divider().background(WatchTheme.border)
+                }
+            }
+        }
     }
 }
 
