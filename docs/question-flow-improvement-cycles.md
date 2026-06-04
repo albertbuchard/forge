@@ -1,10 +1,118 @@
 # Forge Question Flow Improvement Cycles
 
-Latest run date: 2026-06-03
+Latest run date: 2026-06-04
 
 This report records the three-cycle evaluation for Forge agent question flows. The
 same full flow set was tested in each cycle so improvements were kept only where they
 helped the entity or specialized surface.
+
+## 2026-06-04 Automation Pass
+
+Setup verification:
+
+- Confirmed the Forge worktree was on `main` before plugin work and edits.
+- No prior automation memory existed in this Codex home for
+  `improvement-of-question-flows-in-forge`.
+- Verified OpenClaw and Hermes configs both point at
+  `/Users/omarclaw/Documents/aurel-monorepo/data/forge`; the live Forge process had
+  `/Users/omarclaw/Documents/aurel-monorepo/data/forge/forge.sqlite` open. No
+  database, data root, backup, or user data was moved, merged, deleted, or
+  overwritten.
+- Built the repo-local OpenClaw plugin and Hermes packaged runtime, reinstalled
+  OpenClaw from `./openclaw-plugin`, and reinstalled Hermes editable from
+  `./plugins/forge-hermes`.
+- Verified OpenClaw loads `forge-openclaw-plugin 0.2.106` from the repo-local
+  `openclaw-plugin/dist/openclaw/index.js` source path and Hermes imports
+  `forge-hermes-plugin 0.2.106` from the local editable package.
+- Verified live health, onboarding, and OpenAPI before the cycles: 42 entity catalog
+  entries, 23 Movement route keys, four Life Force route keys under both
+  `lifeForce` and `life_force`, 16 Workbench route keys, dedicated route-key tools
+  for the three specialized surfaces, and OpenAPI at `/api/v1/openapi.json` with
+  Movement, Life Force, Entity Batch, Agents, and Workbench tags.
+
+Every cycle retested the full current flow set: goal, project, strategy, task,
+habit, tag, note, insight, task_run, work_adjustment, calendar_event,
+work_block_template, task_timebox, calendar_connection, preference_catalog,
+preference_catalog_item, preference_context, preference_item,
+preference_judgment, preference_signal, questionnaire_instrument,
+questionnaire_run, self_observation, sleep_session, sleep_overview,
+workout_session, sports_overview, training_load, weight_loss, wiki_page,
+movement, life_force, workbench, psyche_value, behavior_pattern, behavior,
+belief_entry, mode_profile, mode_guide_session, flashcard, trigger_report,
+event_type, and emotion_definition.
+
+Specialized route scenarios covered all live Movement lanes for day, month,
+all-time, timeline, places, box detail, trip detail, selected-span aggregate,
+settings, settings updates, place create/update, user-box preflight/create/update/delete,
+automatic-box invalidation, stay/trip update/delete, and trip-point update/delete;
+Life Force overview, profile, weekday template, and fatigue signal; and Workbench
+flow catalog, flow detail by id or slug, flow CRUD, saved-flow execution, one-off
+execution, chat follow-up, run history, run detail, run nodes, node result, latest
+node output, published output, and box catalog.
+
+Cycle 1 tested all entity and specialized-surface flows after the plugin refresh.
+Strengths: first-turn wording, Psyche pacing, batch-first posture, and specialized
+Movement/Life Force/Workbench onboarding were already strong. Weakness: the OpenClaw
+route-key tool test proved route-key names but did not prove that every tool
+description's method/path guide matched live onboarding `methodRoutes`, so a stale
+method or path could still pass.
+
+What changed in Cycle 1:
+
+- Extended `src/openclaw/tool-contract.test.ts` to parse each OpenClaw specialized
+  route-key tool's exact route guide and compare it to live onboarding `methodRoutes`
+  for Movement, Life Force, and Workbench.
+
+What happened after retesting Cycle 1:
+
+- The focused retest passed: question-flow quality, three-cycle simulation, and
+  OpenClaw tool contracts all remained green.
+- The change improved API-path truthfulness without changing user-facing wording, so
+  it was kept. Nothing was reverted.
+
+Cycle 2 retested the same full flow set with attention to both installed adapter
+families. Strengths: Hermes already exposed the dedicated route-key tools and route
+schemas. Weakness: there was no exact Hermes-to-onboarding method/path parity check,
+so Hermes could drift even when OpenClaw and onboarding stayed correct.
+
+What changed in Cycle 2:
+
+- Added a Hermes route-spec parity assertion in `src/openclaw/tool-contract.test.ts`
+  that parses `MOVEMENT_ROUTE_SPECS`, `LIFE_FORCE_ROUTE_SPECS`, and
+  `WORKBENCH_ROUTE_SPECS` from `plugins/forge-hermes/forge_hermes/catalog.py` and
+  compares them to live onboarding `methodRoutes`.
+
+What happened after retesting Cycle 2:
+
+- The focused retest passed again across question flows and tool contracts.
+- The change improved cross-plugin API alignment without changing the route families
+  or pushing specialized surfaces into batch CRUD, so it was kept. Nothing was
+  reverted.
+
+Cycle 3 retested all flows with attention to review and navigation behavior after a
+correct API read. Strengths: the playbooks were strong before the read, especially
+around asking what practical question a review should answer. Weakness: they were
+less explicit about the next turn after a read returns data, so an agent could ask a
+vague follow-up instead of synthesizing the result and asking only if a concrete next
+action would change.
+
+What changed in Cycle 3:
+
+- Added `Post-read synthesis` to the shared entity conversation playbook.
+- Mirrored the rule into live onboarding conversation rules.
+- Synchronized the canonical playbook into OpenClaw, Hermes, and Codex bundled
+  playbook copies.
+- Added question-flow assertions requiring post-read synthesis, next-action-only
+  follow-ups, and anchored Movement/Life Force/Workbench/calendar/health/operator
+  review follow-ups.
+
+What happened after retesting Cycle 3:
+
+- The full focused retest passed: question-flow quality, three-cycle simulation,
+  playbook parity, onboarding contract, and tool contracts all passed.
+- The change improved review/navigation behavior without weakening Psyche depth,
+  normal batch CRUD, or specialized route posture, so it was kept. Nothing was
+  reverted.
 
 ## 2026-06-03 Automation Pass
 

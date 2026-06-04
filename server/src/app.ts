@@ -3907,6 +3907,7 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
   "For direct update or review requests, the next question should usually narrow the saved object, timeframe, or route family instead of reopening the whole meaning-making arc.",
   "For updates, start with the smallest thing that now feels wrong, newly true, or newly visible rather than restarting the whole story.",
   "For review requests, ask what practical question the user wants the read to answer before you ask for more scope.",
+  "After a review, overview, navigation, or specialized read returns data, first answer the user's practical question in plain language, then name one implication or uncertainty that matters for the next decision. Ask a follow-up only if it changes the next action: save, update, correct, link, schedule, run, publish, enrich, or open the UI.",
   "Treat userId, owner, and human/bot assignees as accountability and scope, not as opening form fields. Ask whose record or owner scope matters only when it changes visibility, review results, collaboration, automation behavior, or later filtering.",
   "For read and overview requests, ask for human or bot user scope only when the answer would meaningfully differ across owners; otherwise keep the next question focused on the user's practical question.",
   "The opening question should help the user understand what they are actually trying to save, decide, review, or change, not make them perform the schema out loud.",
