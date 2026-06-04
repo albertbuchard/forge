@@ -1,5 +1,6 @@
-Forge Companion 1.0.79 improves the watchOS command surface and keeps the
-historical HealthKit evidence replay fix from 1.0.78.
+Forge Companion 1.0.80 improves the watchOS command surface and keeps the
+historical HealthKit evidence replay fix from 1.0.78. This build also makes
+the TestFlight release lane resilient to App Store Connect partial uploads.
 
 Historical workouts whose heart-rate, time-series, and route evidence was already
 uploaded are no longer treated as missing just because they used an older raw

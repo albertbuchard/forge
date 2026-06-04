@@ -330,6 +330,12 @@ Important iOS rule:
   published `forge-openclaw-plugin@0.2.81` from run `26316264957` and
   `forge-memory@0.2.81` from run `26316264949`. Registry checks confirmed all
   three latest versions at `0.2.81`.
+- 2026-06-04: App Store Connect returned a ContentDelivery checksum `500` after
+  accepting Forge Companion `1.0.79 (30)`, then rejected reruns as duplicate build
+  `30`. The Fastlane lane now reconciles ambiguous or duplicate uploader errors by
+  querying App Store Connect for the target marketing/build number before failing.
+  If the workflow still fails after a consumed build number, bump the committed
+  build baseline and tag the next marketing version.
 - Current non-blocking workflow cleanup: GitHub Actions annotates
   `actions/upload-artifact@v4` as a Node.js 20 action. GitHub will force Node 24
   defaults starting 2026-06-02, so update the artifact action path before that
