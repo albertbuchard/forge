@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -30,6 +30,7 @@ const TEST_CONFIG = {
   timeoutMs: 15000
 } as const;
 
+const repoRoot = path.resolve(import.meta.dirname, "../..");
 const tempRoots: string[] = [];
 
 afterEach(() => {
@@ -41,7 +42,7 @@ afterEach(() => {
   }
 });
 
-async function loadOnboardingRouteKeys() {
+async function loadOnboardingSpecializedSurfaces() {
   const dataRoot = mkdtempSync(path.join(os.tmpdir(), "forge-tool-contract-"));
   tempRoots.push(dataRoot);
   const app = await buildServer({ dataRoot, taskRunWatchdog: false });
@@ -53,11 +54,14 @@ async function loadOnboardingRouteKeys() {
   await app.close();
 
   const surfaces = response.json().onboarding.entityRouteModel
-    .specializedDomainSurfaces as Record<string, { routeKeys: string[] }>;
+    .specializedDomainSurfaces as Record<
+    string,
+    { routeKeys: string[]; methodRoutes: Record<string, string> }
+  >;
   return {
-    movement: [...surfaces.movement.routeKeys].sort(),
-    lifeForce: [...surfaces.lifeForce.routeKeys].sort(),
-    workbench: [...surfaces.workbench.routeKeys].sort()
+    movement: surfaces.movement,
+    lifeForce: surfaces.lifeForce,
+    workbench: surfaces.workbench
   };
 }
 
@@ -102,6 +106,56 @@ function readPropertyDescription(schema: Record<string, unknown>, key: string) {
     key
   ] as { description?: string } | undefined;
   return property?.description ?? "";
+}
+
+function readRouteGuideFromDescription(description: string) {
+  const guide = /Exact routes: ([\s\S]+?)\. For any /.exec(description)?.[1];
+  expect(guide, "routeKey description should publish exact route guide").toBeTruthy();
+
+  return Object.fromEntries(
+    guide!.split("; ").map((entry) => {
+      const match = /^([^:]+):\s+([A-Z]+)\s+(\/api\/v1\/\S+)$/.exec(entry);
+      expect(match, `route guide entry should be parseable: ${entry}`).toBeTruthy();
+      return [match![1], `${match![2]} ${match![3]}`];
+    })
+  );
+}
+
+function readHermesRouteSpecs(constantName: string) {
+  const source = readFileSync(
+    path.join(repoRoot, "plugins/forge-hermes/forge_hermes/catalog.py"),
+    "utf8"
+  );
+  const start = source.indexOf(`${constantName}:`);
+  expect(start, `${constantName} should exist in Hermes catalog`).toBeGreaterThanOrEqual(
+    0
+  );
+  const bodyStart = source.indexOf("{", start);
+  expect(bodyStart, `${constantName} should open a dict`).toBeGreaterThanOrEqual(0);
+
+  let depth = 0;
+  let bodyEnd = -1;
+  for (let index = bodyStart; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === "{") depth += 1;
+    if (char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        bodyEnd = index;
+        break;
+      }
+    }
+  }
+  expect(bodyEnd, `${constantName} should close its dict`).toBeGreaterThan(
+    bodyStart
+  );
+
+  const body = source.slice(bodyStart, bodyEnd + 1);
+  return Object.fromEntries(
+    [...body.matchAll(/"([^"]+)":\s*\{"method":\s*"([A-Z]+)",\s*"path":\s*"([^"]+)"/g)].map(
+      (match) => [match[1], `${match[2]} ${match[3]}`]
+    )
+  );
 }
 
 describe("openclaw tool contracts", () => {
@@ -160,7 +214,7 @@ describe("openclaw tool contracts", () => {
     const movement = requireTool(tools, "forge_call_movement_route");
     const lifeForce = requireTool(tools, "forge_call_life_force_route");
     const workbench = requireTool(tools, "forge_call_workbench_route");
-    const onboardingRouteKeys = await loadOnboardingRouteKeys();
+    const onboardingSurfaces = await loadOnboardingSpecializedSurfaces();
     const movementRouteKeys = readTypeBoxUnionValues(
       movement.parameters ?? {},
       "routeKey"
@@ -174,9 +228,30 @@ describe("openclaw tool contracts", () => {
       "routeKey"
     );
 
-    expect(movementRouteKeys).toEqual(onboardingRouteKeys.movement);
-    expect(lifeForceRouteKeys).toEqual(onboardingRouteKeys.lifeForce);
-    expect(workbenchRouteKeys).toEqual(onboardingRouteKeys.workbench);
+    expect(movementRouteKeys).toEqual(
+      [...onboardingSurfaces.movement.routeKeys].sort()
+    );
+    expect(lifeForceRouteKeys).toEqual(
+      [...onboardingSurfaces.lifeForce.routeKeys].sort()
+    );
+    expect(workbenchRouteKeys).toEqual(
+      [...onboardingSurfaces.workbench.routeKeys].sort()
+    );
+    expect(
+      readRouteGuideFromDescription(
+        readPropertyDescription(movement.parameters ?? {}, "routeKey")
+      )
+    ).toEqual(onboardingSurfaces.movement.methodRoutes);
+    expect(
+      readRouteGuideFromDescription(
+        readPropertyDescription(lifeForce.parameters ?? {}, "routeKey")
+      )
+    ).toEqual(onboardingSurfaces.lifeForce.methodRoutes);
+    expect(
+      readRouteGuideFromDescription(
+        readPropertyDescription(workbench.parameters ?? {}, "routeKey")
+      )
+    ).toEqual(onboardingSurfaces.workbench.methodRoutes);
 
     expect(movementRouteKeys).toEqual(
       expect.arrayContaining([
@@ -258,5 +333,19 @@ describe("openclaw tool contracts", () => {
         /Use the exact :placeholder names shown in the routeKey description/i
       );
     }
+  });
+
+  it("keeps Hermes specialized route specs aligned with live onboarding", async () => {
+    const onboardingSurfaces = await loadOnboardingSpecializedSurfaces();
+
+    expect(readHermesRouteSpecs("MOVEMENT_ROUTE_SPECS")).toEqual(
+      onboardingSurfaces.movement.methodRoutes
+    );
+    expect(readHermesRouteSpecs("LIFE_FORCE_ROUTE_SPECS")).toEqual(
+      onboardingSurfaces.lifeForce.methodRoutes
+    );
+    expect(readHermesRouteSpecs("WORKBENCH_ROUTE_SPECS")).toEqual(
+      onboardingSurfaces.workbench.methodRoutes
+    );
   });
 });

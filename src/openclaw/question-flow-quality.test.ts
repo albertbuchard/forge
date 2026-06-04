@@ -146,6 +146,19 @@ describe("question flow quality coverage", () => {
     expect(entityPlaybook).toMatch(
       /review this and\s+fix it[\s\S]*save the pattern and make me a card[\s\S]*inspect the run and publish the\s+output/i
     );
+    expect(entityPlaybook).toMatch(/## Post-read synthesis/i);
+    expect(entityPlaybook).toMatch(
+      /After a review, overview, navigation, or specialized read returns data/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Ask a follow-up only if it changes the next action:[\s\S]*save, update, correct, link,\s+schedule, run, publish, enrich, or open the UI/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Movement, Life Force, Workbench, calendar, health, and operator overviews/i
+    );
+    expect(entityPlaybook).toMatch(
+      /For Psyche-adjacent reads,[\s\S]*Psyche formulation, a flashcard, a note, a task, a habit, or no\s+write at all/i
+    );
     expect(entityPlaybook).toMatch(
       /Movement timeline or box\s+detail comes before correction[\s\S]*Workbench run or node detail comes before editing[\s\S]*Life Force overview comes before changing planning\s+assumptions/i
     );

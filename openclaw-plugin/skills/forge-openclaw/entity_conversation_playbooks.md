@@ -161,6 +161,29 @@ output".
   intake for the second action when the first answer already supplied the wording,
   span, flow, run, node, weekday, or link.
 
+## Post-read synthesis
+
+Use this after a review, overview, navigation, or specialized read returns data. The
+agent's next turn should not become another vague intake prompt just because the route
+worked.
+
+- First answer the practical question the user asked, in plain language, using the
+  relevant record names, dates, time windows, run labels, node names, places, or
+  owner scope that came back from Forge.
+- Name one implication or uncertainty that matters for the user's next decision. Do
+  not dump the whole payload unless the user asked for a raw listing.
+- Ask a follow-up only if it changes the next action: save, update, correct, link,
+  schedule, run, publish, enrich, or open the UI. If the read already answers the
+  question, close cleanly instead of asking a ceremonial "what next?"
+- For Movement, Life Force, Workbench, calendar, health, and operator overviews,
+  keep the follow-up anchored to the read result: the span that is missing, the
+  weekday curve that needs correction, the failed run or node, the overloaded day, or
+  the specific session worth enriching.
+- For Psyche-adjacent reads, reflect the meaning or pattern once, then decide whether
+  the next move is a Psyche formulation, a flashcard, a note, a task, a habit, or no
+  write at all. Do not widen into a new taxonomy choice unless the read made the
+  container genuinely ambiguous.
+
 ## Psyche and memory routing
 
 Self-observation is not the default container for psychological material. Use it only

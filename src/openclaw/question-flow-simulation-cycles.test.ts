@@ -1010,6 +1010,18 @@ describe("question flow simulation cycles", () => {
     expect(entityPlaybook).toMatch(/published output/i);
     expect(entityPlaybook).toMatch(/do not ask a broad review question again/i);
     expect(entityPlaybook).toMatch(
+      /After a review, overview, navigation, or specialized read returns data/i
+    );
+    expect(entityPlaybook).toMatch(
+      /First answer the practical question[\s\S]*Name one implication or uncertainty/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Ask a follow-up only if it changes the next action/i
+    );
+    expect(entityPlaybook).toMatch(
+      /the span that is missing[\s\S]*weekday curve[\s\S]*failed run or node/i
+    );
+    expect(entityPlaybook).toMatch(
       /already gave usable wording[\s\S]*rename it for style/i
     );
     expect(entityPlaybook).toMatch(
