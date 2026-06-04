@@ -204,7 +204,7 @@ export function WeightLossNutritionTargetsPanel({
           </div>
         </div>
 
-        <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.58fr)]">
+        <div className="mt-5 grid gap-4 2xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.58fr)]">
           <div className="grid gap-4">
             <TargetSection
               title="All macro targets"

@@ -31,12 +31,12 @@ export function ProjectCollectionFilters({
             className={cn(
               "inline-flex min-h-10 items-center gap-2 rounded-full border px-4 py-2 text-sm transition",
               active
-                ? "border-[rgba(192,193,255,0.28)] bg-[rgba(192,193,255,0.16)] text-white shadow-[0_16px_36px_rgba(8,12,24,0.18)]"
-                : "border-white/8 bg-white/[0.04] text-white/62 hover:bg-white/[0.08] hover:text-white"
+                ? "border-[var(--ui-border-strong)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)] shadow-[var(--ui-shadow-soft)]"
+                : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]"
             )}
           >
             <span>{FILTER_LABELS[filter]}</span>
-            <span className={cn("rounded-full px-2 py-0.5 text-[11px]", active ? "bg-white/12 text-white/88" : "bg-white/8 text-white/54")}>
+            <span className={cn("rounded-full px-2 py-0.5 text-[11px]", active ? "bg-[var(--ui-surface-active)] text-[var(--ui-ink-strong)]" : "bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]")}>
               {counts[filter]}
             </span>
           </button>

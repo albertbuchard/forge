@@ -182,10 +182,12 @@ function getHabitVisualState(habit: Habit) {
         habit.frequency === "daily"
           ? "Waiting for today"
           : "Awaiting this week's check-in",
-      cardClass: "border-amber-300/24 shadow-[0_0_0_1px_rgba(251,191,36,0.12)]",
+      cardClass:
+        "border-[color-mix(in_srgb,var(--warning)_28%,var(--ui-border-subtle)_72%)] shadow-[var(--ui-shadow-soft)]",
       overlayClass:
-        "bg-[radial-gradient(circle_at_top_right,rgba(251,191,36,0.18),transparent_44%)]",
-      pillClass: "border border-amber-300/16 bg-amber-300/12 text-amber-100"
+        "bg-[radial-gradient(circle_at_top_right,color-mix(in_srgb,var(--warning)_18%,transparent),transparent_44%)]",
+      pillClass:
+        "border border-[color-mix(in_srgb,var(--warning)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]"
     };
   }
 
@@ -196,20 +198,21 @@ function getHabitVisualState(habit: Habit) {
           tone: "aligned" as const,
           label: `${getCheckInLabel(habit, todayCheckIn.status)} today`,
           cardClass:
-            "border-emerald-300/20 shadow-[0_0_0_1px_rgba(52,211,153,0.08)]",
+            "border-[color-mix(in_srgb,var(--success)_24%,var(--ui-border-subtle)_76%)] shadow-[var(--ui-shadow-soft)]",
           overlayClass:
-            "bg-[radial-gradient(circle_at_top_right,rgba(52,211,153,0.16),transparent_44%)]",
+            "bg-[radial-gradient(circle_at_top_right,color-mix(in_srgb,var(--success)_16%,transparent),transparent_44%)]",
           pillClass:
-            "border border-emerald-300/16 bg-emerald-300/12 text-emerald-100"
+            "border border-[color-mix(in_srgb,var(--success)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_76%,var(--ui-ink-strong)_24%)]"
         }
       : {
           tone: "unaligned" as const,
           label: `${getCheckInLabel(habit, todayCheckIn.status)} today`,
           cardClass:
-            "border-rose-300/20 shadow-[0_0_0_1px_rgba(251,113,133,0.08)]",
+            "border-[color-mix(in_srgb,var(--danger)_24%,var(--ui-border-subtle)_76%)] shadow-[var(--ui-shadow-soft)]",
           overlayClass:
-            "bg-[radial-gradient(circle_at_top_right,rgba(251,113,133,0.16),transparent_44%)]",
-          pillClass: "border border-rose-300/16 bg-rose-300/12 text-rose-100"
+            "bg-[radial-gradient(circle_at_top_right,color-mix(in_srgb,var(--danger)_16%,transparent),transparent_44%)]",
+          pillClass:
+            "border border-[color-mix(in_srgb,var(--danger)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-danger-soft)] text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]"
         };
   }
 
@@ -219,16 +222,18 @@ function getHabitVisualState(habit: Habit) {
         label: "No update due right now",
         cardClass: "",
         overlayClass:
-          "bg-[radial-gradient(circle_at_top_right,rgba(52,211,153,0.09),transparent_40%)]",
-        pillClass: "border border-white/10 bg-white/[0.06] text-white/62"
+          "bg-[radial-gradient(circle_at_top_right,color-mix(in_srgb,var(--success)_9%,transparent),transparent_40%)]",
+        pillClass:
+          "border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]"
       }
     : {
         tone: "neutral" as const,
         label: "No update due right now",
         cardClass: "",
         overlayClass:
-          "bg-[radial-gradient(circle_at_top_right,rgba(251,113,133,0.09),transparent_40%)]",
-        pillClass: "border border-white/10 bg-white/[0.06] text-white/62"
+          "bg-[radial-gradient(circle_at_top_right,color-mix(in_srgb,var(--danger)_9%,transparent),transparent_40%)]",
+        pillClass:
+          "border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]"
       };
 }
 
@@ -237,9 +242,10 @@ function getStreakPresentation(streak: number) {
     return {
       Icon: PartyPopper,
       className:
-        "border border-amber-300/20 bg-amber-300/10 text-amber-100 shadow-[0_16px_32px_rgba(251,191,36,0.14)]",
-      iconClass: "text-amber-200",
-      valueClass: "text-amber-50",
+        "border border-[color-mix(in_srgb,var(--warning)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)] shadow-[var(--ui-shadow-soft)]",
+      iconClass:
+        "text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]",
+      valueClass: "text-[var(--ui-ink-strong)]",
       label: "Celebration pace"
     };
   }
@@ -247,9 +253,10 @@ function getStreakPresentation(streak: number) {
     return {
       Icon: Smile,
       className:
-        "border border-emerald-300/20 bg-emerald-300/10 text-emerald-100 shadow-[0_16px_32px_rgba(52,211,153,0.12)]",
-      iconClass: "text-emerald-200",
-      valueClass: "text-emerald-50",
+        "border border-[color-mix(in_srgb,var(--success)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_76%,var(--ui-ink-strong)_24%)] shadow-[var(--ui-shadow-soft)]",
+      iconClass:
+        "text-[color-mix(in_srgb,var(--success)_76%,var(--ui-ink-strong)_24%)]",
+      valueClass: "text-[var(--ui-ink-strong)]",
       label: "Locked in"
     };
   }
@@ -257,31 +264,45 @@ function getStreakPresentation(streak: number) {
     return {
       Icon: Meh,
       className:
-        "border border-sky-300/18 bg-sky-300/10 text-sky-100 shadow-[0_16px_32px_rgba(125,211,252,0.1)]",
-      iconClass: "text-sky-200",
-      valueClass: "text-sky-50",
+        "border border-[color-mix(in_srgb,var(--info)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-info-soft)] text-[color-mix(in_srgb,var(--info)_76%,var(--ui-ink-strong)_24%)] shadow-[var(--ui-shadow-soft)]",
+      iconClass:
+        "text-[color-mix(in_srgb,var(--info)_76%,var(--ui-ink-strong)_24%)]",
+      valueClass: "text-[var(--ui-ink-strong)]",
       label: "Building rhythm"
     };
   }
   return {
     Icon: Frown,
     className:
-      "border border-white/10 bg-white/[0.04] text-white/72 shadow-[0_16px_32px_rgba(15,23,42,0.16)]",
-    iconClass: "text-white/55",
-    valueClass: "text-white",
+      "border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] shadow-[var(--ui-shadow-soft)]",
+    iconClass: "text-[var(--ui-ink-soft)]",
+    valueClass: "text-[var(--ui-ink-strong)]",
     label: "Cold start"
   };
 }
 
 function getAlignmentBadgeClass(completionRate: number) {
   if (completionRate >= 80) {
-    return "bg-emerald-400/12 text-emerald-100";
+    return "border-[color-mix(in_srgb,var(--success)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_76%,var(--ui-ink-strong)_24%)]";
   }
   if (completionRate >= 50) {
-    return "bg-amber-300/12 text-amber-100";
+    return "border-[color-mix(in_srgb,var(--warning)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]";
   }
-  return "bg-rose-400/12 text-rose-100";
+  return "border-[color-mix(in_srgb,var(--danger)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-danger-soft)] text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]";
 }
+
+const habitNeutralBadgeClass =
+  "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]";
+const habitSuccessBadgeClass =
+  "border-[color-mix(in_srgb,var(--success)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_76%,var(--ui-ink-strong)_24%)]";
+const habitDangerBadgeClass =
+  "border-[color-mix(in_srgb,var(--danger)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-danger-soft)] text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]";
+const habitWarningBadgeClass =
+  "border-[color-mix(in_srgb,var(--warning)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]";
+const habitInfoBadgeClass =
+  "border-[color-mix(in_srgb,var(--info)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-info-soft)] text-[color-mix(in_srgb,var(--info)_76%,var(--ui-ink-strong)_24%)]";
+const habitAccentBadgeClass =
+  "border-[color-mix(in_srgb,var(--primary)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-accent-soft)] text-[color-mix(in_srgb,var(--primary)_72%,var(--ui-ink-strong)_28%)]";
 
 type HabitHistoryCell = {
   id: string;
@@ -397,11 +418,12 @@ function getHistoryCellClass(
   return cn(
     "h-8 w-full rounded-[10px] border transition",
     state === "aligned" &&
-      "border-emerald-300/20 bg-emerald-300/75 shadow-[0_8px_18px_rgba(52,211,153,0.18)]",
+      "border-[color-mix(in_srgb,var(--success)_30%,var(--ui-border-subtle)_70%)] bg-[color-mix(in_srgb,var(--success)_58%,var(--ui-surface-1)_42%)] shadow-[var(--ui-shadow-soft)]",
     state === "unaligned" &&
-      "border-rose-300/20 bg-rose-300/75 shadow-[0_8px_18px_rgba(251,113,133,0.18)]",
-    state === "unknown" && "border-white/8 bg-white/[0.08]",
-    current && "shadow-[0_0_0_1px_rgba(255,255,255,0.16)]"
+      "border-[color-mix(in_srgb,var(--danger)_30%,var(--ui-border-subtle)_70%)] bg-[color-mix(in_srgb,var(--danger)_54%,var(--ui-surface-1)_46%)] shadow-[var(--ui-shadow-soft)]",
+    state === "unknown" &&
+      "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]",
+    current && "ring-1 ring-[color-mix(in_srgb,var(--primary)_34%,transparent)]"
   );
 }
 
@@ -416,20 +438,22 @@ function HabitHistoryStrip({
   const visualState = getHabitVisualState(habit);
 
   return (
-    <div className="w-full rounded-[18px] border border-white/8 bg-black/10 px-3 py-2.5">
+    <div className="w-full rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-2.5 shadow-[var(--ui-shadow-soft)]">
       <div className="flex flex-wrap items-center gap-3">
         <div className="shrink-0">
-          <div className="font-label text-[10px] uppercase tracking-[0.16em] text-white/34">
+          <div className="font-label text-[10px] uppercase tracking-[0.16em] text-[var(--ui-ink-muted)]">
             {history.caption}
           </div>
-          <div className="text-[11px] text-white/46">{history.rangeLabel}</div>
+          <div className="text-[11px] text-[var(--ui-ink-soft)]">
+            {history.rangeLabel}
+          </div>
         </div>
         <div className="flex min-w-0 flex-1 items-center gap-1.5">
           {history.cells.map((cell) => (
             <button
               key={cell.id}
               type="button"
-              className="group flex min-w-0 flex-1 items-center gap-1 rounded-[10px] transition hover:bg-white/[0.04]"
+              className="group flex min-w-0 flex-1 items-center gap-1 rounded-[10px] transition hover:bg-[var(--ui-surface-hover)]"
               onClick={() => onSelectCell(habit, cell)}
               title={`Log check-in for ${cell.actionLabel}`}
               aria-label={`Log check-in for ${cell.actionLabel}`}
@@ -437,11 +461,11 @@ function HabitHistoryStrip({
               <div
                 className={cn(
                   getHistoryCellClass(cell.state, cell.current),
-                  "h-6 min-w-0 flex-1 rounded-[8px] transition duration-150 group-hover:-translate-y-0.5 group-hover:shadow-[0_10px_22px_rgba(15,23,42,0.22)]"
+                  "h-6 min-w-0 flex-1 rounded-[8px] transition duration-150 group-hover:-translate-y-0.5 group-hover:shadow-[var(--ui-shadow-soft)]"
                 )}
               />
               {history.showLabels ? (
-                <span className="hidden text-[9px] uppercase tracking-[0.14em] text-white/26 transition group-hover:text-white/48 sm:inline">
+                <span className="hidden text-[9px] uppercase tracking-[0.14em] text-[var(--ui-ink-muted)] transition group-hover:text-[var(--ui-ink-medium)] sm:inline">
                   {cell.label}
                 </span>
               ) : null}
@@ -459,7 +483,7 @@ function HabitHistoryStrip({
       </div>
 
       {!history.showLabels ? (
-        <div className="mt-1 text-right text-[10px] uppercase tracking-[0.14em] text-white/26">
+        <div className="mt-1 text-right text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-muted)]">
           {history.startLabel} - {history.endLabel}
         </div>
       ) : null}
@@ -522,7 +546,8 @@ export function HabitsPage() {
     useState<Habit | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const focusedHabitId = searchParams.get("focus");
-  const habitOrderBy = (searchParams.get("orderBy") as HabitOrderBy | null) ?? "name";
+  const habitOrderBy =
+    (searchParams.get("orderBy") as HabitOrderBy | null) ?? "name";
   const selectedUserIds = coerceSelectedUserIds(shell.selectedUserIds);
   const defaultUserId = getSingleSelectedUserId(selectedUserIds);
   const habitsQueryKey = ["forge-habits", habitOrderBy, ...selectedUserIds];
@@ -744,7 +769,7 @@ export function HabitsPage() {
       />
 
       {errorMessage ? (
-        <Card className="border-rose-400/22 bg-rose-400/8 text-rose-100">
+        <Card className="border-[color-mix(in_srgb,var(--danger)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-danger-soft)] text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]">
           <div className="flex items-start gap-3">
             <CircleAlert className="mt-0.5 size-4 shrink-0" />
             <div>{errorMessage}</div>
@@ -753,44 +778,44 @@ export function HabitsPage() {
       ) : null}
 
       <section className="grid gap-4 lg:grid-cols-4">
-        <Card className="border-amber-300/16 shadow-[0_0_0_1px_rgba(251,191,36,0.08)]">
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+        <Card className="border-[color-mix(in_srgb,var(--warning)_22%,var(--ui-border-subtle)_78%)] shadow-[var(--ui-shadow-soft)]">
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
             Due today
           </div>
           <div className="mt-3 font-display text-4xl text-[var(--primary)]">
             {dueHabits.length}
           </div>
-          <div className="mt-2 text-sm text-white/58">
+          <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
             Habits that still need a check-in today.
           </div>
         </Card>
-        <Card className="border-[var(--primary)]/16 shadow-[0_0_0_1px_rgba(245,158,11,0.08)]">
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+        <Card className="border-[color-mix(in_srgb,var(--primary)_22%,var(--ui-border-subtle)_78%)] shadow-[var(--ui-shadow-soft)]">
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
             Habit AP due
           </div>
           <div className="mt-3 font-display text-4xl text-[var(--primary)]">
             {formatLifeForceAp(dueHabitsActionPointLoad)}
           </div>
-          <div className="mt-2 text-sm text-white/58">
+          <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
             Default Action Point load if every due habit is logged today.
           </div>
         </Card>
-        <Card className="border-emerald-300/16 shadow-[0_0_0_1px_rgba(52,211,153,0.08)]">
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+        <Card className="border-[color-mix(in_srgb,var(--success)_22%,var(--ui-border-subtle)_78%)] shadow-[var(--ui-shadow-soft)]">
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
             Best streak
           </div>
-          <div className="mt-3 font-display text-4xl text-emerald-50">
+          <div className="mt-3 font-display text-4xl text-[color-mix(in_srgb,var(--success)_76%,var(--ui-ink-strong)_24%)]">
             {Math.max(0, ...activeHabits.map((habit) => habit.streakCount))}
           </div>
-          <div className="mt-2 text-sm text-white/58">
+          <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
             Longest current aligned streak across active habits.
           </div>
         </Card>
         <Card>
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
             Average alignment
           </div>
-          <div className="mt-3 font-display text-4xl text-white">
+          <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
             {activeHabits.length > 0
               ? Math.round(
                   activeHabits.reduce(
@@ -801,7 +826,7 @@ export function HabitsPage() {
               : 0}
             %
           </div>
-          <div className="mt-2 text-sm text-white/58">
+          <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
             Share of recent habit check-ins that matched the intended direction.
           </div>
         </Card>
@@ -809,41 +834,41 @@ export function HabitsPage() {
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
         <Card>
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
             Life Force sync
           </div>
-          <div className="mt-3 text-2xl font-display text-white">
+          <div className="mt-3 text-2xl font-display text-[var(--ui-ink-strong)]">
             {lifeForceQuery.data
               ? `${formatLifeForceAp(lifeForceQuery.data.spentTodayAp)} / ${formatLifeForceAp(lifeForceQuery.data.dailyBudgetAp)}`
               : "Loading..."}
           </div>
-          <div className="mt-2 text-sm text-white/58">
+          <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
             Habit check-ins debit the same Action Point ledger as work, notes,
             movement, and workouts.
           </div>
         </Card>
         <Card>
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
             Instant headroom
           </div>
-          <div className="mt-3 text-2xl font-display text-white">
+          <div className="mt-3 text-2xl font-display text-[var(--ui-ink-strong)]">
             {lifeForceQuery.data
               ? formatLifeForceRate(lifeForceQuery.data.instantFreeApPerHour)
               : "Loading..."}
           </div>
-          <div className="mt-2 text-sm text-white/58">
+          <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
             Use this to tell whether now is a good moment for heavier habits or
             just a light check-in.
           </div>
         </Card>
         <Card>
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
             Workout-linked load
           </div>
-          <div className="mt-3 text-2xl font-display text-white">
+          <div className="mt-3 text-2xl font-display text-[var(--ui-ink-strong)]">
             {formatLifeForceAp(generatedWorkoutLoad)}
           </div>
-          <div className="mt-2 text-sm text-white/58">
+          <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
             Habit-generated workout templates stay visible as Action Point cost
             instead of hiding behind the XP reward.
           </div>
@@ -870,14 +895,14 @@ export function HabitsPage() {
         />
       ) : (
         <div className="grid gap-4">
-          <div className="flex flex-col gap-3 rounded-[24px] border border-white/8 bg-white/[0.03] p-4 shadow-[0_18px_36px_rgba(15,23,42,0.16)] sm:flex-row sm:items-end sm:justify-between">
+          <div className="flex flex-col gap-3 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4 shadow-[var(--ui-shadow-soft)] sm:flex-row sm:items-end sm:justify-between">
             <div className="max-w-xl">
-              <div className="text-sm font-medium text-white">
+              <div className="text-sm font-medium text-[var(--ui-ink-strong)]">
                 Habit list order
               </div>
-              <div className="mt-1 text-sm text-white/54">
-                Choose a stable ordering so the list does not reshuffle while you
-                are logging check-ins.
+              <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
+                Choose a stable ordering so the list does not reshuffle while
+                you are logging check-ins.
               </div>
             </div>
             <SelectMenu
@@ -891,114 +916,269 @@ export function HabitsPage() {
 
           <div className="grid gap-4 xl:grid-cols-2">
             {activeHabits.map((habit) => {
-            const visualState = getHabitVisualState(habit);
-            const streak = getStreakPresentation(habit.streakCount);
-            const StreakIcon = streak.Icon;
-            const habitActionLoad = estimateHabitCheckInActionPointLoad(habit);
-            const generatedWorkoutActionLoad =
-              estimateHabitGeneratedWorkoutActionPointLoad(habit);
-            const noteCount = getEntityNotesSummary(
-              shell.snapshot.dashboard.notesSummaryByEntity,
-              "habit",
-              habit.id
-            ).count;
-            const alignedAction =
-              habit.polarity === "positive"
-                ? {
-                    label: "Done",
-                    status: getHabitActionStatus(habit, "aligned"),
-                    Icon: CheckCheck,
-                    className:
-                      "border-emerald-300/18 bg-emerald-300/14 text-emerald-50 shadow-[0_14px_28px_rgba(52,211,153,0.14)] hover:bg-emerald-300/20"
-                  }
-                : {
-                    label: "Resisted",
-                    status: getHabitActionStatus(habit, "aligned"),
-                    Icon: ShieldBan,
-                    className:
-                      "border-emerald-300/18 bg-emerald-300/14 text-emerald-50 shadow-[0_14px_28px_rgba(52,211,153,0.14)] hover:bg-emerald-300/20"
-                  };
-            const unalignedAction =
-              habit.polarity === "positive"
-                ? {
-                    label: "Missed",
-                    status: getHabitActionStatus(habit, "unaligned"),
-                    Icon: CircleX,
-                    className:
-                      "border-rose-300/18 bg-rose-300/14 text-rose-50 shadow-[0_14px_28px_rgba(251,113,133,0.14)] hover:bg-rose-300/20"
-                  }
-                : {
-                    label: "Performed",
-                    status: getHabitActionStatus(habit, "unaligned"),
-                    Icon: TriangleAlert,
-                    className:
-                      "border-rose-300/18 bg-rose-300/14 text-rose-50 shadow-[0_14px_28px_rgba(251,113,133,0.14)] hover:bg-rose-300/20"
-                  };
+              const visualState = getHabitVisualState(habit);
+              const streak = getStreakPresentation(habit.streakCount);
+              const StreakIcon = streak.Icon;
+              const habitActionLoad =
+                estimateHabitCheckInActionPointLoad(habit);
+              const generatedWorkoutActionLoad =
+                estimateHabitGeneratedWorkoutActionPointLoad(habit);
+              const noteCount = getEntityNotesSummary(
+                shell.snapshot.dashboard.notesSummaryByEntity,
+                "habit",
+                habit.id
+              ).count;
+              const alignedAction =
+                habit.polarity === "positive"
+                  ? {
+                      label: "Done",
+                      status: getHabitActionStatus(habit, "aligned"),
+                      Icon: CheckCheck,
+                      className:
+                        "border-[color-mix(in_srgb,var(--success)_34%,var(--ui-border-subtle)_66%)] bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_76%,var(--ui-ink-strong)_24%)] shadow-[var(--ui-shadow-soft)] hover:bg-[color-mix(in_srgb,var(--success)_24%,var(--ui-surface-hover)_76%)]"
+                    }
+                  : {
+                      label: "Resisted",
+                      status: getHabitActionStatus(habit, "aligned"),
+                      Icon: ShieldBan,
+                      className:
+                        "border-[color-mix(in_srgb,var(--success)_34%,var(--ui-border-subtle)_66%)] bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_76%,var(--ui-ink-strong)_24%)] shadow-[var(--ui-shadow-soft)] hover:bg-[color-mix(in_srgb,var(--success)_24%,var(--ui-surface-hover)_76%)]"
+                    };
+              const unalignedAction =
+                habit.polarity === "positive"
+                  ? {
+                      label: "Missed",
+                      status: getHabitActionStatus(habit, "unaligned"),
+                      Icon: CircleX,
+                      className:
+                        "border-[color-mix(in_srgb,var(--danger)_34%,var(--ui-border-subtle)_66%)] bg-[var(--ui-danger-soft)] text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)] shadow-[var(--ui-shadow-soft)] hover:bg-[color-mix(in_srgb,var(--danger)_22%,var(--ui-surface-hover)_78%)]"
+                    }
+                  : {
+                      label: "Performed",
+                      status: getHabitActionStatus(habit, "unaligned"),
+                      Icon: TriangleAlert,
+                      className:
+                        "border-[color-mix(in_srgb,var(--danger)_34%,var(--ui-border-subtle)_66%)] bg-[var(--ui-danger-soft)] text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)] shadow-[var(--ui-shadow-soft)] hover:bg-[color-mix(in_srgb,var(--danger)_22%,var(--ui-surface-hover)_78%)]"
+                    };
 
-            return (
-              <Card
-                key={habit.id}
-                className={cn(
-                  "relative flex h-full flex-col overflow-hidden",
-                  visualState.cardClass,
-                  psycheFocusClass(focusedHabitId === habit.id)
-                )}
-                data-psyche-focus-id={habit.id}
-              >
-                <div
+              return (
+                <Card
+                  key={habit.id}
                   className={cn(
-                    "pointer-events-none absolute inset-0 opacity-100",
-                    visualState.overlayClass
+                    "relative flex h-full flex-col overflow-hidden",
+                    visualState.cardClass,
+                    psycheFocusClass(focusedHabitId === habit.id)
                   )}
-                />
-                <div className="relative z-10 flex h-full flex-col">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <EntityName
-                          kind="habit"
-                          label={habit.title}
-                          variant="heading"
-                          size="sm"
-                        />
-                        <UserBadge user={habit.user} compact />
-                        <Badge className="bg-white/[0.08] text-white/72">
-                          {habit.status}
-                        </Badge>
-                        <Badge className="bg-white/[0.08] text-white/72">
-                          <CalendarDays className="mr-1 size-3.5" />
-                          {formatHabitCadence(habit)}
-                        </Badge>
-                        <Badge
-                          className={
-                            habit.polarity === "positive"
-                              ? "bg-emerald-400/12 text-emerald-200"
-                              : "bg-rose-400/12 text-rose-200"
-                          }
+                  data-psyche-focus-id={habit.id}
+                >
+                  <div
+                    className={cn(
+                      "pointer-events-none absolute inset-0 opacity-100",
+                      visualState.overlayClass
+                    )}
+                  />
+                  <div className="relative z-10 flex h-full flex-col">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <EntityName
+                            kind="habit"
+                            label={habit.title}
+                            variant="heading"
+                            size="sm"
+                          />
+                          <UserBadge user={habit.user} compact />
+                          <Badge className={habitNeutralBadgeClass}>
+                            {habit.status}
+                          </Badge>
+                          <Badge className={habitNeutralBadgeClass}>
+                            <CalendarDays className="mr-1 size-3.5" />
+                            {formatHabitCadence(habit)}
+                          </Badge>
+                          <Badge
+                            className={
+                              habit.polarity === "positive"
+                                ? habitSuccessBadgeClass
+                                : habitDangerBadgeClass
+                            }
+                          >
+                            {habit.polarity === "positive"
+                              ? "Positive"
+                              : "Negative"}
+                          </Badge>
+                          {habit.dueToday ? (
+                            <Badge className={habitWarningBadgeClass}>
+                              Needs check-in
+                            </Badge>
+                          ) : null}
+                          {habit.linkedGoalIds.slice(0, 1).map((goalId) => {
+                            const goal = shell.snapshot.goals.find(
+                              (entry) => entry.id === goalId
+                            );
+                            return goal ? (
+                              <Badge
+                                key={goal.id}
+                                className={habitWarningBadgeClass}
+                              >
+                                Goal · {goal.title}
+                              </Badge>
+                            ) : null;
+                          })}
+                          {habit.linkedProjectIds
+                            .slice(0, 1)
+                            .map((projectId) => {
+                              const project =
+                                shell.snapshot.dashboard.projects.find(
+                                  (entry) => entry.id === projectId
+                                );
+                              return project ? (
+                                <Badge
+                                  key={project.id}
+                                  className={habitInfoBadgeClass}
+                                >
+                                  Project · {project.title}
+                                </Badge>
+                              ) : null;
+                            })}
+                          {habit.linkedTaskIds.slice(0, 1).map((taskId) => {
+                            const task = shell.snapshot.tasks.find(
+                              (entry) => entry.id === taskId
+                            );
+                            return task ? (
+                              <Badge
+                                key={task.id}
+                                className={habitAccentBadgeClass}
+                              >
+                                Task · {task.title}
+                              </Badge>
+                            ) : null;
+                          })}
+                        </div>
+                        <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-medium)]">
+                          {habit.description ? (
+                            <NoteMarkdown
+                              markdown={habit.description}
+                              className="[&>p]:text-sm [&>p]:leading-6 [&>blockquote]:text-sm [&>ul]:text-sm [&>ol]:text-sm"
+                            />
+                          ) : (
+                            "No extra notes yet."
+                          )}
+                        </div>
+                      </div>
+                      <div className="ml-auto inline-flex shrink-0 flex-col items-end gap-2 self-start text-right">
+                        <div
+                          className={cn(
+                            "inline-flex flex-col self-end rounded-[20px] px-3 py-2.5 text-right",
+                            streak.className
+                          )}
                         >
-                          {habit.polarity === "positive"
-                            ? "Positive"
-                            : "Negative"}
+                          <div className="flex items-center justify-end gap-1.5 text-[10px] uppercase tracking-[0.16em]">
+                            <span>Streak</span>
+                            <StreakIcon
+                              className={cn(
+                                "size-3.5 shrink-0",
+                                streak.iconClass
+                              )}
+                            />
+                          </div>
+                          <div
+                            className={cn(
+                              "mt-1.5 font-display text-[2.75rem] leading-none",
+                              streak.valueClass
+                            )}
+                          >
+                            {habit.streakCount}
+                          </div>
+                          <div className="mt-1 text-[11px] leading-tight text-[var(--ui-ink-soft)]">
+                            {streak.label}
+                          </div>
+                        </div>
+                        <div className="ml-auto grid grid-cols-2 gap-1.5">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 min-w-0 rounded-[11px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
+                            disabled={saveHabitMutation.isPending}
+                            onClick={() => {
+                              setEditingHabit(habit);
+                              setDialogOpen(true);
+                            }}
+                            aria-label={`Edit ${habit.title}`}
+                            title="Edit habit"
+                          >
+                            <Pencil className="size-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 min-w-0 rounded-[11px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
+                            disabled={deleteHabitMutation.isPending}
+                            onClick={() => setConfirmingDeleteHabit(habit)}
+                            aria-label={`Delete ${habit.title}`}
+                            title="Delete habit"
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-auto grid gap-4 pt-5">
+                      <div className="flex flex-wrap gap-2">
+                        <Badge
+                          className={cn(
+                            "",
+                            getAlignmentBadgeClass(habit.completionRate)
+                          )}
+                        >
+                          Alignment {habit.completionRate}%
                         </Badge>
-                        {habit.dueToday ? (
-                          <Badge className="bg-amber-300/12 text-amber-100">
-                            Needs check-in
+                        <Badge className={habitNeutralBadgeClass}>
+                          {habit.polarity === "positive"
+                            ? `+${habit.rewardXp} XP done`
+                            : `+${habit.rewardXp} XP resisted`}
+                        </Badge>
+                        <Badge className={habitNeutralBadgeClass}>
+                          {habit.polarity === "positive"
+                            ? `-${habit.penaltyXp} XP missed`
+                            : `-${habit.penaltyXp} XP performed`}
+                        </Badge>
+                        <Badge className={habitAccentBadgeClass}>
+                          {formatLifeForceAp(habitActionLoad.totalAp)} check-in
+                        </Badge>
+                        {generatedWorkoutActionLoad ? (
+                          <Badge className={habitWarningBadgeClass}>
+                            {formatLifeForceAp(
+                              generatedWorkoutActionLoad.totalAp
+                            )}{" "}
+                            workout
                           </Badge>
                         ) : null}
-                        {habit.linkedGoalIds.slice(0, 1).map((goalId) => {
-                          const goal = shell.snapshot.goals.find(
-                            (entry) => entry.id === goalId
-                          );
-                          return goal ? (
+                        {generatedWorkoutActionLoad ? (
+                          <Badge className={habitNeutralBadgeClass}>
+                            {formatLifeForceRate(
+                              generatedWorkoutActionLoad.rateApPerHour
+                            )}
+                          </Badge>
+                        ) : null}
+                        <EntityNoteCountLink
+                          entityType="habit"
+                          entityId={habit.id}
+                          count={noteCount}
+                          className="min-h-8 rounded-full border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-1.5 text-[12px] text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)]"
+                        />
+                        {habit.linkedBehaviorTitles
+                          .slice(0, 2)
+                          .map((behaviorTitle) => (
                             <Badge
-                              key={goal.id}
-                              className="bg-amber-400/12 text-amber-100"
+                              key={behaviorTitle}
+                              className={habitWarningBadgeClass}
                             >
-                              Goal · {goal.title}
+                              <ShieldBan className="mr-1 size-3.5" />
+                              {behaviorTitle}
                             </Badge>
-                          ) : null;
-                        })}
-                        {habit.linkedProjectIds.slice(0, 1).map((projectId) => {
+                          ))}
+                        {habit.linkedProjectIds.slice(1, 2).map((projectId) => {
                           const project =
                             shell.snapshot.dashboard.projects.find(
                               (entry) => entry.id === projectId
@@ -1006,294 +1186,146 @@ export function HabitsPage() {
                           return project ? (
                             <Badge
                               key={project.id}
-                              className="bg-sky-400/12 text-sky-100"
+                              className={habitInfoBadgeClass}
                             >
                               Project · {project.title}
                             </Badge>
                           ) : null;
                         })}
-                        {habit.linkedTaskIds.slice(0, 1).map((taskId) => {
+                        {habit.linkedTaskIds.slice(1, 2).map((taskId) => {
                           const task = shell.snapshot.tasks.find(
                             (entry) => entry.id === taskId
                           );
                           return task ? (
                             <Badge
                               key={task.id}
-                              className="bg-indigo-400/12 text-indigo-100"
+                              className={habitAccentBadgeClass}
                             >
                               Task · {task.title}
                             </Badge>
                           ) : null;
                         })}
-                      </div>
-                      <div className="mt-3 text-sm leading-6 text-white/60">
-                        {habit.description ? (
-                          <NoteMarkdown
-                            markdown={habit.description}
-                            className="[&>p]:text-sm [&>p]:leading-6 [&>blockquote]:text-sm [&>ul]:text-sm [&>ol]:text-sm"
-                          />
-                        ) : (
-                          "No extra notes yet."
-                        )}
-                      </div>
-                    </div>
-                    <div className="ml-auto inline-flex shrink-0 flex-col items-end gap-2 self-start text-right">
-                      <div
-                        className={cn(
-                          "inline-flex flex-col self-end rounded-[20px] px-3 py-2.5 text-right",
-                          streak.className
-                        )}
-                      >
-                        <div className="flex items-center justify-end gap-1.5 text-[10px] uppercase tracking-[0.16em]">
-                          <span>Streak</span>
-                          <StreakIcon
-                            className={cn(
-                              "size-3.5 shrink-0",
-                              streak.iconClass
-                            )}
-                          />
-                        </div>
-                        <div
-                          className={cn(
-                            "mt-1.5 font-display text-[2.75rem] leading-none",
-                            streak.valueClass
-                          )}
-                        >
-                          {habit.streakCount}
-                        </div>
-                        <div className="mt-1 text-[11px] leading-tight text-white/68">
-                          {streak.label}
-                        </div>
-                      </div>
-                      <div className="ml-auto grid grid-cols-2 gap-1.5">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 min-w-0 rounded-[11px] border border-white/8 bg-white/[0.04] px-3 text-white/72 hover:bg-white/[0.08] hover:text-white"
-                          disabled={saveHabitMutation.isPending}
-                          onClick={() => {
-                            setEditingHabit(habit);
-                            setDialogOpen(true);
-                          }}
-                          aria-label={`Edit ${habit.title}`}
-                          title="Edit habit"
-                        >
-                          <Pencil className="size-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 min-w-0 rounded-[11px] border border-white/8 bg-white/[0.04] px-3 text-white/72 hover:bg-white/[0.08] hover:text-white"
-                          disabled={deleteHabitMutation.isPending}
-                          onClick={() => setConfirmingDeleteHabit(habit)}
-                          aria-label={`Delete ${habit.title}`}
-                          title="Delete habit"
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-auto grid gap-4 pt-5">
-                    <div className="flex flex-wrap gap-2">
-                      <Badge
-                        className={cn(
-                          "border-0",
-                          getAlignmentBadgeClass(habit.completionRate)
-                        )}
-                      >
-                        Alignment {habit.completionRate}%
-                      </Badge>
-                      <Badge className="bg-white/[0.08] text-white/72">
-                        {habit.polarity === "positive"
-                          ? `+${habit.rewardXp} XP done`
-                          : `+${habit.rewardXp} XP resisted`}
-                      </Badge>
-                      <Badge className="bg-white/[0.08] text-white/72">
-                        {habit.polarity === "positive"
-                          ? `-${habit.penaltyXp} XP missed`
-                          : `-${habit.penaltyXp} XP performed`}
-                      </Badge>
-                      <Badge className="bg-[var(--primary)]/12 text-[var(--primary)]">
-                        {formatLifeForceAp(habitActionLoad.totalAp)} check-in
-                      </Badge>
-                      {generatedWorkoutActionLoad ? (
-                        <Badge className="bg-orange-400/12 text-orange-100">
-                          {formatLifeForceAp(generatedWorkoutActionLoad.totalAp)}{" "}
-                          workout
-                        </Badge>
-                      ) : null}
-                      {generatedWorkoutActionLoad ? (
-                        <Badge className="bg-white/[0.08] text-white/72">
-                          {formatLifeForceRate(
-                            generatedWorkoutActionLoad.rateApPerHour
-                          )}
-                        </Badge>
-                      ) : null}
-                      <EntityNoteCountLink
-                        entityType="habit"
-                        entityId={habit.id}
-                        count={noteCount}
-                        className="min-h-8 rounded-full border-white/8 bg-white/[0.04] px-3 py-1.5 text-[12px] text-white/68 hover:bg-white/[0.07]"
-                      />
-                      {habit.linkedBehaviorTitles
-                        .slice(0, 2)
-                        .map((behaviorTitle) => (
-                          <Badge
-                            key={behaviorTitle}
-                            className="bg-orange-400/12 text-orange-100"
-                          >
-                            <ShieldBan className="mr-1 size-3.5" />
-                            {behaviorTitle}
-                          </Badge>
-                        ))}
-                      {habit.linkedProjectIds.slice(1, 2).map((projectId) => {
-                        const project = shell.snapshot.dashboard.projects.find(
-                          (entry) => entry.id === projectId
-                        );
-                        return project ? (
-                          <Badge
-                            key={project.id}
-                            className="bg-sky-400/12 text-sky-100"
-                          >
-                            Project · {project.title}
-                          </Badge>
-                        ) : null;
-                      })}
-                      {habit.linkedTaskIds.slice(1, 2).map((taskId) => {
-                        const task = shell.snapshot.tasks.find(
-                          (entry) => entry.id === taskId
-                        );
-                        return task ? (
-                          <Badge
-                            key={task.id}
-                            className="bg-indigo-400/12 text-indigo-100"
-                          >
-                            Task · {task.title}
-                          </Badge>
-                        ) : null;
-                      })}
-                      {habit.linkedValueIds.slice(0, 2).map((valueId) => {
-                        const valueEntry =
-                          psycheOverviewQuery.data?.values.find(
-                            (entry) => entry.id === valueId
+                        {habit.linkedValueIds.slice(0, 2).map((valueId) => {
+                          const valueEntry =
+                            psycheOverviewQuery.data?.values.find(
+                              (entry) => entry.id === valueId
+                            );
+                          return valueEntry ? (
+                            <Badge
+                              key={valueEntry.id}
+                              className={habitSuccessBadgeClass}
+                            >
+                              Value · {valueEntry.title}
+                            </Badge>
+                          ) : null;
+                        })}
+                        {habit.linkedPatternIds.slice(0, 2).map((patternId) => {
+                          const pattern =
+                            psycheOverviewQuery.data?.patterns.find(
+                              (entry) => entry.id === patternId
+                            );
+                          return pattern ? (
+                            <Badge
+                              key={pattern.id}
+                              className={habitInfoBadgeClass}
+                            >
+                              Pattern · {pattern.title}
+                            </Badge>
+                          ) : null;
+                        })}
+                        {habit.linkedBeliefIds.slice(0, 2).map((beliefId) => {
+                          const belief = psycheOverviewQuery.data?.beliefs.find(
+                            (entry) => entry.id === beliefId
                           );
-                        return valueEntry ? (
-                          <Badge
-                            key={valueEntry.id}
-                            className="bg-emerald-400/12 text-emerald-100"
-                          >
-                            Value · {valueEntry.title}
-                          </Badge>
-                        ) : null;
-                      })}
-                      {habit.linkedPatternIds.slice(0, 2).map((patternId) => {
-                        const pattern = psycheOverviewQuery.data?.patterns.find(
-                          (entry) => entry.id === patternId
-                        );
-                        return pattern ? (
-                          <Badge
-                            key={pattern.id}
-                            className="bg-cyan-400/12 text-cyan-100"
-                          >
-                            Pattern · {pattern.title}
-                          </Badge>
-                        ) : null;
-                      })}
-                      {habit.linkedBeliefIds.slice(0, 2).map((beliefId) => {
-                        const belief = psycheOverviewQuery.data?.beliefs.find(
-                          (entry) => entry.id === beliefId
-                        );
-                        return belief ? (
-                          <Badge
-                            key={belief.id}
-                            className="bg-rose-400/12 text-rose-100"
-                          >
-                            Belief · {belief.statement}
-                          </Badge>
-                        ) : null;
-                      })}
-                      {habit.linkedModeIds.slice(0, 2).map((modeId) => {
-                        const mode = psycheOverviewQuery.data?.modes.find(
-                          (entry) => entry.id === modeId
-                        );
-                        return mode ? (
-                          <Badge
-                            key={mode.id}
-                            className="bg-violet-400/12 text-violet-100"
-                          >
-                            Mode · {mode.title}
-                          </Badge>
-                        ) : null;
-                      })}
-                      {habit.linkedReportIds.slice(0, 2).map((reportId) => {
-                        const report = psycheOverviewQuery.data?.reports.find(
-                          (entry) => entry.id === reportId
-                        );
-                        return report ? (
-                          <Badge
-                            key={report.id}
-                            className="bg-fuchsia-400/12 text-fuchsia-100"
-                          >
-                            Report · {report.title}
-                          </Badge>
-                        ) : null;
-                      })}
-                    </div>
+                          return belief ? (
+                            <Badge
+                              key={belief.id}
+                              className={habitDangerBadgeClass}
+                            >
+                              Belief · {belief.statement}
+                            </Badge>
+                          ) : null;
+                        })}
+                        {habit.linkedModeIds.slice(0, 2).map((modeId) => {
+                          const mode = psycheOverviewQuery.data?.modes.find(
+                            (entry) => entry.id === modeId
+                          );
+                          return mode ? (
+                            <Badge
+                              key={mode.id}
+                              className={habitAccentBadgeClass}
+                            >
+                              Mode · {mode.title}
+                            </Badge>
+                          ) : null;
+                        })}
+                        {habit.linkedReportIds.slice(0, 2).map((reportId) => {
+                          const report = psycheOverviewQuery.data?.reports.find(
+                            (entry) => entry.id === reportId
+                          );
+                          return report ? (
+                            <Badge
+                              key={report.id}
+                              className={habitAccentBadgeClass}
+                            >
+                              Report · {report.title}
+                            </Badge>
+                          ) : null;
+                        })}
+                      </div>
 
-                    <div className="grid gap-4">
-                      <HabitHistoryStrip
-                        habit={habit}
-                        onSelectCell={(selectedHabit, cell) => {
-                          setHistoryEditor({ habit: selectedHabit, cell });
-                          setErrorMessage(null);
-                        }}
-                      />
-                    </div>
+                      <div className="grid gap-4">
+                        <HabitHistoryStrip
+                          habit={habit}
+                          onSelectCell={(selectedHabit, cell) => {
+                            setHistoryEditor({ habit: selectedHabit, cell });
+                            setErrorMessage(null);
+                          }}
+                        />
+                      </div>
 
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <Button
-                        variant="secondary"
-                        className={cn(
-                          "h-11 rounded-[16px] border",
-                          alignedAction.className
-                        )}
-                        disabled={checkInMutation.isPending}
-                        onClick={() =>
-                          void checkInMutation.mutateAsync({
-                            habitId: habit.id,
-                            status: alignedAction.status,
-                            dateKey: formatDateKey(new Date())
-                          })
-                        }
-                      >
-                        <alignedAction.Icon className="size-4" />
-                        {alignedAction.label}
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        className={cn(
-                          "h-11 rounded-[16px] border",
-                          unalignedAction.className
-                        )}
-                        disabled={checkInMutation.isPending}
-                        onClick={() =>
-                          void checkInMutation.mutateAsync({
-                            habitId: habit.id,
-                            status: unalignedAction.status,
-                            dateKey: formatDateKey(new Date())
-                          })
-                        }
-                      >
-                        <unalignedAction.Icon className="size-4" />
-                        {unalignedAction.label}
-                      </Button>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <Button
+                          variant="secondary"
+                          className={cn(
+                            "h-11 rounded-[16px] border",
+                            alignedAction.className
+                          )}
+                          disabled={checkInMutation.isPending}
+                          onClick={() =>
+                            void checkInMutation.mutateAsync({
+                              habitId: habit.id,
+                              status: alignedAction.status,
+                              dateKey: formatDateKey(new Date())
+                            })
+                          }
+                        >
+                          <alignedAction.Icon className="size-4" />
+                          {alignedAction.label}
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          className={cn(
+                            "h-11 rounded-[16px] border",
+                            unalignedAction.className
+                          )}
+                          disabled={checkInMutation.isPending}
+                          onClick={() =>
+                            void checkInMutation.mutateAsync({
+                              habitId: habit.id,
+                              status: unalignedAction.status,
+                              dateKey: formatDateKey(new Date())
+                            })
+                          }
+                        >
+                          <unalignedAction.Icon className="size-4" />
+                          {unalignedAction.label}
+                        </Button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </Card>
-            );
+                </Card>
+              );
             })}
           </div>
         </div>
@@ -1335,18 +1367,18 @@ export function HabitsPage() {
         }}
       >
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-40 bg-[rgba(4,8,18,0.72)] backdrop-blur-xl" />
-          <Dialog.Content className="fixed inset-x-4 top-1/2 z-50 mx-auto w-[min(30rem,calc(100vw-2rem))] max-w-[30rem] -translate-y-1/2 overflow-hidden rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(20,28,42,0.98),rgba(12,17,30,0.98))] shadow-[0_32px_90px_rgba(3,8,18,0.45)]">
-            <div className="border-b border-white/8 px-5 py-4">
+          <Dialog.Overlay className="surface-overlay fixed inset-0 z-40 backdrop-blur-xl" />
+          <Dialog.Content className="surface-modal-panel fixed inset-x-4 top-1/2 z-50 mx-auto w-[min(30rem,calc(100vw-2rem))] max-w-[30rem] -translate-y-1/2 overflow-hidden rounded-[30px] border">
+            <div className="border-b border-[var(--ui-border-subtle)] px-5 py-4">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/40">
+                  <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                     Delete habit
                   </div>
-                  <Dialog.Title className="mt-2 text-lg font-semibold text-white">
+                  <Dialog.Title className="mt-2 text-lg font-semibold text-[var(--ui-ink-strong)]">
                     {confirmingDeleteHabit?.title ?? "Delete this habit?"}
                   </Dialog.Title>
-                  <Dialog.Description className="mt-3 text-sm text-white/56">
+                  <Dialog.Description className="mt-3 text-sm text-[var(--ui-ink-soft)]">
                     Remove this habit from Forge. The habit card disappears
                     immediately after delete succeeds.
                   </Dialog.Description>
@@ -1355,7 +1387,7 @@ export function HabitsPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-10 w-10 rounded-[14px] border border-white/8 bg-white/[0.04] px-0 text-white/72 hover:bg-white/[0.08] hover:text-white"
+                    className="h-10 w-10 rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-0 text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                     aria-label="Close delete habit modal"
                     title="Close"
                     disabled={deleteHabitMutation.isPending}
@@ -1367,7 +1399,7 @@ export function HabitsPage() {
             </div>
 
             <div className="grid gap-4 p-5">
-              <div className="rounded-[20px] border border-rose-400/16 bg-rose-400/8 px-4 py-3 text-sm leading-6 text-rose-100/90">
+              <div className="rounded-[20px] border border-[color-mix(in_srgb,var(--danger)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-danger-soft)] px-4 py-3 text-sm leading-6 text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]">
                 This removes the habit and its check-in history from the habits
                 page.
               </div>
@@ -1380,14 +1412,16 @@ export function HabitsPage() {
                   Cancel
                 </Button>
                 <Button
-                  className="border border-rose-300/18 bg-rose-300/14 text-rose-50 hover:bg-rose-300/20"
+                  className="border border-[color-mix(in_srgb,var(--danger)_34%,var(--ui-border-subtle)_66%)] bg-[var(--ui-danger-soft)] text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)] hover:bg-[color-mix(in_srgb,var(--danger)_22%,var(--ui-surface-hover)_78%)]"
                   pending={deleteHabitMutation.isPending}
                   pendingLabel="Deleting"
                   onClick={() => {
                     if (!confirmingDeleteHabit) {
                       return;
                     }
-                    void deleteHabitMutation.mutateAsync(confirmingDeleteHabit.id);
+                    void deleteHabitMutation.mutateAsync(
+                      confirmingDeleteHabit.id
+                    );
                   }}
                 >
                   Delete habit
@@ -1406,29 +1440,27 @@ export function HabitsPage() {
         }}
       >
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-40 bg-[rgba(4,8,18,0.72)] backdrop-blur-xl" />
-          <Dialog.Content className="fixed inset-x-4 top-1/2 z-50 mx-auto w-[min(42rem,calc(100vw-2rem))] max-w-[42rem] -translate-y-1/2 overflow-hidden rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(20,28,42,0.98),rgba(12,17,30,0.98))] shadow-[0_32px_90px_rgba(3,8,18,0.45)]">
+          <Dialog.Overlay className="surface-overlay fixed inset-0 z-40 backdrop-blur-xl" />
+          <Dialog.Content className="surface-modal-panel fixed inset-x-4 top-1/2 z-50 mx-auto w-[min(42rem,calc(100vw-2rem))] max-w-[42rem] -translate-y-1/2 overflow-hidden rounded-[30px] border">
             <Dialog.Title className="sr-only">Habit history</Dialog.Title>
             <Dialog.Description className="sr-only">
               Log or revise a habit check-in for a selected history point.
             </Dialog.Description>
             {historyEditor && historyCopy ? (
               <>
-                <div className="border-b border-white/8 px-5 py-4">
+                <div className="border-b border-[var(--ui-border-subtle)] px-5 py-4">
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
-                      <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/40">
+                      <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                         Habit history
                       </div>
                       <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <div className="text-lg font-semibold text-white">
+                        <div className="text-lg font-semibold text-[var(--ui-ink-strong)]">
                           {historyEditor.habit.title}
                         </div>
-                        <Badge className="bg-white/[0.08] text-white/76">
-                          {historyEditor.cell.actionLabel}
-                        </Badge>
+                        <Badge>{historyEditor.cell.actionLabel}</Badge>
                       </div>
-                      <div className="mt-3 text-sm text-white/56">
+                      <div className="mt-3 text-sm text-[var(--ui-ink-soft)]">
                         {historyEditor.habit.frequency === "daily"
                           ? "Log or revise the check-in for this specific day."
                           : "Log or revise the representative check-in for this week."}
@@ -1438,7 +1470,7 @@ export function HabitsPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-10 w-10 rounded-[14px] border border-white/8 bg-white/[0.04] px-0 text-white/72 hover:bg-white/[0.08] hover:text-white"
+                        className="h-10 w-10 rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-0 text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                         aria-label="Close history modal"
                         title="Close"
                       >
@@ -1454,16 +1486,20 @@ export function HabitsPage() {
                       type="button"
                       aria-pressed={
                         historyStatus !== null &&
-                        getHabitActionTone(historyEditor.habit, historyStatus) ===
-                          "aligned"
+                        getHabitActionTone(
+                          historyEditor.habit,
+                          historyStatus
+                        ) === "aligned"
                       }
                       className={cn(
                         "rounded-[22px] border px-4 py-4 text-left transition",
                         historyStatus !== null &&
-                          getHabitActionTone(historyEditor.habit, historyStatus) ===
-                            "aligned"
-                          ? "border-emerald-300/24 bg-emerald-300/14 text-white shadow-[0_16px_36px_rgba(52,211,153,0.14)]"
-                          : "border-white/8 bg-white/[0.04] text-white/72 hover:bg-white/[0.07]"
+                          getHabitActionTone(
+                            historyEditor.habit,
+                            historyStatus
+                          ) === "aligned"
+                          ? "border-[color-mix(in_srgb,var(--success)_34%,var(--ui-border-subtle)_66%)] bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_76%,var(--ui-ink-strong)_24%)] shadow-[var(--ui-shadow-soft)]"
+                          : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)]"
                       )}
                       onClick={() =>
                         setHistoryStatus((current) =>
@@ -1482,7 +1518,7 @@ export function HabitsPage() {
                         <CheckCheck className="size-4" />
                         {historyCopy.alignedLabel}
                       </div>
-                      <div className="mt-2 text-sm leading-6 text-white/56">
+                      <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                         {historyCopy.alignedDescription}
                       </div>
                     </button>
@@ -1490,16 +1526,20 @@ export function HabitsPage() {
                       type="button"
                       aria-pressed={
                         historyStatus !== null &&
-                        getHabitActionTone(historyEditor.habit, historyStatus) ===
-                          "unaligned"
+                        getHabitActionTone(
+                          historyEditor.habit,
+                          historyStatus
+                        ) === "unaligned"
                       }
                       className={cn(
                         "rounded-[22px] border px-4 py-4 text-left transition",
                         historyStatus !== null &&
-                          getHabitActionTone(historyEditor.habit, historyStatus) ===
-                            "unaligned"
-                          ? "border-rose-300/24 bg-rose-300/14 text-white shadow-[0_16px_36px_rgba(251,113,133,0.14)]"
-                          : "border-white/8 bg-white/[0.04] text-white/72 hover:bg-white/[0.07]"
+                          getHabitActionTone(
+                            historyEditor.habit,
+                            historyStatus
+                          ) === "unaligned"
+                          ? "border-[color-mix(in_srgb,var(--danger)_34%,var(--ui-border-subtle)_66%)] bg-[var(--ui-danger-soft)] text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)] shadow-[var(--ui-shadow-soft)]"
+                          : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)]"
                       )}
                       onClick={() =>
                         setHistoryStatus((current) =>
@@ -1518,14 +1558,14 @@ export function HabitsPage() {
                         <CircleX className="size-4" />
                         {historyCopy.unalignedLabel}
                       </div>
-                      <div className="mt-2 text-sm leading-6 text-white/56">
+                      <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                         {historyCopy.unalignedDescription}
                       </div>
                     </button>
                   </div>
 
                   <label className="grid gap-2">
-                    <span className="text-sm font-medium text-white">
+                    <span className="text-sm font-medium text-[var(--ui-ink-strong)]">
                       Optional note
                     </span>
                     <Textarea

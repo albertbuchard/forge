@@ -2,7 +2,14 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { Link } from "react-router-dom";
-import { Check, Download, Info, RefreshCw, Sparkles, Stethoscope } from "lucide-react";
+import {
+  Check,
+  Download,
+  Info,
+  RefreshCw,
+  Sparkles,
+  Stethoscope
+} from "lucide-react";
 import { ThemeCustomizerDialog } from "@/components/settings/theme-customizer-dialog";
 import { SettingsSectionNav } from "@/components/settings/settings-section-nav";
 import { PageHero } from "@/components/shell/page-hero";
@@ -48,6 +55,15 @@ import { setSelectedUserIds as setSelectedUserIdsAction } from "@/store/slices/s
 import { useAppDispatch } from "@/store/typed-hooks";
 import type { DoctorIssue, ForgeDoctorReport } from "@/lib/types";
 
+const settingsEyebrowClass =
+  "font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]";
+const settingsSoftTextClass = "text-sm leading-6 text-[var(--ui-ink-soft)]";
+const settingsSubtleTextClass = "text-xs leading-5 text-[var(--ui-ink-faint)]";
+const settingsPanelClass =
+  "rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]";
+const settingsTileClass =
+  "rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]";
+
 function ThemePreviewSwatches({
   theme
 }: {
@@ -59,7 +75,7 @@ function ThemePreviewSwatches({
         (color) => (
           <div
             key={color}
-            className="h-6 rounded-[10px] border border-black/10"
+            className="h-6 rounded-[10px] border border-[var(--ui-border-subtle)]"
             style={{ background: color }}
           />
         )
@@ -76,22 +92,22 @@ function GamificationStylePreview({
   theme: GamificationThemePreference;
 }) {
   return (
-    <div className="relative min-h-[138px] overflow-hidden rounded-[18px] border border-white/10 bg-[radial-gradient(circle_at_24%_10%,rgba(255,199,104,0.22),transparent_30%),radial-gradient(circle_at_88%_12%,rgba(84,191,255,0.16),transparent_32%),linear-gradient(145deg,rgba(255,255,255,0.08),rgba(255,255,255,0.025))]">
-      <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/42 to-transparent" />
+    <div className="relative min-h-[138px] overflow-hidden rounded-[18px] border border-[var(--ui-border-subtle)] bg-[linear-gradient(145deg,var(--ui-surface-2),var(--ui-surface-1))]">
+      <div className="absolute inset-x-0 bottom-0 h-16 bg-[linear-gradient(0deg,color-mix(in_srgb,var(--ui-surface-3)_82%,transparent),transparent)]" />
       <img
         src={getGamificationThemePreviewUrl(theme)}
         alt={`${theme} neutral Forge Smith mascot preview`}
-        className="absolute bottom-1 left-1/2 h-[124px] w-[124px] -translate-x-1/2 object-contain drop-shadow-[0_18px_30px_rgba(0,0,0,0.34)]"
+        className="absolute bottom-1 left-1/2 h-[124px] w-[124px] -translate-x-1/2 object-contain drop-shadow-[0_18px_30px_color-mix(in_srgb,var(--ui-shadow-color)_30%,transparent)]"
       />
-      <div className="absolute left-3 top-3 flex items-center gap-2 rounded-full border border-white/10 bg-black/28 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-white/78 backdrop-blur-md">
-        <Sparkles className="size-3 text-amber-200" />
+      <div className="absolute left-3 top-3 flex items-center gap-2 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-glass)] px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-[var(--ui-ink-medium)] backdrop-blur-md">
+        <Sparkles className="size-3 text-[var(--warning)]" />
         Live rewards
       </div>
       <div className="absolute bottom-3 left-3 flex items-center gap-1.5">
         {gamificationPreviewItemKeys.map((assetKey) => (
           <span
             key={assetKey}
-            className="grid size-11 place-items-center overflow-hidden rounded-[12px] border border-white/12 bg-black/26 p-1 shadow-[0_12px_22px_rgba(0,0,0,0.22)] backdrop-blur-md"
+            className="grid size-11 place-items-center overflow-hidden rounded-[12px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-glass)] p-1 shadow-[var(--ui-shadow-soft)] backdrop-blur-md"
           >
             <img
               src={getGamificationThemePreviewItemUrl(theme, assetKey)}
@@ -104,8 +120,8 @@ function GamificationStylePreview({
       <span
         className={`absolute right-3 top-3 grid size-7 place-items-center rounded-full border ${
           selected
-            ? "border-emerald-200/55 bg-emerald-300/18 text-emerald-100"
-            : "border-white/15 bg-black/20 text-white/40"
+            ? "border-[color-mix(in_srgb,var(--success)_42%,var(--ui-border-subtle)_58%)] bg-[var(--ui-success-soft)] text-[var(--success)]"
+            : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-glass)] text-[var(--ui-ink-faint)]"
         }`}
       >
         {selected ? <Check className="size-4" /> : null}
@@ -119,13 +135,11 @@ function MobileCompanionSettingsCard({ healthy }: { healthy: boolean }) {
     <Card className="p-4">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="min-w-0">
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-            Mobile companion
-          </div>
-          <div className="mt-1 text-base font-medium text-white">
+          <div className={settingsEyebrowClass}>Mobile companion</div>
+          <div className="mt-1 text-base font-medium text-[var(--ui-ink-strong)]">
             {healthy ? "iPhone bridge is syncing" : "Connect the iPhone bridge"}
           </div>
-          <div className="mt-1 max-w-3xl text-sm leading-6 text-white/58">
+          <div className={`mt-1 max-w-3xl ${settingsSoftTextClass}`}>
             {healthy
               ? "Review HealthKit, movement, and background sync permissions."
               : "Pair or refresh the native companion before relying on HealthKit, movement, or watch signals."}
@@ -133,7 +147,7 @@ function MobileCompanionSettingsCard({ healthy }: { healthy: boolean }) {
         </div>
         <Link
           to="/settings/mobile"
-          className="inline-flex min-h-10 items-center rounded-[14px] bg-white/[0.08] px-3 py-2 text-sm text-white transition hover:bg-white/[0.12]"
+          className="inline-flex min-h-10 items-center rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-2 text-sm text-[var(--ui-ink-strong)] transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]"
         >
           Open mobile settings
         </Link>
@@ -204,7 +218,7 @@ function IntegrityHelpPill({
   return (
     <details className="group relative inline-flex">
       <summary
-        className="inline-flex cursor-pointer list-none items-center gap-1 rounded-full border border-white/10 bg-white/[0.05] px-2.5 py-1 text-[11px] font-medium normal-case tracking-normal text-white/72 transition marker:hidden hover:border-white/18 hover:bg-white/[0.08] hover:text-white/88 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(192,193,255,0.35)] [&::-webkit-details-marker]:hidden"
+        className="inline-flex cursor-pointer list-none items-center gap-1 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-2.5 py-1 text-[11px] font-medium normal-case tracking-normal text-[var(--ui-ink-soft)] transition marker:hidden hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--primary)_32%,transparent)] [&::-webkit-details-marker]:hidden"
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             event.currentTarget.parentElement?.removeAttribute("open");
@@ -216,12 +230,10 @@ function IntegrityHelpPill({
       </summary>
       <span
         role="tooltip"
-        className="absolute right-0 top-[calc(100%+0.55rem)] z-50 hidden w-[min(19rem,calc(100vw-2rem))] rounded-[16px] border border-white/10 bg-[rgba(10,15,27,0.98)] px-3 py-2.5 text-left text-xs leading-5 tracking-normal text-white/70 normal-case shadow-[0_18px_48px_rgba(3,8,18,0.46)] group-open:block"
+        className="surface-modal-panel absolute right-0 top-[calc(100%+0.55rem)] z-50 hidden w-[min(19rem,calc(100vw-2rem))] rounded-[16px] border px-3 py-2.5 text-left text-xs leading-5 tracking-normal text-[var(--ui-ink-soft)] normal-case shadow-[var(--ui-shadow-strong)] group-open:block"
       >
-        <span className="block font-medium text-white/88">
-          {score >= 100
-            ? "Integrity is complete"
-            : `Why this is ${score}%`}
+        <span className="block font-medium text-[var(--ui-ink-strong)]">
+          {score >= 100 ? "Integrity is complete" : `Why this is ${score}%`}
         </span>
         {explanation.map((line) => (
           <span key={line} className="mt-1 block">
@@ -254,7 +266,9 @@ function SecurityPostureCard({
 }) {
   const score = doctor?.integrity.score ?? integrityScore;
   const checkedAt = doctor?.integrity.lastCheckedAt ?? lastAuditAt;
-  const topIssues = doctor?.issues.filter((issue) => issue.severity !== "info").slice(0, 4) ?? [];
+  const topIssues =
+    doctor?.issues.filter((issue) => issue.severity !== "info").slice(0, 4) ??
+    [];
   const [primaryExplanation] = getIntegrityExplanation({
     integrityScore,
     storageMode,
@@ -266,15 +280,13 @@ function SecurityPostureCard({
     <Card className="p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-            Security posture
-          </div>
-          <div className="mt-1 text-sm leading-6 text-white/58">
+          <div className={settingsEyebrowClass}>Security posture</div>
+          <div className={`mt-1 ${settingsSoftTextClass}`}>
             Local-first means Forge stores its runtime data on this machine.
             Integrity is the latest internal consistency score from settings and
             data checks.
           </div>
-          <div className="mt-2 text-xs leading-5 text-white/50">
+          <div className={`mt-2 ${settingsSubtleTextClass}`}>
             {primaryExplanation}
           </div>
         </div>
@@ -286,23 +298,25 @@ function SecurityPostureCard({
         />
       </div>
       <div className="mt-3 grid gap-2 md:grid-cols-2">
-        <div className="rounded-[14px] bg-white/[0.04] px-3 py-3">
-          <div className="text-xs text-white/54">Storage mode</div>
-          <div className="mt-1 text-base font-medium text-white">
+        <div className={`${settingsTileClass} px-3 py-3`}>
+          <div className="text-xs text-[var(--ui-ink-soft)]">Storage mode</div>
+          <div className="mt-1 text-base font-medium text-[var(--ui-ink-strong)]">
             {storageMode}
           </div>
         </div>
-        <div className="rounded-[14px] bg-white/[0.04] px-3 py-3">
-          <div className="text-xs text-white/54">Last Doctor run</div>
-          <div className="mt-1 text-base font-medium text-white">
+        <div className={`${settingsTileClass} px-3 py-3`}>
+          <div className="text-xs text-[var(--ui-ink-soft)]">
+            Last Doctor run
+          </div>
+          <div className="mt-1 text-base font-medium text-[var(--ui-ink-strong)]">
             {formatAuditDate(checkedAt)}
           </div>
         </div>
       </div>
-      <div className="mt-3 rounded-[14px] border border-white/8 bg-white/[0.035] p-3">
+      <div className={`mt-3 ${settingsTileClass} p-3`}>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-sm font-medium text-white">
-            <Stethoscope className="size-4 text-cyan-200" />
+          <div className="flex items-center gap-2 text-sm font-medium text-[var(--ui-ink-strong)]">
+            <Stethoscope className="size-4 text-[var(--info)]" />
             Forge Doctor
           </div>
           <Button
@@ -315,7 +329,7 @@ function SecurityPostureCard({
             Run
           </Button>
         </div>
-        <div className="mt-2 text-sm leading-6 text-white/58">
+        <div className={`mt-2 ${settingsSoftTextClass}`}>
           {doctor
             ? `${score}% integrity. ${doctor.integrity.headline}`
             : "Run Doctor to check settings, storage, entities, rewards, and runtime consistency."}
@@ -332,7 +346,7 @@ function SecurityPostureCard({
             ))}
           </div>
         ) : doctor ? (
-          <div className="mt-3 rounded-[12px] border border-emerald-200/12 bg-emerald-300/8 px-3 py-2 text-sm text-emerald-100">
+          <div className="mt-3 rounded-[12px] border border-[color-mix(in_srgb,var(--success)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-success-soft)] px-3 py-2 text-sm text-[var(--success)]">
             No active consistency warnings.
           </div>
         ) : null}
@@ -351,13 +365,15 @@ function DoctorIssueRow({
   onApplyFix: (fixId: string) => void;
 }) {
   return (
-    <div className="rounded-[12px] border border-white/8 bg-black/12 px-3 py-2">
+    <div className={`${settingsTileClass} px-3 py-2`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <div className="text-xs uppercase tracking-[0.14em] text-white/42">
+          <div className="text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
             {issue.group} / {issue.severity}
           </div>
-          <div className="mt-1 text-sm text-white/78">{issue.summary}</div>
+          <div className="mt-1 text-sm text-[var(--ui-ink-medium)]">
+            {issue.summary}
+          </div>
         </div>
         {issue.fix?.kind === "safe_auto_fix" ? (
           <Button
@@ -469,7 +485,9 @@ export function SettingsPage() {
       queryClient.setQueryData(["forge-settings"], response);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["forge-settings"] }),
-        queryClient.invalidateQueries({ queryKey: ["forge-gamification-assets"] })
+        queryClient.invalidateQueries({
+          queryKey: ["forge-gamification-assets"]
+        })
       ]);
     }
   });
@@ -523,10 +541,7 @@ export function SettingsPage() {
     setApplyingDoctorFixId(fixId);
     try {
       await applyDoctorFixMutation({ fixIds: [fixId] }).unwrap();
-      await Promise.all([
-        settingsQuery.refetch(),
-        doctorQuery.refetch()
-      ]);
+      await Promise.all([settingsQuery.refetch(), doctorQuery.refetch()]);
     } finally {
       setApplyingDoctorFixId(undefined);
     }
@@ -633,10 +648,10 @@ export function SettingsPage() {
 
       {import.meta.env.DEV ? (
         <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full border border-amber-400/25 bg-amber-500/[0.1] px-3 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-amber-100/92">
+          <span className="rounded-full border border-[color-mix(in_srgb,var(--warning)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-warning-soft)] px-3 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-[var(--warning)]">
             Dev frontend
           </span>
-          <span className="text-sm text-white/50">
+          <span className="text-sm text-[var(--ui-ink-soft)]">
             Forge UI is currently being served by the Vite dev server.
           </span>
         </div>
@@ -645,10 +660,10 @@ export function SettingsPage() {
       <SettingsSectionNav />
 
       {operatorSessionQuery.data?.session ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] border border-emerald-400/20 bg-emerald-500/[0.08] px-4 py-3 text-sm text-emerald-100/88">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] border border-[color-mix(in_srgb,var(--success)_26%,var(--ui-border-subtle)_74%)] bg-[var(--ui-success-soft)] px-4 py-3 text-sm text-[var(--ui-ink-medium)]">
           <div>
             Operator session active as{" "}
-            <span className="font-medium text-white">
+            <span className="font-medium text-[var(--ui-ink-strong)]">
               {operatorSessionQuery.data.session.actorLabel}
             </span>
             .
@@ -677,30 +692,28 @@ export function SettingsPage() {
           })}
         >
           <Card className="p-4">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-              Operator profile
-            </div>
+            <div className={settingsEyebrowClass}>Operator profile</div>
             <div className="grid gap-3 md:grid-cols-2">
               <label className="grid gap-2">
-                <span className="text-sm text-white/58">Name</span>
+                <span className="text-sm text-[var(--ui-ink-soft)]">Name</span>
                 <Input {...settingsForm.register("profile.operatorName")} />
               </label>
               <label className="grid gap-2">
-                <span className="text-sm text-white/58">Email</span>
+                <span className="text-sm text-[var(--ui-ink-soft)]">Email</span>
                 <Input {...settingsForm.register("profile.operatorEmail")} />
               </label>
             </div>
             <label className="grid gap-2">
-              <span className="text-sm text-white/58">Title</span>
+              <span className="text-sm text-[var(--ui-ink-soft)]">Title</span>
               <Input {...settingsForm.register("profile.operatorTitle")} />
             </label>
 
-            <div className="mt-2 font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            <div className={`mt-2 ${settingsEyebrowClass}`}>
               Execution policy
             </div>
             <div className="grid gap-3 lg:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)]">
               <label className="grid gap-2">
-                <span className="text-sm text-white/58">
+                <span className="text-sm text-[var(--ui-ink-soft)]">
                   Maximum active tasks
                 </span>
                 <Input
@@ -713,7 +726,7 @@ export function SettingsPage() {
                 />
               </label>
               <div className="grid gap-3">
-                <div className="text-sm text-white/58">
+                <div className="text-sm text-[var(--ui-ink-soft)]">
                   Time accounting mode
                 </div>
                 <div className="grid gap-2 md:grid-cols-3">
@@ -741,7 +754,7 @@ export function SettingsPage() {
                   ).map((mode) => (
                     <label
                       key={mode.value}
-                      className="grid gap-2 rounded-[16px] bg-white/[0.04] px-3 py-3"
+                      className={`grid gap-2 ${settingsPanelClass} px-3 py-3`}
                     >
                       <span className="flex items-center gap-3">
                         <input
@@ -751,9 +764,11 @@ export function SettingsPage() {
                             "execution.timeAccountingMode"
                           )}
                         />
-                        <span className="text-white/82">{mode.label}</span>
+                        <span className="text-[var(--ui-ink-strong)]">
+                          {mode.label}
+                        </span>
                       </span>
-                      <span className="text-xs leading-5 text-white/56">
+                      <span className={settingsSubtleTextClass}>
                         {mode.description}
                       </span>
                     </label>
@@ -762,25 +777,37 @@ export function SettingsPage() {
               </div>
             </div>
 
-            <div className="mt-2 font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            <div className={`mt-2 ${settingsEyebrowClass}`}>
               Notification rules
             </div>
-            <label className="flex items-center justify-between rounded-[16px] bg-white/[0.04] px-3 py-2.5">
-              <span className="text-white/72">Goal drift alerts</span>
+            <label
+              className={`flex items-center justify-between ${settingsPanelClass} px-3 py-2.5`}
+            >
+              <span className="text-[var(--ui-ink-medium)]">
+                Goal drift alerts
+              </span>
               <input
                 type="checkbox"
                 {...settingsForm.register("notifications.goalDriftAlerts")}
               />
             </label>
-            <label className="flex items-center justify-between rounded-[16px] bg-white/[0.04] px-3 py-2.5">
-              <span className="text-white/72">Daily quest reminders</span>
+            <label
+              className={`flex items-center justify-between ${settingsPanelClass} px-3 py-2.5`}
+            >
+              <span className="text-[var(--ui-ink-medium)]">
+                Daily quest reminders
+              </span>
               <input
                 type="checkbox"
                 {...settingsForm.register("notifications.dailyQuestReminders")}
               />
             </label>
-            <label className="flex items-center justify-between rounded-[16px] bg-white/[0.04] px-3 py-2.5">
-              <span className="text-white/72">Achievement celebrations</span>
+            <label
+              className={`flex items-center justify-between ${settingsPanelClass} px-3 py-2.5`}
+            >
+              <span className="text-[var(--ui-ink-medium)]">
+                Achievement celebrations
+              </span>
               <input
                 type="checkbox"
                 {...settingsForm.register(
@@ -791,10 +818,8 @@ export function SettingsPage() {
           </Card>
 
           <Card className="p-4">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-              Theme calibration
-            </div>
-            <p className="text-sm text-white/58">
+            <div className={settingsEyebrowClass}>Theme calibration</div>
+            <p className={settingsSoftTextClass}>
               Switch between Forge dark and light presets, follow the system
               palette, or save your own shell theme.
             </p>
@@ -819,26 +844,26 @@ export function SettingsPage() {
                     }
                     className={`rounded-[18px] border px-3 py-3 text-left transition ${
                       selected
-                        ? "border-[rgba(192,193,255,0.28)] bg-[rgba(192,193,255,0.14)] shadow-[0_18px_36px_rgba(5,12,24,0.24)]"
-                        : "border-white/8 bg-white/[0.04] hover:bg-white/[0.07]"
+                        ? "border-[color-mix(in_srgb,var(--primary)_34%,var(--ui-border-subtle)_66%)] bg-[var(--ui-accent-soft)] shadow-[var(--ui-shadow-soft)]"
+                        : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <div className="text-sm font-semibold text-white">
+                        <div className="text-sm font-semibold text-[var(--ui-ink-strong)]">
                           {themeOption.value === "custom"
                             ? customTheme.label
                             : themeOption.label}
                         </div>
-                        <div className="mt-1 line-clamp-2 text-xs leading-5 text-white/58">
+                        <div className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--ui-ink-soft)]">
                           {themeOption.description}
                         </div>
                       </div>
                       <div
                         className={`mt-1 size-4 rounded-full border ${
                           selected
-                            ? "border-[rgba(192,193,255,0.65)] bg-[var(--primary)]"
-                            : "border-white/25"
+                            ? "border-[color-mix(in_srgb,var(--primary)_65%,var(--ui-border-subtle)_35%)] bg-[var(--primary)]"
+                            : "border-[var(--ui-border-strong)]"
                         }`}
                       />
                     </div>
@@ -847,12 +872,14 @@ export function SettingsPage() {
                 );
               })}
             </div>
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-[16px] bg-white/[0.04] px-3 py-3">
+            <div
+              className={`mt-3 flex flex-wrap items-center justify-between gap-3 ${settingsPanelClass} px-3 py-3`}
+            >
               <div>
-                <div className="text-sm font-medium text-white">
+                <div className="text-sm font-medium text-[var(--ui-ink-strong)]">
                   Custom theme editor
                 </div>
-                <div className="mt-1 text-sm leading-6 text-white/58">
+                <div className={`mt-1 ${settingsSoftTextClass}`}>
                   Save a custom Forge palette through a guided modal, or paste
                   and upload JSON directly.
                 </div>
@@ -873,20 +900,18 @@ export function SettingsPage() {
           <Card className="p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-                  Gamification style
-                </div>
-                <p className="text-sm text-white/58">
+                <div className={settingsEyebrowClass}>Gamification style</div>
+                <p className={settingsSoftTextClass}>
                   Choose the reward art style and download its optional trophy,
                   unlock, and mascot sprites.
                 </p>
               </div>
               {selectedGamificationAssetStatus?.installed ? (
-                <span className="inline-flex rounded-full border border-emerald-200/18 bg-emerald-300/10 px-3 py-1 text-xs font-medium text-emerald-100">
+                <span className="inline-flex rounded-full border border-[color-mix(in_srgb,var(--success)_26%,var(--ui-border-subtle)_74%)] bg-[var(--ui-success-soft)] px-3 py-1 text-xs font-medium text-[var(--success)]">
                   Selected style downloaded
                 </span>
               ) : (
-                <span className="inline-flex rounded-full border border-amber-200/18 bg-amber-300/10 px-3 py-1 text-xs font-medium text-amber-100">
+                <span className="inline-flex rounded-full border border-[color-mix(in_srgb,var(--warning)_26%,var(--ui-border-subtle)_74%)] bg-[var(--ui-warning-soft)] px-3 py-1 text-xs font-medium text-[var(--warning)]">
                   Selected style not downloaded
                 </span>
               )}
@@ -901,14 +926,15 @@ export function SettingsPage() {
                 const installed = assetStatus?.installed ?? false;
                 const installing =
                   gamificationAssetInstallMutation.isPending &&
-                  gamificationAssetInstallMutation.variables === themeOption.value;
+                  gamificationAssetInstallMutation.variables ===
+                    themeOption.value;
                 return (
                   <div
                     key={themeOption.value}
                     className={`grid gap-2 rounded-[18px] border p-2.5 text-left transition ${
                       selected
-                        ? "border-amber-200/28 bg-amber-300/[0.09] shadow-[0_18px_42px_rgba(0,0,0,0.26)]"
-                        : "border-white/8 bg-white/[0.035] hover:border-white/16 hover:bg-white/[0.065]"
+                        ? "border-[color-mix(in_srgb,var(--warning)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-warning-soft)] shadow-[var(--ui-shadow-soft)]"
+                        : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]"
                     }`}
                   >
                     <button
@@ -926,13 +952,13 @@ export function SettingsPage() {
                       />
                     </button>
                     <span className="grid gap-1 px-1 pb-1">
-                      <span className="text-sm font-semibold text-white">
+                      <span className="text-sm font-semibold text-[var(--ui-ink-strong)]">
                         {themeOption.label}
                       </span>
-                      <span className="line-clamp-2 text-xs leading-5 text-white/58">
+                      <span className="line-clamp-2 text-xs leading-5 text-[var(--ui-ink-soft)]">
                         {themeOption.description}
                       </span>
-                      <span className="mt-1 text-[11px] uppercase tracking-[0.14em] text-white/42">
+                      <span className="mt-1 text-[11px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
                         {installed
                           ? `Downloaded ${assetStatus?.spriteCount ?? 0}/${assetStatus?.expectedSpriteCount ?? 0}`
                           : "Not downloaded"}
@@ -941,9 +967,14 @@ export function SettingsPage() {
                         type="button"
                         variant={installed ? "secondary" : "primary"}
                         pending={installing}
-                        disabled={installed || gamificationAssetInstallMutation.isPending}
+                        disabled={
+                          installed ||
+                          gamificationAssetInstallMutation.isPending
+                        }
                         onClick={() =>
-                          gamificationAssetInstallMutation.mutate(themeOption.value)
+                          gamificationAssetInstallMutation.mutate(
+                            themeOption.value
+                          )
                         }
                       >
                         <Download className="size-4" />
@@ -955,10 +986,12 @@ export function SettingsPage() {
               })}
             </div>
             {gamificationThemeMutation.isPending ? (
-              <div className="text-sm text-white/48">Saving reward style…</div>
+              <div className="text-sm text-[var(--ui-ink-faint)]">
+                Saving reward style…
+              </div>
             ) : null}
             {gamificationAssetInstallMutation.isError ? (
-              <div className="mt-3 rounded-[14px] border border-red-300/20 bg-red-500/10 px-3 py-2 text-sm text-red-100">
+              <div className="mt-3 rounded-[14px] border border-[color-mix(in_srgb,var(--danger)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-danger-soft)] px-3 py-2 text-sm text-[var(--danger)]">
                 {gamificationAssetInstallMutation.error instanceof Error
                   ? gamificationAssetInstallMutation.error.message
                   : "Could not download the selected reward art."}
@@ -967,10 +1000,10 @@ export function SettingsPage() {
           </Card>
 
           <Card className="p-4">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            <div className={settingsEyebrowClass}>
               {t("common.settings.localeLabel")}
             </div>
-            <p className="text-sm text-white/58">
+            <p className={settingsSoftTextClass}>
               {t("common.settings.localeDescription")}
             </p>
             <div className="grid gap-3 md:grid-cols-2">
@@ -982,14 +1015,16 @@ export function SettingsPage() {
               ).map((locale) => (
                 <label
                   key={locale.value}
-                  className="flex items-center gap-3 rounded-[16px] bg-white/[0.04] px-3 py-3"
+                  className={`flex items-center gap-3 ${settingsPanelClass} px-3 py-3`}
                 >
                   <input
                     type="radio"
                     value={locale.value}
                     {...settingsForm.register("localePreference")}
                   />
-                  <span className="text-white/72">{locale.label}</span>
+                  <span className="text-[var(--ui-ink-medium)]">
+                    {locale.label}
+                  </span>
                 </label>
               ))}
             </div>
@@ -1013,7 +1048,9 @@ export function SettingsPage() {
           storageMode={settings.security.storageMode}
           lastAuditAt={settings.security.lastAuditAt}
           doctor={doctor}
-          doctorLoading={doctorQuery.isFetching || applyDoctorFixState.isLoading}
+          doctorLoading={
+            doctorQuery.isFetching || applyDoctorFixState.isLoading
+          }
           onRefreshDoctor={() => void doctorQuery.refetch()}
           onApplyFix={(fixId) => void applyDoctorFix(fixId)}
           applyingFixId={applyingDoctorFixId}

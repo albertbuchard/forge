@@ -14,24 +14,28 @@ function summarizeNodeState(strategy: Strategy, nodeId: string) {
   if (isBlocked) {
     return {
       label: "Blocked",
-      className: "bg-rose-500/12 text-rose-200"
+      className:
+        "bg-[var(--ui-danger-soft)] text-[color-mix(in_srgb,var(--danger)_78%,var(--ui-ink-strong)_22%)]"
     };
   }
   if (isOutOfOrder) {
     return {
       label: "Out of order",
-      className: "bg-amber-500/12 text-amber-200"
+      className:
+        "bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]"
     };
   }
   if (isActive) {
     return {
       label: "Ready now",
-      className: "bg-emerald-500/12 text-emerald-200"
+      className:
+        "bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_78%,var(--ui-ink-strong)_22%)]"
     };
   }
   return {
     label: "In plan",
-    className: "bg-sky-500/12 text-sky-200"
+    className:
+      "bg-[var(--ui-info-soft)] text-[color-mix(in_srgb,var(--info)_78%,var(--ui-ink-strong)_22%)]"
   };
 }
 
@@ -73,12 +77,12 @@ export function StrategyHierarchyTree({
         return (
           <div
             key={phase.level}
-            className="rounded-[24px] border border-white/8 bg-white/[0.03]"
+            className="min-w-0 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] shadow-[var(--ui-shadow-soft)]"
           >
             <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
               <button
                 type="button"
-                className="flex min-w-0 items-center gap-3 text-left"
+                className="flex min-w-0 max-w-full items-center gap-3 text-left"
                 onClick={() =>
                   setCollapsedLevels((current) =>
                     collapsed
@@ -87,18 +91,18 @@ export function StrategyHierarchyTree({
                   )
                 }
               >
-                <span className="rounded-full bg-white/[0.06] p-2 text-white/72">
+                <span className="rounded-full bg-[var(--ui-surface-3)] p-2 text-[var(--ui-ink-soft)]">
                   {collapsed ? (
                     <ChevronRight className="size-4" />
                   ) : (
                     <ChevronDown className="size-4" />
                   )}
                 </span>
-                <div>
-                  <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/42">
+                <div className="min-w-0">
+                  <div className="break-words font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                     {phaseLabel}
                   </div>
-                  <div className="mt-1 text-sm text-white/60">
+                  <div className="mt-1 break-words text-sm text-[var(--ui-ink-soft)]">
                     {parallel
                       ? "These branches can progress in parallel once the previous phase is complete."
                       : "This phase advances as one focused step in the strategy."}
@@ -107,11 +111,11 @@ export function StrategyHierarchyTree({
               </button>
 
               <div className="flex flex-wrap gap-2">
-                <Badge className="bg-white/[0.08] text-white/76">
+                <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-soft)]">
                   {phase.nodeIds.length} node
                   {phase.nodeIds.length === 1 ? "" : "s"}
                 </Badge>
-                <Badge className="bg-white/[0.08] text-white/76">
+                <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-soft)]">
                   {parallel ? (
                     <>
                       <Split className="mr-1 size-3.5" />
@@ -128,7 +132,7 @@ export function StrategyHierarchyTree({
             </div>
 
             {!collapsed ? (
-              <div className="grid gap-3 border-t border-white/8 px-4 py-4 lg:grid-cols-2">
+              <div className="grid min-w-0 gap-3 border-t border-[var(--ui-border-subtle)] px-4 py-4 lg:grid-cols-2">
                 {phase.nodeIds.map((nodeId) => {
                   const node = strategy.graph.nodes.find(
                     (candidate) => candidate.id === nodeId
@@ -163,12 +167,12 @@ export function StrategyHierarchyTree({
                   return (
                     <div
                       key={node.id}
-                      className="rounded-[20px] border border-white/8 bg-[rgba(8,14,26,0.76)] p-4"
+                      className="min-w-0 rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4"
                     >
-                      <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="flex flex-wrap gap-2">
-                            <Badge className="bg-white/[0.08] text-white/76">
+                            <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-soft)]">
                               {node.entityType}
                             </Badge>
                             <Badge className={state.className}>
@@ -177,11 +181,11 @@ export function StrategyHierarchyTree({
                           </div>
                           <Link
                             to={href}
-                            className="mt-3 block text-lg font-medium text-white transition hover:text-[var(--primary)]"
+                            className="mt-3 block break-words text-lg font-medium text-[var(--ui-ink-strong)] transition hover:text-[var(--primary)]"
                           >
                             {node.title}
                           </Link>
-                          <div className="mt-2 text-sm leading-6 text-white/54">
+                          <div className="mt-2 break-words text-sm leading-6 text-[var(--ui-ink-soft)]">
                             {node.notes ||
                               ("description" in (entity ?? {})
                                 ? entity?.description
@@ -194,19 +198,19 @@ export function StrategyHierarchyTree({
 
                       <div className="mt-4 flex flex-wrap gap-2">
                         {node.branchLabel ? (
-                          <Badge className="bg-[rgba(192,193,255,0.12)] text-white/82">
+                          <Badge className="bg-[var(--ui-accent-soft)] text-[var(--primary)]">
                             {node.branchLabel}
                           </Badge>
                         ) : null}
                         {predecessorLabels.length === 0 ? (
-                          <Badge className="bg-emerald-500/10 text-emerald-200">
+                          <Badge className="bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_78%,var(--ui-ink-strong)_22%)]">
                             Start node
                           </Badge>
                         ) : (
                           predecessorLabels.map((label) => (
                             <Badge
                               key={`${node.id}:${label}`}
-                              className="bg-white/[0.08] text-white/70"
+                              className="max-w-full break-words bg-[var(--ui-surface-3)] text-[var(--ui-ink-soft)]"
                             >
                               Depends on {label}
                             </Badge>
@@ -223,7 +227,7 @@ export function StrategyHierarchyTree({
       })}
 
       {phases.length === 0 ? (
-        <div className="rounded-[22px] border border-white/8 bg-white/[0.03] px-4 py-4 text-sm text-white/56">
+        <div className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-4 text-sm text-[var(--ui-ink-soft)]">
           No phases mapped yet.
         </div>
       ) : null}

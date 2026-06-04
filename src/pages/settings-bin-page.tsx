@@ -9,7 +9,12 @@ import { Card } from "@/components/ui/card";
 import { EntityBadge } from "@/components/ui/entity-badge";
 import { Input } from "@/components/ui/input";
 import { ErrorState } from "@/components/ui/page-state";
-import { deleteEntities, ensureOperatorSession, getSettingsBin, restoreEntities } from "@/lib/api";
+import {
+  deleteEntities,
+  ensureOperatorSession,
+  getSettingsBin,
+  restoreEntities
+} from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { CrudEntityType, DeletedEntityRecord } from "@/lib/types";
 
@@ -44,7 +49,10 @@ const ENTITY_LABELS: Record<CrudEntityType, string> = {
   workout_session: "Workout sessions"
 };
 
-const ENTITY_BADGE_KIND: Record<CrudEntityType, ComponentProps<typeof EntityBadge>["kind"] | null> = {
+const ENTITY_BADGE_KIND: Record<
+  CrudEntityType,
+  ComponentProps<typeof EntityBadge>["kind"] | null
+> = {
   goal: "goal",
   project: "project",
   task: "task",
@@ -75,6 +83,18 @@ const ENTITY_BADGE_KIND: Record<CrudEntityType, ComponentProps<typeof EntityBadg
   workout_session: null
 };
 
+const binEyebrowClass =
+  "font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]";
+const binTitleClass = "text-[var(--ui-ink-strong)]";
+const binBodyClass = "text-[var(--ui-ink-soft)]";
+const binFaintClass = "text-[var(--ui-ink-faint)]";
+const binFilterPillClass =
+  "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]";
+const binActivePillClass =
+  "border-[color-mix(in_srgb,var(--primary)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-accent-soft)] text-[var(--primary)]";
+const binRowClass =
+  "grid min-w-0 gap-3 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4 lg:grid-cols-[minmax(0,1fr)_auto]";
+
 function formatDeletedAt(value: string) {
   return new Date(value).toLocaleString();
 }
@@ -82,7 +102,9 @@ function formatDeletedAt(value: string) {
 export function SettingsBinPage() {
   const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
-  const [selectedEntityTypes, setSelectedEntityTypes] = useState<CrudEntityType[]>([]);
+  const [selectedEntityTypes, setSelectedEntityTypes] = useState<
+    CrudEntityType[]
+  >([]);
 
   const operatorSessionQuery = useQuery({
     queryKey: ["forge-operator-session"],
@@ -98,7 +120,10 @@ export function SettingsBinPage() {
 
   const invalidateBin = async () => {
     await queryClient.invalidateQueries({
-      predicate: (query) => Array.isArray(query.queryKey) && typeof query.queryKey[0] === "string" && query.queryKey[0].startsWith("forge-")
+      predicate: (query) =>
+        Array.isArray(query.queryKey) &&
+        typeof query.queryKey[0] === "string" &&
+        query.queryKey[0].startsWith("forge-")
     });
   };
 
@@ -113,7 +138,9 @@ export function SettingsBinPage() {
   const hardDeleteMutation = useMutation({
     mutationFn: (record: DeletedEntityRecord) =>
       deleteEntities({
-        operations: [{ entityType: record.entityType, id: record.entityId, mode: "hard" }]
+        operations: [
+          { entityType: record.entityType, id: record.entityId, mode: "hard" }
+        ]
       }),
     onSuccess: invalidateBin
   });
@@ -121,7 +148,10 @@ export function SettingsBinPage() {
   const bulkRestoreMutation = useMutation({
     mutationFn: (items: DeletedEntityRecord[]) =>
       restoreEntities({
-        operations: items.map((record) => ({ entityType: record.entityType, id: record.entityId }))
+        operations: items.map((record) => ({
+          entityType: record.entityType,
+          id: record.entityId
+        }))
       }),
     onSuccess: invalidateBin
   });
@@ -129,7 +159,11 @@ export function SettingsBinPage() {
   const bulkHardDeleteMutation = useMutation({
     mutationFn: (items: DeletedEntityRecord[]) =>
       deleteEntities({
-        operations: items.map((record) => ({ entityType: record.entityType, id: record.entityId, mode: "hard" as const }))
+        operations: items.map((record) => ({
+          entityType: record.entityType,
+          id: record.entityId,
+          mode: "hard" as const
+        }))
       }),
     onSuccess: invalidateBin
   });
@@ -138,7 +172,9 @@ export function SettingsBinPage() {
   const normalizedQuery = query.trim().toLowerCase();
   const filteredRecords = useMemo(() => {
     return records.filter((record) => {
-      const entityTypeMatch = selectedEntityTypes.length === 0 || selectedEntityTypes.includes(record.entityType);
+      const entityTypeMatch =
+        selectedEntityTypes.length === 0 ||
+        selectedEntityTypes.includes(record.entityType);
       if (!entityTypeMatch) {
         return false;
       }
@@ -166,17 +202,23 @@ export function SettingsBinPage() {
       list.push(record);
       grouped.set(record.entityType, list);
     }
-    return [...grouped.entries()].sort((a, b) => ENTITY_LABELS[a[0]].localeCompare(ENTITY_LABELS[b[0]]));
+    return [...grouped.entries()].sort((a, b) =>
+      ENTITY_LABELS[a[0]].localeCompare(ENTITY_LABELS[b[0]])
+    );
   }, [filteredRecords]);
   const availableEntityTypes = useMemo(
     () =>
-      [...new Set(records.map((record) => record.entityType))].sort((left, right) => ENTITY_LABELS[left].localeCompare(ENTITY_LABELS[right])),
+      [...new Set(records.map((record) => record.entityType))].sort(
+        (left, right) => ENTITY_LABELS[left].localeCompare(ENTITY_LABELS[right])
+      ),
     [records]
   );
 
   function toggleEntityType(entityType: CrudEntityType) {
     setSelectedEntityTypes((current) =>
-      current.includes(entityType) ? current.filter((entry) => entry !== entityType) : [...current, entityType]
+      current.includes(entityType)
+        ? current.filter((entry) => entry !== entityType)
+        : [...current, entityType]
     );
   }
 
@@ -206,11 +248,23 @@ export function SettingsBinPage() {
   }
 
   if (operatorSessionQuery.isError) {
-    return <ErrorState eyebrow="Settings" error={operatorSessionQuery.error} onRetry={() => void operatorSessionQuery.refetch()} />;
+    return (
+      <ErrorState
+        eyebrow="Settings"
+        error={operatorSessionQuery.error}
+        onRetry={() => void operatorSessionQuery.refetch()}
+      />
+    );
   }
 
   if (binQuery.isError) {
-    return <ErrorState eyebrow="Settings" error={binQuery.error} onRetry={() => void binQuery.refetch()} />;
+    return (
+      <ErrorState
+        eyebrow="Settings"
+        error={binQuery.error}
+        onRetry={() => void binQuery.refetch()}
+      />
+    );
   }
 
   return (
@@ -226,10 +280,17 @@ export function SettingsBinPage() {
       <Card className="grid gap-4">
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
           <div className="grid gap-4">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Find deleted items</div>
+            <div className={binEyebrowClass}>Find deleted items</div>
             <div className="relative">
-              <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-white/35" />
-              <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search title, id, reason, or source" className="pl-11" />
+              <Search
+                className={`pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 ${binFaintClass}`}
+              />
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search title, id, reason, or source"
+                className="pl-11"
+              />
             </div>
             <div className="flex flex-wrap gap-2">
               {availableEntityTypes.map((entityType) => {
@@ -241,9 +302,7 @@ export function SettingsBinPage() {
                     onClick={() => toggleEntityType(entityType)}
                     className={cn(
                       "rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] transition",
-                      active
-                        ? "border-[var(--primary)]/30 bg-[var(--primary)]/[0.16] text-[var(--primary)]"
-                        : "border-white/10 bg-white/[0.04] text-white/58 hover:bg-white/[0.08] hover:text-white"
+                      active ? binActivePillClass : binFilterPillClass
                     )}
                   >
                     {ENTITY_LABELS[entityType]}
@@ -260,7 +319,9 @@ export function SettingsBinPage() {
               disabled={filteredRecords.length === 0}
               pending={bulkRestoreMutation.isPending}
               pendingLabel="Restoring"
-              onClick={() => void bulkRestoreMutation.mutateAsync(filteredRecords)}
+              onClick={() =>
+                void bulkRestoreMutation.mutateAsync(filteredRecords)
+              }
             >
               <ArchiveRestore className="size-4" />
               <span>Restore visible</span>
@@ -279,22 +340,28 @@ export function SettingsBinPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-3 text-sm text-white/55">
+        <div className={`flex flex-wrap gap-3 text-sm ${binFaintClass}`}>
           <span>{filteredRecords.length} visible</span>
-          {selectedEntityTypes.length > 0 ? <span>{selectedEntityTypes.length} type filters active</span> : null}
+          {selectedEntityTypes.length > 0 ? (
+            <span>{selectedEntityTypes.length} type filters active</span>
+          ) : null}
           {normalizedQuery ? <span>Search: “{query.trim()}”</span> : null}
         </div>
       </Card>
 
       {records.length === 0 ? (
         <Card>
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Deleted items</div>
-          <div className="mt-4 text-white/72">Nothing is in the bin right now.</div>
+          <div className={binEyebrowClass}>Deleted items</div>
+          <div className={`mt-4 ${binBodyClass}`}>
+            Nothing is in the bin right now.
+          </div>
         </Card>
       ) : groupedRecords.length === 0 ? (
         <Card>
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Deleted items</div>
-          <div className="mt-4 text-white/72">No deleted items match the current search or filters.</div>
+          <div className={binEyebrowClass}>Deleted items</div>
+          <div className={`mt-4 ${binBodyClass}`}>
+            No deleted items match the current search or filters.
+          </div>
         </Card>
       ) : (
         <div className="grid gap-5">
@@ -304,13 +371,23 @@ export function SettingsBinPage() {
               <Card key={entityType}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    {badgeKind ? <EntityBadge kind={badgeKind} label={ENTITY_LABELS[entityType]} compact /> : null}
+                    {badgeKind ? (
+                      <EntityBadge
+                        kind={badgeKind}
+                        label={ENTITY_LABELS[entityType]}
+                        compact
+                      />
+                    ) : null}
                     {!badgeKind ? (
-                      <div className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-white/55">
+                      <div
+                        className={`rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-1 text-[11px] uppercase tracking-[0.16em] ${binFaintClass}`}
+                      >
                         {ENTITY_LABELS[entityType]}
                       </div>
                     ) : null}
-                    <div className="text-sm text-white/55">{items.length} deleted</div>
+                    <div className={`text-sm ${binFaintClass}`}>
+                      {items.length} deleted
+                    </div>
                   </div>
                 </div>
 
@@ -318,16 +395,36 @@ export function SettingsBinPage() {
                   {items.map((record) => (
                     <div
                       key={`${record.entityType}:${record.entityId}`}
-                      className="grid gap-3 rounded-[22px] border border-white/8 bg-white/[0.04] p-4 lg:grid-cols-[minmax(0,1fr)_auto]"
+                      className={binRowClass}
                     >
                       <div className="min-w-0">
-                        <div className="text-lg font-medium text-white">{record.title}</div>
-                        {record.subtitle ? <div className="mt-1 text-sm text-white/62">{record.subtitle}</div> : null}
-                        <div className="mt-3 flex flex-wrap gap-3 text-xs text-white/45">
-                          <span>Deleted {formatDeletedAt(record.deletedAt)}</span>
-                          {record.deletedByActor ? <span>By {record.deletedByActor}</span> : null}
-                          {record.deletedSource ? <span>Source {record.deletedSource}</span> : null}
-                          {record.deleteReason ? <span>Reason: {record.deleteReason}</span> : null}
+                        <div
+                          className={`break-words text-lg font-medium [overflow-wrap:anywhere] ${binTitleClass}`}
+                        >
+                          {record.title}
+                        </div>
+                        {record.subtitle ? (
+                          <div
+                            className={`mt-1 break-words text-sm [overflow-wrap:anywhere] ${binBodyClass}`}
+                          >
+                            {record.subtitle}
+                          </div>
+                        ) : null}
+                        <div
+                          className={`mt-3 flex flex-wrap gap-3 break-words text-xs [overflow-wrap:anywhere] ${binFaintClass}`}
+                        >
+                          <span>
+                            Deleted {formatDeletedAt(record.deletedAt)}
+                          </span>
+                          {record.deletedByActor ? (
+                            <span>By {record.deletedByActor}</span>
+                          ) : null}
+                          {record.deletedSource ? (
+                            <span>Source {record.deletedSource}</span>
+                          ) : null}
+                          {record.deleteReason ? (
+                            <span>Reason: {record.deleteReason}</span>
+                          ) : null}
                         </div>
                       </div>
 
@@ -337,7 +434,9 @@ export function SettingsBinPage() {
                           size="sm"
                           pending={restoreMutation.isPending}
                           pendingLabel="Restoring"
-                          onClick={() => void restoreMutation.mutateAsync(record)}
+                          onClick={() =>
+                            void restoreMutation.mutateAsync(record)
+                          }
                         >
                           <ArchiveRestore className="size-4" />
                           <span>Restore</span>
@@ -347,7 +446,9 @@ export function SettingsBinPage() {
                           size="sm"
                           pending={hardDeleteMutation.isPending}
                           pendingLabel="Deleting"
-                          onClick={() => void hardDeleteMutation.mutateAsync(record)}
+                          onClick={() =>
+                            void hardDeleteMutation.mutateAsync(record)
+                          }
                         >
                           <Trash2 className="size-4" />
                           <span>Delete forever</span>

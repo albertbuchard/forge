@@ -128,6 +128,14 @@ function formatContextTime(startAt: string, endAt: string) {
   return `${formatWeekday(new Date(startAt))} · ${formatClockRange(startAt, endAt)}`;
 }
 
+const PANEL_CLASS =
+  "rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]";
+const INNER_CARD_CLASS =
+  "rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]";
+const SOFT_BADGE_CLASS = "bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)]";
+const SELECT_CLASS =
+  "rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3 text-[15px] text-[var(--ui-ink-strong)] outline-none transition focus:border-[var(--ui-border-strong)] focus:ring-2 focus:ring-[var(--primary)]/20";
+
 function CalendarContextColumn({
   title,
   subtitle,
@@ -141,19 +149,21 @@ function CalendarContextColumn({
 }) {
   const items = Array.isArray(children) ? children : children ? [children] : [];
   return (
-    <div className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4">
+    <div className={`${PANEL_CLASS} p-4`}>
       <div className="flex items-center justify-between gap-3">
         <div>
-          <div className="font-medium text-white">{title}</div>
-          <div className="mt-1 text-sm text-white/54">{subtitle}</div>
+          <div className="font-medium text-[var(--ui-ink-strong)]">{title}</div>
+          <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
+            {subtitle}
+          </div>
         </div>
-        <Badge className="bg-white/[0.08] text-white/74">{items.length}</Badge>
+        <Badge className={SOFT_BADGE_CLASS}>{items.length}</Badge>
       </div>
       <div className="mt-3 grid gap-2">
         {items.length > 0 ? (
           items
         ) : (
-          <div className="rounded-[18px] border border-dashed border-white/8 bg-white/[0.03] px-3 py-3 text-sm text-white/46">
+          <div className="rounded-[18px] border border-dashed border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-3 text-sm text-[var(--ui-ink-muted)]">
             {emptyLabel}
           </div>
         )}
@@ -164,14 +174,14 @@ function CalendarContextColumn({
 
 function CalendarEventCard({ event }: { event: CalendarEvent }) {
   return (
-    <div className="rounded-[18px] bg-white/[0.04] px-3 py-3">
+    <div className={`${INNER_CARD_CLASS} px-3 py-3`}>
       <div className="flex items-center justify-between gap-3">
-        <div className="font-medium text-white">{event.title}</div>
-        <Badge className="bg-white/[0.08] text-white/70">
-          {event.availability}
-        </Badge>
+        <div className="font-medium text-[var(--ui-ink-strong)]">
+          {event.title}
+        </div>
+        <Badge className={SOFT_BADGE_CLASS}>{event.availability}</Badge>
       </div>
-      <div className="mt-1 text-sm text-white/56">
+      <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
         {formatContextTime(event.startAt, event.endAt)}
       </div>
     </div>
@@ -180,14 +190,14 @@ function CalendarEventCard({ event }: { event: CalendarEvent }) {
 
 function WorkBlockCard({ block }: { block: WorkBlockInstance }) {
   return (
-    <div className="rounded-[18px] bg-white/[0.04] px-3 py-3">
+    <div className={`${INNER_CARD_CLASS} px-3 py-3`}>
       <div className="flex items-center justify-between gap-3">
-        <div className="font-medium text-white">{block.title}</div>
-        <Badge className="bg-white/[0.08] text-white/70">
-          {block.blockingState}
-        </Badge>
+        <div className="font-medium text-[var(--ui-ink-strong)]">
+          {block.title}
+        </div>
+        <Badge className={SOFT_BADGE_CLASS}>{block.blockingState}</Badge>
       </div>
-      <div className="mt-1 text-sm text-white/56">
+      <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
         {formatContextTime(block.startAt, block.endAt)}
       </div>
     </div>
@@ -197,21 +207,21 @@ function WorkBlockCard({ block }: { block: WorkBlockInstance }) {
 function TimeboxCard({ timebox }: { timebox: TaskTimebox }) {
   const actionPointLoad = estimateTaskTimeboxActionPointLoad(timebox);
   return (
-    <div className="rounded-[18px] bg-white/[0.04] px-3 py-3">
+    <div className={`${INNER_CARD_CLASS} px-3 py-3`}>
       <div className="flex items-center justify-between gap-3">
-        <div className="font-medium text-white">{timebox.title}</div>
-        <Badge className="bg-white/[0.08] text-white/70">
-          {timebox.source}
-        </Badge>
+        <div className="font-medium text-[var(--ui-ink-strong)]">
+          {timebox.title}
+        </div>
+        <Badge className={SOFT_BADGE_CLASS}>{timebox.source}</Badge>
       </div>
-      <div className="mt-1 text-sm text-white/56">
+      <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
         {formatContextTime(timebox.startsAt, timebox.endsAt)}
       </div>
       <div className="mt-2 flex flex-wrap gap-2">
-        <Badge className="bg-white/[0.08] text-white/72">
+        <Badge className={SOFT_BADGE_CLASS}>
           {formatLifeForceRate(actionPointLoad.rateApPerHour)}
         </Badge>
-        <Badge className="bg-white/[0.08] text-white/72">
+        <Badge className={SOFT_BADGE_CLASS}>
           {formatLifeForceAp(actionPointLoad.totalAp)}
         </Badge>
       </div>
@@ -523,7 +533,7 @@ export function TimeboxPlanningDialog({
         title: taskStepTitle,
         description: taskStepDescription,
         render: (value, setValue) => (
-          <div className="grid gap-4">
+          <div className="grid min-w-0 max-w-full gap-4 overflow-hidden">
             {!lockedTaskId ? (
               <FlowField label="Task">
                 <select
@@ -548,7 +558,7 @@ export function TimeboxPlanningDialog({
                       });
                     })()
                   }
-                  className="rounded-[22px] border border-white/8 bg-white/6 px-4 py-3 text-[15px] text-white outline-none"
+                  className={SELECT_CLASS}
                 >
                   {availableTasks.map((task) => (
                     <option key={task.id} value={task.id}>
@@ -560,36 +570,36 @@ export function TimeboxPlanningDialog({
             ) : null}
 
             {selectedTask ? (
-              <div className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(28,36,54,0.78),rgba(15,22,34,0.78))] p-5 shadow-[0_18px_40px_rgba(5,12,24,0.22)]">
+              <div className="min-w-0 max-w-full overflow-hidden rounded-[28px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-5 shadow-[var(--ui-shadow-soft)]">
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
+                  <div className="min-w-0">
+                    <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                       Time Box
                     </div>
-                    <div className="mt-2 font-display text-[1.4rem] leading-tight text-white">
+                    <div className="mt-2 break-words font-display text-[1.4rem] leading-tight text-[var(--ui-ink-strong)]">
                       {selectedTask.title}
                     </div>
                   </div>
-                  <Badge className="bg-white/[0.08] text-white/74">
+                  <Badge className={SOFT_BADGE_CLASS}>
                     {selectedTask.status}
                   </Badge>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <Badge className="bg-white/[0.08] text-white/74">
+                  <Badge className={SOFT_BADGE_CLASS}>
                     {selectedTask.plannedDurationSeconds
                       ? `${Math.round(selectedTask.plannedDurationSeconds / 60)} min target`
                       : "No duration yet"}
                   </Badge>
-                  <Badge className="bg-white/[0.08] text-white/74">
+                  <Badge className={SOFT_BADGE_CLASS}>
                     {selectedTask.schedulingRules
                       ? "Task-specific rules"
                       : "Uses project rules"}
                   </Badge>
-                  <Badge className="bg-white/[0.08] text-white/74">
+                  <Badge className={SOFT_BADGE_CLASS}>
                     {selectedTask.points} xp
                   </Badge>
                   {selectedTask.plannedDurationSeconds ? (
-                    <Badge className="bg-white/[0.08] text-white/74">
+                    <Badge className={SOFT_BADGE_CLASS}>
                       {formatLifeForceAp(
                         (selectedTask.plannedDurationSeconds / 3600 / 24) * 100
                       )}{" "}
@@ -597,20 +607,20 @@ export function TimeboxPlanningDialog({
                     </Badge>
                   ) : null}
                 </div>
-                <p className="mt-4 text-sm leading-6 text-white/60">
+                <p className="mt-4 text-sm leading-6 text-[var(--ui-ink-soft)]">
                   Pick a day first, then either accept one of Forge&apos;s
                   suggested slots or set the block manually.
                 </p>
                 {isEditing && editingTimebox && onDeleteTimebox ? (
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-rose-400/18 bg-rose-400/8 px-4 py-3">
-                    <div className="text-sm leading-6 text-rose-100/84">
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-[color-mix(in_srgb,var(--danger)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-danger-soft)] px-4 py-3">
+                    <div className="text-sm leading-6 text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]">
                       Remove this planned timebox if you no longer want it in
                       the calendar.
                     </div>
                     <Button
                       type="button"
                       variant="ghost"
-                      className="text-rose-100 hover:bg-rose-500/12"
+                      className="text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)] hover:bg-[var(--ui-danger-soft)]"
                       pending={deleting}
                       pendingLabel="Deleting"
                       onClick={() =>
@@ -706,13 +716,13 @@ export function TimeboxPlanningDialog({
                   />
                 </FlowField>
               </div>
-              <div className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(21,31,44,0.86),rgba(11,17,28,0.86))] p-5">
+              <div className="rounded-[28px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
+                    <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                       Selected day
                     </div>
-                    <div className="mt-2 font-display text-[1.3rem] leading-tight text-white">
+                    <div className="mt-2 font-display text-[1.3rem] leading-tight text-[var(--ui-ink-strong)]">
                       {value.preferredDate
                         ? new Date(
                             `${value.preferredDate}T12:00:00`
@@ -725,24 +735,24 @@ export function TimeboxPlanningDialog({
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Badge className="bg-white/[0.08] text-white/74">
+                    <Badge className={SOFT_BADGE_CLASS}>
                       {dayEvents.length} events
                     </Badge>
-                    <Badge className="bg-white/[0.08] text-white/74">
+                    <Badge className={SOFT_BADGE_CLASS}>
                       {dayBlocks.length} work blocks
                     </Badge>
-                    <Badge className="bg-white/[0.08] text-white/74">
+                    <Badge className={SOFT_BADGE_CLASS}>
                       {dayTimeboxes.length} timeboxes
                     </Badge>
                   </div>
                 </div>
-                <p className="mt-3 text-sm leading-6 text-white/58">
+                <p className="mt-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
                   This is the context Forge will use while recommending a slot.
                   You can still place the block manually if you want something
                   more exact.
                 </p>
                 {calendarDayQuery.isLoading ? (
-                  <div className="mt-4 rounded-[18px] border border-white/8 bg-white/[0.04] px-4 py-4 text-sm text-white/56">
+                  <div className="mt-4 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4 text-sm text-[var(--ui-ink-soft)]">
                     Loading the selected day…
                   </div>
                 ) : (
@@ -869,7 +879,7 @@ export function TimeboxPlanningDialog({
                       onChange={(event) =>
                         setValue({ activityPresetKey: event.target.value })
                       }
-                      className="rounded-[18px] border border-white/8 bg-white/6 px-4 py-3 text-[15px] text-white outline-none"
+                      className={SELECT_CLASS}
                     >
                       {getCalendarActivityPresetOptions().map((preset) => (
                         <option key={preset.key} value={preset.key}>
@@ -896,15 +906,15 @@ export function TimeboxPlanningDialog({
                     />
                   </FlowField>
                 </div>
-                <div className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4">
+                <div className={`${PANEL_CLASS} p-4`}>
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <div className="font-medium text-white">
+                      <div className="font-medium text-[var(--ui-ink-strong)]">
                         {value.manualTitle ||
                           selectedTask?.title ||
                           "Manual timebox"}
                       </div>
-                      <div className="mt-1 text-sm text-white/56">
+                      <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
                         {manualStart && manualEnd
                           ? `${manualStart.toLocaleDateString([], {
                               weekday: "long",
@@ -917,16 +927,14 @@ export function TimeboxPlanningDialog({
                           : "Choose a start and end time."}
                       </div>
                     </div>
-                    <Badge className="bg-white/[0.08] text-white/74">
-                      manual
-                    </Badge>
+                    <Badge className={SOFT_BADGE_CLASS}>manual</Badge>
                   </div>
                   {manualPreview ? (
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <Badge className="bg-white/[0.08] text-white/72">
+                      <Badge className={SOFT_BADGE_CLASS}>
                         {formatLifeForceRate(manualPreview.rateApPerHour)}
                       </Badge>
-                      <Badge className="bg-white/[0.08] text-white/72">
+                      <Badge className={SOFT_BADGE_CLASS}>
                         {formatLifeForceAp(manualPreview.totalAp)}
                       </Badge>
                     </div>
@@ -939,7 +947,7 @@ export function TimeboxPlanningDialog({
           const suggestions = suggestionQuery.data?.timeboxes ?? [];
           if (suggestionQuery.isLoading) {
             return (
-              <div className="text-sm text-white/62">
+              <div className="text-sm text-[var(--ui-ink-soft)]">
                 Looking for valid slots on the selected day…
               </div>
             );
@@ -947,7 +955,7 @@ export function TimeboxPlanningDialog({
           if (!suggestions.length) {
             return (
               <div className="grid gap-3">
-                <div className="rounded-[24px] border border-amber-400/20 bg-amber-400/10 px-4 py-4 text-sm leading-6 text-amber-100/86">
+                <div className="rounded-[24px] border border-[color-mix(in_srgb,var(--warning)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-warning-soft)] px-4 py-4 text-sm leading-6 text-[color-mix(in_srgb,var(--warning)_72%,var(--ui-ink-strong)_28%)]">
                   Forge could not find a valid slot on this day. Try another
                   day, adjust the task rules, or switch to manual placement if
                   you already know the right block.
@@ -1018,24 +1026,24 @@ export function TimeboxPlanningDialog({
                     onClick={() => setValue({ selectedTimeboxId: timebox.id })}
                     className={`rounded-[24px] border px-4 py-4 text-left transition ${
                       active
-                        ? "border-[rgba(192,193,255,0.28)] bg-[rgba(192,193,255,0.14)] text-white shadow-[0_18px_36px_rgba(5,12,24,0.24)]"
-                        : "border-white/8 bg-white/[0.04] text-white/72 hover:bg-white/[0.07]"
+                        ? "border-[color-mix(in_srgb,var(--primary)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)] shadow-[var(--ui-shadow-soft)]"
+                        : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)] hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]"
                     }`}
                   >
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="font-medium">{timebox.title}</div>
-                      <Badge className="bg-white/[0.08] text-white/76">
+                      <Badge className={SOFT_BADGE_CLASS}>
                         {timebox.source}
                       </Badge>
                     </div>
-                    <div className="mt-2 text-sm leading-6 text-white/58">
+                    <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                       {formatContextTime(timebox.startsAt, timebox.endsAt)}
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <Badge className="bg-white/[0.08] text-white/74">
+                      <Badge className={SOFT_BADGE_CLASS}>
                         {formatLifeForceRate(actionPointLoad.rateApPerHour)}
                       </Badge>
-                      <Badge className="bg-white/[0.08] text-white/74">
+                      <Badge className={SOFT_BADGE_CLASS}>
                         {formatLifeForceAp(actionPointLoad.totalAp)}
                       </Badge>
                     </div>
@@ -1049,7 +1057,7 @@ export function TimeboxPlanningDialog({
                                 activityPresetKey: event.target.value
                               })
                             }
-                            className="rounded-[18px] border border-white/8 bg-white/6 px-4 py-3 text-[15px] text-white outline-none"
+                            className={SELECT_CLASS}
                           >
                             {getCalendarActivityPresetOptions().map(
                               (preset) => (

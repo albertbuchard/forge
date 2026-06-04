@@ -27,7 +27,7 @@ function ThemePreviewCard({
 }) {
   return (
     <div
-      className="overflow-hidden rounded-[24px] border border-white/10"
+      className="overflow-hidden rounded-[24px] border border-[var(--ui-border-subtle)]"
       style={{
         background: `linear-gradient(180deg, ${theme.panelHigh}, ${theme.panelLow})`,
         color: theme.ink
@@ -53,7 +53,7 @@ function ThemePreviewCard({
           ].map((value) => (
             <div
               key={value}
-              className="h-9 flex-1 rounded-[14px] border border-black/10"
+              className="h-9 flex-1 rounded-[14px] border border-[var(--ui-border-subtle)]"
               style={{ background: value }}
             />
           ))}
@@ -81,7 +81,7 @@ function ThemeColorField({
           type="color"
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className="h-12 w-full cursor-pointer rounded-[18px] border border-white/10 bg-transparent p-1"
+          className="h-12 w-full cursor-pointer rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-1"
         />
         <Input
           value={value}

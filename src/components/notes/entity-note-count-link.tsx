@@ -26,7 +26,7 @@ export function EntityNoteCountLink({
     <span
       role="link"
       tabIndex={0}
-      className={`inline-flex items-center rounded-full border border-white/10 bg-white/[0.05] text-white/72 transition hover:bg-white/[0.09] hover:text-white ${
+      className={`inline-flex items-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)] transition hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)] ${
         compact ? "min-h-5 gap-1 px-2 py-0.5 text-[10px]" : "min-h-10 gap-2 px-3 py-2 text-xs"
       } ${className}`}
       onClick={(event) => {

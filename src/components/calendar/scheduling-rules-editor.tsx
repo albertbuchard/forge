@@ -2,7 +2,11 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import type { CalendarAvailability, CalendarSchedulingRules, WorkBlockKind } from "@/lib/types";
+import type {
+  CalendarAvailability,
+  CalendarSchedulingRules,
+  WorkBlockKind
+} from "@/lib/types";
 
 const WORK_BLOCK_OPTIONS: Array<{ value: WorkBlockKind; label: string }> = [
   { value: "main_activity", label: "Main activity" },
@@ -13,7 +17,10 @@ const WORK_BLOCK_OPTIONS: Array<{ value: WorkBlockKind; label: string }> = [
   { value: "custom", label: "Custom" }
 ];
 
-const AVAILABILITY_OPTIONS: Array<{ value: CalendarAvailability; label: string }> = [
+const AVAILABILITY_OPTIONS: Array<{
+  value: CalendarAvailability;
+  label: string;
+}> = [
   { value: "busy", label: "Busy" },
   { value: "free", label: "Free" }
 ];
@@ -54,9 +61,11 @@ function ChipToggleGroup<T extends string>({
   options: Array<{ value: T; label: string }>;
 }) {
   return (
-    <div className="grid gap-2">
-      <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">{label}</div>
-      <div className="flex flex-wrap gap-2">
+    <div className="grid min-w-0 gap-2">
+      <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
+        {label}
+      </div>
+      <div className="flex min-w-0 flex-wrap gap-2">
         {options.map((option) => {
           const active = selected.includes(option.value);
           return (
@@ -66,8 +75,8 @@ function ChipToggleGroup<T extends string>({
               onClick={() => onToggle(option.value)}
               className={`rounded-full px-3 py-2 text-sm transition ${
                 active
-                  ? "bg-[var(--primary)]/18 text-[var(--primary)] shadow-[inset_0_0_0_1px_rgba(192,193,255,0.24)]"
-                  : "bg-white/[0.05] text-white/62 hover:bg-white/[0.08]"
+                  ? "bg-[var(--ui-accent-soft)] text-[var(--primary)] ring-1 ring-[color-mix(in_srgb,var(--primary)_24%,transparent)]"
+                  : "bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
               }`}
             >
               {option.label}
@@ -130,54 +139,71 @@ export function SchedulingRulesEditor({
     toCsv(initialRules?.blockEventKeywords ?? EMPTY_RULES.blockEventKeywords)
   );
   const [plannedMinutes, setPlannedMinutes] = useState(
-    initialPlannedDurationSeconds ? String(Math.round(initialPlannedDurationSeconds / 60)) : "30"
+    initialPlannedDurationSeconds
+      ? String(Math.round(initialPlannedDurationSeconds / 60))
+      : "30"
   );
   const [pending, setPending] = useState(false);
 
-  const normalizedRules = useMemo<CalendarSchedulingRules>(() => ({
-    allowWorkBlockKinds,
-    blockWorkBlockKinds,
-    allowCalendarIds: parseCsv(allowCalendarIds),
-    blockCalendarIds: parseCsv(blockCalendarIds),
-    allowEventTypes: parseCsv(allowEventTypes),
-    blockEventTypes: parseCsv(blockEventTypes),
-    allowEventKeywords: parseCsv(allowEventKeywords),
-    blockEventKeywords: parseCsv(blockEventKeywords),
-    allowAvailability,
-    blockAvailability
-  }), [
-    allowAvailability,
-    allowCalendarIds,
-    allowEventKeywords,
-    allowEventTypes,
-    allowWorkBlockKinds,
-    blockAvailability,
-    blockCalendarIds,
-    blockEventKeywords,
-    blockEventTypes,
-    blockWorkBlockKinds
-  ]);
+  const normalizedRules = useMemo<CalendarSchedulingRules>(
+    () => ({
+      allowWorkBlockKinds,
+      blockWorkBlockKinds,
+      allowCalendarIds: parseCsv(allowCalendarIds),
+      blockCalendarIds: parseCsv(blockCalendarIds),
+      allowEventTypes: parseCsv(allowEventTypes),
+      blockEventTypes: parseCsv(blockEventTypes),
+      allowEventKeywords: parseCsv(allowEventKeywords),
+      blockEventKeywords: parseCsv(blockEventKeywords),
+      allowAvailability,
+      blockAvailability
+    }),
+    [
+      allowAvailability,
+      allowCalendarIds,
+      allowEventKeywords,
+      allowEventTypes,
+      allowWorkBlockKinds,
+      blockAvailability,
+      blockCalendarIds,
+      blockEventKeywords,
+      blockEventTypes,
+      blockWorkBlockKinds
+    ]
+  );
 
-  const isEmpty = Object.values(normalizedRules).every((value) => value.length === 0);
+  const isEmpty = Object.values(normalizedRules).every(
+    (value) => value.length === 0
+  );
 
   const toggle = <T extends string>(
     values: T[],
     setter: (next: T[]) => void,
     value: T
   ) => {
-    setter(values.includes(value) ? values.filter((entry) => entry !== value) : [...values, value]);
+    setter(
+      values.includes(value)
+        ? values.filter((entry) => entry !== value)
+        : [...values, value]
+    );
   };
 
   return (
-    <Card className="grid gap-4">
+    <Card className="grid min-w-0 gap-4 overflow-hidden border-[var(--ui-border-subtle)] !bg-[var(--ui-surface-1)]">
       <div>
-        <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">{title}</div>
-        <p className="mt-2 text-sm leading-6 text-white/60">{subtitle}</p>
+        <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
+          {title}
+        </div>
+        <p className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
+          {subtitle}
+        </p>
       </div>
 
       {allowPlannedDuration ? (
-        <div className="grid gap-2">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">Planned duration</div>
+        <div className="grid min-w-0 gap-2">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
+            Planned duration
+          </div>
           <Input
             type="number"
             min={15}
@@ -189,57 +215,101 @@ export function SchedulingRulesEditor({
         </div>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-2">
         <ChipToggleGroup
           label="Allow work blocks"
           selected={allowWorkBlockKinds}
-          onToggle={(value) => toggle(allowWorkBlockKinds, setAllowWorkBlockKinds, value)}
+          onToggle={(value) =>
+            toggle(allowWorkBlockKinds, setAllowWorkBlockKinds, value)
+          }
           options={WORK_BLOCK_OPTIONS}
         />
         <ChipToggleGroup
           label="Block work blocks"
           selected={blockWorkBlockKinds}
-          onToggle={(value) => toggle(blockWorkBlockKinds, setBlockWorkBlockKinds, value)}
+          onToggle={(value) =>
+            toggle(blockWorkBlockKinds, setBlockWorkBlockKinds, value)
+          }
           options={WORK_BLOCK_OPTIONS}
         />
         <ChipToggleGroup
           label="Allow availability"
           selected={allowAvailability}
-          onToggle={(value) => toggle(allowAvailability, setAllowAvailability, value)}
+          onToggle={(value) =>
+            toggle(allowAvailability, setAllowAvailability, value)
+          }
           options={AVAILABILITY_OPTIONS}
         />
         <ChipToggleGroup
           label="Block availability"
           selected={blockAvailability}
-          onToggle={(value) => toggle(blockAvailability, setBlockAvailability, value)}
+          onToggle={(value) =>
+            toggle(blockAvailability, setBlockAvailability, value)
+          }
           options={AVAILABILITY_OPTIONS}
         />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="grid gap-2">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">Allow calendar ids</div>
-          <Input value={allowCalendarIds} onChange={(event) => setAllowCalendarIds(event.target.value)} placeholder="calendar_123, primary" />
+          <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
+            Allow calendar ids
+          </div>
+          <Input
+            value={allowCalendarIds}
+            onChange={(event) => setAllowCalendarIds(event.target.value)}
+            placeholder="calendar_123, primary"
+          />
         </div>
         <div className="grid gap-2">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">Block calendar ids</div>
-          <Input value={blockCalendarIds} onChange={(event) => setBlockCalendarIds(event.target.value)} placeholder="calendar_456" />
+          <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
+            Block calendar ids
+          </div>
+          <Input
+            value={blockCalendarIds}
+            onChange={(event) => setBlockCalendarIds(event.target.value)}
+            placeholder="calendar_456"
+          />
         </div>
         <div className="grid gap-2">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">Allow event types</div>
-          <Input value={allowEventTypes} onChange={(event) => setAllowEventTypes(event.target.value)} placeholder="focus, personal" />
+          <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
+            Allow event types
+          </div>
+          <Input
+            value={allowEventTypes}
+            onChange={(event) => setAllowEventTypes(event.target.value)}
+            placeholder="focus, personal"
+          />
         </div>
         <div className="grid gap-2">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">Block event types</div>
-          <Input value={blockEventTypes} onChange={(event) => setBlockEventTypes(event.target.value)} placeholder="out-of-office, main-work" />
+          <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
+            Block event types
+          </div>
+          <Input
+            value={blockEventTypes}
+            onChange={(event) => setBlockEventTypes(event.target.value)}
+            placeholder="out-of-office, main-work"
+          />
         </div>
         <div className="grid gap-2">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">Allow event keywords</div>
-          <Input value={allowEventKeywords} onChange={(event) => setAllowEventKeywords(event.target.value)} placeholder="creative, writing" />
+          <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
+            Allow event keywords
+          </div>
+          <Input
+            value={allowEventKeywords}
+            onChange={(event) => setAllowEventKeywords(event.target.value)}
+            placeholder="creative, writing"
+          />
         </div>
         <div className="grid gap-2">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">Block event keywords</div>
-          <Input value={blockEventKeywords} onChange={(event) => setBlockEventKeywords(event.target.value)} placeholder="psychiatrist, clinic, rest" />
+          <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
+            Block event keywords
+          </div>
+          <Input
+            value={blockEventKeywords}
+            onChange={(event) => setBlockEventKeywords(event.target.value)}
+            placeholder="psychiatrist, clinic, rest"
+          />
         </div>
       </div>
 

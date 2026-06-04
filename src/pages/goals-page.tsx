@@ -72,7 +72,7 @@ export function GoalsPage() {
         badge={`${shell.snapshot.dashboard.goals.length} active goals`}
         actions={
           hasGoals ? (
-            <div className="inline-flex min-h-10 items-center rounded-full border border-white/8 bg-white/[0.04] px-4 py-2 text-sm whitespace-nowrap text-white/68">
+            <div className="inline-flex min-h-10 items-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-2 text-sm whitespace-nowrap text-[var(--ui-ink-soft)]">
               {shell.snapshot.dashboard.projects.length} live project
               {shell.snapshot.dashboard.projects.length === 1 ? "" : "s"}{" "}
               attached
@@ -119,7 +119,7 @@ export function GoalsPage() {
               <Link
                 key={goal.id}
                 to={`/goals/${goal.id}`}
-                className="min-w-0 overflow-hidden rounded-[28px] border border-white/6 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.03))] p-4 transition hover:bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.04))] sm:p-5"
+                className="min-w-0 overflow-hidden rounded-[28px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 transition hover:bg-[var(--ui-surface-hover)] sm:p-5"
               >
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] xl:gap-5">
                   <div className="min-w-0">
@@ -127,13 +127,13 @@ export function GoalsPage() {
                       {goal.tags.slice(0, 3).map((tag) => (
                         <Badge
                           key={tag.id}
-                          className="bg-white/[0.08]"
+                          className="bg-[var(--ui-surface-2)]"
                           style={{ color: tag.color }}
                         >
                           {tag.name}
                         </Badge>
                       ))}
-                      <Badge className="bg-white/[0.08] text-white/72">
+                      <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
                         {goal.horizon}
                       </Badge>
                       <UserBadge user={goal.user} compact />
@@ -147,31 +147,31 @@ export function GoalsPage() {
                         lines={2}
                       />
                     </div>
-                    <p className="mt-3 max-w-2xl text-sm leading-7 text-white/58">
+                    <p className="mt-3 max-w-2xl text-sm leading-7 text-[var(--ui-ink-soft)]">
                       {goal.description}
                     </p>
                     <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                      <div className="rounded-[18px] bg-white/[0.03] px-3.5 py-3">
-                        <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
+                      <div className="rounded-[18px] bg-[var(--ui-surface-2)] px-3.5 py-3">
+                        <div className="font-label text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                           Progress
                         </div>
-                        <div className="mt-2 text-xl text-white">
+                        <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">
                           {goal.progress}%
                         </div>
                       </div>
-                      <div className="rounded-[18px] bg-white/[0.03] px-3.5 py-3">
-                        <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
+                      <div className="rounded-[18px] bg-[var(--ui-surface-2)] px-3.5 py-3">
+                        <div className="font-label text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                           Tasks done
                         </div>
-                        <div className="mt-2 text-xl text-white">
+                        <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">
                           {goal.completedTasks}/{Math.max(goal.totalTasks, 1)}
                         </div>
                       </div>
-                      <div className="rounded-[18px] bg-white/[0.03] px-3.5 py-3">
-                        <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
+                      <div className="rounded-[18px] bg-[var(--ui-surface-2)] px-3.5 py-3">
+                        <div className="font-label text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                           XP banked
                         </div>
-                        <div className="mt-2 text-xl text-white">
+                        <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">
                           {goal.earnedPoints}
                         </div>
                       </div>
@@ -188,18 +188,18 @@ export function GoalsPage() {
                     </div>
                   </div>
 
-                  <div className="min-w-0 rounded-[24px] bg-white/[0.04] p-4">
+                  <div className="min-w-0 rounded-[24px] bg-[var(--ui-surface-2)] p-4">
                     <CardHeaderRow
                       title="Projects carrying this direction"
                       meta={
-                        <div className="shrink-0 text-sm text-white/48">
+                        <div className="shrink-0 text-sm text-[var(--ui-ink-faint)]">
                           {linkedProjects.length}
                         </div>
                       }
                       className="gap-2"
                     />
                     {linkedProjects.length === 0 ? (
-                      <div className="mt-4 text-sm leading-6 text-white/56">
+                      <div className="mt-4 text-sm leading-6 text-[var(--ui-ink-soft)]">
                         {projectFilter === "active"
                           ? "No active project is attached yet. Create one so this direction starts producing visible work."
                           : "No projects in this lifecycle view are attached yet. Switch filters or restart one to bring it back into active motion."}
@@ -209,7 +209,7 @@ export function GoalsPage() {
                         {linkedProjects.slice(0, 3).map((project) => (
                           <div
                             key={project.id}
-                            className="rounded-[18px] bg-white/[0.05] px-4 py-4"
+                            className="rounded-[18px] bg-[var(--ui-surface-hover)] px-4 py-4"
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -228,10 +228,10 @@ export function GoalsPage() {
                               </div>
                               <Badge className="shrink-0">{project.status}</Badge>
                             </div>
-                            <div className="mt-2 text-sm leading-6 text-white/58">
+                            <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                               {project.description}
                             </div>
-                            <div className="mt-3 text-sm text-white/42">
+                            <div className="mt-3 text-sm text-[var(--ui-ink-faint)]">
                               Next move:{" "}
                               {project.nextTaskTitle ??
                                 "Define the first attached task"}
@@ -268,7 +268,7 @@ export function GoalsPage() {
         </div>
       ) : (
         <Card>
-          <div className="rounded-[20px] bg-white/[0.04] p-4 text-sm text-white/58">
+          <div className="rounded-[20px] bg-[var(--ui-surface-2)] p-4 text-sm text-[var(--ui-ink-soft)]">
             Goal cards will appear here once the first long-horizon direction is
             created.
           </div>

@@ -81,7 +81,7 @@ export function TaskDetailContextGrid({
                   />
                 </Link>
               ) : (
-                <Badge className="bg-white/[0.08] text-white/65">
+                <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-soft)]">
                   No project linked
                 </Badge>
               )}
@@ -108,7 +108,7 @@ export function TaskDetailContextGrid({
                   />
                 </Link>
               ) : (
-                <Badge className="bg-white/[0.08] text-white/65">
+                <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-soft)]">
                   No goal linked
                 </Badge>
               )}
@@ -135,7 +135,7 @@ export function TaskDetailContextGrid({
                   />
                 </Link>
               ) : (
-                <Badge className="bg-white/[0.08] text-white/65">
+                <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-soft)]">
                   No parent work item
                 </Badge>
               )}
@@ -165,7 +165,7 @@ export function TaskDetailContextGrid({
                   </Link>
                 ))
               ) : (
-                <Badge className="bg-white/[0.08] text-white/65">
+                <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-soft)]">
                   No child work items
                 </Badge>
               )}
@@ -219,12 +219,17 @@ export function TaskDetailContextGrid({
             <div className="mt-2 flex flex-wrap gap-2">
               {mappedTags.length > 0 ? (
                 mappedTags.map((tag) => (
-                  <Badge key={tag.id} className="bg-white/[0.08] text-white/72">
+                  <Badge
+                    key={tag.id}
+                    className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]"
+                  >
                     {tag.name}
                   </Badge>
                 ))
               ) : (
-                <Badge className="bg-white/[0.08] text-white/65">No tags</Badge>
+                <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-soft)]">
+                  No tags
+                </Badge>
               )}
             </div>
           </div>
@@ -244,7 +249,7 @@ export function TaskDetailContextGrid({
                     <Badge
                       key={`${blocker.entityType}:${blocker.entityId}`}
                       wrap
-                      className="bg-amber-500/12 text-amber-100"
+                      className="bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]"
                     >
                       {blocker.label ??
                         `${blocker.entityType} · ${blocker.entityId}`}
@@ -264,7 +269,7 @@ export function TaskDetailContextGrid({
                   );
                 })
               ) : (
-                <Badge className="bg-white/[0.08] text-white/65">
+                <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-soft)]">
                   No blockers linked
                 </Badge>
               )}
@@ -288,7 +293,7 @@ export function TaskDetailContextGrid({
                 ) : null}
                 <span>{payload.task.owner}</span>
                 {botOwner ? (
-                  <Badge className="bg-fuchsia-500/12 text-fuchsia-100">
+                  <Badge className="bg-[var(--ui-accent-soft)] text-[var(--tertiary)]">
                     <Bot className="mr-1 size-3.5" />
                     Bot owner
                   </Badge>
@@ -303,17 +308,17 @@ export function TaskDetailContextGrid({
                 payload.task.assignees.map((user) => (
                   <div
                     key={user.id}
-                    className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.05] px-3 py-1.5 text-sm text-white/72"
+                    className="inline-flex items-center gap-2 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-1.5 text-sm text-[var(--ui-ink-medium)]"
                   >
                     <UserBadge user={user} compact />
                     <span>{user.displayName}</span>
                     {user.kind === "bot" ? (
-                      <Bot className="size-3.5 text-fuchsia-200" />
+                      <Bot className="size-3.5 text-[var(--tertiary)]" />
                     ) : null}
                   </div>
                 ))
               ) : (
-                <Badge className="bg-white/[0.08] text-white/65">
+                <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-soft)]">
                   No assignees
                 </Badge>
               )}

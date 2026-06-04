@@ -18,6 +18,13 @@ import {
   TOTAL_RIGHTS
 } from "@/components/users/user-relationship-graph";
 
+const relationshipPanelClass =
+  "rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]";
+const relationshipTitleClass =
+  "text-sm font-medium text-[var(--ui-ink-strong)]";
+const relationshipBodyClass = "text-sm leading-6 text-[var(--ui-ink-soft)]";
+const relationshipFaintClass = "text-xs leading-5 text-[var(--ui-ink-faint)]";
+
 type RelationshipDraft = {
   accessLevel: "view" | "manage";
   applyScope: "this_arrow" | "both_arrows";
@@ -109,17 +116,15 @@ export function UserRelationshipFlowDialog({
       render: (value, setValue) => (
         <>
           {grant ? (
-            <div className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
+            <div className={`${relationshipPanelClass} p-4`}>
               <div className="flex flex-wrap items-center gap-2">
                 <UserBadge user={grant.subjectUser} />
-                <span className="text-white/45">→</span>
+                <span className="text-[var(--ui-ink-faint)]">→</span>
                 <UserBadge user={grant.targetUser} />
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
-                <Badge className="bg-white/[0.08] text-white/74">
-                  {describeGrantTone(grant)}
-                </Badge>
-                <Badge className="bg-white/[0.08] text-white/74">
+                <Badge tone="meta">{describeGrantTone(grant)}</Badge>
+                <Badge tone="meta">
                   {countEnabledRights(grant)}/{TOTAL_RIGHTS} rights
                 </Badge>
               </div>
@@ -128,7 +133,7 @@ export function UserRelationshipFlowDialog({
 
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="grid gap-3">
-              <div className="text-sm font-medium text-white">Access level</div>
+              <div className={relationshipTitleClass}>Access level</div>
               <FlowChoiceGrid
                 columns={2}
                 value={value.accessLevel}
@@ -154,9 +159,7 @@ export function UserRelationshipFlowDialog({
 
             {reverseGrant ? (
               <div className="grid gap-3">
-                <div className="text-sm font-medium text-white">
-                  Apply scope
-                </div>
+                <div className={relationshipTitleClass}>Apply scope</div>
                 <FlowChoiceGrid
                   columns={2}
                   value={value.applyScope}
@@ -184,7 +187,7 @@ export function UserRelationshipFlowDialog({
           </div>
 
           <div className="grid gap-3">
-            <div className="text-sm font-medium text-white">Quick preset</div>
+            <div className={relationshipTitleClass}>Quick preset</div>
             <div className="grid gap-3 md:grid-cols-2">
               {EDGE_PRESETS.map((preset) => (
                 <button
@@ -192,17 +195,15 @@ export function UserRelationshipFlowDialog({
                   type="button"
                   className={`rounded-[22px] border p-4 text-left transition ${
                     grant && presetMatchesGrant(grant, preset)
-                      ? "border-[rgba(244,185,122,0.35)] bg-[rgba(244,185,122,0.08)]"
-                      : "border-white/8 bg-white/[0.03] hover:bg-white/[0.05]"
+                      ? "border-[color-mix(in_srgb,var(--warning)_32%,var(--ui-border-subtle)_68%)] bg-[var(--ui-warning-soft)]"
+                      : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]"
                   }`}
                   onClick={() =>
                     setValue({ rights: { ...value.rights, ...preset.rights } })
                   }
                 >
-                  <div className="text-sm font-medium text-white">
-                    {preset.label}
-                  </div>
-                  <div className="mt-2 text-sm leading-6 text-white/56">
+                  <div className={relationshipTitleClass}>{preset.label}</div>
+                  <div className={`mt-2 ${relationshipBodyClass}`}>
                     {preset.description}
                   </div>
                 </button>
@@ -223,10 +224,8 @@ export function UserRelationshipFlowDialog({
           {RIGHT_GROUPS.map((group) => (
             <div key={group.id} className="grid gap-3">
               <div>
-                <div className="text-sm font-medium text-white">
-                  {group.label}
-                </div>
-                <div className="mt-1 text-sm leading-6 text-white/54">
+                <div className={relationshipTitleClass}>{group.label}</div>
+                <div className={`mt-1 ${relationshipBodyClass}`}>
                   {group.description}
                 </div>
               </div>
@@ -234,13 +233,13 @@ export function UserRelationshipFlowDialog({
                 {group.rights.map((right) => (
                   <label
                     key={right.key}
-                    className="flex items-start justify-between gap-3 rounded-[18px] border border-white/8 bg-white/[0.03] px-4 py-3"
+                    className="flex items-start justify-between gap-3 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3"
                   >
                     <div>
-                      <div className="text-sm font-medium text-white">
+                      <div className={relationshipTitleClass}>
                         {right.label}
                       </div>
-                      <div className="mt-1 text-xs leading-5 text-white/50">
+                      <div className={`mt-1 ${relationshipFaintClass}`}>
                         {right.description}
                       </div>
                     </div>
@@ -273,14 +272,12 @@ export function UserRelationshipFlowDialog({
       render: (value) => (
         <>
           <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
-              <div className="text-sm font-medium text-white">
-                Capability coverage
-              </div>
+            <div className={`${relationshipPanelClass} p-4`}>
+              <div className={relationshipTitleClass}>Capability coverage</div>
               <div className="mt-4">
                 <ProgressMeter value={rightsRatio} />
               </div>
-              <div className="mt-3 text-sm text-white/62">
+              <div className="mt-3 text-sm text-[var(--ui-ink-soft)]">
                 {rightsEnabledCount}/{TOTAL_RIGHTS} rights enabled
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
@@ -315,8 +312,8 @@ export function UserRelationshipFlowDialog({
                     key={capability.id}
                     className={
                       capability.enabled
-                        ? "bg-white/[0.08] text-white/74"
-                        : "bg-white/[0.04] text-white/38"
+                        ? "bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)]"
+                        : "bg-[var(--ui-surface-1)] text-[var(--ui-ink-faint)] opacity-70"
                     }
                   >
                     {capability.label}
@@ -325,18 +322,16 @@ export function UserRelationshipFlowDialog({
               </div>
             </div>
 
-            <div className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
-              <div className="text-sm font-medium text-white">Save scope</div>
-              <div className="mt-3 text-sm leading-6 text-white/58">
+            <div className={`${relationshipPanelClass} p-4`}>
+              <div className={relationshipTitleClass}>Save scope</div>
+              <div className={`mt-3 ${relationshipBodyClass}`}>
                 {value.applyScope === "both_arrows" && reverseGrant
                   ? "Forge will apply the same access level and rights to both directions of this pair."
                   : "Forge will only update the exact arrow you opened."}
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
-                <Badge className="bg-white/[0.08] text-white/74">
-                  access {value.accessLevel}
-                </Badge>
-                <Badge className="bg-white/[0.08] text-white/74">
+                <Badge tone="meta">access {value.accessLevel}</Badge>
+                <Badge tone="meta">
                   scope{" "}
                   {value.applyScope === "both_arrows" && reverseGrant
                     ? "both arrows"
@@ -344,7 +339,7 @@ export function UserRelationshipFlowDialog({
                 </Badge>
               </div>
               {reverseGrant ? (
-                <div className="mt-4 rounded-[18px] border border-white/8 bg-white/[0.03] px-4 py-3 text-sm text-white/54">
+                <div className="mt-4 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3 text-sm text-[var(--ui-ink-soft)]">
                   Reverse arrow available:{" "}
                   {reverseGrant.subjectUser?.displayName ??
                     reverseGrant.subjectUserId}{" "}

@@ -216,9 +216,9 @@ export function GoalDialog({
             label={t("common.dialogs.goal.themeColor")}
             error={fieldErrors.themeColor ?? null}
           >
-            <div className="flex items-center gap-3 rounded-[22px] border border-white/8 bg-white/6 px-4 py-3">
+            <div className="flex items-center gap-3 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3">
               <input
-                className="h-10 w-12 rounded-lg border border-white/10 bg-transparent"
+                className="h-10 w-12 rounded-lg border border-[var(--ui-border-subtle)] bg-transparent"
                 type="color"
                 value={value.themeColor}
                 onChange={(event) =>
@@ -242,7 +242,7 @@ export function GoalDialog({
                   <button
                     key={tag.id}
                     type="button"
-                    className={`rounded-full px-3 py-2 text-sm transition ${selected ? "bg-white/16 text-white" : "bg-white/6 text-white/58 hover:bg-white/10 hover:text-white"}`}
+                    className={`rounded-full px-3 py-2 text-sm transition ${selected ? "bg-[var(--ui-surface-active)] text-[var(--ui-ink-strong)]" : "bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"}`}
                     onClick={() =>
                       setValue({
                         tagIds: selected

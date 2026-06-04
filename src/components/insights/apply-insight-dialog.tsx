@@ -28,6 +28,7 @@ import {
   type QuickTaskInput
 } from "@/lib/schemas";
 import type { Goal, Insight, ProjectSummary, Tag, Task } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 type ApplyInsightDraft = {
   kind: ApplyInsightKind;
@@ -42,6 +43,17 @@ export type ApplyInsightSubmission =
   | { kind: "project"; input: ProjectMutationInput }
   | { kind: "goal"; input: GoalMutationInput }
   | { kind: "note"; input: { contentMarkdown: string } };
+
+const applySelectionCardBaseClass =
+  "min-w-0 rounded-[22px] border px-4 py-4 text-left transition";
+const applySelectionCardClass =
+  "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)] hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]";
+const applySelectionCardSelectedClass =
+  "border-[color-mix(in_srgb,var(--primary)_42%,var(--ui-border-subtle)_58%)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]";
+const applyTagChipClass =
+  "rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-2 text-sm text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]";
+const applyTagChipSelectedClass =
+  "border-[color-mix(in_srgb,var(--primary)_38%,var(--ui-border-subtle)_62%)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]";
 
 function buildInitialDraft(
   insight: Insight,
@@ -244,7 +256,12 @@ export function ApplyInsightDialog({
                       <button
                         key={project.id}
                         type="button"
-                        className={`rounded-[22px] border px-4 py-4 text-left transition ${selected ? "border-[rgba(192,193,255,0.28)] bg-[rgba(192,193,255,0.14)] text-white" : "border-white/8 bg-white/[0.04] text-white/72 hover:bg-white/[0.07]"}`}
+                        className={cn(
+                          applySelectionCardBaseClass,
+                          selected
+                            ? applySelectionCardSelectedClass
+                            : applySelectionCardClass
+                        )}
                         onClick={() =>
                           patch({
                             task: {
@@ -255,8 +272,10 @@ export function ApplyInsightDialog({
                           })
                         }
                       >
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="font-medium">{project.title}</span>
+                        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+                          <span className="min-w-0 break-words font-medium">
+                            {project.title}
+                          </span>
                           <EntityBadge
                             kind="goal"
                             label={project.goalTitle}
@@ -264,7 +283,7 @@ export function ApplyInsightDialog({
                             gradient={false}
                           />
                         </div>
-                        <div className="mt-2 text-sm leading-6 text-white/54">
+                        <div className="mt-2 break-words text-sm leading-6 text-[var(--ui-ink-soft)]">
                           {project.description ||
                             "No project note attached yet."}
                         </div>
@@ -292,7 +311,10 @@ export function ApplyInsightDialog({
                       <button
                         key={tag.id}
                         type="button"
-                        className={`rounded-full px-3 py-2 text-sm transition ${selected ? "bg-white/16 text-white" : "bg-white/6 text-white/58 hover:bg-white/10 hover:text-white"}`}
+                        className={cn(
+                          applyTagChipClass,
+                          selected ? applyTagChipSelectedClass : null
+                        )}
                         onClick={() =>
                           patch({
                             task: {
@@ -355,15 +377,22 @@ export function ApplyInsightDialog({
                       <button
                         key={goal.id}
                         type="button"
-                        className={`rounded-[22px] border px-4 py-4 text-left transition ${selected ? "border-[rgba(192,193,255,0.28)] bg-[rgba(192,193,255,0.14)] text-white" : "border-white/8 bg-white/[0.04] text-white/72 hover:bg-white/[0.07]"}`}
+                        className={cn(
+                          applySelectionCardBaseClass,
+                          selected
+                            ? applySelectionCardSelectedClass
+                            : applySelectionCardClass
+                        )}
                         onClick={() =>
                           patch({
                             project: { ...value.project, goalId: goal.id }
                           })
                         }
                       >
-                        <div className="font-medium">{goal.title}</div>
-                        <div className="mt-2 text-sm leading-6 text-white/54">
+                        <div className="break-words font-medium">
+                          {goal.title}
+                        </div>
+                        <div className="mt-2 break-words text-sm leading-6 text-[var(--ui-ink-soft)]">
                           {goal.description ||
                             "No strategic note attached yet."}
                         </div>
@@ -414,7 +443,10 @@ export function ApplyInsightDialog({
                       <button
                         key={tag.id}
                         type="button"
-                        className={`rounded-full px-3 py-2 text-sm transition ${selected ? "bg-white/16 text-white" : "bg-white/6 text-white/58 hover:bg-white/10 hover:text-white"}`}
+                        className={cn(
+                          applyTagChipClass,
+                          selected ? applyTagChipSelectedClass : null
+                        )}
                         onClick={() =>
                           patch({
                             goal: {
@@ -459,9 +491,9 @@ export function ApplyInsightDialog({
               />
             </FlowField>
             {linkedTargetLabel ? (
-              <div className="rounded-[18px] border border-white/8 bg-white/[0.04] px-4 py-3 text-sm text-white/70">
+              <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3 text-sm text-[var(--ui-ink-medium)]">
                 Linked target:{" "}
-                <span className="font-medium text-white">
+                <span className="font-medium text-[var(--ui-ink-strong)]">
                   {linkedTargetLabel}
                 </span>
               </div>

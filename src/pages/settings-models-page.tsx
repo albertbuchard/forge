@@ -45,7 +45,29 @@ type EditorState = {
 
 const WORKBENCH_MOCK_PROVIDER_ENABLED = import.meta.env.DEV;
 
-function defaultEditorState(provider: AiModelProvider = "openai-api"): EditorState {
+const modelPanelClass =
+  "grid min-w-0 gap-2 rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4";
+const modelSoftPanelClass =
+  "grid min-w-0 gap-3 rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4";
+const modelEmptyClass =
+  "rounded-[20px] border border-dashed border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-5 text-sm leading-6 text-[var(--ui-ink-soft)]";
+const modelInputClass =
+  "min-w-0 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-3 text-sm text-[var(--ui-ink-strong)] outline-none placeholder:text-[var(--ui-ink-faint)] transition focus:border-[var(--primary)]/35 focus:bg-[var(--ui-surface-3)]";
+const modelTitleClass = "text-sm text-[var(--ui-ink-strong)]";
+const modelBodyClass = "text-[var(--ui-ink-soft)]";
+const modelFaintClass = "text-[var(--ui-ink-faint)]";
+const modelEyebrowClass =
+  "text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]";
+const modelMetaBadgeClass =
+  "bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]";
+const modelWarningBadgeClass =
+  "bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]";
+const modelDangerPanelClass =
+  "rounded-[20px] border border-[color-mix(in_srgb,var(--danger)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-danger-soft)] px-4 py-5 text-sm leading-6 text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]";
+
+function defaultEditorState(
+  provider: AiModelProvider = "openai-api"
+): EditorState {
   return {
     label:
       provider === "openai-codex"
@@ -54,7 +76,7 @@ function defaultEditorState(provider: AiModelProvider = "openai-api"): EditorSta
           ? "Local compatible endpoint"
           : provider === "mock"
             ? "Workbench mock runtime"
-          : "OpenAI API",
+            : "OpenAI API",
     provider,
     baseUrl:
       provider === "openai-codex"
@@ -63,7 +85,7 @@ function defaultEditorState(provider: AiModelProvider = "openai-api"): EditorSta
           ? "http://127.0.0.1:11434/v1"
           : provider === "mock"
             ? "mock://workbench"
-          : "https://api.openai.com/v1",
+            : "https://api.openai.com/v1",
     model: provider === "mock" ? "mock-echo" : "gpt-5.4-mini",
     apiKey: ""
   };
@@ -167,9 +189,13 @@ export function SettingsModelsPage() {
         baseUrl: editor.baseUrl,
         model: editor.model,
         apiKey:
-          editor.provider === "openai-codex" ? undefined : editor.apiKey || undefined,
+          editor.provider === "openai-codex"
+            ? undefined
+            : editor.apiKey || undefined,
         oauthSessionId:
-          editor.provider === "openai-codex" ? oauthSessionId ?? undefined : undefined
+          editor.provider === "openai-codex"
+            ? (oauthSessionId ?? undefined)
+            : undefined
       }),
     onSuccess: async () => {
       setFeedback("Connection saved.");
@@ -179,6 +205,11 @@ export function SettingsModelsPage() {
       }
       setEditor(defaultEditorState(editor.provider));
       await invalidateSettings();
+    },
+    onError: (error) => {
+      setFeedback(
+        error instanceof Error ? error.message : "Connection save failed."
+      );
     }
   });
 
@@ -204,7 +235,8 @@ export function SettingsModelsPage() {
   });
 
   const deleteEmbeddingMutation = useMutation({
-    mutationFn: (profileId: string) => deleteWikiProfile("embedding", profileId),
+    mutationFn: (profileId: string) =>
+      deleteWikiProfile("embedding", profileId),
     onSuccess: invalidateSettings
   });
 
@@ -216,7 +248,9 @@ export function SettingsModelsPage() {
         baseUrl: editor.baseUrl,
         model: editor.model,
         apiKey:
-          editor.provider === "openai-codex" ? undefined : editor.apiKey || undefined
+          editor.provider === "openai-codex"
+            ? undefined
+            : editor.apiKey || undefined
       }),
     onSuccess: ({ result }) => {
       setFeedback(`Connection test succeeded: ${result.outputPreview}`);
@@ -273,7 +307,8 @@ export function SettingsModelsPage() {
     setWikiModel(settings.modelSettings.forgeAgent.wiki.model);
   }, [settingsQuery.data]);
 
-  const connections = settingsQuery.data?.settings.modelSettings.connections ?? [];
+  const connections =
+    settingsQuery.data?.settings.modelSettings.connections ?? [];
   const codexOauthConnections = connections.filter(
     (connection) =>
       connection.provider === "openai-codex" && connection.authMode === "oauth"
@@ -283,17 +318,23 @@ export function SettingsModelsPage() {
   );
   const oauthSession: OpenAiCodexOauthSession | null =
     oauthSessionQuery.data?.session ?? null;
+  const editedConnection = editor.id
+    ? connections.find((connection) => connection.id === editor.id)
+    : null;
 
   const canSaveConnection = useMemo(() => {
     if (!editor.label.trim() || !editor.model.trim()) return false;
     if (editor.provider === "openai-codex") {
-      return Boolean(editor.id || oauthSession?.status === "authorized");
+      return Boolean(
+        oauthSession?.status === "authorized" ||
+        (editor.id && editedConnection?.hasStoredCredential)
+      );
     }
     if (editor.provider === "mock") {
       return true;
     }
     return editor.apiKey.trim().length > 0 || Boolean(editor.id);
-  }, [editor, oauthSession?.status]);
+  }, [editor, editedConnection?.hasStoredCredential, oauthSession?.status]);
 
   if (settingsQuery.isLoading) {
     return (
@@ -321,7 +362,7 @@ export function SettingsModelsPage() {
   const settings = settingsQuery.data.settings;
 
   return (
-    <div className="mx-auto grid w-full max-w-[1440px] gap-5">
+    <div className="mx-auto grid min-w-0 w-full max-w-[1440px] gap-5">
       <PageHero
         eyebrow="AI runtime"
         title="Model Settings"
@@ -335,8 +376,8 @@ export function SettingsModelsPage() {
         <div className="flex items-center gap-3">
           <Bot className="size-4 text-[var(--secondary)]" />
           <div>
-            <div className="text-sm text-white">Forge Agent defaults</div>
-            <div className="text-xs leading-5 text-white/52">
+            <div className={modelTitleClass}>Forge Agent defaults</div>
+            <div className={`text-xs leading-5 ${modelFaintClass}`}>
               Forge Agent stays the default system agent. Choose which model
               connection powers basic chat and the managed wiki workflow.
             </div>
@@ -344,10 +385,12 @@ export function SettingsModelsPage() {
         </div>
 
         <div className="grid gap-4 lg:grid-cols-2">
-          <label className="grid gap-2 rounded-[20px] bg-white/[0.04] p-4">
-            <span className="text-sm text-white/72">Basic chat connection</span>
+          <label className={modelPanelClass}>
+            <span className={`text-sm ${modelBodyClass}`}>
+              Basic chat connection
+            </span>
             <select
-              className="rounded-[16px] border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white"
+              className={modelInputClass}
               value={basicChatConnectionId}
               onChange={(event) => setBasicChatConnectionId(event.target.value)}
             >
@@ -359,19 +402,19 @@ export function SettingsModelsPage() {
               ))}
             </select>
             <input
-              className="rounded-[16px] border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white"
+              className={modelInputClass}
               value={basicChatModel}
               onChange={(event) => setBasicChatModel(event.target.value)}
               placeholder="Model"
             />
           </label>
 
-          <label className="grid gap-2 rounded-[20px] bg-white/[0.04] p-4">
-            <span className="text-sm text-white/72">
+          <label className={modelPanelClass}>
+            <span className={`text-sm ${modelBodyClass}`}>
               KarpaWiki Codex OAuth connection
             </span>
             <select
-              className="rounded-[16px] border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white"
+              className={modelInputClass}
               value={wikiConnectionId}
               onChange={(event) => setWikiConnectionId(event.target.value)}
             >
@@ -382,18 +425,19 @@ export function SettingsModelsPage() {
                   value={connection.id}
                   disabled={!connection.hasStoredCredential}
                 >
-                  {connection.label} ({connection.accountLabel ?? connection.agentLabel})
+                  {connection.label} (
+                  {connection.accountLabel ?? connection.agentLabel})
                   {connection.hasStoredCredential ? "" : " · needs OAuth"}
                 </option>
               ))}
             </select>
             <input
-              className="rounded-[16px] border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white"
+              className={modelInputClass}
               value={wikiModel}
               onChange={(event) => setWikiModel(event.target.value)}
               placeholder="Model"
             />
-            <span className="text-xs leading-5 text-white/50">
+            <span className={`text-xs leading-5 ${modelFaintClass}`}>
               KarpaWiki smart ingest uses ChatGPT/Codex OAuth only. It does not
               use metered OpenAI Platform API keys.
             </span>
@@ -408,19 +452,19 @@ export function SettingsModelsPage() {
           >
             Save Forge Agent defaults
           </Button>
-          <Badge className="bg-white/[0.06] text-white/78">
+          <Badge className={modelMetaBadgeClass}>
             Forge Agent
             {settings.modelSettings.forgeAgent.basicChat.connectionLabel
               ? ` basic chat: ${settings.modelSettings.forgeAgent.basicChat.connectionLabel}`
               : " basic chat stays local"}
           </Badge>
-          <Badge className="bg-white/[0.06] text-white/78">
+          <Badge className={modelMetaBadgeClass}>
             {settings.modelSettings.forgeAgent.wiki.connectionLabel
               ? `KarpaWiki OAuth: ${settings.modelSettings.forgeAgent.wiki.connectionLabel}`
               : "KarpaWiki: no Codex OAuth model selected"}
           </Badge>
           {connectedCodexOauthConnections.length === 0 ? (
-            <Badge className="bg-amber-400/12 text-amber-100">
+            <Badge className={modelWarningBadgeClass}>
               Add OpenAI Codex OAuth before smart ingest
             </Badge>
           ) : null}
@@ -431,8 +475,8 @@ export function SettingsModelsPage() {
         <div className="flex items-center gap-3">
           <DatabaseZap className="size-4 text-[var(--secondary)]" />
           <div>
-            <div className="text-sm text-white">KarpaWiki embeddings</div>
-            <div className="text-xs leading-5 text-white/52">
+            <div className={modelTitleClass}>KarpaWiki embeddings</div>
+            <div className={`text-xs leading-5 ${modelFaintClass}`}>
               Semantic search profiles live with model settings. They remain
               optional; KarpaWiki text search and entity-linked search still
               work without embeddings.
@@ -443,80 +487,84 @@ export function SettingsModelsPage() {
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,0.9fr)]">
           <div className="grid gap-3">
             {wikiSettingsQuery.isLoading ? (
-              <div className="rounded-[20px] border border-dashed border-white/10 bg-white/[0.02] px-4 py-5 text-sm leading-6 text-white/58">
-                Loading embedding profiles.
-              </div>
+              <div className={modelEmptyClass}>Loading embedding profiles.</div>
             ) : null}
             {wikiSettingsQuery.isError ? (
-              <div className="rounded-[20px] border border-rose-300/22 bg-rose-400/10 px-4 py-5 text-sm leading-6 text-rose-100">
+              <div className={modelDangerPanelClass}>
                 Could not load KarpaWiki embedding profiles.
               </div>
             ) : null}
             {wikiSettingsQuery.data?.settings.embeddingProfiles.length === 0 ? (
-              <div className="rounded-[20px] border border-dashed border-white/10 bg-white/[0.02] px-4 py-5 text-sm leading-6 text-white/58">
-                No embedding profile yet. Add one only if you want semantic
-                wiki search in addition to exact search and links.
+              <div className={modelEmptyClass}>
+                No embedding profile yet. Add one only if you want semantic wiki
+                search in addition to exact search and links.
               </div>
             ) : null}
-            {wikiSettingsQuery.data?.settings.embeddingProfiles.map((profile) => (
-              <div
-                key={profile.id}
-                className="grid gap-2 rounded-[18px] bg-white/[0.04] px-4 py-4"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="truncate text-white">{profile.label}</div>
-                    <div className="mt-1 text-xs text-white/46">
-                      {profile.model} · {profile.baseUrl}
+            {wikiSettingsQuery.data?.settings.embeddingProfiles.map(
+              (profile) => (
+                <div
+                  key={profile.id}
+                  className="grid min-w-0 gap-2 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-[var(--ui-ink-strong)]">
+                        {profile.label}
+                      </div>
+                      <div
+                        className={`mt-1 break-words text-xs [overflow-wrap:anywhere] ${modelFaintClass}`}
+                      >
+                        {profile.model} · {profile.baseUrl}
+                      </div>
                     </div>
+                    <Button
+                      variant="secondary"
+                      pending={deleteEmbeddingMutation.isPending}
+                      pendingLabel="Deleting"
+                      onClick={() =>
+                        void deleteEmbeddingMutation.mutateAsync(profile.id)
+                      }
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
                   </div>
-                  <Button
-                    variant="secondary"
-                    pending={deleteEmbeddingMutation.isPending}
-                    pendingLabel="Deleting"
-                    onClick={() =>
-                      void deleteEmbeddingMutation.mutateAsync(profile.id)
-                    }
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge className={modelMetaBadgeClass}>
+                      chunk {profile.chunkSize}
+                    </Badge>
+                    <Badge className={modelMetaBadgeClass}>
+                      overlap {profile.chunkOverlap}
+                    </Badge>
+                    <Badge className={modelMetaBadgeClass}>
+                      {profile.enabled ? "enabled" : "disabled"}
+                    </Badge>
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <Badge className="bg-white/[0.06] text-white/78">
-                    chunk {profile.chunkSize}
-                  </Badge>
-                  <Badge className="bg-white/[0.06] text-white/78">
-                    overlap {profile.chunkOverlap}
-                  </Badge>
-                  <Badge className="bg-white/[0.06] text-white/78">
-                    {profile.enabled ? "enabled" : "disabled"}
-                  </Badge>
-                </div>
-              </div>
-            ))}
+              )
+            )}
           </div>
 
-          <div className="grid gap-3 rounded-[20px] bg-white/[0.03] p-4">
+          <div className={modelSoftPanelClass}>
             <input
-              className="rounded-[16px] border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white"
+              className={modelInputClass}
               value={embeddingLabel}
               onChange={(event) => setEmbeddingLabel(event.target.value)}
               placeholder="Profile label"
             />
             <input
-              className="rounded-[16px] border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white"
+              className={modelInputClass}
               value={embeddingModel}
               onChange={(event) => setEmbeddingModel(event.target.value)}
               placeholder="Embedding model"
             />
             <input
-              className="rounded-[16px] border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white"
+              className={modelInputClass}
               value={embeddingBaseUrl}
               onChange={(event) => setEmbeddingBaseUrl(event.target.value)}
               placeholder="Embedding base URL"
             />
             <input
-              className="rounded-[16px] border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white"
+              className={modelInputClass}
               value={embeddingApiKey}
               onChange={(event) => setEmbeddingApiKey(event.target.value)}
               placeholder="Embedding API key (optional)"
@@ -524,14 +572,14 @@ export function SettingsModelsPage() {
             />
             <div className="grid gap-3 md:grid-cols-2">
               <input
-                className="rounded-[16px] border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white"
+                className={modelInputClass}
                 value={chunkSize}
                 onChange={(event) => setChunkSize(event.target.value)}
                 placeholder="Chunk size"
                 type="number"
               />
               <input
-                className="rounded-[16px] border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white"
+                className={modelInputClass}
                 value={chunkOverlap}
                 onChange={(event) => setChunkOverlap(event.target.value)}
                 placeholder="Chunk overlap"
@@ -550,13 +598,13 @@ export function SettingsModelsPage() {
         </div>
       </Card>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+      <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
         <Card className="grid gap-4">
           <div className="flex items-center gap-3">
             <PlugZap className="size-4 text-[var(--secondary)]" />
             <div>
-              <div className="text-sm text-white">Connection editor</div>
-              <div className="text-xs leading-5 text-white/52">
+              <div className={modelTitleClass}>Connection editor</div>
+              <div className={`text-xs leading-5 ${modelFaintClass}`}>
                 Every saved connection becomes a first-class agent layered on
                 top of Forge Agent.
               </div>
@@ -565,9 +613,7 @@ export function SettingsModelsPage() {
 
           <div className="grid gap-3">
             <div className="grid gap-2">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
-                Provider
-              </div>
+              <div className={modelEyebrowClass}>Provider</div>
               <div className="grid gap-2 md:grid-cols-3">
                 {(
                   [
@@ -584,8 +630,8 @@ export function SettingsModelsPage() {
                     type="button"
                     className={`rounded-[18px] px-4 py-3 text-left text-sm transition ${
                       editor.provider === provider
-                        ? "bg-[var(--primary)]/[0.18] text-white"
-                        : "bg-white/[0.04] text-white/62 hover:bg-white/[0.08]"
+                        ? "border border-[color-mix(in_srgb,var(--primary)_34%,var(--ui-border-subtle)_66%)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)] shadow-[var(--ui-shadow-soft)]"
+                        : "border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                     }`}
                     onClick={() => {
                       setEditor(defaultEditorState(provider));
@@ -600,39 +646,46 @@ export function SettingsModelsPage() {
             </div>
 
             <input
-              className="rounded-[16px] border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white"
+              className={modelInputClass}
               value={editor.label}
               onChange={(event) =>
-                setEditor((current) => ({ ...current, label: event.target.value }))
+                setEditor((current) => ({
+                  ...current,
+                  label: event.target.value
+                }))
               }
               placeholder="Connection label"
             />
             <input
-              className="rounded-[16px] border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white"
+              className={modelInputClass}
               value={editor.model}
               onChange={(event) =>
-                setEditor((current) => ({ ...current, model: event.target.value }))
+                setEditor((current) => ({
+                  ...current,
+                  model: event.target.value
+                }))
               }
               placeholder="Model"
             />
 
             {editor.provider === "mock" ? (
-              <div className="grid gap-3 rounded-[20px] bg-white/[0.04] p-4">
-                <div className="text-sm text-white">
-                  The Workbench mock runtime is only meant for local development and test
-                  workflows.
+              <div className={modelSoftPanelClass}>
+                <div className={modelTitleClass}>
+                  The Workbench mock runtime is only meant for local development
+                  and test workflows.
                 </div>
-                <div className="text-xs leading-5 text-white/52">
-                  Use mock models like <code>mock-echo</code>, <code>mock-json</code>,
-                  <code>mock-tool-search</code>, <code>mock-tool-note</code>, or
-                  <code>mock-chat-memory</code> to exercise deterministic flow behavior
-                  without a real external model.
+                <div className={`text-xs leading-5 ${modelFaintClass}`}>
+                  Use mock models like <code>mock-echo</code>,{" "}
+                  <code>mock-json</code>,<code>mock-tool-search</code>,{" "}
+                  <code>mock-tool-note</code>, or
+                  <code>mock-chat-memory</code> to exercise deterministic flow
+                  behavior without a real external model.
                 </div>
               </div>
             ) : editor.provider !== "openai-codex" ? (
               <>
                 <input
-                  className="rounded-[16px] border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white"
+                  className={modelInputClass}
                   value={editor.baseUrl}
                   onChange={(event) =>
                     setEditor((current) => ({
@@ -643,7 +696,7 @@ export function SettingsModelsPage() {
                   placeholder="Base URL"
                 />
                 <input
-                  className="rounded-[16px] border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white"
+                  className={modelInputClass}
                   value={editor.apiKey}
                   onChange={(event) =>
                     setEditor((current) => ({
@@ -658,12 +711,15 @@ export function SettingsModelsPage() {
                 />
               </>
             ) : (
-              <div className="grid gap-3 rounded-[20px] bg-white/[0.04] p-4">
-                <div className="text-sm text-white">
+              <div className={modelSoftPanelClass}>
+                <div className={modelTitleClass}>
                   OpenAI Codex uses the documented PKCE flow with the local
-                  callback at {settings.modelSettings.oauth.openAiCodex.callbackUrl}.
+                  callback at{" "}
+                  <span className="break-words [overflow-wrap:anywhere]">
+                    {settings.modelSettings.oauth.openAiCodex.callbackUrl}
+                  </span>
                 </div>
-                <div className="text-xs leading-5 text-white/52">
+                <div className={`text-xs leading-5 ${modelFaintClass}`}>
                   Start OAuth, finish the browser sign-in, then save the
                   resulting connection as a chat agent backed by the ChatGPT
                   Codex runtime.
@@ -695,19 +751,21 @@ export function SettingsModelsPage() {
                   ) : null}
                 </div>
                 {oauthSession ? (
-                  <div className="grid gap-2 rounded-[18px] bg-black/20 p-3 text-sm text-white/72">
+                  <div className="grid min-w-0 gap-2 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-code-bg)] p-3 text-sm text-[var(--ui-code-text)]">
                     <div>Status: {oauthSession.status}</div>
                     {oauthSession.accountLabel ? (
                       <div>Account: {oauthSession.accountLabel}</div>
                     ) : null}
                     {oauthSession.error ? (
-                      <div className="text-rose-200">{oauthSession.error}</div>
+                      <div className="text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]">
+                        {oauthSession.error}
+                      </div>
                     ) : null}
                   </div>
                 ) : null}
                 <div className="grid gap-2">
                   <input
-                    className="rounded-[16px] border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white"
+                    className={modelInputClass}
                     value={manualOauthCode}
                     onChange={(event) => setManualOauthCode(event.target.value)}
                     placeholder="Paste the authorization code or full redirect URL"
@@ -743,7 +801,7 @@ export function SettingsModelsPage() {
                     ? !editor.id
                     : editor.provider === "mock"
                       ? false
-                    : !editor.id && !editor.apiKey.trim()
+                      : !editor.id && !editor.apiKey.trim()
                 }
                 onClick={() => void testConnectionMutation.mutateAsync()}
               >
@@ -752,7 +810,9 @@ export function SettingsModelsPage() {
               </Button>
             </div>
             {feedback ? (
-              <div className="rounded-[18px] bg-white/[0.04] px-4 py-3 text-sm text-white/72">
+              <div
+                className={`rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3 text-sm ${modelBodyClass}`}
+              >
                 {feedback}
               </div>
             ) : null}
@@ -763,8 +823,8 @@ export function SettingsModelsPage() {
           <div className="flex items-center gap-3">
             <Bot className="size-4 text-[var(--secondary)]" />
             <div>
-              <div className="text-sm text-white">Connected agents</div>
-              <div className="text-xs leading-5 text-white/52">
+              <div className={modelTitleClass}>Connected agents</div>
+              <div className={`text-xs leading-5 ${modelFaintClass}`}>
                 Each connection registers its own chat-facing agent identity.
               </div>
             </div>
@@ -772,7 +832,7 @@ export function SettingsModelsPage() {
 
           <div className="grid gap-3">
             {connections.length === 0 ? (
-              <div className="rounded-[20px] border border-dashed border-white/10 bg-white/[0.02] px-4 py-5 text-sm leading-6 text-white/58">
+              <div className={modelEmptyClass}>
                 No external model connection yet. Add one with OAuth or API
                 credentials and Forge will expose it as a first-class agent.
               </div>
@@ -781,12 +841,16 @@ export function SettingsModelsPage() {
             {connections.map((connection) => (
               <div
                 key={connection.id}
-                className="grid gap-3 rounded-[20px] bg-white/[0.04] p-4"
+                className="grid min-w-0 gap-3 rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4"
               >
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="text-white">{connection.label}</div>
-                    <div className="mt-1 text-xs text-white/46">
+                    <div className="break-words text-[var(--ui-ink-strong)] [overflow-wrap:anywhere]">
+                      {connection.label}
+                    </div>
+                    <div
+                      className={`mt-1 break-words text-xs [overflow-wrap:anywhere] ${modelFaintClass}`}
+                    >
                       {connection.agentLabel} · {connection.provider} ·{" "}
                       {connection.model}
                     </div>
@@ -815,17 +879,17 @@ export function SettingsModelsPage() {
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Badge className="bg-white/[0.06] text-white/78">
+                  <Badge className={modelMetaBadgeClass}>
                     {connection.authMode === "oauth" ? "OAuth" : "API key"}
                   </Badge>
-                  <Badge className="bg-white/[0.06] text-white/78">
+                  <Badge className={modelMetaBadgeClass}>
                     {connection.status}
                   </Badge>
-                  <Badge className="bg-white/[0.06] text-white/78">
+                  <Badge className={modelMetaBadgeClass} wrap>
                     {connection.baseUrl}
                   </Badge>
                   {connection.accountLabel ? (
-                    <Badge className="bg-white/[0.06] text-white/78">
+                    <Badge className={modelMetaBadgeClass} wrap>
                       {connection.accountLabel}
                     </Badge>
                   ) : null}

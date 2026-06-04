@@ -372,22 +372,22 @@ function buildNodes(
       data: {
         label: (
           <div
-            className={`min-w-[206px] rounded-[22px] border px-4 py-4 shadow-[0_24px_60px_rgba(0,0,0,0.28)] transition ${
+            className={`min-w-[206px] rounded-[22px] border px-4 py-4 shadow-[var(--ui-shadow-soft)] transition ${
               isSelected
-                ? "border-[rgba(244,185,122,0.45)] bg-[rgba(27,16,10,0.92)]"
+                ? "border-[color-mix(in_srgb,var(--warning)_45%,var(--ui-border-subtle)_55%)] bg-[var(--ui-warning-soft)]"
                 : isHighlighted
-                  ? "border-white/18 bg-[rgba(14,20,34,0.94)]"
-                  : "border-white/10 bg-[rgba(9,15,28,0.92)]"
+                  ? "border-[color-mix(in_srgb,var(--primary)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-accent-soft)]"
+                  : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]"
             }`}
           >
             <div className="flex items-center justify-between gap-2">
               <UserBadge user={user} />
-              <Badge className="bg-white/[0.08] text-white/65">
-                {user.kind}
-              </Badge>
+              <Badge tone="meta">{user.kind}</Badge>
             </div>
-            <div className="mt-3 text-xs text-white/52">@{user.handle}</div>
-            <div className="mt-2 line-clamp-2 text-xs leading-5 text-white/46">
+            <div className="mt-3 text-xs text-[var(--ui-ink-soft)]">
+              @{user.handle}
+            </div>
+            <div className="mt-2 line-clamp-2 text-xs leading-5 text-[var(--ui-ink-faint)]">
               {user.description || "No user description yet."}
             </div>
           </div>
@@ -417,13 +417,13 @@ function buildEdges(
           grant.targetUserId === selectedUserId);
       const enabledCount = countEnabledRights(grant);
       const stroke = isSelected
-        ? "#f4b97a"
+        ? "var(--warning)"
         : !grant.config.rights.discoverable &&
             !grant.config.rights.canReadEntities
-          ? "rgba(248,113,113,0.55)"
+          ? "var(--danger)"
           : touchesSelectedUser
-            ? "rgba(192,193,255,0.78)"
-            : "rgba(255,255,255,0.32)";
+            ? "var(--primary)"
+            : "var(--ui-border-strong)";
       return {
         id: grant.id,
         source: grant.subjectUserId,
@@ -434,15 +434,15 @@ function buildEdges(
           color: stroke
         },
         labelStyle: {
-          fill: isSelected ? "#f4b97a" : "rgba(255,255,255,0.68)",
+          fill: isSelected ? "var(--warning)" : "var(--ui-ink-medium)",
           fontSize: 11,
           fontWeight: 600
         },
         labelBgStyle: {
-          fill: isSelected ? "rgba(34,23,16,0.96)" : "rgba(8,13,24,0.94)",
+          fill: isSelected ? "var(--ui-warning-soft)" : "var(--ui-surface-1)",
           stroke: isSelected
-            ? "rgba(244,185,122,0.36)"
-            : "rgba(255,255,255,0.14)",
+            ? "color-mix(in_srgb,var(--warning)_36%,var(--ui-border-subtle)_64%)"
+            : "var(--ui-border-subtle)",
           strokeWidth: 1
         },
         labelBgPadding: [7, 5] as [number, number],
@@ -500,11 +500,11 @@ export function UserRelationshipGraph({
 
   return (
     <Card className="overflow-hidden p-0">
-      <div className="grid gap-4 border-b border-white/8 px-5 py-4">
+      <div className="grid gap-4 border-b border-[var(--ui-border-subtle)] px-5 py-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="max-w-3xl">
             <div className="flex items-center gap-2">
-              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                 Directed relationship graph
               </div>
               <InfoTooltip
@@ -512,60 +512,64 @@ export function UserRelationshipGraph({
                 label="Explain the shared runtime rule"
               />
             </div>
-            <div className="mt-2 text-sm leading-6 text-white/58">
+            <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
               Click a user card to open that user&apos;s settings. Click any
               arrow to open the exact directional relationship flow for that
               lane.
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Badge className="bg-white/[0.08] text-white/70">
-              {directionalGrants.length} edges
-            </Badge>
-            <Badge className="bg-emerald-500/12 text-emerald-200">
+            <Badge tone="meta">{directionalGrants.length} edges</Badge>
+            <Badge className="bg-[var(--ui-success-soft)] text-[var(--success)]">
               {fullyOpenEdges} fully open
             </Badge>
           </div>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
-            <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
+          <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3">
+            <div className="font-label text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
               Full collaboration
             </div>
-            <div className="mt-2 text-lg text-white">{fullyOpenEdges}</div>
-            <div className="text-xs leading-5 text-white/48">
+            <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
+              {fullyOpenEdges}
+            </div>
+            <div className="text-xs leading-5 text-[var(--ui-ink-faint)]">
               Directions still running with the default fully open posture.
             </div>
           </div>
-          <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
-            <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
+          <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3">
+            <div className="font-label text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
               Coordination lanes
             </div>
-            <div className="mt-2 text-lg text-white">{coordinationEdges}</div>
-            <div className="text-xs leading-5 text-white/48">
+            <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
+              {coordinationEdges}
+            </div>
+            <div className="text-xs leading-5 text-[var(--ui-ink-faint)]">
               Directions allowed to coordinate directly through Forge.
             </div>
           </div>
-          <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
-            <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
+          <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3">
+            <div className="font-label text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
               Execution control
             </div>
-            <div className="mt-2 text-lg text-white">{executionEdges}</div>
-            <div className="text-xs leading-5 text-white/48">
+            <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
+              {executionEdges}
+            </div>
+            <div className="text-xs leading-5 text-[var(--ui-ink-faint)]">
               Directions allowed to create or mutate target-owned work.
             </div>
           </div>
         </div>
       </div>
 
-      <div className="h-[min(72vh,54rem)] min-h-[34rem] bg-[radial-gradient(circle_at_top,rgba(244,185,122,0.08),transparent_34%),linear-gradient(180deg,rgba(6,10,20,0.97),rgba(8,14,26,0.94))]">
+      <div className="h-[clamp(26rem,58vh,42rem)] bg-[linear-gradient(180deg,var(--ui-surface-2),var(--ui-surface-1))] sm:h-[min(72vh,54rem)] sm:min-h-[34rem]">
         <ReactFlow
           className="user-relationship-flow"
           nodes={nodes}
           edges={edges}
           fitView
-          fitViewOptions={{ padding: 0.18, maxZoom: 0.95 }}
+          fitViewOptions={{ padding: 0.1, maxZoom: 0.95 }}
           nodesDraggable={false}
           nodesConnectable={false}
           elementsSelectable
@@ -578,7 +582,7 @@ export function UserRelationshipGraph({
           attributionPosition="bottom-left"
         >
           <Controls showInteractive={false} />
-          <Background gap={28} size={1} color="rgba(255,255,255,0.06)" />
+          <Background gap={28} size={1} color="var(--ui-border-subtle)" />
         </ReactFlow>
       </div>
     </Card>

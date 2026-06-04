@@ -59,39 +59,39 @@ const STAGE_META: Record<
 > = {
   awake: {
     label: "Awake",
-    strong: "rgba(251, 191, 36, 0.95)",
-    soft: "rgba(251, 191, 36, 0.16)",
-    text: "text-amber-200"
+    strong: "var(--warning)",
+    soft: "var(--ui-warning-soft)",
+    text: "text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]"
   },
   core: {
     label: "Core",
-    strong: "rgba(165, 180, 252, 0.96)",
-    soft: "rgba(165, 180, 252, 0.18)",
-    text: "text-indigo-100"
+    strong: "var(--primary)",
+    soft: "var(--ui-accent-soft)",
+    text: "text-[color-mix(in_srgb,var(--primary)_78%,var(--ui-ink-strong)_22%)]"
   },
   deep: {
     label: "Deep",
-    strong: "rgba(45, 212, 191, 0.96)",
-    soft: "rgba(45, 212, 191, 0.18)",
-    text: "text-teal-100"
+    strong: "var(--success)",
+    soft: "var(--ui-success-soft)",
+    text: "text-[color-mix(in_srgb,var(--success)_78%,var(--ui-ink-strong)_22%)]"
   },
   rem: {
     label: "REM",
-    strong: "rgba(96, 165, 250, 0.96)",
-    soft: "rgba(96, 165, 250, 0.18)",
-    text: "text-sky-100"
+    strong: "var(--info)",
+    soft: "var(--ui-info-soft)",
+    text: "text-[color-mix(in_srgb,var(--info)_78%,var(--ui-ink-strong)_22%)]"
   },
   in_bed: {
     label: "In bed",
-    strong: "rgba(255, 255, 255, 0.4)",
-    soft: "rgba(255, 255, 255, 0.1)",
-    text: "text-white/72"
+    strong: "color-mix(in_srgb,var(--ui-ink-strong)_46%,transparent)",
+    soft: "var(--ui-surface-3)",
+    text: "text-[var(--ui-ink-medium)]"
   },
   asleep_unspecified: {
     label: "Asleep",
-    strong: "rgba(196, 181, 253, 0.96)",
-    soft: "rgba(196, 181, 253, 0.16)",
-    text: "text-violet-100"
+    strong: "var(--primary)",
+    soft: "var(--ui-accent-soft)",
+    text: "text-[color-mix(in_srgb,var(--primary)_78%,var(--ui-ink-strong)_22%)]"
   }
 };
 
@@ -231,38 +231,38 @@ function buildMonthGrid(monthKey: string, days: SleepCalendarDay[]) {
 
 function percentChangeTone(value: number) {
   if (value > 0) {
-    return "text-emerald-200";
+    return "text-[color-mix(in_srgb,var(--success)_78%,var(--ui-ink-strong)_22%)]";
   }
   if (value < 0) {
-    return "text-rose-200";
+    return "text-[color-mix(in_srgb,var(--danger)_78%,var(--ui-ink-strong)_22%)]";
   }
-  return "text-white/70";
+  return "text-[var(--ui-ink-medium)]";
 }
 
 function summaryBadgeTone(state: string | null) {
   if (state === "recharged" || state === "recovered") {
-    return "bg-emerald-400/16 text-emerald-100";
+    return "bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_78%,var(--ui-ink-strong)_22%)]";
   }
   if (state === "steady" || state === "stable") {
-    return "bg-sky-400/16 text-sky-100";
+    return "bg-[var(--ui-info-soft)] text-[color-mix(in_srgb,var(--info)_78%,var(--ui-ink-strong)_22%)]";
   }
   if (state === "fragile" || state === "strained") {
-    return "bg-amber-400/16 text-amber-100";
+    return "bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]";
   }
   if (state === "depleted") {
-    return "bg-rose-400/16 text-rose-100";
+    return "bg-[var(--ui-danger-soft)] text-[color-mix(in_srgb,var(--danger)_78%,var(--ui-ink-strong)_22%)]";
   }
-  return "bg-white/10 text-white/76";
+  return "bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]";
 }
 
 function rawStatusTone(status: SleepSessionDetailPayload["rawDataStatus"]) {
   if (status === "provider_raw") {
-    return "bg-emerald-400/16 text-emerald-100";
+    return "bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_78%,var(--ui-ink-strong)_22%)]";
   }
   if (status === "historical_raw") {
-    return "bg-amber-400/16 text-amber-100";
+    return "bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]";
   }
-  return "bg-white/10 text-white/70";
+  return "bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]";
 }
 
 function rawStatusLabel(status: SleepSessionDetailPayload["rawDataStatus"]) {
@@ -277,8 +277,8 @@ function rawStatusLabel(status: SleepSessionDetailPayload["rawDataStatus"]) {
 
 function sourceRecordTone(record: SleepSourceRecord) {
   return record.qualityKind === "provider_native"
-    ? "bg-emerald-400/16 text-emerald-100"
-    : "bg-amber-400/16 text-amber-100";
+    ? "bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_78%,var(--ui-ink-strong)_22%)]"
+    : "bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]";
 }
 
 type LegacySleepSessionDetailPayload = SleepSessionDetailPayload & {
@@ -366,14 +366,14 @@ function StageDistributionBar({
   const totalSeconds = stages.reduce((sum, stage) => sum + stage.seconds, 0);
   if (stages.length === 0 || totalSeconds === 0) {
     return (
-      <div className="rounded-[18px] border border-dashed border-white/10 bg-black/10 px-4 py-4 text-sm text-white/52">
+      <div className="rounded-[18px] border border-dashed border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4 text-sm text-[var(--ui-ink-muted)]">
         No stage composition was stored for this night yet.
       </div>
     );
   }
   return (
     <div className="grid gap-3">
-      <div className="flex h-3 overflow-hidden rounded-full bg-white/[0.08]">
+      <div className="flex h-3 overflow-hidden rounded-full bg-[var(--ui-surface-2)]">
         {stages.map((stage) => {
           const meta = stageMeta(stage.stage);
           return (
@@ -401,14 +401,14 @@ function StageDistributionBar({
           return (
             <div
               key={stage.stage}
-              className="rounded-[16px] border border-white/8 px-3 py-3"
+              className="rounded-[16px] border border-[var(--ui-border-subtle)] px-3 py-3"
               style={{ background: meta.soft }}
             >
               <div className={cn("text-sm font-medium", meta.text)}>{meta.label}</div>
-              <div className="mt-1 text-lg text-white">
+              <div className="mt-1 text-lg text-[var(--ui-ink-strong)]">
                 {formatDurationCompact(stage.seconds)}
               </div>
-              <div className="text-xs text-white/54">{formatPercent(ratio)}</div>
+              <div className="text-xs text-[var(--ui-ink-muted)]">{formatPercent(ratio)}</div>
             </div>
           );
         })}
@@ -427,8 +427,8 @@ function TimelineRail({
   onSelect: (blockId: string) => void;
 }) {
   return (
-    <div className="relative h-12 overflow-hidden rounded-[18px] border border-white/8 bg-black/20">
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.06)_1px,transparent_1px)] bg-[length:25%_100%]" />
+    <div className="relative h-12 overflow-hidden rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]">
+      <div className="pointer-events-none absolute inset-0 bg-[image:var(--ui-surface-section)] bg-[length:25%_100%]" />
       {blocks.map((block) => {
         const meta = stageMeta(block.stage);
         const isSelected = selectedBlockId === block.id;
@@ -439,7 +439,9 @@ function TimelineRail({
             onClick={() => onSelect(block.id)}
             className={cn(
               "absolute inset-y-[5px] rounded-[12px] border transition",
-              isSelected ? "border-white/60 shadow-[0_0_0_1px_rgba(255,255,255,0.18)]" : "border-white/10"
+              isSelected
+                ? "border-[var(--ui-border-strong)] shadow-[var(--ui-shadow-soft)]"
+                : "border-[var(--ui-border-subtle)]"
             )}
             style={{
               left: `${block.offsetRatio * 100}%`,
@@ -449,7 +451,7 @@ function TimelineRail({
             title={`${block.label} · ${formatDurationCompact(block.durationSeconds)} · ${block.startedAt} - ${block.endedAt}`}
           >
             {block.widthRatio > 0.13 ? (
-              <span className="truncate px-2 text-[10px] font-medium text-slate-950/85">
+              <span className="truncate px-2 text-[10px] font-medium text-[var(--ui-ink-on-accent)]">
                 {block.label}
               </span>
             ) : null}
@@ -488,7 +490,7 @@ function SleepPhaseTimeline({
 
   if (!timeline.hasRawSegments) {
     return (
-      <div className="rounded-[18px] border border-dashed border-white/10 bg-black/10 px-4 py-5 text-sm text-white/56">
+      <div className="rounded-[18px] border border-dashed border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-5 text-sm text-[var(--ui-ink-muted)]">
         Phase timing is unavailable for this night. Forge still keeps the canonical overnight summary, but the companion did not store segment-level timing.
       </div>
     );
@@ -499,7 +501,7 @@ function SleepPhaseTimeline({
       <div className="grid gap-3">
         {inBedBlocks.length > 0 ? (
           <div className="grid gap-2">
-            <div className="text-xs uppercase tracking-[0.18em] text-white/40">
+            <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
               In bed window
             </div>
             <TimelineRail
@@ -510,7 +512,7 @@ function SleepPhaseTimeline({
           </div>
         ) : null}
         <div className="grid gap-2">
-          <div className="text-xs uppercase tracking-[0.18em] text-white/40">
+          <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
             {timeline.hasSleepStageData ? "Sleep phases" : "Recorded sleep coverage"}
           </div>
           <TimelineRail
@@ -521,20 +523,20 @@ function SleepPhaseTimeline({
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-3 text-xs text-white/48">
+      <div className="flex items-center justify-between gap-3 text-xs text-[var(--ui-ink-muted)]">
         <span>{formatClockInZone(timeline.startedAt, timeZone)}</span>
         <span>{formatDurationCompact(timeline.totalSeconds)}</span>
         <span>{formatClockInZone(timeline.endedAt, timeZone)}</span>
       </div>
 
       {selectedBlock ? (
-        <div className="rounded-[18px] border border-white/8 bg-white/[0.03] px-4 py-4">
+        <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className={cn("text-sm font-medium", stageMeta(selectedBlock.stage).text)}>
                 {selectedBlock.label}
               </div>
-              <div className="mt-1 text-sm text-white/58">
+              <div className="mt-1 text-sm text-[var(--ui-ink-muted)]">
                 {formatClockInZone(selectedBlock.startedAt, timeZone)} -{" "}
                 {formatClockInZone(selectedBlock.endedAt, timeZone)}
               </div>
@@ -555,9 +557,9 @@ function LastNightHero({
   if (!latestNight) {
     return (
       <Card className="overflow-hidden p-6">
-        <div className="text-sm uppercase tracking-[0.18em] text-white/42">Sleep</div>
-        <div className="mt-4 text-2xl text-white">No overnight sleep yet</div>
-        <div className="mt-3 max-w-2xl text-sm leading-6 text-white/58">
+        <div className="text-sm uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">Sleep</div>
+        <div className="mt-4 text-2xl text-[var(--ui-ink-strong)]">No overnight sleep yet</div>
+        <div className="mt-3 max-w-2xl text-sm leading-6 text-[var(--ui-ink-muted)]">
           The sleep page will switch to a night-first summary once the companion syncs a canonical overnight session.
         </div>
       </Card>
@@ -565,13 +567,13 @@ function LastNightHero({
   }
 
   return (
-    <Card className="overflow-hidden border-white/8 bg-[linear-gradient(135deg,rgba(7,17,40,0.96),rgba(16,24,54,0.94))] p-0">
+    <Card className="overflow-hidden border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-section)] p-0">
       <div className="relative overflow-hidden px-6 py-6 sm:px-7 sm:py-7">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(96,165,250,0.22),transparent_36%),radial-gradient(circle_at_bottom_left,rgba(45,212,191,0.14),transparent_34%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-[image:var(--ui-surface-section)]" />
         <div className="relative grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
           <div className="grid gap-5">
             <div className="flex flex-wrap items-center gap-3">
-              <Badge className={cn("border-white/0", summaryBadgeTone(latestNight.recoveryState))}>
+              <Badge className={cn("border-transparent", summaryBadgeTone(latestNight.recoveryState))}>
                 {latestNight.qualitativeState}
               </Badge>
               <Badge tone="meta">{latestNight.sourceTimezone}</Badge>
@@ -584,100 +586,100 @@ function LastNightHero({
             </div>
 
             <div>
-              <div className="text-[11px] uppercase tracking-[0.2em] text-white/42">
+              <div className="text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-muted)]">
                 Last night
               </div>
               <div className="mt-3 flex flex-wrap items-end gap-x-4 gap-y-2">
-                <div className="text-[clamp(2.5rem,6vw,5rem)] font-medium leading-none text-white">
+                <div className="text-[clamp(2.5rem,6vw,5rem)] font-medium leading-none text-[var(--ui-ink-strong)]">
                   {formatDurationCompact(latestNight.asleepSeconds)}
                 </div>
-                <div className="pb-2 text-sm text-white/58">
+                <div className="pb-2 text-sm text-[var(--ui-ink-muted)]">
                   asleep across {formatSleepWindow(latestNight.startedAt, latestNight.endedAt, latestNight.sourceTimezone)}
                 </div>
               </div>
-              <div className="mt-3 text-sm text-white/64">
+              <div className="mt-3 text-sm text-[var(--ui-ink-medium)]">
                 {formatDateLabel(latestNight.endedAt, latestNight.sourceTimezone)}
               </div>
               {latestNight.qualitySummary ? (
-                <div className="mt-4 max-w-2xl text-sm leading-6 text-white/72">
+                <div className="mt-4 max-w-2xl text-sm leading-6 text-[var(--ui-ink-medium)]">
                   {latestNight.qualitySummary}
                 </div>
               ) : (
-                <div className="mt-4 max-w-2xl text-sm leading-6 text-white/56">
+                <div className="mt-4 max-w-2xl text-sm leading-6 text-[var(--ui-ink-muted)]">
                   Canonical overnight summary computed from synced sleep segments, with raw evidence still available underneath.
                 </div>
               )}
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-[18px] border border-white/8 bg-black/20 px-4 py-4">
-                <div className="text-xs uppercase tracking-[0.18em] text-white/40">In bed</div>
-                <div className="mt-2 text-xl text-white">
+              <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4">
+                <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">In bed</div>
+                <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">
                   {formatDurationCompact(latestNight.timeInBedSeconds)}
                 </div>
               </div>
-              <div className="rounded-[18px] border border-white/8 bg-black/20 px-4 py-4">
-                <div className="text-xs uppercase tracking-[0.18em] text-white/40">Score</div>
-                <div className="mt-2 text-xl text-white">{latestNight.score ?? "n/a"}</div>
+              <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4">
+                <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">Score</div>
+                <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">{latestNight.score ?? "n/a"}</div>
               </div>
-              <div className="rounded-[18px] border border-white/8 bg-black/20 px-4 py-4">
-                <div className="text-xs uppercase tracking-[0.18em] text-white/40">Regularity</div>
-                <div className="mt-2 text-xl text-white">{latestNight.regularity ?? "n/a"}</div>
+              <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4">
+                <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">Regularity</div>
+                <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">{latestNight.regularity ?? "n/a"}</div>
               </div>
-              <div className="rounded-[18px] border border-white/8 bg-black/20 px-4 py-4">
-                <div className="text-xs uppercase tracking-[0.18em] text-white/40">Efficiency</div>
-                <div className="mt-2 text-xl text-white">{formatPercent(latestNight.efficiency)}</div>
+              <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4">
+                <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">Efficiency</div>
+                <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">{formatPercent(latestNight.efficiency)}</div>
               </div>
             </div>
           </div>
 
           <div className="grid gap-4">
-            <div className="rounded-[22px] border border-white/8 bg-black/20 px-5 py-5">
+            <div className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-5 py-5">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-xs uppercase tracking-[0.18em] text-white/40">
+                  <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                     Baseline
                   </div>
-                  <div className="mt-2 text-lg text-white">Compared with recent nights</div>
+                  <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">Compared with recent nights</div>
                 </div>
                 <MoonStar className="size-5 text-[var(--primary)]" />
               </div>
               <div className="mt-4 grid gap-3">
-                <div className="flex items-center justify-between gap-3 rounded-[16px] bg-white/[0.04] px-4 py-3">
-                  <span className="text-sm text-white/60">7-night average</span>
-                  <span className="text-sm text-white">
+                <div className="flex items-center justify-between gap-3 rounded-[16px] bg-[var(--ui-surface-2)] px-4 py-3">
+                  <span className="text-sm text-[var(--ui-ink-medium)]">7-night average</span>
+                  <span className="text-sm text-[var(--ui-ink-strong)]">
                     {formatDurationCompact(latestNight.weeklyAverageSleepSeconds)}
                   </span>
                 </div>
-                <div className="flex items-center justify-between gap-3 rounded-[16px] bg-white/[0.04] px-4 py-3">
-                  <span className="text-sm text-white/60">Versus baseline</span>
+                <div className="flex items-center justify-between gap-3 rounded-[16px] bg-[var(--ui-surface-2)] px-4 py-3">
+                  <span className="text-sm text-[var(--ui-ink-medium)]">Versus baseline</span>
                   <span className={cn("text-sm", percentChangeTone(latestNight.deltaFromWeeklyAverageSeconds))}>
                     {formatSignedMinutesFromSeconds(latestNight.deltaFromWeeklyAverageSeconds)}
                   </span>
                 </div>
-                <div className="flex items-center justify-between gap-3 rounded-[16px] bg-white/[0.04] px-4 py-3">
-                  <span className="text-sm text-white/60">Bedtime drift</span>
-                  <span className="text-sm text-white">
+                <div className="flex items-center justify-between gap-3 rounded-[16px] bg-[var(--ui-surface-2)] px-4 py-3">
+                  <span className="text-sm text-[var(--ui-ink-medium)]">Bedtime drift</span>
+                  <span className="text-sm text-[var(--ui-ink-strong)]">
                     {latestNight.bedtimeDriftMinutes ?? 0}m
                   </span>
                 </div>
-                <div className="flex items-center justify-between gap-3 rounded-[16px] bg-white/[0.04] px-4 py-3">
-                  <span className="text-sm text-white/60">Wake drift</span>
-                  <span className="text-sm text-white">
+                <div className="flex items-center justify-between gap-3 rounded-[16px] bg-[var(--ui-surface-2)] px-4 py-3">
+                  <span className="text-sm text-[var(--ui-ink-medium)]">Wake drift</span>
+                  <span className="text-sm text-[var(--ui-ink-strong)]">
                     {latestNight.wakeDriftMinutes ?? 0}m
                   </span>
                 </div>
-                <div className="flex items-center justify-between gap-3 rounded-[16px] bg-white/[0.04] px-4 py-3">
-                  <span className="text-sm text-white/60">Restorative share</span>
-                  <span className="text-sm text-white">
+                <div className="flex items-center justify-between gap-3 rounded-[16px] bg-[var(--ui-surface-2)] px-4 py-3">
+                  <span className="text-sm text-[var(--ui-ink-medium)]">Restorative share</span>
+                  <span className="text-sm text-[var(--ui-ink-strong)]">
                     {formatPercent(latestNight.restorativeShare)}
                   </span>
                 </div>
               </div>
             </div>
 
-            <div className="rounded-[22px] border border-white/8 bg-black/20 px-5 py-5">
-              <div className="text-xs uppercase tracking-[0.18em] text-white/40">
+            <div className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-5 py-5">
+              <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                 Stage composition
               </div>
               <div className="mt-4">
@@ -701,10 +703,10 @@ function WeekBaselineCard({
   description: string;
 }) {
   return (
-    <Card className="h-full border-white/8 bg-white/[0.03]">
-      <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">{title}</div>
-      <div className="mt-3 text-3xl text-white">{value}</div>
-      <div className="mt-3 text-sm leading-6 text-white/56">{description}</div>
+    <Card className="h-full border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]">
+      <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">{title}</div>
+      <div className="mt-3 text-3xl text-[var(--ui-ink-strong)]">{value}</div>
+      <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-muted)]">{description}</div>
     </Card>
   );
 }
@@ -742,21 +744,21 @@ function SleepCalendar({
 
   if (!monthKey) {
     return (
-      <Card className="border-white/8 bg-white/[0.03] px-5 py-8 text-sm leading-6 text-white/56">
+      <Card className="border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-5 py-8 text-sm leading-6 text-[var(--ui-ink-muted)]">
         No canonical nights are available for the calendar yet.
       </Card>
     );
   }
 
   return (
-    <Card className="overflow-hidden border-white/8 bg-[linear-gradient(180deg,rgba(10,17,33,0.98),rgba(12,20,40,0.96))] p-0">
+    <Card className="overflow-hidden border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-section)] p-0">
       <div className="grid gap-5 px-5 py-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
               Sleep calendar
             </div>
-            <div className="mt-2 text-xl text-white">{formatMonthLabel(monthKey)}</div>
+            <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">{formatMonthLabel(monthKey)}</div>
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -784,7 +786,7 @@ function SleepCalendar({
           </div>
         </div>
 
-        <div className="grid grid-cols-7 gap-2 text-center text-[11px] uppercase tracking-[0.16em] text-white/38">
+        <div className="grid grid-cols-7 gap-2 text-center text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-muted)]">
           {WEEKDAY_LABELS.map((label) => (
             <div key={label}>{label}</div>
           ))}
@@ -797,11 +799,11 @@ function SleepCalendar({
             const scoreTone =
               sleep && typeof sleep.score === "number"
                 ? sleep.score >= 80
-                  ? "rgba(45,212,191,0.22)"
+                  ? "var(--ui-success-soft)"
                   : sleep.score >= 65
-                    ? "rgba(96,165,250,0.22)"
-                    : "rgba(251,191,36,0.18)"
-                : "rgba(255,255,255,0.04)";
+                    ? "var(--ui-info-soft)"
+                    : "var(--ui-warning-soft)"
+                : "var(--ui-surface-2)";
             return (
               <button
                 key={cell.dateKey}
@@ -819,26 +821,26 @@ function SleepCalendar({
                 className={cn(
                   "min-h-[90px] rounded-[18px] border px-2 py-2 text-left transition",
                   sleep
-                    ? "border-white/10 hover:border-white/22 hover:bg-white/[0.05]"
-                    : "border-white/6 bg-white/[0.02]",
+                    ? "border-[var(--ui-border-subtle)] hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-3)]"
+                    : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]",
                   isSelected && "border-[var(--primary)] bg-[var(--primary)]/12",
                   cell.outsideMonth && !sleep && "opacity-35"
                 )}
-                style={sleep ? { background: `linear-gradient(180deg, ${scoreTone}, rgba(255,255,255,0.03))` } : undefined}
+                style={sleep ? { background: scoreTone } : undefined}
               >
                 <div className="flex items-start justify-between gap-2">
-                  <span className={cn("text-sm", cell.outsideMonth ? "text-white/40" : "text-white/82")}>
+                  <span className={cn("text-sm", cell.outsideMonth ? "text-[var(--ui-ink-muted)]" : "text-[var(--ui-ink-medium)]")}>
                     {cell.dayNumber}
                   </span>
-                  {sleep?.hasReflection ? <span className="size-2 rounded-full bg-emerald-300" /> : null}
+                  {sleep?.hasReflection ? <span className="size-2 rounded-full bg-[var(--success)]" /> : null}
                 </div>
                 {sleep ? (
                   <div className="mt-4 grid gap-1">
-                    <div className="text-lg text-white">{sleep.sleepHours.toFixed(1)}h</div>
-                    <div className="text-xs text-white/52">
+                    <div className="text-lg text-[var(--ui-ink-strong)]">{sleep.sleepHours.toFixed(1)}h</div>
+                    <div className="text-xs text-[var(--ui-ink-muted)]">
                       {sleep.score ?? "n/a"} score
                     </div>
-                    <div className="text-xs text-white/40">
+                    <div className="text-xs text-[var(--ui-ink-muted)]">
                       {sleep.hasRawSegments ? "phases available" : "summary only"}
                     </div>
                   </div>
@@ -868,8 +870,8 @@ function DetailTabButton({
       className={cn(
         "rounded-full border px-4 py-2 text-sm transition",
         active
-          ? "border-[var(--primary)] bg-[var(--primary)]/12 text-white"
-          : "border-white/8 bg-white/[0.03] text-white/60 hover:text-white"
+          ? "border-[var(--primary)] bg-[var(--primary)]/12 text-[var(--ui-ink-strong)]"
+          : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)] hover:text-[var(--ui-ink-strong)]"
       )}
     >
       {children}
@@ -918,56 +920,56 @@ function SleepDetailPanel({
       : null;
 
   return (
-    <Card className="overflow-hidden border-white/8 bg-[linear-gradient(180deg,rgba(10,17,33,0.98),rgba(13,20,38,0.96))] p-0">
+    <Card className="overflow-hidden border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-section)] p-0">
       <div className="grid gap-5 px-5 py-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge className={cn("border-white/0", summaryBadgeTone(recoveryState))}>
+              <Badge className={cn("border-transparent", summaryBadgeTone(recoveryState))}>
                 {recoveryState ? recoveryState.replaceAll("_", " ") : "Canonical night"}
               </Badge>
               <Badge tone="meta">{session.rawSegmentCount} raw segments</Badge>
               <Badge tone="meta">{session.sourceTimezone}</Badge>
             </div>
-            <div className="mt-3 text-[11px] uppercase tracking-[0.18em] text-white/42">
+            <div className="mt-3 text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
               Selected night
             </div>
-            <div className="mt-2 text-2xl text-white">
+            <div className="mt-2 text-2xl text-[var(--ui-ink-strong)]">
               {formatDateLabel(session.endedAt, session.sourceTimezone)}
             </div>
-            <div className="mt-2 text-sm text-white/56">
+            <div className="mt-2 text-sm text-[var(--ui-ink-muted)]">
               {formatSleepWindow(session.startedAt, session.endedAt, session.sourceTimezone)}
             </div>
           </div>
           <div className="grid gap-2 text-right">
-            <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
               Summary
             </div>
-            <div className="text-3xl text-white">{formatDurationCompact(session.asleepSeconds)}</div>
-            <div className="text-sm text-white/54">asleep</div>
+            <div className="text-3xl text-[var(--ui-ink-strong)]">{formatDurationCompact(session.asleepSeconds)}</div>
+            <div className="text-sm text-[var(--ui-ink-muted)]">asleep</div>
           </div>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-[18px] border border-white/8 bg-white/[0.03] px-4 py-4">
-            <div className="text-xs uppercase tracking-[0.18em] text-white/40">In bed</div>
-            <div className="mt-2 text-xl text-white">
+          <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4">
+            <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">In bed</div>
+            <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">
               {formatDurationCompact(session.timeInBedSeconds)}
             </div>
           </div>
-          <div className="rounded-[18px] border border-white/8 bg-white/[0.03] px-4 py-4">
-            <div className="text-xs uppercase tracking-[0.18em] text-white/40">Awake</div>
-            <div className="mt-2 text-xl text-white">
+          <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4">
+            <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">Awake</div>
+            <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">
               {formatDurationCompact(session.awakeSeconds)}
             </div>
           </div>
-          <div className="rounded-[18px] border border-white/8 bg-white/[0.03] px-4 py-4">
-            <div className="text-xs uppercase tracking-[0.18em] text-white/40">Efficiency</div>
-            <div className="mt-2 text-xl text-white">{formatPercent(efficiency)}</div>
+          <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4">
+            <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">Efficiency</div>
+            <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">{formatPercent(efficiency)}</div>
           </div>
-          <div className="rounded-[18px] border border-white/8 bg-white/[0.03] px-4 py-4">
-            <div className="text-xs uppercase tracking-[0.18em] text-white/40">Restorative</div>
-            <div className="mt-2 text-xl text-white">{formatPercent(restorativeShare)}</div>
+          <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4">
+            <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">Restorative</div>
+            <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">{formatPercent(restorativeShare)}</div>
           </div>
         </div>
 
@@ -988,13 +990,13 @@ function SleepDetailPanel({
 
         {tab === "summary" ? (
           <div className="grid gap-5">
-            <div className="rounded-[22px] border border-white/8 bg-black/18 px-4 py-4">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
+            <div className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                 Phase timeline
               </div>
               <div className="mt-4">
                 {rawDetailLoading ? (
-                  <div className="rounded-[18px] border border-white/8 bg-white/[0.03] px-4 py-6 text-sm text-white/56">
+                  <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-6 text-sm text-[var(--ui-ink-muted)]">
                     Loading phase timing from raw sleep segments…
                   </div>
                 ) : (
@@ -1022,8 +1024,8 @@ function SleepDetailPanel({
               </div>
             </div>
 
-            <div className="rounded-[22px] border border-white/8 bg-black/18 px-4 py-4">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
+            <div className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                 Stage composition
               </div>
               <div className="mt-4">
@@ -1036,7 +1038,7 @@ function SleepDetailPanel({
         {tab === "reflection" ? (
           <div className="grid gap-4">
             <label className="grid gap-2">
-              <span className="text-sm text-white/58">Quality summary</span>
+              <span className="text-sm text-[var(--ui-ink-muted)]">Quality summary</span>
               <Input
                 value={draft.qualitySummary}
                 onChange={(event) =>
@@ -1046,7 +1048,7 @@ function SleepDetailPanel({
               />
             </label>
             <label className="grid gap-2">
-              <span className="text-sm text-white/58">Night notes</span>
+              <span className="text-sm text-[var(--ui-ink-muted)]">Night notes</span>
               <Textarea
                 className="min-h-[200px]"
                 value={draft.notes}
@@ -1055,7 +1057,7 @@ function SleepDetailPanel({
               />
             </label>
             <label className="grid gap-2">
-              <span className="text-sm text-white/58">Tags</span>
+              <span className="text-sm text-[var(--ui-ink-muted)]">Tags</span>
               <Input
                 value={draft.tagsText}
                 onChange={(event) => onDraftChange({ tagsText: event.target.value })}
@@ -1063,7 +1065,7 @@ function SleepDetailPanel({
               />
             </label>
             <div className="grid gap-2">
-              <span className="text-sm text-white/58">Linked context</span>
+              <span className="text-sm text-[var(--ui-ink-muted)]">Linked context</span>
               <EntityLinkMultiSelect
                 options={linkOptions}
                 selectedValues={draft.linkValues}
@@ -1082,18 +1084,18 @@ function SleepDetailPanel({
 
         {tab === "raw" ? (
           <div className="grid gap-5">
-            <div className="rounded-[18px] border border-white/8 bg-white/[0.03] px-4 py-4 text-sm leading-6 text-white/56">
+            <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4 text-sm leading-6 text-[var(--ui-ink-muted)]">
               Forge shows the canonical overnight session by default. This view reveals the evidence stack underneath it: raw provider or historical imported records first, then Forge-normalized sleep segments.
             </div>
 
             {rawDetailLoading ? (
-              <div className="text-sm text-white/56">Loading raw sleep evidence…</div>
+              <div className="text-sm text-[var(--ui-ink-muted)]">Loading raw sleep evidence…</div>
             ) : null}
 
             {!rawDetailLoading ? (
               <div className="grid gap-5">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge className={cn("border-white/0", rawStatusTone(normalizedRawDetail.rawDataStatus))}>
+                  <Badge className={cn("border-transparent", rawStatusTone(normalizedRawDetail.rawDataStatus))}>
                     {rawStatusLabel(normalizedRawDetail.rawDataStatus)}
                   </Badge>
                   {normalizedRawDetail.rawDataStatus === "historical_raw" ? (
@@ -1102,18 +1104,18 @@ function SleepDetailPanel({
                 </div>
 
                 <div className="grid gap-3">
-                  <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                     Raw data
                   </div>
                   {normalizedRawDetail.sourceRecords.length ? (
                     normalizedRawDetail.sourceRecords.map((record) => (
                       <div
                         key={record.id}
-                        className="rounded-[16px] border border-white/8 bg-black/18 px-4 py-3"
+                        className="rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3"
                       >
                         <div className="flex flex-wrap items-center justify-between gap-3">
                           <div className="flex flex-wrap items-center gap-2">
-                            <Badge className={cn("border-white/0", sourceRecordTone(record))}>
+                            <Badge className={cn("border-transparent", sourceRecordTone(record))}>
                               {record.qualityKind === "provider_native"
                                 ? "Provider raw"
                                 : "Historical raw"}
@@ -1121,7 +1123,7 @@ function SleepDetailPanel({
                             <Badge tone="meta" className="capitalize">
                               {record.rawStage.replaceAll("_", " ")}
                             </Badge>
-                            <span className="text-sm text-white/64">
+                            <span className="text-sm text-[var(--ui-ink-medium)]">
                               {formatSleepWindow(
                                 record.startedAt,
                                 record.endedAt,
@@ -1130,7 +1132,7 @@ function SleepDetailPanel({
                             </span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-xs text-white/42">
+                            <span className="text-xs text-[var(--ui-ink-muted)]">
                               {record.providerRecordType.replaceAll("_", " ")}
                             </span>
                             <Button
@@ -1147,7 +1149,7 @@ function SleepDetailPanel({
                             </Button>
                           </div>
                         </div>
-                        <div className="mt-3 text-sm text-white/50">
+                        <div className="mt-3 text-sm text-[var(--ui-ink-muted)]">
                           {formatDurationCompact(
                             Math.max(
                               0,
@@ -1160,7 +1162,7 @@ function SleepDetailPanel({
                           )}
                         </div>
                         {expandedRecordId === record.id ? (
-                          <pre className="mt-3 overflow-x-auto rounded-[14px] border border-white/8 bg-slate-950/70 p-3 text-xs leading-6 text-white/72">
+                          <pre className="mt-3 overflow-x-auto rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-code-bg)] p-3 text-xs leading-6 text-[var(--ui-ink-medium)]">
                             {JSON.stringify(
                               {
                                 payload: record.payload,
@@ -1174,21 +1176,21 @@ function SleepDetailPanel({
                       </div>
                     ))
                   ) : (
-                    <div className="rounded-[16px] border border-dashed border-white/10 bg-black/10 px-4 py-4 text-sm text-white/52">
+                    <div className="rounded-[16px] border border-dashed border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4 text-sm text-[var(--ui-ink-muted)]">
                       No raw data was stored for this night.
                     </div>
                   )}
                 </div>
 
                 <div className="grid gap-3">
-                  <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                     Sleep segments
                   </div>
                   {normalizedRawDetail.segments.length ? (
                     normalizedRawDetail.segments.map((segment) => (
                       <div
                         key={segment.id}
-                        className="rounded-[16px] border border-white/8 bg-black/18 px-4 py-3"
+                        className="rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3"
                       >
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div className="flex flex-wrap items-center gap-2">
@@ -1200,7 +1202,7 @@ function SleepDetailPanel({
                                 ? "provider-backed"
                                 : "historical"}
                             </Badge>
-                            <span className="text-sm text-white/64">
+                            <span className="text-sm text-[var(--ui-ink-medium)]">
                               {formatSleepWindow(
                                 segment.startedAt,
                                 segment.endedAt,
@@ -1208,7 +1210,7 @@ function SleepDetailPanel({
                               )}
                             </span>
                           </div>
-                          <span className="text-sm text-white/50">
+                          <span className="text-sm text-[var(--ui-ink-muted)]">
                             {formatDurationCompact(
                               Math.max(
                                 0,
@@ -1224,7 +1226,7 @@ function SleepDetailPanel({
                       </div>
                     ))
                   ) : (
-                    <div className="rounded-[16px] border border-dashed border-white/10 bg-black/10 px-4 py-4 text-sm text-white/52">
+                    <div className="rounded-[16px] border border-dashed border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4 text-sm text-[var(--ui-ink-muted)]">
                       No normalized sleep segments were stored for this night.
                     </div>
                   )}
@@ -1451,13 +1453,13 @@ export function SleepPage() {
             value={formatPercent(sleep.summary.averageRestorativeShare)}
             description={`Deep + REM share across recent nights, with ${sleep.summary.reflectiveNightCount} nights already carrying context.`}
           />
-          <Card className="border-white/8 bg-white/[0.03]">
+          <Card className="border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                   Recent stage mix
                 </div>
-                <div className="mt-2 text-xl text-white">Average nightly phases</div>
+                <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">Average nightly phases</div>
               </div>
               <CalendarDays className="size-5 text-[var(--primary)]" />
             </div>
@@ -1469,7 +1471,7 @@ export function SleepPage() {
                   </Badge>
                 ))
               ) : (
-                <div className="text-sm text-white/52">
+                <div className="text-sm text-[var(--ui-ink-muted)]">
                   Stage averages will appear once nights include phase data.
                 </div>
               )}
@@ -1503,7 +1505,7 @@ export function SleepPage() {
               onSave={() => void saveSleep(activeSession.id)}
             />
           ) : (
-            <Card className="border-white/8 bg-white/[0.03] px-6 py-8 text-sm leading-6 text-white/58">
+            <Card className="border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-6 py-8 text-sm leading-6 text-[var(--ui-ink-muted)]">
               Pick a night from the calendar to inspect its phase timing, stage summary, and reflection context.
             </Card>
           )}

@@ -11,6 +11,17 @@ import {
 } from "@/lib/wiki-markup";
 import { cn } from "@/lib/utils";
 
+const wikiCopyClass = "text-[var(--ui-ink-medium)]";
+const wikiSoftCopyClass = "text-[var(--ui-ink-soft)]";
+const wikiFaintCopyClass = "text-[var(--ui-ink-faint)]";
+const wikiStrongCopyClass = "text-[var(--ui-ink-strong)]";
+const wikiPanelClass =
+  "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]";
+const wikiMutedPanelClass =
+  "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]";
+const wikiInlineTokenClass =
+  "rounded-sm bg-[var(--ui-surface-2)] px-1.5 py-0.5 text-[var(--ui-ink-strong)] no-underline ring-1 ring-[var(--ui-border-subtle)] transition hover:bg-[var(--ui-surface-hover)]";
+
 function renderInlineTokens(
   tokens: WikiInlineToken[],
   keyPrefix: string,
@@ -25,20 +36,23 @@ function renderInlineTokens(
         return (
           <code
             key={key}
-            className="rounded bg-black/10 px-1.5 py-0.5 font-mono text-[0.92em] text-white"
+            className="rounded bg-[var(--ui-surface-2)] px-1.5 py-0.5 font-mono text-[0.92em] text-[var(--ui-ink-strong)] ring-1 ring-[var(--ui-border-subtle)]"
           >
             {token.value}
           </code>
         );
       case "strong":
         return (
-          <strong key={key} className="font-semibold text-white">
+          <strong
+            key={key}
+            className="font-semibold text-[var(--ui-ink-strong)]"
+          >
             {token.value}
           </strong>
         );
       case "em":
         return (
-          <em key={key} className="italic text-white/82">
+          <em key={key} className="italic text-[var(--ui-ink-medium)]">
             {token.value}
           </em>
         );
@@ -50,7 +64,7 @@ function renderInlineTokens(
             href={token.href}
             target={external ? "_blank" : undefined}
             rel={external ? "noreferrer" : undefined}
-            className="text-[var(--secondary)] underline decoration-current/30 underline-offset-2 transition hover:text-white"
+            className="text-[var(--secondary)] underline decoration-current/30 underline-offset-2 transition hover:text-[var(--ui-ink-strong)]"
           >
             {token.label}
           </a>
@@ -60,17 +74,13 @@ function renderInlineTokens(
         const route = getEntityRoute(token.entityType as never, token.entityId);
         const href = route ? resolveForgePath(route) : null;
         return href ? (
-          <a
-            key={key}
-            href={href}
-            className="rounded-sm bg-white/[0.08] px-1.5 py-0.5 text-white no-underline ring-1 ring-black/5 transition hover:bg-white/[0.12]"
-          >
+          <a key={key} href={href} className={wikiInlineTokenClass}>
             {token.label}
           </a>
         ) : (
           <span
             key={key}
-            className="rounded-sm bg-white/[0.08] px-1.5 py-0.5 text-white/64"
+            className="rounded-sm bg-[var(--ui-surface-2)] px-1.5 py-0.5 text-[var(--ui-ink-soft)] ring-1 ring-[var(--ui-border-subtle)]"
           >
             {token.label}
           </span>
@@ -85,10 +95,8 @@ function renderInlineTokens(
               search: spaceId ? `?spaceId=${encodeURIComponent(spaceId)}` : ""
             }}
             className={cn(
-              "underline decoration-current/30 underline-offset-2 transition hover:text-white",
-              token.embed
-                ? "text-[var(--primary)]"
-                : "text-[var(--secondary)]"
+              "underline decoration-current/30 underline-offset-2 transition hover:text-[var(--ui-ink-strong)]",
+              token.embed ? "text-[var(--primary)]" : "text-[var(--secondary)]"
             )}
           >
             {token.label}
@@ -108,9 +116,11 @@ function renderDirectiveList(lines: string[], spaceId?: string) {
     return null;
   }
   return (
-    <ul className="space-y-1.5 pl-4 text-[13px] leading-6 text-white/76">
+    <ul className={cn("space-y-1.5 pl-4 text-[13px] leading-6", wikiCopyClass)}>
       {items.map((item, index) => (
-        <li key={`${item}-${index}`}>{renderInline(item, `directive-${index}`, spaceId)}</li>
+        <li key={`${item}-${index}`}>
+          {renderInline(item, `directive-${index}`, spaceId)}
+        </li>
       ))}
     </ul>
   );
@@ -131,7 +141,8 @@ function renderBlock(block: WikiContentBlock, index: number, spaceId?: string) {
         <h2
           key={`heading-${index}`}
           className={cn(
-            "font-semibold tracking-[-0.02em] text-white",
+            "font-semibold tracking-[-0.02em]",
+            wikiStrongCopyClass,
             index > 0 && "mt-6",
             sizeClass
           )}
@@ -142,7 +153,10 @@ function renderBlock(block: WikiContentBlock, index: number, spaceId?: string) {
     }
     case "paragraph":
       return (
-        <p key={`paragraph-${index}`} className="text-[14px] leading-7 text-white/78">
+        <p
+          key={`paragraph-${index}`}
+          className={cn("text-[14px] leading-7", wikiCopyClass)}
+        >
           {renderInline(block.text, `paragraph-${index}`, spaceId)}
         </p>
       );
@@ -150,7 +164,10 @@ function renderBlock(block: WikiContentBlock, index: number, spaceId?: string) {
       return (
         <blockquote
           key={`quote-${index}`}
-          className="border-l-[3px] border-white/16 pl-4 text-[14px] leading-7 text-white/62"
+          className={cn(
+            "border-l-[3px] border-[var(--ui-border-strong)] pl-4 text-[14px] leading-7",
+            wikiSoftCopyClass
+          )}
         >
           {renderInline(block.text, `quote-${index}`, spaceId)}
         </blockquote>
@@ -161,7 +178,8 @@ function renderBlock(block: WikiContentBlock, index: number, spaceId?: string) {
         <ListTag
           key={`list-${index}`}
           className={cn(
-            "space-y-1.5 pl-5 text-[14px] leading-7 text-white/78",
+            "space-y-1.5 pl-5 text-[14px] leading-7",
+            wikiCopyClass,
             block.ordered ? "list-decimal" : "list-disc"
           )}
         >
@@ -177,7 +195,7 @@ function renderBlock(block: WikiContentBlock, index: number, spaceId?: string) {
       return (
         <pre
           key={`code-${index}`}
-          className="overflow-x-auto rounded-xl bg-[rgba(10,16,30,0.9)] px-4 py-3 text-[12px] leading-6 text-white ring-1 ring-black/5"
+          className="max-w-full overflow-x-auto rounded-xl border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-code)] px-4 py-3 text-[12px] leading-6 text-[var(--ui-ink-strong)]"
         >
           <code>{block.code}</code>
         </pre>
@@ -189,17 +207,28 @@ function renderBlock(block: WikiContentBlock, index: number, spaceId?: string) {
           className={cn(
             "rounded-xl border px-4 py-3",
             block.kind === "warning" || block.kind === "danger"
-              ? "border-amber-500/25 bg-amber-500/8"
-              : "border-white/12 bg-white/[0.04]"
+              ? "border-[color-mix(in_srgb,var(--warning)_32%,transparent)] bg-[var(--ui-warning-soft)]"
+              : wikiMutedPanelClass
           )}
         >
-          <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/48">
+          <div
+            className={cn(
+              "mb-2 text-[11px] font-semibold uppercase tracking-[0.16em]",
+              wikiFaintCopyClass
+            )}
+          >
             {block.kind}
           </div>
-          <div className="grid gap-2 text-[13px] leading-6 text-white/76">
+          <div
+            className={cn("grid gap-2 text-[13px] leading-6", wikiCopyClass)}
+          >
             {block.lines.map((line, lineIndex) => (
               <p key={`admonition-line-${lineIndex}`}>
-                {renderInline(line, `admonition-${index}-${lineIndex}`, spaceId)}
+                {renderInline(
+                  line,
+                  `admonition-${index}-${lineIndex}`,
+                  spaceId
+                )}
               </p>
             ))}
           </div>
@@ -211,9 +240,14 @@ function renderBlock(block: WikiContentBlock, index: number, spaceId?: string) {
       return (
         <section
           key={`${block.type}-${index}`}
-          className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"
+          className={cn("rounded-xl border px-4 py-3", wikiPanelClass)}
         >
-          <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/48">
+          <div
+            className={cn(
+              "mb-2 text-[11px] font-semibold uppercase tracking-[0.16em]",
+              wikiFaintCopyClass
+            )}
+          >
             {block.type.replace("forge-", "")}
           </div>
           {renderDirectiveList(block.lines, spaceId)}
@@ -222,9 +256,13 @@ function renderBlock(block: WikiContentBlock, index: number, spaceId?: string) {
   }
 }
 
-function renderInfoboxValue(value: string, keyPrefix: string, spaceId?: string) {
+function renderInfoboxValue(
+  value: string,
+  keyPrefix: string,
+  spaceId?: string
+) {
   return (
-    <div className="text-[13px] leading-6 text-white/76">
+    <div className={cn("text-[13px] leading-6", wikiCopyClass)}>
       {renderInline(value, keyPrefix, spaceId)}
     </div>
   );
@@ -242,17 +280,18 @@ export function WikiArticleInfobox({
   return (
     <aside
       className={cn(
-        "wiki-infobox rounded-2xl border border-white/10 bg-white/[0.03] p-4",
+        "wiki-infobox rounded-2xl border p-4",
+        wikiPanelClass,
         className
       )}
     >
       {infobox.title ? (
-        <div className="text-[1rem] font-semibold leading-tight text-white">
+        <div className="text-[1rem] font-semibold leading-tight text-[var(--ui-ink-strong)]">
           {infobox.title}
         </div>
       ) : null}
       {infobox.summary ? (
-        <p className="mt-2 text-[13px] leading-6 text-white/60">
+        <p className="mt-2 text-[13px] leading-6 text-[var(--ui-ink-soft)]">
           {renderInline(infobox.summary, "infobox-summary", spaceId)}
         </p>
       ) : null}
@@ -260,12 +299,14 @@ export function WikiArticleInfobox({
         {infobox.rows.map((row, index) => (
           <div
             key={`${row.label}-${index}`}
-            className="grid gap-1 border-t border-white/10 pt-2 first:border-t-0 first:pt-0"
+            className="grid gap-1 border-t border-[var(--ui-border-subtle)] pt-2 first:border-t-0 first:pt-0"
           >
-            <dt className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/48">
+            <dt className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
               {row.label}
             </dt>
-            <dd>{renderInfoboxValue(row.value, `infobox-row-${index}`, spaceId)}</dd>
+            <dd>
+              {renderInfoboxValue(row.value, `infobox-row-${index}`, spaceId)}
+            </dd>
           </div>
         ))}
       </dl>
@@ -279,7 +320,12 @@ function splitIntro(blocks: WikiContentBlock[]) {
   let introDone = false;
 
   for (const block of blocks) {
-    if (!introDone && block.type === "heading" && block.level <= 2 && intro.length > 0) {
+    if (
+      !introDone &&
+      block.type === "heading" &&
+      block.level <= 2 &&
+      intro.length > 0
+    ) {
       introDone = true;
     }
     if (introDone) {
@@ -324,7 +370,9 @@ export function WikiArticleMarkdown({
 
       {rest.length > 0 ? (
         <div className="grid gap-4">
-          {rest.map((block, index) => renderBlock(block, index + intro.length, spaceId))}
+          {rest.map((block, index) =>
+            renderBlock(block, index + intro.length, spaceId)
+          )}
         </div>
       ) : null}
     </div>

@@ -78,10 +78,7 @@ export function SettingsSectionNav({ className }: { className?: string }) {
   return (
     <>
       <Card
-        className={cn(
-          "surface-shell-panel overflow-hidden p-2",
-          className
-        )}
+        className={cn("surface-shell-panel overflow-hidden p-2", className)}
       >
         <div className="hidden items-center gap-3 lg:flex">
           <div className="flex flex-wrap gap-2">
@@ -206,7 +203,7 @@ export function SettingsSectionNav({ className }: { className?: string }) {
                             end={section.to === "/settings"}
                             onClick={() => setMobileOpen(false)}
                             className={cn(
-                              "group flex items-center justify-between gap-3 rounded-[22px] border px-3.5 py-3 transition-[transform,border-color,background-color,color] duration-150 hover:-translate-y-[1px] hover:text-white",
+                              "group flex items-center justify-between gap-3 rounded-[22px] border px-3.5 py-3 transition-[transform,border-color,background-color,color] duration-150 hover:-translate-y-[1px] hover:text-[var(--ui-ink-strong)]",
                               isActive
                                 ? "border-[var(--primary)]/18 bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]"
                                 : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)] hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]"

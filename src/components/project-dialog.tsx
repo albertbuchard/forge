@@ -123,29 +123,31 @@ export function ProjectDialog({
           label={t("common.dialogs.project.goal")}
           error={fieldErrors.goalId ?? null}
         >
-          <div className="grid gap-3">
+          <div className="grid min-w-0 max-w-full gap-3">
             {goals.map((goal) => {
               const selected = goal.id === value.goalId;
               return (
                 <button
                   key={goal.id}
                   type="button"
-                  className={`rounded-[22px] border px-4 py-4 text-left transition ${
+                  className={`min-w-0 max-w-full overflow-hidden rounded-[22px] border px-4 py-4 text-left transition ${
                     selected
-                      ? "border-[rgba(192,193,255,0.28)] bg-[rgba(192,193,255,0.14)] text-white"
-                      : "border-white/8 bg-white/[0.04] text-white/72 hover:bg-white/[0.07]"
+                      ? "border-[color-mix(in_srgb,var(--primary)_34%,var(--ui-border-subtle)_66%)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]"
+                      : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)]"
                   }`}
                   onClick={() => setValue({ goalId: goal.id })}
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex min-w-0 max-w-full flex-wrap items-center justify-between gap-2">
                     <EntityName
                       kind="goal"
                       label={goal.title}
-                      className="max-w-full"
+                      className="min-w-0 max-w-full"
                     />
-                    <UserBadge user={goal.user} compact />
+                    <span className="min-w-0 max-w-full">
+                      <UserBadge user={goal.user} compact />
+                    </span>
                   </div>
-                  <div className="mt-2 text-sm leading-6 text-white/54">
+                  <div className="mt-2 min-w-0 break-words text-sm leading-6 text-[var(--ui-ink-faint)]">
                     {goal.description || "No strategic note attached yet."}
                   </div>
                 </button>
@@ -213,7 +215,7 @@ export function ProjectDialog({
                   )
                 })
               }
-              className="min-h-28 rounded-[var(--radius-control)] border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white outline-none transition focus:border-[rgba(192,193,255,0.3)]"
+              className="min-h-28 rounded-[var(--radius-control)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-2 text-sm text-[var(--ui-ink-strong)] outline-none transition focus:border-[color-mix(in_srgb,var(--primary)_35%,var(--ui-border-strong)_65%)]"
             >
               {safeUsers.map((user) => (
                 <option key={user.id} value={user.id}>
@@ -291,9 +293,9 @@ export function ProjectDialog({
             label={t("common.dialogs.project.themeColor")}
             error={fieldErrors.themeColor ?? null}
           >
-            <div className="flex items-center gap-3 rounded-[22px] border border-white/8 bg-white/6 px-4 py-3">
+            <div className="flex items-center gap-3 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3">
               <input
-                className="h-10 w-12 rounded-lg border border-white/10 bg-transparent"
+                className="h-10 w-12 rounded-lg border border-[var(--ui-border-subtle)] bg-transparent"
                 type="color"
                 value={value.themeColor}
                 onChange={(event) =>

@@ -292,6 +292,8 @@ export type WeightLossViewData = {
     movementCaloriesKcal: number | null;
     workoutEnergyKcal: number | null;
     averageCalorieIntake: number;
+    recentFoodLogCount: number;
+    recentFoodLogDayCount: number;
     currentDeficitEstimate: number | null;
     estimatedDailyEnergyBalanceKcal: number | null;
     energySourceConfidence: string;

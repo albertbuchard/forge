@@ -53,7 +53,9 @@ type StoredOpenAiCodexSecret = {
   accountId: string;
 };
 
-export type StoredModelCredential = StoredApiKeySecret | StoredOpenAiCodexSecret;
+export type StoredModelCredential =
+  | StoredApiKeySecret
+  | StoredOpenAiCodexSecret;
 
 function parseMetadata(value: string) {
   try {
@@ -92,10 +94,10 @@ export function buildConnectionAgentIdentity(
     connection.provider === "openai-codex"
       ? "Chat agent backed by OpenAI Codex OAuth."
       : connection.provider === "openai-compatible"
-      ? "Chat agent backed by a local or OpenAI-compatible endpoint."
-      : connection.provider === "mock"
-        ? "Chat agent backed by Forge's deterministic mock workflow runtime."
-        : "Chat agent backed by the OpenAI API.";
+        ? "Chat agent backed by a local or OpenAI-compatible endpoint."
+        : connection.provider === "mock"
+          ? "Chat agent backed by Forge's deterministic mock workflow runtime."
+          : "Chat agent backed by the OpenAI API.";
   return {
     id: connection.agentId,
     label: connection.agentLabel,
@@ -201,8 +203,7 @@ export function upsertAiModelConnection(
         .get(parsed.id.trim()) as AiModelConnectionRow | undefined)
     : undefined;
   const id =
-    existing?.id ??
-    `mdl_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+    existing?.id ?? `mdl_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
   const now = new Date().toISOString();
   const provider = parsed.provider;
   const authMode = parsed.authMode ?? defaultAuthMode(provider);
@@ -210,7 +211,10 @@ export function upsertAiModelConnection(
     parsed.baseUrl?.trim() ||
     existing?.base_url ||
     defaultBaseUrlForProvider(provider);
-  let secretId = existing?.secret_id ?? null;
+  let secretId =
+    existing?.secret_id && readEncryptedSecret(existing.secret_id)
+      ? existing.secret_id
+      : null;
   let accountLabel = existing?.account_label ?? null;
 
   if (parsed.provider === "mock") {
@@ -235,6 +239,14 @@ export function upsertAiModelConnection(
       secretId,
       secrets.sealJson(options.oauthCredential),
       `${parsed.label} AI OAuth connection`
+    );
+  }
+
+  if (parsed.provider !== "mock" && !secretId) {
+    throw new Error(
+      authMode === "oauth"
+        ? "Reconnect OAuth before saving this model connection. The existing credential is missing from Forge's encrypted secret store."
+        : "Enter the API key before saving this model connection. The existing credential is missing from Forge's encrypted secret store."
     );
   }
 

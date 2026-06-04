@@ -104,7 +104,7 @@ export function LogWorkFlowDialog({
               description="Select the task this work belongs to."
             >
               <select
-                className="rounded-[14px] bg-white/[0.06] px-3 py-3 text-white"
+                className="rounded-[14px] bg-[var(--ui-surface-2)] px-3 py-3 text-[var(--ui-ink-strong)]"
                 value={value.taskId}
                 onChange={(e) => setValue({ taskId: e.target.value })}
               >
@@ -117,7 +117,7 @@ export function LogWorkFlowDialog({
               </select>
             </FlowField>
           ) : value.source === "existing" && availableTasks.length === 0 ? (
-            <div className="rounded-[18px] bg-white/[0.04] px-4 py-3 text-sm text-white/58">
+            <div className="rounded-[18px] bg-[var(--ui-surface-2)] px-4 py-3 text-sm text-[var(--ui-ink-muted)]">
               No tasks are loaded yet. Switch to "New task" to create one from
               scratch.
             </div>
@@ -181,7 +181,7 @@ export function LogWorkFlowDialog({
               description="Link this work to an active project if it belongs to one."
             >
               <select
-                className="rounded-[14px] bg-white/[0.06] px-3 py-3 text-white"
+                className="rounded-[14px] bg-[var(--ui-surface-2)] px-3 py-3 text-[var(--ui-ink-strong)]"
                 value={value.projectId}
                 onChange={(e) => setValue({ projectId: e.target.value })}
               >
@@ -246,7 +246,7 @@ export function LogWorkFlowDialog({
                   <button
                     key={pts}
                     type="button"
-                    className={`rounded-full px-3 py-1.5 text-xs transition ${value.points === pts ? "bg-white/18 text-white" : "bg-white/[0.06] text-white/55 hover:bg-white/[0.10]"}`}
+                    className={`rounded-full px-3 py-1.5 text-xs transition ${value.points === pts ? "bg-[var(--ui-surface-3)] text-[var(--ui-ink-strong)]" : "bg-[var(--ui-surface-2)] text-[var(--ui-ink-muted)] hover:bg-[var(--ui-surface-2)]"}`}
                     onClick={() => setValue({ points: pts })}
                   >
                     {pts} xp

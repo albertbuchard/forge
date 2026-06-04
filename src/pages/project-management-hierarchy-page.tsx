@@ -551,17 +551,17 @@ function flattenHiddenLevels(
 function hierarchyBadgeClass(kind: HierarchyKind) {
   switch (kind) {
     case "goal":
-      return "bg-amber-400/12 text-amber-100";
+      return "bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_76%,var(--ui-ink-strong)_24%)]";
     case "strategy":
-      return "bg-cyan-400/12 text-cyan-100";
+      return "bg-[var(--ui-info-soft)] text-[color-mix(in_srgb,var(--info)_76%,var(--ui-ink-strong)_24%)]";
     case "project":
-      return "bg-sky-400/12 text-sky-100";
+      return "bg-[var(--ui-accent-soft)] text-[var(--primary)]";
     case "issue":
-      return "bg-orange-400/12 text-orange-100";
+      return "bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_72%,var(--ui-ink-strong)_28%)]";
     case "subtask":
-      return "border-indigo-300/18 bg-indigo-400/12 text-indigo-100";
+      return "border-[color-mix(in_srgb,var(--tertiary)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-tertiary-soft)] text-[var(--tertiary)]";
     default:
-      return "bg-indigo-400/12 text-indigo-100";
+      return "bg-[var(--ui-tertiary-soft)] text-[var(--tertiary)]";
   }
 }
 
@@ -569,22 +569,26 @@ function statusBadgeClass(statusLabel: string | null) {
   switch (statusLabel) {
     case "done":
     case "completed":
-      return "bg-emerald-400/12 text-emerald-100";
+      return "bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_76%,var(--ui-ink-strong)_24%)]";
     case "blocked":
-      return "bg-rose-400/12 text-rose-100";
+      return "bg-[var(--ui-danger-soft)] text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]";
     case "in_progress":
     case "active":
-      return "bg-sky-400/12 text-sky-100";
+      return "bg-[var(--ui-accent-soft)] text-[var(--primary)]";
     case "focus":
-      return "bg-violet-400/12 text-violet-100";
+      return "bg-[var(--ui-tertiary-soft)] text-[var(--tertiary)]";
     default:
-      return "bg-white/[0.08] text-white/70";
+      return "bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]";
   }
 }
 
 function renderHierarchyClauseBadge(kind: HierarchySearchClauseKind) {
   if (kind === "any") {
-    return <Badge className="bg-white/[0.08] text-white/76">Any</Badge>;
+    return (
+      <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
+        Any
+      </Badge>
+    );
   }
   if (kind === "subtask") {
     return (
@@ -593,7 +597,7 @@ function renderHierarchyClauseBadge(kind: HierarchySearchClauseKind) {
         label="Subtask"
         compact
         gradient={false}
-        className="border-indigo-300/18 bg-indigo-400/12 text-indigo-100"
+        className="border-[color-mix(in_srgb,var(--tertiary)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-tertiary-soft)] text-[var(--tertiary)]"
       />
     );
   }
@@ -645,14 +649,23 @@ function HierarchySearchBar({
 
   return (
     <div className="grid gap-3">
-      <div className="rounded-[28px] border border-white/8 bg-[linear-gradient(135deg,rgba(19,28,48,0.9),rgba(10,14,26,0.98))] p-4 shadow-[0_30px_80px_rgba(3,8,18,0.28)] sm:p-5">
+      <div className="rounded-[28px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 shadow-[var(--ui-shadow-soft)] sm:p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
+            <div className="font-label text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-faint)]">
               Hierarchy search
             </div>
-            <div className="mt-2 max-w-3xl text-sm leading-6 text-white/62">
-              Build OR clauses like <span className="text-white">Goal + "MD"</span> or <span className="text-white">Any + "Happy"</span>. Matching ancestors keep their branches visible so you can explore the hierarchy, not lose it.
+            <div className="mt-2 max-w-3xl text-sm leading-6 text-[var(--ui-ink-soft)]">
+              Build OR clauses like{" "}
+              <span className="text-[var(--ui-ink-strong)]">
+                Goal + "MD"
+              </span>{" "}
+              or{" "}
+              <span className="text-[var(--ui-ink-strong)]">
+                Any + "Happy"
+              </span>
+              . Matching ancestors keep their branches visible so you can
+              explore the hierarchy, not lose it.
             </div>
           </div>
           {clauses.length > 0 || query.trim().length > 0 ? (
@@ -671,21 +684,21 @@ function HierarchySearchBar({
           ) : null}
         </div>
 
-        <div className="mt-4 rounded-[24px] border border-white/8 bg-white/[0.04] px-4 py-3">
+        <div className="mt-4 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3">
           {clauses.length > 0 ? (
             <div className="mb-3 flex flex-wrap gap-2">
               {clauses.map((clause) => (
                 <span
                   key={clause.id}
-                  className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.06] px-2.5 py-1.5"
+                  className="inline-flex items-center gap-2 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-2.5 py-1.5"
                 >
                   {renderHierarchyClauseBadge(clause.kind)}
-                  <span className="max-w-[14rem] truncate text-sm text-white/78">
+                  <span className="max-w-[14rem] truncate text-sm text-[var(--ui-ink-medium)]">
                     "{clause.query}"
                   </span>
                   <button
                     type="button"
-                    className="rounded-full text-white/52 transition hover:text-white"
+                    className="rounded-full text-[var(--ui-ink-soft)] transition hover:text-[var(--ui-ink-strong)]"
                     onClick={() => removeClause(clause.id)}
                     aria-label={`Remove ${clause.kind} ${clause.query}`}
                   >
@@ -698,7 +711,7 @@ function HierarchySearchBar({
 
           <div className="relative">
             <div className="flex items-center gap-3">
-              <Search className="size-4 text-white/36" />
+              <Search className="size-4 text-[var(--ui-ink-muted)]" />
               <input
                 value={query}
                 onChange={(event) => {
@@ -744,12 +757,12 @@ function HierarchySearchBar({
                   }
                 }}
                 placeholder='Type text, then pick a clause like Goal + "MD" or Any + "Happy"'
-                className="min-w-0 flex-1 bg-transparent text-sm text-white placeholder:text-white/34 focus:outline-none"
+                className="min-w-0 flex-1 bg-transparent text-sm text-[var(--ui-ink-strong)] placeholder:text-[var(--ui-ink-muted)] focus:outline-none"
               />
             </div>
 
             {open ? (
-              <div className="absolute top-full z-20 mt-2 w-full rounded-[22px] border border-white/8 bg-[rgba(8,13,24,0.96)] p-2 shadow-[0_26px_60px_rgba(4,8,18,0.32)] backdrop-blur-xl">
+              <div className="absolute top-full z-20 mt-2 w-full rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-popover)] p-2 shadow-[var(--ui-shadow-strong)] backdrop-blur-xl">
                 {suggestions.length > 0 ? (
                   suggestions.map((suggestion, index) => (
                     <button
@@ -758,8 +771,8 @@ function HierarchySearchBar({
                       className={cn(
                         "flex w-full items-start justify-between gap-3 rounded-[18px] px-3 py-2.5 text-left transition",
                         index === highlightedIndex
-                          ? "bg-white/[0.1] text-white"
-                          : "text-white/70 hover:bg-white/[0.06] hover:text-white"
+                          ? "bg-[var(--ui-surface-active)] text-[var(--ui-ink-strong)]"
+                          : "text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                       )}
                       onMouseEnter={() => setHighlightedIndex(index)}
                       onMouseDown={(event) => event.preventDefault()}
@@ -768,18 +781,18 @@ function HierarchySearchBar({
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           {renderHierarchyClauseBadge(suggestion.kind)}
-                          <span className="truncate text-sm font-medium text-white">
+                          <span className="truncate text-sm font-medium text-[var(--ui-ink-strong)]">
                             "{suggestion.query}"
                           </span>
                         </div>
-                        <div className="mt-1 text-xs leading-5 text-white/46">
+                        <div className="mt-1 text-xs leading-5 text-[var(--ui-ink-soft)]">
                           Match {suggestion.kind === "any" ? "any visible hierarchy node" : `${suggestion.kind} nodes`} that mention this text.
                         </div>
                       </div>
                     </button>
                   ))
                 ) : (
-                  <div className="px-3 py-2.5 text-sm text-white/42">
+                  <div className="px-3 py-2.5 text-sm text-[var(--ui-ink-muted)]">
                     Type a word or phrase to create a new OR clause.
                   </div>
                 )}
@@ -788,7 +801,9 @@ function HierarchySearchBar({
           </div>
         </div>
 
-        <div className="mt-3 text-sm text-white/52">{resultSummary}</div>
+        <div className="mt-3 text-sm text-[var(--ui-ink-soft)]">
+          {resultSummary}
+        </div>
       </div>
     </div>
   );
@@ -829,12 +844,12 @@ export function ProjectManagementHierarchyPage() {
         description: `${bots.length} bot collaborators`,
         searchText: `bots bot ai agents assistants ${bots.map((user) => `${user.displayName} ${user.handle}`).join(" ")}`,
         badge: (
-          <Badge className="border-cyan-300/18 bg-cyan-400/12 text-cyan-50">
+          <Badge className="border-[color-mix(in_srgb,var(--info)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-info-soft)] text-[color-mix(in_srgb,var(--info)_76%,var(--ui-ink-strong)_24%)]">
             Bots
           </Badge>
         ),
         menuBadge: (
-          <Badge className="border-cyan-300/18 bg-cyan-400/12 text-cyan-50">
+          <Badge className="border-[color-mix(in_srgb,var(--info)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-info-soft)] text-[color-mix(in_srgb,var(--info)_76%,var(--ui-ink-strong)_24%)]">
             Bots
           </Badge>
         )
@@ -845,12 +860,12 @@ export function ProjectManagementHierarchyPage() {
         description: `${humans.length} human collaborators`,
         searchText: `humans human people operators ${humans.map((user) => `${user.displayName} ${user.handle}`).join(" ")}`,
         badge: (
-          <Badge className="border-amber-300/18 bg-amber-400/12 text-amber-50">
+          <Badge className="border-[color-mix(in_srgb,var(--warning)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_76%,var(--ui-ink-strong)_24%)]">
             Humans
           </Badge>
         ),
         menuBadge: (
-          <Badge className="border-amber-300/18 bg-amber-400/12 text-amber-50">
+          <Badge className="border-[color-mix(in_srgb,var(--warning)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_76%,var(--ui-ink-strong)_24%)]">
             Humans
           </Badge>
         )
@@ -908,7 +923,7 @@ export function ProjectManagementHierarchyPage() {
             label="Subtask"
             compact
             gradient={false}
-            className="border-indigo-300/18 bg-indigo-400/12 text-indigo-100"
+            className="border-[color-mix(in_srgb,var(--tertiary)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-tertiary-soft)] text-[var(--tertiary)]"
           />
         ),
         menuBadge: (
@@ -917,7 +932,7 @@ export function ProjectManagementHierarchyPage() {
             label="Subtask"
             compact
             gradient={false}
-            className="border-indigo-300/18 bg-indigo-400/12 text-indigo-100"
+            className="border-[color-mix(in_srgb,var(--tertiary)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-tertiary-soft)] text-[var(--tertiary)]"
           />
         )
       }
@@ -1085,13 +1100,13 @@ export function ProjectManagementHierarchyPage() {
         badge={`${visibleNodeCount} visible nodes`}
       />
 
-      <Card className="min-w-0 overflow-hidden border-white/8 bg-[linear-gradient(180deg,rgba(16,23,38,0.92),rgba(9,14,24,0.98))]">
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/8 px-5 py-4">
+      <Card className="min-w-0 overflow-hidden border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--ui-border-subtle)] px-5 py-4">
           <div>
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/42">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
               Hierarchy controls
             </div>
-            <div className="mt-2 max-w-3xl text-sm leading-6 text-white/60">
+            <div className="mt-2 max-w-3xl text-sm leading-6 text-[var(--ui-ink-soft)]">
               Filter across goals, projects, tags, humans, bots, and work-item
               types, then expand or collapse the full tree without losing the
               hierarchy context.
@@ -1171,13 +1186,13 @@ export function ProjectManagementHierarchyPage() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Badge className="bg-white/[0.08] text-white/72">
+            <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
               {filteredTree.length} top-level nodes
             </Badge>
-            <Badge className="bg-white/[0.08] text-white/72">
+            <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
               {visibleNodeCount} visible nodes
             </Badge>
-            <Badge className="bg-white/[0.08] text-white/72">
+            <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
               {visibleLevels.join(" + ")}
             </Badge>
           </div>
@@ -1205,8 +1220,8 @@ export function ProjectManagementHierarchyPage() {
           }
         />
       ) : (
-        <Card className="min-w-0 overflow-hidden border-white/8 bg-[linear-gradient(180deg,rgba(13,20,31,0.96),rgba(9,15,24,0.98))] p-0">
-          <div className="grid grid-cols-[minmax(0,1.8fr)_auto_auto_auto] gap-3 border-b border-white/8 px-5 py-3 text-[11px] uppercase tracking-[0.18em] text-white/38">
+        <Card className="min-w-0 overflow-hidden border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-0">
+          <div className="grid grid-cols-[minmax(0,1.8fr)_auto_auto_auto] gap-3 border-b border-[var(--ui-border-subtle)] px-5 py-3 text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
             <div>Name</div>
             <div className="hidden lg:block">State</div>
             <div className="hidden xl:block">People</div>
@@ -1240,19 +1255,18 @@ export function ProjectManagementHierarchyPage() {
                   <div style={style} className="px-2 py-1.5">
                     <div
                       className={cn(
-                        "grid min-w-0 items-center gap-3 rounded-[16px] border border-white/8 px-3 py-2 transition hover:border-white/14 hover:bg-white/[0.05]",
+                        "grid min-w-0 items-center gap-3 rounded-[16px] border border-[var(--ui-border-subtle)] px-3 py-2 transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]",
                         "grid-cols-[minmax(0,1.8fr)_auto] lg:grid-cols-[minmax(0,1.8fr)_auto_auto] xl:grid-cols-[minmax(0,1.8fr)_auto_auto_auto]"
                       )}
                       style={{
                         marginLeft: `${node.level * 14}px`,
-                        background:
-                          `linear-gradient(180deg, rgba(${accent}, 0.07), rgba(255,255,255,0.02))`
+                        background: `color-mix(in srgb, rgb(${accent}) 7%, var(--ui-surface-1))`
                       }}
                     >
                       <div className="flex min-w-0 items-center gap-3">
                         <button
                           type="button"
-                          className="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-white/62 transition hover:bg-white/[0.1] hover:text-white"
+                          className="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                           onClick={() => node.toggle()}
                           disabled={node.isLeaf}
                           aria-label={
@@ -1262,7 +1276,7 @@ export function ProjectManagementHierarchyPage() {
                           }
                         >
                           {node.isLeaf ? (
-                            <span className="size-2 rounded-full bg-white/22" />
+                            <span className="size-2 rounded-full bg-[var(--ui-ink-muted)]" />
                           ) : node.isOpen ? (
                             <ChevronDown className="size-4" />
                           ) : (
@@ -1288,18 +1302,18 @@ export function ProjectManagementHierarchyPage() {
                               <Badge
                                 className={
                                   node.data.executionMode === "afk"
-                                    ? "bg-emerald-400/12 text-emerald-100"
-                                    : "bg-amber-400/12 text-amber-100"
+                                    ? "bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_76%,var(--ui-ink-strong)_24%)]"
+                                    : "bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_76%,var(--ui-ink-strong)_24%)]"
                                 }
                               >
                                 {node.data.executionMode.toUpperCase()}
                               </Badge>
                             ) : null}
-                            <div className="truncate text-[13px] font-medium text-white">
+                            <div className="truncate text-[13px] font-medium text-[var(--ui-ink-strong)]">
                               {node.data.label}
                             </div>
                           </div>
-                          <div className="mt-0.5 truncate text-[11px] leading-5 text-white/46">
+                          <div className="mt-0.5 truncate text-[11px] leading-5 text-[var(--ui-ink-soft)]">
                             {node.data.description}
                           </div>
                         </div>
@@ -1316,7 +1330,7 @@ export function ProjectManagementHierarchyPage() {
                       <div className="hidden xl:flex items-center justify-end gap-2">
                         {node.data.user ? <UserBadge user={node.data.user} compact /> : null}
                         {node.data.assignees.length > 0 ? (
-                          <Badge className="bg-white/[0.08] text-white/72">
+                          <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                             +{node.data.assignees.length}
                           </Badge>
                         ) : null}
@@ -1324,16 +1338,16 @@ export function ProjectManagementHierarchyPage() {
 
                       <div className="hidden lg:flex min-w-[11rem] items-center justify-end gap-3">
                         <div className="min-w-[7.5rem]">
-                          <div className="h-2 overflow-hidden rounded-full bg-white/[0.08]">
+                          <div className="h-2 overflow-hidden rounded-full bg-[var(--ui-surface-2)]">
                             <div
                               className="h-full rounded-full"
                               style={{
                                 width: `${node.data.progressPercent ?? 0}%`,
-                                background: `linear-gradient(90deg, rgba(${accent}, 0.96), rgba(${accent}, 0.72))`
+                                background: `linear-gradient(90deg, rgb(${accent}), color-mix(in srgb, rgb(${accent}) 72%, var(--ui-surface-1)))`
                               }}
                             />
                           </div>
-                          <div className="mt-1 text-[11px] text-white/44">
+                          <div className="mt-1 text-[11px] text-[var(--ui-ink-faint)]">
                             {node.data.progressLabel ??
                               `${node.data.progressPercent ?? 0}% complete`}
                           </div>
@@ -1341,7 +1355,7 @@ export function ProjectManagementHierarchyPage() {
                         {node.data.href ? (
                           <Link
                             to={node.data.href}
-                            className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] uppercase tracking-[0.16em] text-white/72 transition hover:border-white/18 hover:bg-white/[0.08] hover:text-white"
+                            className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-1.5 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-medium)] transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                           >
                             Open
                           </Link>

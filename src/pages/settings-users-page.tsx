@@ -23,6 +23,13 @@ import {
 } from "@/lib/api";
 import type { UserAccessGrant, UserSummary } from "@/lib/types";
 
+const usersEyebrowClass =
+  "font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]";
+const usersSoftTextClass = "text-sm leading-6 text-[var(--ui-ink-soft)]";
+const usersFaintTextClass = "text-xs leading-5 text-[var(--ui-ink-faint)]";
+const usersPanelClass =
+  "rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]";
+
 export function SettingsUsersPage() {
   const shell = useForgeShell();
   const [editingUser, setEditingUser] = useState<UserSummary | null>(null);
@@ -135,7 +142,8 @@ export function SettingsUsersPage() {
       bots: visibleUsers.filter((user) => user.kind === "bot")
     };
   }, [directory?.users, normalizedSearch, shell.snapshot.users]);
-  const highlightedUserId = editingGrant?.subjectUserId ?? editingUser?.id ?? null;
+  const highlightedUserId =
+    editingGrant?.subjectUserId ?? editingUser?.id ?? null;
   const highlightedGrantId = editingGrant?.id ?? null;
 
   return (
@@ -154,9 +162,9 @@ export function SettingsUsersPage() {
         user={editingUser}
         grants={directory?.grants ?? []}
         ownership={
-          editingUser ? ownershipByUserId.get(editingUser.id) ?? null : null
+          editingUser ? (ownershipByUserId.get(editingUser.id) ?? null) : null
         }
-        xp={editingUser ? xpByUserId.get(editingUser.id) ?? null : null}
+        xp={editingUser ? (xpByUserId.get(editingUser.id) ?? null) : null}
         pending={saveUserMutation.isPending}
         onSubmit={async (payload) => {
           await saveUserMutation.mutateAsync(payload);
@@ -191,19 +199,17 @@ export function SettingsUsersPage() {
       <Card className="grid gap-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-              Multi-user posture
-            </div>
-            <div className="mt-2 text-sm leading-6 text-white/60">
+            <div className={usersEyebrowClass}>Multi-user posture</div>
+            <div className={`mt-2 ${usersSoftTextClass}`}>
               {directory?.posture.summary ??
                 "Forge is preparing modular user access while keeping the current posture permissive."}
             </div>
           </div>
-          <Badge className="bg-white/[0.08] text-white/72">
+          <Badge tone="meta">
             {directory?.posture.accessModel ?? "permissive"}
           </Badge>
         </div>
-        <div className="flex items-center gap-3 rounded-[18px] bg-white/[0.04] px-4 py-3">
+        <div className={`flex items-center gap-3 ${usersPanelClass} px-4 py-3`}>
           <Input
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
@@ -217,55 +223,43 @@ export function SettingsUsersPage() {
           <Card className="grid gap-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-                  Multi-agent onboarding
-                </div>
-                <div className="mt-2 text-sm leading-6 text-white/60">
+                <div className={usersEyebrowClass}>Multi-agent onboarding</div>
+                <div className={`mt-2 ${usersSoftTextClass}`}>
                   Forge now treats the users graph as the collaboration control
                   plane. Create each human or bot here, keep the runtime shared,
                   then narrow only the specific arrows that should stop seeing,
                   coordinating, planning, or affecting another user.
                 </div>
               </div>
-              <Badge className="bg-white/[0.08] text-white/72">
-                default open
-              </Badge>
+              <Badge tone="meta">default open</Badge>
             </div>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
-                <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
-                  Directional edges
-                </div>
-                <div className="mt-2 text-lg text-white">
+              <div className={`${usersPanelClass} px-4 py-3`}>
+                <div className={usersEyebrowClass}>Directional edges</div>
+                <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
                   {relationshipStats.totalEdges}
                 </div>
               </div>
-              <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
-                <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
-                  Fully open
-                </div>
-                <div className="mt-2 text-lg text-white">
+              <div className={`${usersPanelClass} px-4 py-3`}>
+                <div className={usersEyebrowClass}>Fully open</div>
+                <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
                   {relationshipStats.fullyOpenEdges}
                 </div>
               </div>
-              <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
-                <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
-                  Coordination
-                </div>
-                <div className="mt-2 text-lg text-white">
+              <div className={`${usersPanelClass} px-4 py-3`}>
+                <div className={usersEyebrowClass}>Coordination</div>
+                <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
                   {relationshipStats.coordinationEdges}
                 </div>
               </div>
-              <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
-                <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
-                  Execution control
-                </div>
-                <div className="mt-2 text-lg text-white">
+              <div className={`${usersPanelClass} px-4 py-3`}>
+                <div className={usersEyebrowClass}>Execution control</div>
+                <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
                   {relationshipStats.executionEdges}
                 </div>
               </div>
             </div>
-            <div className="grid gap-2 text-sm leading-6 text-white/56">
+            <div className={`grid gap-2 ${usersSoftTextClass}`}>
               <div>
                 1. Create the human and bot users that should exist in the
                 shared Forge system.
@@ -307,17 +301,15 @@ export function SettingsUsersPage() {
           />
 
           <Card className="grid gap-3">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-              Agent onboarding
-            </div>
-            <div className="text-sm leading-6 text-white/60">
+            <div className={usersEyebrowClass}>Agent onboarding</div>
+            <div className={usersSoftTextClass}>
               OpenClaw, Hermes, and the Forge UI all read this same multi-user
               graph. Keep the defaults open while you are still wiring
               collaboration, then narrow specific arrows when one user or agent
               should stop seeing, messaging, planning, or changing another
               user&apos;s work.
             </div>
-            <div className="text-sm leading-6 text-white/52">
+            <div className={usersSoftTextClass}>
               Forge now treats every owner as either human or bot, keeps search
               cross-user by default, and allows cross-owner links plus explicit
               coordination lanes between projects, tasks, notes, and strategies.
@@ -325,7 +317,7 @@ export function SettingsUsersPage() {
             <div>
               <Link
                 to="/settings/agents"
-                className="inline-flex min-h-10 items-center justify-center rounded-[var(--radius-control)] bg-white/8 px-3 py-2 text-[13px] font-medium text-white transition hover:bg-white/12"
+                className="inline-flex min-h-10 items-center justify-center rounded-[var(--radius-control)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-2 text-[13px] font-medium text-[var(--ui-ink-strong)] transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]"
               >
                 Open agent onboarding
               </Link>
@@ -336,10 +328,8 @@ export function SettingsUsersPage() {
         <Card>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-                User directory
-              </div>
-              <div className="mt-2 text-sm leading-6 text-white/60">
+              <div className={usersEyebrowClass}>User directory</div>
+              <div className={`mt-2 ${usersSoftTextClass}`}>
                 Open any user to edit its identity and jump into the exact
                 directional relationship lanes from the user settings flow.
               </div>
@@ -365,36 +355,29 @@ export function SettingsUsersPage() {
           ).map((group) => (
             <Card key={group.title}>
               <div className="flex items-center justify-between gap-3">
-                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-                  {group.title}
-                </div>
-                <Badge className="bg-white/[0.08] text-white/72">
-                  {group.users.length}
-                </Badge>
+                <div className={usersEyebrowClass}>{group.title}</div>
+                <Badge tone="meta">{group.users.length}</Badge>
               </div>
               <div className="mt-4 grid gap-3">
                 {group.users.map((user) => (
-                  <div
-                    key={user.id}
-                    className="rounded-[18px] bg-white/[0.04] px-4 py-4"
-                  >
+                  <div key={user.id} className={`${usersPanelClass} px-4 py-4`}>
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
                         <UserBadge user={user} />
-                        <div className="mt-3 text-sm text-white/58">
+                        <div className="mt-3 text-sm text-[var(--ui-ink-soft)]">
                           @{user.handle}
                         </div>
-                        <div className="mt-2 text-sm leading-6 text-white/60">
+                        <div className={`mt-2 ${usersSoftTextClass}`}>
                           {user.description || "No description yet."}
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2">
                           <Badge className="bg-[var(--primary)]/14 text-[var(--primary)]">
                             {xpByUserId.get(user.id)?.totalXp ?? 0} XP
                           </Badge>
-                          <Badge className="bg-white/[0.08] text-white/70">
+                          <Badge tone="meta">
                             {xpByUserId.get(user.id)?.weeklyXp ?? 0} weekly
                           </Badge>
-                          <Badge className="bg-white/[0.08] text-white/70">
+                          <Badge tone="meta">
                             {xpByUserId.get(user.id)?.rewardEventCount ?? 0}{" "}
                             rewards
                           </Badge>
@@ -406,18 +389,18 @@ export function SettingsUsersPage() {
                             .map(([entityType, count]) => (
                               <Badge
                                 key={`${user.id}-${entityType}`}
-                                className="bg-white/[0.08] text-white/70"
+                                tone="meta"
                               >
                                 {count} {entityType}
                               </Badge>
                             ))}
-                          <Badge className="bg-white/[0.08] text-white/70">
-                            {ownershipByUserId.get(user.id)?.totalOwnedEntities ??
-                              0}{" "}
+                          <Badge tone="meta">
+                            {ownershipByUserId.get(user.id)
+                              ?.totalOwnedEntities ?? 0}{" "}
                             owned
                           </Badge>
                         </div>
-                        <div className="mt-3 text-xs leading-5 text-white/50">
+                        <div className={`mt-3 ${usersFaintTextClass}`}>
                           Can currently read:{" "}
                           {(readableTargetsByUserId.get(user.id) ?? [])
                             .map(
@@ -427,7 +410,7 @@ export function SettingsUsersPage() {
                             .join(", ") || "no other users"}
                         </div>
                         {xpByUserId.get(user.id)?.lastRewardAt ? (
-                          <div className="mt-2 text-xs leading-5 text-white/45">
+                          <div className={`mt-2 ${usersFaintTextClass}`}>
                             Last XP movement:{" "}
                             {new Date(
                               xpByUserId.get(user.id)!.lastRewardAt!

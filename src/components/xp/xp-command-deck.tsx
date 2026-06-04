@@ -2,7 +2,13 @@ import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { ProgressMeter } from "@/components/ui/progress-meter";
 import { cn, formatDateTime } from "@/lib/utils";
-import type { AchievementSignal, MilestoneReward, RewardLedgerEvent, XpMetricsPayload, XpMomentumPulse } from "@/lib/types";
+import type {
+  AchievementSignal,
+  MilestoneReward,
+  RewardLedgerEvent,
+  XpMetricsPayload,
+  XpMomentumPulse
+} from "@/lib/types";
 
 type XpCommandDeckProps = {
   profile: XpMetricsPayload["profile"];
@@ -17,26 +23,38 @@ type XpCommandDeckProps = {
 function achievementTone(tier: AchievementSignal["tier"]) {
   switch (tier) {
     case "platinum":
-      return "text-cyan-200";
+      return "bg-[var(--ui-accent-soft)] text-[var(--primary)]";
     case "gold":
-      return "text-amber-200";
+      return "bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]";
     case "silver":
-      return "text-slate-200";
+      return "bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]";
     default:
-      return "text-orange-200";
+      return "bg-[var(--ui-warning-soft)] text-[var(--warning)]";
   }
 }
 
 function statusTone(status: XpMomentumPulse["status"]) {
   switch (status) {
     case "surging":
-      return "from-[rgba(192,193,255,0.3)] via-[rgba(78,222,163,0.22)] to-[rgba(255,185,95,0.22)]";
+      return "bg-[color-mix(in_srgb,var(--ui-accent-soft)_62%,var(--ui-success-soft)_38%)]";
     case "steady":
-      return "from-[rgba(192,193,255,0.24)] via-[rgba(192,193,255,0.14)] to-[rgba(78,222,163,0.18)]";
+      return "bg-[var(--ui-accent-soft)]";
     default:
-      return "from-[rgba(255,185,95,0.2)] via-[rgba(255,185,95,0.12)] to-[rgba(192,193,255,0.16)]";
+      return "bg-[color-mix(in_srgb,var(--ui-warning-soft)_54%,var(--ui-accent-soft)_46%)]";
   }
 }
+
+const deckPanelClass =
+  "min-w-0 overflow-hidden rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4";
+const deckRowClass =
+  "min-w-0 overflow-hidden rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4";
+const deckEyebrowClass =
+  "font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]";
+const deckTitleClass = "text-[var(--ui-ink-strong)]";
+const deckBodyClass = "text-[var(--ui-ink-soft)]";
+const deckFaintClass = "text-[var(--ui-ink-faint)]";
+const deckMetricBadgeClass =
+  "bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]";
 
 export function XpCommandDeck({
   profile,
@@ -48,30 +66,48 @@ export function XpCommandDeck({
   tone = "core"
 }: XpCommandDeckProps) {
   const unlocked = achievements.filter((achievement) => achievement.unlocked);
-  const visibleAchievements = (unlocked.length > 0 ? unlocked : achievements).slice(0, 3);
+  const visibleAchievements = (
+    unlocked.length > 0 ? unlocked : achievements
+  ).slice(0, 3);
   const visibleMilestones = milestoneRewards.slice(0, 3);
   const visibleLedger = recentLedger.slice(0, 3);
-  const nextLevelProgress = Math.min(100, Math.round((profile.currentLevelXp / profile.nextLevelXp) * 100));
+  const nextLevelProgress = Math.min(
+    100,
+    Math.round((profile.currentLevelXp / profile.nextLevelXp) * 100)
+  );
 
   return (
     <section
       className={cn(
-        "min-w-0 overflow-hidden rounded-[30px] border border-white/6 bg-[linear-gradient(180deg,rgba(18,24,40,0.96),rgba(11,16,28,0.94))] shadow-[0_24px_70px_rgba(4,8,18,0.3)]",
-        tone === "psyche" && "bg-[linear-gradient(180deg,rgba(18,27,35,0.96),rgba(12,20,26,0.94))]",
+        "min-w-0 overflow-hidden rounded-[30px] border border-[var(--ui-border-subtle)] bg-[var(--card-gradient)] shadow-[var(--card-shadow)]",
+        tone === "psyche" &&
+          "border-[color-mix(in_srgb,var(--success)_18%,var(--ui-border-subtle)_82%)]",
         className
       )}
     >
-      <div className={cn("bg-gradient-to-r px-5 py-5", statusTone(momentumPulse.status))}>
+      <div className={cn("px-5 py-5", statusTone(momentumPulse.status))}>
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
-            <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/55">Weekly progress</div>
-            <h2 className="mt-3 font-display text-3xl leading-none text-white lg:text-4xl">{momentumPulse.headline}</h2>
-            <p className="mt-3 max-w-3xl text-sm leading-7 text-white/68">{momentumPulse.detail}</p>
+            <div className={deckEyebrowClass}>Weekly progress</div>
+            <h2
+              className={`mt-3 font-display text-3xl leading-none lg:text-4xl ${deckTitleClass}`}
+            >
+              {momentumPulse.headline}
+            </h2>
+            <p className={`mt-3 max-w-3xl text-sm leading-7 ${deckBodyClass}`}>
+              {momentumPulse.detail}
+            </p>
           </div>
           <div className="flex min-w-0 flex-wrap gap-2">
-            <Badge wrap className="bg-black/20 text-white/84">Level {profile.level}</Badge>
-            <Badge wrap className="bg-black/20 text-white/84">{profile.streakDays} day streak</Badge>
-            <Badge wrap className="bg-black/20 text-white/84">{profile.weeklyXp} weekly XP</Badge>
+            <Badge wrap className={deckMetricBadgeClass}>
+              Level {profile.level}
+            </Badge>
+            <Badge wrap className={deckMetricBadgeClass}>
+              {profile.streakDays} day streak
+            </Badge>
+            <Badge wrap className={deckMetricBadgeClass}>
+              {profile.weeklyXp} weekly XP
+            </Badge>
           </div>
         </div>
       </div>
@@ -82,20 +118,33 @@ export function XpCommandDeck({
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.24, ease: "easeOut" }}
-            className="overflow-hidden rounded-[24px] bg-white/[0.04] p-4"
+            className={deckPanelClass}
           >
             <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
-                <div className="font-medium text-white">Next reward</div>
-                <div className="mt-2 text-sm text-white/60">{momentumPulse.nextMilestoneLabel}</div>
+                <div className={`font-medium ${deckTitleClass}`}>
+                  Next reward
+                </div>
+                <div className={`mt-2 text-sm ${deckBodyClass}`}>
+                  {momentumPulse.nextMilestoneLabel}
+                </div>
               </div>
-              <Badge wrap className="max-w-[12rem] shrink-0 self-start text-[var(--tertiary)]">{momentumPulse.celebrationLabel}</Badge>
+              <Badge
+                wrap
+                className="max-w-[12rem] shrink-0 self-start text-[var(--tertiary)]"
+              >
+                {momentumPulse.celebrationLabel}
+              </Badge>
             </div>
             <div className="mt-5">
               <ProgressMeter value={nextLevelProgress} />
             </div>
-            <div className="mt-3 flex items-center justify-between gap-3 text-xs uppercase tracking-[0.16em] text-white/38">
-              <span>{profile.currentLevelXp}/{profile.nextLevelXp} XP</span>
+            <div
+              className={`mt-3 flex flex-wrap items-center justify-between gap-3 text-xs uppercase tracking-[0.16em] ${deckFaintClass}`}
+            >
+              <span>
+                {profile.currentLevelXp}/{profile.nextLevelXp} XP
+              </span>
               <span>{profile.comboMultiplier.toFixed(2)}x combo</span>
             </div>
           </motion.div>
@@ -106,37 +155,82 @@ export function XpCommandDeck({
                 key={achievement.id}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.24, delay: 0.04 * index, ease: "easeOut" }}
-                className="overflow-hidden rounded-[22px] bg-white/[0.04] p-4"
+                transition={{
+                  duration: 0.24,
+                  delay: 0.04 * index,
+                  ease: "easeOut"
+                }}
+                className={deckPanelClass}
               >
                 <div className="flex min-w-0 items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1 font-medium text-white">{achievement.title}</div>
-                  <Badge wrap className={cn("max-w-[8rem] shrink-0 self-start", achievementTone(achievement.tier))}>{achievement.tier}</Badge>
+                  <div
+                    className={`min-w-0 flex-1 font-medium ${deckTitleClass}`}
+                  >
+                    {achievement.title}
+                  </div>
+                  <Badge
+                    wrap
+                    className={cn(
+                      "max-w-[8rem] shrink-0 self-start",
+                      achievementTone(achievement.tier)
+                    )}
+                  >
+                    {achievement.tier}
+                  </Badge>
                 </div>
-                <div className="mt-2 text-sm leading-6 text-white/58">{achievement.summary}</div>
-                <div className="mt-4 text-xs uppercase tracking-[0.16em] text-white/40">{achievement.progressLabel}</div>
+                <div className={`mt-2 text-sm leading-6 ${deckBodyClass}`}>
+                  {achievement.summary}
+                </div>
+                <div
+                  className={`mt-4 text-xs uppercase tracking-[0.16em] ${deckFaintClass}`}
+                >
+                  {achievement.progressLabel}
+                </div>
               </motion.div>
             ))}
           </div>
         </div>
 
         <div className="grid gap-4">
-          <div className="overflow-hidden rounded-[24px] bg-white/[0.04] p-4">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Rewards in progress</div>
+          <div className={deckPanelClass}>
+            <div className={deckEyebrowClass}>Rewards in progress</div>
             <div className="mt-4 grid gap-3">
               {visibleMilestones.map((milestone) => {
-                const progress = Math.min(100, Math.round((milestone.current / milestone.target) * 100));
+                const progress = Math.min(
+                  100,
+                  Math.round((milestone.current / milestone.target) * 100)
+                );
                 return (
-                  <div key={milestone.id} className="overflow-hidden rounded-[18px] bg-[rgba(8,13,28,0.68)] p-4">
+                  <div key={milestone.id} className={deckRowClass}>
                     <div className="flex min-w-0 items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1 font-medium text-white">{milestone.title}</div>
-                      <Badge wrap className={cn("max-w-[10.5rem] shrink-0 self-start", milestone.completed ? "text-emerald-300" : "text-white/68")}>{milestone.rewardLabel}</Badge>
+                      <div
+                        className={`min-w-0 flex-1 font-medium ${deckTitleClass}`}
+                      >
+                        {milestone.title}
+                      </div>
+                      <Badge
+                        wrap
+                        className={cn(
+                          "max-w-[10.5rem] shrink-0 self-start",
+                          milestone.completed
+                            ? "bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_76%,var(--ui-ink-strong)_24%)]"
+                            : deckMetricBadgeClass
+                        )}
+                      >
+                        {milestone.rewardLabel}
+                      </Badge>
                     </div>
-                    <div className="mt-2 text-sm text-white/58">{milestone.summary}</div>
+                    <div className={`mt-2 text-sm ${deckBodyClass}`}>
+                      {milestone.summary}
+                    </div>
                     <div className="mt-4">
                       <ProgressMeter value={progress} />
                     </div>
-                    <div className="mt-3 text-xs uppercase tracking-[0.16em] text-white/38">{milestone.progressLabel}</div>
+                    <div
+                      className={`mt-3 text-xs uppercase tracking-[0.16em] ${deckFaintClass}`}
+                    >
+                      {milestone.progressLabel}
+                    </div>
                   </div>
                 );
               })}
@@ -144,20 +238,38 @@ export function XpCommandDeck({
           </div>
 
           {visibleLedger.length > 0 ? (
-            <div className="overflow-hidden rounded-[24px] bg-white/[0.04] p-4">
-              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Recent XP changes</div>
+            <div className={deckPanelClass}>
+              <div className={deckEyebrowClass}>Recent XP changes</div>
               <div className="mt-4 grid gap-3">
                 {visibleLedger.map((event) => (
-                  <div key={event.id} className="overflow-hidden rounded-[18px] bg-[rgba(8,13,28,0.68)] p-4">
+                  <div key={event.id} className={deckRowClass}>
                     <div className="flex min-w-0 items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1 font-medium text-white">{event.reasonTitle}</div>
-                      <Badge wrap className={cn("max-w-[8rem] shrink-0 self-start", event.deltaXp >= 0 ? "text-emerald-300" : "text-amber-300")}>
+                      <div
+                        className={`min-w-0 flex-1 font-medium ${deckTitleClass}`}
+                      >
+                        {event.reasonTitle}
+                      </div>
+                      <Badge
+                        wrap
+                        className={cn(
+                          "max-w-[8rem] shrink-0 self-start",
+                          event.deltaXp >= 0
+                            ? "bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_76%,var(--ui-ink-strong)_24%)]"
+                            : "bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]"
+                        )}
+                      >
                         {event.deltaXp > 0 ? "+" : ""}
                         {event.deltaXp} XP
                       </Badge>
                     </div>
-                    <div className="mt-2 text-sm text-white/58">{event.reasonSummary}</div>
-                    <div className="mt-3 text-xs uppercase tracking-[0.16em] text-white/38">{formatDateTime(event.createdAt)}</div>
+                    <div className={`mt-2 text-sm ${deckBodyClass}`}>
+                      {event.reasonSummary}
+                    </div>
+                    <div
+                      className={`mt-3 text-xs uppercase tracking-[0.16em] ${deckFaintClass}`}
+                    >
+                      {formatDateTime(event.createdAt)}
+                    </div>
                   </div>
                 ))}
               </div>

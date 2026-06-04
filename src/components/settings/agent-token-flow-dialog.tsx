@@ -337,7 +337,7 @@ export function AgentTokenFlowDialog({
               labelHelp="Use 'assistant' for interactive agents. Use 'automation' for scripts or scheduled jobs with no conversational layer."
             >
               <select
-                className="rounded-[14px] bg-white/[0.06] px-3 py-3 text-white"
+                className="rounded-[14px] bg-[var(--ui-surface-2)] px-3 py-3 text-[var(--ui-ink-strong)]"
                 value={value.agentType}
                 onChange={(e) => setValue({ agentType: e.target.value })}
               >
@@ -482,8 +482,8 @@ export function AgentTokenFlowDialog({
                   type="button"
                   className={`rounded-[18px] border px-4 py-4 text-left transition ${
                     selected
-                      ? "border-[rgba(192,193,255,0.28)] bg-[rgba(192,193,255,0.14)] text-white"
-                      : "border-white/8 bg-white/[0.04] text-white/58 hover:bg-white/[0.08]"
+                      ? "border-[color-mix(in_srgb,var(--primary)_28%,transparent)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]"
+                      : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-muted)] hover:bg-[var(--ui-surface-2)]"
                   }`}
                   onClick={() => {
                     if (selected) {
@@ -497,14 +497,14 @@ export function AgentTokenFlowDialog({
                   }}
                 >
                   <div className="font-medium">{scope.label}</div>
-                  <div className="mt-1 text-xs leading-5 text-white/58">
+                  <div className="mt-1 text-xs leading-5 text-[var(--ui-ink-muted)]">
                     {scope.description}
                   </div>
                 </button>
               );
             })}
           </div>
-          <div className="mt-2 text-xs text-white/40">
+          <div className="mt-2 text-xs text-[var(--ui-ink-muted)]">
             {value.scopes.length} scope{value.scopes.length !== 1 ? "s" : ""}{" "}
             selected
           </div>
@@ -571,7 +571,7 @@ export function AgentTokenFlowDialog({
               }
             />
           </FlowField>
-          <div className="rounded-[16px] bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/62">
+          <div className="rounded-[16px] bg-[var(--ui-surface-2)] px-4 py-3 text-sm leading-6 text-[var(--ui-ink-medium)]">
             Default scope summary:{" "}
             {value.scopePolicy.userIds.length > 0
               ? `${value.scopePolicy.userIds.length} user slice${value.scopePolicy.userIds.length === 1 ? "" : "s"}`
@@ -664,7 +664,7 @@ export function AgentTokenFlowDialog({
               </FlowField>
             ))}
           </div>
-          <label className="flex items-center gap-3 rounded-[16px] bg-white/[0.04] px-4 py-3 text-sm text-white/70">
+          <label className="flex items-center gap-3 rounded-[16px] bg-[var(--ui-surface-2)] px-4 py-3 text-sm text-[var(--ui-ink-medium)]">
             <input
               type="checkbox"
               checked={value.bootstrapPolicy.includePeoplePages}

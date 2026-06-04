@@ -138,7 +138,7 @@ export function KnowledgeGraphEntityPanel({
         className
       )}
     >
-      <div className="grid gap-4 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[linear-gradient(180deg,rgba(11,17,30,0.98),rgba(9,14,24,0.96))] p-4 shadow-[0_28px_90px_rgba(0,0,0,0.3)]">
+      <div className="grid gap-4 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 shadow-[var(--ui-shadow-floating)]">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <EntityBadge

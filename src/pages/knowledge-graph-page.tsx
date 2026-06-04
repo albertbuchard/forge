@@ -99,6 +99,43 @@ import {
 import { useAppDispatch, useAppSelector } from "@/store/typed-hooks";
 import { getEntityVisual } from "@/lib/entity-visuals";
 
+const graphFloatingChipClass =
+  "shrink-0 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-2 py-0.5 text-[9px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)] shadow-[var(--ui-shadow-soft)] backdrop-blur";
+const graphSegmentedControlClass =
+  "flex shrink-0 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-0.5 shadow-[var(--ui-shadow-soft)] backdrop-blur";
+const graphSegmentActiveClass =
+  "bg-[var(--ui-accent-soft)] text-[var(--primary)] shadow-[var(--ui-shadow-soft)]";
+const graphSegmentInactiveClass =
+  "text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]";
+const graphFloatingButtonClass =
+  "rounded-full border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] shadow-[var(--ui-shadow-soft)] backdrop-blur hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]";
+const graphDialogOverlayClass =
+  "fixed inset-0 z-40 bg-[color-mix(in_srgb,var(--ui-scrim)_72%,transparent)] backdrop-blur-xl";
+const graphDialogContentClass =
+  "fixed inset-x-4 top-[max(1rem,env(safe-area-inset-top))] z-50 max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-[30px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] shadow-[var(--ui-shadow-floating)] md:left-1/2 md:right-auto md:-translate-x-1/2";
+const graphDialogHeaderClass =
+  "sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-5 py-4 backdrop-blur-xl";
+const graphDialogEyebrowClass =
+  "text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]";
+const graphDialogTitleClass =
+  "font-display text-2xl text-[var(--ui-ink-strong)]";
+const graphDialogCopyClass =
+  "text-sm leading-6 text-[var(--ui-ink-soft)]";
+const graphDialogCardClass =
+  "grid min-w-0 gap-3 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4";
+const graphDialogMetricCardClass =
+  "min-w-0 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4";
+const graphDialogMiniCardClass =
+  "min-w-0 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-2";
+const graphDialogCardTitleClass =
+  "text-sm font-medium text-[var(--ui-ink-strong)]";
+const graphDialogCardCopyClass =
+  "text-xs leading-5 text-[var(--ui-ink-faint)]";
+const graphDialogPillClass =
+  "rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-2.5 py-1 text-xs text-[var(--ui-ink-soft)]";
+const graphDialogNoticeClass =
+  "rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-info-soft)] px-4 py-3 text-sm leading-6 text-[var(--ui-ink-soft)]";
+
 declare global {
   interface Window {
     __FORGE_ENABLE_GRAPH_DIAGNOSTICS__?: boolean;
@@ -736,7 +773,7 @@ export function KnowledgeGraphPage() {
 
   return (
     <div className="h-[calc(100dvh-var(--forge-mobile-nav-clearance)-5.25rem)] overflow-hidden lg:-mt-3 lg:h-[calc(100dvh-10rem)]">
-      <div className="relative h-full bg-[radial-gradient(circle_at_top,rgba(125,211,252,0.08),transparent_26%),linear-gradient(180deg,rgba(7,12,23,0.98),rgba(5,10,19,1))]">
+      <div className="relative h-full bg-[var(--ui-surface-0)]">
         <div className="pointer-events-auto absolute right-3 top-3 z-30 hidden md:block">
           <GamificationMiniHud metrics={shell.snapshot.metrics} />
         </div>
@@ -744,8 +781,8 @@ export function KnowledgeGraphPage() {
           resetKey={graphSurfaceResetKey}
           fallback={(error) => (
             <div className="grid h-full place-items-center p-6 text-center">
-              <div className="grid max-w-lg gap-4 rounded-[28px] border border-[rgba(255,255,255,0.08)] bg-[rgba(8,12,22,0.92)] p-6 shadow-[0_30px_80px_rgba(0,0,0,0.36)]">
-                <div className="mx-auto flex size-12 items-center justify-center rounded-full border border-[rgba(255,255,255,0.12)] bg-[rgba(255,255,255,0.04)] text-[var(--warning)]">
+              <div className="grid max-w-lg gap-4 rounded-[28px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-6 shadow-[var(--ui-shadow-floating)]">
+                <div className="mx-auto flex size-12 items-center justify-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-warning-soft)] text-[var(--warning)]">
                   <AlertTriangle className="size-5" />
                 </div>
                 <div className="grid gap-2">
@@ -760,7 +797,7 @@ export function KnowledgeGraphPage() {
                     filters. The graph will recover automatically when the
                     dataset changes.
                   </p>
-                  <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[rgba(255,255,255,0.04)] px-4 py-3 text-left text-xs text-[var(--ui-ink-faint)]">
+                  <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3 text-left text-xs text-[var(--ui-ink-faint)]">
                     {error.message}
                   </div>
                 </div>
@@ -815,18 +852,18 @@ export function KnowledgeGraphPage() {
             <div className="pointer-events-auto flex items-center gap-1.5">
               <div
                 title={summaryBadgeTitle}
-                className="shrink-0 rounded-full border border-white/10 bg-[rgba(8,12,20,0.78)] px-2 py-0.5 text-[9px] uppercase tracking-[0.18em] text-white/48 backdrop-blur"
+                className={graphFloatingChipClass}
               >
                 {summaryBadge}
               </div>
               <div className="ml-auto flex items-center gap-1.5">
-                <div className="flex shrink-0 rounded-full border border-white/10 bg-[rgba(8,12,20,0.78)] p-0.5 shadow-[0_14px_42px_rgba(0,0,0,0.24)] backdrop-blur">
+                <div className={graphSegmentedControlClass}>
                   <button
                     type="button"
                     className={`rounded-full px-2 py-1 text-[10px] transition ${
                       selectedView === "graph"
-                        ? "bg-white/[0.14] text-white"
-                        : "text-white/52 hover:text-white"
+                        ? graphSegmentActiveClass
+                        : graphSegmentInactiveClass
                     }`}
                     onClick={() =>
                       setParam((next) => {
@@ -840,8 +877,8 @@ export function KnowledgeGraphPage() {
                     type="button"
                     className={`rounded-full px-2 py-1 text-[10px] transition ${
                       selectedView === "hierarchy"
-                        ? "bg-white/[0.14] text-white"
-                        : "text-white/52 hover:text-white"
+                        ? graphSegmentActiveClass
+                        : graphSegmentInactiveClass
                     }`}
                     onClick={() =>
                       setParam((next) => {
@@ -855,7 +892,7 @@ export function KnowledgeGraphPage() {
                 <Button
                   variant="secondary"
                   size="sm"
-                  className="h-7 rounded-full border-white/10 bg-[rgba(8,12,20,0.78)] px-2 text-[10px] text-white/68 backdrop-blur hover:text-white"
+                  className={`h-7 px-2 text-[10px] ${graphFloatingButtonClass}`}
                   onClick={() => setAppearanceDialogOpen(true)}
                   aria-label="Open graph appearance settings"
                   title="Graph appearance settings"
@@ -865,7 +902,7 @@ export function KnowledgeGraphPage() {
                 <Button
                   variant="secondary"
                   size="sm"
-                  className="h-7 rounded-full border-white/10 bg-[rgba(8,12,20,0.78)] px-2 text-[10px] text-white/68 backdrop-blur hover:text-white"
+                  className={`h-7 px-2 text-[10px] ${graphFloatingButtonClass}`}
                   onClick={() => {
                     setMobilePanelOpen(false);
                     setMobileFiltersOpen(true);
@@ -889,7 +926,7 @@ export function KnowledgeGraphPage() {
               <div
                 data-testid="knowledge-graph-count-pill"
                 title={summaryBadgeTitle}
-                className="shrink-0 rounded-full border border-white/10 bg-[rgba(8,12,20,0.78)] px-2 py-0.5 text-[9px] uppercase tracking-[0.18em] text-white/48 backdrop-blur"
+                className={graphFloatingChipClass}
               >
                 {summaryBadge}
               </div>
@@ -937,7 +974,7 @@ export function KnowledgeGraphPage() {
               <Button
                 variant="secondary"
                 size="sm"
-                className="h-7 rounded-full border-white/10 bg-[rgba(8,12,20,0.78)] px-2 text-[10px] text-white/68 backdrop-blur hover:text-white"
+                className={`h-7 px-2 text-[10px] ${graphFloatingButtonClass}`}
                 onClick={() => setAdvancedFiltersOpen((current) => !current)}
               >
                 <SlidersHorizontal className="size-3" />
@@ -947,7 +984,7 @@ export function KnowledgeGraphPage() {
                 <Button
                   variant="secondary"
                   size="sm"
-                  className="h-7 rounded-full border-white/10 bg-[rgba(8,12,20,0.78)] px-2 text-[10px] text-white/68 backdrop-blur hover:text-white"
+                  className={`h-7 px-2 text-[10px] ${graphFloatingButtonClass}`}
                   onClick={resetFilters}
                 >
                   Reset
@@ -962,7 +999,7 @@ export function KnowledgeGraphPage() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
                   transition={{ duration: 0.18, ease: "easeOut" }}
-                  className="pointer-events-auto mt-2 ml-auto max-w-[min(54rem,calc(100%-3.5rem))] rounded-[20px] border border-white/10 bg-[rgba(8,12,20,0.88)] p-3 shadow-[0_20px_60px_rgba(0,0,0,0.32)] backdrop-blur"
+                  className="pointer-events-auto mt-2 ml-auto max-w-[min(54rem,calc(100%-3.5rem))] rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3 shadow-[var(--ui-shadow-floating)] backdrop-blur"
                 >
                   <div className="grid gap-3 xl:grid-cols-[minmax(0,1.4fr)_minmax(17rem,1fr)]">
                     <div className="grid gap-3">
@@ -1024,9 +1061,9 @@ export function KnowledgeGraphPage() {
                       />
                     </div>
 
-                    <div className="grid gap-3 rounded-[20px] border border-white/10 bg-white/[0.03] p-3">
+                    <div className="grid gap-3 rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-3">
                       <div className="grid gap-2">
-                        <div className="flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.18em] text-white/46">
+                        <div className="flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                           <span>Max nodes shown</span>
                           <span>{maxNodes}</span>
                         </div>
@@ -1043,7 +1080,7 @@ export function KnowledgeGraphPage() {
                           }
                           className="w-full accent-[var(--secondary)]"
                         />
-                        <div className="text-xs text-white/42">
+                        <div className="text-xs text-[var(--ui-ink-faint)]">
                           The graph stays deterministic under the cap and focus
                           mode redistributes the visible neighborhood around the
                           selected node.
@@ -1052,7 +1089,7 @@ export function KnowledgeGraphPage() {
 
                       <div className="grid gap-3 sm:grid-cols-2">
                         <div className="grid gap-2">
-                          <div className="text-[11px] uppercase tracking-[0.18em] text-white/46">
+                          <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                             Updated from
                           </div>
                           <Input
@@ -1076,7 +1113,7 @@ export function KnowledgeGraphPage() {
                           />
                         </div>
                         <div className="grid gap-2">
-                          <div className="text-[11px] uppercase tracking-[0.18em] text-white/46">
+                          <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                             Updated to
                           </div>
                           <Input
@@ -1134,13 +1171,13 @@ export function KnowledgeGraphPage() {
         {!isMobile ? (
           <div className="pointer-events-none absolute bottom-5 left-4 z-20 lg:left-6">
             <div className="flex items-center gap-2">
-              <div className="pointer-events-auto flex shrink-0 rounded-full border border-white/10 bg-[rgba(8,12,20,0.82)] p-0.5 shadow-[0_14px_42px_rgba(0,0,0,0.24)] backdrop-blur">
+              <div className={`pointer-events-auto ${graphSegmentedControlClass}`}>
                 <button
                   type="button"
                   className={`rounded-full px-2.5 py-1.5 text-[10px] transition ${
                     selectedView === "graph"
-                      ? "bg-white/[0.14] text-white"
-                      : "text-white/52 hover:text-white"
+                      ? graphSegmentActiveClass
+                      : graphSegmentInactiveClass
                   }`}
                   onClick={() =>
                     setParam((next) => {
@@ -1154,8 +1191,8 @@ export function KnowledgeGraphPage() {
                   type="button"
                   className={`rounded-full px-2.5 py-1.5 text-[10px] transition ${
                     selectedView === "hierarchy"
-                      ? "bg-white/[0.14] text-white"
-                      : "text-white/52 hover:text-white"
+                      ? graphSegmentActiveClass
+                      : graphSegmentInactiveClass
                   }`}
                   onClick={() =>
                     setParam((next) => {
@@ -1171,7 +1208,7 @@ export function KnowledgeGraphPage() {
                   <Button
                     variant="secondary"
                     size="sm"
-                    className="pointer-events-auto size-8 rounded-full border-white/10 bg-[rgba(8,12,20,0.82)] p-0 text-white/72 backdrop-blur hover:text-white"
+                    className={`pointer-events-auto size-8 p-0 ${graphFloatingButtonClass}`}
                     onClick={() => setAppearanceDialogOpen(true)}
                     title="Graph appearance settings"
                     aria-label="Open graph appearance settings"
@@ -1181,7 +1218,7 @@ export function KnowledgeGraphPage() {
                   <Button
                     variant="secondary"
                     size="sm"
-                    className="pointer-events-auto size-8 rounded-full border-white/10 bg-[rgba(8,12,20,0.82)] p-0 text-white/72 backdrop-blur hover:text-white"
+                    className={`pointer-events-auto size-8 p-0 ${graphFloatingButtonClass}`}
                     onClick={() => graphViewRef.current?.zoomIn()}
                     title="Zoom in"
                     aria-label="Zoom in"
@@ -1191,7 +1228,7 @@ export function KnowledgeGraphPage() {
                   <Button
                     variant="secondary"
                     size="sm"
-                    className="pointer-events-auto size-8 rounded-full border-white/10 bg-[rgba(8,12,20,0.82)] p-0 text-white/72 backdrop-blur hover:text-white"
+                    className={`pointer-events-auto size-8 p-0 ${graphFloatingButtonClass}`}
                     onClick={() => graphViewRef.current?.zoomOut()}
                     title="Zoom out"
                     aria-label="Zoom out"
@@ -1201,7 +1238,7 @@ export function KnowledgeGraphPage() {
                   <Button
                     variant="secondary"
                     size="sm"
-                    className="pointer-events-auto size-8 rounded-full border-white/10 bg-[rgba(8,12,20,0.82)] p-0 text-white/72 backdrop-blur hover:text-white"
+                    className={`pointer-events-auto size-8 p-0 ${graphFloatingButtonClass}`}
                     onClick={() => graphViewRef.current?.recenterOnFocus()}
                     disabled={!focusPayload.focusNode}
                     title="Recenter"
@@ -1212,7 +1249,7 @@ export function KnowledgeGraphPage() {
                   <Button
                     variant="secondary"
                     size="sm"
-                    className="pointer-events-auto size-8 rounded-full border-white/10 bg-[rgba(8,12,20,0.82)] p-0 text-white/72 backdrop-blur hover:text-white"
+                    className={`pointer-events-auto size-8 p-0 ${graphFloatingButtonClass}`}
                     onClick={() => graphViewRef.current?.fit()}
                     title="Reset camera"
                     aria-label="Reset camera"
@@ -1223,7 +1260,7 @@ export function KnowledgeGraphPage() {
                     <Button
                       variant="secondary"
                       size="sm"
-                      className="pointer-events-auto size-8 rounded-full border-white/10 bg-[rgba(8,12,20,0.82)] p-0 text-white/72 backdrop-blur hover:text-white"
+                      className={`pointer-events-auto size-8 p-0 ${graphFloatingButtonClass}`}
                       onClick={() =>
                         dispatch(
                           setKnowledgeGraphDiagnosticsPanelOpen(
@@ -1281,7 +1318,7 @@ export function KnowledgeGraphPage() {
         description="Search the visible graph and adjust the focus cap without covering the canvas all the time."
       >
         <div className="grid gap-4 pb-2">
-          <div className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[rgba(255,255,255,0.03)] p-3">
+          <div className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3">
             <FacetedTokenSearch
               title=""
               description=""
@@ -1362,8 +1399,8 @@ export function KnowledgeGraphPage() {
             />
           </div>
 
-          <div className="grid gap-3 rounded-[20px] border border-[var(--ui-border-subtle)] bg-[rgba(255,255,255,0.03)] p-3">
-            <div className="flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.18em] text-white/46">
+          <div className="grid gap-3 rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3">
+            <div className="flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
               <span>Max nodes shown</span>
               <span>{maxNodes}</span>
             </div>
@@ -1382,7 +1419,7 @@ export function KnowledgeGraphPage() {
             />
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="grid gap-2">
-                <div className="text-[11px] uppercase tracking-[0.18em] text-white/46">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                   Updated from
                 </div>
                 <Input
@@ -1406,7 +1443,7 @@ export function KnowledgeGraphPage() {
                 />
               </div>
               <div className="grid gap-2">
-                <div className="text-[11px] uppercase tracking-[0.18em] text-white/46">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                   Updated to
                 </div>
                 <Input
@@ -1451,8 +1488,10 @@ export function KnowledgeGraphPage() {
         onOpenChange={setAppearanceDialogOpen}
       >
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-40 bg-[rgba(4,8,18,0.72)] backdrop-blur-xl" />
-          <Dialog.Content className="fixed inset-x-4 top-[max(1rem,env(safe-area-inset-top))] z-50 max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(16,23,36,0.98),rgba(8,12,22,0.98))] shadow-[0_32px_90px_rgba(3,8,18,0.48)] md:left-1/2 md:right-auto md:w-[min(40rem,calc(100vw-3rem))] md:-translate-x-1/2">
+          <Dialog.Overlay className={graphDialogOverlayClass} />
+          <Dialog.Content
+            className={`${graphDialogContentClass} md:w-[min(40rem,calc(100vw-3rem))]`}
+          >
             <Dialog.Title className="sr-only">
               Knowledge Graph appearance settings
             </Dialog.Title>
@@ -1460,15 +1499,15 @@ export function KnowledgeGraphPage() {
               Tune the graph focus physics and appearance response.
             </Dialog.Description>
 
-            <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-white/8 bg-[rgba(8,12,22,0.9)] px-5 py-4 backdrop-blur-xl">
+            <div className={graphDialogHeaderClass}>
               <div className="grid gap-1">
-                <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
+                <div className={graphDialogEyebrowClass}>
                   Graph appearance
                 </div>
-                <div className="font-display text-2xl text-white">
+                <div className={graphDialogTitleClass}>
                   Tune the focus field
                 </div>
-                <p className="max-w-xl text-sm leading-6 text-white/55">
+                <p className={`max-w-xl ${graphDialogCopyClass}`}>
                   Shape how strongly a focused node opens its neighborhood and
                   how far that pressure diffuses through connected hops.
                 </p>
@@ -1480,18 +1519,18 @@ export function KnowledgeGraphPage() {
 
             <div className="grid gap-4 px-5 py-5">
               <div className="grid gap-4 md:grid-cols-2">
-                <div className="grid gap-3 rounded-[24px] border border-white/10 bg-white/[0.04] p-4">
+                <div className={graphDialogCardClass}>
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <div className="text-sm font-medium text-white">
+                      <div className={graphDialogCardTitleClass}>
                         Focused repulsion
                       </div>
-                      <div className="text-xs leading-5 text-white/46">
+                      <div className={graphDialogCardCopyClass}>
                         Push nearby nodes apart more aggressively while the
                         focused node stays anchored.
                       </div>
                     </div>
-                    <div className="rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-xs text-white/72">
+                    <div className={graphDialogPillClass}>
                       {physicsSettings.focusRepulsion.toFixed(2)}
                     </div>
                   </div>
@@ -1512,18 +1551,18 @@ export function KnowledgeGraphPage() {
                   />
                 </div>
 
-                <div className="grid gap-3 rounded-[24px] border border-white/10 bg-white/[0.04] p-4">
+                <div className={graphDialogCardClass}>
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <div className="text-sm font-medium text-white">
+                      <div className={graphDialogCardTitleClass}>
                         Focus diffusion
                       </div>
-                      <div className="text-xs leading-5 text-white/46">
+                      <div className={graphDialogCardCopyClass}>
                         Extend the focus field further through multi-hop
                         neighbors and lengthen the reversible transition.
                       </div>
                     </div>
-                    <div className="rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-xs text-white/72">
+                    <div className={graphDialogPillClass}>
                       {physicsSettings.focusDiffusion.toFixed(2)}
                     </div>
                   </div>
@@ -1544,19 +1583,19 @@ export function KnowledgeGraphPage() {
                   />
                 </div>
 
-                <div className="grid gap-3 rounded-[24px] border border-white/10 bg-white/[0.04] p-4">
+                <div className={graphDialogCardClass}>
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <div className="text-sm font-medium text-white">
+                      <div className={graphDialogCardTitleClass}>
                         Spring reduction max
                       </div>
-                      <div className="text-xs leading-5 text-white/46">
+                      <div className={graphDialogCardCopyClass}>
                         Reduce edge spring constants most strongly around the
                         focused node so its local neighborhood can open more
                         freely.
                       </div>
                     </div>
-                    <div className="rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-xs text-white/72">
+                    <div className={graphDialogPillClass}>
                       {physicsSettings.focusSpringReductionMax.toFixed(2)}
                     </div>
                   </div>
@@ -1577,18 +1616,18 @@ export function KnowledgeGraphPage() {
                   />
                 </div>
 
-                <div className="grid gap-3 rounded-[24px] border border-white/10 bg-white/[0.04] p-4">
+                <div className={graphDialogCardClass}>
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <div className="text-sm font-medium text-white">
+                      <div className={graphDialogCardTitleClass}>
                         Spring reduction diffusion
                       </div>
-                      <div className="text-xs leading-5 text-white/46">
+                      <div className={graphDialogCardCopyClass}>
                         Spread that spring softening progressively through
                         first-hop, second-hop, and more distant neighborhoods.
                       </div>
                     </div>
-                    <div className="rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-xs text-white/72">
+                    <div className={graphDialogPillClass}>
                       {physicsSettings.focusSpringReductionDiffusion.toFixed(2)}
                     </div>
                   </div>
@@ -1609,18 +1648,18 @@ export function KnowledgeGraphPage() {
                   />
                 </div>
 
-                <div className="grid gap-3 rounded-[24px] border border-white/10 bg-white/[0.04] p-4">
+                <div className={graphDialogCardClass}>
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <div className="text-sm font-medium text-white">
+                      <div className={graphDialogCardTitleClass}>
                         Edge spring strength
                       </div>
-                      <div className="text-xs leading-5 text-white/46">
+                      <div className={graphDialogCardCopyClass}>
                         Lower this to loosen graph edges globally and let
                         neighborhoods spread instead of snapping tightly inward.
                       </div>
                     </div>
-                    <div className="rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-xs text-white/72">
+                    <div className={graphDialogPillClass}>
                       {physicsSettings.edgeSpringStrength.toFixed(2)}
                     </div>
                   </div>
@@ -1641,18 +1680,18 @@ export function KnowledgeGraphPage() {
                   />
                 </div>
 
-                <div className="grid gap-3 rounded-[24px] border border-white/10 bg-white/[0.04] p-4">
+                <div className={graphDialogCardClass}>
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <div className="text-sm font-medium text-white">
+                      <div className={graphDialogCardTitleClass}>
                         Gravity strength
                       </div>
-                      <div className="text-xs leading-5 text-white/46">
+                      <div className={graphDialogCardCopyClass}>
                         Reduce this to weaken the global inward pull that
                         compacts the whole graph toward the middle.
                       </div>
                     </div>
-                    <div className="rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-xs text-white/72">
+                    <div className={graphDialogPillClass}>
                       {physicsSettings.gravityStrength.toFixed(2)}
                     </div>
                   </div>
@@ -1673,18 +1712,18 @@ export function KnowledgeGraphPage() {
                   />
                 </div>
 
-                <div className="grid gap-3 rounded-[24px] border border-white/10 bg-white/[0.04] p-4">
+                <div className={graphDialogCardClass}>
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <div className="text-sm font-medium text-white">
+                      <div className={graphDialogCardTitleClass}>
                         Focus shell spacing
                       </div>
-                      <div className="text-xs leading-5 text-white/46">
+                      <div className={graphDialogCardCopyClass}>
                         Increase this to push focused rings farther outward and
                         visibly open the local structure.
                       </div>
                     </div>
-                    <div className="rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-xs text-white/72">
+                    <div className={graphDialogPillClass}>
                       {physicsSettings.focusShellSpacing.toFixed(2)}
                     </div>
                   </div>
@@ -1706,7 +1745,7 @@ export function KnowledgeGraphPage() {
                 </div>
               </div>
 
-              <div className="rounded-[24px] border border-white/8 bg-[rgba(125,211,252,0.07)] px-4 py-3 text-sm leading-6 text-white/62">
+              <div className={graphDialogNoticeClass}>
                 The main cramming forces are the edge springs and the inward
                 gravity pull. Lower edge spring strength or gravity strength to
                 let the whole graph breathe more, then raise focus shell spacing
@@ -1740,8 +1779,10 @@ export function KnowledgeGraphPage() {
           }
         >
           <Dialog.Portal>
-            <Dialog.Overlay className="fixed inset-0 z-40 bg-[rgba(4,8,18,0.64)] backdrop-blur-xl" />
-            <Dialog.Content className="fixed inset-x-4 top-[max(1rem,env(safe-area-inset-top))] z-50 max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(16,23,36,0.98),rgba(8,12,22,0.98))] shadow-[0_32px_90px_rgba(3,8,18,0.48)] md:left-1/2 md:right-auto md:w-[min(56rem,calc(100vw-3rem))] md:-translate-x-1/2">
+            <Dialog.Overlay className={graphDialogOverlayClass} />
+            <Dialog.Content
+              className={`${graphDialogContentClass} md:w-[min(56rem,calc(100vw-3rem))]`}
+            >
               <Dialog.Title className="sr-only">
                 Knowledge Graph diagnostics
               </Dialog.Title>
@@ -1750,15 +1791,15 @@ export function KnowledgeGraphPage() {
                 periodic graph snapshots.
               </Dialog.Description>
 
-              <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-white/8 bg-[rgba(8,12,22,0.9)] px-5 py-4 backdrop-blur-xl">
+              <div className={graphDialogHeaderClass}>
                 <div className="grid gap-1">
-                  <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
+                  <div className={graphDialogEyebrowClass}>
                     Dev diagnostics
                   </div>
-                  <div className="font-display text-2xl text-white">
+                  <div className={graphDialogTitleClass}>
                     Knowledge Graph truth surface
                   </div>
-                  <p className="max-w-2xl text-sm leading-6 text-white/55">
+                  <p className={`max-w-2xl ${graphDialogCopyClass}`}>
                     Track startup phase, origin drift, recent lifecycle logs,
                     and the bounded 5-second graph snapshots that help catch
                     centering regressions.
@@ -1771,65 +1812,65 @@ export function KnowledgeGraphPage() {
 
               <div className="grid gap-4 px-5 py-5">
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                  <div className="rounded-[22px] border border-white/10 bg-white/[0.04] p-4">
-                    <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
+                  <div className={graphDialogMetricCardClass}>
+                    <div className={graphDialogEyebrowClass}>
                       Startup phase
                     </div>
-                    <div className="mt-2 text-lg font-semibold text-white">
+                    <div className="mt-2 text-lg font-semibold text-[var(--ui-ink-strong)]">
                       {knowledgeGraphDiagnostics.latestStatus?.startupPhase ??
                         "boot"}
                     </div>
-                    <div className="mt-1 text-xs text-white/50">
+                    <div className="mt-1 text-xs text-[var(--ui-ink-faint)]">
                       {knowledgeGraphDiagnostics.latestStatus
                         ?.startupInvariantSatisfied
                         ? "Origin invariant holding"
                         : "Waiting for invariant or correction"}
                     </div>
                   </div>
-                  <div className="rounded-[22px] border border-white/10 bg-white/[0.04] p-4">
-                    <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
+                  <div className={graphDialogMetricCardClass}>
+                    <div className={graphDialogEyebrowClass}>
                       Camera drift
                     </div>
-                    <div className="mt-2 text-lg font-semibold text-white">
+                    <div className="mt-2 text-lg font-semibold text-[var(--ui-ink-strong)]">
                       {knowledgeGraphDiagnostics.latestStatus
                         ? knowledgeGraphDiagnostics.latestStatus.driftMetrics.cameraDistanceFromOrigin.toFixed(
                             3
                           )
                         : "0.000"}
                     </div>
-                    <div className="mt-1 text-xs text-white/50">
+                    <div className="mt-1 text-xs text-[var(--ui-ink-faint)]">
                       camera{" "}
                       {knowledgeGraphDiagnostics.latestStatus
                         ? `${knowledgeGraphDiagnostics.latestStatus.camera.x.toFixed(3)}, ${knowledgeGraphDiagnostics.latestStatus.camera.y.toFixed(3)}`
                         : "0.000, 0.000"}
                     </div>
                   </div>
-                  <div className="rounded-[22px] border border-white/10 bg-white/[0.04] p-4">
-                    <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
+                  <div className={graphDialogMetricCardClass}>
+                    <div className={graphDialogEyebrowClass}>
                       Graph centroid
                     </div>
-                    <div className="mt-2 text-lg font-semibold text-white">
+                    <div className="mt-2 text-lg font-semibold text-[var(--ui-ink-strong)]">
                       {knowledgeGraphDiagnostics.latestStatus
                         ? knowledgeGraphDiagnostics.latestStatus.driftMetrics.centroidDistanceFromOrigin.toFixed(
                             3
                           )
                         : "0.000"}
                     </div>
-                    <div className="mt-1 text-xs text-white/50">
+                    <div className="mt-1 text-xs text-[var(--ui-ink-faint)]">
                       centroid{" "}
                       {knowledgeGraphDiagnostics.latestStatus
                         ? `${knowledgeGraphDiagnostics.latestStatus.graphCentroid.x.toFixed(3)}, ${knowledgeGraphDiagnostics.latestStatus.graphCentroid.y.toFixed(3)}`
                         : "0.000, 0.000"}
                     </div>
                   </div>
-                  <div className="rounded-[22px] border border-white/10 bg-white/[0.04] p-4">
-                    <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
+                  <div className={graphDialogMetricCardClass}>
+                    <div className={graphDialogEyebrowClass}>
                       Snapshot ring
                     </div>
-                    <div className="mt-2 text-lg font-semibold text-white">
+                    <div className="mt-2 text-lg font-semibold text-[var(--ui-ink-strong)]">
                       {knowledgeGraphDiagnostics.recentSnapshots.length}
                     </div>
-                    <div className="mt-1 text-xs text-white/50">
+                    <div className="mt-1 text-xs text-[var(--ui-ink-faint)]">
                       latest{" "}
                       {knowledgeGraphDiagnostics.latestStatus
                         ?.latestSnapshotAt ?? "none"}
@@ -1838,17 +1879,17 @@ export function KnowledgeGraphPage() {
                 </div>
 
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-                  <div className="grid gap-3 rounded-[24px] border border-white/10 bg-white/[0.04] p-4">
+                  <div className={graphDialogCardClass}>
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <div className="text-sm font-medium text-white">
+                        <div className={graphDialogCardTitleClass}>
                           Recent lifecycle events
                         </div>
-                        <div className="text-xs text-white/46">
+                        <div className={graphDialogCardCopyClass}>
                           Scoped dev events from the page and graph renderer.
                         </div>
                       </div>
-                      <div className="rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-xs text-white/72">
+                      <div className={graphDialogPillClass}>
                         {knowledgeGraphDiagnostics.recentEvents.length}
                       </div>
                     </div>
@@ -1856,20 +1897,20 @@ export function KnowledgeGraphPage() {
                       {knowledgeGraphDiagnostics.recentEvents.map((event) => (
                         <div
                           key={event.id}
-                          className="rounded-[18px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-3 py-2"
+                          className={graphDialogMiniCardClass}
                         >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="text-xs font-medium text-white">
+                          <div className="flex min-w-0 items-center justify-between gap-3">
+                            <div className="min-w-0 break-words text-xs font-medium text-[var(--ui-ink-strong)]">
                               {event.eventKey}
                             </div>
-                            <div className="text-[11px] uppercase tracking-[0.14em] text-white/38">
+                            <div className="shrink-0 text-[11px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
                               {event.level}
                             </div>
                           </div>
-                          <div className="mt-1 text-sm text-white/72">
+                          <div className="mt-1 break-words text-sm text-[var(--ui-ink-soft)]">
                             {event.message}
                           </div>
-                          <div className="mt-1 text-[11px] text-white/40">
+                          <div className="mt-1 break-words text-[11px] text-[var(--ui-ink-faint)]">
                             {event.createdAt}
                           </div>
                         </div>
@@ -1877,13 +1918,13 @@ export function KnowledgeGraphPage() {
                     </div>
                   </div>
 
-                  <div className="grid gap-3 rounded-[24px] border border-white/10 bg-white/[0.04] p-4">
+                  <div className={graphDialogCardClass}>
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <div className="text-sm font-medium text-white">
+                        <div className={graphDialogCardTitleClass}>
                           Snapshot summaries
                         </div>
-                        <div className="text-xs text-white/46">
+                        <div className={graphDialogCardCopyClass}>
                           Periodic dev snapshots of node positions, camera
                           state, and drift metrics.
                         </div>
@@ -1894,17 +1935,17 @@ export function KnowledgeGraphPage() {
                         (snapshot) => (
                           <div
                             key={snapshot.id}
-                            className="rounded-[18px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-3 py-2"
+                            className={graphDialogMiniCardClass}
                           >
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="text-xs font-medium text-white">
+                            <div className="flex min-w-0 items-center justify-between gap-3">
+                              <div className="min-w-0 break-words text-xs font-medium text-[var(--ui-ink-strong)]">
                                 {snapshot.startupPhase}
                               </div>
-                              <div className="text-[11px] uppercase tracking-[0.14em] text-white/38">
+                              <div className="shrink-0 text-[11px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
                                 {snapshot.rendererMode}
                               </div>
                             </div>
-                            <div className="mt-1 text-sm text-white/72">
+                            <div className="mt-1 break-words text-sm text-[var(--ui-ink-soft)]">
                               {snapshot.nodeCount} nodes · centroid drift{" "}
                               {snapshot.driftMetrics.centroidDistanceFromOrigin.toFixed(
                                 3
@@ -1914,7 +1955,7 @@ export function KnowledgeGraphPage() {
                                 3
                               )}
                             </div>
-                            <div className="mt-1 text-[11px] text-white/40">
+                            <div className="mt-1 break-words text-[11px] text-[var(--ui-ink-faint)]">
                               {snapshot.capturedAt}
                             </div>
                           </div>

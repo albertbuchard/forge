@@ -4,9 +4,16 @@ import { useForgeShell } from "@/components/shell/app-shell";
 import { PageHero } from "@/components/shell/page-hero";
 import { ActivityTable } from "@/components/activity-table";
 import { Card } from "@/components/ui/card";
-import { EmptyState, ErrorState, LoadingState } from "@/components/ui/page-state";
+import {
+  EmptyState,
+  ErrorState,
+  LoadingState
+} from "@/components/ui/page-state";
 import { listActivity, removeActivityLog } from "@/lib/api";
-import { getActivityEventCtaLabel, getActivityEventHref } from "@/lib/entity-links";
+import {
+  getActivityEventCtaLabel,
+  getActivityEventHref
+} from "@/lib/entity-links";
 import { formatDateTime } from "@/lib/utils";
 import { invalidateForgeSnapshot } from "@/store/api/invalidate-forge-snapshot";
 
@@ -55,14 +62,24 @@ export function ActivityPage() {
   }
 
   if (activityQuery.isError) {
-    return <ErrorState eyebrow="Evidence archive" error={activityQuery.error} onRetry={() => void activityQuery.refetch()} />;
+    return (
+      <ErrorState
+        eyebrow="Evidence archive"
+        error={activityQuery.error}
+        onRetry={() => void activityQuery.refetch()}
+      />
+    );
   }
 
   if (rows.length === 0) {
     return (
       <EmptyState
         eyebrow="Evidence archive"
-        title={entityId ? "No evidence matched this filter" : "No activity recorded yet"}
+        title={
+          entityId
+            ? "No evidence matched this filter"
+            : "No activity recorded yet"
+        }
         description={
           entityId
             ? "Forge could not find visible events for this specific entity yet. Try a broader archive view or create some work first."
@@ -72,11 +89,14 @@ export function ActivityPage() {
     );
   }
 
-  const grouped = rows.reduce<Record<string, typeof rows>>((accumulator, event) => {
-    const key = event.createdAt.slice(0, 10);
-    accumulator[key] = [...(accumulator[key] ?? []), event];
-    return accumulator;
-  }, {});
+  const grouped = rows.reduce<Record<string, typeof rows>>(
+    (accumulator, event) => {
+      const key = event.createdAt.slice(0, 10);
+      accumulator[key] = [...(accumulator[key] ?? []), event];
+      return accumulator;
+    },
+    {}
+  );
 
   return (
     <div className="grid gap-5">
@@ -101,19 +121,35 @@ export function ActivityPage() {
           {Object.entries(grouped)
             .slice(0, 6)
             .map(([day, events]) => (
-              <Card key={day}>
-                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">{day}</div>
+              <Card key={day} className="min-w-0">
+                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+                  {day}
+                </div>
                 <div className="mt-4 grid gap-3">
                   {events.slice(0, 3).map((event) => (
                     <div
                       key={event.id}
-                      className={`rounded-[18px] p-4 ${highlightedEventId === event.id ? "bg-[rgba(192,193,255,0.12)] shadow-[inset_0_0_0_1px_rgba(192,193,255,0.2)]" : "bg-white/[0.04]"}`}
+                      className={`min-w-0 rounded-[18px] border p-4 ${
+                        highlightedEventId === event.id
+                          ? "border-[color-mix(in_srgb,var(--primary)_30%,transparent)] bg-[var(--ui-accent-soft)] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--primary)_16%,transparent)]"
+                          : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]"
+                      }`}
                     >
-                      <div className="font-medium text-white">{event.title}</div>
-                      <div className="mt-2 text-sm text-white/58">{event.description}</div>
-                      <div className="mt-3 text-[11px] uppercase tracking-[0.16em] text-white/35">{formatDateTime(event.createdAt)}</div>
-                      {getActivityEventHref(event) && getActivityEventCtaLabel(event) ? (
-                        <Link to={getActivityEventHref(event)!} className="mt-3 inline-flex text-[11px] uppercase tracking-[0.16em] text-[var(--primary)]">
+                      <div className="break-words font-medium text-[var(--ui-ink-strong)]">
+                        {event.title}
+                      </div>
+                      <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
+                        {event.description}
+                      </div>
+                      <div className="mt-3 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
+                        {formatDateTime(event.createdAt)}
+                      </div>
+                      {getActivityEventHref(event) &&
+                      getActivityEventCtaLabel(event) ? (
+                        <Link
+                          to={getActivityEventHref(event)!}
+                          className="mt-3 inline-flex text-[11px] uppercase tracking-[0.16em] text-[var(--primary)] transition hover:text-[var(--ui-ink-strong)]"
+                        >
                           {getActivityEventCtaLabel(event)}
                         </Link>
                       ) : null}

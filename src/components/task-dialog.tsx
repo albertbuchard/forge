@@ -543,8 +543,8 @@ export function TaskDialog({
         ? Math.max(
             0,
             Math.floor(
-              (currentCreditedSeconds ?? editingTask.time.totalCreditedSeconds) /
-                60
+              (currentCreditedSeconds ??
+                editingTask.time.totalCreditedSeconds) / 60
             )
           )
         : 0
@@ -842,13 +842,13 @@ export function TaskDialog({
             error={fieldErrors.projectId ?? null}
           >
             <div className="grid gap-3">
-              <div className="rounded-[24px] border border-white/10 bg-white/[0.04] p-4">
+              <div className="rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
                 {selectedAnchorOptions.length > 0 ? (
                   <div className="mb-3 flex flex-wrap gap-2">
                     {selectedAnchorOptions.map((option) => (
                       <span
                         key={option.id}
-                        className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.06] px-2.5 py-1.5"
+                        className="inline-flex items-center gap-2 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-2.5 py-1.5"
                       >
                         <EntityBadge
                           kind={anchorKindToEntityKind(option.kind)}
@@ -859,7 +859,7 @@ export function TaskDialog({
                         />
                         <button
                           type="button"
-                          className="rounded-full text-white/52 transition hover:text-white"
+                          className="rounded-full text-[var(--ui-ink-soft)] transition hover:text-[var(--ui-ink-strong)]"
                           onClick={() => removeAnchor(option.kind)}
                           aria-label={`Remove ${option.label}`}
                         >
@@ -871,8 +871,8 @@ export function TaskDialog({
                 ) : null}
 
                 <div className="relative">
-                  <div className="flex items-center gap-3 rounded-[18px] border border-white/8 bg-black/20 px-4 py-3">
-                    <Search className="size-4 text-white/36" />
+                  <div className="flex items-center gap-3 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3">
+                    <Search className="size-4 text-[var(--ui-ink-faint)]" />
                     <input
                       value={anchorQuery}
                       onChange={(event) => {
@@ -941,12 +941,12 @@ export function TaskDialog({
                         }
                       }}
                       placeholder='Search or create Goal, Project, or parent Issue like Goal + "Creative system"'
-                      className="min-w-0 flex-1 bg-transparent text-sm text-white placeholder:text-white/34 focus:outline-none"
+                      className="min-w-0 flex-1 bg-transparent text-sm text-[var(--ui-ink-strong)] placeholder:text-[var(--ui-ink-faint)] focus:outline-none"
                     />
                   </div>
 
                   {anchorOpen ? (
-                    <div className="absolute top-full z-20 mt-2 w-full rounded-[22px] border border-white/8 bg-[rgba(8,13,24,0.96)] p-2 shadow-[0_26px_60px_rgba(4,8,18,0.32)] backdrop-blur-xl">
+                    <div className="absolute top-full z-20 mt-2 w-full rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-popover)] p-2 shadow-[var(--ui-shadow-floating)] backdrop-blur-xl">
                       {anchorSuggestions.length > 0 ? (
                         anchorSuggestions.map((suggestion, index) => (
                           <button
@@ -959,8 +959,8 @@ export function TaskDialog({
                             className={cn(
                               "flex w-full items-start justify-between gap-3 rounded-[18px] px-3 py-2.5 text-left transition",
                               index === anchorHighlightedIndex
-                                ? "bg-white/[0.1] text-white"
-                                : "text-white/70 hover:bg-white/[0.06] hover:text-white",
+                                ? "bg-[var(--ui-surface-active)] text-[var(--ui-ink-strong)]"
+                                : "text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]",
                               suggestion.mode === "create" &&
                                 suggestion.disabled &&
                                 "cursor-not-allowed opacity-45"
@@ -990,12 +990,12 @@ export function TaskDialog({
                                   gradient={false}
                                 />
                                 {suggestion.mode === "create" ? (
-                                  <Badge className="bg-white/[0.08] text-white/70">
+                                  <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
                                     "{suggestion.label}"
                                   </Badge>
                                 ) : null}
                               </div>
-                              <div className="mt-1 text-xs leading-5 text-white/46">
+                              <div className="mt-1 text-xs leading-5 text-[var(--ui-ink-faint)]">
                                 {suggestion.description}
                               </div>
                             </div>
@@ -1007,7 +1007,7 @@ export function TaskDialog({
                           </button>
                         ))
                       ) : (
-                        <div className="px-3 py-2.5 text-sm text-white/42">
+                        <div className="px-3 py-2.5 text-sm text-[var(--ui-ink-faint)]">
                           Type to find an existing anchor or create a new one.
                         </div>
                       )}
@@ -1016,7 +1016,7 @@ export function TaskDialog({
                 </div>
 
                 {anchorError ? (
-                  <div className="mt-3 rounded-[16px] border border-rose-400/16 bg-rose-400/10 px-3 py-2 text-sm text-rose-100">
+                  <div className="mt-3 rounded-[16px] border border-[color-mix(in_srgb,var(--danger)_22%,transparent)] bg-[var(--ui-danger-soft)] px-3 py-2 text-sm text-[var(--danger)]">
                     {anchorError}
                   </div>
                 ) : null}
@@ -1191,7 +1191,7 @@ export function TaskDialog({
                   )
                 })
               }
-              className="min-h-28 rounded-[var(--radius-control)] border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white outline-none transition focus:border-[rgba(192,193,255,0.3)]"
+              className="min-h-28 rounded-[var(--radius-control)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-2 text-sm text-[var(--ui-ink-strong)] outline-none transition focus:border-[var(--primary)]"
             >
               {safeUsers.map((user) => (
                 <option key={user.id} value={user.id}>
@@ -1398,7 +1398,7 @@ export function TaskDialog({
             </FlowField>
           </div>
           {editingTask ? (
-            <div className="rounded-[22px] border border-white/8 bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/62">
+            <div className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
               Currently recorded: {currentTrackedMinutes} min.{" "}
               {trackedMinutesDelta === 0
                 ? "Saving this edit keeps the tracked total unchanged."
@@ -1413,7 +1413,11 @@ export function TaskDialog({
                   <button
                     key={tag.id}
                     type="button"
-                    className={`rounded-full px-3 py-2 text-sm transition ${selected ? "bg-white/16 text-white" : "bg-white/6 text-white/58 hover:bg-white/10 hover:text-white"}`}
+                    className={`rounded-full px-3 py-2 text-sm transition ${
+                      selected
+                        ? "bg-[var(--ui-surface-active)] text-[var(--ui-ink-strong)]"
+                        : "bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]"
+                    }`}
                     onClick={() =>
                       setValue({
                         tagIds: selected
@@ -1509,7 +1513,7 @@ export function TaskDialog({
       description:
         "These notes become linked Markdown evidence on the task immediately, which helps preserve setup context, blockers, or handoff detail.",
       render: (value, setValue) => (
-        <div className="text-sm leading-6 text-white/62">
+        <div className="text-sm leading-6 text-[var(--ui-ink-soft)]">
           Use the previous step for completion closeout. Use linked notes here
           only when you want durable extra context, setup detail, or handoff
           evidence beyond the structured completion report.

@@ -781,13 +781,13 @@ export function PreferencesPage() {
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1.3fr)_360px]">
               <Card className="grid gap-5">
                 <div className="grid gap-2">
-                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                     What Forge knows
                   </div>
-                  <div className="font-display text-3xl text-white">
+                  <div className="font-display text-3xl text-[var(--ui-ink-strong)]">
                     {headline.title}
                   </div>
-                  <div className="max-w-[70ch] text-sm leading-6 text-white/58">
+                  <div className="max-w-[70ch] text-sm leading-6 text-[var(--ui-ink-soft)]">
                     {headline.description}
                   </div>
                 </div>
@@ -817,15 +817,15 @@ export function PreferencesPage() {
                   ].map((entry) => (
                     <div
                       key={entry.label}
-                      className="rounded-[22px] bg-white/[0.04] px-4 py-4"
+                      className="rounded-[22px] bg-[var(--ui-surface-2)] px-4 py-4"
                     >
-                      <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+                      <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                         {entry.label}
                       </div>
-                      <div className="mt-2 font-display text-3xl text-white">
+                      <div className="mt-2 font-display text-3xl text-[var(--ui-ink-strong)]">
                         {entry.value}
                       </div>
-                      <div className="mt-1 text-sm text-white/52">
+                      <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
                         {entry.detail}
                       </div>
                     </div>
@@ -840,13 +840,13 @@ export function PreferencesPage() {
               </Card>
 
               <Card className="grid gap-4">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   Next move
                 </div>
-                <div className="font-display text-2xl text-white">
+                <div className="font-display text-2xl text-[var(--ui-ink-strong)]">
                   Start the game
                 </div>
-                <div className="text-sm leading-6 text-white/58">
+                <div className="text-sm leading-6 text-[var(--ui-ink-soft)]">
                   Forge will ask a small number of pairwise questions. You
                   choose a domain, Forge supplies the candidates, and the model
                   tightens from there.
@@ -854,7 +854,7 @@ export function PreferencesPage() {
                 <Button className="w-full" onClick={() => openGame()}>
                   Start the game
                 </Button>
-                <div className="grid gap-3 rounded-[22px] bg-white/[0.04] px-4 py-4 text-sm text-white/58">
+                <div className="grid gap-3 rounded-[22px] bg-[var(--ui-surface-2)] px-4 py-4 text-sm text-[var(--ui-ink-soft)]">
                   <div>
                     Current queue: {workspace.compare.pendingCount} comparison
                     {workspace.compare.pendingCount === 1 ? "" : "s"}
@@ -873,10 +873,10 @@ export function PreferencesPage() {
               <Card className="grid gap-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+                    <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                       Preference map
                     </div>
-                    <div className="mt-1 text-sm text-white/54">
+                    <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
                       Green drifts positive, red drifts negative, and low
                       opacity still means uncertainty.
                     </div>
@@ -885,7 +885,7 @@ export function PreferencesPage() {
                     Open full map
                   </Link>
                 </div>
-                <div className="relative min-h-[340px] overflow-hidden rounded-[24px] border border-[var(--ui-border-subtle)] bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--success)_18%,transparent),transparent_35%),radial-gradient(circle_at_bottom_right,color-mix(in_srgb,var(--danger)_14%,transparent),transparent_30%),var(--ui-surface-section)]">
+                <div className="relative min-h-[340px] overflow-hidden rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)]">
                   <div className="absolute inset-x-0 top-1/2 h-px bg-[var(--ui-border-subtle)]" />
                   <div className="absolute inset-y-0 left-1/2 w-px bg-[var(--ui-border-subtle)]" />
                   {workspace.map.map((point) => (
@@ -897,8 +897,8 @@ export function PreferencesPage() {
                         point.itemId === selectedScore?.itemId
                           ? "border-[var(--ui-border-strong)] bg-[var(--ui-surface-active)] text-[var(--ui-ink-strong)]"
                           : point.score >= 0
-                            ? "border-[color-mix(in_srgb,var(--success)_34%,transparent)] bg-[var(--ui-success-soft)] text-[var(--success)]"
-                            : "border-[color-mix(in_srgb,var(--danger)_34%,transparent)] bg-[var(--ui-danger-soft)] text-[var(--danger)]"
+                            ? "border-[color-mix(in_srgb,var(--success)_34%,transparent)] bg-[var(--ui-success-soft)] text-[var(--ui-ink-strong)]"
+                            : "border-[color-mix(in_srgb,var(--danger)_34%,transparent)] bg-[var(--ui-danger-soft)] text-[var(--ui-ink-strong)]"
                       )}
                       style={{
                         left: `${50 + point.x * 30}%`,
@@ -914,7 +914,7 @@ export function PreferencesPage() {
               </Card>
 
               <Card className="grid gap-4">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   Best read so far
                 </div>
                 <div className="grid gap-2">
@@ -923,30 +923,30 @@ export function PreferencesPage() {
                       <button
                         key={score.itemId}
                         type="button"
-                        className="rounded-[18px] bg-white/[0.04] px-3 py-3 text-left transition hover:bg-white/[0.07]"
+                        className="rounded-[18px] bg-[var(--ui-surface-2)] px-3 py-3 text-left transition hover:bg-[var(--ui-surface-hover)]"
                         onClick={() => {
                           setSelectedItemId(score.itemId);
                           updateSearchParams({ focusItem: score.itemId });
                         }}
                       >
-                        <div className="font-medium text-white">
+                        <div className="font-medium text-[var(--ui-ink-strong)]">
                           {score.item?.label ?? score.itemId}
                         </div>
-                        <div className="mt-1 text-sm text-white/54">
+                        <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
                           {score.explanation[0] ||
                             "Forge has positive evidence here."}
                         </div>
                       </button>
                     ))
                   ) : (
-                    <div className="rounded-[18px] bg-white/[0.04] px-3 py-3 text-sm text-white/58">
+                    <div className="rounded-[18px] bg-[var(--ui-surface-2)] px-3 py-3 text-sm text-[var(--ui-ink-soft)]">
                       No clear positives yet. A few comparison rounds will
                       change that.
                     </div>
                   )}
                 </div>
-                <div className="border-t border-white/8 pt-4">
-                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+                <div className="border-t border-[var(--ui-border-subtle)] pt-4">
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                     Biggest unknowns
                   </div>
                   <div className="mt-3 grid gap-2">
@@ -954,9 +954,9 @@ export function PreferencesPage() {
                       biggestUnknowns.map((score) => (
                         <div
                           key={score.itemId}
-                          className="rounded-[18px] bg-white/[0.04] px-3 py-3 text-sm text-white/58"
+                          className="rounded-[18px] bg-[var(--ui-surface-2)] px-3 py-3 text-sm text-[var(--ui-ink-soft)]"
                         >
-                          <div className="font-medium text-white">
+                          <div className="font-medium text-[var(--ui-ink-strong)]">
                             {score.item?.label ?? score.itemId}
                           </div>
                           <div className="mt-1">
@@ -965,7 +965,7 @@ export function PreferencesPage() {
                         </div>
                       ))
                     ) : (
-                      <div className="rounded-[18px] bg-white/[0.04] px-3 py-3 text-sm text-white/58">
+                      <div className="rounded-[18px] bg-[var(--ui-surface-2)] px-3 py-3 text-sm text-[var(--ui-ink-soft)]">
                         The current unknown list is short.
                       </div>
                     )}
@@ -977,21 +977,21 @@ export function PreferencesPage() {
             <Card className="grid gap-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                     Bring in Forge records
                   </div>
-                  <div className="mt-1 text-sm text-white/54">
+                  <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
                     Search goals, projects, tasks, strategies, or habits across
                     human and bot users, then send them straight into this
                     model.
                   </div>
                 </div>
-                <Badge className="bg-white/[0.08] text-white/70">
+                <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                   {filteredEntities.length} visible
                 </Badge>
               </div>
               <div className="flex items-center gap-3">
-                <Search className="size-4 text-white/38" />
+                <Search className="size-4 text-[var(--ui-ink-muted)]" />
                 <Input
                   value={entitySearchQuery}
                   onChange={(event) => setEntitySearchQuery(event.target.value)}
@@ -1002,21 +1002,21 @@ export function PreferencesPage() {
                 {filteredEntities.map((entry) => (
                   <div
                     key={`${entry.entityType}-${entry.entityId}`}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] bg-white/[0.04] px-4 py-3"
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] bg-[var(--ui-surface-2)] px-4 py-3"
                   >
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium text-white">
+                        <span className="font-medium text-[var(--ui-ink-strong)]">
                           {entry.label}
                         </span>
-                        <Badge className="bg-white/[0.08] text-white/70">
+                        <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                           {entry.entityType}
                         </Badge>
                         {entry.user ? (
                           <UserBadge user={entry.user} compact />
                         ) : null}
                       </div>
-                      <div className="mt-1 text-sm text-white/52">
+                      <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
                         {entry.description || "No description yet."}
                       </div>
                     </div>
@@ -1059,10 +1059,10 @@ export function PreferencesPage() {
           <Card className="grid gap-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   Full map
                 </div>
-                <div className="mt-1 text-sm text-white/54">
+                <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
                   Click a point to inspect why Forge believes it belongs there.
                 </div>
               </div>
@@ -1070,7 +1070,7 @@ export function PreferencesPage() {
                 {workspace.map.length} plotted items
               </div>
             </div>
-            <div className="relative min-h-[520px] overflow-hidden rounded-[24px] border border-[var(--ui-border-subtle)] bg-[radial-gradient(circle_at_20%_20%,color-mix(in_srgb,var(--success)_20%,transparent),transparent_25%),radial-gradient(circle_at_80%_80%,color-mix(in_srgb,var(--danger)_20%,transparent),transparent_26%),var(--ui-surface-section)]">
+            <div className="relative min-h-[520px] overflow-hidden rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)]">
               <div className="absolute inset-x-0 top-1/2 h-px bg-[var(--ui-border-subtle)]" />
               <div className="absolute inset-y-0 left-1/2 w-px bg-[var(--ui-border-subtle)]" />
               {workspace.map.map((point) => (
@@ -1082,8 +1082,8 @@ export function PreferencesPage() {
                     point.itemId === selectedScore?.itemId
                       ? "border-[var(--ui-border-strong)] bg-[var(--ui-surface-active)] text-[var(--ui-ink-strong)]"
                       : point.score >= 0
-                        ? "border-[color-mix(in_srgb,var(--success)_34%,transparent)] bg-[var(--ui-success-soft)] text-[var(--success)]"
-                        : "border-[color-mix(in_srgb,var(--danger)_34%,transparent)] bg-[var(--ui-danger-soft)] text-[var(--danger)]"
+                        ? "border-[color-mix(in_srgb,var(--success)_34%,transparent)] bg-[var(--ui-success-soft)] text-[var(--ui-ink-strong)]"
+                        : "border-[color-mix(in_srgb,var(--danger)_34%,transparent)] bg-[var(--ui-danger-soft)] text-[var(--ui-ink-strong)]"
                   )}
                   style={{
                     left: `${50 + point.x * 34}%`,
@@ -1106,7 +1106,7 @@ export function PreferencesPage() {
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_380px]">
             <Card className="grid gap-3">
               <div className="flex items-center gap-3">
-                <Search className="size-4 text-white/38" />
+                <Search className="size-4 text-[var(--ui-ink-muted)]" />
                 <Input
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
@@ -1115,7 +1115,7 @@ export function PreferencesPage() {
               </div>
               <div className="overflow-x-auto">
                 <table className="min-w-full text-left text-sm">
-                  <thead className="text-[11px] uppercase tracking-[0.14em] text-white/38">
+                  <thead className="text-[11px] uppercase tracking-[0.14em] text-[var(--ui-ink-muted)]">
                     <tr>
                       <th className="px-3 py-2">Item</th>
                       <th className="px-3 py-2">Score</th>
@@ -1129,9 +1129,9 @@ export function PreferencesPage() {
                       <tr
                         key={score.itemId}
                         className={cn(
-                          "cursor-pointer border-t border-white/6 transition hover:bg-white/[0.04]",
+                          "cursor-pointer border-t border-[var(--ui-border-subtle)] transition hover:bg-[var(--ui-surface-2)]",
                           score.itemId === selectedScore?.itemId
-                            ? "bg-white/[0.05]"
+                            ? "bg-[var(--ui-surface-2)]"
                             : ""
                         )}
                         onClick={() => {
@@ -1140,17 +1140,17 @@ export function PreferencesPage() {
                         }}
                       >
                         <td className="px-3 py-3">
-                          <div className="font-medium text-white">
+                          <div className="font-medium text-[var(--ui-ink-strong)]">
                             {score.item?.label ?? score.itemId}
                           </div>
-                          <div className="text-xs text-white/48">
+                          <div className="text-xs text-[var(--ui-ink-muted)]">
                             {(score.item?.tags ?? []).join(" · ")}
                           </div>
                         </td>
-                        <td className="px-3 py-3 text-white/68">
+                        <td className="px-3 py-3 text-[var(--ui-ink-medium)]">
                           {score.latentScore.toFixed(2)}
                         </td>
-                        <td className="px-3 py-3 text-white/68">
+                        <td className="px-3 py-3 text-[var(--ui-ink-medium)]">
                           {formatPercent(score.confidence)}
                         </td>
                         <td className="px-3 py-3">
@@ -1160,7 +1160,7 @@ export function PreferencesPage() {
                             {getScoreStatus(score)}
                           </Badge>
                         </td>
-                        <td className="px-3 py-3 text-white/68">
+                        <td className="px-3 py-3 text-[var(--ui-ink-medium)]">
                           {score.evidenceCount}
                         </td>
                       </tr>
@@ -1171,7 +1171,7 @@ export function PreferencesPage() {
             </Card>
 
             <Card className="grid gap-3">
-              <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+              <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                 Item editor
               </div>
               {selectedScore?.item ? (
@@ -1218,7 +1218,7 @@ export function PreferencesPage() {
                             | ""
                         }))
                       }
-                      className="min-h-10 rounded-[18px] border border-white/8 bg-white/[0.05] px-3 text-sm text-white outline-none"
+                      className="min-h-10 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm text-[var(--ui-ink-strong)] outline-none"
                     >
                       <option value="">Inferred status</option>
                       {Object.keys(STATUS_CLASSES).map((status) => (
@@ -1256,7 +1256,7 @@ export function PreferencesPage() {
                         key={dimensionId}
                         className="grid grid-cols-[110px_minmax(0,1fr)] items-center gap-3"
                       >
-                        <div className="text-sm text-white/56">
+                        <div className="text-sm text-[var(--ui-ink-soft)]">
                           {DIMENSION_LABELS[dimensionId]}
                         </div>
                         <Input
@@ -1274,7 +1274,7 @@ export function PreferencesPage() {
                       </div>
                     ))}
                   </div>
-                  <div className="grid gap-2 text-sm text-white/58">
+                  <div className="grid gap-2 text-sm text-[var(--ui-ink-soft)]">
                     {[
                       ["bookmarked", "Bookmarked"],
                       ["compareLater", "Compare later"],
@@ -1316,13 +1316,13 @@ export function PreferencesPage() {
                   ) : null}
                 </>
               ) : (
-                <div className="text-sm text-white/52">
+                <div className="text-sm text-[var(--ui-ink-soft)]">
                   Select a row to inspect or edit it.
                 </div>
               )}
 
-              <div className="mt-3 border-t border-white/8 pt-3">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+              <div className="mt-3 border-t border-[var(--ui-border-subtle)] pt-3">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   Add custom item
                 </div>
                 <div className="mt-3 grid gap-3">
@@ -1387,7 +1387,7 @@ export function PreferencesPage() {
         {selectedTab === "history" ? (
           <div className="grid gap-5 xl:grid-cols-3">
             <Card className="grid gap-3 xl:col-span-2">
-              <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+              <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                 Recent pairwise judgments
               </div>
               <div className="grid gap-2">
@@ -1403,9 +1403,9 @@ export function PreferencesPage() {
                   return (
                     <div
                       key={judgment.id}
-                      className="rounded-[18px] bg-white/[0.04] px-4 py-3 text-sm text-white/58"
+                      className="rounded-[18px] bg-[var(--ui-surface-2)] px-4 py-3 text-sm text-[var(--ui-ink-soft)]"
                     >
-                      <div className="font-medium text-white">
+                      <div className="font-medium text-[var(--ui-ink-strong)]">
                         {left} vs {right}
                       </div>
                       <div className="mt-1">
@@ -1419,7 +1419,7 @@ export function PreferencesPage() {
               </div>
             </Card>
             <Card className="grid gap-3">
-              <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+              <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                 Signals and snapshots
               </div>
               <div className="grid gap-2">
@@ -1431,7 +1431,7 @@ export function PreferencesPage() {
                   return (
                     <div
                       key={signal.id}
-                      className="rounded-[18px] bg-white/[0.04] px-3 py-2 text-sm text-white/58"
+                      className="rounded-[18px] bg-[var(--ui-surface-2)] px-3 py-2 text-sm text-[var(--ui-ink-soft)]"
                     >
                       {item} · {signal.signalType} ·{" "}
                       {new Date(signal.createdAt).toLocaleString()}
@@ -1443,13 +1443,13 @@ export function PreferencesPage() {
                 {workspace.history.snapshots.slice(0, 5).map((snapshot) => (
                   <div
                     key={snapshot.id}
-                    className="rounded-[18px] bg-white/[0.04] px-3 py-2 text-sm text-white/58"
+                    className="rounded-[18px] bg-[var(--ui-surface-2)] px-3 py-2 text-sm text-[var(--ui-ink-soft)]"
                   >
                     Snapshot {new Date(snapshot.createdAt).toLocaleString()}
                   </div>
                 ))}
               </div>
-              <div className="rounded-[18px] bg-white/[0.04] px-3 py-3 text-sm text-white/58">
+              <div className="rounded-[18px] bg-[var(--ui-surface-2)] px-3 py-3 text-sm text-[var(--ui-ink-soft)]">
                 Stale items: {workspace.history.staleItemIds.length} · Flipped
                 items: {workspace.history.flippedItemIds.length}
               </div>
@@ -1464,10 +1464,10 @@ export function PreferencesPage() {
                 <Card key={context.id} className="grid gap-3">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <div className="font-display text-2xl text-white">
+                      <div className="font-display text-2xl text-[var(--ui-ink-strong)]">
                         {context.name}
                       </div>
-                      <div className="text-sm text-white/54">
+                      <div className="text-sm text-[var(--ui-ink-soft)]">
                         {context.description || "No description yet."}
                       </div>
                     </div>
@@ -1477,7 +1477,7 @@ export function PreferencesPage() {
                           Default
                         </Badge>
                       ) : null}
-                      <Badge className="bg-white/[0.08] text-white/70">
+                      <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                         {context.shareMode}
                       </Badge>
                       {!context.active ? (
@@ -1509,7 +1509,7 @@ export function PreferencesPage() {
                           }
                         })
                       }
-                      className="min-h-10 rounded-[18px] border border-white/8 bg-white/[0.05] px-3 text-sm text-white outline-none"
+                      className="min-h-10 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm text-[var(--ui-ink-strong)] outline-none"
                     >
                       <option value="shared">shared</option>
                       <option value="blended">blended</option>
@@ -1579,7 +1579,7 @@ export function PreferencesPage() {
 
             <div className="grid gap-4">
               <Card className="grid gap-3">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   Create context
                 </div>
                 <Input
@@ -1612,7 +1612,7 @@ export function PreferencesPage() {
                         .value as PreferenceContext["shareMode"]
                     }))
                   }
-                  className="min-h-10 rounded-[18px] border border-white/8 bg-white/[0.05] px-3 text-sm text-white outline-none"
+                  className="min-h-10 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm text-[var(--ui-ink-strong)] outline-none"
                 >
                   <option value="blended">blended</option>
                   <option value="shared">shared</option>
@@ -1650,7 +1650,7 @@ export function PreferencesPage() {
               </Card>
 
               <Card className="grid gap-3">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   Merge contexts
                 </div>
                 <select
@@ -1658,7 +1658,7 @@ export function PreferencesPage() {
                   onChange={(event) =>
                     setMergeSourceContextId(event.target.value)
                   }
-                  className="min-h-10 rounded-[18px] border border-white/8 bg-white/[0.05] px-3 text-sm text-white outline-none"
+                  className="min-h-10 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm text-[var(--ui-ink-strong)] outline-none"
                 >
                   <option value="">Source context</option>
                   {workspace.contexts.map((context) => (
@@ -1672,7 +1672,7 @@ export function PreferencesPage() {
                   onChange={(event) =>
                     setMergeTargetContextId(event.target.value)
                   }
-                  className="min-h-10 rounded-[18px] border border-white/8 bg-white/[0.05] px-3 text-sm text-white outline-none"
+                  className="min-h-10 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm text-[var(--ui-ink-strong)] outline-none"
                 >
                   <option value="">Target context</option>
                   {workspace.contexts.map((context) => (
@@ -1708,10 +1708,10 @@ export function PreferencesPage() {
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_380px]">
               <Card className="grid gap-4">
                 <div>
-                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                     Concept libraries
                   </div>
-                  <div className="mt-1 text-sm text-white/54">
+                  <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
                     These are the lists Forge can use when you start the game in
                     a concept domain. Seeded lists are editable, and custom
                     lists are fully yours.
@@ -1726,19 +1726,19 @@ export function PreferencesPage() {
                   ].map(([label, value]) => (
                     <div
                       key={label}
-                      className="rounded-[18px] bg-white/[0.04] px-4 py-4"
+                      className="rounded-[18px] bg-[var(--ui-surface-2)] px-4 py-4"
                     >
-                      <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+                      <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                         {label}
                       </div>
-                      <div className="mt-2 font-display text-3xl text-white">
+                      <div className="mt-2 font-display text-3xl text-[var(--ui-ink-strong)]">
                         {value}
                       </div>
                     </div>
                   ))}
                 </div>
                 <div className="flex items-center gap-3">
-                  <Search className="size-4 text-white/38" />
+                  <Search className="size-4 text-[var(--ui-ink-muted)]" />
                   <Input
                     value={conceptSearchQuery}
                     onChange={(event) =>
@@ -1750,7 +1750,7 @@ export function PreferencesPage() {
               </Card>
 
               <Card className="grid gap-3">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   Create concept list
                 </div>
                 <Input
@@ -1836,17 +1836,17 @@ export function PreferencesPage() {
                         ) : (
                           <>
                             <div className="flex flex-wrap items-center gap-2">
-                              <div className="font-display text-2xl text-white">
+                              <div className="font-display text-2xl text-[var(--ui-ink-strong)]">
                                 {catalog.title}
                               </div>
-                              <Badge className="bg-white/[0.08] text-white/70">
+                              <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                                 {catalog.source}
                               </Badge>
-                              <Badge className="bg-white/[0.08] text-white/70">
+                              <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                                 {catalog.items.length} items
                               </Badge>
                             </div>
-                            <div className="mt-1 text-sm text-white/54">
+                            <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
                               {catalog.description || "No description yet."}
                             </div>
                           </>
@@ -1921,7 +1921,7 @@ export function PreferencesPage() {
                       {visibleItems.map((item) => (
                         <div
                           key={item.id}
-                          className="rounded-[18px] bg-white/[0.04] px-4 py-3"
+                          className="rounded-[18px] bg-[var(--ui-surface-2)] px-4 py-3"
                         >
                           {editingCatalogItemId === item.id ? (
                             <div className="grid gap-3">
@@ -1988,17 +1988,17 @@ export function PreferencesPage() {
                           ) : (
                             <div className="flex flex-wrap items-start justify-between gap-3">
                               <div className="min-w-0">
-                                <div className="font-medium text-white">
+                                <div className="font-medium text-[var(--ui-ink-strong)]">
                                   {item.label}
                                 </div>
-                                <div className="mt-1 text-sm text-white/54">
+                                <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
                                   {item.description || "No description yet."}
                                 </div>
                                 <div className="mt-2 flex flex-wrap gap-2">
                                   {item.tags.map((tag) => (
                                     <Badge
                                       key={`${item.id}-${tag}`}
-                                      className="bg-white/[0.08] text-white/70"
+                                      className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]"
                                     >
                                       {tag}
                                     </Badge>
@@ -2041,8 +2041,8 @@ export function PreferencesPage() {
                       ))}
                     </div>
 
-                    <div className="grid gap-3 rounded-[18px] border border-white/8 bg-white/[0.02] px-4 py-4">
-                      <div className="flex items-center gap-2 text-sm text-white/68">
+                    <div className="grid gap-3 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-4">
+                      <div className="flex items-center gap-2 text-sm text-[var(--ui-ink-medium)]">
                         <Plus className="size-4" />
                         Add concept to {catalog.title}
                       </div>

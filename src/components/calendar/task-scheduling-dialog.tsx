@@ -53,16 +53,20 @@ export function TaskSchedulingDialog({
       title="Adjust task scheduling rules"
       description="Choose a task, then tell Forge which work blocks, calendar conditions, or keywords should allow or block that work."
     >
-      <div className="grid gap-4">
-        <Card className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(18,28,38,0.98),rgba(11,17,28,0.98))]">
-          <div className="flex items-start gap-3">
+      <div className="grid min-w-0 gap-4">
+        <Card className="min-w-0 overflow-hidden rounded-[28px] border border-[var(--ui-border-subtle)] !bg-[var(--ui-surface-1)]">
+          <div className="flex min-w-0 items-start gap-3">
             <div className="rounded-[18px] bg-[var(--primary)]/14 p-3 text-[var(--primary)]">
               <Sparkles className="size-4" />
             </div>
-            <div>
-              <div className="font-medium text-white">Guided rule editing</div>
-              <p className="mt-2 text-sm leading-6 text-white/60">
-                Use this when a task should only run in certain blocks such as Secondary Activity, or should stay blocked during clinic, rest, or other provider events.
+            <div className="min-w-0">
+              <div className="font-medium text-[var(--ui-ink-strong)]">
+                Guided rule editing
+              </div>
+              <p className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
+                Use this when a task should only run in certain blocks such as
+                Secondary Activity, or should stay blocked during clinic, rest,
+                or other provider events.
               </p>
             </div>
           </div>
@@ -70,12 +74,12 @@ export function TaskSchedulingDialog({
 
         {availableTasks.length > 0 ? (
           <>
-            <label className="grid gap-2">
-              <span className="text-sm text-white/58">Task</span>
+            <label className="grid min-w-0 gap-2">
+              <span className="text-sm text-[var(--ui-ink-soft)]">Task</span>
               <select
                 value={selectedTaskId}
                 onChange={(event) => setSelectedTaskId(event.target.value)}
-                className="rounded-[22px] border border-white/8 bg-white/6 px-4 py-3 text-[15px] text-white outline-none"
+                className="w-full min-w-0 max-w-full rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3 text-[15px] text-[var(--ui-ink-strong)] outline-none transition focus:border-[var(--ui-border-strong)] focus:ring-2 focus:ring-[var(--primary)]/20"
               >
                 {availableTasks.map((task) => (
                   <option key={task.id} value={task.id}>
@@ -90,7 +94,9 @@ export function TaskSchedulingDialog({
                 title="Task rules"
                 subtitle="These rules are saved directly on the task. They drive blocked-now checks and future timebox recommendations."
                 initialRules={selectedTask.schedulingRules}
-                initialPlannedDurationSeconds={selectedTask.plannedDurationSeconds}
+                initialPlannedDurationSeconds={
+                  selectedTask.plannedDurationSeconds
+                }
                 allowPlannedDuration
                 saveLabel="Save task rules"
                 onSave={async ({ schedulingRules, plannedDurationSeconds }) => {
@@ -100,7 +106,7 @@ export function TaskSchedulingDialog({
                     plannedDurationSeconds:
                       plannedDurationSeconds === undefined
                         ? selectedTask.plannedDurationSeconds
-                        : plannedDurationSeconds ?? null
+                        : (plannedDurationSeconds ?? null)
                   });
                   onOpenChange(false);
                 }}
@@ -108,10 +114,13 @@ export function TaskSchedulingDialog({
             ) : null}
           </>
         ) : (
-          <Card className="rounded-[28px] border border-white/8 bg-white/[0.04]">
-            <div className="font-medium text-white">No schedulable tasks yet</div>
-            <p className="mt-2 text-sm leading-6 text-white/60">
-              Create or reopen a task first, then come back here to define work-block and calendar eligibility.
+          <Card className="min-w-0 overflow-hidden rounded-[28px] border border-[var(--ui-border-subtle)] !bg-[var(--ui-surface-1)]">
+            <div className="font-medium text-[var(--ui-ink-strong)]">
+              No schedulable tasks yet
+            </div>
+            <p className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
+              Create or reopen a task first, then come back here to define
+              work-block and calendar eligibility.
             </p>
             <div className="mt-4">
               <Button variant="secondary" onClick={() => onOpenChange(false)}>

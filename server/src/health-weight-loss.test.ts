@@ -344,6 +344,230 @@ test("weight loss overview reflects food logs and body check-ins", async () => {
   }
 });
 
+test("weight loss ledger and active override are scoped to the requested local day", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-weight-loss-day-scope-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: false });
+
+  try {
+    const cookie = await issueOperatorSessionCookie(app);
+    const dayOne = "2030-01-01";
+    const dayTwo = "2030-01-02";
+
+    const createLog = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/weight-loss/food-logs",
+      headers: { cookie },
+      payload: {
+        loggedAt: "2029-12-31T23:30:00.000Z",
+        dayKey: dayOne,
+        mealLabel: "Local midnight snack",
+        source: "manual",
+        confirmationState: "confirmed",
+        items: [
+          {
+            name: "Yogurt",
+            quantity: 200,
+            unit: "grams",
+            grams: 200,
+            calories: 160,
+            proteinGrams: 18
+          }
+        ]
+      }
+    });
+    assert.equal(createLog.statusCode, 201);
+
+    const override = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/health/weight-loss/daily-active-calories",
+      headers: { cookie },
+      payload: {
+        dayKey: dayOne,
+        activeCaloriesKcal: 650,
+        notes: "Day-one override"
+      }
+    });
+    assert.equal(override.statusCode, 200);
+
+    const dayOneOverview = await app.inject({
+      method: "GET",
+      url:
+        "/api/v1/health/weight-loss?dateKey=2030-01-01" +
+        "&dayStartAt=2029-12-31T23%3A00%3A00.000Z" +
+        "&dayEndAt=2030-01-01T23%3A00%3A00.000Z"
+    });
+    assert.equal(dayOneOverview.statusCode, 200);
+    const dayOneBody = dayOneOverview.json() as {
+      weightLoss: {
+        todayLedger: {
+          dateKey: string;
+          meals: unknown[];
+          totals: { calories: number };
+          activeCaloriesSource: string;
+        };
+        energyModel: {
+          todayActiveCaloriesKcal: number;
+          todayActiveCaloriesSource: string;
+          todayActiveOverride: { activeCaloriesKcal: number } | null;
+        };
+      };
+    };
+    assert.equal(dayOneBody.weightLoss.todayLedger.dateKey, dayOne);
+    assert.equal(dayOneBody.weightLoss.todayLedger.meals.length, 1);
+    assert.equal(dayOneBody.weightLoss.todayLedger.totals.calories, 160);
+    assert.equal(
+      dayOneBody.weightLoss.todayLedger.activeCaloriesSource,
+      "user_override"
+    );
+    assert.equal(
+      dayOneBody.weightLoss.energyModel.todayActiveCaloriesKcal,
+      650
+    );
+    assert.equal(
+      dayOneBody.weightLoss.energyModel.todayActiveCaloriesSource,
+      "user_override"
+    );
+    assert.equal(
+      dayOneBody.weightLoss.energyModel.todayActiveOverride?.activeCaloriesKcal,
+      650
+    );
+
+    const dayTwoOverview = await app.inject({
+      method: "GET",
+      url:
+        "/api/v1/health/weight-loss?dateKey=2030-01-02" +
+        "&dayStartAt=2030-01-01T23%3A00%3A00.000Z" +
+        "&dayEndAt=2030-01-02T23%3A00%3A00.000Z"
+    });
+    assert.equal(dayTwoOverview.statusCode, 200);
+    const dayTwoBody = dayTwoOverview.json() as {
+      weightLoss: {
+        todayLedger: {
+          dateKey: string;
+          meals: unknown[];
+          totals: { calories: number };
+          activeCaloriesSource: string;
+        };
+        energyModel: {
+          todayActiveCaloriesKcal: number;
+          todayActiveCaloriesSource: string;
+          todayActiveOverride: { activeCaloriesKcal: number } | null;
+        };
+      };
+    };
+    assert.equal(dayTwoBody.weightLoss.todayLedger.dateKey, dayTwo);
+    assert.equal(dayTwoBody.weightLoss.todayLedger.meals.length, 0);
+    assert.equal(dayTwoBody.weightLoss.todayLedger.totals.calories, 0);
+    assert.equal(
+      dayTwoBody.weightLoss.todayLedger.activeCaloriesSource,
+      "default_active_calories"
+    );
+    assert.equal(dayTwoBody.weightLoss.energyModel.todayActiveCaloriesKcal, 0);
+    assert.equal(
+      dayTwoBody.weightLoss.energyModel.todayActiveCaloriesSource,
+      "default_active_calories"
+    );
+    assert.equal(dayTwoBody.weightLoss.energyModel.todayActiveOverride, null);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("weight loss energy gap averages intake over the same recent log window", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-weight-loss-energy-gap-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: false });
+
+  try {
+    const cookie = await issueOperatorSessionCookie(app);
+    const now = new Date().toISOString();
+
+    getDatabase()
+      .prepare(
+        `INSERT INTO health_daily_summaries (
+           id, user_id, date_key, summary_type, metrics_json, derived_json, source, created_at, updated_at
+         )
+         VALUES (?, 'user_operator', '2030-01-15', 'vitals', ?, '{}', 'healthkit', ?, ?)`
+      )
+      .run(
+        "hds_energy_gap_window",
+        JSON.stringify({
+          activeEnergyBurned: {
+            metric: "activeEnergyBurned",
+            unit: "kcal",
+            total: 500
+          },
+          basalEnergyBurned: {
+            metric: "basalEnergyBurned",
+            unit: "kcal",
+            total: 1500
+          }
+        }),
+        now,
+        now
+      );
+
+    for (let day = 1; day <= 15; day += 1) {
+      const dayKey = `2030-01-${String(day).padStart(2, "0")}`;
+      const createLog = await app.inject({
+        method: "POST",
+        url: "/api/v1/health/weight-loss/food-logs",
+        headers: { cookie },
+        payload: {
+          loggedAt: `${dayKey}T12:00:00.000Z`,
+          dayKey,
+          mealLabel: `Measured meal ${day}`,
+          source: "manual",
+          confirmationState: "confirmed",
+          items: [
+            {
+              name: "Measured food",
+              quantity: 1,
+              unit: "serving",
+              calories: 100
+            }
+          ]
+        }
+      });
+      assert.equal(createLog.statusCode, 201);
+    }
+
+    const overview = await app.inject({
+      method: "GET",
+      url: "/api/v1/health/weight-loss?dateKey=2030-01-15"
+    });
+    assert.equal(overview.statusCode, 200);
+    const overviewBody = overview.json() as {
+      weightLoss: {
+        energyModel: {
+          averageCalorieIntake: number;
+          recentFoodLogCount: number;
+          recentFoodLogDayCount: number;
+          estimatedTdeeKcal: number | null;
+          estimatedDailyEnergyBalanceKcal: number | null;
+        };
+      };
+    };
+    assert.equal(overviewBody.weightLoss.energyModel.averageCalorieIntake, 100);
+    assert.equal(overviewBody.weightLoss.energyModel.recentFoodLogCount, 14);
+    assert.equal(overviewBody.weightLoss.energyModel.recentFoodLogDayCount, 14);
+    assert.equal(overviewBody.weightLoss.energyModel.estimatedTdeeKcal, 2000);
+    assert.equal(
+      overviewBody.weightLoss.energyModel.estimatedDailyEnergyBalanceKcal,
+      -1900
+    );
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("weight loss overview seeds latest weight from HealthKit body mass", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-weight-loss-"));
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
@@ -893,6 +1117,129 @@ test("weight loss overview estimates active calories from steps before using the
       47
     );
     assert.equal(overviewBody.weightLoss.todayLedger.targetCalories, 2047);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("weight loss overview keeps the default active calories when only trivial steps are synced", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-weight-loss-"));
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const cookie = await issueOperatorSessionCookie(app);
+    const today = new Date().toISOString().slice(0, 10);
+    const now = new Date().toISOString();
+    const updateTarget = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/health/weight-loss/target",
+      headers: { cookie },
+      payload: {
+        calorieTarget: 2000,
+        proteinGramsTarget: 150,
+        fiberGramsTarget: 30,
+        carbohydrateGramsTarget: 220,
+        fatGramsTarget: 65,
+        weightGoalKg: 78,
+        weeklyRateGoalKg: -0.25,
+        dietStyle: "balanced",
+        bodyGoal: "lose fat",
+        notes: "Forge science plan; activity_kcal=388"
+      }
+    });
+    assert.equal(updateTarget.statusCode, 200);
+
+    getDatabase()
+      .prepare(
+        `INSERT INTO health_daily_summaries (
+           id, user_id, date_key, summary_type, metrics_json, derived_json, source, created_at, updated_at
+         )
+         VALUES (?, 'user_operator', ?, 'vitals', ?, '{}', 'healthkit', ?, ?)`
+      )
+      .run(
+        "hds_weight_loss_trivial_steps_only",
+        today,
+        JSON.stringify({
+          bodyMass: {
+            metric: "bodyMass",
+            label: "Body mass",
+            category: "composition",
+            unit: "kg",
+            displayUnit: "kg",
+            aggregation: "discrete",
+            latest: 80,
+            sampleCount: 1
+          },
+          stepCount: {
+            metric: "stepCount",
+            label: "Steps",
+            category: "activity",
+            unit: "count",
+            displayUnit: "steps",
+            aggregation: "cumulative",
+            total: 8,
+            sampleCount: 1
+          }
+        }),
+        now,
+        now
+      );
+
+    const overview = await app.inject({
+      method: "GET",
+      url: "/api/v1/health/weight-loss"
+    });
+    assert.equal(overview.statusCode, 200);
+    const overviewBody = overview.json() as {
+      weightLoss: {
+        todayLedger: {
+          targetCalories: number;
+          activeAdjustmentCalories: number;
+          activeCaloriesSource: string;
+        };
+        energyModel: {
+          baselineActiveCaloriesKcal: number;
+          todayActiveCaloriesKcal: number;
+          todayObservedActiveCaloriesKcal: number | null;
+          todayActiveCaloriesSource: string;
+          todayStepCount: number | null;
+          todayStepEstimatedCaloriesKcal: number | null;
+        };
+      };
+    };
+
+    assert.equal(
+      overviewBody.weightLoss.energyModel.baselineActiveCaloriesKcal,
+      388
+    );
+    assert.equal(overviewBody.weightLoss.energyModel.todayStepCount, 8);
+    assert.equal(
+      overviewBody.weightLoss.energyModel.todayStepEstimatedCaloriesKcal,
+      0
+    );
+    assert.equal(
+      overviewBody.weightLoss.energyModel.todayObservedActiveCaloriesKcal,
+      null
+    );
+    assert.equal(
+      overviewBody.weightLoss.energyModel.todayActiveCaloriesKcal,
+      388
+    );
+    assert.equal(
+      overviewBody.weightLoss.energyModel.todayActiveCaloriesSource,
+      "default_active_calories"
+    );
+    assert.equal(
+      overviewBody.weightLoss.todayLedger.activeCaloriesSource,
+      "default_active_calories"
+    );
+    assert.equal(
+      overviewBody.weightLoss.todayLedger.activeAdjustmentCalories,
+      0
+    );
+    assert.equal(overviewBody.weightLoss.todayLedger.targetCalories, 2000);
   } finally {
     await app.close();
     closeDatabase();

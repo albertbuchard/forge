@@ -105,7 +105,7 @@ export function GoalDetailPage() {
         action={
           <Link
             to="/goals"
-            className="inline-flex min-h-10 min-w-0 max-w-full items-center justify-center whitespace-nowrap rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-medium text-slate-950 transition hover:opacity-90"
+            className="inline-flex min-h-10 min-w-0 max-w-full items-center justify-center whitespace-nowrap rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-medium text-[var(--ui-ink-on-accent)] transition hover:opacity-90"
           >
             {t("common.goalDetail.backToGoals")}
           </Link>
@@ -188,8 +188,8 @@ export function GoalDetailPage() {
       />
 
       {goal.user ? (
-        <div className="flex flex-wrap items-center gap-2 text-sm text-white/62">
-          <span className="text-white/42">Owned by</span>
+        <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--ui-ink-soft)]">
+          <span className="text-[var(--ui-ink-faint)]">Owned by</span>
           <UserBadge user={goal.user} />
         </div>
       ) : null}
@@ -203,7 +203,7 @@ export function GoalDetailPage() {
         </Button>
         <Button
           variant="ghost"
-          className="text-rose-200 hover:bg-rose-500/10"
+          className="text-[var(--danger)] hover:bg-[var(--ui-danger-soft)]"
           pending={deleteGoalMutation.isPending}
           pendingLabel={t("common.goalDetail.deleting")}
           onClick={() => void handleDeleteGoal()}
@@ -215,7 +215,7 @@ export function GoalDetailPage() {
       <section className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
         <Card>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
               {t("common.goalDetail.sectionProjects")}
             </div>
             <ProjectCollectionFilters
@@ -226,7 +226,7 @@ export function GoalDetailPage() {
             />
           </div>
           {projects.length === 0 ? (
-            <div className="mt-4 rounded-[20px] bg-white/[0.04] p-4 text-sm text-white/58">
+            <div className="mt-4 rounded-[20px] bg-[var(--ui-surface-2)] p-4 text-sm text-[var(--ui-ink-soft)]">
               {projectFilter === "active"
                 ? t("common.goalDetail.noProjects")
                 : "No projects match this lifecycle filter yet. Switch filters or restart one to make it active again."}
@@ -236,7 +236,7 @@ export function GoalDetailPage() {
               {projects.map((project) => (
                 <div
                   key={project.id}
-                  className="rounded-[22px] bg-white/[0.04] p-5 transition hover:bg-white/[0.08]"
+                  className="rounded-[22px] bg-[var(--ui-surface-2)] p-5 transition hover:bg-[var(--ui-surface-2)]"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-2">
@@ -258,13 +258,13 @@ export function GoalDetailPage() {
                       />
                     </Link>
                   </div>
-                  <p className="mt-3 text-sm leading-6 text-white/58">
+                  <p className="mt-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
                     {project.description}
                   </p>
                   <div className="mt-4">
                     <ProgressMeter value={project.progress} />
                   </div>
-                  <div className="mt-4 text-[11px] uppercase tracking-[0.16em] text-white/40">
+                  <div className="mt-4 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                     {project.nextTaskTitle
                       ? t("common.goalDetail.nextMove", {
                           value: project.nextTaskTitle
@@ -296,23 +296,23 @@ export function GoalDetailPage() {
 
         <div className="grid min-w-0 gap-5">
           <Card>
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
               {t("common.goalDetail.sectionHealth")}
             </div>
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <EntityBadge kind="goal" compact gradient={false} />
-              <Badge className="bg-white/[0.08] text-white/72">
+              <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
                 {t("common.goalDetail.progressTitle", {
                   progress: goal.progress,
                   count: goal.completedTasks
                 })}
               </Badge>
-              <Badge className="bg-white/[0.08] text-white/72">
+              <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
                 {t("common.goalDetail.progressDetail", {
                   xp: goal.earnedPoints
                 })}
               </Badge>
-              <Badge className="bg-white/[0.08] text-white/72">
+              <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
                 {t(
                   projects.length === 1
                     ? "common.goalDetail.heroBadgeOne"
@@ -322,45 +322,45 @@ export function GoalDetailPage() {
               </Badge>
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+              <div className="rounded-[18px] bg-[var(--ui-surface-2)] px-4 py-3">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   {t("common.goalDetail.fieldProgress")}
                 </div>
-                <div className="mt-2 font-display text-xl text-white">
+                <div className="mt-2 font-display text-xl text-[var(--ui-ink-strong)]">
                   {goal.progress}%
                 </div>
               </div>
-              <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+              <div className="rounded-[18px] bg-[var(--ui-surface-2)] px-4 py-3">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   {t("common.goalDetail.fieldCompletedTasks")}
                 </div>
-                <div className="mt-2 font-display text-xl text-white">
+                <div className="mt-2 font-display text-xl text-[var(--ui-ink-strong)]">
                   {goal.completedTasks}
                 </div>
               </div>
-              <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+              <div className="rounded-[18px] bg-[var(--ui-surface-2)] px-4 py-3">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   {t("common.goalDetail.fieldXpBanked")}
                 </div>
-                <div className="mt-2 font-display text-xl text-white">
+                <div className="mt-2 font-display text-xl text-[var(--ui-ink-strong)]">
                   {goal.earnedPoints}
                 </div>
               </div>
             </div>
             <div className="mt-4 grid gap-3">
-              <div className="rounded-[18px] bg-white/[0.04] p-4">
+              <div className="rounded-[18px] bg-[var(--ui-surface-2)] p-4">
                 <div className="flex items-center justify-between gap-3">
-                  <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/42">
+                  <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                     {t("common.goalDetail.signalNext")}
                   </div>
                   {nextProject ? (
                     <EntityBadge kind="project" compact gradient={false} />
                   ) : null}
                 </div>
-                <div className="mt-2 font-medium text-white">
+                <div className="mt-2 font-medium text-[var(--ui-ink-strong)]">
                   {nextProject?.title ?? t("common.goalDetail.noProject")}
                 </div>
-                <div className="mt-2 text-sm leading-6 text-white/58">
+                <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                   {nextProject?.nextTaskTitle
                     ? t("common.goalDetail.nextMove", {
                         value: nextProject.nextTaskTitle
@@ -370,25 +370,25 @@ export function GoalDetailPage() {
                 </div>
               </div>
               <div className="grid gap-3 md:grid-cols-2">
-                <div className="rounded-[18px] bg-white/[0.04] p-4">
-                  <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/42">
+                <div className="rounded-[18px] bg-[var(--ui-surface-2)] p-4">
+                  <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                     {t("common.goalDetail.signalRisk")}
                   </div>
-                  <div className="mt-2 font-medium text-white">
+                  <div className="mt-2 font-medium text-[var(--ui-ink-strong)]">
                     {weakSpot?.title ?? t("common.goalDetail.noRisk")}
                   </div>
-                  <div className="mt-2 text-sm leading-6 text-white/58">
+                  <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                     {weakSpot?.summary || t("common.goalDetail.noRiskDetail")}
                   </div>
                 </div>
-                <div className="rounded-[18px] bg-white/[0.04] p-4">
-                  <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/42">
+                <div className="rounded-[18px] bg-[var(--ui-surface-2)] p-4">
+                  <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                     {t("common.goalDetail.signalEvidence")}
                   </div>
-                  <div className="mt-2 font-medium text-white">
+                  <div className="mt-2 font-medium text-[var(--ui-ink-strong)]">
                     {latestEvidence?.title ?? t("common.goalDetail.noEvidence")}
                   </div>
-                  <div className="mt-2 text-sm leading-6 text-white/58">
+                  <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                     {latestEvidence?.description ||
                       t("common.goalDetail.noEvidenceDetail")}
                   </div>
@@ -407,11 +407,11 @@ export function GoalDetailPage() {
       />
 
       <Card>
-        <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+        <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
           {t("common.goalDetail.sectionEvidence")}
         </div>
         {evidence.length === 0 ? (
-          <div className="mt-4 rounded-[20px] bg-white/[0.04] p-4 text-sm text-white/58">
+          <div className="mt-4 rounded-[20px] bg-[var(--ui-surface-2)] p-4 text-sm text-[var(--ui-ink-soft)]">
             {t("common.goalDetail.noEvidenceLogged")}
           </div>
         ) : (
@@ -422,12 +422,12 @@ export function GoalDetailPage() {
                 to={
                   getActivityEventHref(event) ?? `/activity?eventId=${event.id}`
                 }
-                className="rounded-[18px] bg-white/[0.04] p-4 transition hover:bg-white/[0.08]"
+                className="rounded-[18px] bg-[var(--ui-surface-2)] p-4 transition hover:bg-[var(--ui-surface-2)]"
               >
-                <div className="font-medium text-white">
+                <div className="font-medium text-[var(--ui-ink-strong)]">
                   {getReadableActivityTitle(event)}
                 </div>
-                <div className="mt-2 text-sm leading-6 text-white/58">
+                <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                   {getReadableActivityDescription(event)}
                 </div>
               </Link>

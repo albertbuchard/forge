@@ -36,13 +36,13 @@ export function GoalStudio({
       <Card>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
               Goal arcs
             </div>
-            <h3 className="mt-2 font-display text-3xl text-white">
+            <h3 className="mt-2 font-display text-3xl text-[var(--ui-ink-strong)]">
               Strategic arcs before tickets
             </h3>
-            <p className="mt-3 max-w-3xl text-sm leading-7 text-white/60">
+            <p className="mt-3 max-w-3xl text-sm leading-7 text-[var(--ui-ink-soft)]">
               This is the long-horizon map. Each arc shows why it matters, how
               much ground has been covered, and which project should move next.
             </p>
@@ -59,7 +59,7 @@ export function GoalStudio({
 
         <div className="mt-5 grid gap-3 xl:grid-cols-2">
           {goals.length === 0 ? (
-            <div className="rounded-[24px] bg-white/[0.04] p-5 text-sm leading-7 text-white/60 xl:col-span-2">
+            <div className="rounded-[24px] bg-[var(--ui-surface-2)] p-5 text-sm leading-7 text-[var(--ui-ink-soft)] xl:col-span-2">
               Start with a life goal. Once the destination is clear, you can
               attach projects and then fill those projects with tasks.
             </div>
@@ -70,7 +70,7 @@ export function GoalStudio({
               <Link
                 to={`/goals/${goal.id}`}
                 key={goal.id}
-                className="rounded-[24px] border border-white/6 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))] p-4 transition hover:bg-[linear-gradient(180deg,rgba(255,255,255,0.09),rgba(255,255,255,0.04))]"
+                className="rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 transition hover:bg-[var(--ui-surface-hover)]"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">
@@ -85,12 +85,12 @@ export function GoalStudio({
                         lines={2}
                       />
                     </div>
-                    <p className="mt-2 text-sm leading-6 text-white/58">
+                    <p className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                       {goal.description || "No strategic note attached yet."}
                     </p>
                   </div>
                   <button
-                    className="rounded-full bg-white/6 p-2 text-white/60 transition hover:bg-white/10 hover:text-white"
+                    className="rounded-full bg-[var(--ui-surface-2)] p-2 text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                     type="button"
                     onClick={(event) => {
                       event.preventDefault();
@@ -104,31 +104,31 @@ export function GoalStudio({
                 </div>
 
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <Badge className="bg-white/[0.08] text-white/70">
+                  <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
                     {goal.horizon}
                   </Badge>
                   <Badge
                     className={
                       goal.status === "active"
-                        ? "text-emerald-300"
+                        ? "text-[var(--success)]"
                         : goal.status === "paused"
-                          ? "text-amber-300"
+                          ? "text-[var(--warning)]"
                           : "text-[var(--tertiary)]"
                     }
                   >
                     {goal.status}
                   </Badge>
-                  <Badge className="bg-white/[0.08] text-white/70">
+                  <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
                     {goal.earnedPoints} / {goal.targetPoints} xp
                   </Badge>
-                  <Badge className="bg-white/[0.08] text-white/70">
+                  <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
                     {goal.totalTasks} tasks
                   </Badge>
                 </div>
 
-                <div className="mt-4 h-1.5 rounded-full bg-white/[0.08]">
+                <div className="mt-4 h-1.5 rounded-full bg-[var(--ui-surface-2)]">
                   <div
-                    className="h-full rounded-full bg-[linear-gradient(90deg,var(--primary)_0%,var(--secondary)_100%)]"
+                    className="h-full rounded-full bg-[var(--primary)]"
                     style={{ width: progressWidth }}
                   />
                 </div>
@@ -137,14 +137,14 @@ export function GoalStudio({
                   {goal.tags.map((tag) => (
                     <Badge
                       key={tag.id}
-                      className="bg-white/[0.06] text-white/58"
+                      className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]"
                     >
                       {tag.name}
                     </Badge>
                   ))}
                 </div>
 
-                <div className="mt-3 flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.16em] text-white/42">
+                <div className="mt-3 flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   <span className="min-w-0 flex-1 truncate">
                     {goal.momentumLabel}
                   </span>

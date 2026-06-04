@@ -93,8 +93,8 @@ function WikiIndexTree({
               className={cn(
                 "rounded-lg px-2 py-1.5 text-[12px] leading-5 transition",
                 active
-                  ? "bg-white/[0.08] text-white"
-                  : "text-white/64 hover:bg-white/[0.04] hover:text-white"
+                  ? "bg-[var(--ui-surface-2)] text-[var(--ui-ink-strong)]"
+                  : "text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-1)] hover:text-[var(--ui-ink-strong)]"
               )}
               style={{ paddingLeft: `${0.5 + depth * 0.7}rem` }}
             >
@@ -133,21 +133,21 @@ function WikiSpacePickerDialog({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-[rgba(3,7,18,0.72)] backdrop-blur-sm" />
-        <Dialog.Content className="fixed left-1/2 top-[14vh] z-50 w-[min(28rem,calc(100vw-1.5rem))] -translate-x-1/2 rounded-[28px] border border-white/10 bg-[rgba(10,15,28,0.97)] p-4 shadow-[0_32px_90px_rgba(0,0,0,0.45)] sm:p-5">
+        <Dialog.Overlay className="fixed inset-0 z-50 surface-overlay backdrop-blur-sm" />
+        <Dialog.Content className="fixed left-1/2 top-[14vh] z-50 w-[min(28rem,calc(100vw-1.5rem))] -translate-x-1/2 rounded-[28px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-popover)] p-4 shadow-[var(--ui-shadow-floating)] sm:p-5">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <Dialog.Title className="font-display text-[1.2rem] tracking-[-0.04em] text-white">
+              <Dialog.Title className="font-display text-[1.2rem] tracking-[-0.04em] text-[var(--ui-ink-strong)]">
                 Choose KarpaWiki space
               </Dialog.Title>
-              <Dialog.Description className="mt-1 text-[13px] leading-6 text-white/56">
+              <Dialog.Description className="mt-1 text-[13px] leading-6 text-[var(--ui-ink-soft)]">
                 Switch the reading space without leaving the article surface.
               </Dialog.Description>
             </div>
             <Dialog.Close asChild>
               <button
                 type="button"
-                className="rounded-full border border-white/10 bg-white/[0.04] p-2 text-white/64 transition hover:bg-white/[0.08] hover:text-white"
+                className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-2 text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]"
                 aria-label="Close space picker"
               >
                 <X className="size-4" />
@@ -166,8 +166,8 @@ function WikiSpacePickerDialog({
                   className={cn(
                     "flex items-center justify-between gap-3 rounded-[22px] border px-4 py-3 text-left transition",
                     active
-                      ? "border-[rgba(192,193,255,0.22)] bg-[rgba(192,193,255,0.12)] text-white"
-                      : "border-white/8 bg-white/[0.03] text-white/78 hover:bg-white/[0.06] hover:text-white"
+                      ? "border-[color-mix(in_srgb,var(--primary)_26%,transparent)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]"
+                      : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]"
                   )}
                   onClick={() => {
                     onSelect(space.id);
@@ -178,7 +178,7 @@ function WikiSpacePickerDialog({
                     <span className="block text-[14px] font-semibold text-inherit">
                       {space.label}
                     </span>
-                    <span className="mt-1 block text-[12px] leading-5 text-white/52">
+                    <span className="mt-1 block text-[12px] leading-5 text-[var(--ui-ink-soft)]">
                       {space.description || `/${space.slug}`}
                     </span>
                     {shared ? (
@@ -536,7 +536,7 @@ export function WikiPage() {
                   className="max-w-[20rem]"
                 />
               ) : null}
-              <span className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+              <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                 {formatUpdatedAt(selectedPage.updatedAt)}
               </span>
               <GamificationMiniHud
@@ -548,26 +548,26 @@ export function WikiPage() {
             <div className="mt-3 flex flex-col gap-2 lg:flex-row lg:items-center">
               <button
                 type="button"
-                className="wiki-search-launch flex min-h-[2.9rem] w-full items-center gap-3 rounded-[18px] border border-white/8 bg-white/[0.04] px-4 text-left text-[14px] text-white/56 transition hover:bg-white/[0.06] hover:text-white lg:flex-1"
+                className="wiki-search-launch flex min-h-[2.9rem] w-full items-center gap-3 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 text-left text-[14px] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)] lg:flex-1"
                 onClick={() => setSearchOpen(true)}
               >
-                <Search className="size-4 shrink-0 text-white/44" />
+                <Search className="size-4 shrink-0 text-[var(--ui-ink-faint)]" />
                 <span>Search KarpaWiki</span>
               </button>
 
               <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
                 <button
                   type="button"
-                  className="wiki-space-trigger inline-flex min-h-[2.9rem] items-center gap-2 rounded-[18px] border border-white/8 bg-white/[0.04] px-4 text-[13px] font-medium text-white/78 transition hover:bg-white/[0.07] hover:text-white"
+                  className="wiki-space-trigger inline-flex min-h-[2.9rem] items-center gap-2 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 text-[13px] font-medium text-[var(--ui-ink-medium)] transition hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]"
                   onClick={() => setSpacePickerOpen(true)}
                 >
-                  <span className="text-[11px] uppercase tracking-[0.14em] text-white/38">
+                  <span className="text-[11px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
                     Space
                   </span>
                   <span className="max-w-[16rem] truncate">
                     {activeSpace?.label ?? "KarpaWiki space"}
                   </span>
-                  <ChevronDown className="size-3.5 text-white/44" />
+                  <ChevronDown className="size-3.5 text-[var(--ui-ink-faint)]" />
                 </button>
                 <div className="relative" ref={ingestMenuRef}>
                   <Button
@@ -581,10 +581,10 @@ export function WikiPage() {
                     <ChevronDown className="size-3.5" />
                   </Button>
                   {ingestMenuOpen ? (
-                    <div className="absolute right-0 top-[calc(100%+0.5rem)] z-20 grid min-w-[15rem] gap-2 rounded-[22px] border border-white/10 bg-[rgba(9,14,27,0.98)] p-2 shadow-[0_24px_60px_rgba(0,0,0,0.35)]">
+                    <div className="absolute right-0 top-[calc(100%+0.5rem)] z-20 grid min-w-[15rem] gap-2 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-popover)] p-2 shadow-[var(--ui-shadow-floating)]">
                       <button
                         type="button"
-                        className="flex items-start gap-3 rounded-[18px] px-3 py-3 text-left transition hover:bg-white/[0.06]"
+                        className="flex items-start gap-3 rounded-[18px] px-3 py-3 text-left transition hover:bg-[var(--ui-surface-2)]"
                         onClick={() => {
                           setIngestMenuOpen(false);
                           openIngestModal();
@@ -592,10 +592,10 @@ export function WikiPage() {
                       >
                         <Sparkles className="mt-0.5 size-4 shrink-0 text-[var(--primary)]" />
                         <span>
-                          <span className="block text-sm font-medium text-white">
+                          <span className="block text-sm font-medium text-[var(--ui-ink-strong)]">
                             New ingest
                           </span>
-                          <span className="mt-1 block text-xs leading-5 text-white/48">
+                          <span className="mt-1 block text-xs leading-5 text-[var(--ui-ink-faint)]">
                             Start a fresh import from files, URLs, or pasted
                             text.
                           </span>
@@ -603,7 +603,7 @@ export function WikiPage() {
                       </button>
                       <button
                         type="button"
-                        className="flex items-start gap-3 rounded-[18px] px-3 py-3 text-left transition hover:bg-white/[0.06]"
+                        className="flex items-start gap-3 rounded-[18px] px-3 py-3 text-left transition hover:bg-[var(--ui-surface-2)]"
                         onClick={() => {
                           setIngestMenuOpen(false);
                           navigate(
@@ -617,10 +617,10 @@ export function WikiPage() {
                       >
                         <History className="mt-0.5 size-4 shrink-0 text-[var(--secondary)]" />
                         <span>
-                          <span className="block text-sm font-medium text-white">
+                          <span className="block text-sm font-medium text-[var(--ui-ink-strong)]">
                             History
                           </span>
-                          <span className="mt-1 block text-xs leading-5 text-white/48">
+                          <span className="mt-1 block text-xs leading-5 text-[var(--ui-ink-faint)]">
                             Browse prior ingests, reopen reviews, and delete old
                             ingest records.
                           </span>
@@ -713,7 +713,7 @@ export function WikiPage() {
 
           <section className="grid gap-4 lg:grid-cols-[15rem_minmax(0,1fr)] xl:grid-cols-[16rem_minmax(0,1fr)]">
             <aside className="wiki-frame h-fit px-2 py-3 sm:px-3 lg:sticky lg:top-[5.75rem]">
-              <div className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/42">
+              <div className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                 Index
               </div>
               <WikiIndexTree
@@ -731,7 +731,7 @@ export function WikiPage() {
               )}
             >
               {contentPending ? (
-                <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(192,193,255,0.8),transparent)] opacity-90" />
+                <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[color-mix(in_srgb,var(--primary)_70%,transparent)] opacity-90" />
               ) : null}
               <div className="wiki-reading-copy wiki-reading-flow mx-auto max-w-[76rem]">
                 {deletePageMutation.isError ? (
@@ -747,14 +747,14 @@ export function WikiPage() {
                 />
 
                 {selectedPage.summary.trim() ? (
-                  <p className="mt-5 border-t border-white/8 pt-4 text-[13px] leading-6 text-white/56">
+                  <p className="mt-5 border-t border-[var(--ui-border-subtle)] pt-4 text-[13px] leading-6 text-[var(--ui-ink-soft)]">
                     {selectedPage.summary}
                   </p>
                 ) : null}
 
                 {linkedEntityItems.length > 0 ? (
-                  <section className="mt-8 border-t border-white/8 pt-4">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/42">
+                  <section className="mt-8 border-t border-[var(--ui-border-subtle)] pt-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                       Forge links
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -764,7 +764,7 @@ export function WikiPage() {
                           href={
                             item.href ? resolveForgePath(item.href) : undefined
                           }
-                          className="rounded-full bg-white/[0.05] px-3 py-1.5 text-[12px] text-white/76 transition hover:bg-white/[0.1] hover:text-white"
+                          className="rounded-full bg-[var(--ui-surface-2)] px-3 py-1.5 text-[12px] text-[var(--ui-ink-medium)] transition hover:bg-[var(--ui-surface-3)] hover:text-[var(--ui-ink-strong)]"
                         >
                           {item.label}
                         </a>
@@ -774,8 +774,8 @@ export function WikiPage() {
                 ) : null}
 
                 {detail?.backlinkSourceNotes.length ? (
-                  <section className="mt-8 border-t border-white/8 pt-4">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/42">
+                  <section className="mt-8 border-t border-[var(--ui-border-subtle)] pt-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                       Linked here
                     </div>
                     <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -789,13 +789,13 @@ export function WikiPage() {
                                 : `/wiki/page/${encodeURIComponent(page.slug)}`,
                             search: `?spaceId=${encodeURIComponent(page.spaceId)}`
                           }}
-                          className="rounded-xl border border-white/8 bg-white/[0.03] px-4 py-3 transition hover:bg-white/[0.06]"
+                          className="rounded-xl border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3 transition hover:bg-[var(--ui-surface-2)]"
                         >
-                          <div className="text-[13px] font-semibold text-white">
+                          <div className="text-[13px] font-semibold text-[var(--ui-ink-strong)]">
                             {page.title}
                           </div>
                           {page.summary ? (
-                            <div className="mt-1 text-[12px] leading-5 text-white/56">
+                            <div className="mt-1 text-[12px] leading-5 text-[var(--ui-ink-soft)]">
                               {page.summary}
                             </div>
                           ) : null}
@@ -812,18 +812,18 @@ export function WikiPage() {
 
       <Dialog.Root open={searchOpen} onOpenChange={setSearchOpen}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-50 bg-[rgba(3,7,18,0.8)] backdrop-blur-sm" />
-          <Dialog.Content className="fixed left-1/2 top-[8vh] z-50 w-[min(54rem,calc(100vw-1.5rem))] -translate-x-1/2 rounded-[28px] border border-white/10 bg-[rgba(10,15,28,0.96)] p-4 shadow-[0_30px_90px_rgba(0,0,0,0.45)] sm:p-5">
+          <Dialog.Overlay className="fixed inset-0 z-50 surface-overlay backdrop-blur-sm" />
+          <Dialog.Content className="fixed left-1/2 top-[8vh] z-50 w-[min(54rem,calc(100vw-1.5rem))] -translate-x-1/2 rounded-[28px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-popover)] p-4 shadow-[var(--ui-shadow-floating)] sm:p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <Dialog.Title className="font-display text-[1.35rem] tracking-[-0.04em] text-white">
+                <Dialog.Title className="font-display text-[1.35rem] tracking-[-0.04em] text-[var(--ui-ink-strong)]">
                   Search the wiki
                 </Dialog.Title>
               </div>
               <Dialog.Close asChild>
                 <button
                   type="button"
-                  className="rounded-full border border-white/10 bg-white/[0.04] p-2 text-white/64 transition hover:bg-white/[0.08] hover:text-white"
+                  className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-2 text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]"
                   aria-label="Close search"
                 >
                   <X className="size-4" />
@@ -837,7 +837,7 @@ export function WikiPage() {
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder="Search KarpaWiki pages"
-                className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-[14px] text-white placeholder:text-white/28"
+                className="h-11 rounded-2xl border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[14px] text-[var(--ui-ink-strong)] placeholder:text-[var(--ui-ink-faint)]"
               />
 
               <div className="flex flex-wrap items-center gap-2">
@@ -850,8 +850,8 @@ export function WikiPage() {
                     className={cn(
                       "rounded-full px-3 py-1.5 text-[12px] font-medium uppercase tracking-[0.14em] transition",
                       searchMode === mode
-                        ? "bg-white/[0.12] text-white"
-                        : "bg-white/[0.04] text-white/54 hover:bg-white/[0.08] hover:text-white"
+                        ? "bg-[var(--ui-surface-3)] text-[var(--ui-ink-strong)]"
+                        : "bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]"
                     )}
                     onClick={() => setSearchMode(mode)}
                   >
@@ -861,7 +861,7 @@ export function WikiPage() {
                 {(searchMode === "semantic" || searchMode === "hybrid") &&
                 embeddingProfiles.length > 0 ? (
                   <select
-                    className="ml-auto rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[12px] text-white"
+                    className="ml-auto rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-1.5 text-[12px] text-[var(--ui-ink-strong)]"
                     value={selectedEmbeddingProfileId}
                     onChange={(event) =>
                       setSelectedEmbeddingProfileId(event.target.value)
@@ -879,7 +879,7 @@ export function WikiPage() {
 
             <div className="mt-4 max-h-[60vh] overflow-y-auto">
               {!searchQuery.trim() ? (
-                <div className="rounded-2xl border border-dashed border-white/10 px-4 py-10 text-center text-[13px] leading-6 text-white/42">
+                <div className="rounded-2xl border border-dashed border-[var(--ui-border-subtle)] px-4 py-10 text-center text-[13px] leading-6 text-[var(--ui-ink-faint)]">
                   Start typing to search the current KarpaWiki space.
                 </div>
               ) : searchResultsQuery.isLoading ? (
@@ -900,7 +900,7 @@ export function WikiPage() {
                     <button
                       key={result.page.id}
                       type="button"
-                      className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 text-left transition hover:bg-white/[0.06]"
+                      className="rounded-2xl border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3 text-left transition hover:bg-[var(--ui-surface-2)]"
                       onClick={() => {
                         setSearchOpen(false);
                         navigate({
@@ -914,11 +914,11 @@ export function WikiPage() {
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <div className="text-[14px] font-semibold text-white">
+                          <div className="text-[14px] font-semibold text-[var(--ui-ink-strong)]">
                             {result.page.title}
                           </div>
                           {result.page.summary ? (
-                            <div className="mt-1 text-[12px] leading-5 text-white/56">
+                            <div className="mt-1 text-[12px] leading-5 text-[var(--ui-ink-soft)]">
                               {result.page.summary}
                             </div>
                           ) : null}
@@ -931,7 +931,7 @@ export function WikiPage() {
                   ))}
                 </div>
               ) : (
-                <div className="rounded-2xl border border-dashed border-white/10 px-4 py-10 text-center text-[13px] leading-6 text-white/42">
+                <div className="rounded-2xl border border-dashed border-[var(--ui-border-subtle)] px-4 py-10 text-center text-[13px] leading-6 text-[var(--ui-ink-faint)]">
                   No pages matched this search.
                 </div>
               )}

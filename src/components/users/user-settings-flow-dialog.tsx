@@ -23,6 +23,12 @@ import {
   TOTAL_RIGHTS
 } from "@/components/users/user-relationship-graph";
 
+const userDialogPanelClass =
+  "rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]";
+const userDialogTitleClass = "text-sm font-medium text-[var(--ui-ink-strong)]";
+const userDialogBodyClass = "text-sm leading-6 text-[var(--ui-ink-soft)]";
+const userDialogFaintClass = "text-xs leading-5 text-[var(--ui-ink-faint)]";
+
 export type UserDraft = {
   kind: UserKind;
   handle: string;
@@ -198,32 +204,36 @@ export function UserSettingsFlowDialog({
                 placeholder="#c0c1ff"
               />
               <div
-                className="size-10 shrink-0 rounded-full border border-white/10"
+                className="size-10 shrink-0 rounded-full border border-[var(--ui-border-subtle)]"
                 style={{ backgroundColor: value.accentColor || "#c0c1ff" }}
               />
             </div>
           </FlowField>
 
           <div className="grid gap-3 md:grid-cols-3">
-            <div className="rounded-[20px] border border-white/8 bg-white/[0.03] px-4 py-3">
-              <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">
+            <div className={`${userDialogPanelClass} px-4 py-3`}>
+              <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                 Owned records
               </div>
-              <div className="mt-2 text-white">
+              <div className="mt-2 text-[var(--ui-ink-strong)]">
                 {ownership?.totalOwnedEntities ?? 0}
               </div>
             </div>
-            <div className="rounded-[20px] border border-white/8 bg-white/[0.03] px-4 py-3">
-              <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">
+            <div className={`${userDialogPanelClass} px-4 py-3`}>
+              <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                 Total XP
               </div>
-              <div className="mt-2 text-white">{xp?.totalXp ?? 0}</div>
+              <div className="mt-2 text-[var(--ui-ink-strong)]">
+                {xp?.totalXp ?? 0}
+              </div>
             </div>
-            <div className="rounded-[20px] border border-white/8 bg-white/[0.03] px-4 py-3">
-              <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">
+            <div className={`${userDialogPanelClass} px-4 py-3`}>
+              <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                 Weekly XP
               </div>
-              <div className="mt-2 text-white">{xp?.weeklyXp ?? 0}</div>
+              <div className="mt-2 text-[var(--ui-ink-strong)]">
+                {xp?.weeklyXp ?? 0}
+              </div>
             </div>
           </div>
         </>
@@ -238,63 +248,57 @@ export function UserSettingsFlowDialog({
       render: () =>
         user ? (
           <>
-            <div className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
+            <div className={`${userDialogPanelClass} p-4`}>
               <UserBadge user={user} />
-              <div className="mt-3 text-sm leading-6 text-white/56">
+              <div className={`mt-3 ${userDialogBodyClass}`}>
                 @{user.handle} · {user.description || "No description yet."}
               </div>
             </div>
 
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="grid gap-3">
-                <div className="text-sm font-medium text-white">
-                  Outbound lanes
-                </div>
+                <div className={userDialogTitleClass}>Outbound lanes</div>
                 {outboundGrants.length > 0 ? (
                   outboundGrants.map((grant) => (
                     <button
                       key={grant.id}
                       type="button"
-                      className="rounded-[20px] border border-white/8 bg-white/[0.03] px-4 py-4 text-left transition hover:bg-white/[0.05]"
+                      className={`${userDialogPanelClass} px-4 py-4 text-left transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]`}
                       onClick={() => onOpenRelationship(grant.id)}
                     >
                       <div className="flex flex-wrap items-center gap-2">
                         <UserBadge user={grant.subjectUser} />
-                        <span className="text-white/45">→</span>
+                        <span className="text-[var(--ui-ink-faint)]">→</span>
                         <UserBadge user={grant.targetUser} />
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">
-                        <Badge className="bg-white/[0.08] text-white/74">
-                          {summarizeGrant(grant)}
-                        </Badge>
-                        <Badge className="bg-white/[0.08] text-white/74">
+                        <Badge tone="meta">{summarizeGrant(grant)}</Badge>
+                        <Badge tone="meta">
                           {countEnabledRights(grant)}/{TOTAL_RIGHTS} rights
                         </Badge>
                       </div>
                     </button>
                   ))
                 ) : (
-                  <div className="rounded-[20px] border border-dashed border-white/10 bg-white/[0.02] px-4 py-4 text-sm text-white/52">
+                  <div className="rounded-[20px] border border-dashed border-[var(--ui-border-subtle)] px-4 py-4 text-sm text-[var(--ui-ink-soft)]">
                     No outbound relationship lanes yet.
                   </div>
                 )}
               </div>
 
               <div className="grid gap-3">
-                <div className="text-sm font-medium text-white">
-                  Inbound lanes
-                </div>
+                <div className={userDialogTitleClass}>Inbound lanes</div>
                 {inboundGrants.length > 0 ? (
                   inboundGrants.map((grant) => (
                     <button
                       key={grant.id}
                       type="button"
-                      className="rounded-[20px] border border-white/8 bg-white/[0.03] px-4 py-4 text-left transition hover:bg-white/[0.05]"
+                      className={`${userDialogPanelClass} px-4 py-4 text-left transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]`}
                       onClick={() => onOpenRelationship(grant.id)}
                     >
                       <div className="flex flex-wrap items-center gap-2">
                         <UserBadge user={grant.subjectUser} />
-                        <span className="text-white/45">→</span>
+                        <span className="text-[var(--ui-ink-faint)]">→</span>
                         <UserBadge user={grant.targetUser} />
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">
@@ -304,8 +308,8 @@ export function UserSettingsFlowDialog({
                               key={`${grant.id}-${capability.id}`}
                               className={
                                 capability.enabled
-                                  ? "bg-white/[0.08] text-white/74"
-                                  : "bg-white/[0.04] text-white/38"
+                                  ? "bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)]"
+                                  : "bg-[var(--ui-surface-1)] text-[var(--ui-ink-faint)] opacity-70"
                               }
                             >
                               {capability.label}
@@ -316,7 +320,7 @@ export function UserSettingsFlowDialog({
                     </button>
                   ))
                 ) : (
-                  <div className="rounded-[20px] border border-dashed border-white/10 bg-white/[0.02] px-4 py-4 text-sm text-white/52">
+                  <div className="rounded-[20px] border border-dashed border-[var(--ui-border-subtle)] px-4 py-4 text-sm text-[var(--ui-ink-soft)]">
                     No inbound relationship lanes yet.
                   </div>
                 )}
@@ -324,7 +328,7 @@ export function UserSettingsFlowDialog({
             </div>
           </>
         ) : (
-          <div className="rounded-[20px] border border-dashed border-white/10 bg-white/[0.02] px-4 py-4 text-sm leading-6 text-white/52">
+          <div className="rounded-[20px] border border-dashed border-[var(--ui-border-subtle)] px-4 py-4 text-sm leading-6 text-[var(--ui-ink-soft)]">
             Create the user first, then Forge will generate the directional
             relationship lanes you can tune from here.
           </div>

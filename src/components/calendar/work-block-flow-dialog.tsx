@@ -104,19 +104,19 @@ function WorkBlockApPreview({ draft }: { draft: WorkBlockDraft }) {
       : 1440 - draft.startMinute + draft.endMinute;
 
   return (
-    <div className="rounded-[22px] border border-white/8 bg-white/[0.04] p-4">
+    <div className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge className="bg-white/[0.08] text-white/74">
+        <Badge className="bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)]">
           {formatLifeForceRate(preview.rateApPerHour)}
         </Badge>
-        <Badge className="bg-white/[0.08] text-white/74">
+        <Badge className="bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)]">
           {formatLifeForceAp(preview.totalAp)} / block
         </Badge>
-        <Badge className="bg-white/[0.08] text-white/74">
+        <Badge className="bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)]">
           {Math.round(durationMinutes / 60)}h {durationMinutes % 60}m
         </Badge>
       </div>
-      <div className="mt-3 text-sm leading-6 text-white/58">
+      <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
         This is the default Life Force container drain for each occurrence of
         the block when no richer task run or timebox already covers that window.
       </div>
@@ -320,7 +320,7 @@ export function WorkBlockFlowDialog({
                 />
               </FlowField>
             </div>
-            <div className="text-sm leading-6 text-white/54">
+            <div className="text-sm leading-6 text-[var(--ui-ink-soft)]">
               Leave the end date empty to keep repeating indefinitely. Holiday
               blocks work well with all seven weekdays and `0-1440`, and they
               still carry AP load because leisure and holiday time are real
@@ -343,8 +343,8 @@ export function WorkBlockFlowDialog({
                       }
                       className={`rounded-full px-3 py-2 text-sm transition ${
                         active
-                          ? "bg-[var(--primary)]/18 text-[var(--primary)] shadow-[inset_0_0_0_1px_rgba(192,193,255,0.24)]"
-                          : "bg-white/[0.05] text-white/62 hover:bg-white/[0.08]"
+                          ? "bg-[var(--ui-accent-soft)] text-[var(--primary)] ring-1 ring-[color-mix(in_srgb,var(--primary)_24%,transparent)]"
+                          : "bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                       }`}
                     >
                       {label}
@@ -390,9 +390,9 @@ export function WorkBlockFlowDialog({
               />
             </FlowField>
             <FlowField label="Color">
-              <div className="flex items-center gap-3 rounded-[22px] border border-white/8 bg-white/6 px-4 py-3">
+              <div className="flex items-center gap-3 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3">
                 <input
-                  className="h-10 w-12 rounded-lg border border-white/10 bg-transparent"
+                  className="h-10 w-12 rounded-lg border border-[var(--ui-border-subtle)] bg-transparent"
                   type="color"
                   value={value.color}
                   onChange={(event) => setValue({ color: event.target.value })}

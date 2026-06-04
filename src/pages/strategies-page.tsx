@@ -157,14 +157,14 @@ export function StrategiesPage() {
 
       <Card className="grid gap-4">
         <div className="flex items-center gap-3">
-          <Search className="size-4 text-white/38" />
+          <Search className="size-4 text-[var(--ui-ink-muted)]" />
           <Input
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
             placeholder="Search strategy title, target, graph node, human, or bot"
           />
         </div>
-        <div className="text-sm text-white/56">
+        <div className="text-sm text-[var(--ui-ink-soft)]">
           Search includes owners, target goals/projects, and graph nodes so
           cross-user plans stay discoverable.
         </div>
@@ -204,10 +204,10 @@ export function StrategiesPage() {
                       className="text-left"
                       onClick={() => navigate(`/strategies/${strategy.id}`)}
                     >
-                      <div className="font-display text-2xl text-white">
+                      <div className="font-display text-2xl text-[var(--ui-ink-strong)]">
                         {strategy.title}
                       </div>
-                      <div className="mt-2 max-w-3xl text-sm leading-6 text-white/58">
+                      <div className="mt-2 max-w-3xl text-sm leading-6 text-[var(--ui-ink-soft)]">
                         {strategy.overview || strategy.endStateDescription}
                       </div>
                     </button>
@@ -217,13 +217,13 @@ export function StrategiesPage() {
                     <Badge
                       className={
                         strategy.isLocked
-                          ? "bg-amber-500/12 text-amber-200"
-                          : "bg-emerald-500/12 text-emerald-200"
+                          ? "bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_76%,var(--ui-ink-strong)_24%)]"
+                          : "bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_76%,var(--ui-ink-strong)_24%)]"
                       }
                     >
                       {strategy.isLocked ? "Contract locked" : "Editable draft"}
                     </Badge>
-                    <Badge className="bg-white/[0.08] text-white/78">
+                    <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                       {strategy.status}
                     </Badge>
                     <Badge className="bg-[var(--primary)]/14 text-[var(--primary)]">
@@ -233,68 +233,68 @@ export function StrategiesPage() {
                 </div>
 
                 <div className="grid gap-3 lg:grid-cols-4">
-                  <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
-                    <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
+                  <div className="rounded-[18px] bg-[var(--ui-surface-2)] px-4 py-3">
+                    <div className="font-label text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                       Graph progress
                     </div>
-                    <div className="mt-2 text-xl text-white">
+                    <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">
                       {strategy.metrics.startedNodeCount}/
                       {strategy.metrics.totalNodeCount}
                     </div>
-                    <div className="text-xs leading-5 text-white/46">
+                    <div className="text-xs leading-5 text-[var(--ui-ink-soft)]">
                       {strategy.metrics.completedNodeCount} completed
                     </div>
                   </div>
-                  <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
-                    <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
+                  <div className="rounded-[18px] bg-[var(--ui-surface-2)] px-4 py-3">
+                    <div className="font-label text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                       Ready branches
                     </div>
-                    <div className="mt-2 text-xl text-white">
+                    <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">
                       {strategy.metrics.readyNodeCount}
                     </div>
-                    <div className="text-xs leading-5 text-white/46">
+                    <div className="text-xs leading-5 text-[var(--ui-ink-soft)]">
                       Nodes whose prerequisites are already satisfied.
                     </div>
                   </div>
-                  <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
-                    <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
+                  <div className="rounded-[18px] bg-[var(--ui-surface-2)] px-4 py-3">
+                    <div className="font-label text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                       End targets
                     </div>
-                    <div className="mt-2 text-xl text-white">
+                    <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">
                       {strategy.metrics.completedTargetCount}/
                       {strategy.metrics.totalTargetCount || 0}
                     </div>
-                    <div className="text-xs leading-5 text-white/46">
+                    <div className="text-xs leading-5 text-[var(--ui-ink-soft)]">
                       {strategy.metrics.targetProgressScore}% target progress
                     </div>
                   </div>
-                  <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
-                    <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
+                  <div className="rounded-[18px] bg-[var(--ui-surface-2)] px-4 py-3">
+                    <div className="font-label text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                       Sequencing
                     </div>
-                    <div className="mt-2 text-xl text-white">
+                    <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">
                       {strategy.metrics.sequencingScore}%
                     </div>
                   </div>
                 </div>
 
                 <div className="grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(16rem,0.8fr)]">
-                  <div className="rounded-[18px] bg-white/[0.04] px-4 py-4">
+                  <div className="rounded-[18px] bg-[var(--ui-surface-2)] px-4 py-4">
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div>
-                        <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/42">
+                        <div className="font-label text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                           Active next nodes
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2">
                           {activeNodes.length === 0 ? (
-                            <div className="text-sm text-white/52">
+                            <div className="text-sm text-[var(--ui-ink-soft)]">
                               No currently open branch.
                             </div>
                           ) : (
                             activeNodes.map((node) => (
                               <Badge
                                 key={node.id}
-                                className="bg-white/[0.08] text-white/80"
+                                className="bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)]"
                               >
                                 {node.title}
                               </Badge>
@@ -303,10 +303,10 @@ export function StrategiesPage() {
                         </div>
                       </div>
                       <div>
-                        <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/42">
+                        <div className="font-label text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                           Alignment breakdown
                         </div>
-                        <div className="mt-3 grid gap-2 text-sm text-white/58">
+                        <div className="mt-3 grid gap-2 text-sm text-[var(--ui-ink-soft)]">
                           {alignmentBreakdown.map((metric) => (
                             <div key={metric.id}>
                               {metric.label} {metric.value}%

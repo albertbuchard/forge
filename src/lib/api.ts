@@ -3382,9 +3382,25 @@ export function getVitalsView(userIds?: string[] | unknown) {
   );
 }
 
-export function getWeightLossView(userIds?: string[] | unknown) {
+export function getWeightLossView(
+  userIds?: string[] | unknown,
+  options?: {
+    dateKey?: string;
+    dayStartAt?: string;
+    dayEndAt?: string;
+  }
+) {
   const search = new URLSearchParams();
   appendUserIds(search, coerceUserIds(userIds));
+  if (options?.dateKey) {
+    search.set("dateKey", options.dateKey);
+  }
+  if (options?.dayStartAt) {
+    search.set("dayStartAt", options.dayStartAt);
+  }
+  if (options?.dayEndAt) {
+    search.set("dayEndAt", options.dayEndAt);
+  }
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
   return request<{ weightLoss: WeightLossViewData }>(
     `/api/v1/health/weight-loss${suffix}`
