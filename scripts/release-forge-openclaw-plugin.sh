@@ -37,6 +37,7 @@ ORIGINAL_FORGE_MEMORY_PACKAGE_LOCK_VERSION=""
 RELEASE_TARGET_VERSION=""
 VERIFY_TESTS=(
   "npm --prefix openclaw-plugin audit --omit=dev --omit=peer"
+  "npm --prefix packages/forge-memory ci"
   "npm run test:forge-memory"
   "npm exec -- vitest run src/openclaw/parity.test.ts src/openclaw/index.test.ts src/openclaw/api-client.test.ts src/openclaw/manifest.test.ts src/openclaw/tool-contract.test.ts"
   "npm run build"
