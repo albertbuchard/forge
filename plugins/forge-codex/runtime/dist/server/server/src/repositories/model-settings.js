@@ -124,15 +124,16 @@ export function upsertAiModelConnection(input, secrets, options = {}) {
            WHERE id = ?`)
             .get(parsed.id.trim())
         : undefined;
-    const id = existing?.id ??
-        `mdl_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+    const id = existing?.id ?? `mdl_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
     const now = new Date().toISOString();
     const provider = parsed.provider;
     const authMode = parsed.authMode ?? defaultAuthMode(provider);
     const baseUrl = parsed.baseUrl?.trim() ||
         existing?.base_url ||
         defaultBaseUrlForProvider(provider);
-    let secretId = existing?.secret_id ?? null;
+    let secretId = existing?.secret_id && readEncryptedSecret(existing.secret_id)
+        ? existing.secret_id
+        : null;
     let accountLabel = existing?.account_label ?? null;
     if (parsed.provider === "mock") {
         secretId = null;
@@ -151,6 +152,11 @@ export function upsertAiModelConnection(input, secrets, options = {}) {
             secretId ?? `mdl_secret_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
         accountLabel = options.oauthCredential.accountId;
         storeEncryptedSecret(secretId, secrets.sealJson(options.oauthCredential), `${parsed.label} AI OAuth connection`);
+    }
+    if (parsed.provider !== "mock" && !secretId) {
+        throw new Error(authMode === "oauth"
+            ? "Reconnect OAuth before saving this model connection. The existing credential is missing from Forge's encrypted secret store."
+            : "Enter the API key before saving this model connection. The existing credential is missing from Forge's encrypted secret store.");
     }
     getDatabase()
         .prepare(`INSERT INTO ai_model_connections (

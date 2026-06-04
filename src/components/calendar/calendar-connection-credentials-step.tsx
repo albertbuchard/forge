@@ -33,6 +33,30 @@ type CalendarSettingsValidation<TDraft> = {
   isValid: boolean;
 };
 
+const PANEL_CLASS =
+  "rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]";
+const INNER_PANEL_CLASS =
+  "rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]";
+const READONLY_FIELD_CLASS =
+  "flex min-h-11 min-w-0 items-center overflow-hidden rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 text-sm text-[var(--ui-ink-faint)]";
+const ICON_BUTTON_CLASS =
+  "inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]";
+const BODY_TEXT_CLASS = "text-sm leading-6 text-[var(--ui-ink-soft)]";
+const STRONG_TEXT_CLASS = "font-medium text-[var(--ui-ink-strong)]";
+const META_BADGE_CLASS = "bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]";
+const SUCCESS_BADGE_CLASS =
+  "bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_74%,var(--ui-ink-strong)_26%)]";
+const INFO_BADGE_CLASS =
+  "bg-[var(--ui-info-soft)] text-[color-mix(in_srgb,var(--info)_76%,var(--ui-ink-strong)_24%)]";
+const INFO_CALLOUT_CLASS =
+  "rounded-[18px] border border-[var(--ui-info-soft)] bg-[var(--ui-info-soft)] px-4 py-3 text-sm leading-6 text-[var(--ui-ink-strong)]";
+const MESSAGE_CLASS =
+  "mt-4 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3 text-sm leading-6 text-[var(--ui-ink-soft)]";
+const CHOICE_SELECTED_CLASS =
+  "border-[color-mix(in_srgb,var(--primary)_34%,var(--ui-border-subtle)_66%)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]";
+const CHOICE_IDLE_CLASS =
+  "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)]";
+
 export function CalendarConnectionCredentialsStep({
   value,
   setValue,
@@ -214,11 +238,11 @@ function MacOSLocalCredentialsPanel({
 }) {
   return (
     <div className="grid gap-4">
-      <div className="rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(20,32,48,0.98),rgba(11,18,30,0.98))] p-5">
+      <div className={`${PANEL_CLASS} p-5`}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="font-medium text-white">macOS Calendar access</div>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/60">
+            <div className={STRONG_TEXT_CLASS}>macOS Calendar access</div>
+            <p className={`mt-2 max-w-2xl ${BODY_TEXT_CLASS}`}>
               Forge uses EventKit to read and write the calendars already
               configured in Calendar.app on this Mac. Grant Calendar full
               access, then discover the available account sources.
@@ -227,8 +251,8 @@ function MacOSLocalCredentialsPanel({
           <Badge
             className={
               macosStatus === "full_access"
-                ? "bg-emerald-500/16 text-emerald-100"
-                : "bg-white/[0.08] text-white/72"
+                ? SUCCESS_BADGE_CLASS
+                : META_BADGE_CLASS
             }
           >
             {macosStatus === "full_access"
@@ -271,7 +295,7 @@ function MacOSLocalCredentialsPanel({
 
         {macosDiscovery?.sources?.length ? (
           <div className="mt-5 grid gap-3">
-            <div className="text-sm font-medium text-white">
+            <div className="text-sm font-medium text-[var(--ui-ink-strong)]">
               Host calendar sources
             </div>
             {macosDiscovery.sources.map((source) => {
@@ -281,9 +305,7 @@ function MacOSLocalCredentialsPanel({
                   key={source.sourceId}
                   type="button"
                   className={`rounded-[20px] border px-4 py-3 text-left transition ${
-                    selected
-                      ? "border-[var(--primary)]/40 bg-[var(--primary)]/12 text-white"
-                      : "border-white/8 bg-white/[0.04] text-white/72 hover:bg-white/[0.07]"
+                    selected ? CHOICE_SELECTED_CLASS : CHOICE_IDLE_CLASS
                   }`}
                   onClick={() => {
                     setValue({ sourceId: source.sourceId });
@@ -300,7 +322,7 @@ function MacOSLocalCredentialsPanel({
                   <div className="font-medium">
                     {source.accountLabel || source.sourceTitle}
                   </div>
-                  <div className="mt-1 text-sm text-white/56">
+                  <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
                     {source.sourceType} · {source.calendars.length} calendars
                   </div>
                 </button>
@@ -356,71 +378,69 @@ function GoogleCredentialsPanel({
 
   return (
     <div className="grid gap-4">
-      <div className="rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(20,32,48,0.98),rgba(11,18,30,0.98))] p-5">
+      <div className={`${PANEL_CLASS} p-5`}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="font-medium text-white">
-              How Google sign-in works
-            </div>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/60">
+            <div className={STRONG_TEXT_CLASS}>How Google sign-in works</div>
+            <p className={`mt-2 max-w-2xl ${BODY_TEXT_CLASS}`}>
               Start the popup from the host running Forge. Google returns to
               Forge on localhost, Forge completes the PKCE exchange on the
               backend, then Forge discovers the calendars for that account.
             </p>
           </div>
-          <Badge className="bg-emerald-500/16 text-emerald-100">
-            Auth code + PKCE
-          </Badge>
+          <Badge className={SUCCESS_BADGE_CLASS}>Auth code + PKCE</Badge>
         </div>
 
-        <div className="mt-4 rounded-[18px] bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/68">
+        <div
+          className={`mt-4 ${INNER_PANEL_CLASS} px-4 py-3 ${BODY_TEXT_CLASS}`}
+        >
           <div>
             Forge runtime:{" "}
-            <span className="font-medium text-white">
+            <span className={STRONG_TEXT_CLASS}>
               {activeGoogleSetup.appBaseUrl}
             </span>
           </div>
           <div className="break-all">
             Redirect URI:{" "}
-            <span className="font-medium text-white">
+            <span className={STRONG_TEXT_CLASS}>
               {activeGoogleSetup.redirectUri}
             </span>
           </div>
           <div className="break-all">
             Redirect origin:{" "}
-            <span className="font-medium text-white">
+            <span className={STRONG_TEXT_CLASS}>
               {googleRedirectOrigin || "Unavailable"}
             </span>
           </div>
           <div>
             Allowed local browser origins:{" "}
-            <span className="font-medium text-white">
+            <span className={STRONG_TEXT_CLASS}>
               {activeGoogleSetup.allowedOrigins.join(", ")}
             </span>
           </div>
           <div className="break-all">
             Detected browser origin:{" "}
-            <span className="font-medium text-white">
+            <span className={STRONG_TEXT_CLASS}>
               {currentBrowserOrigin || "Unavailable"}
             </span>
           </div>
         </div>
 
-        <div className="mt-4 rounded-[18px] bg-white/[0.04] p-4">
+        <div className={`mt-4 ${INNER_PANEL_CLASS} p-4`}>
           {!googleClientIdEditing ? (
             <div className="grid gap-3">
               <div className="grid min-w-0 gap-3">
                 <div className="flex min-w-0 items-center justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex min-w-0 items-center gap-2">
-                      <span className="truncate font-medium text-white">
+                      <span className="truncate font-medium text-[var(--ui-ink-strong)]">
                         Google OAuth client
                       </span>
                       <Badge
                         className={
                           hasStoredGoogleOverride
-                            ? "bg-emerald-500/16 text-emerald-100"
-                            : "bg-white/[0.08] text-white/72"
+                            ? SUCCESS_BADGE_CLASS
+                            : META_BADGE_CLASS
                         }
                       >
                         {hasStoredGoogleOverride
@@ -437,7 +457,7 @@ function GoogleCredentialsPanel({
                   <button
                     type="button"
                     aria-label="Edit Google OAuth client"
-                    className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-white/72 transition hover:bg-white/[0.12] hover:text-white"
+                    className={ICON_BUTTON_CLASS}
                     onClick={() => {
                       setGoogleSetupMessage(null);
                       setGoogleClientIdEditing(true);
@@ -452,7 +472,7 @@ function GoogleCredentialsPanel({
                 label="Effective client ID"
                 description="This is the Google desktop-app client ID Forge will use right now."
               >
-                <div className="flex min-h-11 min-w-0 items-center overflow-hidden rounded-[18px] border border-white/8 bg-black/20 px-4 text-sm text-white/38">
+                <div className={READONLY_FIELD_CLASS}>
                   <span
                     className="block min-w-0 truncate"
                     title={activeGoogleSetup.clientId}
@@ -466,7 +486,7 @@ function GoogleCredentialsPanel({
                 label="Effective client secret"
                 description="Forge uses this value on the local backend when exchanging and refreshing Google tokens."
               >
-                <div className="flex min-h-11 min-w-0 items-center overflow-hidden rounded-[18px] border border-white/8 bg-black/20 px-4 text-sm text-white/38">
+                <div className={READONLY_FIELD_CLASS}>
                   <span
                     className="block min-w-0 truncate"
                     title={activeGoogleSetup.clientSecret || ""}
@@ -480,10 +500,8 @@ function GoogleCredentialsPanel({
             <div className="grid gap-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="font-medium text-white">
-                    Google OAuth override
-                  </div>
-                  <p className="mt-2 max-w-2xl text-sm leading-6 text-white/60">
+                  <div className={STRONG_TEXT_CLASS}>Google OAuth override</div>
+                  <p className={`mt-2 max-w-2xl ${BODY_TEXT_CLASS}`}>
                     Save both the client ID and client secret only when this
                     Forge install should use a different Google desktop OAuth
                     app than the packaged default.
@@ -492,7 +510,7 @@ function GoogleCredentialsPanel({
                 <button
                   type="button"
                   aria-label="Done editing Google OAuth client"
-                  className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-white/72 transition hover:bg-white/[0.12] hover:text-white"
+                  className={ICON_BUTTON_CLASS}
                   onClick={() => {
                     setGoogleSetupMessage(null);
                     setGoogleSettingsDraft(
@@ -522,7 +540,7 @@ function GoogleCredentialsPanel({
                   placeholder="1234567890-abcdef.apps.googleusercontent.com"
                 />
                 {googleValidation.issues.clientId ? (
-                  <p className="mt-2 text-sm text-rose-200">
+                  <p className="mt-2 text-sm text-[var(--danger)]">
                     {googleValidation.issues.clientId}
                   </p>
                 ) : null}
@@ -545,7 +563,7 @@ function GoogleCredentialsPanel({
                   placeholder="GOCSPX-..."
                 />
                 {googleValidation.issues.clientSecret ? (
-                  <p className="mt-2 text-sm text-rose-200">
+                  <p className="mt-2 text-sm text-[var(--danger)]">
                     {googleValidation.issues.clientSecret}
                   </p>
                 ) : null}
@@ -592,12 +610,10 @@ function GoogleCredentialsPanel({
         </div>
 
         {googleSetupMessage ? (
-          <div className="mt-4 rounded-[18px] border border-white/10 bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/72">
-            {googleSetupMessage}
-          </div>
+          <div className={MESSAGE_CLASS}>{googleSetupMessage}</div>
         ) : null}
 
-        <div className="mt-4 rounded-[18px] border border-sky-400/20 bg-sky-400/10 px-4 py-3 text-sm leading-6 text-sky-50">
+        <div className={`mt-4 ${INFO_CALLOUT_CLASS}`}>
           If you open Forge on a phone or another remote route, Google redirects
           to localhost on that other device instead of back to Forge.
         </div>
@@ -621,7 +637,7 @@ function GoogleCredentialsPanel({
               : "Sign in with Google"}
           </Button>
           {googleSession?.accountLabel ? (
-            <Badge className="bg-emerald-500/16 text-emerald-100">
+            <Badge className={SUCCESS_BADGE_CLASS}>
               <CheckCircle2 className="mr-1 size-3.5" />
               {googleSession.accountLabel}
             </Badge>
@@ -661,17 +677,17 @@ function MicrosoftCredentialsPanel({
 }) {
   return (
     <div className="grid gap-4">
-      <div className="rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(20,32,48,0.98),rgba(11,18,30,0.98))] p-5">
+      <div className={`${PANEL_CLASS} p-5`}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="font-medium text-white">Guided Microsoft setup</div>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/60">
+            <div className={STRONG_TEXT_CLASS}>Guided Microsoft setup</div>
+            <p className={`mt-2 max-w-2xl ${BODY_TEXT_CLASS}`}>
               Save the Microsoft app registration details for this Forge
               instance here, optionally test them, then continue into the
               Microsoft sign-in popup. Exchange Online stays read-only for now.
             </p>
           </div>
-          <Badge className="bg-sky-400/12 text-sky-100">Read only</Badge>
+          <Badge className={INFO_BADGE_CLASS}>Read only</Badge>
         </div>
 
         <div className="mt-4 grid gap-4 md:grid-cols-2">
@@ -691,7 +707,7 @@ function MicrosoftCredentialsPanel({
               placeholder="00000000-0000-0000-0000-000000000000"
             />
             {microsoftValidation.issues.clientId ? (
-              <div className="text-sm text-rose-300">
+              <div className="text-sm text-[var(--danger)]">
                 {microsoftValidation.issues.clientId}
               </div>
             ) : null}
@@ -731,13 +747,15 @@ function MicrosoftCredentialsPanel({
             placeholder="http://127.0.0.1:4317/api/v1/calendar/oauth/microsoft/callback"
           />
           {microsoftValidation.issues.redirectUri ? (
-            <div className="text-sm text-rose-300">
+            <div className="text-sm text-[var(--danger)]">
               {microsoftValidation.issues.redirectUri}
             </div>
           ) : null}
         </FlowField>
 
-        <div className="mt-4 rounded-[18px] bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/68">
+        <div
+          className={`mt-4 ${INNER_PANEL_CLASS} px-4 py-3 ${BODY_TEXT_CLASS}`}
+        >
           Forge saves the client ID, tenant, and redirect URI for this local
           instance, then handles Microsoft sign-in in a popup.
         </div>
@@ -779,7 +797,7 @@ function MicrosoftCredentialsPanel({
               : "Sign in with Microsoft"}
           </Button>
           {microsoftSession?.accountLabel ? (
-            <Badge className="bg-emerald-500/16 text-emerald-100">
+            <Badge className={SUCCESS_BADGE_CLASS}>
               <CheckCircle2 className="mr-1 size-3.5" />
               {microsoftSession.accountLabel}
             </Badge>
@@ -787,20 +805,18 @@ function MicrosoftCredentialsPanel({
         </div>
 
         <div className="mt-4 grid gap-3 md:grid-cols-2">
-          <div className="rounded-[18px] bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/68">
+          <div className={`${INNER_PANEL_CLASS} px-4 py-3 ${BODY_TEXT_CLASS}`}>
             Save before sign-in. The Microsoft popup always uses the latest
             saved client ID, tenant, and redirect URI.
           </div>
-          <div className="rounded-[18px] bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/68">
+          <div className={`${INNER_PANEL_CLASS} px-4 py-3 ${BODY_TEXT_CLASS}`}>
             After sign-in, Forge will let you choose which Exchange Online
             calendars to mirror into the Calendar page.
           </div>
         </div>
 
         {microsoftSetupMessage ? (
-          <div className="mt-4 rounded-[18px] border border-white/10 bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/72">
-            {microsoftSetupMessage}
-          </div>
+          <div className={MESSAGE_CLASS}>{microsoftSetupMessage}</div>
         ) : null}
       </div>
     </div>

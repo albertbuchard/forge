@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { SurfacePanel, SurfaceStat } from "@/components/ui/surface";
 import { Textarea } from "@/components/ui/textarea";
+import { formatLocalDateKey } from "@/lib/date-keys";
 import type {
   NutritionFoodLog,
   NutritionFoodLogInput,
@@ -41,6 +42,8 @@ export type WeightLossSelectedFood = {
 export type WeightLossFoodDraft = {
   mealLabel: string;
   notes: string;
+  loggedAt?: string;
+  dayKey?: string | null;
   source?: NutritionFoodLogInput["source"];
   selectedItems: WeightLossSelectedFood[];
 };
@@ -238,6 +241,8 @@ export function buildFoodDraftFromLog(
   return {
     mealLabel: meal.mealLabel ?? "Meal",
     notes: meal.notes ?? "",
+    loggedAt: meal.loggedAt,
+    dayKey: meal.dayKey,
     source: normalizeFoodSource(meal.source),
     selectedItems: meal.items.map((item) => ({
       localId: item.id,
@@ -255,6 +260,8 @@ export function buildFoodDraftFromInput(
   return {
     mealLabel: input.mealLabel ?? "Meal",
     notes: input.notes ?? "",
+    loggedAt: input.loggedAt,
+    dayKey: input.dayKey,
     source: input.source ?? "manual",
     selectedItems: input.items.map((item, index) => ({
       localId: `${source}-${index}-${Date.now()}`,
@@ -717,6 +724,8 @@ export function buildFoodLogInput(
   draft: WeightLossFoodDraft
 ): NutritionFoodLogInput {
   return {
+    loggedAt: draft.loggedAt,
+    dayKey: draft.dayKey ?? formatLocalDateKey(),
     mealLabel: asFoodDraftString(draft.mealLabel, "Meal"),
     source: draft.source ?? "search",
     confirmationState: "confirmed",

@@ -45,6 +45,22 @@ type BonusGrantFormValues = {
   metadataJson: string;
 };
 
+const rewardPanelClass =
+  "min-w-0 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4";
+const rewardInsetClass =
+  "min-w-0 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4";
+const rewardSelectClass =
+  "min-w-0 rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-3 text-sm text-[var(--ui-ink-strong)] outline-none transition focus:border-[var(--primary)]/35 focus:bg-[var(--ui-surface-3)]";
+const rewardEyebrowClass =
+  "font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]";
+const rewardTitleClass = "text-[var(--ui-ink-strong)]";
+const rewardBodyClass = "text-[var(--ui-ink-soft)]";
+const rewardFaintClass = "text-[var(--ui-ink-faint)]";
+const rewardWarningClass =
+  "text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]";
+const rewardSuccessPanelClass =
+  "mt-4 rounded-[18px] border border-[color-mix(in_srgb,var(--success)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-success-soft)] p-4 text-sm text-[color-mix(in_srgb,var(--success)_76%,var(--ui-ink-strong)_24%)]";
+
 function prettyRecord(value: Record<string, string | number | boolean | null>) {
   return JSON.stringify(value, null, 2);
 }
@@ -64,7 +80,9 @@ export function SettingsRewardsPage() {
   const queryClient = useQueryClient();
   const [selectedRuleId, setSelectedRuleId] = useState("");
   const [ruleConfigError, setRuleConfigError] = useState<string | null>(null);
-  const [bonusMetadataError, setBonusMetadataError] = useState<string | null>(null);
+  const [bonusMetadataError, setBonusMetadataError] = useState<string | null>(
+    null
+  );
 
   const operatorSessionQuery = useQuery({
     queryKey: ["forge-operator-session"],
@@ -106,7 +124,8 @@ export function SettingsRewardsPage() {
       entityId: "",
       deltaXp: 15,
       reasonTitle: "Operator bonus",
-      reasonSummary: "Manual boost for a meaningful action captured with good provenance.",
+      reasonSummary:
+        "Manual boost for a meaningful action captured with good provenance.",
       metadataJson: "{}"
     }
   });
@@ -120,7 +139,13 @@ export function SettingsRewardsPage() {
   };
 
   const rewardRuleMutation = useMutation({
-    mutationFn: (input: { ruleId: string; title: string; description: string; active: boolean; config: RewardRule["config"] }) =>
+    mutationFn: (input: {
+      ruleId: string;
+      title: string;
+      description: string;
+      active: boolean;
+      config: RewardRule["config"];
+    }) =>
       patchRewardRule(input.ruleId, {
         title: input.title,
         description: input.description,
@@ -136,28 +161,69 @@ export function SettingsRewardsPage() {
   });
 
   const rewardRules = rewardRulesQuery.data?.rules ?? [];
-  const rewardableOptionsByType = useMemo<Record<RewardableEntityType, RewardableOption[]>>(
+  const rewardableOptionsByType = useMemo<
+    Record<RewardableEntityType, RewardableOption[]>
+  >(
     () => ({
-      system: [{ id: "operator_manual_reward", label: "Operator reward ledger" }],
-      goal: shell.snapshot.goals.map((goal) => ({ id: goal.id, label: goal.title })),
-      project: shell.snapshot.dashboard.projects.map((project) => ({ id: project.id, label: project.title })),
-      task: shell.snapshot.tasks.map((task) => ({ id: task.id, label: task.title })),
-      habit: shell.snapshot.habits.map((habit) => ({ id: habit.id, label: habit.title })),
+      system: [
+        { id: "operator_manual_reward", label: "Operator reward ledger" }
+      ],
+      goal: shell.snapshot.goals.map((goal) => ({
+        id: goal.id,
+        label: goal.title
+      })),
+      project: shell.snapshot.dashboard.projects.map((project) => ({
+        id: project.id,
+        label: project.title
+      })),
+      task: shell.snapshot.tasks.map((task) => ({
+        id: task.id,
+        label: task.title
+      })),
+      habit: shell.snapshot.habits.map((habit) => ({
+        id: habit.id,
+        label: habit.title
+      })),
       tag: shell.snapshot.tags.map((tag) => ({ id: tag.id, label: tag.name })),
       note: [],
       insight: [],
-      psyche_value: (psycheOverviewQuery.data?.values ?? []).map((value) => ({ id: value.id, label: value.title })),
-      behavior_pattern: (psycheOverviewQuery.data?.patterns ?? []).map((pattern) => ({ id: pattern.id, label: pattern.title })),
-      behavior: (psycheOverviewQuery.data?.behaviors ?? []).map((behavior) => ({ id: behavior.id, label: behavior.title })),
-      belief_entry: (psycheOverviewQuery.data?.beliefs ?? []).map((belief) => ({ id: belief.id, label: belief.statement })),
-      mode_profile: (psycheOverviewQuery.data?.modes ?? []).map((mode) => ({ id: mode.id, label: mode.title })),
-      flashcard: (psycheOverviewQuery.data?.flashcards ?? []).map((flashcard) => ({
-        id: flashcard.id,
-        label: flashcard.title || flashcard.message
+      psyche_value: (psycheOverviewQuery.data?.values ?? []).map((value) => ({
+        id: value.id,
+        label: value.title
       })),
-      trigger_report: (psycheOverviewQuery.data?.reports ?? []).map((report) => ({ id: report.id, label: report.title }))
+      behavior_pattern: (psycheOverviewQuery.data?.patterns ?? []).map(
+        (pattern) => ({ id: pattern.id, label: pattern.title })
+      ),
+      behavior: (psycheOverviewQuery.data?.behaviors ?? []).map((behavior) => ({
+        id: behavior.id,
+        label: behavior.title
+      })),
+      belief_entry: (psycheOverviewQuery.data?.beliefs ?? []).map((belief) => ({
+        id: belief.id,
+        label: belief.statement
+      })),
+      mode_profile: (psycheOverviewQuery.data?.modes ?? []).map((mode) => ({
+        id: mode.id,
+        label: mode.title
+      })),
+      flashcard: (psycheOverviewQuery.data?.flashcards ?? []).map(
+        (flashcard) => ({
+          id: flashcard.id,
+          label: flashcard.title || flashcard.message
+        })
+      ),
+      trigger_report: (psycheOverviewQuery.data?.reports ?? []).map(
+        (report) => ({ id: report.id, label: report.title })
+      )
     }),
-    [psycheOverviewQuery.data, shell.snapshot.dashboard.projects, shell.snapshot.goals, shell.snapshot.habits, shell.snapshot.tags, shell.snapshot.tasks]
+    [
+      psycheOverviewQuery.data,
+      shell.snapshot.dashboard.projects,
+      shell.snapshot.goals,
+      shell.snapshot.habits,
+      shell.snapshot.tags,
+      shell.snapshot.tasks
+    ]
   );
 
   useEffect(() => {
@@ -172,12 +238,18 @@ export function SettingsRewardsPage() {
 
   useEffect(() => {
     if (!rewardRules.length) return;
-    if (!selectedRuleId || !rewardRules.some((rule) => rule.id === selectedRuleId)) {
+    if (
+      !selectedRuleId ||
+      !rewardRules.some((rule) => rule.id === selectedRuleId)
+    ) {
       setSelectedRuleId(rewardRules[0].id);
     }
   }, [rewardRules, selectedRuleId]);
 
-  const selectedRule = rewardRules.find((rule) => rule.id === selectedRuleId) ?? rewardRules[0] ?? null;
+  const selectedRule =
+    rewardRules.find((rule) => rule.id === selectedRuleId) ??
+    rewardRules[0] ??
+    null;
 
   useEffect(() => {
     if (!selectedRule) return;
@@ -192,7 +264,9 @@ export function SettingsRewardsPage() {
 
   const xpMetrics = xpQuery.data?.metrics;
   const rewardLedger = rewardLedgerQuery.data?.ledger ?? [];
-  const manualBonusEvents = rewardLedger.filter((event) => event.metadata.manual === true).slice(0, 8);
+  const manualBonusEvents = rewardLedger
+    .filter((event) => event.metadata.manual === true)
+    .slice(0, 8);
 
   if (operatorSessionQuery.isLoading) {
     return (
@@ -207,7 +281,13 @@ export function SettingsRewardsPage() {
   }
 
   if (operatorSessionQuery.isError) {
-    return <ErrorState eyebrow="Settings · Rewards" error={operatorSessionQuery.error} onRetry={() => void operatorSessionQuery.refetch()} />;
+    return (
+      <ErrorState
+        eyebrow="Settings · Rewards"
+        error={operatorSessionQuery.error}
+        onRetry={() => void operatorSessionQuery.refetch()}
+      />
+    );
   }
 
   return (
@@ -221,7 +301,7 @@ export function SettingsRewardsPage() {
 
       <div className="grid gap-5">
         <Card>
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">Reward operations</div>
+          <div className={rewardEyebrowClass}>Reward operations</div>
           <div className="mt-4 grid gap-4">
             {xpMetrics ? (
               <XpCommandDeck
@@ -235,15 +315,25 @@ export function SettingsRewardsPage() {
 
             {xpMetrics ? (
               <div className="grid gap-3 sm:grid-cols-2">
-                <MetricTile label="Total XP" value={xpMetrics.profile.totalXp} tone="core" />
-                <MetricTile label="Daily ambient" value={`${xpMetrics.dailyAmbientXp} / ${xpMetrics.dailyAmbientCap}`} tone="core" />
+                <MetricTile
+                  label="Total XP"
+                  value={xpMetrics.profile.totalXp}
+                  tone="core"
+                />
+                <MetricTile
+                  label="Daily ambient"
+                  value={`${xpMetrics.dailyAmbientXp} / ${xpMetrics.dailyAmbientCap}`}
+                  tone="core"
+                />
               </div>
             ) : null}
 
             <div className="grid gap-4 xl:grid-cols-2">
               {/* Reward rule editor */}
-              <div className="rounded-[22px] bg-white/[0.04] p-4">
-                <div className="font-medium text-white">Reward rule editor</div>
+              <div className={rewardPanelClass}>
+                <div className={`font-medium ${rewardTitleClass}`}>
+                  Reward rule editor
+                </div>
                 {rewardRules.length > 0 ? (
                   <form
                     className="mt-4 grid gap-4"
@@ -260,51 +350,86 @@ export function SettingsRewardsPage() {
                           config
                         });
                       } catch (error) {
-                        setRuleConfigError(error instanceof Error ? error.message : "Invalid reward rule config.");
+                        setRuleConfigError(
+                          error instanceof Error
+                            ? error.message
+                            : "Invalid reward rule config."
+                        );
                       }
                     })}
                   >
                     <label className="grid gap-2">
-                      <span className="text-sm text-white/58">Rule</span>
+                      <span className={`text-sm ${rewardBodyClass}`}>Rule</span>
                       <select
-                        className="rounded-[14px] bg-white/[0.06] px-3 py-3 text-white"
+                        className={rewardSelectClass}
                         value={selectedRuleId}
-                        onChange={(event) => setSelectedRuleId(event.target.value)}
+                        onChange={(event) =>
+                          setSelectedRuleId(event.target.value)
+                        }
                       >
                         {rewardRules.map((rule) => (
-                          <option key={rule.id} value={rule.id}>{rule.title}</option>
+                          <option key={rule.id} value={rule.id}>
+                            {rule.title}
+                          </option>
                         ))}
                       </select>
                     </label>
                     <label className="grid gap-2">
-                      <span className="text-sm text-white/58">Title</span>
+                      <span className={`text-sm ${rewardBodyClass}`}>
+                        Title
+                      </span>
                       <Input {...rewardRuleForm.register("title")} />
                     </label>
                     <label className="grid gap-2">
-                      <span className="text-sm text-white/58">Description</span>
-                      <Textarea className="min-h-24" {...rewardRuleForm.register("description")} />
+                      <span className={`text-sm ${rewardBodyClass}`}>
+                        Description
+                      </span>
+                      <Textarea
+                        className="min-h-24"
+                        {...rewardRuleForm.register("description")}
+                      />
                     </label>
-                    <label className="flex items-center justify-between rounded-[18px] bg-[rgba(8,13,28,0.68)] px-4 py-3">
-                      <span className="text-white/72">Rule is active</span>
-                      <input type="checkbox" {...rewardRuleForm.register("active")} />
+                    <label className="flex min-w-0 items-center justify-between gap-3 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3">
+                      <span className={rewardBodyClass}>Rule is active</span>
+                      <input
+                        type="checkbox"
+                        {...rewardRuleForm.register("active")}
+                      />
                     </label>
                     <label className="grid gap-2">
-                      <span className="text-sm text-white/58">Config JSON</span>
-                      <Textarea className="min-h-28 font-mono text-xs" {...rewardRuleForm.register("configJson")} />
+                      <span className={`text-sm ${rewardBodyClass}`}>
+                        Config JSON
+                      </span>
+                      <Textarea
+                        className="min-h-28 font-mono text-xs"
+                        {...rewardRuleForm.register("configJson")}
+                      />
                     </label>
-                    {ruleConfigError ? <div className="text-sm text-amber-300">{ruleConfigError}</div> : null}
-                    <Button type="submit" pending={rewardRuleMutation.isPending} pendingLabel="Saving rule">
+                    {ruleConfigError ? (
+                      <div className={`text-sm ${rewardWarningClass}`}>
+                        {ruleConfigError}
+                      </div>
+                    ) : null}
+                    <Button
+                      type="submit"
+                      pending={rewardRuleMutation.isPending}
+                      pendingLabel="Saving rule"
+                    >
                       Save reward rule
                     </Button>
                   </form>
                 ) : (
-                  <div className="mt-4 text-sm text-white/58">Loading reward rules…</div>
+                  <div className={`mt-4 text-sm ${rewardBodyClass}`}>
+                    Loading reward rules...
+                  </div>
                 )}
               </div>
 
               {/* Manual bonus XP */}
-              <div className="rounded-[22px] bg-white/[0.04] p-4">
-                <div className="font-medium text-white">Manual bonus XP</div>
+              <div className={rewardPanelClass}>
+                <div className={`font-medium ${rewardTitleClass}`}>
+                  Manual bonus XP
+                </div>
                 <form
                   className="mt-4 grid gap-4"
                   onSubmit={bonusForm.handleSubmit(async (values) => {
@@ -323,35 +448,50 @@ export function SettingsRewardsPage() {
                         ...values,
                         entityId: "",
                         reasonTitle: "Operator bonus",
-                        reasonSummary: "Manual boost for a meaningful action captured with good provenance.",
+                        reasonSummary:
+                          "Manual boost for a meaningful action captured with good provenance.",
                         metadataJson: "{}"
                       });
                     } catch (error) {
-                      setBonusMetadataError(error instanceof Error ? error.message : "Invalid metadata payload.");
+                      setBonusMetadataError(
+                        error instanceof Error
+                          ? error.message
+                          : "Invalid metadata payload."
+                      );
                     }
                   })}
                 >
                   <div className="grid gap-4 md:grid-cols-2">
                     <label className="grid gap-2">
-                      <span className="text-sm text-white/58">Entity type</span>
+                      <span className={`text-sm ${rewardBodyClass}`}>
+                        Entity type
+                      </span>
                       <select
-                        className="rounded-[14px] bg-white/[0.06] px-3 py-3 text-white"
+                        className={rewardSelectClass}
                         {...bonusForm.register("entityType")}
                       >
-                        {Object.keys(rewardableOptionsByType).map((entityType) => (
-                          <option key={entityType} value={entityType}>
-                            {entityType.replaceAll("_", " ")}
-                          </option>
-                        ))}
+                        {Object.keys(rewardableOptionsByType).map(
+                          (entityType) => (
+                            <option key={entityType} value={entityType}>
+                              {entityType.replaceAll("_", " ")}
+                            </option>
+                          )
+                        )}
                       </select>
                     </label>
                     <label className="grid gap-2">
-                      <span className="text-sm text-white/58">Entity id</span>
+                      <span className={`text-sm ${rewardBodyClass}`}>
+                        Entity id
+                      </span>
                       <select
-                        className="rounded-[14px] bg-white/[0.06] px-3 py-3 text-white"
+                        className={rewardSelectClass}
                         {...bonusForm.register("entityId")}
                       >
-                        {(rewardableOptionsByType[bonusForm.watch("entityType")] ?? []).map((option) => (
+                        {(
+                          rewardableOptionsByType[
+                            bonusForm.watch("entityType")
+                          ] ?? []
+                        ).map((option) => (
                           <option key={option.id} value={option.id}>
                             {option.label}
                           </option>
@@ -361,54 +501,107 @@ export function SettingsRewardsPage() {
                   </div>
                   <div className="grid gap-4 md:grid-cols-2">
                     <label className="grid gap-2">
-                      <span className="text-sm text-white/58">Delta XP</span>
-                      <Input type="number" {...bonusForm.register("deltaXp", { valueAsNumber: true })} />
+                      <span className={`text-sm ${rewardBodyClass}`}>
+                        Delta XP
+                      </span>
+                      <Input
+                        type="number"
+                        {...bonusForm.register("deltaXp", {
+                          valueAsNumber: true
+                        })}
+                      />
                     </label>
                     <label className="grid gap-2">
-                      <span className="text-sm text-white/58">Reason title</span>
+                      <span className={`text-sm ${rewardBodyClass}`}>
+                        Reason title
+                      </span>
                       <Input {...bonusForm.register("reasonTitle")} />
                     </label>
                   </div>
                   <label className="grid gap-2">
-                    <span className="text-sm text-white/58">Reason summary</span>
-                    <Textarea className="min-h-24" {...bonusForm.register("reasonSummary")} />
+                    <span className={`text-sm ${rewardBodyClass}`}>
+                      Reason summary
+                    </span>
+                    <Textarea
+                      className="min-h-24"
+                      {...bonusForm.register("reasonSummary")}
+                    />
                   </label>
                   <label className="grid gap-2">
-                    <span className="text-sm text-white/58">Metadata JSON</span>
-                    <Textarea className="min-h-24 font-mono text-xs" {...bonusForm.register("metadataJson")} />
+                    <span className={`text-sm ${rewardBodyClass}`}>
+                      Metadata JSON
+                    </span>
+                    <Textarea
+                      className="min-h-24 font-mono text-xs"
+                      {...bonusForm.register("metadataJson")}
+                    />
                   </label>
-                  {bonusMetadataError ? <div className="text-sm text-amber-300">{bonusMetadataError}</div> : null}
-                  <Button type="submit" pending={bonusMutation.isPending} pendingLabel="Issuing bonus">
+                  {bonusMetadataError ? (
+                    <div className={`text-sm ${rewardWarningClass}`}>
+                      {bonusMetadataError}
+                    </div>
+                  ) : null}
+                  <Button
+                    type="submit"
+                    pending={bonusMutation.isPending}
+                    pendingLabel="Issuing bonus"
+                  >
                     Issue bonus XP
                   </Button>
                 </form>
                 {bonusMutation.data ? (
-                  <div className="mt-4 rounded-[18px] bg-[rgba(192,193,255,0.12)] p-4 text-sm text-white">
+                  <div className={rewardSuccessPanelClass}>
                     Granted {bonusMutation.data.reward.deltaXp > 0 ? "+" : ""}
-                    {bonusMutation.data.reward.deltaXp} XP for <strong>{bonusMutation.data.reward.reasonTitle}</strong>.
+                    {bonusMutation.data.reward.deltaXp} XP for{" "}
+                    <strong>{bonusMutation.data.reward.reasonTitle}</strong>.
                   </div>
                 ) : null}
               </div>
             </div>
 
             {/* Manual bonus history */}
-            <div className="rounded-[22px] bg-white/[0.04] p-4">
-              <div className="font-medium text-white">Manual bonus history</div>
+            <div className={rewardPanelClass}>
+              <div className={`font-medium ${rewardTitleClass}`}>
+                Manual bonus history
+              </div>
               <div className="mt-4 grid gap-3">
                 {manualBonusEvents.length === 0 ? (
-                  <div className="rounded-[18px] bg-[rgba(8,13,28,0.68)] p-4 text-sm text-white/58">No manual bonus grants yet.</div>
+                  <div
+                    className={`${rewardInsetClass} text-sm ${rewardBodyClass}`}
+                  >
+                    No manual bonus grants yet.
+                  </div>
                 ) : (
                   manualBonusEvents.map((event) => (
-                    <div key={event.id} className="rounded-[18px] bg-[rgba(8,13,28,0.68)] p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="font-medium text-white">{event.reasonTitle}</div>
-                        <Badge className={event.deltaXp >= 0 ? "text-emerald-300" : "text-amber-300"}>
-                          {event.deltaXp > 0 ? "+" : ""}{event.deltaXp} XP
+                    <div key={event.id} className={rewardInsetClass}>
+                      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+                        <div
+                          className={`min-w-0 break-words font-medium ${rewardTitleClass}`}
+                        >
+                          {event.reasonTitle}
+                        </div>
+                        <Badge
+                          wrap
+                          className={
+                            event.deltaXp >= 0
+                              ? "bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_76%,var(--ui-ink-strong)_24%)]"
+                              : "bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]"
+                          }
+                        >
+                          {event.deltaXp > 0 ? "+" : ""}
+                          {event.deltaXp} XP
                         </Badge>
                       </div>
-                      <div className="mt-2 text-sm leading-6 text-white/58">{event.reasonSummary || "No summary supplied."}</div>
-                      <div className="mt-2 text-xs uppercase tracking-[0.16em] text-white/38">
-                        {event.entityType} · {event.entityId} · {new Date(event.createdAt).toLocaleString()}
+                      <div
+                        className={`mt-2 text-sm leading-6 ${rewardBodyClass}`}
+                      >
+                        {event.reasonSummary || "No summary supplied."}
+                      </div>
+                      <div
+                        className={`mt-2 break-words text-xs uppercase tracking-[0.16em] [overflow-wrap:anywhere] ${rewardFaintClass}`}
+                      >
+                        {event.entityType} · {event.entityId} ·{" "}
+                        {new Date(event.createdAt).toLocaleString()}
                       </div>
                     </div>
                   ))

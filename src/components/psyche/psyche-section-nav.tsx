@@ -110,7 +110,7 @@ export function PsycheSectionNav({ className }: { className?: string }) {
                   cn(
                     "inline-flex items-center gap-2 whitespace-nowrap rounded-full px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] transition",
                     isActive || sectionMatches(location.pathname, section.to)
-                      ? "bg-[color-mix(in_srgb,var(--tertiary)_18%,var(--ui-surface-1)_82%)] text-[var(--tertiary)]"
+                      ? "bg-[color-mix(in_srgb,var(--tertiary)_18%,var(--ui-surface-1)_82%)] text-[var(--ui-ink-strong)]"
                       : "bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                   )
                 }

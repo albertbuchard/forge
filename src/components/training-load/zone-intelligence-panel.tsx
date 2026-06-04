@@ -31,12 +31,12 @@ const ZONE_LABELS: Record<TrainingLoadZoneKey, string> = {
 };
 
 const ZONE_COLORS: Record<TrainingLoadZoneKey, string> = {
-  below_z1: "#94a3b8",
-  zone_1: "#38bdf8",
-  zone_2: "#22c55e",
-  zone_3: "#eab308",
-  zone_4: "#f97316",
-  zone_5: "#ef4444"
+  below_z1: "var(--ui-ink-muted)",
+  zone_1: "var(--info)",
+  zone_2: "var(--success)",
+  zone_3: "var(--warning)",
+  zone_4: "var(--tertiary)",
+  zone_5: "var(--danger)"
 };
 
 const ZONE_INTELLIGENCE_HELP = {
@@ -126,8 +126,8 @@ function latestBuckets(
 function ModeNarrative({ mode }: { mode: TrainingIntelligenceMode }) {
   return (
     <div className="grid gap-3 lg:grid-cols-2">
-      <div className="rounded-[8px] border border-white/8 bg-white/[0.035] p-3">
-        <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-white/44">
+      <div className="rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-3">
+        <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-muted)]">
           <Activity className="size-3.5" />
           Drivers
           <InfoTooltip
@@ -136,7 +136,7 @@ function ModeNarrative({ mode }: { mode: TrainingIntelligenceMode }) {
             content={ZONE_INTELLIGENCE_HELP.drivers}
           />
         </div>
-        <div className="mt-3 grid gap-2 text-[12px] leading-5 text-white/62">
+        <div className="mt-3 grid gap-2 text-[12px] leading-5 text-[var(--ui-ink-medium)]">
           {(mode.drivers.length > 0
             ? mode.drivers
             : ["No positive driver is strong enough yet."]
@@ -145,8 +145,8 @@ function ModeNarrative({ mode }: { mode: TrainingIntelligenceMode }) {
           ))}
         </div>
       </div>
-      <div className="rounded-[8px] border border-white/8 bg-white/[0.035] p-3">
-        <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-white/44">
+      <div className="rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-3">
+        <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-muted)]">
           <Zap className="size-3.5" />
           Limiters
           <InfoTooltip
@@ -155,7 +155,7 @@ function ModeNarrative({ mode }: { mode: TrainingIntelligenceMode }) {
             content={ZONE_INTELLIGENCE_HELP.limiters}
           />
         </div>
-        <div className="mt-3 grid gap-2 text-[12px] leading-5 text-white/62">
+        <div className="mt-3 grid gap-2 text-[12px] leading-5 text-[var(--ui-ink-medium)]">
           {(mode.limitingFactors.length > 0
             ? mode.limitingFactors
             : ["No major limiter in this mode right now."]
@@ -195,7 +195,7 @@ export function ZoneIntelligencePanel({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-1.5">
-              <div className="font-label text-[10px] uppercase tracking-[0.18em] text-white/45">
+              <div className="font-label text-[10px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                 Zone intelligence
               </div>
               <InfoTooltip
@@ -204,16 +204,16 @@ export function ZoneIntelligencePanel({
                 content={ZONE_INTELLIGENCE_HELP.timeInZone}
               />
             </div>
-            <div className="mt-2 text-lg text-white">
+            <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
               Time in zone by training block
             </div>
-            <div className="mt-1 max-w-2xl text-[12px] leading-5 text-white/50">
+            <div className="mt-1 max-w-2xl text-[12px] leading-5 text-[var(--ui-ink-muted)]">
               Weekly by default because most training plans are adjusted week by
               week. The stacked bars preserve the full zone split, while the
               table adds load rate, hard days, and data confidence.
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-1 rounded-[8px] border border-white/8 bg-white/[0.035] p-1">
+          <div className="grid grid-cols-3 gap-1 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-1">
             {[
               ["weekly", "Week"],
               ["monthly", "Month"],
@@ -224,8 +224,8 @@ export function ZoneIntelligencePanel({
                 type="button"
                 className={`rounded-[6px] px-3 py-1.5 text-[12px] ${
                   interval === value
-                    ? "bg-white/[0.12] text-white"
-                    : "text-white/54"
+                    ? "bg-[var(--ui-surface-2)] text-[var(--ui-ink-strong)]"
+                    : "text-[var(--ui-ink-muted)]"
                 }`}
                 onClick={() => setInterval(value as ZoneInterval)}
               >
@@ -240,15 +240,15 @@ export function ZoneIntelligencePanel({
             {({ width, height }) => (
               <BarChart data={rows} width={width} height={height}>
                 <CartesianGrid
-                  stroke="rgba(255,255,255,0.08)"
+                  stroke="var(--ui-border-subtle)"
                   vertical={false}
                 />
                 <XAxis
                   dataKey="bucket"
-                  tick={{ fill: "rgba(255,255,255,0.54)", fontSize: 10 }}
+                  tick={{ fill: "var(--ui-ink-muted)", fontSize: 10 }}
                 />
                 <YAxis
-                  tick={{ fill: "rgba(255,255,255,0.54)", fontSize: 10 }}
+                  tick={{ fill: "var(--ui-ink-muted)", fontSize: 10 }}
                   width={42}
                 />
                 <Tooltip
@@ -257,10 +257,10 @@ export function ZoneIntelligencePanel({
                     ZONE_LABELS[name as TrainingLoadZoneKey] ?? String(name)
                   ]}
                   contentStyle={{
-                    background: "rgba(6,10,18,0.96)",
-                    border: "1px solid rgba(255,255,255,0.12)",
+                    background: "var(--ui-surface-modal)",
+                    border: "1px solid var(--ui-border-subtle)",
                     borderRadius: 8,
-                    color: "white"
+                    color: "var(--ui-ink-strong)"
                   }}
                 />
                 {ZONE_ORDER.map((zone) => (
@@ -281,14 +281,14 @@ export function ZoneIntelligencePanel({
           {tableBuckets.map((bucket) => (
             <div
               key={bucket.bucketKey}
-              className="rounded-[8px] border border-white/8 bg-white/[0.035] p-3"
+              className="rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-3"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold text-white">
+                  <div className="text-sm font-semibold text-[var(--ui-ink-strong)]">
                     {bucket.bucketKey}
                   </div>
-                  <div className="mt-1 text-xs leading-5 text-white/50">
+                  <div className="mt-1 text-xs leading-5 text-[var(--ui-ink-muted)]">
                     Load {bucket.trainingLoad} · {bucket.loadPerMinute}{" "}
                     TRIMP/min
                   </div>
@@ -299,18 +299,18 @@ export function ZoneIntelligencePanel({
                 {ZONE_ORDER.map((zone) => (
                   <div
                     key={zone}
-                    className="rounded-[8px] bg-white/[0.04] px-2 py-1.5"
+                    className="rounded-[8px] bg-[var(--ui-surface-2)] px-2 py-1.5"
                   >
-                    <div className="text-[10px] uppercase tracking-[0.12em] text-white/42">
+                    <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--ui-ink-muted)]">
                       {ZONE_LABELS[zone]}
                     </div>
-                    <div className="mt-0.5 text-white/72">
+                    <div className="mt-0.5 text-[var(--ui-ink-medium)]">
                       {bucket.zoneMinutes[zone]} min
                     </div>
                   </div>
                 ))}
               </div>
-              <div className="mt-3 text-xs leading-5 text-white/50">
+              <div className="mt-3 text-xs leading-5 text-[var(--ui-ink-muted)]">
                 {bucket.hardDayCount} hard day
                 {bucket.hardDayCount === 1 ? "" : "s"} in this block.
               </div>
@@ -318,8 +318,8 @@ export function ZoneIntelligencePanel({
           ))}
         </div>
 
-        <div className="mt-4 hidden overflow-x-auto rounded-[8px] border border-white/8 md:block">
-          <div className="grid min-w-[760px] grid-cols-[96px_72px_72px_repeat(6,64px)_72px_80px] bg-white/[0.045] px-3 py-2 text-[10px] uppercase tracking-[0.14em] text-white/42">
+        <div className="mt-4 hidden overflow-x-auto rounded-[8px] border border-[var(--ui-border-subtle)] md:block">
+          <div className="grid min-w-[760px] grid-cols-[96px_72px_72px_repeat(6,64px)_72px_80px] bg-[var(--ui-surface-2)] px-3 py-2 text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-muted)]">
             <div>Block</div>
             <div>Load</div>
             <div>TRIMP/min</div>
@@ -332,9 +332,9 @@ export function ZoneIntelligencePanel({
           {tableBuckets.map((bucket) => (
             <div
               key={bucket.bucketKey}
-              className="grid min-w-[760px] grid-cols-[96px_72px_72px_repeat(6,64px)_72px_80px] border-t border-white/8 px-3 py-2 text-[12px] text-white/62"
+              className="grid min-w-[760px] grid-cols-[96px_72px_72px_repeat(6,64px)_72px_80px] border-t border-[var(--ui-border-subtle)] px-3 py-2 text-[12px] text-[var(--ui-ink-medium)]"
             >
-              <div className="text-white">{bucket.bucketKey}</div>
+              <div className="text-[var(--ui-ink-strong)]">{bucket.bucketKey}</div>
               <div>{bucket.trainingLoad}</div>
               <div>{bucket.loadPerMinute}</div>
               {ZONE_ORDER.map((zone) => (
@@ -351,7 +351,7 @@ export function ZoneIntelligencePanel({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-1.5">
-              <div className="font-label text-[10px] uppercase tracking-[0.18em] text-white/45">
+              <div className="font-label text-[10px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                 Smart training mode
               </div>
               <InfoTooltip
@@ -360,22 +360,22 @@ export function ZoneIntelligencePanel({
                 content={ZONE_INTELLIGENCE_HELP.smartMode}
               />
             </div>
-            <div className="mt-2 text-lg text-white">{selectedMode.label}</div>
+            <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">{selectedMode.label}</div>
           </div>
           <Badge tone={scoreTone(selectedMode.score)}>
             {selectedMode.score}/100
           </Badge>
         </div>
 
-        <div className="mt-4 grid grid-cols-3 gap-1 rounded-[8px] border border-white/8 bg-white/[0.035] p-1">
+        <div className="mt-4 grid grid-cols-3 gap-1 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-1">
           {trainingLoad.trainingIntelligence.modes.map((mode) => (
             <button
               key={mode.key}
               type="button"
               className={`rounded-[6px] px-2 py-2 text-[12px] ${
                 mode.key === selectedMode.key
-                  ? "bg-white/[0.12] text-white"
-                  : "text-white/54"
+                  ? "bg-[var(--ui-surface-2)] text-[var(--ui-ink-strong)]"
+                  : "text-[var(--ui-ink-muted)]"
               }`}
               onClick={() => setModeKey(mode.key)}
             >
@@ -384,8 +384,8 @@ export function ZoneIntelligencePanel({
           ))}
         </div>
 
-        <div className="mt-4 rounded-[8px] border border-white/8 bg-white/[0.035] p-3">
-          <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-white/44">
+        <div className="mt-4 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-3">
+          <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-muted)]">
             <Brain className="size-3.5" />
             Interpretation
             <InfoTooltip
@@ -394,10 +394,10 @@ export function ZoneIntelligencePanel({
               content={ZONE_INTELLIGENCE_HELP.interpretation}
             />
           </div>
-          <div className="mt-3 text-[13px] leading-5 text-white/72">
+          <div className="mt-3 text-[13px] leading-5 text-[var(--ui-ink-medium)]">
             {selectedMode.summary}
           </div>
-          <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-white/50">
+          <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-[var(--ui-ink-muted)]">
             <div>Balance: {selectedMode.loadBalance.status}</div>
             <div>Confidence: {selectedMode.confidence}</div>
             <div>
@@ -414,8 +414,8 @@ export function ZoneIntelligencePanel({
           <ModeNarrative mode={selectedMode} />
         </div>
 
-        <div className="mt-4 grid gap-3 rounded-[8px] border border-white/8 bg-white/[0.035] p-3">
-          <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-white/44">
+        <div className="mt-4 grid gap-3 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-3">
+          <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-muted)]">
             <Target className="size-3.5" />
             Next targets
             <InfoTooltip
@@ -424,7 +424,7 @@ export function ZoneIntelligencePanel({
               content={ZONE_INTELLIGENCE_HELP.targets}
             />
           </div>
-          <div className="grid gap-2 text-[12px] leading-5 text-white/62">
+          <div className="grid gap-2 text-[12px] leading-5 text-[var(--ui-ink-medium)]">
             <div>
               Next week: {selectedMode.nextWeekTargets.totalMinutesRange[0]}-
               {selectedMode.nextWeekTargets.totalMinutesRange[1]} min · max{" "}
@@ -434,18 +434,18 @@ export function ZoneIntelligencePanel({
             </div>
             <div>
               Next workout:{" "}
-              <span className="text-white">
+              <span className="text-[var(--ui-ink-strong)]">
                 {workoutLabel(selectedMode.nextWorkout.recommendedType)}
               </span>{" "}
               for {selectedMode.nextWorkout.durationMinutesRange[0]}-
               {selectedMode.nextWorkout.durationMinutesRange[1]} min, ceiling{" "}
               {selectedMode.nextWorkout.intensityCeiling}.
             </div>
-            <div className="text-white/50">
+            <div className="text-[var(--ui-ink-muted)]">
               {selectedMode.nextWorkout.reason}
             </div>
             {selectedMode.nextWeekTargets.warning ? (
-              <div className="rounded-[6px] bg-amber-300/10 px-2 py-1 text-amber-100/82">
+              <div className="rounded-[6px] bg-[var(--ui-warning-soft)] px-2 py-1 text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]">
                 {selectedMode.nextWeekTargets.warning}
               </div>
             ) : null}

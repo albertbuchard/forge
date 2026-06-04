@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis } from "recharts";
 import { FlagshipSignalDeck } from "@/components/experience/flagship-signal-deck";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import { PageHero } from "@/components/shell/page-hero";
@@ -9,7 +8,72 @@ import { Card } from "@/components/ui/card";
 import { ErrorState } from "@/components/ui/page-state";
 import { finalizeWeeklyReview, getWeeklyReview } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import type { WeeklyReviewPayload } from "@/lib/types";
 import { invalidateForgeSnapshot } from "@/store/api/invalidate-forge-snapshot";
+
+const reviewEyebrowClass =
+  "font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]";
+const reviewPanelClass =
+  "overflow-hidden rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]";
+const reviewSoftTextClass = "text-sm leading-6 text-[var(--ui-ink-soft)]";
+
+function WeeklyReviewBarChart({
+  data
+}: {
+  data: WeeklyReviewPayload["chart"];
+}) {
+  const max = Math.max(1, ...data.map((entry) => entry.xp));
+  const barWidth =
+    data.length > 0 ? Math.max(4, Math.min(18, 280 / data.length - 4)) : 8;
+  const gap =
+    data.length > 1
+      ? Math.max(1, (300 - data.length * barWidth) / (data.length - 1))
+      : 0;
+
+  return (
+    <div className="mt-4 aspect-[16/9] min-h-56 w-full min-w-0 overflow-hidden rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-3">
+      <svg
+        viewBox="0 0 340 200"
+        role="img"
+        aria-label="Weekly review XP chart"
+        className="h-full w-full"
+      >
+        <g stroke="var(--ui-border-subtle)" strokeWidth="1">
+          {[45, 85, 125, 165].map((y) => (
+            <line key={y} x1="20" x2="320" y1={y} y2={y} />
+          ))}
+        </g>
+        {data.map((entry, index) => {
+          const x = 20 + index * (barWidth + gap);
+          const height = Math.max(2, (entry.xp / max) * 128);
+          return (
+            <g key={`${entry.label}-${index}`}>
+              <rect
+                x={x}
+                y={168 - height}
+                width={barWidth}
+                height={height}
+                rx="5"
+                fill="var(--primary)"
+              />
+              {index === 0 || index === data.length - 1 || index % 3 === 0 ? (
+                <text
+                  x={x + barWidth / 2}
+                  y="192"
+                  fill="var(--ui-ink-faint)"
+                  fontSize="10"
+                  textAnchor="middle"
+                >
+                  {entry.label}
+                </text>
+              ) : null}
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
 
 export function WeeklyReviewPage() {
   const { t } = useI18n();
@@ -37,16 +101,34 @@ export function WeeklyReviewPage() {
   }
 
   if (reviewQuery.isError) {
-    return <ErrorState eyebrow={t("common.weeklyReview.heroEyebrow")} error={reviewQuery.error} onRetry={() => void reviewQuery.refetch()} />;
+    return (
+      <ErrorState
+        eyebrow={t("common.weeklyReview.heroEyebrow")}
+        error={reviewQuery.error}
+        onRetry={() => void reviewQuery.refetch()}
+      />
+    );
   }
 
   if (!review) {
-    return <ErrorState eyebrow={t("common.weeklyReview.heroEyebrow")} error={new Error("Forge returned an empty weekly review payload.")} onRetry={() => void reviewQuery.refetch()} />;
+    return (
+      <ErrorState
+        eyebrow={t("common.weeklyReview.heroEyebrow")}
+        error={new Error("Forge returned an empty weekly review payload.")}
+        onRetry={() => void reviewQuery.refetch()}
+      />
+    );
   }
 
   const strongestWin = review.wins[0] ?? null;
-  const recoveryCalibration = review.calibration.find((entry) => entry.mode === "recover") ?? review.calibration[0] ?? null;
-  const accelerationCalibration = review.calibration.find((entry) => entry.mode === "accelerate") ?? review.calibration[0] ?? null;
+  const recoveryCalibration =
+    review.calibration.find((entry) => entry.mode === "recover") ??
+    review.calibration[0] ??
+    null;
+  const accelerationCalibration =
+    review.calibration.find((entry) => entry.mode === "accelerate") ??
+    review.calibration[0] ??
+    null;
   const reviewSignals = [
     {
       id: "week",
@@ -60,13 +142,16 @@ export function WeeklyReviewPage() {
       label: "Wins",
       title: strongestWin?.title ?? t("common.weeklyReview.noWin"),
       detail: strongestWin?.summary ?? t("common.weeklyReview.noWinDetail"),
-      badge: strongestWin ? `+${strongestWin.rewardXp} xp` : `${review.wins.length} wins`
+      badge: strongestWin
+        ? `+${strongestWin.rewardXp} xp`
+        : `${review.wins.length} wins`
     },
     {
       id: "recovery",
       label: "Recovery",
       title: recoveryCalibration?.title ?? t("common.weeklyReview.noRecovery"),
-      detail: recoveryCalibration?.note ?? t("common.weeklyReview.noRecoveryDetail"),
+      detail:
+        recoveryCalibration?.note ?? t("common.weeklyReview.noRecoveryDetail"),
       badge: recoveryCalibration?.mode ?? "maintain"
     },
     {
@@ -89,42 +174,50 @@ export function WeeklyReviewPage() {
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
         <div className="grid gap-5">
           <Card>
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">{t("common.weeklyReview.sectionMomentum")}</div>
-            <div className="mt-4 h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={review.chart}>
-                  <XAxis dataKey="label" tick={{ fill: "rgba(255,255,255,0.42)", fontSize: 11 }} />
-                  <YAxis hide />
-                  <Bar dataKey="xp" fill="#c0c1ff" radius={[8, 8, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+            <div className={reviewEyebrowClass}>
+              {t("common.weeklyReview.sectionMomentum")}
             </div>
+            <WeeklyReviewBarChart data={review.chart} />
             <div className="mt-4 grid gap-3 md:grid-cols-3">
-              <div className="rounded-[18px] bg-white/[0.04] p-4">
-                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/40">XP</div>
-                <div className="mt-2 text-2xl text-white">{review.momentumSummary.totalXp}</div>
+              <div className={`${reviewPanelClass} p-4`}>
+                <div className={reviewEyebrowClass}>XP</div>
+                <div className="mt-2 text-2xl text-[var(--ui-ink-strong)]">
+                  {review.momentumSummary.totalXp}
+                </div>
               </div>
-              <div className="rounded-[18px] bg-white/[0.04] p-4">
-                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/40">Focus hours</div>
-                <div className="mt-2 text-2xl text-white">{review.momentumSummary.focusHours}</div>
+              <div className={`${reviewPanelClass} p-4`}>
+                <div className={reviewEyebrowClass}>Focus hours</div>
+                <div className="mt-2 text-2xl text-[var(--ui-ink-strong)]">
+                  {review.momentumSummary.focusHours}
+                </div>
               </div>
-              <div className="rounded-[18px] bg-white/[0.04] p-4">
-                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/40">Peak window</div>
-                <div className="mt-2 text-2xl text-white">{review.momentumSummary.peakWindow}</div>
+              <div className={`${reviewPanelClass} p-4`}>
+                <div className={reviewEyebrowClass}>Peak window</div>
+                <div className="mt-2 break-words text-2xl text-[var(--ui-ink-strong)]">
+                  {review.momentumSummary.peakWindow}
+                </div>
               </div>
             </div>
           </Card>
 
           <Card>
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">{t("common.weeklyReview.sectionGoals")}</div>
+            <div className={reviewEyebrowClass}>
+              {t("common.weeklyReview.sectionGoals")}
+            </div>
             <div className="mt-4 grid gap-3">
               {review.calibration.map((entry) => (
-                <div key={entry.id} className="overflow-hidden rounded-[20px] bg-white/[0.04] p-4">
+                <div key={entry.id} className={`${reviewPanelClass} p-4`}>
                   <div className="flex min-w-0 items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1 font-medium text-white">{entry.title}</div>
-                    <Badge className="max-w-[9rem] shrink-0 self-start">{entry.mode}</Badge>
+                    <div className="min-w-0 flex-1 break-words font-medium text-[var(--ui-ink-strong)]">
+                      {entry.title}
+                    </div>
+                    <Badge className="max-w-[9rem] shrink-0 self-start">
+                      {entry.mode}
+                    </Badge>
                   </div>
-                  <div className="mt-3 text-sm text-white/58">{entry.note}</div>
+                  <div className={`mt-3 break-words ${reviewSoftTextClass}`}>
+                    {entry.note}
+                  </div>
                 </div>
               ))}
             </div>
@@ -133,26 +226,45 @@ export function WeeklyReviewPage() {
 
         <div className="grid gap-5">
           <Card>
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">{t("common.weeklyReview.sectionWins")}</div>
+            <div className={reviewEyebrowClass}>
+              {t("common.weeklyReview.sectionWins")}
+            </div>
             <div className="mt-4 grid gap-3">
               {review.wins.map((win) => (
-                <div key={win.id} className="overflow-hidden rounded-[20px] bg-white/[0.04] p-4">
+                <div key={win.id} className={`${reviewPanelClass} p-4`}>
                   <div className="flex min-w-0 items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1 font-medium text-white">{win.title}</div>
-                    <Badge className="max-w-[8rem] shrink-0 self-start text-emerald-300">+{win.rewardXp} xp</Badge>
+                    <div className="min-w-0 flex-1 break-words font-medium text-[var(--ui-ink-strong)]">
+                      {win.title}
+                    </div>
+                    <Badge
+                      tone="signal"
+                      className="max-w-[8rem] shrink-0 self-start"
+                    >
+                      +{win.rewardXp} xp
+                    </Badge>
                   </div>
-                  <div className="mt-2 text-sm text-white/58">{win.summary}</div>
+                  <div className={`mt-2 break-words ${reviewSoftTextClass}`}>
+                    {win.summary}
+                  </div>
                 </div>
               ))}
             </div>
           </Card>
 
           <Card>
-            <h2 className="font-display text-3xl text-white">{review.reward.title}</h2>
-            <p className="mt-3 text-sm leading-7 text-white/60">{review.reward.summary}</p>
-            <div className="mt-4 rounded-[20px] bg-white/[0.04] p-4">
-              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/40">{t("common.weeklyReview.completionBonus")}</div>
-              <div className="mt-2 text-3xl text-[var(--primary)]">+{review.reward.rewardXp} XP</div>
+            <h2 className="break-words font-display text-3xl text-[var(--ui-ink-strong)]">
+              {review.reward.title}
+            </h2>
+            <p className={`mt-3 leading-7 ${reviewSoftTextClass}`}>
+              {review.reward.summary}
+            </p>
+            <div className={`mt-4 ${reviewPanelClass} p-4`}>
+              <div className={reviewEyebrowClass}>
+                {t("common.weeklyReview.completionBonus")}
+              </div>
+              <div className="mt-2 text-3xl text-[var(--primary)]">
+                +{review.reward.rewardXp} XP
+              </div>
             </div>
             <Button
               className="mt-4 w-full"
@@ -163,9 +275,11 @@ export function WeeklyReviewPage() {
                 await finalizeMutation.mutateAsync();
               }}
             >
-              {review.completion.finalized ? t("common.weeklyReview.finalized") : t("common.weeklyReview.finalize")}
+              {review.completion.finalized
+                ? t("common.weeklyReview.finalized")
+                : t("common.weeklyReview.finalize")}
             </Button>
-            <div className="mt-3 text-sm leading-6 text-white/58">
+            <div className={`mt-3 ${reviewSoftTextClass}`}>
               {review.completion.finalized
                 ? `${t("common.weeklyReview.finalizedDetail")} ${review.completion.finalizedBy ? `By ${review.completion.finalizedBy}. ` : ""}${review.completion.finalizedAt ? new Date(review.completion.finalizedAt).toLocaleString() : ""}`.trim()
                 : review.reward.summary}

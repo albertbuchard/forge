@@ -21,13 +21,13 @@ import type {
 import { cn } from "@/lib/utils";
 
 const timelineRailShadeClassName =
-  "bg-[linear-gradient(90deg,color-mix(in_srgb,var(--canvas)_96%,transparent),color-mix(in_srgb,var(--canvas)_42%,transparent),transparent)]";
+  "bg-[image:var(--ui-surface-section)]";
 const timelineCenterLineClassName =
-  "bg-[linear-gradient(180deg,color-mix(in_srgb,var(--ui-ink-strong)_2%,transparent),color-mix(in_srgb,var(--ui-ink-strong)_8%,transparent),color-mix(in_srgb,var(--ui-ink-strong)_2%,transparent))]";
+  "bg-[image:var(--ui-surface-section)]";
 const timelineHandleClassName =
-  "h-6 w-[3px] rounded-full bg-[var(--info)] shadow-[0_0_14px_color-mix(in_srgb,var(--info)_36%,transparent)]";
+  "h-6 w-[3px] rounded-full bg-[var(--info)] shadow-[var(--ui-shadow-soft)]";
 const timelineHistoryCapClassName =
-  "relative w-[min(18rem,calc(100vw-6rem))] overflow-hidden rounded-[26px] border border-[color-mix(in_srgb,var(--info)_22%,transparent)] bg-[linear-gradient(180deg,var(--ui-accent-soft),var(--ui-info-soft))] shadow-[var(--ui-shadow-soft)]";
+  "relative w-[min(18rem,calc(100vw-6rem))] overflow-hidden rounded-[26px] border border-[color-mix(in_srgb,var(--info)_22%,transparent)] bg-[image:var(--ui-surface-section)] shadow-[var(--ui-shadow-soft)]";
 const timelineEndpointClassName =
   "absolute z-10 h-7 w-8 rounded-[12px] border bg-[image:var(--ui-surface-modal)] shadow-[var(--ui-shadow-soft)] backdrop-blur-sm";
 const timelineTripChipClassName =
@@ -79,13 +79,13 @@ export function MovementTimelineViewportGrid({
           <div
             className={cn(
               "border-t",
-              marker.strong ? "border-white/14" : "border-white/7"
+              marker.strong ? "border-[var(--ui-border-subtle)]" : "border-[var(--ui-border-subtle)]"
             )}
           />
           <div
             className={cn(
               "absolute left-3 top-0 -translate-y-1/2 font-label text-[9px] tracking-[0.24em]",
-              marker.strong ? "text-white/38" : "text-white/22"
+              marker.strong ? "text-[var(--ui-ink-muted)]" : "text-[var(--ui-ink-muted)]"
             )}
           >
             {marker.label}
@@ -183,17 +183,17 @@ export function MovementTimelineHistoryCap({
         <MovementStayHandle position="bottom" />
         <div className="relative z-10 px-5 py-4">
           <div className="flex items-center justify-between gap-3">
-            <Badge tone="signal" className="bg-white/10 text-white/78">
+            <Badge tone="signal" className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]">
               Start
             </Badge>
-            <div className="font-label text-[10px] uppercase tracking-[0.2em] text-white/28">
+            <div className="font-label text-[10px] uppercase tracking-[0.2em] text-[var(--ui-ink-muted)]">
               Beginning of history
             </div>
           </div>
-          <div className="mt-5 font-display text-[1.25rem] tracking-normal text-white">
+          <div className="mt-5 font-display text-[1.25rem] tracking-normal text-[var(--ui-ink-strong)]">
             {label}
           </div>
-          <div className="mt-2 font-label text-[10px] uppercase tracking-[0.22em] text-white/30">
+          <div className="mt-2 font-label text-[10px] uppercase tracking-[0.22em] text-[var(--ui-ink-muted)]">
             {knownLabel ? "Oldest loaded known stay" : "Earliest known anchor"}
           </div>
         </div>
@@ -322,25 +322,25 @@ export function MovementTimelineRow({
               )}
             >
               <div className="flex items-center justify-between gap-3">
-                <div className="font-label text-[10px] uppercase tracking-[0.18em] text-white/34">
+                <div className="font-label text-[10px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                   Move
                 </div>
-                <div className="text-[11px] tracking-[0.18em] text-white/44">
+                <div className="text-[11px] tracking-[0.18em] text-[var(--ui-ink-strong)]/44">
                   {formatDurationLabel(segment.durationSeconds)}
                 </div>
               </div>
               <div className="mt-2 flex flex-wrap gap-2">
-                <Badge className="bg-white/[0.08] text-white/74">
+                <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                   {distanceLabel(segment.trip?.distanceMeters ?? 0)}
                 </Badge>
                 {(segment.trip?.stops.length ?? 0) > 0 ? (
-                  <Badge className="bg-white/[0.08] text-white/74">
+                  <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                     {segment.trip?.stops.length} stop
                     {segment.trip?.stops.length === 1 ? "" : "s"}
                   </Badge>
                 ) : null}
               </div>
-              <div className="mt-2 font-label text-[9px] uppercase tracking-[0.22em] text-white/28">
+              <div className="mt-2 font-label text-[9px] uppercase tracking-[0.22em] text-[var(--ui-ink-muted)]">
                 {compactTimeLabel(segment.startedAt)} →{" "}
                 {compactTimeLabel(segment.endedAt)}
               </div>
@@ -369,22 +369,22 @@ export function MovementTimelineRow({
               <MovementStayHandle position="bottom" />
               <div className="relative z-10 flex h-full flex-col justify-between p-3.5 sm:p-5">
                 <div className="flex items-center justify-between gap-3">
-                  <Badge tone="signal" className="bg-white/10 text-white/82">
+                  <Badge tone="signal" className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]">
                     {sleepOverlay ? "Sleep" : "Stay"}
                   </Badge>
-                  <div className="text-[11px] tracking-[0.16em] text-white/46 sm:text-xs sm:tracking-[0.18em]">
+                  <div className="text-[11px] tracking-[0.16em] text-[var(--ui-ink-muted)] sm:text-xs sm:tracking-[0.18em]">
                     {formatDurationLabel(segment.durationSeconds)}
                   </div>
                 </div>
                 <div className="mt-3 min-w-0 sm:mt-5">
-                  <div className="truncate font-display text-[1rem] tracking-normal text-white sm:text-[1.12rem]">
+                  <div className="truncate font-display text-[1rem] tracking-normal text-[var(--ui-ink-strong)] sm:text-[1.12rem]">
                     {displaySegmentTitle(segment)}
                   </div>
                   {segment.kind === "stay" &&
                   resolveSegmentPlaceLabel(segment) &&
                   !sleepOverlay ? (
                     <div className="mt-2 flex flex-wrap gap-2 sm:mt-3">
-                      <Badge className="max-w-full truncate bg-white/[0.08] text-white/76">
+                      <Badge className="max-w-full truncate bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                         {resolveSegmentPlaceLabel(segment)}
                       </Badge>
                     </div>
@@ -397,7 +397,7 @@ export function MovementTimelineRow({
                   ) : null}
                 </div>
                 <div className="mt-auto pt-4 sm:pt-8">
-                  <div className="font-label text-[9px] uppercase tracking-[0.2em] text-white/34 sm:text-[10px] sm:tracking-[0.22em]">
+                  <div className="font-label text-[9px] uppercase tracking-[0.2em] text-[var(--ui-ink-muted)] sm:text-[10px] sm:tracking-[0.22em]">
                     {compactTimeLabel(segment.startedAt)} →{" "}
                     {compactTimeLabel(segment.endedAt)}
                   </div>

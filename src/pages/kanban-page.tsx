@@ -212,7 +212,11 @@ export function KanbanPage() {
         kind: "tag" as const
       }))
     ],
-    [shell.snapshot.dashboard.projects, shell.snapshot.goals, shell.snapshot.tags]
+    [
+      shell.snapshot.dashboard.projects,
+      shell.snapshot.goals,
+      shell.snapshot.tags
+    ]
   );
 
   const ownerFilterOptions = useMemo<EntityLinkOption[]>(() => {
@@ -226,12 +230,12 @@ export function KanbanPage() {
         description: `${bots.length} bot owner${bots.length === 1 ? "" : "s"}`,
         searchText: `bots bot ai agents assistants ${bots.map((user) => `${user.displayName} ${user.handle}`).join(" ")}`,
         badge: (
-          <Badge className="border-cyan-300/18 bg-cyan-400/12 text-cyan-50">
+          <Badge className="border-[color-mix(in_srgb,var(--info)_28%,transparent)] bg-[var(--ui-info-soft)] text-[var(--ui-ink-strong)]">
             Bots
           </Badge>
         ),
         menuBadge: (
-          <Badge className="border-cyan-300/18 bg-cyan-400/12 text-cyan-50">
+          <Badge className="border-[color-mix(in_srgb,var(--info)_28%,transparent)] bg-[var(--ui-info-soft)] text-[var(--ui-ink-strong)]">
             Bots
           </Badge>
         )
@@ -242,12 +246,12 @@ export function KanbanPage() {
         description: `${humans.length} human owner${humans.length === 1 ? "" : "s"}`,
         searchText: `humans human people operators ${humans.map((user) => `${user.displayName} ${user.handle}`).join(" ")}`,
         badge: (
-          <Badge className="border-amber-300/18 bg-amber-400/12 text-amber-50">
+          <Badge className="border-[color-mix(in_srgb,var(--warning)_28%,transparent)] bg-[var(--ui-warning-soft)] text-[var(--ui-ink-strong)]">
             Humans
           </Badge>
         ),
         menuBadge: (
-          <Badge className="border-amber-300/18 bg-amber-400/12 text-amber-50">
+          <Badge className="border-[color-mix(in_srgb,var(--warning)_28%,transparent)] bg-[var(--ui-warning-soft)] text-[var(--ui-ink-strong)]">
             Humans
           </Badge>
         )
@@ -276,11 +280,13 @@ export function KanbanPage() {
               label="Subtask"
               compact
               gradient={false}
-              className="border-indigo-300/18 bg-indigo-400/12 text-indigo-100"
+              className="border-[color-mix(in_srgb,var(--primary)_28%,transparent)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]"
             />
           ) : (
             <EntityBadge
-              kind={(option.kind ?? option.value) as "project" | "issue" | "task"}
+              kind={
+                (option.kind ?? option.value) as "project" | "issue" | "task"
+              }
               label={option.label}
               compact
               gradient={false}
@@ -293,11 +299,13 @@ export function KanbanPage() {
               label="Subtask"
               compact
               gradient={false}
-              className="border-indigo-300/18 bg-indigo-400/12 text-indigo-100"
+              className="border-[color-mix(in_srgb,var(--primary)_28%,transparent)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]"
             />
           ) : (
             <EntityBadge
-              kind={(option.kind ?? option.value) as "project" | "issue" | "task"}
+              kind={
+                (option.kind ?? option.value) as "project" | "issue" | "task"
+              }
               label={option.label}
               compact
               gradient={false}
@@ -326,7 +334,9 @@ export function KanbanPage() {
   const projectById = useMemo(
     () =>
       new Map(
-        shell.snapshot.dashboard.projects.map((project) => [project.id, project] as const)
+        shell.snapshot.dashboard.projects.map(
+          (project) => [project.id, project] as const
+        )
       ),
     [shell.snapshot.dashboard.projects]
   );
@@ -336,7 +346,9 @@ export function KanbanPage() {
       return false;
     }
     if (normalizedQuery.length > 0) {
-      const project = task.projectId ? projectById.get(task.projectId) ?? null : null;
+      const project = task.projectId
+        ? (projectById.get(task.projectId) ?? null)
+        : null;
       const searchText = normalize(
         [
           task.title,
@@ -396,59 +408,62 @@ export function KanbanPage() {
     return true;
   });
 
-  const filteredProjects = shell.snapshot.dashboard.projects.filter((project) => {
-    if (!selectedLevels.includes("project")) {
-      return false;
-    }
-    if (normalizedQuery.length > 0) {
-      const searchText = normalize(
-        [
-          project.title,
-          project.description,
-          project.goalTitle,
-          project.productRequirementsDocument,
-          project.user?.displayName ?? "",
-          ...(project.assignees ?? []).map((user) => user.displayName)
-        ].join(" ")
-      );
-      if (!searchText.includes(normalizedQuery)) {
+  const filteredProjects = shell.snapshot.dashboard.projects.filter(
+    (project) => {
+      if (!selectedLevels.includes("project")) {
         return false;
       }
-    }
-    if (
-      parsedEntityFilters.goalIds.length > 0 &&
-      !parsedEntityFilters.goalIds.includes(project.goalId)
-    ) {
-      return false;
-    }
-    if (
-      parsedEntityFilters.projectIds.length > 0 &&
-      !parsedEntityFilters.projectIds.includes(project.id)
-    ) {
-      return false;
-    }
-    if (
-      parsedOwnerFilters.userIds.length > 0 ||
-      parsedOwnerFilters.kinds.length > 0
-    ) {
-      const linkedUsers = [
-        ...(project.user ? [project.user] : []),
-        ...(project.assignees ?? [])
-      ];
-      const matchesExplicitUser = linkedUsers.some((user) =>
-        parsedOwnerFilters.userIds.includes(user.id)
-      );
-      const matchesOwnerKind = linkedUsers.some((user) =>
-        parsedOwnerFilters.kinds.includes(user.kind)
-      );
-      if (!matchesExplicitUser && !matchesOwnerKind) {
+      if (normalizedQuery.length > 0) {
+        const searchText = normalize(
+          [
+            project.title,
+            project.description,
+            project.goalTitle,
+            project.productRequirementsDocument,
+            project.user?.displayName ?? "",
+            ...(project.assignees ?? []).map((user) => user.displayName)
+          ].join(" ")
+        );
+        if (!searchText.includes(normalizedQuery)) {
+          return false;
+        }
+      }
+      if (
+        parsedEntityFilters.goalIds.length > 0 &&
+        !parsedEntityFilters.goalIds.includes(project.goalId)
+      ) {
         return false;
       }
+      if (
+        parsedEntityFilters.projectIds.length > 0 &&
+        !parsedEntityFilters.projectIds.includes(project.id)
+      ) {
+        return false;
+      }
+      if (
+        parsedOwnerFilters.userIds.length > 0 ||
+        parsedOwnerFilters.kinds.length > 0
+      ) {
+        const linkedUsers = [
+          ...(project.user ? [project.user] : []),
+          ...(project.assignees ?? [])
+        ];
+        const matchesExplicitUser = linkedUsers.some((user) =>
+          parsedOwnerFilters.userIds.includes(user.id)
+        );
+        const matchesOwnerKind = linkedUsers.some((user) =>
+          parsedOwnerFilters.kinds.includes(user.kind)
+        );
+        if (!matchesExplicitUser && !matchesOwnerKind) {
+          return false;
+        }
+      }
+      return true;
     }
-    return true;
-  });
+  );
   const visibleItemCount = filteredTasks.length + filteredProjects.length;
-  const hasVisibleBoardContent = filteredProjects.length > 0 || filteredTasks.length > 0;
+  const hasVisibleBoardContent =
+    filteredProjects.length > 0 || filteredTasks.length > 0;
   const hasActiveFilters =
     query.trim().length > 0 ||
     selectedEntityFilterIds.length > 0 ||
@@ -461,12 +476,11 @@ export function KanbanPage() {
     filteredTasks.find((task) => task.id === selectedTaskId) ??
     boardWorkItems.find((task) => task.id === selectedTaskId) ??
     null;
-  const editingProject =
-    editingProjectId
-      ? shell.snapshot.dashboard.projects.find(
-          (project) => project.id === editingProjectId
-        ) ?? null
-      : null;
+  const editingProject = editingProjectId
+    ? (shell.snapshot.dashboard.projects.find(
+        (project) => project.id === editingProjectId
+      ) ?? null)
+    : null;
   const editingTask = editingTaskId
     ? (boardWorkItems.find((task) => task.id === editingTaskId) ?? null)
     : null;
@@ -580,7 +594,7 @@ export function KanbanPage() {
           action={
             <Link
               to="/goals"
-              className="inline-flex whitespace-nowrap rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-medium text-slate-950 transition hover:opacity-90"
+              className="inline-flex whitespace-nowrap rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-medium text-[var(--ui-ink-on-accent)] transition hover:opacity-90"
             >
               {t("common.kanban.emptyAction")}
             </Link>
@@ -615,31 +629,31 @@ export function KanbanPage() {
         <Card className="min-w-0 overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
-              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                 Board
               </div>
-              <div className="mt-2 text-base text-white">
+              <div className="mt-2 text-base text-[var(--ui-ink-strong)]">
                 See projects, issues, tasks, and subtasks in the same workflow
                 lanes, with one card language and one shared board state.
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
-            <Badge className="bg-white/[0.08] text-white/72">
-              {focusCount} ready or active
-            </Badge>
-            <Badge className="bg-white/[0.08] text-white/72">
-              {blockedCount} blocked
-            </Badge>
-            <Badge className="bg-white/[0.08] text-white/72">
-              {doneCount} done
-            </Badge>
-            <Badge className="bg-white/[0.08] text-white/72">
-              {liveRunCount} live timer{liveRunCount === 1 ? "" : "s"}
-            </Badge>
-            <Badge className="bg-[var(--primary)]/12 text-[var(--primary)]">
-              {Math.round(shell.snapshot.lifeForce?.spentTodayAp ?? 0)} /{" "}
-              {Math.round(shell.snapshot.lifeForce?.dailyBudgetAp ?? 0)} AP
-            </Badge>
+              <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
+                {focusCount} ready or active
+              </Badge>
+              <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
+                {blockedCount} blocked
+              </Badge>
+              <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
+                {doneCount} done
+              </Badge>
+              <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
+                {liveRunCount} live timer{liveRunCount === 1 ? "" : "s"}
+              </Badge>
+              <Badge className="bg-[var(--ui-accent-soft)] text-[var(--primary)]">
+                {Math.round(shell.snapshot.lifeForce?.spentTodayAp ?? 0)} /{" "}
+                {Math.round(shell.snapshot.lifeForce?.dailyBudgetAp ?? 0)} AP
+              </Badge>
             </div>
           </div>
         </Card>
@@ -649,8 +663,10 @@ export function KanbanPage() {
         <Card className="min-w-0 overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="type-label text-white/40">Filters</div>
-              <div className="mt-2 text-sm text-white/56">
+              <div className="type-label text-[var(--ui-ink-faint)]">
+                Filters
+              </div>
+              <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
                 Use compact entity chips for goals, projects, tags, and owner
                 scopes instead of the wide pill rows.
               </div>
@@ -674,19 +690,19 @@ export function KanbanPage() {
           </div>
 
           <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]">
-            <div className="rounded-[22px] border border-white/10 bg-black/20 px-4 py-3">
+            <div className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3">
               <div className="flex items-center gap-3">
-                <Search className="size-4 text-white/36" />
+                <Search className="size-4 text-[var(--ui-ink-faint)]" />
                 <input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="Search projects, issues, tasks, subtasks, PRDs, owners, and assignees"
-                  className="min-w-0 flex-1 bg-transparent text-sm text-white placeholder:text-white/34 focus:outline-none"
+                  className="min-w-0 flex-1 bg-transparent text-sm text-[var(--ui-ink-strong)] placeholder:text-[var(--ui-ink-faint)] focus:outline-none"
                 />
                 {query.trim().length > 0 ? (
                   <button
                     type="button"
-                    className="rounded-full text-white/46 transition hover:text-white"
+                    className="rounded-full text-[var(--ui-ink-faint)] transition hover:text-[var(--ui-ink-strong)]"
                     onClick={() => setQuery("")}
                     aria-label="Clear board search"
                   >
@@ -711,7 +727,7 @@ export function KanbanPage() {
 
           <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1.55fr)_minmax(18rem,1fr)]">
             <div className="grid gap-2">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                 Entity filters
               </div>
               <EntityLinkMultiSelect
@@ -723,7 +739,7 @@ export function KanbanPage() {
               />
             </div>
             <div className="grid gap-2">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                 Owner filters
               </div>
               <EntityLinkMultiSelect
@@ -787,9 +803,13 @@ export function KanbanPage() {
                 if (current !== taskId) {
                   return current;
                 }
-                return filteredTasks.find((task) => task.id !== taskId)?.id ?? null;
+                return (
+                  filteredTasks.find((task) => task.id !== taskId)?.id ?? null
+                );
               });
-              setEditingTaskId((current) => (current === taskId ? null : current));
+              setEditingTaskId((current) =>
+                current === taskId ? null : current
+              );
             }}
             onStartTask={async (taskId) => {
               await shell.startTaskNow(taskId);
@@ -952,17 +972,17 @@ export function KanbanPage() {
       />
 
       {splittingTask ? (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[rgba(5,8,18,0.74)] p-4 backdrop-blur-xl">
-          <Card className="w-full max-w-xl border border-white/10 bg-[linear-gradient(180deg,rgba(16,22,36,0.96),rgba(9,13,22,0.98))] shadow-[0_32px_90px_rgba(5,8,18,0.58)]">
+        <div className="surface-overlay fixed inset-0 z-[60] flex items-center justify-center p-4 backdrop-blur-xl">
+          <Card className="surface-modal-panel w-full max-w-xl">
             <div className="flex items-start gap-3">
-              <div className="mt-1 flex size-11 shrink-0 items-center justify-center rounded-full bg-amber-400/14 text-amber-100">
+              <div className="mt-1 flex size-11 shrink-0 items-center justify-center rounded-full bg-[var(--ui-warning-soft)] text-[var(--warning)]">
                 <Scissors className="size-5" />
               </div>
               <div className="min-w-0">
-                <div className="font-display text-[1.35rem] leading-tight text-white">
+                <div className="font-display text-[1.35rem] leading-tight text-[var(--ui-ink-strong)]">
                   Split this task
                 </div>
-                <div className="mt-2 text-sm leading-6 text-white/64">
+                <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                   {splittingTask.title} has grown beyond its expected shape.
                   Split the remaining work into two child tasks while keeping
                   the original history intact.
@@ -972,7 +992,7 @@ export function KanbanPage() {
 
             <div className="mt-5 grid gap-4">
               <div className="grid gap-2">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   First task name
                 </div>
                 <Input
@@ -986,7 +1006,7 @@ export function KanbanPage() {
                 />
               </div>
               <div className="grid gap-2">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   Second task name
                 </div>
                 <Input
@@ -999,10 +1019,13 @@ export function KanbanPage() {
                   }
                 />
               </div>
-              <div className="grid gap-3 rounded-[18px] bg-white/[0.04] px-4 py-4">
-                <div className="flex items-center justify-between gap-3 text-sm text-white/70">
+              <div className="grid gap-3 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-4">
+                <div className="flex items-center justify-between gap-3 text-sm text-[var(--ui-ink-soft)]">
                   <span>Remaining work ratio</span>
-                  <span>{Math.round(splitDraft.remainingRatio * 100)}% / {100 - Math.round(splitDraft.remainingRatio * 100)}%</span>
+                  <span>
+                    {Math.round(splitDraft.remainingRatio * 100)}% /{" "}
+                    {100 - Math.round(splitDraft.remainingRatio * 100)}%
+                  </span>
                 </div>
                 <input
                   type="range"
@@ -1018,14 +1041,14 @@ export function KanbanPage() {
                   }
                 />
                 <div className="flex flex-wrap gap-2">
-                  <Badge className="bg-white/[0.08] text-white/72">
+                  <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
                     {Math.round(
                       (splittingTask.actionPointSummary?.totalCostAp ?? 0) *
                         splitDraft.remainingRatio
                     )}{" "}
                     AP first child
                   </Badge>
-                  <Badge className="bg-white/[0.08] text-white/72">
+                  <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
                     {Math.round(
                       (splittingTask.actionPointSummary?.totalCostAp ?? 0) *
                         (1 - splitDraft.remainingRatio)

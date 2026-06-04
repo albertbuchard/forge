@@ -1,7 +1,10 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { FacetedTokenSearch, type FacetedTokenOption } from "@/components/search/faceted-token-search";
+import {
+  FacetedTokenSearch,
+  type FacetedTokenOption
+} from "@/components/search/faceted-token-search";
 import { PageHero } from "@/components/shell/page-hero";
 import { Button } from "@/components/ui/button";
 import { EntityBadge } from "@/components/ui/entity-badge";
@@ -31,7 +34,9 @@ export function WorkbenchPage() {
         homeSurfaceId: preferredSurface
       }),
     onSuccess: ({ flow }) => {
-      void queryClient.invalidateQueries({ queryKey: ["forge-workbench-flows"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["forge-workbench-flows"]
+      });
       navigate(`/workbench/${flow.id}`);
     }
   });
@@ -136,7 +141,7 @@ export function WorkbenchPage() {
           <button
             key={flow.id}
             type="button"
-            className="rounded-[26px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-section)] p-5 text-left transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]"
+            className="min-w-0 rounded-[26px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-section)] p-5 text-left transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]"
             onClick={() => navigate(`/workbench/${flow.id}`)}
           >
             <div className="flex items-start justify-between gap-4">
@@ -155,10 +160,18 @@ export function WorkbenchPage() {
                 gradient={false}
               />
             </div>
-            <div className="mt-4 flex flex-wrap gap-2 text-[12px] text-white/44">
-              <span>{flow.graph.nodes.length} nodes</span>
-              <span>{flow.graph.edges.length} edges</span>
-              {flow.homeSurfaceId ? <span>{flow.homeSurfaceId}</span> : null}
+            <div className="mt-4 flex min-w-0 flex-wrap gap-2 text-[12px] text-[var(--ui-ink-faint)]">
+              <span className="min-w-0 break-words">
+                {flow.graph.nodes.length} nodes
+              </span>
+              <span className="min-w-0 break-words">
+                {flow.graph.edges.length} edges
+              </span>
+              {flow.homeSurfaceId ? (
+                <span className="min-w-0 break-words">
+                  {flow.homeSurfaceId}
+                </span>
+              ) : null}
             </div>
           </button>
         ))}

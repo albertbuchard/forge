@@ -14,36 +14,52 @@ function formatObservedAt(value: string | null) {
   return value ? new Date(value).toLocaleString() : "Waiting for device update";
 }
 
+const labCardClass =
+  "grid min-w-0 gap-4 rounded-[28px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-5";
+const labFixtureClass =
+  "grid min-w-0 gap-2 rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4";
+const labColumnClass =
+  "grid min-w-0 gap-2 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-3";
+const labSmallCardClass =
+  "rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-2 text-xs text-[var(--ui-ink-soft)]";
+const labEyebrowClass =
+  "font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]";
+const labSubEyebrowClass =
+  "text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]";
+const labTitleClass = "text-sm font-medium text-[var(--ui-ink-strong)]";
+const labBodyClass = "text-[var(--ui-ink-soft)]";
+const labFaintClass = "text-[var(--ui-ink-faint)]";
+const labWarningBadgeClass =
+  "bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]";
+const labSuccessBadgeClass =
+  "bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_76%,var(--ui-ink-strong)_24%)]";
+const labDangerBadgeClass =
+  "bg-[var(--ui-danger-soft)] text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]";
+const labUserBadgeClass = "bg-[var(--ui-accent-soft)] text-[var(--primary)]";
+
 export function CompanionSyncLabPage() {
   return (
-    <div className="mx-auto grid w-full max-w-[1180px] gap-5">
+    <div className="mx-auto grid min-w-0 w-full max-w-[1180px] gap-5">
       <PageHero
         title="Companion Sync Lab"
         description="Deterministic fixtures for source-state reconciliation and movement gap repair. This route is dev-only and exists to make QA faster than recreating every phone state by hand."
         badge="Dev only"
       />
 
-      <section className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
-        <Card className="grid gap-4 rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(10,17,31,0.96),rgba(8,13,24,0.92))] p-5">
+      <section className="grid min-w-0 gap-4 lg:grid-cols-[1.05fr_0.95fr]">
+        <Card className={labCardClass}>
           <div>
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/42">
-              Source matrix
-            </div>
-            <div className="mt-2 text-sm leading-6 text-white/58">
+            <div className={labEyebrowClass}>Source matrix</div>
+            <div className={`mt-2 text-sm leading-6 ${labBodyClass}`}>
               These rows mirror the pairing source-state contract that the web
               and phone now share.
             </div>
           </div>
           <div className="grid gap-3">
             {companionSyncLabSourceFixtures.map((fixture) => (
-              <div
-                key={fixture.id}
-                className="grid gap-2 rounded-[20px] border border-white/8 bg-white/[0.03] px-4 py-4"
-              >
+              <div key={fixture.id} className={labFixtureClass}>
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="text-sm font-medium text-white">
-                    {fixture.title}
-                  </div>
+                  <div className={labTitleClass}>{fixture.title}</div>
                   <Badge tone={fixture.desiredEnabled ? "signal" : "meta"}>
                     {fixture.desiredEnabled ? "Enabled" : "Off"}
                   </Badge>
@@ -53,9 +69,13 @@ export function CompanionSyncLabPage() {
                       : "Pending on phone"}
                   </Badge>
                 </div>
-                <div className="grid gap-1 text-xs text-white/56 sm:grid-cols-2">
+                <div
+                  className={`grid gap-1 text-xs ${labBodyClass} sm:grid-cols-2`}
+                >
                   <div>Authorization: {fixture.authorizationStatus}</div>
-                  <div>Sync eligible: {fixture.syncEligible ? "Yes" : "No"}</div>
+                  <div>
+                    Sync eligible: {fixture.syncEligible ? "Yes" : "No"}
+                  </div>
                   <div>Desired: {fixture.desiredEnabled ? "On" : "Off"}</div>
                   <div>Applied: {fixture.appliedEnabled ? "On" : "Off"}</div>
                   <div className="sm:col-span-2">
@@ -67,12 +87,10 @@ export function CompanionSyncLabPage() {
           </div>
         </Card>
 
-        <Card className="grid gap-4 rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(10,17,31,0.96),rgba(8,13,24,0.92))] p-5">
+        <Card className={labCardClass}>
           <div>
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/42">
-              Gap classifier
-            </div>
-            <div className="mt-2 text-sm leading-6 text-white/58">
+            <div className={labEyebrowClass}>Gap classifier</div>
+            <div className={`mt-2 text-sm leading-6 ${labBodyClass}`}>
               Every gap resolves to exactly one of <code>stay</code>,{" "}
               <code>trip</code>, or <code>missing</code>.
             </div>
@@ -81,14 +99,9 @@ export function CompanionSyncLabPage() {
             {companionSyncLabGapFixtures.map((fixture) => {
               const preview = classifyCompanionSyncLabGap(fixture);
               return (
-                <div
-                  key={fixture.id}
-                  className="grid gap-2 rounded-[20px] border border-white/8 bg-white/[0.03] px-4 py-4"
-                >
+                <div key={fixture.id} className={labFixtureClass}>
                   <div className="flex flex-wrap items-center gap-2">
-                    <div className="text-sm font-medium text-white">
-                      {fixture.title}
-                    </div>
+                    <div className={labTitleClass}>{fixture.title}</div>
                     <Badge
                       tone={
                         preview.kind === "missing"
@@ -102,12 +115,14 @@ export function CompanionSyncLabPage() {
                     </Badge>
                     <Badge tone="meta">{preview.origin}</Badge>
                     {preview.suppressedShortJump ? (
-                      <Badge className="bg-amber-400/10 text-amber-100">
+                      <Badge className={labWarningBadgeClass}>
                         Suppressed short jump
                       </Badge>
                     ) : null}
                   </div>
-                  <div className="grid gap-1 text-xs text-white/56 sm:grid-cols-2">
+                  <div
+                    className={`grid gap-1 text-xs ${labBodyClass} sm:grid-cols-2`}
+                  >
                     <div>Gap: {Math.round(fixture.gapSeconds / 60)} min</div>
                     <div>
                       Displacement:{" "}
@@ -115,10 +130,16 @@ export function CompanionSyncLabPage() {
                         ? "unknown"
                         : `${Math.round(fixture.displacementMeters)} m`}
                     </div>
-                    <div>Start boundary: {fixture.hasStartBoundary ? "present" : "missing"}</div>
-                    <div>End boundary: {fixture.hasEndBoundary ? "present" : "missing"}</div>
+                    <div>
+                      Start boundary:{" "}
+                      {fixture.hasStartBoundary ? "present" : "missing"}
+                    </div>
+                    <div>
+                      End boundary:{" "}
+                      {fixture.hasEndBoundary ? "present" : "missing"}
+                    </div>
                   </div>
-                  <div className="text-sm leading-6 text-white/72">
+                  <div className={`text-sm leading-6 ${labBodyClass}`}>
                     {preview.reason}
                   </div>
                 </div>
@@ -128,12 +149,10 @@ export function CompanionSyncLabPage() {
         </Card>
       </section>
 
-      <Card className="grid gap-4 rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(10,17,31,0.96),rgba(8,13,24,0.92))] p-5">
+      <Card className={labCardClass}>
         <div>
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/42">
-            Coverage preview
-          </div>
-          <div className="mt-2 text-sm leading-6 text-white/58">
+          <div className={labEyebrowClass}>Coverage preview</div>
+          <div className={`mt-2 text-sm leading-6 ${labBodyClass}`}>
             These fixtures normalize a full window and highlight whether any
             interval would still be left uncovered.
           </div>
@@ -142,17 +161,14 @@ export function CompanionSyncLabPage() {
           {companionSyncLabTimelineFixtures.map((fixture) => {
             const preview = previewCompanionSyncLabTimeline(fixture);
             return (
-              <div
-                key={fixture.id}
-                className="grid gap-3 rounded-[20px] border border-white/8 bg-white/[0.03] px-4 py-4"
-              >
+              <div key={fixture.id} className={labFixtureClass}>
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="text-sm font-medium text-white">{fixture.title}</div>
+                  <div className={labTitleClass}>{fixture.title}</div>
                   <Badge
                     className={
                       preview.uncoveredIntervals.length === 0
-                        ? "bg-emerald-400/10 text-emerald-100"
-                        : "bg-rose-400/10 text-rose-100"
+                        ? labSuccessBadgeClass
+                        : labDangerBadgeClass
                     }
                   >
                     {preview.uncoveredIntervals.length === 0
@@ -168,7 +184,7 @@ export function CompanionSyncLabPage() {
                   {preview.segments.map((segment) => (
                     <div
                       key={segment.id}
-                      className="flex flex-wrap items-center gap-2 rounded-[16px] border border-white/6 bg-white/[0.02] px-3 py-2 text-xs text-white/68"
+                      className="flex flex-wrap items-center gap-2 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-2 text-xs text-[var(--ui-ink-soft)]"
                     >
                       <Badge
                         tone={
@@ -182,8 +198,11 @@ export function CompanionSyncLabPage() {
                         {segment.kind}
                       </Badge>
                       <Badge tone="meta">{segment.origin}</Badge>
-                      <span>{new Date(segment.startedAt).toLocaleTimeString()} → {new Date(segment.endedAt).toLocaleTimeString()}</span>
-                      <span className="text-white/48">{segment.title}</span>
+                      <span>
+                        {new Date(segment.startedAt).toLocaleTimeString()} →{" "}
+                        {new Date(segment.endedAt).toLocaleTimeString()}
+                      </span>
+                      <span className={labFaintClass}>{segment.title}</span>
                     </div>
                   ))}
                 </div>
@@ -192,9 +211,10 @@ export function CompanionSyncLabPage() {
                     {preview.uncoveredIntervals.map((interval) => (
                       <div
                         key={`${interval.startedAt}-${interval.endedAt}`}
-                        className="rounded-[14px] border border-rose-400/18 bg-rose-500/10 px-3 py-2 text-xs text-rose-100"
+                        className={`rounded-[14px] border border-[color-mix(in_srgb,var(--danger)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-danger-soft)] px-3 py-2 text-xs ${labDangerBadgeClass}`}
                       >
-                        Uncovered: {new Date(interval.startedAt).toLocaleTimeString()} →{" "}
+                        Uncovered:{" "}
+                        {new Date(interval.startedAt).toLocaleTimeString()} →{" "}
                         {new Date(interval.endedAt).toLocaleTimeString()}
                       </div>
                     ))}
@@ -206,12 +226,10 @@ export function CompanionSyncLabPage() {
         </div>
       </Card>
 
-      <Card className="grid gap-4 rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(10,17,31,0.96),rgba(8,13,24,0.92))] p-5">
+      <Card className={labCardClass}>
         <div>
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/42">
-            Canonical box layers
-          </div>
-          <div className="mt-2 text-sm leading-6 text-white/58">
+          <div className={labEyebrowClass}>Canonical box layers</div>
+          <div className={`mt-2 text-sm leading-6 ${labBodyClass}`}>
             Raw phone measurements stay immutable. Forge generates automatic
             boxes from them, user-defined boxes override them, and the final
             projected boxes are what both the web and iPhone should render.
@@ -219,28 +237,26 @@ export function CompanionSyncLabPage() {
         </div>
         <div className="grid gap-4">
           {companionSyncLabBoxLayerFixtures.map((fixture) => (
-            <div
-              key={fixture.id}
-              className="grid gap-4 rounded-[20px] border border-white/8 bg-white/[0.03] px-4 py-4"
-            >
+            <div key={fixture.id} className={labFixtureClass}>
               <div className="flex flex-wrap items-center gap-2">
-                <div className="text-sm font-medium text-white">{fixture.title}</div>
+                <div className={labTitleClass}>{fixture.title}</div>
                 <Badge tone="meta">Raw: {fixture.rawMeasurements.length}</Badge>
-                <Badge tone="meta">Automatic: {fixture.automaticBoxes.length}</Badge>
+                <Badge tone="meta">
+                  Automatic: {fixture.automaticBoxes.length}
+                </Badge>
                 <Badge tone="meta">User: {fixture.userBoxes.length}</Badge>
-                <Badge tone="signal">Projected: {fixture.projectedBoxes.length}</Badge>
+                <Badge tone="signal">
+                  Projected: {fixture.projectedBoxes.length}
+                </Badge>
               </div>
               <div className="grid gap-3 xl:grid-cols-4">
-                <div className="grid gap-2 rounded-[16px] border border-white/6 bg-black/10 p-3">
-                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
-                    Raw measurements
-                  </div>
+                <div className={labColumnClass}>
+                  <div className={labSubEyebrowClass}>Raw measurements</div>
                   {fixture.rawMeasurements.map((entry) => (
-                    <div
-                      key={entry.id}
-                      className="rounded-[14px] border border-white/6 bg-white/[0.03] px-3 py-2 text-xs text-white/68"
-                    >
-                      <div className="font-medium text-white">{entry.label}</div>
+                    <div key={entry.id} className={labSmallCardClass}>
+                      <div className="font-medium text-[var(--ui-ink-strong)]">
+                        {entry.label}
+                      </div>
                       <div>
                         {new Date(entry.startedAt).toLocaleTimeString()} →{" "}
                         {new Date(entry.endedAt).toLocaleTimeString()}
@@ -248,15 +264,10 @@ export function CompanionSyncLabPage() {
                     </div>
                   ))}
                 </div>
-                <div className="grid gap-2 rounded-[16px] border border-white/6 bg-black/10 p-3">
-                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
-                    Automatic boxes
-                  </div>
+                <div className={labColumnClass}>
+                  <div className={labSubEyebrowClass}>Automatic boxes</div>
                   {fixture.automaticBoxes.map((entry) => (
-                    <div
-                      key={entry.id}
-                      className="rounded-[14px] border border-white/6 bg-white/[0.03] px-3 py-2 text-xs text-white/68"
-                    >
+                    <div key={entry.id} className={labSmallCardClass}>
                       <div className="flex items-center gap-2">
                         <Badge
                           tone={
@@ -271,7 +282,9 @@ export function CompanionSyncLabPage() {
                         </Badge>
                         <Badge tone="meta">{entry.origin}</Badge>
                       </div>
-                      <div className="mt-2 font-medium text-white">{entry.title}</div>
+                      <div className="mt-2 font-medium text-[var(--ui-ink-strong)]">
+                        {entry.title}
+                      </div>
                       <div>
                         {new Date(entry.startedAt).toLocaleTimeString()} →{" "}
                         {new Date(entry.endedAt).toLocaleTimeString()}
@@ -279,44 +292,40 @@ export function CompanionSyncLabPage() {
                     </div>
                   ))}
                 </div>
-                <div className="grid gap-2 rounded-[16px] border border-white/6 bg-black/10 p-3">
-                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
-                    User-defined boxes
-                  </div>
+                <div className={labColumnClass}>
+                  <div className={labSubEyebrowClass}>User-defined boxes</div>
                   {fixture.userBoxes.map((entry) => (
-                    <div
-                      key={entry.id}
-                      className="rounded-[14px] border border-white/6 bg-white/[0.03] px-3 py-2 text-xs text-white/68"
-                    >
+                    <div key={entry.id} className={labSmallCardClass}>
                       <div className="flex items-center gap-2">
-                        <Badge tone={entry.kind === "missing" ? "meta" : "default"}>
+                        <Badge
+                          tone={entry.kind === "missing" ? "meta" : "default"}
+                        >
                           {entry.kind}
                         </Badge>
-                        <Badge className="bg-pink-400/10 text-pink-100">
+                        <Badge className={labUserBadgeClass}>
                           {entry.origin}
                         </Badge>
                       </div>
-                      <div className="mt-2 font-medium text-white">{entry.title}</div>
+                      <div className="mt-2 font-medium text-[var(--ui-ink-strong)]">
+                        {entry.title}
+                      </div>
                       <div>
                         {new Date(entry.startedAt).toLocaleTimeString()} →{" "}
                         {new Date(entry.endedAt).toLocaleTimeString()}
                       </div>
-                      <div className="mt-1 text-white/52">
+                      <div className={`mt-1 ${labFaintClass}`}>
                         Overrides {entry.overrideCount} automatic box
                         {entry.overrideCount === 1 ? "" : "es"}
                       </div>
                     </div>
                   ))}
                 </div>
-                <div className="grid gap-2 rounded-[16px] border border-white/6 bg-black/10 p-3">
-                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+                <div className={labColumnClass}>
+                  <div className={labSubEyebrowClass}>
                     Projected visible boxes
                   </div>
                   {fixture.projectedBoxes.map((entry) => (
-                    <div
-                      key={entry.id}
-                      className="rounded-[14px] border border-white/6 bg-white/[0.03] px-3 py-2 text-xs text-white/68"
-                    >
+                    <div key={entry.id} className={labSmallCardClass}>
                       <div className="flex items-center gap-2">
                         <Badge
                           tone={
@@ -331,12 +340,14 @@ export function CompanionSyncLabPage() {
                         </Badge>
                         <Badge tone="meta">{entry.sourceKind}</Badge>
                       </div>
-                      <div className="mt-2 font-medium text-white">{entry.title}</div>
+                      <div className="mt-2 font-medium text-[var(--ui-ink-strong)]">
+                        {entry.title}
+                      </div>
                       <div>
                         {new Date(entry.startedAt).toLocaleTimeString()} →{" "}
                         {new Date(entry.endedAt).toLocaleTimeString()}
                       </div>
-                      <div className="mt-1 text-white/52">
+                      <div className={`mt-1 ${labFaintClass}`}>
                         {entry.origin}
                         {entry.overrideCount > 0
                           ? ` · overrides ${entry.overrideCount}`

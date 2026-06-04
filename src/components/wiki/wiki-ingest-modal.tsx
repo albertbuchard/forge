@@ -46,6 +46,18 @@ type IngestMode = "files" | "url" | "text";
 
 const ACTIVE_JOB_STATUSES = new Set(["queued", "processing"]);
 const STALE_INGEST_RESUME_THRESHOLD_MS = 15_000;
+const INGEST_EYEBROW_CLASS =
+  "text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]";
+const INGEST_PANEL_CLASS =
+  "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]";
+const INGEST_MUTED_PANEL_CLASS =
+  "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]";
+const INGEST_SELECTED_CLASS =
+  "border-[color-mix(in_srgb,var(--primary)_30%,transparent)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]";
+const INGEST_IDLE_CLASS =
+  "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]";
+const INGEST_BADGE_CLASS =
+  "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]";
 const SEARCHABLE_ENTITY_TYPES: CrudEntityType[] = [
   "goal",
   "project",
@@ -118,8 +130,7 @@ function buildPollingDisplayMessage(
     readMetadataString(entry.metadata, "currentFileName") ??
     readMetadataString(entry.metadata, "fileName") ??
     "current source";
-  const status =
-    readMetadataString(entry.metadata, "status") ?? "in_progress";
+  const status = readMetadataString(entry.metadata, "status") ?? "in_progress";
   const chunkIndex = readMetadataNumber(entry.metadata, "chunkIndex");
   const chunkCount = readMetadataNumber(entry.metadata, "chunkCount");
   const fileIndex = readMetadataNumber(entry.metadata, "currentFileIndex");
@@ -249,7 +260,8 @@ function inferMappedEntityDescription(
     entity.originNote
   ];
   const description = descriptionFields.find(
-    (value): value is string => typeof value === "string" && value.trim().length > 0
+    (value): value is string =>
+      typeof value === "string" && value.trim().length > 0
   );
   if (description) {
     return description;
@@ -287,7 +299,7 @@ function CandidateCard({
         ? candidate.payload.patchSummary
         : typeof candidate.payload.rationale === "string"
           ? candidate.payload.rationale
-        : candidate.summary;
+          : candidate.summary;
   const mappedSearch = useQuery({
     queryKey: [
       "forge-wiki-ingest-map-search",
@@ -321,17 +333,19 @@ function CandidateCard({
       return (
         first?.matches
           ?.filter(
-            (match): match is {
+            (
+              match
+            ): match is {
               entityType: CrudEntityType;
               id: string;
               entity: Record<string, unknown>;
             } =>
               Boolean(
                 match &&
-                  isCrudEntityType(match.entityType) &&
-                  typeof match.id === "string" &&
-                  match.entity &&
-                  typeof match.entity === "object"
+                isCrudEntityType(match.entityType) &&
+                typeof match.id === "string" &&
+                match.entity &&
+                typeof match.entity === "object"
               )
           )
           .map((match) => ({
@@ -375,7 +389,7 @@ function CandidateCard({
   const mergedPageResults = mergedPageSearch.data ?? [];
   const selectedMappedResult =
     decision.mappedEntityId && decision.mappedEntityType
-      ? mappedResults.find(
+      ? (mappedResults.find(
           (entry) =>
             entry.entityId === decision.mappedEntityId &&
             entry.entityType === decision.mappedEntityType
@@ -388,29 +402,30 @@ function CandidateCard({
               description: "",
               kind: entityTypeToKind(decision.mappedEntityType)
             }
-          : null)
+          : null))
       : null;
-  const selectedMergedPage =
-    decision.targetNoteId
-      ? mergedPageResults.find((entry) => entry.noteId === decision.targetNoteId) ??
-        (decision.targetNoteLabel
-          ? {
-              noteId: decision.targetNoteId,
-              title: decision.targetNoteLabel,
-              slug: "",
-              summary: ""
-            }
-          : null)
-      : null;
+  const selectedMergedPage = decision.targetNoteId
+    ? (mergedPageResults.find(
+        (entry) => entry.noteId === decision.targetNoteId
+      ) ??
+      (decision.targetNoteLabel
+        ? {
+            noteId: decision.targetNoteId,
+            title: decision.targetNoteLabel,
+            slug: "",
+            summary: ""
+          }
+        : null))
+    : null;
 
   return (
-    <div className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4">
+    <div className={cn("rounded-[24px] border p-4", INGEST_PANEL_CLASS)}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">
+          <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
             {candidate.candidateType.replaceAll("_", " ")}
           </div>
-          <div className="mt-2 text-base font-semibold text-white">
+          <div className="mt-2 text-base font-semibold text-[var(--ui-ink-strong)]">
             {candidate.title || candidate.targetKey || "Untitled candidate"}
           </div>
           {proposalEntityType ? (
@@ -423,26 +438,26 @@ function CandidateCard({
                   gradient={false}
                 />
               ) : (
-                <Badge className="bg-white/[0.08] text-white/72">
+                <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                   {proposalEntityType.replaceAll("_", " ")}
                 </Badge>
               )}
             </div>
           ) : null}
           {candidate.summary ? (
-            <div className="mt-1 text-sm leading-6 text-white/58">
+            <div className="mt-1 text-sm leading-6 text-[var(--ui-ink-soft)]">
               {candidate.summary}
             </div>
           ) : null}
         </div>
-        <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] p-1">
+        <div className="inline-flex items-center gap-2 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-1">
           <button
             type="button"
             className={cn(
               "rounded-full px-3 py-1.5 text-xs font-medium transition",
               decision.action === "keep"
-                ? "bg-[rgba(192,193,255,0.2)] text-white"
-                : "text-white/54 hover:text-white"
+                ? "bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]"
+                : "text-[var(--ui-ink-soft)] hover:text-[var(--ui-ink-strong)]"
             )}
             onClick={() =>
               onDecisionChange({
@@ -459,8 +474,8 @@ function CandidateCard({
               className={cn(
                 "rounded-full px-3 py-1.5 text-xs font-medium transition",
                 decision.action === "map_existing"
-                  ? "bg-[rgba(133,222,255,0.18)] text-white"
-                  : "text-white/54 hover:text-white"
+                  ? "bg-[var(--ui-info-soft)] text-[var(--ui-ink-strong)]"
+                  : "text-[var(--ui-ink-soft)] hover:text-[var(--ui-ink-strong)]"
               )}
               onClick={() =>
                 onDecisionChange({
@@ -479,8 +494,8 @@ function CandidateCard({
               className={cn(
                 "rounded-full px-3 py-1.5 text-xs font-medium transition",
                 decision.action === "merge_existing"
-                  ? "bg-[rgba(133,222,255,0.18)] text-white"
-                  : "text-white/54 hover:text-white"
+                  ? "bg-[var(--ui-info-soft)] text-[var(--ui-ink-strong)]"
+                  : "text-[var(--ui-ink-soft)] hover:text-[var(--ui-ink-strong)]"
               )}
               onClick={() =>
                 onDecisionChange({
@@ -497,8 +512,8 @@ function CandidateCard({
             className={cn(
               "rounded-full px-3 py-1.5 text-xs font-medium transition",
               decision.action === "discard"
-                ? "bg-[rgba(255,255,255,0.12)] text-white"
-                : "text-white/54 hover:text-white"
+                ? "bg-[var(--ui-surface-2)] text-[var(--ui-ink-strong)]"
+                : "text-[var(--ui-ink-soft)] hover:text-[var(--ui-ink-strong)]"
             )}
             onClick={() =>
               onDecisionChange({
@@ -514,13 +529,18 @@ function CandidateCard({
       {candidate.candidateType === "entity" &&
       proposalEntityType &&
       decision.action === "map_existing" ? (
-        <div className="mt-4 grid gap-3 rounded-[18px] border border-white/8 bg-[rgba(6,10,20,0.55)] p-4">
-          <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+        <div
+          className={cn(
+            "mt-4 grid gap-3 rounded-[18px] border p-4",
+            INGEST_MUTED_PANEL_CLASS
+          )}
+        >
+          <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
             Map to existing {proposalEntityType.replaceAll("_", " ")}
           </div>
           {selectedMappedResult ? (
             <div className="flex flex-wrap gap-2">
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.06] px-2.5 py-1.5">
+              <span className="inline-flex items-center gap-2 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-2.5 py-1.5">
                 {selectedMappedResult.kind ? (
                   <EntityBadge
                     kind={selectedMappedResult.kind}
@@ -530,13 +550,13 @@ function CandidateCard({
                     className="max-w-[20rem]"
                   />
                 ) : (
-                  <Badge className="bg-white/[0.08] text-white/78">
+                  <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                     {selectedMappedResult.label}
                   </Badge>
                 )}
                 <button
                   type="button"
-                  className="rounded-full text-white/50 transition hover:text-white"
+                  className="rounded-full text-[var(--ui-ink-faint)] transition hover:text-[var(--ui-ink-strong)]"
                   onClick={() =>
                     onDecisionChange({
                       ...decision,
@@ -551,8 +571,13 @@ function CandidateCard({
               </span>
             </div>
           ) : null}
-          <div className="flex items-center gap-3 rounded-[20px] border border-white/8 bg-white/[0.04] px-4 py-3">
-            <Search className="size-4 text-white/34" />
+          <div
+            className={cn(
+              "flex items-center gap-3 rounded-[20px] border px-4 py-3",
+              INGEST_PANEL_CLASS
+            )}
+          >
+            <Search className="size-4 text-[var(--ui-ink-faint)]" />
             <input
               value={mapQuery}
               onChange={(event) => {
@@ -566,16 +591,21 @@ function CandidateCard({
                 }
               }}
               placeholder={`Search existing ${proposalEntityType.replaceAll("_", " ")}`}
-              className="min-w-0 flex-1 bg-transparent text-sm text-white placeholder:text-white/34 focus:outline-none"
+              className="min-w-0 flex-1 bg-transparent text-sm text-[var(--ui-ink-strong)] placeholder:text-[var(--ui-ink-faint)] focus:outline-none"
             />
           </div>
           <div className="grid gap-2">
             {mappedSearch.isPending ? (
-              <div className="rounded-[16px] border border-white/8 bg-white/[0.03] px-3 py-3 text-sm text-white/48">
+              <div
+                className={cn(
+                  "rounded-[16px] border px-3 py-3 text-sm text-[var(--ui-ink-faint)]",
+                  INGEST_PANEL_CLASS
+                )}
+              >
                 Searching Forge…
               </div>
             ) : mappedResults.length === 0 ? (
-              <div className="rounded-[16px] border border-dashed border-white/10 px-3 py-3 text-sm text-white/42">
+              <div className="rounded-[16px] border border-dashed border-[var(--ui-border-subtle)] px-3 py-3 text-sm text-[var(--ui-ink-faint)]">
                 No existing {proposalEntityType.replaceAll("_", " ")} matches
                 yet.
               </div>
@@ -591,8 +621,8 @@ function CandidateCard({
                     className={cn(
                       "flex w-full items-start justify-between gap-3 rounded-[18px] border px-3 py-3 text-left transition",
                       selected
-                        ? "border-[rgba(133,222,255,0.24)] bg-[rgba(133,222,255,0.12)] text-white"
-                        : "border-white/8 bg-white/[0.03] text-white/72 hover:bg-white/[0.06] hover:text-white"
+                        ? INGEST_SELECTED_CLASS
+                        : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]"
                     )}
                     onClick={() =>
                       onDecisionChange({
@@ -617,7 +647,7 @@ function CandidateCard({
                         )}
                       </div>
                       {result.description ? (
-                        <div className="mt-1 text-xs leading-5 text-white/46">
+                        <div className="mt-1 text-xs leading-5 text-[var(--ui-ink-faint)]">
                           {result.description}
                         </div>
                       ) : null}
@@ -631,19 +661,24 @@ function CandidateCard({
       ) : null}
       {candidate.candidateType === "page" &&
       decision.action === "merge_existing" ? (
-        <div className="mt-4 grid gap-3 rounded-[18px] border border-white/8 bg-[rgba(6,10,20,0.55)] p-4">
-          <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+        <div
+          className={cn(
+            "mt-4 grid gap-3 rounded-[18px] border p-4",
+            INGEST_MUTED_PANEL_CLASS
+          )}
+        >
+          <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
             Merge into existing page
           </div>
           {selectedMergedPage ? (
             <div className="flex flex-wrap gap-2">
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.06] px-2.5 py-1.5">
-                <Badge className="bg-white/[0.08] text-white/78">
+              <span className="inline-flex items-center gap-2 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-2.5 py-1.5">
+                <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                   {selectedMergedPage.title}
                 </Badge>
                 <button
                   type="button"
-                  className="rounded-full text-white/50 transition hover:text-white"
+                  className="rounded-full text-[var(--ui-ink-faint)] transition hover:text-[var(--ui-ink-strong)]"
                   onClick={() =>
                     onDecisionChange({
                       ...decision,
@@ -658,8 +693,13 @@ function CandidateCard({
               </span>
             </div>
           ) : null}
-          <div className="flex items-center gap-3 rounded-[20px] border border-white/8 bg-white/[0.04] px-4 py-3">
-            <Search className="size-4 text-white/34" />
+          <div
+            className={cn(
+              "flex items-center gap-3 rounded-[20px] border px-4 py-3",
+              INGEST_PANEL_CLASS
+            )}
+          >
+            <Search className="size-4 text-[var(--ui-ink-faint)]" />
             <input
               value={mergeQuery}
               onChange={(event) => {
@@ -673,16 +713,21 @@ function CandidateCard({
                 }
               }}
               placeholder="Search existing wiki pages"
-              className="min-w-0 flex-1 bg-transparent text-sm text-white placeholder:text-white/34 focus:outline-none"
+              className="min-w-0 flex-1 bg-transparent text-sm text-[var(--ui-ink-strong)] placeholder:text-[var(--ui-ink-faint)] focus:outline-none"
             />
           </div>
           <div className="grid gap-2">
             {mergedPageSearch.isPending ? (
-              <div className="rounded-[16px] border border-white/8 bg-white/[0.03] px-3 py-3 text-sm text-white/48">
+              <div
+                className={cn(
+                  "rounded-[16px] border px-3 py-3 text-sm text-[var(--ui-ink-faint)]",
+                  INGEST_PANEL_CLASS
+                )}
+              >
                 Searching Forge…
               </div>
             ) : mergedPageResults.length === 0 ? (
-              <div className="rounded-[16px] border border-dashed border-white/10 px-3 py-3 text-sm text-white/42">
+              <div className="rounded-[16px] border border-dashed border-[var(--ui-border-subtle)] px-3 py-3 text-sm text-[var(--ui-ink-faint)]">
                 No existing wiki pages match yet.
               </div>
             ) : (
@@ -695,8 +740,8 @@ function CandidateCard({
                     className={cn(
                       "flex w-full items-start justify-between gap-3 rounded-[18px] border px-3 py-3 text-left transition",
                       selected
-                        ? "border-[rgba(133,222,255,0.24)] bg-[rgba(133,222,255,0.12)] text-white"
-                        : "border-white/8 bg-white/[0.03] text-white/72 hover:bg-white/[0.06] hover:text-white"
+                        ? INGEST_SELECTED_CLASS
+                        : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]"
                     )}
                     onClick={() =>
                       onDecisionChange({
@@ -710,7 +755,7 @@ function CandidateCard({
                       <div className="truncate text-sm font-medium">
                         {result.title}
                       </div>
-                      <div className="mt-1 text-xs leading-5 text-white/46">
+                      <div className="mt-1 text-xs leading-5 text-[var(--ui-ink-faint)]">
                         {result.slug ? `${result.slug}` : ""}
                         {result.summary
                           ? `${result.slug ? " · " : ""}${result.summary}`
@@ -725,7 +770,12 @@ function CandidateCard({
         </div>
       ) : null}
       {previewText ? (
-        <div className="mt-4 rounded-[18px] border border-white/8 bg-[rgba(6,10,20,0.65)] px-4 py-3 text-sm leading-6 text-white/72">
+        <div
+          className={cn(
+            "mt-4 rounded-[18px] border px-4 py-3 text-sm leading-6 text-[var(--ui-ink-medium)]",
+            INGEST_MUTED_PANEL_CLASS
+          )}
+        >
           <pre className="whitespace-pre-wrap font-sans">{previewText}</pre>
         </div>
       ) : null}
@@ -846,7 +896,9 @@ export function WikiIngestModal({
         queryClient.setQueryData(["forge-wiki-ingest-job", jobId], result.job);
       }
       queryClient.invalidateQueries({ queryKey: ["forge-wiki-ingest-jobs"] });
-      queryClient.invalidateQueries({ queryKey: ["forge-wiki-ingest-history"] });
+      queryClient.invalidateQueries({
+        queryKey: ["forge-wiki-ingest-history"]
+      });
     }
   });
 
@@ -868,7 +920,8 @@ export function WikiIngestModal({
       return;
     }
     const now = Date.now();
-    const isStale = now - freshestActivityAt >= STALE_INGEST_RESUME_THRESHOLD_MS;
+    const isStale =
+      now - freshestActivityAt >= STALE_INGEST_RESUME_THRESHOLD_MS;
     if (!isStale || resumeJobMutation.isPending) {
       return;
     }
@@ -989,10 +1042,10 @@ export function WikiIngestModal({
                 action: "merge_existing" as const,
                 targetNoteId: decision.targetNoteId
               }
-          : {
-              candidateId: candidate.id,
-              action: decision.action
-            };
+            : {
+                candidateId: candidate.id,
+                action: decision.action
+              };
       });
       return reviewWikiIngestJob({
         jobId: selectedJobId,
@@ -1123,20 +1176,20 @@ export function WikiIngestModal({
       }}
     >
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-[rgba(3,7,18,0.78)] backdrop-blur-sm" />
-        <Dialog.Content className="fixed inset-x-4 bottom-4 top-4 z-50 mx-auto flex max-w-[min(74rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-[32px] border border-white/8 bg-[linear-gradient(180deg,rgba(18,27,42,0.98),rgba(10,15,28,0.98))] shadow-[0_36px_110px_rgba(3,8,18,0.48)]">
-          <div className="border-b border-white/8 px-5 py-5">
+        <Dialog.Overlay className="fixed inset-0 z-50 surface-overlay backdrop-blur-sm" />
+        <Dialog.Content className="fixed inset-x-4 bottom-4 top-4 z-50 mx-auto flex max-w-[min(74rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-[32px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-popover)] shadow-[var(--ui-shadow-floating)]">
+          <div className="border-b border-[var(--ui-border-subtle)] px-5 py-5">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                   KarpaWiki Ingest
                 </div>
-                <Dialog.Title className="mt-2 font-display text-[1.5rem] tracking-[-0.04em] text-white">
+                <Dialog.Title className="mt-2 font-display text-[1.5rem] tracking-[-0.04em] text-[var(--ui-ink-strong)]">
                   {activeJob
                     ? "Ingest review and progress"
                     : "Build KarpaWiki memory from source files"}
                 </Dialog.Title>
-                <Dialog.Description className="mt-2 max-w-3xl text-sm leading-6 text-white/58">
+                <Dialog.Description className="mt-2 max-w-3xl text-sm leading-6 text-[var(--ui-ink-soft)]">
                   Upload notes, media, ZIP archives, links, or pasted text.
                   Forge will process them in the background, propose pages and
                   entities, and let you keep only what belongs.
@@ -1145,7 +1198,7 @@ export function WikiIngestModal({
               <Dialog.Close asChild>
                 <button
                   type="button"
-                  className="rounded-full border border-white/10 bg-white/[0.04] p-2 text-white/64 transition hover:bg-white/[0.08] hover:text-white"
+                  className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-2 text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]"
                   aria-label="Close ingest modal"
                 >
                   <X className="size-4" />
@@ -1187,9 +1240,7 @@ export function WikiIngestModal({
                           type="button"
                           className={cn(
                             "rounded-[24px] border px-4 py-4 text-left transition",
-                            selected
-                              ? "border-[rgba(192,193,255,0.24)] bg-[rgba(192,193,255,0.12)] text-white"
-                              : "border-white/8 bg-white/[0.04] text-white/72 hover:bg-white/[0.07] hover:text-white"
+                            selected ? INGEST_SELECTED_CLASS : INGEST_IDLE_CLASS
                           )}
                           onClick={() => setMode(option.id as IngestMode)}
                         >
@@ -1197,7 +1248,7 @@ export function WikiIngestModal({
                           <div className="mt-3 text-sm font-semibold">
                             {option.label}
                           </div>
-                          <div className="mt-1 text-xs leading-5 text-white/48">
+                          <div className="mt-1 text-xs leading-5 text-[var(--ui-ink-faint)]">
                             {option.detail}
                           </div>
                         </button>
@@ -1205,7 +1256,12 @@ export function WikiIngestModal({
                     })}
                   </div>
 
-                  <div className="rounded-[28px] border border-white/8 bg-[rgba(9,14,26,0.72)] p-4 sm:p-5">
+                  <div
+                    className={cn(
+                      "rounded-[28px] border p-4 sm:p-5",
+                      INGEST_PANEL_CLASS
+                    )}
+                  >
                     <div className="grid gap-4">
                       <Input
                         value={titleHint}
@@ -1218,8 +1274,8 @@ export function WikiIngestModal({
                           className={cn(
                             "rounded-[28px] border-2 border-dashed px-5 py-8 text-center transition",
                             dragActive
-                              ? "border-[rgba(192,193,255,0.35)] bg-[rgba(192,193,255,0.08)]"
-                              : "border-white/10 bg-white/[0.03]"
+                              ? "border-[color-mix(in_srgb,var(--primary)_36%,transparent)] bg-[var(--ui-accent-soft)]"
+                              : INGEST_PANEL_CLASS
                           )}
                           onDragEnter={(event) => {
                             event.preventDefault();
@@ -1242,17 +1298,17 @@ export function WikiIngestModal({
                             setFiles((current) => [...current, ...dropped]);
                           }}
                         >
-                          <div className="mx-auto flex size-14 items-center justify-center rounded-full border border-white/10 bg-white/[0.05]">
-                            <Upload className="size-5 text-white/72" />
+                          <div className="mx-auto flex size-14 items-center justify-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]">
+                            <Upload className="size-5 text-[var(--ui-ink-medium)]" />
                           </div>
-                          <div className="mt-4 text-base font-semibold text-white">
+                          <div className="mt-4 text-base font-semibold text-[var(--ui-ink-strong)]">
                             Drop files, media, notes, or ZIP archives here
                           </div>
-                          <div className="mt-2 text-sm leading-6 text-white/50">
+                          <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-faint)]">
                             Forge accepts many files at once and queues the
                             ingest in the background so the UI stays responsive.
                           </div>
-                          <label className="mt-5 inline-flex cursor-pointer items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-4 py-2 text-sm text-white/78 transition hover:bg-white/[0.08] hover:text-white">
+                          <label className="mt-5 inline-flex cursor-pointer items-center gap-2 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-2 text-sm text-[var(--ui-ink-medium)] transition hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]">
                             <Upload className="size-4" />
                             Choose files
                             <input
@@ -1269,10 +1325,10 @@ export function WikiIngestModal({
                               {files.map((file) => (
                                 <div
                                   key={`${file.name}-${file.size}-${file.lastModified}`}
-                                  className="flex items-center justify-between gap-3 rounded-[18px] border border-white/8 bg-white/[0.04] px-4 py-3 text-sm text-white/72"
+                                  className="flex items-center justify-between gap-3 rounded-[18px] border ${INGEST_PANEL_CLASS} px-4 py-3 text-sm text-[var(--ui-ink-medium)]"
                                 >
                                   <span className="truncate">{file.name}</span>
-                                  <span className="shrink-0 text-xs text-white/42">
+                                  <span className="shrink-0 text-xs text-[var(--ui-ink-faint)]">
                                     {file.name
                                       .toLowerCase()
                                       .endsWith(".zip") ? (
@@ -1315,7 +1371,7 @@ export function WikiIngestModal({
 
                 <aside className="grid h-fit gap-4">
                   {!selectedLlmProfile ? (
-                    <div className="rounded-[30px] border border-amber-300/28 bg-[linear-gradient(180deg,rgba(120,74,14,0.28),rgba(37,22,8,0.42))] p-5 shadow-[0_24px_64px_rgba(12,6,0,0.22)]">
+                    <div className="rounded-[30px] border border-[color-mix(in_srgb,var(--warning)_30%,transparent)] bg-[var(--ui-warning-soft)] p-5 shadow-[var(--ui-shadow-card)]">
                       <div className="flex items-start gap-3">
                         <div className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full border border-amber-200/20 bg-amber-300/12 text-amber-100">
                           <AlertTriangle className="size-4.5" />
@@ -1324,17 +1380,17 @@ export function WikiIngestModal({
                           <div className="text-[11px] uppercase tracking-[0.18em] text-amber-100/62">
                             OpenAI setup required for smart ingest
                           </div>
-                          <div className="mt-2 text-lg font-semibold text-white">
+                          <div className="mt-2 text-lg font-semibold text-[var(--ui-ink-strong)]">
                             Forge can only do a raw import without OpenAI
                           </div>
-                          <div className="mt-3 text-sm leading-6 text-white/78">
+                          <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-medium)]">
                             Without an OpenAI ingest profile, Forge cannot
                             extract key insights, split the source into draft
                             wiki pages, or propose Forge entities. The fallback
                             is just a direct text import or media reference with
                             no structured synthesis.
                           </div>
-                          <div className="mt-3 text-sm leading-6 text-white/62">
+                          <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
                             Set up the API key, model, thinking, and verbosity
                             first, then come back here to build real draft pages
                             and reviewable entity proposals.
@@ -1366,27 +1422,27 @@ export function WikiIngestModal({
                     </div>
                   ) : null}
 
-                  <div className="rounded-[28px] border border-white/8 bg-white/[0.04] p-4">
+                  <div className="rounded-[28px] border ${INGEST_PANEL_CLASS} p-4">
                     <button
                       type="button"
                       className="flex w-full items-center justify-between gap-3 text-left"
                       onClick={() => setShowAdvanced((current) => !current)}
                     >
                       <div>
-                        <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+                        <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                           Advanced
                         </div>
-                        <div className="mt-2 text-sm text-white/72">
+                        <div className="mt-2 text-sm text-[var(--ui-ink-medium)]">
                           Model, parse, and target controls.
                         </div>
                       </div>
-                      <Sparkles className="size-4 text-white/58" />
+                      <Sparkles className="size-4 text-[var(--ui-ink-soft)]" />
                     </button>
 
                     {showAdvanced ? (
                       <div className="mt-4 grid gap-4">
                         <div>
-                          <div className="mb-2 text-[11px] uppercase tracking-[0.16em] text-white/42">
+                          <div className="mb-2 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                             Space
                           </div>
                           <div className="grid gap-2">
@@ -1397,13 +1453,13 @@ export function WikiIngestModal({
                                 className={cn(
                                   "rounded-[18px] border px-3 py-3 text-left text-sm transition",
                                   selectedSpaceId === space.id
-                                    ? "border-[rgba(192,193,255,0.24)] bg-[rgba(192,193,255,0.12)] text-white"
-                                    : "border-white/8 bg-white/[0.03] text-white/68 hover:bg-white/[0.06] hover:text-white"
+                                    ? INGEST_SELECTED_CLASS
+                                    : INGEST_IDLE_CLASS
                                 )}
                                 onClick={() => setSelectedSpaceId(space.id)}
                               >
                                 <div>{space.label}</div>
-                                <div className="mt-1 text-xs text-white/45">
+                                <div className="mt-1 text-xs text-[var(--ui-ink-faint)]">
                                   {space.description || `/${space.slug}`}
                                 </div>
                               </button>
@@ -1412,7 +1468,7 @@ export function WikiIngestModal({
                         </div>
 
                         <div>
-                          <div className="mb-2 text-[11px] uppercase tracking-[0.16em] text-white/42">
+                          <div className="mb-2 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                             LLM profile
                           </div>
                           <div className="grid gap-2">
@@ -1423,19 +1479,19 @@ export function WikiIngestModal({
                                 className={cn(
                                   "rounded-[18px] border px-3 py-3 text-left text-sm transition",
                                   llmProfileId === profile.id
-                                    ? "border-[rgba(192,193,255,0.24)] bg-[rgba(192,193,255,0.12)] text-white"
-                                    : "border-white/8 bg-white/[0.03] text-white/68 hover:bg-white/[0.06] hover:text-white"
+                                    ? INGEST_SELECTED_CLASS
+                                    : INGEST_IDLE_CLASS
                                 )}
                                 onClick={() => setLlmProfileId(profile.id)}
                               >
                                 <div>{profile.label}</div>
-                                <div className="mt-1 text-xs text-white/45">
+                                <div className="mt-1 text-xs text-[var(--ui-ink-faint)]">
                                   {profile.model}
                                 </div>
                               </button>
                             ))}
                             {usableLlmProfiles.length === 0 ? (
-                              <div className="rounded-[18px] border border-dashed border-white/10 px-4 py-4 text-sm text-white/48">
+                              <div className="rounded-[18px] border border-dashed border-[var(--ui-border-subtle)] px-4 py-4 text-sm text-[var(--ui-ink-faint)]">
                                 No enabled profile with a saved key yet.
                               </div>
                             ) : null}
@@ -1443,7 +1499,7 @@ export function WikiIngestModal({
                         </div>
 
                         <div>
-                          <div className="mb-2 text-[11px] uppercase tracking-[0.16em] text-white/42">
+                          <div className="mb-2 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                             Parse mode
                           </div>
                           <div className="grid gap-2 sm:grid-cols-3">
@@ -1458,8 +1514,8 @@ export function WikiIngestModal({
                                 className={cn(
                                   "rounded-[18px] border px-3 py-3 text-sm transition",
                                   parseStrategy === option.id
-                                    ? "border-[rgba(192,193,255,0.24)] bg-[rgba(192,193,255,0.12)] text-white"
-                                    : "border-white/8 bg-white/[0.03] text-white/68 hover:bg-white/[0.06] hover:text-white"
+                                    ? INGEST_SELECTED_CLASS
+                                    : INGEST_IDLE_CLASS
                                 )}
                                 onClick={() =>
                                   setParseStrategy(
@@ -1479,14 +1535,14 @@ export function WikiIngestModal({
                     ) : null}
                   </div>
 
-                  <div className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(192,193,255,0.12),rgba(192,193,255,0.05))] p-4">
-                    <div className="flex items-center gap-2 text-white">
+                  <div className="rounded-[28px] border border-[color-mix(in_srgb,var(--primary)_24%,transparent)] bg-[var(--ui-accent-soft)] p-4">
+                    <div className="flex items-center gap-2 text-[var(--ui-ink-strong)]">
                       <Wand2 className="size-4 text-[var(--secondary)]" />
                       <span className="text-sm font-semibold">
                         Publish only what belongs
                       </span>
                     </div>
-                    <div className="mt-3 text-sm leading-6 text-white/62">
+                    <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
                       Forge stages candidate pages, proposed entity records, and
                       page updates first. You review the output before anything
                       is committed to the live memory graph.
@@ -1514,16 +1570,21 @@ export function WikiIngestModal({
             ) : (
               <div className="grid gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
                 <div className="grid gap-5">
-                  <div className="rounded-[28px] border border-white/8 bg-white/[0.04] p-4 sm:p-5">
+                  <div
+                    className={cn(
+                      "rounded-[28px] border p-4 sm:p-5",
+                      INGEST_PANEL_CLASS
+                    )}
+                  >
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div>
-                        <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+                        <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                           Job {activeJob.job.id}
                         </div>
-                        <div className="mt-2 text-xl font-semibold text-white">
+                        <div className="mt-2 text-xl font-semibold text-[var(--ui-ink-strong)]">
                           {activeJob.job.latestMessage || "Ingest job"}
                         </div>
-                        <div className="mt-2 text-sm leading-6 text-white/56">
+                        <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                           {activeJob.job.status} · {activeJob.job.phase} ·
                           started {formatTimestamp(activeJob.job.createdAt)}
                         </div>
@@ -1592,12 +1653,15 @@ export function WikiIngestModal({
                       ].map((stat) => (
                         <div
                           key={stat.label}
-                          className="rounded-[22px] border border-white/8 bg-[rgba(8,12,22,0.68)] px-4 py-3"
+                          className={cn(
+                            "rounded-[22px] border px-4 py-3",
+                            INGEST_MUTED_PANEL_CLASS
+                          )}
                         >
-                          <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+                          <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                             {stat.label}
                           </div>
-                          <div className="mt-2 text-lg font-semibold text-white">
+                          <div className="mt-2 text-lg font-semibold text-[var(--ui-ink-strong)]">
                             {stat.value}
                           </div>
                         </div>
@@ -1605,9 +1669,9 @@ export function WikiIngestModal({
                     </div>
 
                     <div className="mt-5">
-                      <div className="h-2 overflow-hidden rounded-full bg-white/[0.06]">
+                      <div className="h-2 overflow-hidden rounded-full bg-[var(--ui-surface-2)]">
                         <div
-                          className="h-full rounded-full bg-[linear-gradient(90deg,rgba(192,193,255,0.8),rgba(133,222,255,0.8))] transition-all duration-300"
+                          className="h-full rounded-full bg-[var(--primary)] transition-all duration-300"
                           style={{ width: `${activeJob.job.progressPercent}%` }}
                         />
                       </div>
@@ -1620,9 +1684,14 @@ export function WikiIngestModal({
                     ) : null}
                   </div>
 
-                  <div className="rounded-[28px] border border-white/8 bg-white/[0.04] p-4 sm:p-5">
+                  <div
+                    className={cn(
+                      "rounded-[28px] border p-4 sm:p-5",
+                      INGEST_PANEL_CLASS
+                    )}
+                  >
                     <div className="flex items-center justify-between gap-3">
-                      <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+                      <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                         Rich log
                       </div>
                       <Button
@@ -1639,33 +1708,37 @@ export function WikiIngestModal({
                     </div>
                     <div className="mt-4 grid max-h-[28rem] gap-2 overflow-y-auto">
                       {displayLogs.length === 0 ? (
-                        <div className="rounded-[18px] border border-dashed border-white/10 px-4 py-4 text-sm text-white/45">
+                        <div className="rounded-[18px] border border-dashed border-[var(--ui-border-subtle)] px-4 py-4 text-sm text-[var(--ui-ink-faint)]">
                           Waiting for the backend to emit progress.
                         </div>
                       ) : (
                         displayLogs.map((entry) => (
                           <div
                             key={entry.id}
-                            className="rounded-[18px] border border-white/8 bg-[rgba(7,11,21,0.72)] px-4 py-3"
+                            className={cn(
+                              "rounded-[18px] border px-4 py-3",
+                              INGEST_MUTED_PANEL_CLASS
+                            )}
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/55">
+                                  <span className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--ui-ink-soft)]">
                                     {entry.level}
                                   </span>
                                   {typeof entry.metadata.scope === "string" ? (
-                                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/38">
+                                    <span className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
                                       {entry.metadata.scope}
                                     </span>
                                   ) : null}
-                                  {typeof entry.metadata.eventKey === "string" ? (
-                                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/38">
+                                  {typeof entry.metadata.eventKey ===
+                                  "string" ? (
+                                    <span className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
                                       {entry.metadata.eventKey}
                                     </span>
                                   ) : null}
                                 </div>
-                                <div className="mt-2 text-sm text-white/82">
+                                <div className="mt-2 text-sm text-[var(--ui-ink-strong)]">
                                   {readMetadataString(
                                     entry.metadata,
                                     "eventKey"
@@ -1677,23 +1750,23 @@ export function WikiIngestModal({
                                     : entry.message}
                                 </div>
                                 {entry.repetitionCount > 1 ? (
-                                  <div className="mt-2 text-xs text-white/44">
+                                  <div className="mt-2 text-xs text-[var(--ui-ink-faint)]">
                                     Combined {entry.repetitionCount} repeated
                                     polling updates.
                                   </div>
                                 ) : null}
                                 {Object.keys(entry.metadata).length > 0 ? (
                                   <details className="mt-3">
-                                    <summary className="cursor-pointer text-xs text-white/45">
+                                    <summary className="cursor-pointer text-xs text-[var(--ui-ink-faint)]">
                                       View metadata
                                     </summary>
-                                    <pre className="mt-2 overflow-x-auto whitespace-pre-wrap rounded-[14px] border border-white/8 bg-black/20 px-3 py-3 text-[11px] leading-5 text-white/52">
+                                    <pre className="mt-2 max-w-full overflow-x-auto whitespace-pre-wrap rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-code)] px-3 py-3 text-[11px] leading-5 text-[var(--ui-ink-soft)]">
                                       {JSON.stringify(entry.metadata, null, 2)}
                                     </pre>
                                   </details>
                                 ) : null}
                               </div>
-                              <div className="text-[11px] uppercase tracking-[0.14em] text-white/38">
+                              <div className="text-[11px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
                                 {formatTimestamp(entry.createdAt)}
                               </div>
                             </div>
@@ -1705,27 +1778,35 @@ export function WikiIngestModal({
                 </div>
 
                 <div className="grid gap-5">
-                  <div className="rounded-[28px] border border-white/8 bg-white/[0.04] p-4 sm:p-5">
-                    <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+                  <div
+                    className={cn(
+                      "rounded-[28px] border p-4 sm:p-5",
+                      INGEST_PANEL_CLASS
+                    )}
+                  >
+                    <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                       Source files
                     </div>
                     <div className="mt-4 grid gap-2">
                       {activeJob.assets.map((asset) => (
                         <div
                           key={asset.id}
-                          className="flex items-center justify-between gap-3 rounded-[18px] border border-white/8 bg-[rgba(7,11,21,0.72)] px-4 py-3"
+                          className={cn(
+                            "flex min-w-0 items-center justify-between gap-3 rounded-[18px] border px-4 py-3",
+                            INGEST_MUTED_PANEL_CLASS
+                          )}
                         >
                           <div className="min-w-0">
-                            <div className="truncate text-sm font-medium text-white">
+                            <div className="truncate text-sm font-medium text-[var(--ui-ink-strong)]">
                               {asset.fileName ||
                                 asset.sourceLocator ||
                                 "Source"}
                             </div>
-                            <div className="mt-1 text-xs text-white/45">
+                            <div className="mt-1 text-xs text-[var(--ui-ink-faint)]">
                               {asset.mimeType || asset.sourceKind}
                             </div>
                           </div>
-                          <div className="shrink-0 text-[11px] uppercase tracking-[0.14em] text-white/40">
+                          <div className="shrink-0 text-[11px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
                             {asset.status}
                           </div>
                         </div>
@@ -1733,19 +1814,24 @@ export function WikiIngestModal({
                     </div>
                   </div>
 
-                  <div className="rounded-[28px] border border-white/8 bg-white/[0.04] p-4 sm:p-5">
+                  <div
+                    className={cn(
+                      "rounded-[28px] border p-4 sm:p-5",
+                      INGEST_PANEL_CLASS
+                    )}
+                  >
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+                        <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                           Review
                         </div>
-                        <div className="mt-2 text-sm leading-6 text-white/58">
+                        <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                           Keep the candidates that belong in Forge and discard
                           the rest.
                         </div>
                       </div>
                       {ACTIVE_JOB_STATUSES.has(activeJob.job.status) ? (
-                        <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-white/58">
+                        <div className="inline-flex items-center gap-2 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-2 text-xs text-[var(--ui-ink-soft)]">
                           <LoaderCircle className="size-3.5 animate-spin" />
                           Processing
                         </div>
@@ -1754,7 +1840,7 @@ export function WikiIngestModal({
 
                     <div className="mt-4 grid gap-3">
                       {reviewableCandidates.length === 0 ? (
-                        <div className="rounded-[18px] border border-dashed border-white/10 px-4 py-4 text-sm text-white/45">
+                        <div className="rounded-[18px] border border-dashed border-[var(--ui-border-subtle)] px-4 py-4 text-sm text-[var(--ui-ink-faint)]">
                           {ACTIVE_JOB_STATUSES.has(activeJob.job.status)
                             ? "Candidates will appear here while the job progresses."
                             : "This job has no reviewable candidates left."}

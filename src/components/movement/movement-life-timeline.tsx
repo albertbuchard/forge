@@ -873,7 +873,7 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
     <section className="grid gap-4">
       <Card className="overflow-hidden rounded-[28px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-section)] p-3 sm:rounded-[34px] sm:p-4">
         <div className="mb-3 flex items-center justify-between gap-3 px-1">
-          <div className="font-label text-[11px] uppercase tracking-[0.22em] text-white/34">
+          <div className="font-label text-[11px] uppercase tracking-[0.22em] text-[var(--ui-ink-muted)]">
             Movement
           </div>
           <div className="flex min-w-0 items-center justify-end gap-2">
@@ -882,7 +882,7 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
                 {invalidSegmentCount} invalid hidden
               </Badge>
             ) : null}
-            <Badge className="hidden bg-white/[0.06] text-white/68 sm:inline-flex">
+            <Badge className="hidden bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)] sm:inline-flex">
               {displaySegments.length} visible
             </Badge>
             <div ref={actionMenuButtonRef}>
@@ -893,7 +893,7 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
                 aria-expanded={actionMenuOpen}
                 aria-haspopup="dialog"
                 className={cn(
-                  "h-9 rounded-full border border-white/10 bg-white/[0.05] px-3 text-white/78 hover:bg-white/[0.1] hover:text-white",
+                  "h-9 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-3)] hover:text-[var(--ui-ink-strong)]",
                   actionMenuOpen ? timelineSelectedRingClassName : ""
                 )}
                 onClick={openActionMenu}
@@ -1165,22 +1165,22 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
             emptyStateMessage="Keep typing or pick filters to narrow the movement history."
           />
 
-          <Card className="grid gap-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="space-y-2">
-                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+          <Card className="grid min-w-0 gap-3">
+            <div className="flex min-w-0 flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0 space-y-2">
+                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                   Canonical boxes
                 </div>
-                <div className="max-w-3xl text-sm leading-6 text-white/56">
+                <div className="max-w-3xl break-words text-sm leading-6 text-[var(--ui-ink-muted)]">
                   This list shows the canonical movement boxes projected by Forge. Automatic boxes are derived from immutable raw phone measurements. User-defined boxes override the projection without mutating raw movement data.
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-8 rounded-full border border-white/10 bg-white/[0.04] px-3 text-white/70"
+                  className="h-8 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-[var(--ui-ink-medium)]"
                   onClick={() => {
                     setReopenDataModalOnEditClose(true);
                     setDataModalOpen(false);
@@ -1200,7 +1200,7 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="h-8 rounded-full border border-white/10 bg-white/[0.04] px-3 text-white/70"
+                    className="h-8 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-[var(--ui-ink-medium)]"
                     pending={dataTimelineQuery.isFetchingNextPage}
                     pendingLabel="Loading…"
                     onClick={() => void dataTimelineQuery.fetchNextPage()}
@@ -1213,10 +1213,10 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
 
               <div
                 ref={dataListRef}
-                className="h-[36rem] overflow-y-auto rounded-[24px] border border-white/8 bg-white/[0.03]"
+                className="h-[36rem] overflow-y-auto rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]"
               >
                 {filteredSegments.length === 0 ? (
-                  <div className="flex h-full items-center justify-center p-6 text-center text-sm leading-6 text-white/50">
+                  <div className="flex h-full items-center justify-center p-6 text-center text-sm leading-6 text-[var(--ui-ink-muted)]">
                     No movement record matches the current search. Clear filters or load older timeline history.
                   </div>
                 ) : (
@@ -1228,13 +1228,13 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
                       const segment = filteredSegments[virtualRow.index]!;
                       return (
                         <div
-                          key={segment.id}
+                          key={`${segment.kind}:${segment.id}:${segment.startedAt}:${segment.endedAt}:${virtualRow.index}`}
                           ref={dataListVirtualizer.measureElement}
                           data-index={virtualRow.index}
                           className="absolute left-0 top-0 w-full px-3 py-2"
                           style={{ transform: `translateY(${virtualRow.start}px)` }}
                         >
-                          <div className="flex items-start gap-2 rounded-[18px] border border-white/8 bg-white/[0.04] px-3 py-2.5">
+                          <div className="flex items-start gap-2 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-2.5">
                             <button
                               type="button"
                               className="min-w-0 flex-1 text-left transition hover:opacity-100"
@@ -1249,7 +1249,7 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
                             >
                               <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
-                                  <div className="flex items-center gap-2 text-white">
+                                  <div className="flex items-center gap-2 text-[var(--ui-ink-strong)]">
                                     {segment.kind === "stay" ? (
                                       <MapPin className="size-3.5 shrink-0 text-[var(--primary)]" />
                                     ) : segment.kind === "missing" ? (
@@ -1261,7 +1261,7 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
                                       {displaySegmentTitle(segment)}
                                     </span>
                                   </div>
-                                  <div className="mt-1 text-xs text-white/56">
+                                  <div className="mt-1 text-xs text-[var(--ui-ink-muted)]">
                                     {formatSegmentTimestamp(segment.startedAt)} →{" "}
                                     {formatSegmentTimestamp(segment.endedAt)}
                                   </div>
@@ -1278,7 +1278,7 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
                                     className={
                                       segment.sourceKind === "user_defined"
                                         ? "bg-[var(--ui-accent-soft)] text-[var(--primary)]"
-                                        : "bg-white/[0.06] text-white/70"
+                                        : "bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]"
                                     }
                                   >
                                     {segment.sourceKind === "user_defined"
@@ -1318,13 +1318,13 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
                                       Overrides {segment.overrideCount}
                                     </Badge>
                                   ) : null}
-                                  <Badge className="bg-white/[0.06] text-white/66">
+                                  <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                                     Raw stays {segment.rawStayIds.length}
                                   </Badge>
-                                  <Badge className="bg-white/[0.06] text-white/66">
+                                  <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                                     Raw trips {segment.rawTripIds.length}
                                   </Badge>
-                                  <Badge className="bg-white/[0.06] text-white/66">
+                                  <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                                     Raw points {segment.rawPointCount}
                                   </Badge>
                                   {segment.hasLegacyCorrections ? (

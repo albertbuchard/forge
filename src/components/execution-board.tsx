@@ -38,7 +38,11 @@ import {
   type DragEndEvent,
   type DragStartEvent
 } from "@dnd-kit/core";
-import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy
+} from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -51,7 +55,14 @@ import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 import { getEntityNotesSummary } from "@/lib/note-helpers";
 import { getTaskExecutionSummary } from "@/lib/task-execution-summary";
-import type { Goal, ProjectSummary, Tag, Task, TaskRun, TaskStatus } from "@/lib/types";
+import type {
+  Goal,
+  ProjectSummary,
+  Tag,
+  Task,
+  TaskRun,
+  TaskStatus
+} from "@/lib/types";
 import type { NotesSummaryByEntity } from "@/lib/types";
 import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
 import {
@@ -59,7 +70,24 @@ import {
   type FloatingActionMenuItem
 } from "@/components/ui/floating-action-menu";
 
-export const LANE_ORDER: TaskStatus[] = ["backlog", "focus", "in_progress", "blocked", "done"];
+export const LANE_ORDER: TaskStatus[] = [
+  "backlog",
+  "focus",
+  "in_progress",
+  "blocked",
+  "done"
+];
+
+function dateKeyFromIso(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) {
+    return null;
+  }
+  return new Date(timestamp).toISOString().slice(0, 10);
+}
 
 type BuildTaskMenuItemsOptions = {
   task: Task;
@@ -173,11 +201,19 @@ function isLaneContainerId(value: string) {
   return value.startsWith("lane:") || value.includes(":lane:");
 }
 
-function isLaneContainer(container: { id: string | number; data?: { current?: Record<string, unknown> } }) {
-  return container.data?.current?.type === "lane" || isLaneContainerId(String(container.id));
+function isLaneContainer(container: {
+  id: string | number;
+  data?: { current?: Record<string, unknown> };
+}) {
+  return (
+    container.data?.current?.type === "lane" ||
+    isLaneContainerId(String(container.id))
+  );
 }
 
-function isTrashContainer(container: { data?: { current?: Record<string, unknown> } }) {
+function isTrashContainer(container: {
+  data?: { current?: Record<string, unknown> };
+}) {
   return container.data?.current?.type === "trash";
 }
 
@@ -185,8 +221,14 @@ function getRectIntersectionArea(
   first: { left: number; right: number; top: number; bottom: number },
   second: { left: number; right: number; top: number; bottom: number }
 ) {
-  const width = Math.max(0, Math.min(first.right, second.right) - Math.max(first.left, second.left));
-  const height = Math.max(0, Math.min(first.bottom, second.bottom) - Math.max(first.top, second.top));
+  const width = Math.max(
+    0,
+    Math.min(first.right, second.right) - Math.max(first.left, second.left)
+  );
+  const height = Math.max(
+    0,
+    Math.min(first.bottom, second.bottom) - Math.max(first.top, second.top)
+  );
   return width * height;
 }
 
@@ -201,12 +243,16 @@ export const laneFirstCollision: CollisionDetection = (args) => {
   if (trashHit) {
     return [trashHit];
   }
-  const laneHit = pointerHits.find((entry) => isLaneContainerId(String(entry.id)));
+  const laneHit = pointerHits.find((entry) =>
+    isLaneContainerId(String(entry.id))
+  );
   if (laneHit) {
     return [laneHit];
   }
 
-  const laneContainers = args.droppableContainers.filter((container) => isLaneContainer(container));
+  const laneContainers = args.droppableContainers.filter((container) =>
+    isLaneContainer(container)
+  );
   const laneIntersections = laneContainers
     .map((container) => {
       const rect = args.droppableRects.get(container.id);
@@ -228,7 +274,11 @@ export const laneFirstCollision: CollisionDetection = (args) => {
       };
     })
     .filter(Boolean)
-    .sort((left, right) => ((right?.data?.value as number | undefined) ?? 0) - ((left?.data?.value as number | undefined) ?? 0));
+    .sort(
+      (left, right) =>
+        ((right?.data?.value as number | undefined) ?? 0) -
+        ((left?.data?.value as number | undefined) ?? 0)
+    );
   if (laneIntersections.length > 0) {
     return laneIntersections as ReturnType<CollisionDetection>;
   }
@@ -299,20 +349,25 @@ function TaskCardShell({
   onStartTask?: (taskId: string) => Promise<void>;
   onStopTask?: (run: TaskRun) => Promise<void>;
   onQuickReopen?: (taskId: string) => Promise<void>;
-  onStepTask?: (taskId: string, direction: "previous" | "next") => Promise<void>;
+  onStepTask?: (
+    taskId: string,
+    direction: "previous" | "next"
+  ) => Promise<void>;
   onSplitTask?: (taskId: string) => void;
-  onOpenMenu?: (
-    event: ReactMouseEvent<HTMLButtonElement>,
-    task: Task
-  ) => void;
+  onOpenMenu?: (event: ReactMouseEvent<HTMLButtonElement>, task: Task) => void;
   notesSummaryByEntity?: NotesSummaryByEntity;
 }) {
   const { t, formatDate } = useI18n();
   const executionSummary = getTaskExecutionSummary(task, activeRun ?? null);
   const stepSummary = executionSummary.stepSummary;
-  const previousStatus = LANE_ORDER[LANE_ORDER.indexOf(task.status) - 1] ?? null;
+  const previousStatus =
+    LANE_ORDER[LANE_ORDER.indexOf(task.status) - 1] ?? null;
   const nextStatus = LANE_ORDER[LANE_ORDER.indexOf(task.status) + 1] ?? null;
-  const noteCount = getEntityNotesSummary(notesSummaryByEntity, "task", task.id).count;
+  const noteCount = getEntityNotesSummary(
+    notesSummaryByEntity,
+    "task",
+    task.id
+  ).count;
   const entityKind = task.level === "issue" ? "issue" : "task";
   const entityVisual = getEntityVisual(entityKind);
   const accent =
@@ -347,11 +402,14 @@ function TaskCardShell({
       className={cn(
         "w-full max-w-full min-w-0 overflow-hidden rounded-[18px] p-3 shadow-[inset_0_0_0_1px_rgba(var(--board-card-accent),0.12)] transition cursor-grab active:cursor-grabbing",
         isMobile && "touch-none select-none",
-        isOverlay && "rotate-[0.5deg] bg-[linear-gradient(180deg,rgba(var(--board-card-accent),0.22),rgba(var(--board-card-accent),0.08))] shadow-[0_28px_80px_rgba(8,12,24,0.42),inset_0_0_0_1px_rgba(var(--board-card-accent),0.28)]",
-        isDragging && !isOverlay && "opacity-35 shadow-[inset_0_0_0_1px_rgba(var(--board-card-accent),0.08)]",
+        isOverlay &&
+          "rotate-[0.5deg] bg-[linear-gradient(180deg,rgba(var(--board-card-accent),0.22),rgba(var(--board-card-accent),0.08))] shadow-[var(--ui-shadow-floating)]",
+        isDragging &&
+          !isOverlay &&
+          "opacity-35 shadow-[inset_0_0_0_1px_rgba(var(--board-card-accent),0.08)]",
         isSelected
-          ? "bg-[linear-gradient(180deg,rgba(var(--board-card-accent),0.18),rgba(var(--board-card-accent),0.06))] shadow-[0_16px_40px_rgba(8,12,24,0.32),inset_0_0_0_1px_rgba(var(--board-card-accent),0.26)]"
-          : "bg-[linear-gradient(180deg,rgba(var(--board-card-accent),0.08),rgba(255,255,255,0.03))]"
+          ? "bg-[linear-gradient(180deg,rgba(var(--board-card-accent),0.18),rgba(var(--board-card-accent),0.06))] shadow-[var(--ui-shadow-soft)]"
+          : "bg-[linear-gradient(180deg,rgba(var(--board-card-accent),0.08),color-mix(in_srgb,var(--ui-surface-1)_72%,transparent))]"
       )}
       data-dragging={isDragging ? "true" : "false"}
       data-testid={`task-card-${task.id}`}
@@ -361,7 +419,9 @@ function TaskCardShell({
     >
       <div
         className="mb-3 h-px w-full rounded-full"
-        style={{ background: `linear-gradient(90deg, rgba(${accent}, 0.96), rgba(${accent}, 0.18))` }}
+        style={{
+          background: `linear-gradient(90deg, rgba(${accent}, 0.96), rgba(${accent}, 0.18))`
+        }}
       />
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -373,13 +433,16 @@ function TaskCardShell({
             gradient={false}
             className="shrink-0"
           />
-          <Badge size="xs" className="shrink-0 text-[10px] text-[var(--tertiary)]">
+          <Badge
+            size="xs"
+            className="shrink-0 text-[10px] text-[var(--tertiary)]"
+          >
             {task.priority}
           </Badge>
           {executionSummary.actor ? (
             <Badge
               size="xs"
-              className="shrink-0 bg-cyan-400/12 text-cyan-100"
+              className="shrink-0 bg-cyan-400/12 text-[var(--info)]"
             >
               <Bot className="mr-1 size-3" />
               {executionSummary.actor}
@@ -391,7 +454,7 @@ function TaskCardShell({
             <button
               type="button"
               aria-label={`Open ${task.title} actions`}
-              className="inline-flex size-8 items-center justify-center rounded-full bg-white/8 text-white/62 transition hover:bg-white/12 hover:text-white"
+              className="inline-flex size-8 items-center justify-center rounded-full bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-3)] hover:text-[var(--ui-ink-strong)]"
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -402,11 +465,14 @@ function TaskCardShell({
             </button>
           ) : null}
           {isMobile ? (
-            <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
+            <div
+              className="flex items-center gap-1"
+              onClick={(event) => event.stopPropagation()}
+            >
               <button
                 type="button"
                 aria-label={`Move ${task.title} to the previous lane`}
-                className="inline-flex size-7 items-center justify-center rounded-full bg-white/8 text-white/62 transition hover:bg-white/12 hover:text-white disabled:opacity-35"
+                className="inline-flex size-7 items-center justify-center rounded-full bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-3)] hover:text-[var(--ui-ink-strong)] disabled:opacity-35"
                 disabled={!previousStatus}
                 onClick={() => {
                   if (previousStatus) {
@@ -419,7 +485,7 @@ function TaskCardShell({
               <button
                 type="button"
                 aria-label={`Move ${task.title} to the next lane`}
-                className="inline-flex size-7 items-center justify-center rounded-full bg-white/8 text-white/62 transition hover:bg-white/12 hover:text-white disabled:opacity-35"
+                className="inline-flex size-7 items-center justify-center rounded-full bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-3)] hover:text-[var(--ui-ink-strong)] disabled:opacity-35"
                 disabled={!nextStatus}
                 onClick={() => {
                   if (nextStatus) {
@@ -435,7 +501,7 @@ function TaskCardShell({
             <button
               type="button"
               aria-label={`Stop work on ${task.title}`}
-              className="inline-flex size-8 items-center justify-center rounded-full bg-rose-500/16 text-rose-200 transition hover:bg-rose-500/24"
+              className="inline-flex size-8 items-center justify-center rounded-full bg-rose-500/16 text-[var(--danger)] transition hover:bg-rose-500/24"
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -462,7 +528,7 @@ function TaskCardShell({
             <button
               type="button"
               aria-label={`Split ${task.title}`}
-              className="inline-flex items-center gap-1 rounded-full bg-amber-400/12 px-2.5 py-1 text-[10px] font-medium tracking-[0.14em] text-amber-100 transition hover:bg-amber-400/18"
+              className="inline-flex items-center gap-1 rounded-full bg-amber-400/12 px-2.5 py-1 text-[10px] font-medium tracking-[0.14em] text-[var(--warning)] transition hover:bg-amber-400/18"
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -473,23 +539,33 @@ function TaskCardShell({
               Split it
             </button>
           ) : null}
-          <span className="shrink-0 text-[11px] text-white/44">{task.points} xp</span>
+          <span className="shrink-0 text-[11px] text-[var(--ui-ink-faint)]">
+            {task.points} xp
+          </span>
         </div>
       </div>
-      <EntityName kind={entityKind} label={task.title} className="max-w-full" lines={3} labelClassName="[overflow-wrap:anywhere]" />
-      <p className="mt-1.5 line-clamp-3 [overflow-wrap:anywhere] text-[12px] leading-5 text-white/62">{task.description || t("common.executionBoard.noExecutionNote")}</p>
+      <EntityName
+        kind={entityKind}
+        label={task.title}
+        className="max-w-full"
+        lines={3}
+        labelClassName="[overflow-wrap:anywhere]"
+      />
+      <p className="mt-1.5 line-clamp-3 [overflow-wrap:anywhere] text-[12px] leading-5 text-[var(--ui-ink-soft)]">
+        {task.description || t("common.executionBoard.noExecutionNote")}
+      </p>
       {stepSummary ? (
-        <div className="mt-3 rounded-[16px] border border-white/8 bg-white/[0.045] p-3">
-          <div className="flex items-center justify-between gap-3 text-[11px] text-white/58">
+        <div className="mt-3 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3">
+          <div className="flex items-center justify-between gap-3 text-[11px] text-[var(--ui-ink-soft)]">
             <span className="inline-flex items-center gap-1.5">
-              <ListTodo className="size-3.5 text-sky-200" />
+              <ListTodo className="size-3.5 text-[var(--info)]" />
               {stepSummary.total} step{stepSummary.total === 1 ? "" : "s"}
             </span>
-            <span className="tabular-nums text-white/72">
+            <span className="tabular-nums text-[var(--ui-ink-soft)]">
               {stepSummary.completed}/{stepSummary.total}
             </span>
           </div>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/8">
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--ui-surface-2)]">
             <div
               className="h-full rounded-full bg-[linear-gradient(90deg,rgba(56,189,248,0.96),rgba(125,211,252,0.62))]"
               style={{ width: `${stepProgress ?? 0}%` }}
@@ -499,7 +575,7 @@ function TaskCardShell({
             {stepSummary.items.slice(0, 2).map((item) => (
               <div
                 key={`${task.id}-${item}`}
-                className="truncate text-[11px] text-white/55"
+                className="truncate text-[11px] text-[var(--ui-ink-soft)]"
               >
                 {item}
               </div>
@@ -514,7 +590,7 @@ function TaskCardShell({
               href={branchUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-full border border-sky-300/18 bg-sky-400/12 px-2.5 py-1 text-[11px] text-sky-50 transition hover:bg-sky-400/18"
+              className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-full border border-sky-300/18 bg-sky-400/12 px-2.5 py-1 text-[11px] text-[var(--info)] transition hover:bg-sky-400/18"
               onClick={stopCardNavigation}
             >
               <GitBranch className="size-3.5 shrink-0" />
@@ -523,7 +599,7 @@ function TaskCardShell({
           ) : (
             <Badge
               size="xs"
-              className="min-w-0 max-w-full bg-sky-400/12 text-sky-50"
+              className="min-w-0 max-w-full bg-sky-400/12 text-[var(--info)]"
             >
               <GitBranch className="mr-1 size-3" />
               <span className="truncate">{branchLabel}</span>
@@ -536,7 +612,7 @@ function TaskCardShell({
               href={pullRequestUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-full border border-fuchsia-300/18 bg-fuchsia-400/12 px-2.5 py-1 text-[11px] text-fuchsia-50 transition hover:bg-fuchsia-400/18"
+              className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-full border border-fuchsia-300/18 bg-fuchsia-400/12 px-2.5 py-1 text-[11px] text-[var(--primary)] transition hover:bg-fuchsia-400/18"
               onClick={stopCardNavigation}
             >
               <GitPullRequest className="size-3.5 shrink-0" />
@@ -545,7 +621,7 @@ function TaskCardShell({
           ) : (
             <Badge
               size="xs"
-              className="bg-fuchsia-400/12 text-fuchsia-50"
+              className="bg-fuchsia-400/12 text-[var(--primary)]"
             >
               <GitPullRequest className="mr-1 size-3" />
               {pullRequestLabel}
@@ -553,14 +629,17 @@ function TaskCardShell({
           )
         ) : null}
         {executionSummary.changedFileCount > 0 ? (
-          <Badge size="xs" className="bg-amber-400/12 text-amber-50">
+          <Badge size="xs" className="bg-amber-400/12 text-[var(--warning)]">
             <Files className="mr-1 size-3" />
             {executionSummary.changedFileCount} file
             {executionSummary.changedFileCount === 1 ? "" : "s"}
           </Badge>
         ) : null}
         {executionSummary.git.repository ? (
-          <Badge size="xs" className="bg-white/8 text-white/70">
+          <Badge
+            size="xs"
+            className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]"
+          >
             {executionSummary.git.repository}
           </Badge>
         ) : null}
@@ -572,7 +651,7 @@ function TaskCardShell({
               key={file}
               size="xs"
               wrap
-              className="min-w-0 max-w-full bg-white/[0.06] font-mono text-[10px] text-white/65"
+              className="min-w-0 max-w-full bg-[var(--ui-surface-2)] font-mono text-[10px] text-[var(--ui-ink-soft)]"
             >
               {file}
             </Badge>
@@ -591,31 +670,62 @@ function TaskCardShell({
           />
         ) : null}
         <UserBadge user={task.user} compact size="xs" />
-        <EntityNoteCountLink entityType="task" entityId={task.id} count={noteCount} compact />
+        <EntityNoteCountLink
+          entityType="task"
+          entityId={task.id}
+          count={noteCount}
+          compact
+        />
         {task.actionPointSummary ? (
-          <Badge size="xs" className="bg-[var(--primary)]/12 text-[var(--primary)]">
+          <Badge
+            size="xs"
+            className="bg-[var(--primary)]/12 text-[var(--primary)]"
+          >
             {Math.round(task.actionPointSummary.totalCostAp)} AP
           </Badge>
         ) : null}
         {task.actionPointSummary ? (
-          <Badge size="xs" className="bg-white/8 text-white/72">
+          <Badge
+            size="xs"
+            className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]"
+          >
             {task.actionPointSummary.costBand}
           </Badge>
         ) : null}
         {task.actionPointSummary ? (
-          <Badge size="xs" className="bg-white/8 text-white/72">
-            {Math.round(task.actionPointSummary.expectedDurationSeconds / 3600)} h target
+          <Badge
+            size="xs"
+            className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]"
+          >
+            {Math.round(task.actionPointSummary.expectedDurationSeconds / 3600)}{" "}
+            h target
           </Badge>
         ) : null}
-        {task.time.totalCreditedSeconds > 0 ? <Badge size="xs" className="bg-white/8 text-white/72">{Math.floor(task.time.totalCreditedSeconds / 60)} min</Badge> : null}
-        {task.time.activeRunCount > 0 ? <Badge size="xs" className="bg-emerald-500/12 text-emerald-200">{task.time.activeRunCount} live</Badge> : null}
+        {task.time.totalCreditedSeconds > 0 ? (
+          <Badge
+            size="xs"
+            className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]"
+          >
+            {Math.floor(task.time.totalCreditedSeconds / 60)} min
+          </Badge>
+        ) : null}
+        {task.time.activeRunCount > 0 ? (
+          <Badge size="xs" className="bg-emerald-500/12 text-[var(--success)]">
+            {task.time.activeRunCount} live
+          </Badge>
+        ) : null}
         {tags.slice(0, 2).map((tag) => (
-          <Badge key={tag.id} size="xs" className="bg-white/8" style={{ color: tag.color }}>
+          <Badge
+            key={tag.id}
+            size="xs"
+            className="bg-[var(--ui-surface-2)]"
+            style={{ color: tag.color }}
+          >
             {tag.name}
           </Badge>
         ))}
       </div>
-      <div className="mt-2.5 flex min-w-0 items-center justify-between gap-2 text-[11px] text-white/45">
+      <div className="mt-2.5 flex min-w-0 items-center justify-between gap-2 text-[11px] text-[var(--ui-ink-faint)]">
         <span className="min-w-0 truncate">
           {task.effort} / {task.energy}
         </span>
@@ -623,7 +733,7 @@ function TaskCardShell({
           {task.status === "done" && onQuickReopen ? (
             <button
               type="button"
-              className="rounded-full bg-white/8 px-3 py-1 text-[10px] tracking-[0.16em] text-white transition hover:bg-white/12"
+              className="rounded-full bg-[var(--ui-surface-2)] px-3 py-1 text-[10px] tracking-[0.16em] text-[var(--ui-ink-strong)] transition hover:bg-[var(--ui-surface-3)]"
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -652,16 +762,23 @@ function SortableTaskCard(props: {
   onStartTask?: (taskId: string) => Promise<void>;
   onStopTask?: (run: TaskRun) => Promise<void>;
   onQuickReopen?: (taskId: string) => Promise<void>;
-  onStepTask?: (taskId: string, direction: "previous" | "next") => Promise<void>;
+  onStepTask?: (
+    taskId: string,
+    direction: "previous" | "next"
+  ) => Promise<void>;
   onSplitTask?: (taskId: string) => void;
-  onOpenMenu?: (
-    event: ReactMouseEvent<HTMLButtonElement>,
-    task: Task
-  ) => void;
+  onOpenMenu?: (event: ReactMouseEvent<HTMLButtonElement>, task: Task) => void;
   notesSummaryByEntity?: NotesSummaryByEntity;
 }) {
   const { task, sortableId } = props;
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({
     id: sortableId,
     data: {
       type: "task",
@@ -731,10 +848,10 @@ function ProjectCardShell({
   const accent = entityVisual.colorToken.rgb.join(", ");
   const workflowLabel = project.workflowStatus.replaceAll("_", " ");
   const lifecycleLabel = project.status.replaceAll("_", " ");
-  const updatedLabel =
-    project.updatedAt && !Number.isNaN(Date.parse(project.updatedAt))
-      ? formatDate(project.updatedAt)
-      : "No recent update";
+  const updatedDateKey = dateKeyFromIso(project.updatedAt);
+  const updatedLabel = updatedDateKey
+    ? formatDate(updatedDateKey)
+    : "No recent update";
 
   return (
     <article
@@ -746,11 +863,14 @@ function ProjectCardShell({
       className={cn(
         "w-full max-w-full min-w-0 overflow-hidden rounded-[18px] p-3 shadow-[inset_0_0_0_1px_rgba(var(--board-card-accent),0.12)] transition cursor-grab active:cursor-grabbing",
         isMobile && "touch-none select-none",
-        isOverlay && "rotate-[0.5deg] bg-[linear-gradient(180deg,rgba(var(--board-card-accent),0.22),rgba(var(--board-card-accent),0.08))] shadow-[0_28px_80px_rgba(8,12,24,0.42),inset_0_0_0_1px_rgba(var(--board-card-accent),0.28)]",
-        isDragging && !isOverlay && "opacity-35 shadow-[inset_0_0_0_1px_rgba(var(--board-card-accent),0.08)]",
+        isOverlay &&
+          "rotate-[0.5deg] bg-[linear-gradient(180deg,rgba(var(--board-card-accent),0.22),rgba(var(--board-card-accent),0.08))] shadow-[var(--ui-shadow-floating)]",
+        isDragging &&
+          !isOverlay &&
+          "opacity-35 shadow-[inset_0_0_0_1px_rgba(var(--board-card-accent),0.08)]",
         !isDragging &&
           !isOverlay &&
-          "bg-[linear-gradient(180deg,rgba(var(--board-card-accent),0.08),rgba(255,255,255,0.03))]"
+          "bg-[linear-gradient(180deg,rgba(var(--board-card-accent),0.08),color-mix(in_srgb,var(--ui-surface-1)_72%,transparent))]"
       )}
       data-testid={`project-card-${project.id}`}
       {...dragAttributes}
@@ -778,7 +898,10 @@ function ProjectCardShell({
           >
             {workflowLabel}
           </Badge>
-          <Badge size="xs" className="shrink-0 bg-white/8 text-white/72">
+          <Badge
+            size="xs"
+            className="shrink-0 bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]"
+          >
             {lifecycleLabel}
           </Badge>
         </div>
@@ -787,7 +910,7 @@ function ProjectCardShell({
             <button
               type="button"
               aria-label={`Open ${project.title} actions`}
-              className="inline-flex size-8 items-center justify-center rounded-full bg-white/8 text-white/62 transition hover:bg-white/12 hover:text-white"
+              className="inline-flex size-8 items-center justify-center rounded-full bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-3)] hover:text-[var(--ui-ink-strong)]"
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -798,11 +921,14 @@ function ProjectCardShell({
             </button>
           ) : null}
           {isMobile ? (
-            <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
+            <div
+              className="flex items-center gap-1"
+              onClick={(event) => event.stopPropagation()}
+            >
               <button
                 type="button"
                 aria-label={`Move ${project.title} to the previous lane`}
-                className="inline-flex size-7 items-center justify-center rounded-full bg-white/8 text-white/62 transition hover:bg-white/12 hover:text-white disabled:opacity-35"
+                className="inline-flex size-7 items-center justify-center rounded-full bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-3)] hover:text-[var(--ui-ink-strong)] disabled:opacity-35"
                 disabled={!previousStatus}
                 onClick={() => {
                   if (previousStatus) {
@@ -815,7 +941,7 @@ function ProjectCardShell({
               <button
                 type="button"
                 aria-label={`Move ${project.title} to the next lane`}
-                className="inline-flex size-7 items-center justify-center rounded-full bg-white/8 text-white/62 transition hover:bg-white/12 hover:text-white disabled:opacity-35"
+                className="inline-flex size-7 items-center justify-center rounded-full bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-3)] hover:text-[var(--ui-ink-strong)] disabled:opacity-35"
                 disabled={!nextStatus}
                 onClick={() => {
                   if (nextStatus) {
@@ -836,8 +962,9 @@ function ProjectCardShell({
         lines={3}
         labelClassName="[overflow-wrap:anywhere]"
       />
-      <p className="mt-1.5 line-clamp-3 [overflow-wrap:anywhere] text-[12px] leading-5 text-white/62">
-        {project.description || "PRD-backed initiative spanning multiple work items."}
+      <p className="mt-1.5 line-clamp-3 [overflow-wrap:anywhere] text-[12px] leading-5 text-[var(--ui-ink-soft)]">
+        {project.description ||
+          "PRD-backed initiative spanning multiple work items."}
       </p>
       <div className="mt-2.5 flex min-w-0 flex-wrap gap-1.5">
         {goal ? (
@@ -854,14 +981,20 @@ function ProjectCardShell({
         {(project.assignees ?? []).slice(0, 2).map((user) => (
           <UserBadge key={user.id} user={user} compact size="xs" />
         ))}
-        <Badge size="xs" className="bg-[var(--primary)]/12 text-[var(--primary)]">
+        <Badge
+          size="xs"
+          className="bg-[var(--primary)]/12 text-[var(--primary)]"
+        >
           {project.progress}% progress
         </Badge>
-        <Badge size="xs" className="bg-white/8 text-white/72">
+        <Badge
+          size="xs"
+          className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]"
+        >
           {project.totalTasks} linked tasks
         </Badge>
       </div>
-      <div className="mt-2.5 flex min-w-0 items-center justify-between gap-2 text-[11px] text-white/45">
+      <div className="mt-2.5 flex min-w-0 items-center justify-between gap-2 text-[11px] text-[var(--ui-ink-faint)]">
         <span className="min-w-0 truncate">{project.goalTitle}</span>
         <span>{updatedLabel}</span>
       </div>
@@ -884,15 +1017,21 @@ function SortableProjectCard(props: {
   ) => void;
 }) {
   const { project, sortableId } = props;
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({
-      id: sortableId,
-      data: {
-        type: "project",
-        projectId: project.id,
-        status: project.workflowStatus
-      }
-    });
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({
+    id: sortableId,
+    data: {
+      type: "project",
+      projectId: project.id,
+      status: project.workflowStatus
+    }
+  });
 
   return (
     <ProjectCardShell
@@ -937,7 +1076,10 @@ function LaneDropzone({
   return (
     <div
       ref={setNodeRef}
-      className={cn("w-full max-w-full min-w-0 overflow-hidden rounded-[24px] transition", isOver && "scale-[1.005]")}
+      className={cn(
+        "w-full max-w-full min-w-0 overflow-hidden rounded-[24px] transition",
+        isOver && "scale-[1.005]"
+      )}
       data-lane-id={status}
       data-testid={`kanban-lane-${status}`}
       data-lane-hover={isOver ? "true" : "false"}
@@ -945,20 +1087,31 @@ function LaneDropzone({
       <Card
         className={cn(
           "h-full w-full max-w-full min-w-0 overflow-hidden p-3 transition-[background-color,box-shadow,border-color,transform]",
-          dragging && "border border-white/8",
+          dragging && "border border-[var(--ui-border-subtle)]",
           isOver
-            ? "border border-[rgba(125,211,252,0.38)] bg-[linear-gradient(180deg,rgba(125,211,252,0.12),rgba(125,211,252,0.05))] shadow-[0_18px_54px_rgba(14,165,233,0.12)]"
+            ? "border border-[color-mix(in_srgb,var(--info)_38%,transparent)] bg-[var(--ui-info-soft)] shadow-[var(--ui-shadow-soft)]"
             : "border border-transparent"
         )}
       >
         <div className="mb-3 flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="type-label text-white/45">{detail}</div>
-            <h3 className="mt-1 break-words text-[1.45rem] leading-[1] text-white">{title}</h3>
+            <div className="type-label text-[var(--ui-ink-faint)]">
+              {detail}
+            </div>
+            <h3 className="mt-1 break-words text-[1.45rem] leading-[1] text-[var(--ui-ink-strong)]">
+              {title}
+            </h3>
           </div>
-          <div className="shrink-0 font-display text-[1.45rem] text-[var(--primary)]">{count}</div>
+          <div className="shrink-0 font-display text-[1.45rem] text-[var(--primary)]">
+            {count}
+          </div>
         </div>
-        <div className={cn("grid w-full max-w-full min-w-0 min-h-48 content-start gap-2 rounded-[18px] p-2 transition", isOver ? "bg-[rgba(125,211,252,0.08)]" : "bg-white/[0.02]")}>
+        <div
+          className={cn(
+            "grid w-full max-w-full min-w-0 min-h-48 content-start gap-2 rounded-[18px] p-2 transition",
+            isOver ? "bg-[var(--ui-info-soft)]" : "bg-[var(--ui-surface-1)]"
+          )}
+        >
           {children}
         </div>
       </Card>
@@ -976,15 +1129,17 @@ function InProgressCluster({
   children: ReactNode;
 }) {
   return (
-    <div className="rounded-[20px] border border-cyan-300/20 bg-[linear-gradient(180deg,rgba(34,211,238,0.11),rgba(11,23,34,0.34))] p-2.5 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.08)]">
+    <div className="rounded-[20px] border border-[color-mix(in_srgb,var(--info)_24%,transparent)] bg-[var(--ui-info-soft)] p-2.5 shadow-[inset_0_0_0_1px_var(--ui-border-subtle)]">
       <div className="mb-2 flex items-start justify-between gap-3 px-1">
         <div className="min-w-0">
-          <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-cyan-100/86">
+          <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-[var(--info)]/86">
             <GitBranch className="size-3.5" />
             <span className="truncate">{title}</span>
           </div>
           {detail ? (
-            <div className="mt-1 text-[11px] text-white/45">{detail}</div>
+            <div className="mt-1 text-[11px] text-[var(--ui-ink-faint)]">
+              {detail}
+            </div>
           ) : null}
         </div>
       </div>
@@ -1013,10 +1168,10 @@ function TrashDropzone({
     <div
       ref={setNodeRef}
       className={cn(
-        "pointer-events-auto fixed right-4 top-4 z-50 w-[min(18rem,calc(100vw-2rem))] rounded-[28px] border px-5 py-4 shadow-[0_24px_80px_rgba(6,10,20,0.48)] backdrop-blur-2xl transition lg:right-6 lg:top-6",
+        "pointer-events-auto fixed right-4 top-4 z-50 w-[min(18rem,calc(100vw-2rem))] rounded-[28px] border px-5 py-4 shadow-[var(--ui-shadow-floating)] backdrop-blur-2xl transition lg:right-6 lg:top-6",
         isOver
-          ? "border-rose-300/38 bg-[linear-gradient(180deg,rgba(244,63,94,0.28),rgba(120,24,42,0.46))] text-white scale-[1.02]"
-          : "border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.96),rgba(10,14,24,0.94))] text-white/84"
+          ? "border-[color-mix(in_srgb,var(--danger)_38%,transparent)] bg-[var(--ui-danger-soft)] text-[var(--ui-ink-strong)] scale-[1.02]"
+          : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-popover)] text-[var(--ui-ink-medium)]"
       )}
       data-testid="kanban-trash-dropzone"
       data-trash-hover={isOver ? "true" : "false"}
@@ -1026,18 +1181,22 @@ function TrashDropzone({
           className={cn(
             "flex size-12 items-center justify-center rounded-full border transition",
             isOver
-              ? "border-white/28 bg-white/12"
-              : "border-white/12 bg-white/6"
+              ? "border-[var(--ui-border-strong)] bg-[var(--ui-surface-3)]"
+              : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]"
           )}
         >
           <Trash2 className="size-5" />
         </div>
         <div className="min-w-0">
-          <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/55">
+          <div className="font-label text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-soft)]">
             Bin
           </div>
-          <div className="mt-1 text-base font-medium text-white">{title}</div>
-          <div className="mt-1 text-sm leading-5 text-white/62">{detail}</div>
+          <div className="mt-1 text-base font-medium text-[var(--ui-ink-strong)]">
+            {title}
+          </div>
+          <div className="mt-1 text-sm leading-5 text-[var(--ui-ink-soft)]">
+            {detail}
+          </div>
         </div>
       </div>
     </div>
@@ -1077,10 +1236,7 @@ export function ExecutionBoard({
   tags: Tag[];
   selectedTaskId: string | null;
   onMove: (taskId: string, nextStatus: TaskStatus) => Promise<void>;
-  onMoveProject?: (
-    projectId: string,
-    nextStatus: TaskStatus
-  ) => Promise<void>;
+  onMoveProject?: (projectId: string, nextStatus: TaskStatus) => Promise<void>;
   onSelectTask: (taskId: string) => void;
   onStartTask?: (taskId: string) => Promise<void>;
   onStopTask?: (run: TaskRun) => Promise<void>;
@@ -1102,7 +1258,10 @@ export function ExecutionBoard({
   const boardInstanceId = useId();
   const trashDroppableId = `${boardInstanceId}:trash`;
   const [isMobileBoard, setIsMobileBoard] = useState(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    if (
+      typeof window === "undefined" ||
+      typeof window.matchMedia !== "function"
+    ) {
       return false;
     }
     return window.matchMedia("(max-width: 1023px)").matches;
@@ -1133,16 +1292,33 @@ export function ExecutionBoard({
   });
   const [disableDeleteConfirmChoice, setDisableDeleteConfirmChoice] =
     useState(false);
-  const [optimisticStatuses, setOptimisticStatuses] = useState<Record<string, TaskStatus>>({});
+  const [optimisticStatuses, setOptimisticStatuses] = useState<
+    Record<string, TaskStatus>
+  >({});
   const [optimisticProjectStatuses, setOptimisticProjectStatuses] = useState<
     Record<string, TaskStatus>
   >({});
   const laneLabels: Record<TaskStatus, { title: string; detail: string }> = {
-    backlog: { title: t("common.executionBoard.laneBacklogTitle"), detail: t("common.executionBoard.laneBacklogDetail") },
-    focus: { title: t("common.executionBoard.laneFocusTitle"), detail: t("common.executionBoard.laneFocusDetail") },
-    in_progress: { title: t("common.executionBoard.laneProgressTitle"), detail: t("common.executionBoard.laneProgressDetail") },
-    blocked: { title: t("common.executionBoard.laneBlockedTitle"), detail: t("common.executionBoard.laneBlockedDetail") },
-    done: { title: t("common.executionBoard.laneDoneTitle"), detail: t("common.executionBoard.laneDoneDetail") }
+    backlog: {
+      title: t("common.executionBoard.laneBacklogTitle"),
+      detail: t("common.executionBoard.laneBacklogDetail")
+    },
+    focus: {
+      title: t("common.executionBoard.laneFocusTitle"),
+      detail: t("common.executionBoard.laneFocusDetail")
+    },
+    in_progress: {
+      title: t("common.executionBoard.laneProgressTitle"),
+      detail: t("common.executionBoard.laneProgressDetail")
+    },
+    blocked: {
+      title: t("common.executionBoard.laneBlockedTitle"),
+      detail: t("common.executionBoard.laneBlockedDetail")
+    },
+    done: {
+      title: t("common.executionBoard.laneDoneTitle"),
+      detail: t("common.executionBoard.laneDoneDetail")
+    }
   };
   const boardTasks = useMemo(
     () =>
@@ -1199,7 +1375,7 @@ export function ExecutionBoard({
     [activeRunByTaskId, boardProjects, boardTasks, goals, tags]
   );
   const activeBoardItem = activeTaskId
-    ? boardItems.find((item) => item.id === activeTaskId) ?? null
+    ? (boardItems.find((item) => item.id === activeTaskId) ?? null)
     : null;
   const activeMenuItems = useMemo<FloatingActionMenuItem[]>(() => {
     if (!menuState) {
@@ -1207,7 +1383,9 @@ export function ExecutionBoard({
     }
 
     if (menuState.kind === "project") {
-      const project = boardProjects.find((entry) => entry.id === menuState.entityId);
+      const project = boardProjects.find(
+        (entry) => entry.id === menuState.entityId
+      );
       if (!project) {
         return [];
       }
@@ -1230,7 +1408,8 @@ export function ExecutionBoard({
         {
           id: "link-project",
           label: "Link",
-          description: "Open the anchor step to relink the project to its goal.",
+          description:
+            "Open the anchor step to relink the project to its goal.",
           icon: Link2,
           onSelect: () => onLinkProject?.(project.id)
         },
@@ -1245,7 +1424,8 @@ export function ExecutionBoard({
           (status) => ({
             id: `move-project-${status}`,
             label: `Move to ${status.replaceAll("_", " ")}`,
-            description: "Update the project workflow lane without leaving the board.",
+            description:
+              "Update the project workflow lane without leaving the board.",
             onSelect: () => void onMoveProject?.(project.id, status)
           })
         )
@@ -1292,7 +1472,7 @@ export function ExecutionBoard({
   function renderLaneItems(laneItems: BoardItem[]) {
     if (laneItems.length === 0) {
       return (
-        <div className="w-full max-w-full rounded-[18px] border border-dashed border-white/8 px-4 py-8 text-center text-sm text-white/35">
+        <div className="w-full max-w-full rounded-[18px] border border-dashed border-[var(--ui-border-subtle)] px-4 py-8 text-center text-sm text-[var(--ui-ink-faint)]">
           {t("common.executionBoard.emptyLane")}
         </div>
       );
@@ -1415,7 +1595,11 @@ export function ExecutionBoard({
       }
 
       return (
-        <InProgressCluster key={key} title={cluster.title} detail={cluster.detail}>
+        <InProgressCluster
+          key={key}
+          title={cluster.title}
+          detail={cluster.detail}
+        >
           {cluster.items.map((item) =>
             item.kind === "task" ? (
               <SortableTaskCard
@@ -1454,7 +1638,10 @@ export function ExecutionBoard({
   }
 
   useEffect(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    if (
+      typeof window === "undefined" ||
+      typeof window.matchMedia !== "function"
+    ) {
       return;
     }
 
@@ -1513,7 +1700,11 @@ export function ExecutionBoard({
 
       for (const [projectId, status] of Object.entries(current)) {
         const project = projects.find((entry) => entry.id === projectId);
-        if (!projectIds.has(projectId) || !project || project.workflowStatus === status) {
+        if (
+          !projectIds.has(projectId) ||
+          !project ||
+          project.workflowStatus === status
+        ) {
           changed = true;
           continue;
         }
@@ -1588,14 +1779,19 @@ export function ExecutionBoard({
       return;
     }
 
-    const activeTaskId = typeof active.data.current?.taskId === "string" ? active.data.current.taskId : null;
+    const activeTaskId =
+      typeof active.data.current?.taskId === "string"
+        ? active.data.current.taskId
+        : null;
     const activeProjectId =
       typeof active.data.current?.projectId === "string"
         ? active.data.current.projectId
         : null;
     const boardItem =
       (activeTaskId
-        ? boardItems.find((entry) => entry.kind === "task" && entry.id === activeTaskId)
+        ? boardItems.find(
+            (entry) => entry.kind === "task" && entry.id === activeTaskId
+          )
         : null) ??
       (activeProjectId
         ? boardItems.find(
@@ -1614,7 +1810,10 @@ export function ExecutionBoard({
       return;
     }
 
-    const overStatus = typeof over.data.current?.status === "string" ? (over.data.current.status as TaskStatus) : null;
+    const overStatus =
+      typeof over.data.current?.status === "string"
+        ? (over.data.current.status as TaskStatus)
+        : null;
     const overTaskId =
       typeof over.data.current?.taskId === "string"
         ? over.data.current.taskId
@@ -1625,7 +1824,9 @@ export function ExecutionBoard({
         : null;
     const overItem =
       (overTaskId
-        ? boardItems.find((entry) => entry.kind === "task" && entry.id === overTaskId)
+        ? boardItems.find(
+            (entry) => entry.kind === "task" && entry.id === overTaskId
+          )
         : null) ??
       (overProjectId
         ? boardItems.find(
@@ -1675,14 +1876,18 @@ export function ExecutionBoard({
     }
   }
 
-  async function handleStepTask(taskId: string, direction: "previous" | "next") {
+  async function handleStepTask(
+    taskId: string,
+    direction: "previous" | "next"
+  ) {
     const task = boardTasks.find((entry) => entry.id === taskId);
     if (!task) {
       return;
     }
 
     const currentIndex = LANE_ORDER.indexOf(task.status);
-    const nextIndex = direction === "previous" ? currentIndex - 1 : currentIndex + 1;
+    const nextIndex =
+      direction === "previous" ? currentIndex - 1 : currentIndex + 1;
     const nextStatus = LANE_ORDER[nextIndex] ?? null;
     if (!nextStatus || nextStatus === task.status) {
       return;
@@ -1715,7 +1920,8 @@ export function ExecutionBoard({
     }
 
     const currentIndex = LANE_ORDER.indexOf(project.workflowStatus);
-    const nextIndex = direction === "previous" ? currentIndex - 1 : currentIndex + 1;
+    const nextIndex =
+      direction === "previous" ? currentIndex - 1 : currentIndex + 1;
     const nextStatus = LANE_ORDER[nextIndex] ?? null;
     if (!nextStatus || nextStatus === project.workflowStatus) {
       return;
@@ -1738,10 +1944,7 @@ export function ExecutionBoard({
     }
   }
 
-  function openTaskMenu(
-    event: ReactMouseEvent<HTMLButtonElement>,
-    task: Task
-  ) {
+  function openTaskMenu(event: ReactMouseEvent<HTMLButtonElement>, task: Task) {
     const rect = event.currentTarget.getBoundingClientRect();
     setMenuState({
       kind: "task",
@@ -1787,11 +1990,15 @@ export function ExecutionBoard({
         {isMobileBoard ? (
           <div className="grid w-full max-w-full min-w-0 gap-2">
             {LANE_ORDER.map((status) => {
-              const laneItems = boardItems.filter((item) => item.status === status);
+              const laneItems = boardItems.filter(
+                (item) => item.status === status
+              );
               return (
                 <SortableContext
                   key={status}
-                  items={laneItems.map((item) => `${boardInstanceId}:${item.kind}:${item.id}`)}
+                  items={laneItems.map(
+                    (item) => `${boardInstanceId}:${item.kind}:${item.id}`
+                  )}
                   strategy={verticalListSortingStrategy}
                 >
                   <LaneDropzone
@@ -1811,11 +2018,15 @@ export function ExecutionBoard({
         ) : (
           <div className="grid w-full min-w-0 gap-0.5 xl:grid-cols-[repeat(5,minmax(0,1fr))]">
             {LANE_ORDER.map((status) => {
-              const laneItems = boardItems.filter((item) => item.status === status);
+              const laneItems = boardItems.filter(
+                (item) => item.status === status
+              );
               return (
                 <SortableContext
                   key={status}
-                  items={laneItems.map((item) => `${boardInstanceId}:${item.kind}:${item.id}`)}
+                  items={laneItems.map(
+                    (item) => `${boardInstanceId}:${item.kind}:${item.id}`
+                  )}
                   strategy={verticalListSortingStrategy}
                 >
                   <LaneDropzone
@@ -1868,10 +2079,10 @@ export function ExecutionBoard({
         open={menuState !== null}
         title={
           menuState?.kind === "project"
-            ? boardProjects.find((entry) => entry.id === menuState.entityId)?.title ??
-              "Project actions"
-            : boardTasks.find((entry) => entry.id === menuState?.entityId)?.title ??
-              "Work item actions"
+            ? (boardProjects.find((entry) => entry.id === menuState.entityId)
+                ?.title ?? "Project actions")
+            : (boardTasks.find((entry) => entry.id === menuState?.entityId)
+                ?.title ?? "Work item actions")
         }
         subtitle={
           menuState?.kind === "project"
@@ -1883,31 +2094,31 @@ export function ExecutionBoard({
         onClose={() => setMenuState(null)}
       />
       {confirmingDeleteTask ? (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[rgba(5,8,18,0.74)] p-4 backdrop-blur-xl">
-          <Card className="w-full max-w-md border border-white/10 bg-[linear-gradient(180deg,rgba(16,22,36,0.96),rgba(9,13,22,0.98))] shadow-[0_32px_90px_rgba(5,8,18,0.58)]">
+        <div className="surface-overlay fixed inset-0 z-[60] flex items-center justify-center p-4 backdrop-blur-xl">
+          <Card className="surface-modal-panel w-full max-w-md">
             <div className="flex items-start gap-3">
-              <div className="mt-1 flex size-11 shrink-0 items-center justify-center rounded-full bg-rose-500/14 text-rose-100">
+              <div className="mt-1 flex size-11 shrink-0 items-center justify-center rounded-full bg-[var(--ui-danger-soft)] text-[var(--danger)]">
                 <Trash2 className="size-5" />
               </div>
               <div className="min-w-0">
-                <div className="font-display text-[1.35rem] leading-tight text-white">
+                <div className="font-display text-[1.35rem] leading-tight text-[var(--ui-ink-strong)]">
                   {t("common.executionBoard.deleteConfirmTitle")}
                 </div>
-                <div className="mt-2 text-sm leading-6 text-white/64">
+                <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                   {t("common.executionBoard.deleteConfirmDescription", {
                     title: confirmingDeleteTask.title
                   })}
                 </div>
               </div>
             </div>
-            <label className="mt-5 flex items-center gap-3 rounded-[18px] bg-white/[0.05] px-4 py-3 text-sm text-white/76">
+            <label className="mt-5 flex items-center gap-3 rounded-[18px] bg-[var(--ui-surface-2)] px-4 py-3 text-sm text-[var(--ui-ink-medium)]">
               <input
                 type="checkbox"
                 checked={disableDeleteConfirmChoice}
                 onChange={(event) =>
                   setDisableDeleteConfirmChoice(event.target.checked)
                 }
-                className="size-4 rounded border-white/20 bg-transparent text-[var(--primary)]"
+                className="size-4 rounded border-[var(--ui-border-strong)] bg-transparent text-[var(--primary)]"
               />
               <span>{t("common.executionBoard.deleteConfirmCheckbox")}</span>
             </label>
@@ -1922,7 +2133,7 @@ export function ExecutionBoard({
                 {t("common.executionBoard.deleteConfirmCancel")}
               </Button>
               <Button
-                className="bg-[linear-gradient(135deg,rgba(251,113,133,0.3),rgba(190,24,93,0.26))] text-white shadow-[0_16px_36px_rgba(190,24,93,0.18)]"
+                className="bg-[var(--ui-danger-soft)] text-[var(--danger)] shadow-[var(--ui-shadow-soft)]"
                 pending={deletePendingTaskId === confirmingDeleteTask.id}
                 pendingLabel={t("common.executionBoard.deletingTask")}
                 onClick={() =>

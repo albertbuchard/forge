@@ -605,7 +605,7 @@ export function WorkbenchFlowEditor({
                     return (
                       <label
                         key={tool.key}
-                        className="flex items-start gap-3 rounded-[16px] bg-white/[0.03] px-3 py-2 text-left"
+                        className="flex items-start gap-3 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-2 text-left"
                       >
                         <input
                           type="checkbox"
@@ -623,13 +623,13 @@ export function WorkbenchFlowEditor({
                           }}
                         />
                         <div className="min-w-0">
-                          <div className="flex items-center gap-2 text-sm text-white">
+                          <div className="flex items-center gap-2 text-sm text-[var(--ui-ink-strong)]">
                             <span>{tool.label}</span>
-                            <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-white/48">
+                            <span className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                               {tool.accessMode.replace("_", " ")}
                             </span>
                           </div>
-                          <div className="text-[12px] leading-5 text-white/46">
+                          <div className="text-[12px] leading-5 text-[var(--ui-ink-soft)]">
                             {tool.description}
                           </div>
                           {tool.sources.length > 0 ? (
@@ -637,22 +637,22 @@ export function WorkbenchFlowEditor({
                               {tool.sources.map((source) => (
                                 <span
                                   key={`${tool.key}-${source}`}
-                                  className="rounded-full bg-white/[0.05] px-2 py-1 text-[10px] text-white/44"
+                                  className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-2 py-1 text-[10px] text-[var(--ui-ink-faint)]"
                                 >
                                   {source}
                                 </span>
                               ))}
                             </div>
                           ) : null}
-                          <div className="mt-1 font-mono text-[10px] text-white/32">
+                          <div className="mt-1 font-mono text-[10px] text-[var(--ui-ink-faint)]">
                             {tool.key}
                           </div>
                           {tool.argsSchema ? (
-                            <details className="mt-2 rounded-[14px] border border-white/8 bg-black/20 px-3 py-2">
-                              <summary className="cursor-pointer text-[11px] text-white/56">
+                            <details className="mt-2 rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-code-bg)] px-3 py-2">
+                              <summary className="cursor-pointer text-[11px] text-[var(--ui-ink-soft)]">
                                 Preview tool arguments
                               </summary>
-                              <pre className="mt-2 overflow-auto whitespace-pre-wrap text-[10px] leading-5 text-white/44">
+                              <pre className="mt-2 overflow-auto whitespace-pre-wrap text-[10px] leading-5 text-[var(--ui-ink-faint)]">
                                 {JSON.stringify(tool.argsSchema, null, 2)}
                               </pre>
                             </details>
@@ -662,7 +662,7 @@ export function WorkbenchFlowEditor({
                     );
                   })
                 ) : (
-                  <div className="text-sm text-white/48">
+                  <div className="text-sm text-[var(--ui-ink-faint)]">
                     No registered Forge tools are available yet.
                   </div>
                 )}
@@ -673,15 +673,15 @@ export function WorkbenchFlowEditor({
                 label="Enabled tool preview"
                 description="Collapsed by default in the node card, this is the contract the AI node can call at run time."
               >
-                <details className="rounded-[18px] border border-white/8 bg-black/20 px-4 py-3">
-                  <summary className="cursor-pointer text-sm text-white/70">
+                <details className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-code-bg)] px-4 py-3">
+                  <summary className="cursor-pointer text-sm text-[var(--ui-ink-medium)]">
                     {selectedAiToolPreview.length > 0
                       ? `${selectedAiToolPreview.length} tool contract${
                           selectedAiToolPreview.length === 1 ? "" : "s"
                         }`
                       : "No tool contract yet"}
                   </summary>
-                  <pre className="mt-3 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-white/58">
+                  <pre className="mt-3 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-[var(--ui-ink-soft)]">
                     {JSON.stringify(
                       selectedAiToolPreview.map((tool) => ({
                         key: tool.key,
@@ -700,12 +700,12 @@ export function WorkbenchFlowEditor({
                 label="Output preview"
                 description="This is the structure downstream nodes will see from this AI node."
               >
-                <details className="rounded-[18px] border border-white/8 bg-black/20 px-4 py-3">
-                  <summary className="cursor-pointer text-sm text-white/70">
+                <details className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-code-bg)] px-4 py-3">
+                  <summary className="cursor-pointer text-sm text-[var(--ui-ink-medium)]">
                     {(value.outputs ?? []).length} published output
                     {(value.outputs ?? []).length === 1 ? "" : "s"}
                   </summary>
-                  <pre className="mt-3 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-white/58">
+                  <pre className="mt-3 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-[var(--ui-ink-soft)]">
                     {JSON.stringify(
                       summarizePortShape(value.outputs ?? []),
                       null,
@@ -736,11 +736,11 @@ export function WorkbenchFlowEditor({
                 className={WORKBENCH_FIELD_CLASS}
               />
             </FlowField>
-            <div className="rounded-[20px] border border-white/8 bg-white/[0.03] p-4">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+            <div className="rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                 Danger zone
               </div>
-              <div className="mt-2 text-sm leading-6 text-white/58">
+              <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                 Remove this node from the graph if you no longer need it.
               </div>
               <Button
@@ -1325,7 +1325,7 @@ export function WorkbenchFlowEditor({
                           </option>
                         )}
                       </select>
-                      <div className="rounded-[18px] border border-white/8 bg-white/[0.03] px-4 py-3 text-sm leading-6 text-white/58">
+                      <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
                         Publish one upstream output as the flow result. If the
                         output key is missing from the graph, Forge will flag it
                         in graph checks.
@@ -1409,7 +1409,7 @@ export function WorkbenchFlowEditor({
                     />
                   </div>
                 ) : (
-                  <div className="rounded-[20px] border border-white/8 bg-white/[0.03] px-4 py-4 text-sm leading-6 text-white/58">
+                  <div className="rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4 text-sm leading-6 text-[var(--ui-ink-soft)]">
                     This node inherits its contract from the registered Forge
                     box. Edit the box definition in the registry when the
                     contract itself needs to change.
@@ -1420,17 +1420,17 @@ export function WorkbenchFlowEditor({
               {editNodeSection === "parameters" ? (
                 <div className="grid gap-3">
                   {(selectedNode.data.params ?? []).length === 0 ? (
-                    <div className="rounded-[20px] border border-white/8 bg-white/[0.03] px-4 py-4 text-sm leading-6 text-white/58">
+                    <div className="rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4 text-sm leading-6 text-[var(--ui-ink-soft)]">
                       This node does not expose any configurable parameters.
                     </div>
                   ) : null}
                   {(selectedNode.data.params ?? []).map((param) => (
                     <div key={param.key} className="grid gap-2">
-                      <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+                      <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                         {param.label}
                       </div>
                       {param.kind === "boolean" ? (
-                        <label className="flex items-center gap-3 rounded-[18px] border border-white/10 bg-black/20 px-4 py-3 text-sm text-white">
+                        <label className="flex items-center gap-3 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-code-bg)] px-4 py-3 text-sm text-[var(--ui-ink-strong)]">
                           <input
                             type="checkbox"
                             checked={Boolean(
@@ -1587,8 +1587,8 @@ export function WorkbenchFlowEditor({
         {selectedRun ? (
           <div className="grid gap-4">
             <div className="grid gap-3 md:grid-cols-[0.9fr_1.1fr]">
-              <div className="rounded-[20px] border border-white/8 bg-white/[0.04] p-4">
-                <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
+              <div className="rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                   Run history
                 </div>
                 <div className="mt-3 grid gap-2">
@@ -1600,15 +1600,15 @@ export function WorkbenchFlowEditor({
                         "rounded-[18px] border px-4 py-3 text-left transition",
                         selectedRunId === run.id
                           ? "border-[var(--secondary)]/40 bg-[var(--secondary)]/12"
-                          : "border-white/8 bg-black/20 hover:bg-white/[0.05]"
+                          : "border-[var(--ui-border-subtle)] bg-[var(--ui-code-bg)] hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]"
                       )}
                       onClick={() => setSelectedRunId(run.id)}
                     >
-                      <div className="flex items-center justify-between gap-3 text-[12px] text-white/50">
+                      <div className="flex items-center justify-between gap-3 text-[12px] text-[var(--ui-ink-soft)]">
                         <span>{run.mode}</span>
                         <span>{new Date(run.createdAt).toLocaleString()}</span>
                       </div>
-                      <div className="mt-2 text-sm text-white/80">
+                      <div className="mt-2 text-sm text-[var(--ui-ink-medium)]">
                         {run.result?.primaryText ??
                           run.error ??
                           "No output yet."}
@@ -1618,24 +1618,24 @@ export function WorkbenchFlowEditor({
                 </div>
               </div>
               <div className="grid gap-3">
-                <div className="rounded-[20px] border border-white/8 bg-white/[0.04] p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3 text-[12px] text-white/50">
+                <div className="rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3 text-[12px] text-[var(--ui-ink-soft)]">
                     <span>{selectedRun.mode}</span>
                     <span>
                       {new Date(selectedRun.createdAt).toLocaleString()}
                     </span>
                   </div>
-                  <div className="mt-3 text-sm leading-6 text-white/82">
+                  <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-medium)]">
                     {selectedRun.result?.primaryText ??
                       selectedRun.error ??
                       "No output yet."}
                   </div>
                   {selectedRun.result?.outputs ? (
-                    <details className="mt-3 rounded-[16px] bg-black/20 p-3">
-                      <summary className="cursor-pointer text-[11px] uppercase tracking-[0.16em] text-white/38">
+                    <details className="mt-3 rounded-[16px] bg-[var(--ui-code-bg)] p-3">
+                      <summary className="cursor-pointer text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                         Published outputs
                       </summary>
-                      <pre className="mt-3 overflow-auto whitespace-pre-wrap text-[12px] leading-5 text-white/66">
+                      <pre className="mt-3 overflow-auto whitespace-pre-wrap text-[12px] leading-5 text-[var(--ui-code-text)]">
                         {JSON.stringify(selectedRun.result.outputs, null, 2)}
                       </pre>
                     </details>
@@ -1643,8 +1643,8 @@ export function WorkbenchFlowEditor({
                 </div>
                 {(runNodesQuery.data?.nodeResults ?? []).length > 0 ? (
                   <div className="grid gap-3 xl:grid-cols-[0.9fr_1.1fr]">
-                    <div className="rounded-[20px] border border-white/8 bg-white/[0.04] p-4">
-                      <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
+                    <div className="rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
+                      <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                         Node results
                       </div>
                       <div className="mt-3 grid gap-2">
@@ -1656,20 +1656,20 @@ export function WorkbenchFlowEditor({
                               "rounded-[18px] border px-4 py-3 text-left transition",
                               selectedResultNodeId === node.nodeId
                                 ? "border-[var(--secondary)]/40 bg-[var(--secondary)]/12"
-                                : "border-white/8 bg-black/20 hover:bg-white/[0.05]"
+                                : "border-[var(--ui-border-subtle)] bg-[var(--ui-code-bg)] hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]"
                             )}
                             onClick={() => setSelectedResultNodeId(node.nodeId)}
                           >
                             <div className="flex items-center justify-between gap-3">
                               <div>
-                                <div className="text-sm text-white">
+                                <div className="text-sm text-[var(--ui-ink-strong)]">
                                   {node.label}
                                 </div>
-                                <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">
+                                <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                                   {node.nodeType}
                                 </div>
                               </div>
-                              <div className="rounded-full bg-white/[0.05] px-3 py-1 text-[11px] text-white/56">
+                              <div className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-1 text-[11px] text-[var(--ui-ink-soft)]">
                                 {Object.keys(node.outputMap).length} outputs
                               </div>
                             </div>
@@ -1677,13 +1677,13 @@ export function WorkbenchFlowEditor({
                         ))}
                       </div>
                     </div>
-                    <div className="rounded-[20px] border border-white/8 bg-white/[0.04] p-4">
+                    <div className="rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
                       {selectedNodeResult ||
                       selectedNodeResultQuery.data?.nodeResult ? (
                         <>
                           <div className="flex flex-wrap items-center justify-between gap-3">
                             <div>
-                              <div className="text-sm font-medium text-white">
+                              <div className="text-sm font-medium text-[var(--ui-ink-strong)]">
                                 {
                                   (
                                     selectedNodeResultQuery.data?.nodeResult ??
@@ -1691,7 +1691,7 @@ export function WorkbenchFlowEditor({
                                   )?.label
                                 }
                               </div>
-                              <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                              <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                                 {
                                   (
                                     selectedNodeResultQuery.data?.nodeResult ??
@@ -1700,7 +1700,7 @@ export function WorkbenchFlowEditor({
                                 }
                               </div>
                             </div>
-                            <div className="rounded-full bg-white/[0.05] px-3 py-1 text-[11px] text-white/56">
+                            <div className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-1 text-[11px] text-[var(--ui-ink-soft)]">
                               {
                                 (
                                   (
@@ -1721,11 +1721,11 @@ export function WorkbenchFlowEditor({
                             </div>
                           </div>
                           <div className="mt-3 grid gap-3">
-                            <details className="rounded-[16px] bg-black/20 p-3">
-                              <summary className="cursor-pointer text-[11px] uppercase tracking-[0.16em] text-white/38">
+                            <details className="rounded-[16px] bg-[var(--ui-code-bg)] p-3">
+                              <summary className="cursor-pointer text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                                 Inputs
                               </summary>
-                              <pre className="mt-3 overflow-auto whitespace-pre-wrap text-[12px] leading-5 text-white/66">
+                              <pre className="mt-3 overflow-auto whitespace-pre-wrap text-[12px] leading-5 text-[var(--ui-code-text)]">
                                 {JSON.stringify(
                                   (
                                     selectedNodeResultQuery.data?.nodeResult ??
@@ -1736,11 +1736,11 @@ export function WorkbenchFlowEditor({
                                 )}
                               </pre>
                             </details>
-                            <details className="rounded-[16px] bg-black/20 p-3">
-                              <summary className="cursor-pointer text-[11px] uppercase tracking-[0.16em] text-white/38">
+                            <details className="rounded-[16px] bg-[var(--ui-code-bg)] p-3">
+                              <summary className="cursor-pointer text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                                 Output map
                               </summary>
-                              <pre className="mt-3 overflow-auto whitespace-pre-wrap text-[12px] leading-5 text-white/66">
+                              <pre className="mt-3 overflow-auto whitespace-pre-wrap text-[12px] leading-5 text-[var(--ui-code-text)]">
                                 {JSON.stringify(
                                   (
                                     selectedNodeResultQuery.data?.nodeResult ??
@@ -1751,11 +1751,11 @@ export function WorkbenchFlowEditor({
                                 )}
                               </pre>
                             </details>
-                            <details className="rounded-[16px] bg-black/20 p-3">
-                              <summary className="cursor-pointer text-[11px] uppercase tracking-[0.16em] text-white/38">
+                            <details className="rounded-[16px] bg-[var(--ui-code-bg)] p-3">
+                              <summary className="cursor-pointer text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                                 Payload
                               </summary>
-                              <pre className="mt-3 overflow-auto whitespace-pre-wrap text-[12px] leading-5 text-white/66">
+                              <pre className="mt-3 overflow-auto whitespace-pre-wrap text-[12px] leading-5 text-[var(--ui-code-text)]">
                                 {JSON.stringify(
                                   (
                                     selectedNodeResultQuery.data?.nodeResult ??
@@ -1769,7 +1769,7 @@ export function WorkbenchFlowEditor({
                           </div>
                         </>
                       ) : (
-                        <div className="text-sm text-white/56">
+                        <div className="text-sm text-[var(--ui-ink-soft)]">
                           Pick a node result to inspect its resolved inputs and
                           outputs.
                         </div>
@@ -1777,7 +1777,7 @@ export function WorkbenchFlowEditor({
                     </div>
                   </div>
                 ) : (
-                  <div className="rounded-[20px] border border-white/8 bg-white/[0.04] p-4 text-sm text-white/56">
+                  <div className="rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4 text-sm text-[var(--ui-ink-soft)]">
                     {runNodesQuery.isFetching
                       ? "Loading node results…"
                       : "This run does not have stored node results yet."}
@@ -1787,7 +1787,7 @@ export function WorkbenchFlowEditor({
             </div>
           </div>
         ) : (
-          <div className="text-sm text-white/56">
+          <div className="text-sm text-[var(--ui-ink-soft)]">
             Run the flow once to inspect its published outputs and node-level
             results here.
           </div>

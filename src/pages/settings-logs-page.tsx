@@ -49,6 +49,21 @@ const SOURCES: DiagnosticLogSource[] = [
   "openclaw"
 ];
 const DIAGNOSTIC_LOG_PAGE_SIZE = 60;
+const logEyebrowClass =
+  "text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]";
+const logBodyClass = "text-[var(--ui-ink-soft)]";
+const logFaintClass = "text-[var(--ui-ink-faint)]";
+const logTitleClass = "text-[var(--ui-ink-strong)]";
+const logSoftBadgeClass =
+  "bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]";
+const logFilterBoxClass =
+  "relative rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-2.5";
+const logSelectedChipClass =
+  "inline-flex max-w-full items-center gap-1.5 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-1.5 py-1";
+const logPopoverClass =
+  "z-[80] overflow-y-auto overscroll-contain rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-popover)] p-2 shadow-[var(--ui-shadow-floating)] backdrop-blur-xl [webkit-overflow-scrolling:touch]";
+const logDetailsPanelClass =
+  "rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3";
 
 function normalize(text: string) {
   return text.trim().toLowerCase();
@@ -56,11 +71,7 @@ function normalize(text: string) {
 
 function uniqueValues(values: Array<string | null | undefined>) {
   return Array.from(
-    new Set(
-      values
-        .map((value) => value?.trim() ?? "")
-        .filter(Boolean)
-    )
+    new Set(values.map((value) => value?.trim() ?? "").filter(Boolean))
   );
 }
 
@@ -82,15 +93,15 @@ function formatTimestamp(value: string) {
 
 function levelTone(level: DiagnosticLogLevel) {
   if (level === "error") {
-    return "border-rose-400/20 bg-rose-500/[0.08] text-rose-100";
+    return "border-[color-mix(in_srgb,var(--danger)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-danger-soft)] text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]";
   }
   if (level === "warning") {
-    return "border-amber-400/20 bg-amber-500/[0.08] text-amber-100";
+    return "border-[color-mix(in_srgb,var(--warning)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]";
   }
   if (level === "info") {
-    return "border-sky-400/20 bg-sky-500/[0.08] text-sky-100";
+    return "border-[color-mix(in_srgb,var(--primary)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-accent-soft)] text-[var(--primary)]";
   }
-  return "border-white/10 bg-white/[0.04] text-white/68";
+  return "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]";
 }
 
 function formatLevelLabel(level: DiagnosticLogLevel) {
@@ -148,7 +159,7 @@ function buildLogSearchText(entry: DiagnosticLogEntry) {
 
 function renderSoftBadge(label: string, className?: string) {
   return (
-    <Badge size="sm" className={cn("bg-white/[0.08] text-white/74", className)}>
+    <Badge size="sm" className={cn(logSoftBadgeClass, className)}>
       {label}
     </Badge>
   );
@@ -165,7 +176,10 @@ function renderEntityFilterBadge(entityType: string, label: string) {
       />
     );
   }
-  return renderSoftBadge(label, "bg-[rgba(192,193,255,0.12)] text-white/84");
+  return renderSoftBadge(
+    label,
+    "bg-[var(--ui-accent-soft)] text-[var(--primary)]"
+  );
 }
 
 function CompactFilterMultiSelect({
@@ -238,7 +252,10 @@ function CompactFilterMultiSelect({
 
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
-      if (rootRef.current?.contains(target) || menuRef.current?.contains(target)) {
+      if (
+        rootRef.current?.contains(target) ||
+        menuRef.current?.contains(target)
+      ) {
         return;
       }
       setOpen(false);
@@ -260,24 +277,16 @@ function CompactFilterMultiSelect({
 
   return (
     <label className="grid gap-2">
-      <span className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/45">
-        {label}
-      </span>
-      <div
-        ref={rootRef}
-        className="relative rounded-[20px] border border-white/8 bg-white/[0.04] px-3 py-2.5"
-      >
+      <span className={logEyebrowClass}>{label}</span>
+      <div ref={rootRef} className={logFilterBoxClass}>
         {selectedOptions.length > 0 ? (
           <div className="mb-2 flex flex-wrap gap-1.5">
             {selectedOptions.map((option) => (
-              <span
-                key={option.id}
-                className="inline-flex items-center gap-1.5 rounded-full border border-white/8 bg-white/[0.05] px-1.5 py-1"
-              >
+              <span key={option.id} className={logSelectedChipClass}>
                 {option.badge}
                 <button
                   type="button"
-                  className="rounded-full p-0.5 text-white/46 transition hover:text-white"
+                  className={`rounded-full p-0.5 transition hover:text-[var(--ui-ink-strong)] ${logFaintClass}`}
                   onClick={() => removeOption(option.id)}
                   aria-label={`Remove ${option.label}`}
                 >
@@ -289,7 +298,7 @@ function CompactFilterMultiSelect({
         ) : null}
 
         <div className="flex items-center gap-2">
-          <Search className="size-3.5 text-white/34" />
+          <Search className={`size-3.5 ${logFaintClass}`} />
           <input
             value={query}
             onChange={(event) => {
@@ -299,7 +308,11 @@ function CompactFilterMultiSelect({
             }}
             onFocus={() => setOpen(true)}
             onKeyDown={(event) => {
-              if (event.key === "Backspace" && !query && selectedIds.length > 0) {
+              if (
+                event.key === "Backspace" &&
+                !query &&
+                selectedIds.length > 0
+              ) {
                 removeOption(selectedIds[selectedIds.length - 1]!);
                 return;
               }
@@ -332,7 +345,7 @@ function CompactFilterMultiSelect({
               }
             }}
             placeholder={placeholder}
-            className="min-w-0 flex-1 bg-transparent text-sm text-white placeholder:text-white/34 focus:outline-none"
+            className="min-w-0 flex-1 bg-transparent text-sm text-[var(--ui-ink-strong)] placeholder:text-[var(--ui-ink-faint)] focus:outline-none"
           />
         </div>
 
@@ -342,41 +355,45 @@ function CompactFilterMultiSelect({
                 ref={menuRef}
                 role="listbox"
                 aria-multiselectable="true"
-                className="z-[80] overflow-y-auto overscroll-contain rounded-[20px] border border-white/8 bg-[rgba(8,13,24,0.96)] p-2 shadow-[0_26px_60px_rgba(4,8,18,0.32)] backdrop-blur-xl [webkit-overflow-scrolling:touch]"
+                className={logPopoverClass}
                 style={menuStyle}
               >
-            {filteredOptions.length > 0 ? (
-              filteredOptions.map((option, index) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  role="option"
-                  aria-selected={false}
-                  className={cn(
-                    "flex w-full items-start justify-between gap-3 rounded-[16px] px-3 py-2 text-left transition",
-                    index === highlightedIndex
-                      ? "bg-white/[0.1] text-white"
-                      : "text-white/70 hover:bg-white/[0.06] hover:text-white"
-                  )}
-                  onMouseEnter={() => setHighlightedIndex(index)}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => addOption(option.id)}
-                >
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium">
-                      {option.menuBadge ?? option.badge}
-                    </div>
-                    {option.description ? (
-                      <div className="mt-1 text-xs leading-5 text-white/46">
-                        {option.description}
+                {filteredOptions.length > 0 ? (
+                  filteredOptions.map((option, index) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      role="option"
+                      aria-selected={false}
+                      className={cn(
+                        "flex w-full items-start justify-between gap-3 rounded-[16px] px-3 py-2 text-left transition",
+                        index === highlightedIndex
+                          ? "bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]"
+                          : "text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
+                      )}
+                      onMouseEnter={() => setHighlightedIndex(index)}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => addOption(option.id)}
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium">
+                          {option.menuBadge ?? option.badge}
+                        </div>
+                        {option.description ? (
+                          <div
+                            className={`mt-1 text-xs leading-5 ${logFaintClass}`}
+                          >
+                            {option.description}
+                          </div>
+                        ) : null}
                       </div>
-                    ) : null}
+                    </button>
+                  ))
+                ) : (
+                  <div className={`px-3 py-2 text-sm ${logFaintClass}`}>
+                    {emptyMessage}
                   </div>
-                </button>
-              ))
-            ) : (
-              <div className="px-3 py-2 text-sm text-white/42">{emptyMessage}</div>
-            )}
+                )}
               </div>,
               document.body
             )
@@ -412,9 +429,7 @@ function addEntityOption(
   });
 }
 
-function buildEntityOptions(
-  logs: DiagnosticLogEntry[]
-) {
+function buildEntityOptions(logs: DiagnosticLogEntry[]) {
   const options = new Map<string, FilterOption>();
 
   for (const entry of logs) {
@@ -464,7 +479,7 @@ const DiagnosticLogRowCard = memo(function DiagnosticLogRowCard({
   return (
     <Card className="grid gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="grid gap-3">
+        <div className="grid min-w-0 gap-3">
           <div className="flex flex-wrap items-center gap-1.5">
             <span
               className={cn(
@@ -474,26 +489,38 @@ const DiagnosticLogRowCard = memo(function DiagnosticLogRowCard({
             >
               {entry.level}
             </span>
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/60">
+            <span
+              className={`rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-3)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${logBodyClass}`}
+            >
               {entry.source}
             </span>
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/60">
+            <span
+              className={`rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-3)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${logBodyClass}`}
+            >
               {entry.scope}
             </span>
             {entry.eventKey ? (
-              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/46">
+              <span
+                className={`max-w-full break-words rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-3)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] [overflow-wrap:anywhere] ${logFaintClass}`}
+              >
                 {entry.eventKey}
               </span>
             ) : null}
           </div>
-          <div className="text-base font-medium text-white">{entry.message}</div>
-          <div className="flex flex-wrap gap-3 text-xs text-white/45">
+          <div
+            className={`break-words text-base font-medium [overflow-wrap:anywhere] ${logTitleClass}`}
+          >
+            {entry.message}
+          </div>
+          <div
+            className={`flex flex-wrap gap-3 break-words text-xs [overflow-wrap:anywhere] ${logFaintClass}`}
+          >
             {copyableDetailRows(entry).map((row) => (
               <span key={row}>{row}</span>
             ))}
           </div>
         </div>
-        <div className="shrink-0 text-right text-xs text-white/40">
+        <div className={`shrink-0 text-right text-xs ${logFaintClass}`}>
           <div>{formatTimestamp(entry.createdAt)}</div>
           <div className="mt-1 font-mono text-[11px]">{entry.id}</div>
         </div>
@@ -501,16 +528,18 @@ const DiagnosticLogRowCard = memo(function DiagnosticLogRowCard({
 
       {Object.keys(entry.details).length > 0 ? (
         <details
-          className="rounded-[18px] border border-white/8 bg-[rgba(7,11,21,0.72)] px-4 py-3"
+          className={logDetailsPanelClass}
           onToggle={(event) =>
             setDetailsOpen((event.currentTarget as HTMLDetailsElement).open)
           }
         >
-          <summary className="cursor-pointer text-sm text-white/70">
+          <summary className={`cursor-pointer text-sm ${logBodyClass}`}>
             View structured details
           </summary>
           {detailsOpen ? (
-            <pre className="mt-3 overflow-x-auto whitespace-pre-wrap text-xs leading-6 text-white/58">
+            <pre
+              className={`mt-3 overflow-x-auto whitespace-pre-wrap text-xs leading-6 ${logBodyClass}`}
+            >
               {serializedDetails}
             </pre>
           ) : null}
@@ -526,11 +555,7 @@ export function SettingsLogsPage() {
     const legacyEntityType = searchParams.get("entityType")?.trim() || "";
     const legacyEntityId = searchParams.get("entityId")?.trim() || "";
     const entityFilters = readMultiFilter(searchParams, "entity");
-    if (
-      entityFilters.length === 0 &&
-      legacyEntityType &&
-      legacyEntityId
-    ) {
+    if (entityFilters.length === 0 && legacyEntityType && legacyEntityId) {
       entityFilters.push(`${legacyEntityType}:${legacyEntityId}`);
     }
     return {
@@ -670,10 +695,7 @@ export function SettingsLogsPage() {
     [rawLogs]
   );
 
-  const entityOptions = useMemo(
-    () => buildEntityOptions(rawLogs),
-    [rawLogs]
-  );
+  const entityOptions = useMemo(() => buildEntityOptions(rawLogs), [rawLogs]);
 
   const filteredLogs = useMemo(
     () =>
@@ -807,10 +829,8 @@ export function SettingsLogsPage() {
       <Card className="grid gap-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-              Filters
-            </div>
-            <div className="mt-2 max-w-3xl text-sm leading-6 text-white/58">
+            <div className={logEyebrowClass}>Filters</div>
+            <div className={`mt-2 max-w-3xl text-sm leading-6 ${logBodyClass}`}>
               Use token filters with OR-style badge selections for levels,
               sources, routes, jobs, scopes, and linked entities. Search still
               matches the message body and structured details.
@@ -835,9 +855,7 @@ export function SettingsLogsPage() {
         </div>
 
         <label className="grid gap-2">
-          <span className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/45">
-            Search message or details
-          </span>
+          <span className={logEyebrowClass}>Search message or details</span>
           <Input
             value={filters.search}
             onChange={(event) => setTextFilter("search", event.target.value)}
@@ -902,7 +920,7 @@ export function SettingsLogsPage() {
 
       <div className="grid gap-3">
         {filteredLogs.length === 0 ? (
-          <Card className="text-sm text-white/58">
+          <Card className={`text-sm ${logBodyClass}`}>
             No diagnostic entries match the current filters yet.
           </Card>
         ) : (
@@ -936,9 +954,11 @@ export function SettingsLogsPage() {
                   );
                 })}
               </div>
-              <div className="border-t border-white/6 px-1 py-3 text-center text-xs text-white/46">
+              <div
+                className={`border-t border-[var(--ui-border-subtle)] px-1 py-3 text-center text-xs ${logFaintClass}`}
+              >
                 {logsQuery.isFetchingNextPage
-                  ? "Loading older logs…"
+                  ? "Loading older logs..."
                   : logsQuery.hasNextPage
                     ? "Scroll to load older logs."
                     : `Showing all ${rawLogs.length} loaded logs.`}

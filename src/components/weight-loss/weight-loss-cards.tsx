@@ -1,4 +1,4 @@
-import type { ComponentType, SVGProps } from "react";
+import type { ComponentType, ReactNode, SVGProps } from "react";
 import { Pencil, RotateCcw, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,14 +29,16 @@ export function WeightLossInsightMetric({
   detail,
   icon: Icon,
   tone = "default",
-  help
+  help,
+  helpMaxWidthPx
 }: {
   label: string;
   value: string;
   detail: string;
   icon: WeightLossIcon;
   tone?: WeightLossTone;
-  help?: string;
+  help?: ReactNode;
+  helpMaxWidthPx?: number;
 }) {
   return (
     <Card className="grid gap-4 border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-5">
@@ -47,7 +49,11 @@ export function WeightLossInsightMetric({
         <div className="flex items-center justify-end gap-1 text-right text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
           <span>{label}</span>
           {help ? (
-            <InfoTooltip content={help} label={`Explain ${label}`} />
+            <InfoTooltip
+              content={help}
+              label={`Explain ${label}`}
+              maxWidthPx={helpMaxWidthPx}
+            />
           ) : null}
         </div>
       </div>

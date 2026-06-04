@@ -74,6 +74,19 @@ type HelperDialogKind =
   | "related"
   | "media";
 
+const WIKI_FRAME_CLASS =
+  "rounded-[28px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] shadow-[var(--ui-shadow-card)]";
+const WIKI_EYEBROW_CLASS =
+  "text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]";
+const WIKI_MUTED_TEXT_CLASS = "text-[var(--ui-ink-soft)]";
+const WIKI_STRONG_TEXT_CLASS = "text-[var(--ui-ink-strong)]";
+const WIKI_EDITOR_FIELD_CLASS =
+  "w-full rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3.5 py-3 text-[13px] text-[var(--ui-ink-strong)] outline-none transition focus:border-[color-mix(in_srgb,var(--primary)_40%,transparent)]";
+const WIKI_EDITOR_CHIP_CLASS =
+  "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]";
+const WIKI_HELPER_RESULT_CLASS =
+  "min-w-0 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3 text-left transition hover:bg-[var(--ui-surface-hover)]";
+
 function encodeLinkedValue(entityType: CrudEntityType, entityId: string) {
   return `${entityType}:${entityId}`;
 }
@@ -143,7 +156,10 @@ function createBlankDraft(): WikiPageDraft {
   };
 }
 
-function createDraftFromLinkedTitle(title: string, slug?: string): WikiPageDraft {
+function createDraftFromLinkedTitle(
+  title: string,
+  slug?: string
+): WikiPageDraft {
   const normalizedTitle = title.trim() || "Untitled";
   return {
     ...createBlankDraft(),
@@ -190,21 +206,21 @@ function HelperDialog({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-[rgba(3,7,18,0.8)] backdrop-blur-sm" />
-        <Dialog.Content className="fixed left-1/2 top-[12vh] z-50 w-[min(32rem,calc(100vw-1.5rem))] -translate-x-1/2 rounded-[24px] border border-white/10 bg-[rgba(10,15,28,0.96)] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.45)] sm:p-5">
+        <Dialog.Overlay className="fixed inset-0 z-50 surface-overlay backdrop-blur-sm" />
+        <Dialog.Content className="fixed left-1/2 top-[12vh] z-50 w-[min(32rem,calc(100vw-1.5rem))] -translate-x-1/2 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-popover)] p-4 shadow-[var(--ui-shadow-floating)] sm:p-5">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <Dialog.Title className="text-[1.05rem] font-semibold text-white">
+              <Dialog.Title className="text-[1.05rem] font-semibold text-[var(--ui-ink-strong)]">
                 {title}
               </Dialog.Title>
-              <Dialog.Description className="mt-1 text-[13px] leading-6 text-white/56">
+              <Dialog.Description className="mt-1 text-[13px] leading-6 text-[var(--ui-ink-soft)]">
                 {description}
               </Dialog.Description>
             </div>
             <Dialog.Close asChild>
               <button
                 type="button"
-                className="rounded-full border border-white/10 bg-white/[0.04] p-2 text-white/64 transition hover:bg-white/[0.08] hover:text-white"
+                className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-2 text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]"
                 aria-label="Close"
               >
                 <X className="size-4" />
@@ -218,8 +234,7 @@ function HelperDialog({
   );
 }
 
-const wikiEditorSelectClassName =
-  "w-full rounded-[18px] border border-white/10 bg-[rgba(10,16,30,0.78)] px-3.5 py-3 text-[13px] text-white outline-none transition focus:border-[rgba(192,193,255,0.35)]";
+const wikiEditorSelectClassName = WIKI_EDITOR_FIELD_CLASS;
 
 function normalizeSearch(value: string) {
   return value.trim().toLowerCase();
@@ -247,12 +262,12 @@ function ToolbarIconButton({
       <button
         type="button"
         aria-label={label}
-        className="inline-flex size-10 items-center justify-center rounded-[14px] border border-white/8 bg-white/[0.04] text-white/62 transition hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(192,193,255,0.35)]"
+        className="inline-flex size-10 items-center justify-center rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/35"
         onClick={onClick}
       >
         <Icon className="size-4" />
       </button>
-      <div className="pointer-events-none absolute left-1/2 top-[calc(100%+0.55rem)] z-20 -translate-x-1/2 rounded-[12px] border border-white/8 bg-[rgba(10,15,28,0.96)] px-2.5 py-1.5 text-[11px] font-medium text-white/76 opacity-0 shadow-[0_18px_40px_rgba(0,0,0,0.32)] transition group-hover:opacity-100 group-focus-within:opacity-100">
+      <div className="pointer-events-none absolute left-1/2 top-[calc(100%+0.55rem)] z-20 -translate-x-1/2 whitespace-nowrap rounded-[12px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-popover)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--ui-ink-medium)] opacity-0 shadow-[var(--ui-shadow-floating)] transition group-hover:opacity-100 group-focus-within:opacity-100">
         {label}
       </div>
     </div>
@@ -269,7 +284,7 @@ function buildWikiTagOptions(
     searchText: `${tag.label} ${tag.description}`,
     badge: (
       <Badge
-        className="bg-white/[0.08] text-white/80"
+        className={WIKI_EDITOR_CHIP_CLASS}
         style={tag.color ? { color: tag.color } : undefined}
       >
         {tag.label}
@@ -277,7 +292,7 @@ function buildWikiTagOptions(
     ),
     menuBadge: (
       <Badge
-        className="bg-white/[0.08] text-white/80"
+        className={WIKI_EDITOR_CHIP_CLASS}
         style={tag.color ? { color: tag.color } : undefined}
       >
         {tag.label}
@@ -389,14 +404,10 @@ export function WikiEditorPage() {
           description: `Alias on ${page.title}`,
           searchText: `${trimmedAlias} ${page.title} ${page.slug}`,
           badge: (
-            <Badge className="bg-white/[0.08] text-white/80">
-              {trimmedAlias}
-            </Badge>
+            <Badge className={WIKI_EDITOR_CHIP_CLASS}>{trimmedAlias}</Badge>
           ),
           menuBadge: (
-            <Badge className="bg-white/[0.08] text-white/80">
-              {trimmedAlias}
-            </Badge>
+            <Badge className={WIKI_EDITOR_CHIP_CLASS}>{trimmedAlias}</Badge>
           )
         });
       }
@@ -408,10 +419,8 @@ export function WikiEditorPage() {
         label: alias,
         description: "Wiki alias",
         searchText: alias,
-        badge: <Badge className="bg-white/[0.08] text-white/80">{alias}</Badge>,
-        menuBadge: (
-          <Badge className="bg-white/[0.08] text-white/80">{alias}</Badge>
-        )
+        badge: <Badge className={WIKI_EDITOR_CHIP_CLASS}>{alias}</Badge>,
+        menuBadge: <Badge className={WIKI_EDITOR_CHIP_CLASS}>{alias}</Badge>
       });
     }
 
@@ -670,13 +679,11 @@ export function WikiEditorPage() {
     <>
       <div className="px-3 py-4 sm:px-5 lg:px-6">
         <div className="mx-auto flex w-full max-w-[1720px] flex-col gap-4">
-          <section className="wiki-frame px-4 py-3 sm:px-5">
+          <section className={cn(WIKI_FRAME_CLASS, "px-4 py-3 sm:px-5")}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/42">
-                  Wiki editor
-                </div>
-                <h1 className="mt-1 text-[1.25rem] font-semibold tracking-[-0.04em] text-white">
+                <div className={WIKI_EYEBROW_CLASS}>Wiki editor</div>
+                <h1 className="mt-1 text-[1.25rem] font-semibold tracking-[-0.04em] text-[var(--ui-ink-strong)]">
                   {draft.pageId ? "Edit page" : "New page"}
                 </h1>
               </div>
@@ -726,37 +733,38 @@ export function WikiEditorPage() {
                 metadataOpen ? "block" : "hidden"
               )}
             >
-              <section className="wiki-frame px-4 py-4 sm:px-5 xl:sticky xl:top-[5.75rem]">
-                <div className="mb-4 flex items-center justify-between gap-3 border-b border-white/8 pb-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/42">
-                    Metadata
-                  </div>
-                  <div className="text-[11px] uppercase tracking-[0.14em] text-white/34">
+              <section
+                className={cn(
+                  WIKI_FRAME_CLASS,
+                  "px-4 py-4 sm:px-5 xl:sticky xl:top-[5.75rem]"
+                )}
+              >
+                <div className="mb-4 flex items-center justify-between gap-3 border-b border-[var(--ui-border-subtle)] pb-3">
+                  <div className={WIKI_EYEBROW_CLASS}>Metadata</div>
+                  <div className="min-w-0 truncate text-[11px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
                     {activeSpaceLabel}
                   </div>
                 </div>
 
                 <div className="grid gap-3">
                   <label className="grid gap-1.5">
-                    <span className="text-[11px] uppercase tracking-[0.16em] text-white/42">
-                      Wiki space
-                    </span>
+                    <span className={WIKI_EYEBROW_CLASS}>Wiki space</span>
                     <button
                       type="button"
-                      className="flex min-h-[2.9rem] items-center justify-between gap-3 rounded-[18px] border border-white/8 bg-white/[0.04] px-3.5 text-[13px] text-white/82 transition hover:bg-white/[0.06] hover:text-white"
+                      className="flex min-h-[2.9rem] min-w-0 items-center justify-between gap-3 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3.5 text-[13px] text-[var(--ui-ink-medium)] transition hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]"
                       onClick={() => setSpacePickerOpen(true)}
                     >
-                      <span className="truncate">{activeSpaceLabel}</span>
-                      <span className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+                      <span className="min-w-0 truncate">
+                        {activeSpaceLabel}
+                      </span>
+                      <span className="shrink-0 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                         Change
                       </span>
                     </button>
                   </label>
 
                   <label className="grid gap-1.5">
-                    <span className="text-[11px] uppercase tracking-[0.16em] text-white/42">
-                      Title
-                    </span>
+                    <span className={WIKI_EYEBROW_CLASS}>Title</span>
                     <Input
                       value={draft.title}
                       onChange={(event) =>
@@ -770,9 +778,7 @@ export function WikiEditorPage() {
                   </label>
 
                   <label className="grid gap-1.5">
-                    <span className="text-[11px] uppercase tracking-[0.16em] text-white/42">
-                      Slug
-                    </span>
+                    <span className={WIKI_EYEBROW_CLASS}>Slug</span>
                     <Input
                       value={draft.slug}
                       onChange={(event) =>
@@ -786,9 +792,7 @@ export function WikiEditorPage() {
                   </label>
 
                   <label className="grid gap-1.5">
-                    <span className="text-[11px] uppercase tracking-[0.16em] text-white/42">
-                      Summary
-                    </span>
+                    <span className={WIKI_EYEBROW_CLASS}>Summary</span>
                     <Textarea
                       value={draft.summary}
                       onChange={(event) =>
@@ -803,9 +807,7 @@ export function WikiEditorPage() {
                   </label>
 
                   <label className="grid gap-1.5">
-                    <span className="text-[11px] uppercase tracking-[0.16em] text-white/42">
-                      Tags
-                    </span>
+                    <span className={WIKI_EYEBROW_CLASS}>Tags</span>
                     <EntityLinkMultiSelect
                       options={wikiTagOptions}
                       selectedValues={parseCsvList(draft.tagsText)}
@@ -826,12 +828,12 @@ export function WikiEditorPage() {
                           description: "Wiki tag",
                           searchText: tag,
                           badge: (
-                            <Badge className="bg-white/[0.08] text-white/80">
+                            <Badge className={WIKI_EDITOR_CHIP_CLASS}>
                               {tag}
                             </Badge>
                           ),
                           menuBadge: (
-                            <Badge className="bg-white/[0.08] text-white/80">
+                            <Badge className={WIKI_EDITOR_CHIP_CLASS}>
                               {tag}
                             </Badge>
                           )
@@ -841,9 +843,7 @@ export function WikiEditorPage() {
                   </label>
 
                   <label className="grid gap-1.5">
-                    <span className="text-[11px] uppercase tracking-[0.16em] text-white/42">
-                      Forge entities
-                    </span>
+                    <span className={WIKI_EYEBROW_CLASS}>Forge entities</span>
                     <EntityLinkMultiSelect
                       options={entityOptions}
                       selectedValues={draft.linkedValues}
@@ -858,9 +858,7 @@ export function WikiEditorPage() {
                   </label>
 
                   <label className="grid gap-1.5">
-                    <span className="text-[11px] uppercase tracking-[0.16em] text-white/42">
-                      Aliases
-                    </span>
+                    <span className={WIKI_EYEBROW_CLASS}>Aliases</span>
                     <EntityLinkMultiSelect
                       options={aliasOptions}
                       selectedValues={parseCsvList(draft.aliasesText)}
@@ -881,12 +879,12 @@ export function WikiEditorPage() {
                           description: "Wiki alias",
                           searchText: alias,
                           badge: (
-                            <Badge className="bg-white/[0.08] text-white/80">
+                            <Badge className={WIKI_EDITOR_CHIP_CLASS}>
                               {alias}
                             </Badge>
                           ),
                           menuBadge: (
-                            <Badge className="bg-white/[0.08] text-white/80">
+                            <Badge className={WIKI_EDITOR_CHIP_CLASS}>
                               {alias}
                             </Badge>
                           )
@@ -896,9 +894,7 @@ export function WikiEditorPage() {
                   </label>
 
                   <label className="grid gap-1.5">
-                    <span className="text-[11px] uppercase tracking-[0.16em] text-white/42">
-                      Author
-                    </span>
+                    <span className={WIKI_EYEBROW_CLASS}>Author</span>
                     <Input
                       value={draft.author}
                       onChange={(event) =>
@@ -913,7 +909,12 @@ export function WikiEditorPage() {
 
                   <div className="grid gap-3">
                     <label className="grid gap-1.5">
-                      <span className="flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-white/42">
+                      <span
+                        className={cn(
+                          "flex items-center gap-2",
+                          WIKI_EYEBROW_CLASS
+                        )}
+                      >
                         <span>Parent</span>
                         <InfoTooltip
                           content="Choose the page that should own this page in the wiki tree."
@@ -937,7 +938,12 @@ export function WikiEditorPage() {
                     </label>
 
                     <label className="grid gap-1.5">
-                      <span className="flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-white/42">
+                      <span
+                        className={cn(
+                          "flex items-center gap-2",
+                          WIKI_EYEBROW_CLASS
+                        )}
+                      >
                         <span>Order</span>
                         <InfoTooltip
                           content="Lower numbers appear earlier within the same parent page."
@@ -957,7 +963,7 @@ export function WikiEditorPage() {
                     </label>
                   </div>
 
-                  <label className="flex items-start gap-3 rounded-[18px] border border-white/8 bg-white/[0.03] px-3.5 py-3 text-[13px] text-white/74">
+                  <label className="flex items-start gap-3 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3.5 py-3 text-[13px] text-[var(--ui-ink-medium)]">
                     <input
                       type="checkbox"
                       className="mt-0.5"
@@ -976,8 +982,8 @@ export function WikiEditorPage() {
             </aside>
 
             <div className="order-1 grid min-w-0 gap-4 xl:order-2">
-              <section className="wiki-frame overflow-hidden">
-                <div className="flex min-h-12 w-full flex-wrap items-center justify-between gap-3 border-b border-white/8 bg-[rgba(10,16,30,0.5)] px-3 py-2 sm:px-4">
+              <section className={cn(WIKI_FRAME_CLASS, "overflow-hidden")}>
+                <div className="flex min-h-12 w-full flex-wrap items-center justify-between gap-3 border-b border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-2 sm:px-4">
                   <div className="flex min-w-0 flex-wrap items-center justify-start gap-1.5">
                     {helperButtons.map((button) => (
                       <ToolbarIconButton
@@ -995,14 +1001,14 @@ export function WikiEditorPage() {
                     ))}
                   </div>
                   <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-3 pr-1">
-                    <div className="flex flex-wrap items-center gap-3 text-[11px] uppercase tracking-[0.14em] text-white/36">
+                    <div className="flex flex-wrap items-center gap-3 text-[11px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
                       <span>{wordCount.toLocaleString()} words</span>
                       <span>{characterCount.toLocaleString()} chars</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="bg-[linear-gradient(180deg,rgba(8,13,24,0.98),rgba(9,14,26,0.94))]">
+                <div className="bg-[var(--ui-surface-code)]">
                   <Textarea
                     ref={textareaRef}
                     value={draft.contentMarkdown}
@@ -1013,17 +1019,15 @@ export function WikiEditorPage() {
                       }))
                     }
                     rows={26}
-                    className="min-h-[38rem] resize-y rounded-none border-0 bg-transparent px-5 py-4 font-mono text-[13px] leading-6 text-white shadow-none outline-none focus-visible:ring-0 sm:min-h-[44rem] sm:px-6"
+                    className="min-h-[38rem] resize-y rounded-none border-0 bg-transparent px-5 py-4 font-mono text-[13px] leading-6 text-[var(--ui-ink-strong)] shadow-none outline-none placeholder:text-[var(--ui-ink-faint)] focus-visible:ring-0 sm:min-h-[44rem] sm:px-6"
                     placeholder="Write the page in Markdown"
                   />
                 </div>
               </section>
 
-              <section className="wiki-frame overflow-hidden">
-                <div className="border-b border-white/8 px-4 py-3 sm:px-6">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/42">
-                    Preview
-                  </div>
+              <section className={cn(WIKI_FRAME_CLASS, "overflow-hidden")}>
+                <div className="border-b border-[var(--ui-border-subtle)] px-4 py-3 sm:px-6">
+                  <div className={WIKI_EYEBROW_CLASS}>Preview</div>
                 </div>
                 <div className="px-4 py-5 sm:px-6">
                   <div className="wiki-reading-copy wiki-reading-flow mx-auto max-w-[76rem]">
@@ -1051,7 +1055,7 @@ export function WikiEditorPage() {
             value={wikiLinkQuery}
             onChange={(event) => setWikiLinkQuery(event.target.value)}
             placeholder="Search wiki pages"
-            className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-[14px] text-white placeholder:text-white/28"
+            className="h-11 rounded-2xl border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[14px] text-[var(--ui-ink-strong)] placeholder:text-[var(--ui-ink-faint)]"
           />
           <div className="grid max-h-[22rem] gap-2 overflow-y-auto">
             {filteredWikiPageOptions.length > 0 ? (
@@ -1059,28 +1063,28 @@ export function WikiEditorPage() {
                 <button
                   key={page.id}
                   type="button"
-                  className="rounded-[18px] border border-white/8 bg-white/[0.03] px-4 py-3 text-left transition hover:bg-white/[0.06]"
+                  className={WIKI_HELPER_RESULT_CLASS}
                   onClick={() => {
                     insertIntoMarkdown(`[[${page.slug}]]`);
                     setHelperDialog(null);
                     setWikiLinkQuery("");
                   }}
                 >
-                  <div className="text-[14px] font-semibold text-white">
+                  <div className="break-words text-[14px] font-semibold text-[var(--ui-ink-strong)]">
                     {page.title}
                   </div>
-                  <div className="mt-1 text-[12px] leading-5 text-white/46">
+                  <div className="mt-1 break-all text-[12px] leading-5 text-[var(--ui-ink-faint)]">
                     {page.slug}
                   </div>
                   {page.summary ? (
-                    <div className="mt-1 text-[12px] leading-5 text-white/56">
+                    <div className="mt-1 break-words text-[12px] leading-5 text-[var(--ui-ink-soft)]">
                       {page.summary}
                     </div>
                   ) : null}
                 </button>
               ))
             ) : (
-              <div className="rounded-[18px] border border-dashed border-white/10 px-4 py-8 text-center text-[13px] text-white/42">
+              <div className="rounded-[18px] border border-dashed border-[var(--ui-border-strong)] px-4 py-8 text-center text-[13px] text-[var(--ui-ink-faint)]">
                 No pages match this search.
               </div>
             )}
@@ -1100,7 +1104,7 @@ export function WikiEditorPage() {
             value={forgeLinkQuery}
             onChange={(event) => setForgeLinkQuery(event.target.value)}
             placeholder="Search Forge entities"
-            className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-[14px] text-white placeholder:text-white/28"
+            className="h-11 rounded-2xl border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[14px] text-[var(--ui-ink-strong)] placeholder:text-[var(--ui-ink-faint)]"
           />
           <div className="grid max-h-[22rem] gap-2 overflow-y-auto">
             {filteredEntityOptions.length > 0 ? (
@@ -1108,7 +1112,7 @@ export function WikiEditorPage() {
                 <button
                   key={option.value}
                   type="button"
-                  className="rounded-[18px] border border-white/8 bg-white/[0.03] px-4 py-3 text-left transition hover:bg-white/[0.06]"
+                  className={WIKI_HELPER_RESULT_CLASS}
                   onClick={() => {
                     const [entityType, entityId] = option.value.split(":");
                     insertIntoMarkdown(`[[forge:${entityType}:${entityId}]]`);
@@ -1116,18 +1120,18 @@ export function WikiEditorPage() {
                     setForgeLinkQuery("");
                   }}
                 >
-                  <div className="text-[14px] font-semibold text-white">
+                  <div className="break-words text-[14px] font-semibold text-[var(--ui-ink-strong)]">
                     {option.label}
                   </div>
                   {option.description ? (
-                    <div className="mt-1 text-[12px] leading-5 text-white/56">
+                    <div className="mt-1 break-words text-[12px] leading-5 text-[var(--ui-ink-soft)]">
                       {option.description}
                     </div>
                   ) : null}
                 </button>
               ))
             ) : (
-              <div className="rounded-[18px] border border-dashed border-white/10 px-4 py-8 text-center text-[13px] text-white/42">
+              <div className="rounded-[18px] border border-dashed border-[var(--ui-border-strong)] px-4 py-8 text-center text-[13px] text-[var(--ui-ink-faint)]">
                 No entities match this search.
               </div>
             )}
@@ -1249,21 +1253,21 @@ export function WikiEditorPage() {
 
       <Dialog.Root open={spacePickerOpen} onOpenChange={setSpacePickerOpen}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-50 bg-[rgba(3,7,18,0.72)] backdrop-blur-sm" />
-          <Dialog.Content className="fixed left-1/2 top-[14vh] z-50 w-[min(28rem,calc(100vw-1.5rem))] -translate-x-1/2 rounded-[28px] border border-white/10 bg-[rgba(10,15,28,0.97)] p-4 shadow-[0_32px_90px_rgba(0,0,0,0.45)] sm:p-5">
+          <Dialog.Overlay className="fixed inset-0 z-50 surface-overlay backdrop-blur-sm" />
+          <Dialog.Content className="fixed left-1/2 top-[14vh] z-50 w-[min(28rem,calc(100vw-1.5rem))] -translate-x-1/2 rounded-[28px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-popover)] p-4 shadow-[var(--ui-shadow-floating)] sm:p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <Dialog.Title className="font-display text-[1.2rem] tracking-[-0.04em] text-white">
+                <Dialog.Title className="font-display text-[1.2rem] tracking-[-0.04em] text-[var(--ui-ink-strong)]">
                   Choose wiki space
                 </Dialog.Title>
-                <Dialog.Description className="mt-1 text-[13px] leading-6 text-white/56">
+                <Dialog.Description className="mt-1 text-[13px] leading-6 text-[var(--ui-ink-soft)]">
                   Save this page into a different wiki space.
                 </Dialog.Description>
               </div>
               <Dialog.Close asChild>
                 <button
                   type="button"
-                  className="rounded-full border border-white/10 bg-white/[0.04] p-2 text-white/64 transition hover:bg-white/[0.08] hover:text-white"
+                  className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-2 text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]"
                   aria-label="Close space picker"
                 >
                   <X className="size-4" />
@@ -1278,11 +1282,12 @@ export function WikiEditorPage() {
                   <button
                     key={space.id}
                     type="button"
-                    className={
+                    className={cn(
+                      "flex min-w-0 items-center justify-between gap-3 rounded-[22px] border px-4 py-3 text-left transition",
                       active
-                        ? "flex items-center justify-between gap-3 rounded-[22px] border border-[rgba(192,193,255,0.22)] bg-[rgba(192,193,255,0.12)] px-4 py-3 text-left text-white transition"
-                        : "flex items-center justify-between gap-3 rounded-[22px] border border-white/8 bg-white/[0.03] px-4 py-3 text-left text-white/78 transition hover:bg-white/[0.06] hover:text-white"
-                    }
+                        ? "border-[color-mix(in_srgb,var(--primary)_28%,transparent)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]"
+                        : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]"
+                    )}
                     onClick={() => {
                       const next = new URLSearchParams(searchParams);
                       next.set("spaceId", space.id);
@@ -1294,7 +1299,7 @@ export function WikiEditorPage() {
                       <span className="block text-[14px] font-semibold">
                         {space.label}
                       </span>
-                      <span className="mt-1 block text-[12px] leading-5 text-white/52">
+                      <span className="mt-1 block break-words text-[12px] leading-5 text-[var(--ui-ink-soft)]">
                         {space.description || `/${space.slug}`}
                       </span>
                     </span>

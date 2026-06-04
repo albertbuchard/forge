@@ -137,13 +137,15 @@ function getVisibleSections(provider?: CalendarProvider) {
       ? "Google Calendar setup"
       : provider === "macos_local"
         ? "Calendars On This Mac setup"
-      : provider === "apple"
-        ? "Apple Calendar setup"
-        : provider === "microsoft"
-          ? "Exchange Online setup"
-          : "Custom CalDAV setup";
+        : provider === "apple"
+          ? "Apple Calendar setup"
+          : provider === "microsoft"
+            ? "Exchange Online setup"
+            : "Custom CalDAV setup";
   return GUIDE_SECTIONS.filter(
-    (section) => section.title === "Before you connect anything" || section.title === providerTitle
+    (section) =>
+      section.title === "Before you connect anything" ||
+      section.title === providerTitle
   );
 }
 
@@ -160,8 +162,8 @@ function GuideSectionCard({
     <Card
       className={
         compact
-          ? "grid gap-3 rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(18,28,38,0.98),rgba(11,17,28,0.98))] p-4"
-          : "grid gap-4 rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(18,28,38,0.98),rgba(11,17,28,0.98))]"
+          ? "grid gap-3 rounded-[24px] border border-[var(--ui-border-subtle)] !bg-[var(--ui-surface-1)] p-4"
+          : "grid gap-4 rounded-[28px] border border-[var(--ui-border-subtle)] !bg-[var(--ui-surface-1)]"
       }
     >
       <div className="flex items-start gap-4">
@@ -169,10 +171,22 @@ function GuideSectionCard({
           <Icon className={compact ? "size-4" : "size-5"} />
         </div>
         <div className="min-w-0">
-          <div className={compact ? "font-medium text-white" : "font-display text-[1.15rem] text-white"}>
+          <div
+            className={
+              compact
+                ? "font-medium text-[var(--ui-ink-strong)]"
+                : "font-display text-[1.15rem] text-[var(--ui-ink-strong)]"
+            }
+          >
             {section.title}
           </div>
-          <p className={compact ? "mt-1.5 text-sm leading-6 text-white/62" : "mt-2 max-w-3xl text-sm leading-6 text-white/62"}>
+          <p
+            className={
+              compact
+                ? "mt-1.5 text-sm leading-6 text-[var(--ui-ink-soft)]"
+                : "mt-2 max-w-3xl text-sm leading-6 text-[var(--ui-ink-soft)]"
+            }
+          >
             {section.description}
           </p>
         </div>
@@ -184,8 +198,8 @@ function GuideSectionCard({
             key={bullet}
             className={
               compact
-                ? "rounded-[16px] bg-white/[0.04] px-3 py-2.5 text-sm leading-6 text-white/70"
-                : "rounded-[18px] bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/72"
+                ? "rounded-[16px] bg-[var(--ui-surface-2)] px-3 py-2.5 text-sm leading-6 text-[var(--ui-ink-medium)]"
+                : "rounded-[18px] bg-[var(--ui-surface-2)] px-4 py-3 text-sm leading-6 text-[var(--ui-ink-medium)]"
             }
           >
             {bullet}
@@ -201,7 +215,7 @@ function GuideSectionCard({
               href={link.href}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex min-h-10 items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white/74 transition hover:bg-white/[0.08] hover:text-white"
+              className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-2 text-sm text-[var(--ui-ink-medium)] transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
             >
               <ExternalLink className="size-3.5" />
               {link.label}
@@ -225,7 +239,11 @@ export function CalendarSetupGuide({
   return (
     <div className="grid gap-4">
       {visibleSections.map((section) => (
-        <GuideSectionCard key={section.title} section={section} compact={compact} />
+        <GuideSectionCard
+          key={section.title}
+          section={section}
+          compact={compact}
+        />
       ))}
     </div>
   );

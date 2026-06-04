@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -26,7 +26,10 @@ import {
   Save
 } from "lucide-react";
 import { EntityLinkMultiSelect } from "@/components/psyche/entity-link-multiselect";
-import { FacetedTokenSearch, type FacetedTokenOption } from "@/components/search/faceted-token-search";
+import {
+  FacetedTokenSearch,
+  type FacetedTokenOption
+} from "@/components/search/faceted-token-search";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { PageHero } from "@/components/shell/page-hero";
 import {
@@ -68,6 +71,42 @@ type WorkoutDraft = {
   tagsText: string;
   linkValues: string[];
 };
+
+function ChartViewport({
+  className,
+  children
+}: {
+  className: string;
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    const update = () => {
+      const node = ref.current;
+      setReady(Boolean(node && node.clientWidth > 0 && node.clientHeight > 0));
+    };
+    const frame = window.requestAnimationFrame(update);
+    const observer =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+    if (ref.current && observer) {
+      observer.observe(ref.current);
+    }
+    window.addEventListener("resize", update);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer?.disconnect();
+      window.removeEventListener("resize", update);
+    };
+  }, []);
+
+  return (
+    <div ref={ref} className={className}>
+      {ready ? children : null}
+    </div>
+  );
+}
 
 const ZONE_COLORS: Record<string, string> = {
   below_z1: "#94a3b8",
@@ -167,14 +206,18 @@ function workoutTypeLabel(session: WorkoutSessionRecord) {
 }
 
 function activityFamilyLabel(session: WorkoutSessionRecord) {
-  return session.activityFamilyLabel?.trim() || humanizeToken(session.activityFamily);
+  return (
+    session.activityFamilyLabel?.trim() || humanizeToken(session.activityFamily)
+  );
 }
 
 function sourceSystemLabel(session: WorkoutSessionRecord) {
   return humanizeToken(session.sourceSystem ?? session.source);
 }
 
-function formatScalarValue(value: string | number | boolean | null | undefined) {
+function formatScalarValue(
+  value: string | number | boolean | null | undefined
+) {
   if (value == null) {
     return "n/a";
   }
@@ -198,7 +241,10 @@ function formatWorkoutMetric(metric: {
   return `${base} ${metric.unit}`;
 }
 
-function buildWorkoutSearchText(session: WorkoutSessionRecord, draft: WorkoutDraft) {
+function buildWorkoutSearchText(
+  session: WorkoutSessionRecord,
+  draft: WorkoutDraft
+) {
   return normalize(
     [
       session.workoutType,
@@ -350,7 +396,7 @@ function isKickboxingSession(session: WorkoutSessionRecord) {
 }
 
 function createExerciseTypeOptions(
-  sessions: WorkoutSessionRecord[],
+  sessions: WorkoutSessionRecord[]
 ): FacetedTokenOption[] {
   const options = new Map<string, FacetedTokenOption>();
   for (const session of sessions) {
@@ -404,8 +450,7 @@ function filterAnalysisSessions(
       return true;
     })
     .sort(
-      (left, right) =>
-        Date.parse(left.startedAt) - Date.parse(right.startedAt)
+      (left, right) => Date.parse(left.startedAt) - Date.parse(right.startedAt)
     );
 }
 
@@ -450,7 +495,9 @@ export function formatZoneTrendTooltipValue(
         ? name
         : "";
   const formattedValue =
-    typeof value === "number" ? Number(value.toFixed(1)) : String(value ?? "n/a");
+    typeof value === "number"
+      ? Number(value.toFixed(1))
+      : String(value ?? "n/a");
 
   if (dataKey === "restingHeartRate" || name === "Resting HR") {
     return [`${formattedValue} bpm`, "Resting HR"];
@@ -526,8 +573,7 @@ function buildZoneAnalysisView(
   });
 
   const rawHrCount = sessions.filter(
-    (session) =>
-      (session.analytics?.dataQuality?.heartRateSampleCount ?? 0) > 0
+    (session) => (session.analytics?.dataQuality?.heartRateSampleCount ?? 0) > 0
   ).length;
   const exerciseLabels = [
     ...new Set(sessions.map((session) => workoutTypeLabel(session)))
@@ -582,24 +628,28 @@ function SportsSessionEditor({
 
   return (
     <div className="grid gap-5">
-      <div className="rounded-[24px] bg-white/[0.04] p-4">
+      <div className="rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2 text-lg text-white">
+            <div className="flex items-center gap-2 text-lg text-[var(--ui-ink-strong)]">
               <Dumbbell className="size-4 text-[var(--primary)]" />
               <span>{workoutTypeLabel(session)}</span>
             </div>
-            <div className="mt-2 text-sm text-white/58">
+            <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
               {formatWorkoutWindow(session.startedAt, session.endedAt)}
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
             <Badge>{minutesLabel(session.durationSeconds)}</Badge>
             {session.totalEnergyKcal ? (
-              <Badge tone="meta">{Math.round(session.totalEnergyKcal)} kcal</Badge>
+              <Badge tone="meta">
+                {Math.round(session.totalEnergyKcal)} kcal
+              </Badge>
             ) : null}
             {session.distanceMeters ? (
-              <Badge tone="meta">{kilometersLabel(session.distanceMeters)}</Badge>
+              <Badge tone="meta">
+                {kilometersLabel(session.distanceMeters)}
+              </Badge>
             ) : null}
             <Badge tone="meta">{activityFamilyLabel(session)}</Badge>
             <Badge tone="meta" className="capitalize">
@@ -617,11 +667,11 @@ function SportsSessionEditor({
             onClick={() => onStepChange(index)}
             className={`rounded-[20px] border px-4 py-3 text-left transition ${
               step === index
-                ? "border-[var(--primary)] bg-[var(--primary)]/10 text-white"
-                : "border-white/8 bg-white/[0.04] text-white/62 hover:bg-white/[0.06] hover:text-white"
+                ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--ui-ink-strong)]"
+                : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]"
             }`}
           >
-            <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
               Step {index + 1}
             </div>
             <div className="mt-2 text-sm font-medium">{entry.title}</div>
@@ -629,59 +679,71 @@ function SportsSessionEditor({
         ))}
       </div>
 
-      <div className="rounded-[24px] bg-white/[0.03] p-4">
-        <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
+      <div className="rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+        <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
           {steps[step]!.title}
         </div>
-        <div className="mt-2 text-sm leading-6 text-white/58">
+        <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
           {steps[step]!.description}
         </div>
 
         {step === 0 ? (
           <div className="mt-4 grid gap-4">
             <div className="grid gap-3 md:grid-cols-3">
-              <div className="rounded-[18px] bg-white/[0.04] p-4">
-                <div className="text-sm text-white/58">Activity family</div>
-                <div className="mt-2 text-lg text-white capitalize">
+              <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+                <div className="text-sm text-[var(--ui-ink-soft)]">
+                  Activity family
+                </div>
+                <div className="mt-2 text-lg text-[var(--ui-ink-strong)] capitalize">
                   {activityFamilyLabel(session)}
                 </div>
               </div>
-              <div className="rounded-[18px] bg-white/[0.04] p-4">
-                <div className="text-sm text-white/58">Source system</div>
-                <div className="mt-2 text-lg text-white">
+              <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+                <div className="text-sm text-[var(--ui-ink-soft)]">
+                  Source system
+                </div>
+                <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
                   {sourceSystemLabel(session)}
                 </div>
               </div>
-              <div className="rounded-[18px] bg-white/[0.04] p-4">
-                <div className="text-sm text-white/58">Source device</div>
-                <div className="mt-2 text-lg text-white">
+              <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+                <div className="text-sm text-[var(--ui-ink-soft)]">
+                  Source device
+                </div>
+                <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
                   {session.sourceDevice || "n/a"}
                 </div>
               </div>
             </div>
             <div className="grid gap-3 md:grid-cols-3">
-              <div className="rounded-[18px] bg-white/[0.04] p-4">
-                <div className="text-sm text-white/58">Steps</div>
-                <div className="mt-2 text-lg text-white">
+              <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+                <div className="text-sm text-[var(--ui-ink-soft)]">Steps</div>
+                <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
                   {session.stepCount ?? "n/a"}
                 </div>
               </div>
-              <div className="rounded-[18px] bg-white/[0.04] p-4">
-                <div className="text-sm text-white/58">Avg HR</div>
-                <div className="mt-2 text-lg text-white">
-                  {session.averageHeartRate ? Math.round(session.averageHeartRate) : "n/a"}
+              <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+                <div className="text-sm text-[var(--ui-ink-soft)]">Avg HR</div>
+                <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
+                  {session.averageHeartRate
+                    ? Math.round(session.averageHeartRate)
+                    : "n/a"}
                 </div>
               </div>
-              <div className="rounded-[18px] bg-white/[0.04] p-4">
-                <div className="text-sm text-white/58">Max HR</div>
-                <div className="mt-2 text-lg text-white">
-                  {session.maxHeartRate ? Math.round(session.maxHeartRate) : "n/a"}
+              <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+                <div className="text-sm text-[var(--ui-ink-soft)]">Max HR</div>
+                <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
+                  {session.maxHeartRate
+                    ? Math.round(session.maxHeartRate)
+                    : "n/a"}
                 </div>
               </div>
             </div>
             <div className="grid gap-3 md:grid-cols-3">
               <label className="grid gap-2">
-                <span className="text-sm text-white/58">Effort</span>
+                <span className="text-sm text-[var(--ui-ink-soft)]">
+                  Effort
+                </span>
                 <Input
                   type="number"
                   min={1}
@@ -693,7 +755,9 @@ function SportsSessionEditor({
                 />
               </label>
               <label className="grid gap-2">
-                <span className="text-sm text-white/58">Planned vs spontaneous</span>
+                <span className="text-sm text-[var(--ui-ink-soft)]">
+                  Planned vs spontaneous
+                </span>
                 <Input
                   value={draft.plannedContext}
                   onChange={(event) =>
@@ -703,7 +767,9 @@ function SportsSessionEditor({
                 />
               </label>
               <label className="grid gap-2">
-                <span className="text-sm text-white/58">Social context</span>
+                <span className="text-sm text-[var(--ui-ink-soft)]">
+                  Social context
+                </span>
                 <Input
                   value={draft.socialContext}
                   onChange={(event) =>
@@ -714,10 +780,12 @@ function SportsSessionEditor({
               </label>
             </div>
             <label className="grid gap-2">
-              <span className="text-sm text-white/58">Tags</span>
+              <span className="text-sm text-[var(--ui-ink-soft)]">Tags</span>
               <Input
                 value={draft.tagsText}
-                onChange={(event) => onDraftChange({ tagsText: event.target.value })}
+                onChange={(event) =>
+                  onDraftChange({ tagsText: event.target.value })
+                }
                 placeholder="recovery, interval-block, stress-release"
               />
             </label>
@@ -728,28 +796,38 @@ function SportsSessionEditor({
           <div className="mt-4 grid gap-4">
             <div className="grid gap-3 md:grid-cols-2">
               <label className="grid gap-2">
-                <span className="text-sm text-white/58">Mood before</span>
+                <span className="text-sm text-[var(--ui-ink-soft)]">
+                  Mood before
+                </span>
                 <Input
                   value={draft.moodBefore}
-                  onChange={(event) => onDraftChange({ moodBefore: event.target.value })}
+                  onChange={(event) =>
+                    onDraftChange({ moodBefore: event.target.value })
+                  }
                 />
               </label>
               <label className="grid gap-2">
-                <span className="text-sm text-white/58">Mood after</span>
+                <span className="text-sm text-[var(--ui-ink-soft)]">
+                  Mood after
+                </span>
                 <Input
                   value={draft.moodAfter}
-                  onChange={(event) => onDraftChange({ moodAfter: event.target.value })}
+                  onChange={(event) =>
+                    onDraftChange({ moodAfter: event.target.value })
+                  }
                 />
               </label>
             </div>
             <label className="grid gap-2">
-              <span className="text-sm text-white/58">
+              <span className="text-sm text-[var(--ui-ink-soft)]">
                 Meaning, impact, and why this session mattered
               </span>
               <Textarea
                 className="min-h-[160px]"
                 value={draft.meaningText}
-                onChange={(event) => onDraftChange({ meaningText: event.target.value })}
+                onChange={(event) =>
+                  onDraftChange({ meaningText: event.target.value })
+                }
                 placeholder="This session was planned as active recovery after a heavy work block and helped reset stress before sleep."
               />
             </label>
@@ -758,8 +836,9 @@ function SportsSessionEditor({
 
         {step === 2 ? (
           <div className="mt-4 grid gap-3">
-            <div className="text-sm text-white/58">
-              Search goals, projects, habits, values, beliefs, patterns, or reports and attach the ones that explain this session.
+            <div className="text-sm text-[var(--ui-ink-soft)]">
+              Search goals, projects, habits, values, beliefs, patterns, or
+              reports and attach the ones that explain this session.
             </div>
             <EntityLinkMultiSelect
               options={linkOptions}
@@ -770,50 +849,60 @@ function SportsSessionEditor({
           </div>
         ) : null}
 
-        <div className="mt-5 grid gap-4 border-t border-white/8 pt-5">
+        <div className="mt-5 grid gap-4 border-t border-[var(--ui-border-subtle)] pt-5">
           <div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
               Captured data
             </div>
-            <div className="mt-2 text-sm leading-6 text-white/58">
-              Source-native workout metrics, events, and phases exposed through the adapter layer.
+            <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
+              Source-native workout metrics, events, and phases exposed through
+              the adapter layer.
             </div>
           </div>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {(session.details?.metrics ?? []).slice(0, 12).map((metric) => (
               <div
                 key={`${metric.category}:${metric.key}:${metric.statistic}`}
-                className="rounded-[18px] bg-white/[0.04] p-4"
+                className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4"
               >
-                <div className="text-sm text-white/58">{metric.label}</div>
-                <div className="mt-2 text-lg text-white">
+                <div className="text-sm text-[var(--ui-ink-soft)]">
+                  {metric.label}
+                </div>
+                <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
                   {formatWorkoutMetric(metric)}
                 </div>
-                <div className="mt-1 text-xs uppercase tracking-[0.14em] text-white/38">
-                  {humanizeToken(metric.category)} · {humanizeToken(metric.statistic)}
+                <div className="mt-1 text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
+                  {humanizeToken(metric.category)} ·{" "}
+                  {humanizeToken(metric.statistic)}
                 </div>
               </div>
             ))}
             {(session.details?.metrics?.length ?? 0) === 0 ? (
-              <div className="rounded-[18px] bg-white/[0.04] p-4 text-sm text-white/50">
+              <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 text-sm text-[var(--ui-ink-faint)]">
                 No provider metrics were captured for this session yet.
               </div>
             ) : null}
           </div>
           {(session.details?.events?.length ?? 0) > 0 ? (
             <div className="grid gap-3">
-              <div className="text-sm text-white/58">Workout events</div>
+              <div className="text-sm text-[var(--ui-ink-soft)]">
+                Workout events
+              </div>
               <div className="grid gap-2">
                 {session.details?.events.map((event) => (
                   <div
                     key={`${event.type}:${event.startedAt}`}
-                    className="rounded-[18px] bg-white/[0.04] px-4 py-3"
+                    className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="text-white">{event.label}</div>
-                      <Badge tone="meta">{minutesLabel(event.durationSeconds)}</Badge>
+                      <div className="text-[var(--ui-ink-strong)]">
+                        {event.label}
+                      </div>
+                      <Badge tone="meta">
+                        {minutesLabel(event.durationSeconds)}
+                      </Badge>
                     </div>
-                    <div className="mt-1 text-sm text-white/56">
+                    <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
                       {formatWorkoutWindow(
                         event.startedAt,
                         event.endedAt ?? event.startedAt
@@ -826,20 +915,24 @@ function SportsSessionEditor({
           ) : null}
           {(session.details?.components?.length ?? 0) > 0 ? (
             <div className="grid gap-3">
-              <div className="text-sm text-white/58">Workout phases</div>
+              <div className="text-sm text-[var(--ui-ink-soft)]">
+                Workout phases
+              </div>
               <div className="grid gap-2">
                 {session.details?.components.map((component) => (
                   <div
                     key={component.externalUid}
-                    className="rounded-[18px] bg-white/[0.04] px-4 py-3"
+                    className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="text-white">
+                      <div className="text-[var(--ui-ink-strong)]">
                         {component.activity.canonicalLabel}
                       </div>
-                      <Badge tone="meta">{minutesLabel(component.durationSeconds)}</Badge>
+                      <Badge tone="meta">
+                        {minutesLabel(component.durationSeconds)}
+                      </Badge>
                     </div>
-                    <div className="mt-1 text-sm text-white/56">
+                    <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
                       {formatWorkoutWindow(
                         component.startedAt,
                         component.endedAt ?? component.startedAt
@@ -854,7 +947,7 @@ function SportsSessionEditor({
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="text-sm text-white/48">
+        <div className="text-sm text-[var(--ui-ink-faint)]">
           {step < steps.length - 1
             ? "Move through the session one step at a time, then save when the context is clean."
             : "Everything is in place. Save the session metadata back into Forge."}
@@ -898,9 +991,8 @@ export function SportsPage() {
   const [drafts, setDrafts] = useState<Record<string, WorkoutDraft>>({});
   const [query, setQuery] = useState("");
   const [selectedFilterIds, setSelectedFilterIds] = useState<string[]>([]);
-  const [selectedAnalysisExerciseIds, setSelectedAnalysisExerciseIds] = useState<
-    string[]
-  >([]);
+  const [selectedAnalysisExerciseIds, setSelectedAnalysisExerciseIds] =
+    useState<string[]>([]);
   const [analysisExerciseQuery, setAnalysisExerciseQuery] = useState("");
   const [analysisDateMode, setAnalysisDateMode] =
     useState<AnalysisDateMode>("all");
@@ -909,7 +1001,9 @@ export function SportsPage() {
   const [analysisStartDate, setAnalysisStartDate] = useState("");
   const [analysisEndDate, setAnalysisEndDate] = useState("");
   const [analysisDefaultsApplied, setAnalysisDefaultsApplied] = useState(false);
-  const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
+  const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(
+    null
+  );
   const [editorStep, setEditorStep] = useState(0);
 
   const fitnessQuery = useQuery({
@@ -943,7 +1037,10 @@ export function SportsPage() {
     }
     setDrafts(
       Object.fromEntries(
-        fitnessQuery.data.sessions.map((session) => [session.id, buildWorkoutDraft(session)])
+        fitnessQuery.data.sessions.map((session) => [
+          session.id,
+          buildWorkoutDraft(session)
+        ])
       )
     );
   }, [fitnessQuery.data]);
@@ -1021,7 +1118,8 @@ export function SportsPage() {
     return [...sessions]
       .sort(
         (left, right) =>
-          new Date(right.startedAt).getTime() - new Date(left.startedAt).getTime()
+          new Date(right.startedAt).getTime() -
+          new Date(left.startedAt).getTime()
       )
       .filter((session) => {
         const draft = drafts[session.id] ?? buildWorkoutDraft(session);
@@ -1059,7 +1157,7 @@ export function SportsPage() {
     sessions.find((session) => session.id === selectedWorkoutId) ??
     null;
   const activeDraft = activeSession
-    ? drafts[activeSession.id] ?? buildWorkoutDraft(activeSession)
+    ? (drafts[activeSession.id] ?? buildWorkoutDraft(activeSession))
     : null;
 
   if (fitnessQuery.isLoading) {
@@ -1119,7 +1217,7 @@ export function SportsPage() {
   });
   const scatterData = analysisSessions.map((session) => ({
     duration: Math.round(session.durationSeconds / 60),
-    intensity: Math.round(((session.analytics?.load?.intensity ?? 0) * 100)),
+    intensity: Math.round((session.analytics?.load?.intensity ?? 0) * 100),
     load: session.analytics?.load?.trimp ?? 0,
     type: workoutTypeLabel(session),
     name: workoutTypeLabel(session)
@@ -1130,7 +1228,9 @@ export function SportsPage() {
       const base =
         current[sessionId] ??
         buildWorkoutDraft(
-          sessions.find((entry) => entry.id === sessionId) as WorkoutSessionRecord
+          sessions.find(
+            (entry) => entry.id === sessionId
+          ) as WorkoutSessionRecord
         );
       return {
         ...current,
@@ -1174,142 +1274,179 @@ export function SportsPage() {
 
       <SportsSummaryBox>
         <section className="grid gap-4 lg:grid-cols-4">
-        <Card>
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-            Weekly volume
-          </div>
-          <div className="mt-3 font-display text-4xl text-[var(--primary)]">
-            {minutesLabel(summary.weeklyVolumeSeconds)}
-          </div>
-          <div className="mt-2 text-sm text-white/58">
-            Total training time in the recent week.
-          </div>
-        </Card>
-        <Card>
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-            Exercise minutes
-          </div>
-          <div className="mt-3 font-display text-4xl text-white">
-            {summary.exerciseMinutes}
-          </div>
-          <div className="mt-2 text-sm text-white/58">
-            Aggregate exercise minutes from synced sessions.
-          </div>
-        </Card>
-        <Card>
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-            Energy burned
-          </div>
-          <div className="mt-3 font-display text-4xl text-white">
-            {summary.energyBurnedKcal}
-          </div>
-          <div className="mt-2 text-sm text-white/58">Recent weekly kcal.</div>
-        </Card>
-        <Card>
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-            Training streak
-          </div>
-          <div className="mt-3 font-display text-4xl text-white">
-            {summary.streakDays}
-          </div>
-          <div className="mt-2 text-sm text-white/58">
-            Distinct workout days in the recent week.
-          </div>
-        </Card>
-        <Card>
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-            Average session
-          </div>
-          <div className="mt-3 font-display text-4xl text-white">
-            {summary.averageSessionMinutes}m
-          </div>
-          <div className="mt-2 text-sm text-white/58">
-            Mean duration across recent sessions.
-          </div>
-        </Card>
-        <Card>
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-            Training load
-          </div>
-          <div className="mt-3 font-display text-4xl text-white">
-            {summary.totalTrainingLoad ?? "n/a"}
-          </div>
-          <div className="mt-2 text-sm text-white/58">
-            Forge TRIMP across recent sessions.
-          </div>
-        </Card>
-        <Card>
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-            Linked sessions
-          </div>
-          <div className="mt-3 font-display text-4xl text-white">
-            {summary.linkedSessionCount}
-          </div>
-          <div className="mt-2 text-sm text-white/58">
-            Sessions already tied to Forge or Psyche entities.
-          </div>
-        </Card>
-        <Card>
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-            HR coverage
-          </div>
-          <div className="mt-3 font-display text-4xl text-white">
-            {Math.round((summary.averageHeartRateCoverage ?? 0) * 100)}%
-          </div>
-          <div className="mt-2 text-sm text-white/58">
-            Average raw HR sample coverage.
-          </div>
-        </Card>
+          <Card>
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+              Weekly volume
+            </div>
+            <div className="mt-3 font-display text-4xl text-[var(--primary)]">
+              {minutesLabel(summary.weeklyVolumeSeconds)}
+            </div>
+            <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
+              Total training time in the recent week.
+            </div>
+          </Card>
+          <Card>
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+              Exercise minutes
+            </div>
+            <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
+              {summary.exerciseMinutes}
+            </div>
+            <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
+              Aggregate exercise minutes from synced sessions.
+            </div>
+          </Card>
+          <Card>
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+              Energy burned
+            </div>
+            <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
+              {summary.energyBurnedKcal}
+            </div>
+            <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
+              Recent weekly kcal.
+            </div>
+          </Card>
+          <Card>
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+              Training streak
+            </div>
+            <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
+              {summary.streakDays}
+            </div>
+            <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
+              Distinct workout days in the recent week.
+            </div>
+          </Card>
+          <Card>
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+              Average session
+            </div>
+            <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
+              {summary.averageSessionMinutes}m
+            </div>
+            <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
+              Mean duration across recent sessions.
+            </div>
+          </Card>
+          <Card>
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+              Training load
+            </div>
+            <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
+              {summary.totalTrainingLoad ?? "n/a"}
+            </div>
+            <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
+              Forge TRIMP across recent sessions.
+            </div>
+          </Card>
+          <Card>
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+              Linked sessions
+            </div>
+            <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
+              {summary.linkedSessionCount}
+            </div>
+            <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
+              Sessions already tied to Forge or Psyche entities.
+            </div>
+          </Card>
+          <Card>
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+              HR coverage
+            </div>
+            <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
+              {Math.round((summary.averageHeartRateCoverage ?? 0) * 100)}%
+            </div>
+            <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
+              Average raw HR sample coverage.
+            </div>
+          </Card>
         </section>
       </SportsSummaryBox>
 
       <SportsCompositionBox>
         <section className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
           <Card className="min-h-[320px]">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
               Load and volume trend
             </div>
-            <div className="mt-4 h-[260px]">
-              <ResponsiveContainer width="100%" height="100%">
+            <ChartViewport className="mt-4 h-[260px]">
+              <ResponsiveContainer
+                width="100%"
+                height="100%"
+                minWidth={1}
+                minHeight={1}
+              >
                 <AreaChart data={trendChartData}>
                   <defs>
                     <linearGradient id="sportsLoad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#f97316" stopOpacity={0.36} />
-                      <stop offset="100%" stopColor="#f97316" stopOpacity={0.04} />
+                      <stop
+                        offset="0%"
+                        stopColor="#f97316"
+                        stopOpacity={0.36}
+                      />
+                      <stop
+                        offset="100%"
+                        stopColor="#f97316"
+                        stopOpacity={0.04}
+                      />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
-                  <XAxis dataKey="date" tick={{ fill: "rgba(255,255,255,0.55)", fontSize: 11 }} />
-                  <YAxis tick={{ fill: "rgba(255,255,255,0.55)", fontSize: 11 }} width={34} />
+                  <CartesianGrid
+                    stroke="var(--ui-border-subtle)"
+                    vertical={false}
+                  />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fill: "var(--ui-ink-faint)", fontSize: 11 }}
+                  />
+                  <YAxis
+                    tick={{ fill: "var(--ui-ink-faint)", fontSize: 11 }}
+                    width={34}
+                  />
                   <Tooltip
                     contentStyle={{
-                      background: "rgba(8,12,22,0.94)",
-                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: "var(--ui-surface-popover)",
+                      border: "1px solid var(--ui-border-strong)",
                       borderRadius: 8,
-                      color: "white"
+                      color: "var(--ui-ink-strong)"
                     }}
                   />
-                  <Area type="monotone" dataKey="load" stroke="#f97316" fill="url(#sportsLoad)" strokeWidth={2} />
-                  <Area type="monotone" dataKey="duration" stroke="#38bdf8" fill="rgba(56,189,248,0.10)" strokeWidth={2} />
+                  <Area
+                    type="monotone"
+                    dataKey="load"
+                    stroke="#f97316"
+                    fill="url(#sportsLoad)"
+                    strokeWidth={2}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="duration"
+                    stroke="#38bdf8"
+                    fill="var(--ui-info-soft)"
+                    strokeWidth={2}
+                  />
                 </AreaChart>
               </ResponsiveContainer>
-            </div>
+            </ChartViewport>
           </Card>
 
           <Card>
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
               Zone distribution
             </div>
             <div className="mt-4 grid gap-3">
               {zoneMix.map((zone) => (
                 <div key={zone.key} className="grid gap-2">
                   <div className="flex items-center justify-between gap-3 text-sm">
-                    <span className="text-white/72">{zone.label}</span>
-                    <span className="text-white">
-                      {Math.round(zone.percentage * 100)}% · {minutesLabel(zone.seconds)}
+                    <span className="text-[var(--ui-ink)]">{zone.label}</span>
+                    <span className="text-[var(--ui-ink-strong)]">
+                      {Math.round(zone.percentage * 100)}% ·{" "}
+                      {minutesLabel(zone.seconds)}
                     </span>
                   </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-white/[0.08]">
+                  <div className="h-2 overflow-hidden rounded-full bg-[var(--ui-surface-3)]">
                     <div
                       className="h-full rounded-full"
                       style={{
@@ -1321,23 +1458,34 @@ export function SportsPage() {
                 </div>
               ))}
             </div>
-            <div className="mt-5 h-[180px]">
-              <ResponsiveContainer width="100%" height="100%">
+            <ChartViewport className="mt-5 h-[180px]">
+              <ResponsiveContainer
+                width="100%"
+                height="100%"
+                minWidth={1}
+                minHeight={1}
+              >
                 <BarChart data={zoneChartData}>
-                  <XAxis dataKey="zone" tick={{ fill: "rgba(255,255,255,0.55)", fontSize: 10 }} />
-                  <YAxis tick={{ fill: "rgba(255,255,255,0.55)", fontSize: 10 }} width={34} />
+                  <XAxis
+                    dataKey="zone"
+                    tick={{ fill: "var(--ui-ink-faint)", fontSize: 10 }}
+                  />
+                  <YAxis
+                    tick={{ fill: "var(--ui-ink-faint)", fontSize: 10 }}
+                    width={34}
+                  />
                   <Tooltip
                     contentStyle={{
-                      background: "rgba(8,12,22,0.94)",
-                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: "var(--ui-surface-popover)",
+                      border: "1px solid var(--ui-border-strong)",
                       borderRadius: 8,
-                      color: "white"
+                      color: "var(--ui-ink-strong)"
                     }}
                   />
                   <Bar dataKey="minutes" fill="#f97316" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
-            </div>
+            </ChartViewport>
           </Card>
         </section>
       </SportsCompositionBox>
@@ -1347,15 +1495,16 @@ export function SportsPage() {
           <Card className="grid gap-4 overflow-hidden">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                   HR zone analysis
                 </div>
-                <div className="mt-2 text-lg text-white">
+                <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
                   Filter all-time workout evidence by exercise type and date.
                 </div>
               </div>
               <Badge tone="meta">
-                {filteredAnalysisSessions.length} of {analysisSessions.length} sessions
+                {filteredAnalysisSessions.length} of {analysisSessions.length}{" "}
+                sessions
               </Badge>
             </div>
             <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(280px,0.8fr)]">
@@ -1371,8 +1520,8 @@ export function SportsPage() {
                 placeholder="Search exercise types"
                 emptyStateMessage="No exercise type matches."
               />
-              <div className="grid gap-3 rounded-[8px] border border-white/8 bg-white/[0.035] p-4">
-                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+              <div className="grid gap-3 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                   Date range
                 </div>
                 <div className="grid grid-cols-3 gap-2">
@@ -1386,10 +1535,12 @@ export function SportsPage() {
                       type="button"
                       className={`rounded-[8px] border px-3 py-2 text-sm transition ${
                         analysisDateMode === mode
-                          ? "border-[var(--primary)] bg-[var(--primary)]/12 text-white"
-                          : "border-white/8 bg-white/[0.04] text-white/62 hover:bg-white/[0.07] hover:text-white"
+                          ? "border-[var(--primary)] bg-[var(--primary)]/12 text-[var(--ui-ink-strong)]"
+                          : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]"
                       }`}
-                      onClick={() => setAnalysisDateMode(mode as AnalysisDateMode)}
+                      onClick={() =>
+                        setAnalysisDateMode(mode as AnalysisDateMode)
+                      }
                     >
                       {label}
                     </button>
@@ -1397,7 +1548,9 @@ export function SportsPage() {
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="grid gap-2">
-                    <span className="text-sm text-white/58">Start</span>
+                    <span className="text-sm text-[var(--ui-ink-soft)]">
+                      Start
+                    </span>
                     <Input
                       type="date"
                       value={analysisStartDate}
@@ -1408,7 +1561,9 @@ export function SportsPage() {
                     />
                   </label>
                   <label className="grid gap-2">
-                    <span className="text-sm text-white/58">End</span>
+                    <span className="text-sm text-[var(--ui-ink-soft)]">
+                      End
+                    </span>
                     <Input
                       type="date"
                       value={analysisEndDate}
@@ -1424,220 +1579,238 @@ export function SportsPage() {
           </Card>
 
           <div className="grid gap-4 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
-          <Card className="min-h-[330px] overflow-hidden">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-                  Average zones
+            <Card className="min-h-[330px] overflow-hidden">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+                    Average zones
+                  </div>
+                  <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
+                    Duration-weighted proportion of time in each HR zone.
+                  </div>
                 </div>
-                <div className="mt-2 text-lg text-white">
-                  Duration-weighted proportion of time in each HR zone.
-                </div>
+                <Badge tone="meta">{selectedAnalysisLabel}</Badge>
               </div>
-              <Badge tone="meta">
-                {selectedAnalysisLabel}
-              </Badge>
-            </div>
-            <div className="mt-4 h-[235px]">
+              <ChartViewport className="mt-4 h-[235px]">
+                {zoneAnalysisView.sessions.length > 0 ? (
+                  <ResponsiveContainer
+                    width="100%"
+                    height="100%"
+                    minWidth={1}
+                    minHeight={1}
+                  >
+                    <BarChart data={zoneAnalysisView.averageZoneData}>
+                      <CartesianGrid
+                        stroke="var(--ui-border-subtle)"
+                        vertical={false}
+                      />
+                      <XAxis
+                        dataKey="zone"
+                        interval={0}
+                        tick={{ fill: "var(--ui-ink-faint)", fontSize: 10 }}
+                      />
+                      <YAxis
+                        unit="%"
+                        domain={[0, 100]}
+                        ticks={[0, 25, 50, 75, 100]}
+                        tick={{ fill: "var(--ui-ink-faint)", fontSize: 10 }}
+                        width={38}
+                      />
+                      <Tooltip
+                        formatter={(value) => [`${value}%`, "Average time"]}
+                        contentStyle={{
+                          background: "var(--ui-surface-popover)",
+                          border: "1px solid var(--ui-border-strong)",
+                          borderRadius: 8,
+                          color: "var(--ui-ink-strong)"
+                        }}
+                      />
+                      <Bar dataKey="percentage" radius={[4, 4, 0, 0]}>
+                        {zoneAnalysisView.averageZoneData.map((entry) => (
+                          <Cell key={entry.key} fill={entry.fill} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="grid h-full place-items-center rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-6 text-center text-sm leading-6 text-[var(--ui-ink-soft)]">
+                    No selected sessions with zone analytics are available yet.
+                  </div>
+                )}
+              </ChartViewport>
               {zoneAnalysisView.sessions.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={zoneAnalysisView.averageZoneData}>
-                    <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
-                    <XAxis
-                      dataKey="zone"
-                      interval={0}
-                      tick={{ fill: "rgba(255,255,255,0.55)", fontSize: 10 }}
-                    />
-                    <YAxis
-                      unit="%"
-                      domain={[0, 100]}
-                      ticks={[0, 25, 50, 75, 100]}
-                      tick={{ fill: "rgba(255,255,255,0.55)", fontSize: 10 }}
-                      width={38}
-                    />
-                    <Tooltip
-                      formatter={(value) => [`${value}%`, "Average time"]}
-                      contentStyle={{
-                        background: "rgba(8,12,22,0.94)",
-                        border: "1px solid rgba(255,255,255,0.12)",
-                        borderRadius: 8,
-                        color: "white"
-                      }}
-                    />
-                    <Bar dataKey="percentage" radius={[4, 4, 0, 0]}>
-                      {zoneAnalysisView.averageZoneData.map((entry) => (
-                        <Cell key={entry.key} fill={entry.fill} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="grid h-full place-items-center rounded-[8px] bg-white/[0.035] p-6 text-center text-sm leading-6 text-white/54">
-                  No selected sessions with zone analytics are available yet.
+                <div className="mt-3 grid gap-2 text-sm text-[var(--ui-ink-soft)] sm:grid-cols-3">
+                  <div>
+                    {zoneAnalysisView.rawHrCount} sessions have raw HR timelines
+                  </div>
+                  <div>
+                    Latest: {zoneAnalysisView.lineData.at(-1)?.dateKey ?? "n/a"}
+                  </div>
+                  <div>
+                    VO2max points:{" "}
+                    {
+                      zoneAnalysisView.lineData.filter(
+                        (entry) => entry.vo2Max != null
+                      ).length
+                    }
+                  </div>
                 </div>
-              )}
-            </div>
-            {zoneAnalysisView.sessions.length > 0 ? (
-              <div className="mt-3 grid gap-2 text-sm text-white/58 sm:grid-cols-3">
-                <div>{zoneAnalysisView.rawHrCount} sessions have raw HR timelines</div>
-                <div>
-                  Latest:{" "}
-                  {zoneAnalysisView.lineData.at(-1)?.dateKey ?? "n/a"}
-                </div>
-                <div>
-                  VO2max points:{" "}
-                  {
-                    zoneAnalysisView.lineData.filter(
-                      (entry) => entry.vo2Max != null
-                    ).length
-                  }
-                </div>
-              </div>
-            ) : null}
-          </Card>
+              ) : null}
+            </Card>
 
-          <Card className="min-h-[330px] overflow-hidden">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-                  {analysisZoneChartMode === "expanding_lines"
-                    ? "Expanding zone lines"
-                    : "Zone drift"}
+            <Card className="min-h-[330px] overflow-hidden">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+                    {analysisZoneChartMode === "expanding_lines"
+                      ? "Expanding zone lines"
+                      : "Zone drift"}
+                  </div>
+                  <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
+                    {analysisZoneChartMode === "expanding_lines"
+                      ? "Expanding all-session average with resting HR and VO2max overlay."
+                      : "Rolling duration-weighted zone mix with resting HR and VO2max overlay."}
+                  </div>
                 </div>
-                <div className="mt-2 text-lg text-white">
-                  {analysisZoneChartMode === "expanding_lines"
-                    ? "Expanding all-session average with resting HR and VO2max overlay."
-                    : "Rolling duration-weighted zone mix with resting HR and VO2max overlay."}
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
+                  <div
+                    className="grid grid-cols-2 gap-1 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-1"
+                    aria-label="Zone chart display"
+                  >
+                    {[
+                      ["rolling_stack", "Stacked"],
+                      ["expanding_lines", "Lines"]
+                    ].map(([mode, label]) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        className={`min-h-9 rounded-[6px] px-3 py-1.5 text-xs font-medium transition ${
+                          analysisZoneChartMode === mode
+                            ? "bg-[var(--primary)]/18 text-[var(--ui-ink-strong)]"
+                            : "text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]"
+                        }`}
+                        onClick={() =>
+                          setAnalysisZoneChartMode(
+                            mode as ZoneAnalysisChartMode
+                          )
+                        }
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <Badge tone="meta">HRR zones</Badge>
                 </div>
               </div>
-              <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
-                <div
-                  className="grid grid-cols-2 gap-1 rounded-[8px] border border-white/8 bg-white/[0.035] p-1"
-                  aria-label="Zone chart display"
-                >
-                  {[
-                    ["rolling_stack", "Stacked"],
-                    ["expanding_lines", "Lines"]
-                  ].map(([mode, label]) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      className={`min-h-9 rounded-[6px] px-3 py-1.5 text-xs font-medium transition ${
-                        analysisZoneChartMode === mode
-                          ? "bg-[var(--primary)]/18 text-white"
-                          : "text-white/58 hover:bg-white/[0.06] hover:text-white"
-                      }`}
-                      onClick={() =>
-                        setAnalysisZoneChartMode(mode as ZoneAnalysisChartMode)
+              <ChartViewport className="mt-4 h-[255px]">
+                {zoneAnalysisView.lineData.length > 0 ? (
+                  <ResponsiveContainer
+                    width="100%"
+                    height="100%"
+                    minWidth={1}
+                    minHeight={1}
+                  >
+                    <ComposedChart
+                      data={
+                        analysisZoneChartMode === "expanding_lines"
+                          ? zoneAnalysisView.expandingLineData
+                          : zoneAnalysisView.lineData
                       }
                     >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <Badge tone="meta">HRR zones</Badge>
-              </div>
-            </div>
-            <div className="mt-4 h-[255px]">
-              {zoneAnalysisView.lineData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart
-                    data={
-                      analysisZoneChartMode === "expanding_lines"
-                        ? zoneAnalysisView.expandingLineData
-                        : zoneAnalysisView.lineData
-                    }
-                  >
-                    <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
-                    <XAxis
-                      dataKey="date"
-                      tick={{ fill: "rgba(255,255,255,0.55)", fontSize: 10 }}
-                    />
-                    <YAxis
-                      yAxisId="zones"
-                      domain={[0, 100]}
-                      ticks={[0, 25, 50, 75, 100]}
-                      unit="%"
-                      tick={{ fill: "rgba(255,255,255,0.55)", fontSize: 10 }}
-                      width={38}
-                    />
-                    <YAxis
-                      yAxisId="vitals"
-                      orientation="right"
-                      tick={{ fill: "rgba(255,255,255,0.55)", fontSize: 10 }}
-                      width={42}
-                    />
-                    <Tooltip
-                      formatter={(value, name, item) =>
-                        formatZoneTrendTooltipValue(value, name, item)
-                      }
-                      contentStyle={{
-                        background: "rgba(8,12,22,0.94)",
-                        border: "1px solid rgba(255,255,255,0.12)",
-                        borderRadius: 8,
-                        color: "white"
-                      }}
-                    />
-                    <Legend
-                      wrapperStyle={{
-                        color: "rgba(255,255,255,0.7)",
-                        fontSize: 11
-                      }}
-                    />
-                    {analysisZoneChartMode === "expanding_lines"
-                      ? ZONE_ORDER.map((zoneKey) => (
-                          <Line
-                            key={zoneKey}
-                            yAxisId="zones"
-                            type="monotone"
-                            dataKey={zoneKey}
-                            name={humanizeToken(zoneKey)}
-                            stroke={ZONE_COLORS[zoneKey]}
-                            strokeWidth={2}
-                            dot={{ r: 2.5 }}
-                            activeDot={{ r: 4 }}
-                            connectNulls
-                          />
-                        ))
-                      : ZONE_ORDER.map((zoneKey) => (
-                          <Bar
-                            key={zoneKey}
-                            yAxisId="zones"
-                            dataKey={zoneKey}
-                            stackId="zones"
-                            fill={ZONE_COLORS[zoneKey]}
-                            isAnimationActive={false}
-                          />
-                        ))}
-                    <Line
-                      yAxisId="vitals"
-                      type="monotone"
-                      dataKey="restingHeartRate"
-                      name="Resting HR"
-                      stroke="#e2e8f0"
-                      strokeWidth={2}
-                      dot={{ r: 3 }}
-                      connectNulls
-                    />
-                    <Line
-                      yAxisId="vitals"
-                      type="monotone"
-                      dataKey="vo2Max"
-                      name="VO2max"
-                      stroke="#a78bfa"
-                      strokeWidth={2}
-                      dot={{ r: 3 }}
-                      connectNulls
-                    />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="grid h-full place-items-center rounded-[8px] bg-white/[0.035] p-6 text-center text-sm leading-6 text-white/54">
-                  Select workouts with HR evidence to unlock the time-series plot.
-                </div>
-              )}
-            </div>
-          </Card>
+                      <CartesianGrid
+                        stroke="var(--ui-border-subtle)"
+                        vertical={false}
+                      />
+                      <XAxis
+                        dataKey="date"
+                        tick={{ fill: "var(--ui-ink-faint)", fontSize: 10 }}
+                      />
+                      <YAxis
+                        yAxisId="zones"
+                        domain={[0, 100]}
+                        ticks={[0, 25, 50, 75, 100]}
+                        unit="%"
+                        tick={{ fill: "var(--ui-ink-faint)", fontSize: 10 }}
+                        width={38}
+                      />
+                      <YAxis
+                        yAxisId="vitals"
+                        orientation="right"
+                        tick={{ fill: "var(--ui-ink-faint)", fontSize: 10 }}
+                        width={42}
+                      />
+                      <Tooltip
+                        formatter={(value, name, item) =>
+                          formatZoneTrendTooltipValue(value, name, item)
+                        }
+                        contentStyle={{
+                          background: "var(--ui-surface-popover)",
+                          border: "1px solid var(--ui-border-strong)",
+                          borderRadius: 8,
+                          color: "var(--ui-ink-strong)"
+                        }}
+                      />
+                      <Legend
+                        wrapperStyle={{
+                          color: "var(--ui-ink)",
+                          fontSize: 11
+                        }}
+                      />
+                      {analysisZoneChartMode === "expanding_lines"
+                        ? ZONE_ORDER.map((zoneKey) => (
+                            <Line
+                              key={zoneKey}
+                              yAxisId="zones"
+                              type="monotone"
+                              dataKey={zoneKey}
+                              name={humanizeToken(zoneKey)}
+                              stroke={ZONE_COLORS[zoneKey]}
+                              strokeWidth={2}
+                              dot={{ r: 2.5 }}
+                              activeDot={{ r: 4 }}
+                              connectNulls
+                            />
+                          ))
+                        : ZONE_ORDER.map((zoneKey) => (
+                            <Bar
+                              key={zoneKey}
+                              yAxisId="zones"
+                              dataKey={zoneKey}
+                              stackId="zones"
+                              fill={ZONE_COLORS[zoneKey]}
+                              isAnimationActive={false}
+                            />
+                          ))}
+                      <Line
+                        yAxisId="vitals"
+                        type="monotone"
+                        dataKey="restingHeartRate"
+                        name="Resting HR"
+                        stroke="var(--ui-ink-soft)"
+                        strokeWidth={2}
+                        dot={{ r: 3 }}
+                        connectNulls
+                      />
+                      <Line
+                        yAxisId="vitals"
+                        type="monotone"
+                        dataKey="vo2Max"
+                        name="VO2max"
+                        stroke="#a78bfa"
+                        strokeWidth={2}
+                        dot={{ r: 3 }}
+                        connectNulls
+                      />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="grid h-full place-items-center rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-6 text-center text-sm leading-6 text-[var(--ui-ink-soft)]">
+                    Select workouts with HR evidence to unlock the time-series
+                    plot.
+                  </div>
+                )}
+              </ChartViewport>
+            </Card>
           </div>
         </section>
       </SportsCompositionBox>
@@ -1645,50 +1818,74 @@ export function SportsPage() {
       <SportsCompositionBox>
         <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
           <Card className="min-h-[300px]">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
               Duration vs intensity
             </div>
-            <div className="mt-4 h-[250px]">
-              <ResponsiveContainer width="100%" height="100%">
+            <ChartViewport className="mt-4 h-[250px]">
+              <ResponsiveContainer
+                width="100%"
+                height="100%"
+                minWidth={1}
+                minHeight={1}
+              >
                 <ScatterChart data={scatterData}>
-                  <CartesianGrid stroke="rgba(255,255,255,0.08)" />
-                  <XAxis type="number" dataKey="duration" name="minutes" tick={{ fill: "rgba(255,255,255,0.55)", fontSize: 11 }} />
-                  <YAxis type="number" dataKey="intensity" name="intensity" tick={{ fill: "rgba(255,255,255,0.55)", fontSize: 11 }} width={38} />
+                  <CartesianGrid stroke="var(--ui-border-subtle)" />
+                  <XAxis
+                    type="number"
+                    dataKey="duration"
+                    name="minutes"
+                    tick={{ fill: "var(--ui-ink-faint)", fontSize: 11 }}
+                  />
+                  <YAxis
+                    type="number"
+                    dataKey="intensity"
+                    name="intensity"
+                    tick={{ fill: "var(--ui-ink-faint)", fontSize: 11 }}
+                    width={38}
+                  />
                   <Tooltip
                     cursor={{ strokeDasharray: "3 3" }}
                     contentStyle={{
-                      background: "rgba(8,12,22,0.94)",
-                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: "var(--ui-surface-popover)",
+                      border: "1px solid var(--ui-border-strong)",
                       borderRadius: 8,
-                      color: "white"
+                      color: "var(--ui-ink-strong)"
                     }}
                   />
                   <Scatter dataKey="load" fill="#f97316" />
                 </ScatterChart>
               </ResponsiveContainer>
-            </div>
+            </ChartViewport>
           </Card>
           <Card>
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
               Evidence quality
             </div>
             <div className="mt-4 grid gap-3">
-              <div className="rounded-[8px] bg-white/[0.04] p-4">
-                <div className="text-sm text-white/58">Raw HR coverage</div>
-                <div className="mt-2 text-2xl text-white">
+              <div className="rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+                <div className="text-sm text-[var(--ui-ink-soft)]">
+                  Raw HR coverage
+                </div>
+                <div className="mt-2 text-2xl text-[var(--ui-ink-strong)]">
                   {Math.round((summary.averageHeartRateCoverage ?? 0) * 100)}%
                 </div>
               </div>
-              <div className="rounded-[8px] bg-white/[0.04] p-4">
-                <div className="text-sm text-white/58">Route-backed workouts</div>
-                <div className="mt-2 text-2xl text-white">
+              <div className="rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+                <div className="text-sm text-[var(--ui-ink-soft)]">
+                  Route-backed workouts
+                </div>
+                <div className="mt-2 text-2xl text-[var(--ui-ink-strong)]">
                   {summary.routeWorkoutCount ?? 0}
                 </div>
               </div>
-              <div className="rounded-[8px] bg-white/[0.04] p-4">
-                <div className="text-sm text-white/58">Top sport</div>
-                <div className="mt-2 text-lg text-white">
-                  {summary.topWorkoutTypeLabel ?? summary.topWorkoutType ?? "n/a"}
+              <div className="rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+                <div className="text-sm text-[var(--ui-ink-soft)]">
+                  Top sport
+                </div>
+                <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
+                  {summary.topWorkoutTypeLabel ??
+                    summary.topWorkoutType ??
+                    "n/a"}
                 </div>
               </div>
             </div>
@@ -1698,225 +1895,258 @@ export function SportsPage() {
 
       <SportsCompositionBox>
         <section className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
-        <Card className="grid gap-4">
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-            Recent volume
-          </div>
-          <div className="grid gap-3">
-            {weeklyTrend.map((session) => (
-              <div
-                key={session.id}
-                className="grid gap-2 rounded-[18px] bg-white/[0.04] px-4 py-3 md:grid-cols-[110px_150px_minmax(0,1fr)_90px]"
-              >
-                <div className="text-sm text-white/62">{session.dateKey}</div>
-                <div className="text-sm text-white">
-                  {session.workoutTypeLabel ?? humanizeToken(session.workoutType)}
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/[0.08]">
-                    <div
-                      className="h-full rounded-full bg-[var(--primary)]"
-                      style={{
-                        width: `${Math.min(100, (session.durationMinutes / 120) * 100)}%`
-                      }}
-                    />
+          <Card className="grid gap-4">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+              Recent volume
+            </div>
+            <div className="grid gap-3">
+              {weeklyTrend.map((session) => (
+                <div
+                  key={session.id}
+                  className="grid gap-2 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3 md:grid-cols-[110px_150px_minmax(0,1fr)_90px]"
+                >
+                  <div className="text-sm text-[var(--ui-ink-soft)]">
+                    {session.dateKey}
                   </div>
-                  <div className="text-sm text-white">
-                    {session.durationMinutes}m
+                  <div className="text-sm text-[var(--ui-ink-strong)]">
+                    {session.workoutTypeLabel ??
+                      humanizeToken(session.workoutType)}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-[var(--ui-surface-3)]">
+                      <div
+                        className="h-full rounded-full bg-[var(--primary)]"
+                        style={{
+                          width: `${Math.min(100, (session.durationMinutes / 120) * 100)}%`
+                        }}
+                      />
+                    </div>
+                    <div className="text-sm text-[var(--ui-ink-strong)]">
+                      {session.durationMinutes}m
+                    </div>
+                  </div>
+                  <div className="text-sm text-[var(--ui-ink-soft)]">
+                    {session.energyKcal} kcal
                   </div>
                 </div>
-                <div className="text-sm text-white/62">{session.energyKcal} kcal</div>
+              ))}
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+                <div className="text-sm text-[var(--ui-ink-soft)]">
+                  Distance
+                </div>
+                <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
+                  {kilometersLabel(summary.distanceMeters)}
+                </div>
               </div>
-            ))}
-          </div>
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="rounded-[18px] bg-white/[0.04] p-4">
-              <div className="text-sm text-white/58">Distance</div>
-              <div className="mt-2 text-lg text-white">
-                {kilometersLabel(summary.distanceMeters)}
+              <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+                <div className="text-sm text-[var(--ui-ink-soft)]">
+                  Planned sessions
+                </div>
+                <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
+                  {summary.plannedSessionCount}
+                </div>
+              </div>
+              <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+                <div className="text-sm text-[var(--ui-ink-soft)]">
+                  Imported / merged
+                </div>
+                <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
+                  {summary.importedSessionCount} /{" "}
+                  {summary.reconciledSessionCount}
+                </div>
               </div>
             </div>
-            <div className="rounded-[18px] bg-white/[0.04] p-4">
-              <div className="text-sm text-white/58">Planned sessions</div>
-              <div className="mt-2 text-lg text-white">
-                {summary.plannedSessionCount}
-              </div>
-            </div>
-            <div className="rounded-[18px] bg-white/[0.04] p-4">
-              <div className="text-sm text-white/58">Imported / merged</div>
-              <div className="mt-2 text-lg text-white">
-                {summary.importedSessionCount} / {summary.reconciledSessionCount}
-              </div>
-            </div>
-          </div>
-        </Card>
+          </Card>
 
-        <Card className="grid gap-4">
-          <div>
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-              Training composition
+          <Card className="grid gap-4">
+            <div>
+              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+                Training composition
+              </div>
+              <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
+                Workout type and provenance mix
+              </div>
             </div>
-            <div className="mt-2 text-lg text-white">
-              Workout type and provenance mix
-            </div>
-          </div>
-          <div className="grid gap-3">
-            {typeBreakdown.slice(0, 6).map((entry) => (
-              <div
-                key={entry.workoutType}
-                className="grid gap-2 rounded-[18px] bg-white/[0.04] px-4 py-3 md:grid-cols-[minmax(0,1fr)_90px_90px]"
-              >
-                <div>
-                  <div className="text-white">
-                    {entry.workoutTypeLabel ?? humanizeToken(entry.workoutType)}
+            <div className="grid gap-3">
+              {typeBreakdown.slice(0, 6).map((entry) => (
+                <div
+                  key={entry.workoutType}
+                  className="grid gap-2 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3 md:grid-cols-[minmax(0,1fr)_90px_90px]"
+                >
+                  <div>
+                    <div className="text-[var(--ui-ink-strong)]">
+                      {entry.workoutTypeLabel ??
+                        humanizeToken(entry.workoutType)}
+                    </div>
+                    <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
+                      {entry.sessionCount} sessions ·{" "}
+                      {entry.activityFamilyLabel ?? "Other"}
+                    </div>
                   </div>
-                  <div className="mt-1 text-sm text-white/58">
-                    {entry.sessionCount} sessions · {entry.activityFamilyLabel ?? "Other"}
+                  <div className="text-sm text-[var(--ui-ink)]">
+                    {entry.totalMinutes}m
+                  </div>
+                  <div className="text-sm text-[var(--ui-ink)]">
+                    {entry.energyKcal} kcal
                   </div>
                 </div>
-                <div className="text-sm text-white/72">{entry.totalMinutes}m</div>
-                <div className="text-sm text-white/72">{entry.energyKcal} kcal</div>
+              ))}
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+                <div className="text-sm text-[var(--ui-ink-soft)]">
+                  Habit-generated
+                </div>
+                <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
+                  {summary.habitGeneratedSessionCount}
+                </div>
               </div>
-            ))}
-          </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-[18px] bg-white/[0.04] p-4">
-              <div className="text-sm text-white/58">Habit-generated</div>
-              <div className="mt-2 text-lg text-white">
-                {summary.habitGeneratedSessionCount}
+              <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+                <div className="text-sm text-[var(--ui-ink-soft)]">
+                  Forge-linked
+                </div>
+                <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
+                  {summary.linkedSessionCount}
+                </div>
               </div>
             </div>
-            <div className="rounded-[18px] bg-white/[0.04] p-4">
-              <div className="text-sm text-white/58">Forge-linked</div>
-              <div className="mt-2 text-lg text-white">
-                {summary.linkedSessionCount}
-              </div>
-            </div>
-          </div>
-        </Card>
+          </Card>
         </section>
       </SportsCompositionBox>
 
       <SportsBrowserBox>
         <section className="grid gap-4 xl:grid-cols-[minmax(0,25rem)_minmax(0,1fr)]">
-        <FacetedTokenSearch
-          title="Session browser"
-          description="Search past activities by workout type, source, reconciliation state, or whether they still need context."
-          query={query}
-          onQueryChange={setQuery}
-          options={searchOptions}
-          selectedOptionIds={selectedFilterIds}
-          onSelectedOptionIdsChange={setSelectedFilterIds}
-          resultSummary={resultSummary}
-          placeholder="Search workouts, devices, notes, moods, or filter chips"
-          emptyStateMessage="Keep typing or pick a filter chip to narrow the activity history."
-        />
+          <FacetedTokenSearch
+            title="Session browser"
+            description="Search past activities by workout type, source, reconciliation state, or whether they still need context."
+            query={query}
+            onQueryChange={setQuery}
+            options={searchOptions}
+            selectedOptionIds={selectedFilterIds}
+            onSelectedOptionIdsChange={setSelectedFilterIds}
+            resultSummary={resultSummary}
+            placeholder="Search workouts, devices, notes, moods, or filter chips"
+            emptyStateMessage="Keep typing or pick a filter chip to narrow the activity history."
+          />
 
-        <Card className="grid gap-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-                Activity history
+          <Card className="grid gap-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+                  Activity history
+                </div>
+                <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
+                  Open a workout to add reflection and links in a guided modal.
+                </div>
               </div>
-              <div className="mt-2 text-lg text-white">
-                Open a workout to add reflection and links in a guided modal.
-              </div>
+              <Badge tone="meta">{resultSummary}</Badge>
             </div>
-            <Badge tone="meta">{resultSummary}</Badge>
-          </div>
 
-          <div
-            className="max-h-[34rem] overflow-y-auto rounded-[8px] border border-white/8 bg-white/[0.03] p-3"
-          >
-            {filteredSessions.length === 0 ? (
-              <div className="flex min-h-[18rem] items-center justify-center p-6 text-center text-sm leading-6 text-white/50">
-                No workout matches the current search yet. Clear some filters or search by workout type, device, or reflection text.
-              </div>
-            ) : (
-              <div className="grid gap-3">
-                {filteredSessions.map((session) => {
-                  const hasReflection =
-                    session.meaningText.trim().length > 0 ||
-                    session.moodBefore.trim().length > 0 ||
-                    session.moodAfter.trim().length > 0 ||
-                    session.tags.length > 0 ||
-                    session.links.length > 0;
-                  return (
-                    <div
-                      key={session.id}
-                      className="grid w-full min-w-0 gap-3 rounded-[8px] border border-white/8 bg-white/[0.04] px-4 py-3 text-left transition hover:bg-white/[0.07]"
-                    >
-                      <div className="grid min-w-0 gap-3 sm:flex sm:items-start sm:justify-between">
-                        <div className="min-w-0">
-                          <Link
-                            to={`/sports/workouts/${session.id}`}
-                            className="flex min-w-0 items-center gap-2 text-white transition hover:text-[var(--primary)]"
+            <div className="max-h-[34rem] overflow-y-auto rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3">
+              {filteredSessions.length === 0 ? (
+                <div className="flex min-h-[18rem] items-center justify-center p-6 text-center text-sm leading-6 text-[var(--ui-ink-faint)]">
+                  No workout matches the current search yet. Clear some filters
+                  or search by workout type, device, or reflection text.
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  {filteredSessions.map((session) => {
+                    const hasReflection =
+                      session.meaningText.trim().length > 0 ||
+                      session.moodBefore.trim().length > 0 ||
+                      session.moodAfter.trim().length > 0 ||
+                      session.tags.length > 0 ||
+                      session.links.length > 0;
+                    return (
+                      <div
+                        key={session.id}
+                        className="grid w-full min-w-0 gap-3 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3 text-left transition hover:bg-[var(--ui-surface-2)]"
+                      >
+                        <div className="grid min-w-0 gap-3 sm:flex sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <Link
+                              to={`/sports/workouts/${session.id}`}
+                              className="flex min-w-0 items-center gap-2 text-[var(--ui-ink-strong)] transition hover:text-[var(--primary)]"
+                            >
+                              <Dumbbell className="size-4 shrink-0 text-[var(--primary)]" />
+                              <span className="truncate text-base font-medium">
+                                {workoutTypeLabel(session)}
+                              </span>
+                            </Link>
+                            <div className="mt-2 flex min-w-0 items-center gap-2 text-sm text-[var(--ui-ink-soft)]">
+                              <CalendarDays className="size-3.5 shrink-0" />
+                              <span className="min-w-0 truncate">
+                                {formatWorkoutWindow(
+                                  session.startedAt,
+                                  session.endedAt
+                                )}
+                              </span>
+                            </div>
+                            <div className="mt-2 text-sm text-[var(--ui-ink-faint)]">
+                              {activityFamilyLabel(session)} ·{" "}
+                              {session.sourceDevice}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            aria-label={`Edit ${workoutTypeLabel(session)} reflection`}
+                            className="inline-flex w-fit max-w-full items-center gap-2 rounded-full bg-[var(--ui-surface-2)] px-3 py-1.5 text-xs text-[var(--ui-ink)] transition hover:bg-[var(--ui-surface-3)] hover:text-[var(--ui-ink-strong)]"
+                            onClick={() => {
+                              setSelectedWorkoutId(session.id);
+                              setEditorStep(0);
+                            }}
                           >
-                            <Dumbbell className="size-4 shrink-0 text-[var(--primary)]" />
-                            <span className="truncate text-base font-medium">
-                              {workoutTypeLabel(session)}
+                            <span className="truncate">
+                              {hasReflection ? "Reflected" : "Needs reflection"}
                             </span>
-                          </Link>
-                          <div className="mt-2 flex min-w-0 items-center gap-2 text-sm text-white/56">
-                            <CalendarDays className="size-3.5 shrink-0" />
-                            <span className="min-w-0 truncate">
-                              {formatWorkoutWindow(session.startedAt, session.endedAt)}
-                            </span>
-                          </div>
-                          <div className="mt-2 text-sm text-white/46">
-                            {activityFamilyLabel(session)} · {session.sourceDevice}
-                          </div>
+                            <ArrowRight className="size-3.5 shrink-0" />
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          aria-label={`Edit ${workoutTypeLabel(session)} reflection`}
-                          className="inline-flex w-fit max-w-full items-center gap-2 rounded-full bg-white/[0.05] px-3 py-1.5 text-xs text-white/70 transition hover:bg-white/[0.08] hover:text-white"
-                          onClick={() => {
-                            setSelectedWorkoutId(session.id);
-                            setEditorStep(0);
-                          }}
-                        >
-                          <span className="truncate">
-                            {hasReflection ? "Reflected" : "Needs reflection"}
-                          </span>
-                          <ArrowRight className="size-3.5 shrink-0" />
-                        </button>
-                      </div>
-                      <div className="flex min-w-0 flex-wrap gap-2">
-                        <Badge>{minutesLabel(session.durationSeconds)}</Badge>
-                        {session.totalEnergyKcal ? (
-                          <Badge tone="meta">{Math.round(session.totalEnergyKcal)} kcal</Badge>
-                        ) : null}
-                        {session.distanceMeters ? (
-                          <Badge tone="meta">{kilometersLabel(session.distanceMeters)}</Badge>
-                        ) : null}
-                        {session.averageHeartRate ? (
+                        <div className="flex min-w-0 flex-wrap gap-2">
+                          <Badge>{minutesLabel(session.durationSeconds)}</Badge>
+                          {session.totalEnergyKcal ? (
+                            <Badge tone="meta">
+                              {Math.round(session.totalEnergyKcal)} kcal
+                            </Badge>
+                          ) : null}
+                          {session.distanceMeters ? (
+                            <Badge tone="meta">
+                              {kilometersLabel(session.distanceMeters)}
+                            </Badge>
+                          ) : null}
+                          {session.averageHeartRate ? (
+                            <Badge tone="meta">
+                              <HeartPulse className="mr-1 size-3.5" />
+                              {Math.round(session.averageHeartRate)} bpm
+                            </Badge>
+                          ) : null}
                           <Badge tone="meta">
-                            <HeartPulse className="mr-1 size-3.5" />
-                            {Math.round(session.averageHeartRate)} bpm
+                            {activityFamilyLabel(session)}
                           </Badge>
-                        ) : null}
-                        <Badge tone="meta">{activityFamilyLabel(session)}</Badge>
-                        <Badge tone="meta" className="capitalize">
-                          {session.sourceType.replaceAll("_", " ")}
-                        </Badge>
-                        <Badge tone="meta" className="capitalize">
-                          {session.reconciliationStatus.replaceAll("_", " ")}
-                        </Badge>
-                        {session.analytics?.confidence ? (
-                          <Badge tone="meta">{session.analytics.confidence} zones</Badge>
-                        ) : null}
-                        {session.analytics?.routeSummary?.hasRoute ? (
-                          <Badge tone="meta">Route</Badge>
-                        ) : null}
+                          <Badge tone="meta" className="capitalize">
+                            {session.sourceType.replaceAll("_", " ")}
+                          </Badge>
+                          <Badge tone="meta" className="capitalize">
+                            {session.reconciliationStatus.replaceAll("_", " ")}
+                          </Badge>
+                          {session.analytics?.confidence ? (
+                            <Badge tone="meta">
+                              {session.analytics.confidence} zones
+                            </Badge>
+                          ) : null}
+                          {session.analytics?.routeSummary?.hasRoute ? (
+                            <Badge tone="meta">Route</Badge>
+                          ) : null}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </Card>
         </section>
       </SportsBrowserBox>
 

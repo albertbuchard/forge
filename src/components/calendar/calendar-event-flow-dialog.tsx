@@ -63,6 +63,16 @@ type LinkOption = {
   subtitle: string;
 };
 
+const PANEL_CLASS =
+  "rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]";
+const SOFT_BADGE_CLASS = "bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)]";
+const CHOICE_BASE_CLASS =
+  "rounded-[22px] border px-4 py-4 text-left transition";
+const CHOICE_ACTIVE_CLASS =
+  "border-[color-mix(in_srgb,var(--primary)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]";
+const CHOICE_INACTIVE_CLASS =
+  "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)] hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]";
+
 function toSafeIsoOrFallback(value: string, fallback: string) {
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? fallback : parsed.toISOString();
@@ -328,16 +338,16 @@ export function CalendarEventFlowDialog({
                 endAt: toSafeIsoOrFallback(value.endAtLocal, fallbackEnd)
               });
               return (
-                <div className="rounded-[22px] border border-white/8 bg-white/[0.04] p-4">
+                <div className={`${PANEL_CLASS} p-4`}>
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge className="bg-white/[0.08] text-white/74">
+                    <Badge className={SOFT_BADGE_CLASS}>
                       {formatLifeForceRate(preview.rateApPerHour)}
                     </Badge>
-                    <Badge className="bg-white/[0.08] text-white/74">
+                    <Badge className={SOFT_BADGE_CLASS}>
                       {formatLifeForceAp(preview.totalAp)}
                     </Badge>
                   </div>
-                  <div className="mt-3 text-sm leading-6 text-white/58">
+                  <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
                     Availability controls whether the event blocks planning. The
                     activity profile controls AP drain, and you can override it
                     with a custom AP per hour.
@@ -494,17 +504,17 @@ export function CalendarEventFlowDialog({
                 <button
                   type="button"
                   onClick={() => setValue({ preferredCalendarId: undefined })}
-                  className={`rounded-[22px] border px-4 py-4 text-left transition ${
+                  className={`${CHOICE_BASE_CLASS} ${
                     value.preferredCalendarId === undefined
-                      ? "border-[rgba(125,211,252,0.28)] bg-[rgba(125,211,252,0.14)] text-white"
-                      : "border-white/8 bg-white/[0.04] text-white/72 hover:bg-white/[0.07]"
+                      ? CHOICE_ACTIVE_CLASS
+                      : CHOICE_INACTIVE_CLASS
                   }`}
                 >
                   <div className="flex items-center gap-2 font-medium">
                     <CalendarDays className="size-4" />
                     Default synced calendar
                   </div>
-                  <div className="mt-2 text-sm leading-6 text-white/55">
+                  <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                     Let Forge use the default writable connected calendar
                     automatically.
                   </div>
@@ -513,17 +523,17 @@ export function CalendarEventFlowDialog({
               <button
                 type="button"
                 onClick={() => setValue({ preferredCalendarId: null })}
-                className={`rounded-[22px] border px-4 py-4 text-left transition ${
+                className={`${CHOICE_BASE_CLASS} ${
                   value.preferredCalendarId === null
-                    ? "border-[rgba(192,193,255,0.28)] bg-[rgba(192,193,255,0.14)] text-white"
-                    : "border-white/8 bg-white/[0.04] text-white/72 hover:bg-white/[0.07]"
+                    ? CHOICE_ACTIVE_CLASS
+                    : CHOICE_INACTIVE_CLASS
                 }`}
               >
                 <div className="flex items-center gap-2 font-medium">
                   <Sparkles className="size-4" />
                   Forge only
                 </div>
-                <div className="mt-2 text-sm leading-6 text-white/55">
+                <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                   Keep the event in Forge without creating a remote provider
                   copy yet.
                 </div>
@@ -533,25 +543,27 @@ export function CalendarEventFlowDialog({
                   key={calendar.id}
                   type="button"
                   onClick={() => setValue({ preferredCalendarId: calendar.id })}
-                  className={`rounded-[22px] border px-4 py-4 text-left transition ${
+                  className={`${CHOICE_BASE_CLASS} ${
                     value.preferredCalendarId === calendar.id
-                      ? "border-[rgba(125,211,252,0.28)] bg-[rgba(125,211,252,0.14)] text-white"
-                      : "border-white/8 bg-white/[0.04] text-white/72 hover:bg-white/[0.07]"
+                      ? CHOICE_ACTIVE_CLASS
+                      : CHOICE_INACTIVE_CLASS
                   }`}
                 >
                   <div className="flex items-center gap-2 font-medium">
                     <CalendarDays className="size-4" />
                     {readCalendarDisplayName(calendar)}
                   </div>
-                  <div className="mt-2 text-sm leading-6 text-white/55">
+                  <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                     {calendar.description || `${calendar.timezone} · writable`}
                   </div>
                 </button>
               ))}
             </div>
 
-            <div className="grid gap-2 rounded-[22px] border border-white/8 bg-white/[0.04] p-4 text-sm text-white/66">
-              <div className="flex items-center gap-2 font-medium text-white">
+            <div
+              className={`${PANEL_CLASS} grid gap-2 p-4 text-sm text-[var(--ui-ink-medium)]`}
+            >
+              <div className="flex items-center gap-2 font-medium text-[var(--ui-ink-strong)]">
                 <MapPin className="size-4 text-[var(--primary)]" />
                 Categories and filtering
               </div>

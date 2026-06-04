@@ -2,9 +2,7 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarDays, ChevronRight } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import {
-  type SurfaceWidgetDefinition
-} from "@/components/customization/editable-surface";
+import { type SurfaceWidgetDefinition } from "@/components/customization/editable-surface";
 import { AiSurfaceWorkspace } from "@/components/customization/ai-surface-workspace";
 import {
   MiniCalendarWidget,
@@ -34,6 +32,16 @@ import { useI18n } from "@/lib/i18n";
 import type { CalendarEvent } from "@/lib/types";
 
 const MAX_VISIBLE_TODAY_EVENTS = 5;
+const todayEyebrowClass =
+  "text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]";
+const todaySoftTextClass = "text-[var(--ui-ink-soft)]";
+const todayStrongTextClass = "text-[var(--ui-ink-strong)]";
+const todayPanelClass =
+  "min-w-0 rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] shadow-[var(--ui-shadow-soft)]";
+const todayInnerPanelClass =
+  "min-w-0 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]";
+const todayGhostButtonClass =
+  "inline-flex min-h-10 max-w-full shrink-0 items-center justify-center gap-2 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-2 text-xs font-medium text-[var(--ui-ink-medium)] shadow-[var(--ui-shadow-soft)] transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]";
 
 function buildTodayRange() {
   const start = new Date();
@@ -139,7 +147,7 @@ export function TodayPage() {
           action={
             <Link
               to="/goals"
-              className="inline-flex min-h-10 min-w-max shrink-0 items-center justify-center rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-medium whitespace-nowrap text-slate-950 transition hover:opacity-90"
+              className="inline-flex min-h-10 min-w-max shrink-0 items-center justify-center rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-medium whitespace-nowrap text-[var(--ui-ink-on-accent)] transition hover:opacity-90"
             >
               {t("common.todayPage.emptyAction")}
             </Link>
@@ -200,63 +208,61 @@ export function TodayPage() {
       render: ({ compact }) => (
         <TodayMetricsBox>
           <div className="grid gap-3 sm:grid-cols-2">
-          <Card className="p-4">
-            <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
-              Weekly XP
-            </div>
-            <div className="mt-2 font-display text-4xl text-[var(--primary)]">
-              {shell.snapshot.metrics.weeklyXp}
-            </div>
-            <div className="mt-1 text-sm text-white/56">
-              {shell.snapshot.metrics.totalXp} total XP
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
-              Level
-            </div>
-            <div className="mt-2 font-display text-4xl text-white">
-              {shell.snapshot.metrics.level}
-            </div>
-            <div className="mt-1 text-sm text-white/56">
-              {nextLevelXp} xp to the next level
-            </div>
-            {!compact ? (
-              <div className="mt-3">
-                <ProgressMeter
-                  value={
-                    (shell.snapshot.metrics.currentLevelXp /
-                      shell.snapshot.metrics.nextLevelXp) *
-                    100
-                  }
-                  tone="tertiary"
-                />
+            <Card className="min-w-0 p-4">
+              <div className={todayEyebrowClass}>Weekly XP</div>
+              <div className="mt-2 break-words font-display text-4xl text-[var(--primary)]">
+                {shell.snapshot.metrics.weeklyXp}
               </div>
-            ) : null}
-          </Card>
-          <Card className="p-4">
-            <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
-              Momentum
-            </div>
-            <div className="mt-2 font-display text-4xl text-white">
-              {shell.snapshot.metrics.momentumScore}%
-            </div>
-            <div className="mt-1 text-sm text-white/56">
-              {shell.snapshot.metrics.streakDays} day streak
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
-              Next reward
-            </div>
-            <div className="mt-2 text-base font-semibold text-white">
-              {nextMilestone?.title ?? "Keep showing up"}
-            </div>
-            <div className="mt-1 text-sm text-white/56">
-              {nextMilestone?.progressLabel ??
-                "The next visible win comes from a task completion or aligned habit check-in."}
-            </div>
-          </Card>
+              <div className={`mt-1 text-sm ${todaySoftTextClass}`}>
+                {shell.snapshot.metrics.totalXp} total XP
+              </div>
+            </Card>
+            <Card className="min-w-0 p-4">
+              <div className={todayEyebrowClass}>Level</div>
+              <div
+                className={`mt-2 font-display text-4xl ${todayStrongTextClass}`}
+              >
+                {shell.snapshot.metrics.level}
+              </div>
+              <div className={`mt-1 text-sm ${todaySoftTextClass}`}>
+                {nextLevelXp} xp to the next level
+              </div>
+              {!compact ? (
+                <div className="mt-3">
+                  <ProgressMeter
+                    value={
+                      (shell.snapshot.metrics.currentLevelXp /
+                        shell.snapshot.metrics.nextLevelXp) *
+                      100
+                    }
+                    tone="tertiary"
+                  />
+                </div>
+              ) : null}
+            </Card>
+            <Card className="min-w-0 p-4">
+              <div className={todayEyebrowClass}>Momentum</div>
+              <div
+                className={`mt-2 font-display text-4xl ${todayStrongTextClass}`}
+              >
+                {shell.snapshot.metrics.momentumScore}%
+              </div>
+              <div className={`mt-1 text-sm ${todaySoftTextClass}`}>
+                {shell.snapshot.metrics.streakDays} day streak
+              </div>
+            </Card>
+            <Card className="min-w-0 p-4">
+              <div className={todayEyebrowClass}>Next reward</div>
+              <div
+                className={`mt-2 break-words text-base font-semibold ${todayStrongTextClass}`}
+              >
+                {nextMilestone?.title ?? "Keep showing up"}
+              </div>
+              <div className={`mt-1 text-sm ${todaySoftTextClass}`}>
+                {nextMilestone?.progressLabel ??
+                  "The next visible win comes from a task completion or aligned habit check-in."}
+              </div>
+            </Card>
           </div>
         </TodayMetricsBox>
       )
@@ -299,69 +305,74 @@ export function TodayPage() {
       render: ({ compact }) => (
         <TodayCalendarBox>
           <div className="grid gap-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="inline-flex size-10 shrink-0 items-center justify-center rounded-2xl bg-[var(--primary)]/14 text-[var(--primary)]">
-                <CalendarDays className="size-4" />
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="inline-flex size-10 shrink-0 items-center justify-center rounded-2xl bg-[var(--primary)]/14 text-[var(--primary)]">
+                  <CalendarDays className="size-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className={todayEyebrowClass}>Today&apos;s calendar</div>
+                  <div
+                    className={`text-sm font-semibold ${todayStrongTextClass}`}
+                  >
+                    {new Intl.DateTimeFormat(undefined, {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric"
+                    }).format(todayRange.start)}
+                  </div>
+                  <div className={`text-sm ${todaySoftTextClass}`}>
+                    {todayEvents.length} event
+                    {todayEvents.length === 1 ? "" : "s"}
+                  </div>
+                </div>
               </div>
-              <div className="min-w-0">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
-                  Today&apos;s calendar
-                </div>
-                <div className="text-sm font-semibold text-white">
-                  {new Intl.DateTimeFormat(undefined, {
-                    weekday: "short",
-                    month: "short",
-                    day: "numeric"
-                  }).format(todayRange.start)}
-                </div>
-                <div className="text-sm text-white/58">
-                  {todayEvents.length} event
-                  {todayEvents.length === 1 ? "" : "s"}
-                </div>
-              </div>
+              <Link to="/calendar" className={todayGhostButtonClass}>
+                Open calendar
+                <ChevronRight className="size-3.5" />
+              </Link>
             </div>
-            <Link
-              to="/calendar"
-              className="inline-flex shrink-0 items-center gap-2 rounded-full bg-white/[0.06] px-3 py-2 text-xs font-medium text-white/72 transition hover:bg-white/[0.1] hover:text-white"
-            >
-              Open calendar
-              <ChevronRight className="size-3.5" />
-            </Link>
-          </div>
-          {todayEvents.length === 0 ? (
-            <div className="rounded-[18px] bg-white/[0.04] px-4 py-4 text-sm text-white/58">
-              Nothing is scheduled yet for today.
-            </div>
-          ) : (
-            visibleTodayEvents.map((event) => (
-              <button
-                key={event.id}
-                type="button"
-                className="grid min-w-0 gap-2 rounded-[18px] bg-white/[0.04] px-3 py-3 text-left transition hover:bg-white/[0.07]"
-                onClick={() => navigate("/calendar")}
+            {todayEvents.length === 0 ? (
+              <div
+                className={`${todayInnerPanelClass} px-4 py-4 text-sm ${todaySoftTextClass}`}
               >
-                <div className="flex min-w-0 items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium text-white">
-                      {event.title}
+                Nothing is scheduled yet for today.
+              </div>
+            ) : (
+              visibleTodayEvents.map((event) => (
+                <button
+                  key={event.id}
+                  type="button"
+                  className={`${todayInnerPanelClass} grid gap-2 px-3 py-3 text-left transition hover:bg-[var(--ui-surface-hover)]`}
+                  onClick={() => navigate("/calendar")}
+                >
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div
+                        className={`truncate text-sm font-medium ${todayStrongTextClass}`}
+                      >
+                        {event.title}
+                      </div>
+                      <div className={`mt-1 text-sm ${todaySoftTextClass}`}>
+                        {formatTodayEventWindow(event)}
+                      </div>
                     </div>
-                    <div className="mt-1 text-sm text-white/58">
-                      {formatTodayEventWindow(event)}
+                    <Badge className="shrink-0 bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]">
+                      {event.originType === "native"
+                        ? "Forge"
+                        : event.originType}
+                    </Badge>
+                  </div>
+                  {!compact && event.description ? (
+                    <div
+                      className={`line-clamp-2 text-sm leading-6 ${todaySoftTextClass}`}
+                    >
+                      {event.description}
                     </div>
-                  </div>
-                  <Badge className="shrink-0 bg-white/[0.08] text-white/72">
-                    {event.originType === "native" ? "Forge" : event.originType}
-                  </Badge>
-                </div>
-                {!compact && event.description ? (
-                  <div className="line-clamp-2 text-sm leading-6 text-white/52">
-                    {event.description}
-                  </div>
-                ) : null}
-              </button>
-            ))
-          )}
+                  ) : null}
+                </button>
+              ))
+            )}
           </div>
         </TodayCalendarBox>
       )
@@ -377,88 +388,90 @@ export function TodayPage() {
       render: ({ compact }) => (
         <TodayFocusBox>
           <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-          <div className="rounded-[20px] bg-white/[0.04] p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
-                Current task
+            <div className={`${todayPanelClass} p-4`}>
+              <div className="flex items-center justify-between gap-3">
+                <div className={todayEyebrowClass}>Current task</div>
+                {directive ? (
+                  <EntityNoteCountLink
+                    entityType="task"
+                    entityId={directive.id}
+                    count={
+                      shell.snapshot.dashboard.notesSummaryByEntity[
+                        `task:${directive.id}`
+                      ]?.count ?? 0
+                    }
+                  />
+                ) : null}
+              </div>
+              <div
+                className={`mt-3 break-words text-base font-semibold ${todayStrongTextClass}`}
+              >
+                {directive?.title ?? "Pick a task from the runway"}
+              </div>
+              <div className={`mt-2 text-sm leading-6 ${todaySoftTextClass}`}>
+                {directive?.description ??
+                  "Once a task is active, the timer rail and this panel stay aligned."}
               </div>
               {directive ? (
-                <EntityNoteCountLink
-                  entityType="task"
-                  entityId={directive.id}
-                  count={
-                    shell.snapshot.dashboard.notesSummaryByEntity[
-                      `task:${directive.id}`
-                    ]?.count ?? 0
-                  }
-                />
+                <button
+                  type="button"
+                  className="mt-4 inline-flex min-h-10 max-w-full items-center justify-center rounded-2xl border border-[color-mix(in_srgb,var(--primary)_24%,transparent)] bg-[var(--ui-accent-soft)] px-3.5 py-2 text-sm font-medium text-[var(--primary)] shadow-[var(--ui-shadow-soft)] transition hover:bg-[var(--ui-accent-soft-hover)]"
+                  onClick={async () => {
+                    await shell.startTaskNow(directive.id);
+                  }}
+                >
+                  Start work
+                </button>
               ) : null}
             </div>
-            <div className="mt-3 text-base font-semibold text-white">
-              {directive?.title ?? "Pick a task from the runway"}
-            </div>
-            <div className="mt-2 text-sm leading-6 text-white/58">
-              {directive?.description ??
-                "Once a task is active, the timer rail and this panel stay aligned."}
-            </div>
-            {directive ? (
-              <button
-                type="button"
-                className="mt-4 inline-flex min-h-10 items-center justify-center rounded-2xl bg-[rgba(192,193,255,0.16)] px-3.5 py-2 text-sm font-medium text-[var(--primary)] transition hover:bg-[rgba(192,193,255,0.24)]"
-                onClick={async () => {
-                  await shell.startTaskNow(directive.id);
-                }}
-              >
-                Start work
-              </button>
-            ) : null}
-          </div>
-          <div className="grid gap-3">
-            <div className="rounded-[20px] bg-white/[0.04] p-4">
-              <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
-                Recovery task
-              </div>
-              <div className="mt-3 text-sm font-semibold text-white">
-                {comebackTask?.title ??
-                  "No blocked or overdue task is dominating today"}
-              </div>
-              {!compact ? (
-                <div className="mt-2 text-sm leading-6 text-white/56">
-                  {comebackTask?.description ??
-                    "If something slips, it will surface here as the clean comeback move."}
+            <div className="grid gap-3">
+              <div className={`${todayPanelClass} p-4`}>
+                <div className={todayEyebrowClass}>Recovery task</div>
+                <div
+                  className={`mt-3 break-words text-sm font-semibold ${todayStrongTextClass}`}
+                >
+                  {comebackTask?.title ??
+                    "No blocked or overdue task is dominating today"}
                 </div>
-              ) : null}
-            </div>
-            <div className="rounded-[20px] bg-white/[0.04] p-4">
-              <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
-                Due habits
+                {!compact ? (
+                  <div
+                    className={`mt-2 text-sm leading-6 ${todaySoftTextClass}`}
+                  >
+                    {comebackTask?.description ??
+                      "If something slips, it will surface here as the clean comeback move."}
+                  </div>
+                ) : null}
               </div>
-              <div className="mt-3 grid gap-2">
-                {shell.snapshot.today.dueHabits
-                  .slice(0, compact ? 2 : 3)
-                  .map((habit) => (
-                    <div
-                      key={habit.id}
-                      className="flex items-center justify-between gap-3 rounded-[16px] bg-white/[0.04] px-3 py-2.5"
-                    >
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-medium text-white">
-                          {habit.title}
-                        </div>
-                        {!compact ? (
-                          <div className="text-sm text-white/52">
-                            {habit.frequency}
+              <div className={`${todayPanelClass} p-4`}>
+                <div className={todayEyebrowClass}>Due habits</div>
+                <div className="mt-3 grid gap-2">
+                  {shell.snapshot.today.dueHabits
+                    .slice(0, compact ? 2 : 3)
+                    .map((habit) => (
+                      <div
+                        key={habit.id}
+                        className={`${todayInnerPanelClass} flex items-center justify-between gap-3 px-3 py-2.5`}
+                      >
+                        <div className="min-w-0">
+                          <div
+                            className={`truncate text-sm font-medium ${todayStrongTextClass}`}
+                          >
+                            {habit.title}
                           </div>
-                        ) : null}
+                          {!compact ? (
+                            <div className={`text-sm ${todaySoftTextClass}`}>
+                              {habit.frequency}
+                            </div>
+                          ) : null}
+                        </div>
+                        <Badge className="shrink-0 bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_78%,var(--ui-ink-strong)_22%)]">
+                          {habit.rewardXp} xp
+                        </Badge>
                       </div>
-                      <Badge className="bg-[rgba(78,222,163,0.14)] text-[var(--secondary)]">
-                        {habit.rewardXp} xp
-                      </Badge>
-                    </div>
-                  ))}
+                    ))}
+                </div>
               </div>
             </div>
-          </div>
           </div>
         </TodayFocusBox>
       )

@@ -49,6 +49,25 @@ import type {
   CalendarResource
 } from "@/lib/types";
 
+const SETTINGS_EYEBROW_CLASS =
+  "text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]";
+const SETTINGS_BODY_CLASS = "text-sm leading-6 text-[var(--ui-ink-soft)]";
+const SETTINGS_STRONG_CLASS = "font-medium text-[var(--ui-ink-strong)]";
+const SETTINGS_PANEL_CLASS =
+  "rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]";
+const SETTINGS_MUTED_PANEL_CLASS =
+  "rounded-[24px] border border-dashed border-[var(--ui-border-strong)] bg-[var(--ui-surface-1)]";
+const SETTINGS_META_BADGE_CLASS =
+  "bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]";
+const SETTINGS_SUCCESS_BADGE_CLASS =
+  "bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_74%,var(--ui-ink-strong)_26%)]";
+const SETTINGS_INFO_BADGE_CLASS =
+  "bg-[var(--ui-info-soft)] text-[color-mix(in_srgb,var(--info)_76%,var(--ui-ink-strong)_24%)]";
+const SETTINGS_TOGGLE_SELECTED_CLASS =
+  "border border-[var(--ui-success-soft)] bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_74%,var(--ui-ink-strong)_26%)]";
+const SETTINGS_TOGGLE_IDLE_CLASS =
+  "border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)]";
+
 function normalizeCalendarUrl(value: string) {
   try {
     const url = new URL(value);
@@ -366,7 +385,9 @@ export function SettingsCalendarPage() {
         render: (value, setValue) => {
           if (managedDiscoveryQuery.isLoading) {
             return (
-              <div className="rounded-[24px] border border-white/8 bg-white/[0.03] px-4 py-6 text-sm leading-6 text-white/58">
+              <div
+                className={`${SETTINGS_MUTED_PANEL_CLASS} px-4 py-6 ${SETTINGS_BODY_CLASS}`}
+              >
                 Rediscovering calendars for this connection.
               </div>
             );
@@ -411,14 +432,14 @@ export function SettingsCalendarPage() {
                 return (
                   <div
                     key={calendar.url}
-                    className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4"
+                    className={`${SETTINGS_PANEL_CLASS} p-4`}
                   >
                     <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <div className="font-medium text-white">
+                      <div className="min-w-0">
+                        <div className={SETTINGS_STRONG_CLASS}>
                           {readCalendarDisplayName(calendar)}
                         </div>
-                        <div className="mt-1 text-sm text-white/56">
+                        <div className="mt-1 break-all text-sm text-[var(--ui-ink-soft)]">
                           {calendar.timezone || "No timezone exposed"} ·{" "}
                           {calendar.url}
                         </div>
@@ -435,7 +456,7 @@ export function SettingsCalendarPage() {
                           </Badge>
                         ) : null}
                         {calendar.isPrimary ? (
-                          <Badge className="bg-white/[0.08] text-white/74">
+                          <Badge className={SETTINGS_META_BADGE_CLASS}>
                             Primary
                           </Badge>
                         ) : null}
@@ -457,10 +478,10 @@ export function SettingsCalendarPage() {
                         }
                         className={`rounded-full px-3 py-2 text-sm transition ${
                           isWriteTarget && !readOnlyConnection
-                            ? "cursor-not-allowed bg-white/[0.05] text-white/35"
+                            ? "cursor-not-allowed border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-faint)]"
                             : isSelected
-                              ? "bg-emerald-500/18 text-emerald-100 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.28)]"
-                              : "bg-white/[0.05] text-white/62 hover:bg-white/[0.08]"
+                              ? SETTINGS_TOGGLE_SELECTED_CLASS
+                              : SETTINGS_TOGGLE_IDLE_CLASS
                         }`}
                       >
                         {isWriteTarget && !readOnlyConnection
@@ -552,16 +573,13 @@ export function SettingsCalendarPage() {
       <div className="grid gap-5">
         <Card className="surface-section-panel grid gap-5 rounded-[30px] border">
           <div className="max-w-3xl">
-            <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">
-              Provider connections
-            </div>
-            <p className="mt-2 text-sm leading-6 text-white/60">
+            <div className={SETTINGS_EYEBROW_CLASS}>Provider connections</div>
+            <p className={`mt-2 ${SETTINGS_BODY_CLASS}`}>
               Connect a provider here, then choose which calendars Forge should
               mirror. Writable providers publish work blocks and owned timeboxes
               through one shared{" "}
-              <span className="font-medium text-white">Forge</span> write
-              target, creating it only when the runtime does not already have
-              one.
+              <span className={SETTINGS_STRONG_CLASS}>Forge</span> write target,
+              creating it only when the runtime does not already have one.
             </p>
           </div>
 
@@ -577,7 +595,7 @@ export function SettingsCalendarPage() {
                   key={provider.provider}
                   className={`flex min-h-[248px] flex-col rounded-[26px] border p-5 shadow-[inset_0_1px_0_var(--ui-border-subtle)] ${
                     hasConnections
-                      ? "border-emerald-400/24 bg-[linear-gradient(180deg,color-mix(in_srgb,#10b981_18%,var(--surface-panel)_82%),var(--ui-surface-2))]"
+                      ? "border-[var(--ui-success-soft)] bg-[var(--ui-success-soft)]"
                       : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]"
                   }`}
                 >
@@ -585,7 +603,7 @@ export function SettingsCalendarPage() {
                     <div
                       className={`rounded-[18px] p-3 ${
                         hasConnections
-                          ? "bg-emerald-400/16 text-emerald-100"
+                          ? SETTINGS_SUCCESS_BADGE_CLASS
                           : "bg-[var(--primary)]/14 text-[var(--primary)]"
                       }`}
                     >
@@ -598,10 +616,10 @@ export function SettingsCalendarPage() {
                         </div>
                         {hasConnections ? (
                           <>
-                            <Badge className="bg-emerald-400/16 text-emerald-50">
+                            <Badge className={SETTINGS_SUCCESS_BADGE_CLASS}>
                               Connected
                             </Badge>
-                            <Badge className="bg-white/[0.08] text-white/82">
+                            <Badge className={SETTINGS_META_BADGE_CLASS}>
                               {providerConnectionCountLabel(connectionCount)}
                             </Badge>
                           </>
@@ -611,7 +629,7 @@ export function SettingsCalendarPage() {
                         {providerConnectionSummary(provider.provider)}
                       </p>
                       {hasConnections ? (
-                        <div className="mt-3 text-sm text-emerald-100/88">
+                        <div className="mt-3 text-sm text-[color-mix(in_srgb,var(--success)_68%,var(--ui-ink-strong)_32%)]">
                           Forge already has{" "}
                           {providerConnectionCountLabel(connectionCount)} for
                           this provider. Open the guided flow again to add
@@ -624,15 +642,15 @@ export function SettingsCalendarPage() {
                   <div className="mt-5 flex flex-wrap gap-2">
                     <Badge
                       tone="signal"
-                      className="bg-[var(--primary)]/14 text-white/86"
+                      className="bg-[var(--ui-accent-soft)] text-[var(--primary)]"
                     >
                       {providerAccessLabel(provider.provider)}
                     </Badge>
                     <Badge
                       className={
                         provider.supportsDedicatedForgeCalendar
-                          ? "bg-emerald-500/16 text-emerald-100"
-                          : "bg-sky-400/14 text-sky-100"
+                          ? SETTINGS_SUCCESS_BADGE_CLASS
+                          : SETTINGS_INFO_BADGE_CLASS
                       }
                     >
                       {providerSyncLabel(provider.provider)}
@@ -667,10 +685,8 @@ export function SettingsCalendarPage() {
         <Card className="surface-section-panel grid gap-4 rounded-[30px] border">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">
-                Calendar colors
-              </div>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-white/60">
+              <div className={SETTINGS_EYEBROW_CLASS}>Calendar colors</div>
+              <p className={`mt-2 max-w-3xl ${SETTINGS_BODY_CLASS}`}>
                 Calendar colors are on by default so each mirrored calendar
                 stays legible in the week view. Adjust any display color here
                 without changing the provider itself.
@@ -686,7 +702,7 @@ export function SettingsCalendarPage() {
               }
               className={`rounded-full px-4 py-2 text-sm transition ${
                 displayPreferences.useCalendarColors
-                  ? "bg-[var(--ui-accent-soft)] text-[var(--primary)] shadow-[inset_0_0_0_1px_rgba(192,193,255,0.2)]"
+                  ? "border border-[color-mix(in_srgb,var(--primary)_34%,var(--ui-border-subtle)_66%)] bg-[var(--ui-accent-soft)] text-[var(--primary)]"
                   : "border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)]"
               }`}
             >
@@ -773,10 +789,8 @@ export function SettingsCalendarPage() {
         <Card className="surface-section-panel grid gap-4 rounded-[30px] border">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">
-                Connected providers
-              </div>
-              <p className="mt-2 text-sm leading-6 text-white/60">
+              <div className={SETTINGS_EYEBROW_CLASS}>Connected providers</div>
+              <p className={`mt-2 ${SETTINGS_BODY_CLASS}`}>
                 Review connection health, confirm which provider calendars Forge
                 can read or mirror, and see which connection currently owns the
                 shared Forge write target.
@@ -832,11 +846,11 @@ export function SettingsCalendarPage() {
                         ) : null}
                       </div>
                       <div className="flex items-center gap-2">
-                        <Badge className="bg-white/[0.08] text-white/74">
+                        <Badge className={SETTINGS_META_BADGE_CLASS}>
                           {connection.status}
                         </Badge>
                         {connection.config?.readOnly === true ? (
-                          <Badge className="bg-sky-400/12 text-sky-100">
+                          <Badge className={SETTINGS_INFO_BADGE_CLASS}>
                             Read only
                           </Badge>
                         ) : null}
@@ -889,7 +903,7 @@ export function SettingsCalendarPage() {
                       {calendars.map((calendar) => (
                         <div
                           key={calendar.id}
-                          className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] bg-white/[0.04] px-4 py-3"
+                          className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3"
                         >
                           <div className="min-w-0">
                             <div className="truncate text-sm font-medium text-[var(--ui-ink-strong)]">
@@ -905,7 +919,7 @@ export function SettingsCalendarPage() {
                               Forge
                             </Badge>
                           ) : (
-                            <Badge className="bg-white/[0.08] text-white/74">
+                            <Badge className={SETTINGS_META_BADGE_CLASS}>
                               <CalendarDays className="mr-1 size-3.5" />
                               Mirrored
                             </Badge>
@@ -918,10 +932,12 @@ export function SettingsCalendarPage() {
               })}
             </div>
           ) : (
-            <div className="rounded-[26px] border border-dashed border-white/10 bg-white/[0.03] px-5 py-6 text-sm leading-6 text-white/60">
+            <div
+              className={`${SETTINGS_MUTED_PANEL_CLASS} px-5 py-6 ${SETTINGS_BODY_CLASS}`}
+            >
               No provider is connected yet. Open a guided setup flow above when
               you are ready. Forge will reuse one shared{" "}
-              <span className="font-medium text-white">Forge</span> write target
+              <span className={SETTINGS_STRONG_CLASS}>Forge</span> write target
               across writable providers when it already exists, create one only
               when none exists yet, and mirror selected calendars in read-only
               mode for providers like Exchange Online.
@@ -1030,7 +1046,7 @@ export function SettingsCalendarPage() {
               <div className="rounded-[24px] border border-rose-400/20 bg-rose-400/10 p-4 text-sm leading-6 text-rose-100">
                 {removableConnection ? (
                   <>
-                    <div className="font-medium text-white">
+                    <div className={SETTINGS_STRONG_CLASS}>
                       {calendarProviderLabel(removableConnection.provider)} ·{" "}
                       {removableConnection.accountLabel || "No account label"}
                     </div>

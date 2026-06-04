@@ -42,6 +42,7 @@ import {
   insightArray,
   scoreLabel
 } from "@/components/weight-loss/weight-loss-format";
+import { formatLocalDateKey } from "@/lib/date-keys";
 import {
   createNutritionAppearanceCheckin,
   createNutritionBodyCheckin,
@@ -61,6 +62,33 @@ import type {
   WeightLossViewData
 } from "@/lib/weight-loss-types";
 
+function sourceConfidenceLabel(source: string) {
+  switch (source) {
+    case "healthkit_daily_active_energy":
+      return "HealthKit daily active energy";
+    case "workout_movement_fallback":
+      return "workout + movement fallback";
+    case "target_inference_only":
+      return "plan target inference";
+    default:
+      return source || "unknown source";
+  }
+}
+
+function sourceAvailabilityText(view: WeightLossViewData) {
+  const energy = view.energyModel;
+  const availability = energy.sourceAvailability;
+  const sources = [
+    availability.healthKitDailyEnergy ? "HealthKit active energy" : null,
+    energy.restingEnergyCalories != null ? "HealthKit resting energy" : null,
+    availability.workoutEnergy ? "workout energy" : null,
+    availability.movementTripCalories ? "movement-trip calories" : null
+  ].filter(Boolean);
+  return sources.length > 0
+    ? sources.join(", ")
+    : "no measured expenditure streams";
+}
+
 function energyGapDetail(view: WeightLossViewData) {
   const energy = view.energyModel;
   const hasEnergyEvidence =
@@ -71,7 +99,233 @@ function energyGapDetail(view: WeightLossViewData) {
   if (!hasEnergyEvidence) {
     return "No recent HealthKit active energy, workout energy, or movement-trip calories for this user yet.";
   }
-  return `TDEE estimate ${formatNumber(energy.estimatedTdeeKcal)} kcal, movement ${formatNumber(energy.movementCaloriesKcal)} kcal, active burn ${formatNumber(energy.activeBurnKcal)} kcal.`;
+  const intakeWindow =
+    energy.recentFoodLogDayCount > 0
+      ? `${energy.recentFoodLogCount} recent food log${energy.recentFoodLogCount === 1 ? "" : "s"} across ${energy.recentFoodLogDayCount} logged day${energy.recentFoodLogDayCount === 1 ? "" : "s"}`
+      : "no recent logged food days";
+  const formula =
+    energy.estimatedTdeeKcal != null
+      ? `Energy gap = recent logged intake ${formatNumber(energy.averageCalorieIntake)} - TDEE ${formatNumber(energy.estimatedTdeeKcal)} = ${formatSigned(energy.estimatedDailyEnergyBalanceKcal)} kcal/day, based on ${intakeWindow}.`
+      : `Average logged intake ${formatNumber(energy.averageCalorieIntake)} kcal; no TDEE estimate is available yet.`;
+  const activeBurnBreakdown =
+    energy.energySourceConfidence === "healthkit_daily_active_energy"
+      ? `Active burn branch: HealthKit daily active-energy average = ${formatNumber(energy.activeBurnKcal)} kcal/day.`
+      : energy.energySourceConfidence === "workout_movement_fallback"
+        ? `Active burn branch: workout average ${formatNumber(energy.workoutEnergyKcal)} + movement-trip average ${formatNumber(energy.movementCaloriesKcal)} = ${formatNumber(energy.activeBurnKcal)} kcal/day.`
+        : "Active burn is not measured; Forge is using the configured plan/inferred estimate.";
+  const tdeeSource =
+    energy.restingEnergyCalories != null && energy.activeBurnKcal != null
+      ? `TDEE = resting average ${formatNumber(energy.restingEnergyCalories)} + active burn ${formatNumber(energy.activeBurnKcal)} = ${formatNumber(energy.estimatedTdeeKcal)} kcal/day. ${activeBurnBreakdown}`
+      : `TDEE currently falls back to the plan/inferred estimate ${formatNumber(energy.inferredTdee)}.`;
+  const movementNote =
+    energy.movementCaloriesKcal != null &&
+    energy.energySourceConfidence === "workout_movement_fallback"
+      ? `Movement ${formatNumber(energy.movementCaloriesKcal)} kcal/day is already inside active burn on this branch, so it is not added a second time.`
+      : energy.movementCaloriesKcal != null
+        ? `Movement ${formatNumber(energy.movementCaloriesKcal)} kcal/day is supporting evidence only because HealthKit active energy is the selected active-burn branch.`
+        : "No movement-trip calorie evidence is stored for this window.";
+  return `${formula} ${tdeeSource} ${movementNote} Negative means estimated deficit, positive means estimated surplus. This is not today's calories remaining or today's editable active-calorie value.`;
+}
+
+function energyGapHelp(view: WeightLossViewData) {
+  const energy = view.energyModel;
+  const hasMeasuredTdee =
+    energy.restingEnergyCalories != null && energy.activeBurnKcal != null;
+  const selectedDate = view.todayLedger.dateKey;
+  const foodWindow =
+    energy.recentFoodLogDayCount > 0
+      ? `${energy.recentFoodLogCount} recent food log${energy.recentFoodLogCount === 1 ? "" : "s"} across ${energy.recentFoodLogDayCount} distinct logged day${energy.recentFoodLogDayCount === 1 ? "" : "s"}`
+      : "no recent logged food days";
+  const sourceBranch =
+    energy.energySourceConfidence === "healthkit_daily_active_energy"
+      ? "HealthKit daily active energy is present, so it is the active-burn source. Workout, step, and movement numbers are shown as evidence and are not added again."
+      : energy.energySourceConfidence === "workout_movement_fallback"
+        ? "HealthKit daily active energy is missing, so Forge uses the fallback active-burn source: workout calories plus movement-trip calories."
+        : "No measured active-burn stream is available, so Forge uses the plan-derived TDEE estimate.";
+  const activeBurnFormula =
+    energy.energySourceConfidence === "healthkit_daily_active_energy"
+      ? `active burn = HealthKit daily active energy average = ${formatNumber(energy.activeBurnKcal)} kcal/day`
+      : energy.energySourceConfidence === "workout_movement_fallback"
+        ? `active burn = workout average ${formatNumber(energy.workoutEnergyKcal)} + movement-trip average ${formatNumber(energy.movementCaloriesKcal)} = ${formatNumber(energy.activeBurnKcal)} kcal/day`
+        : `active burn is not measured; Forge falls back to plan inference`;
+  const tdeeFormula =
+    energy.restingEnergyCalories != null && energy.activeBurnKcal != null
+      ? `TDEE = resting energy average ${formatNumber(energy.restingEnergyCalories)} + active burn average ${formatNumber(energy.activeBurnKcal)} = ${formatNumber(energy.estimatedTdeeKcal)} kcal/day.`
+      : `TDEE = ${formatNumber(energy.estimatedTdeeKcal)} kcal/day from the configured plan because complete resting + active energy is not available.`;
+  const gapFormula =
+    energy.estimatedTdeeKcal != null
+      ? `Energy gap = average logged intake - TDEE = ${formatNumber(energy.averageCalorieIntake)} - ${formatNumber(energy.estimatedTdeeKcal)} = ${formatSigned(energy.estimatedDailyEnergyBalanceKcal)} kcal/day.`
+      : `Energy gap cannot be computed until Forge has either measured expenditure or an inferred TDEE.`;
+  const activeBranchFormula =
+    energy.energySourceConfidence === "healthkit_daily_active_energy"
+      ? `selected active burn = HealthKit daily active energy average = ${formatNumber(energy.activeBurnKcal)} kcal/day. Workout and movement are visible as evidence but are not added.`
+      : energy.energySourceConfidence === "workout_movement_fallback"
+        ? `selected active burn = workout average ${formatNumber(energy.workoutEnergyKcal)} + movement-trip average ${formatNumber(energy.movementCaloriesKcal)} = ${formatNumber(energy.activeBurnKcal)} kcal/day. This is why movement can appear next to active burn: it is a component of active burn here, not a separate add-on.`
+        : `selected active burn is unavailable, so TDEE falls back to the configured plan estimate.`;
+  const arithmeticFormula =
+    energy.restingEnergyCalories != null &&
+    energy.activeBurnKcal != null &&
+    energy.estimatedTdeeKcal != null
+      ? energy.energySourceConfidence === "healthkit_daily_active_energy"
+        ? `Arithmetic shown here: active burn ${formatNumber(energy.activeBurnKcal)} = HealthKit daily active energy average; TDEE ${formatNumber(energy.estimatedTdeeKcal)} = resting ${formatNumber(energy.restingEnergyCalories)} + active burn ${formatNumber(energy.activeBurnKcal)}; energy gap ${formatSigned(energy.estimatedDailyEnergyBalanceKcal)} = intake ${formatNumber(energy.averageCalorieIntake)} - TDEE ${formatNumber(energy.estimatedTdeeKcal)}.`
+        : energy.energySourceConfidence === "workout_movement_fallback"
+          ? `Arithmetic shown here: active burn ${formatNumber(energy.activeBurnKcal)} = workout ${formatNumber(energy.workoutEnergyKcal)} + movement ${formatNumber(energy.movementCaloriesKcal)}; TDEE ${formatNumber(energy.estimatedTdeeKcal)} = resting ${formatNumber(energy.restingEnergyCalories)} + active burn ${formatNumber(energy.activeBurnKcal)}; energy gap ${formatSigned(energy.estimatedDailyEnergyBalanceKcal)} = intake ${formatNumber(energy.averageCalorieIntake)} - TDEE ${formatNumber(energy.estimatedTdeeKcal)}.`
+          : `Arithmetic shown here: TDEE ${formatNumber(energy.estimatedTdeeKcal)} = resting ${formatNumber(energy.restingEnergyCalories)} + active burn ${formatNumber(energy.activeBurnKcal)}; energy gap ${formatSigned(energy.estimatedDailyEnergyBalanceKcal)} = intake ${formatNumber(energy.averageCalorieIntake)} - TDEE ${formatNumber(energy.estimatedTdeeKcal)}.`
+      : `Arithmetic shown here uses the available expenditure branch; some terms are unavailable because Forge does not yet have both resting and active energy evidence.`;
+  const intakeFormula =
+    energy.recentFoodLogDayCount > 0
+      ? `Average intake = total calories in the latest ${energy.recentFoodLogCount} non-discarded food log${energy.recentFoodLogCount === 1 ? "" : "s"} / ${energy.recentFoodLogDayCount} logged day${energy.recentFoodLogDayCount === 1 ? "" : "s"}. It does not divide by silent calendar days.`
+      : "Average logged intake is 0 because there are no recent food logs in the current window.";
+  const sourcePriority =
+    energy.energySourceConfidence === "healthkit_daily_active_energy"
+      ? "Active burn is using HealthKit daily active energy first. Workout and movement values remain visible as evidence, but movement is not added again on top of HealthKit active energy."
+      : energy.energySourceConfidence === "workout_movement_fallback"
+        ? "HealthKit daily active energy is missing, so active burn falls back to workout energy plus movement-trip calories."
+        : "No measured active-burn stream is available, so this is driven by the plan target and should be treated as low-confidence.";
+  const todayTargetFormula = `Today is separate: today's target = baseline plan target + (today active calories - default active calories). Today active calories currently use ${activeCaloriesSourceLabel(energy.todayActiveCaloriesSource)}: ${formatNumber(energy.todayActiveCaloriesKcal)} kcal. Default active calories: ${formatNumber(energy.baselineActiveCaloriesKcal)} kcal. Today's adjustment: ${formatSigned(energy.todayTargetAdjustmentKcal)} kcal.`;
+  const dataLineage =
+    energy.energySourceConfidence === "healthkit_daily_active_energy"
+      ? "Data path: recent food logs provide intake; HealthKit daily active-energy rows provide active burn; resting-energy rows provide basal/resting expenditure."
+      : energy.energySourceConfidence === "workout_movement_fallback"
+        ? "Data path: recent food logs provide intake; HealthKit resting-energy rows provide resting expenditure; workout-session energy plus movement-trip calories provide fallback active burn."
+        : "Data path: recent food logs provide intake; expenditure is using the configured plan inference because measured expenditure streams are incomplete.";
+  return (
+    <span className="grid gap-2">
+      <span>
+        <span className="font-semibold text-[var(--ui-ink-strong)]">
+          What this card means:
+        </span>{" "}
+        this is a historical energy-balance estimate, not the remaining food
+        budget for today. Negative means estimated deficit; positive means
+        estimated surplus.
+      </span>
+      <span>
+        <span className="font-semibold text-[var(--ui-ink-strong)]">
+          Formula:
+        </span>{" "}
+        {gapFormula}
+      </span>
+      <span>
+        <span className="font-semibold text-[var(--ui-ink-strong)]">
+          TDEE:
+        </span>{" "}
+        TDEE means total daily energy expenditure. Forge uses{" "}
+        {hasMeasuredTdee
+          ? "measured resting energy plus the selected active-burn branch"
+          : "the configured/inferred plan estimate because measured resting plus active expenditure is incomplete"}
+        . Objective deficit or surplus is not subtracted here; that belongs to
+        the intake target.
+      </span>
+      <span>
+        <span className="font-semibold text-[var(--ui-ink-strong)]">
+          Active-burn branch:
+        </span>{" "}
+        {activeBranchFormula}
+      </span>
+      <span>
+        <span className="font-semibold text-[var(--ui-ink-strong)]">
+          Arithmetic:
+        </span>{" "}
+        {arithmeticFormula}
+      </span>
+      <span>
+        <span className="font-semibold text-[var(--ui-ink-strong)]">
+          Why these numbers:
+        </span>{" "}
+        {sourceBranch} The displayed movement value is therefore{" "}
+        {energy.energySourceConfidence === "workout_movement_fallback"
+          ? "part of the active-burn calculation"
+          : "supporting evidence only"}
+        , and it is not the same thing as today's editable active-calorie
+        budget.
+      </span>
+      <span>
+        <span className="font-semibold text-[var(--ui-ink-strong)]">
+          Current data:
+        </span>{" "}
+        intake {formatNumber(energy.averageCalorieIntake)} kcal/day; TDEE{" "}
+        {formatNumber(energy.estimatedTdeeKcal)} kcal/day; resting{" "}
+        {formatNumber(energy.restingEnergyCalories)} kcal/day; active burn{" "}
+        {formatNumber(energy.activeBurnKcal)} kcal/day; workout{" "}
+        {formatNumber(energy.workoutEnergyKcal)} kcal/day; movement{" "}
+        {formatNumber(energy.movementCaloriesKcal)} kcal/day.{" "}
+        {energy.energySourceConfidence === "workout_movement_fallback"
+          ? "On this branch, active burn already equals workout plus movement, so movement is not an extra add-on after active burn."
+          : "On this branch, movement is shown as evidence and is not added on top of active burn."}
+      </span>
+      <span>
+        <span className="font-semibold text-[var(--ui-ink-strong)]">
+          Data lineage:
+        </span>{" "}
+        {dataLineage}
+      </span>
+      <span>
+        <span className="font-semibold text-[var(--ui-ink-strong)]">
+          Food window:
+        </span>{" "}
+        {intakeFormula} Current denominator: {foodWindow}.
+      </span>
+      <span>
+        <span className="font-semibold text-[var(--ui-ink-strong)]">
+          Expenditure:
+        </span>{" "}
+        {tdeeFormula} {activeBurnFormula}. TDEE means total daily energy
+        expenditure, the estimated calories burned per day before applying the
+        weight-loss or weight-gain objective.
+      </span>
+      <span>
+        <span className="font-semibold text-[var(--ui-ink-strong)]">
+          TDEE source:
+        </span>{" "}
+        {hasMeasuredTdee
+          ? "measured expenditure branch: resting energy average plus selected active-burn branch"
+          : "plan-inference branch because Forge does not yet have both resting and active expenditure streams"}
+        . TDEE is an expenditure estimate; the goal deficit or surplus is
+        applied when planning intake targets, not when calculating historical
+        TDEE.
+      </span>
+      <span>
+        <span className="font-semibold text-[var(--ui-ink-strong)]">
+          Calculation path:
+        </span>{" "}
+        Forge first tries HealthKit daily active energy for active burn. If that
+        is missing, it uses workout energy plus movement-trip calories. TDEE is
+        resting energy plus whichever active-burn branch was selected. The
+        objective deficit or surplus is not part of this historical TDEE.
+      </span>
+      <span>
+        <span className="font-semibold text-[var(--ui-ink-strong)]">
+          Source:
+        </span>{" "}
+        {sourceConfidenceLabel(energy.energySourceConfidence)} across{" "}
+        {energy.evidenceDays} expenditure evidence day
+        {energy.evidenceDays === 1 ? "" : "s"} ending the selected day (
+        {selectedDate}). Available streams: {sourceAvailabilityText(view)}.{" "}
+        {sourcePriority}
+      </span>
+      <span>
+        <span className="font-semibold text-[var(--ui-ink-strong)]">
+          Movement:
+        </span>{" "}
+        movement kcal is a component of fallback active burn. If HealthKit daily
+        active energy exists, Forge shows movement as supporting evidence but
+        does not add it again. If HealthKit active energy is missing, fallback
+        active burn is workout average + movement average; the displayed active
+        burn number already includes that movement component.
+      </span>
+      <span>
+        <span className="font-semibold text-[var(--ui-ink-strong)]">
+          Today:
+        </span>{" "}
+        {todayTargetFormula}
+      </span>
+    </span>
+  );
+}
+
+function energyGapValue(value: unknown) {
+  const formatted = formatSigned(value);
+  return formatted === "n/a" ? formatted : `${formatted} kcal/d`;
 }
 
 function activeCaloriesSourceLabel(source: string) {
@@ -99,13 +353,37 @@ function activeCaloriesSourceLabel(source: string) {
   }
 }
 
+function getLocalDayBounds(dateKey: string) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const start = new Date(year, month - 1, day);
+  const end = new Date(year, month - 1, day + 1);
+  return {
+    dayStartAt: start.toISOString(),
+    dayEndAt: end.toISOString()
+  };
+}
+
+function millisecondsUntilNextLocalDay() {
+  const now = new Date();
+  const next = new Date(now);
+  next.setHours(24, 0, 2, 0);
+  return Math.max(1_000, next.getTime() - now.getTime());
+}
+
 export function WeightLossPage() {
   const shell = useForgeShell();
   const queryClient = useQueryClient();
   const selectedUserIds = shell.selectedUserIds;
+  const [currentDateKey, setCurrentDateKey] = useState(() =>
+    formatLocalDateKey()
+  );
+  const currentDayBounds = useMemo(
+    () => getLocalDayBounds(currentDateKey),
+    [currentDateKey]
+  );
   const queryKey = useMemo(
-    () => ["forge-weight-loss-view", ...selectedUserIds],
-    [selectedUserIds]
+    () => ["forge-weight-loss-view", currentDateKey, ...selectedUserIds],
+    [currentDateKey, selectedUserIds]
   );
 
   const [planOpen, setPlanOpen] = useState(false);
@@ -134,9 +412,35 @@ export function WeightLossPage() {
 
   const viewQuery = useQuery({
     queryKey,
-    queryFn: async () => (await getWeightLossView(selectedUserIds)).weightLoss
+    queryFn: async () =>
+      (
+        await getWeightLossView(selectedUserIds, {
+          dateKey: currentDateKey,
+          ...currentDayBounds
+        })
+      ).weightLoss
   });
   const loadedView = viewQuery.data;
+
+  useEffect(() => {
+    const syncDateKey = () => {
+      setCurrentDateKey((previous) => {
+        const next = formatLocalDateKey();
+        return next === previous ? previous : next;
+      });
+    };
+    const timer = window.setTimeout(
+      syncDateKey,
+      millisecondsUntilNextLocalDay()
+    );
+    window.addEventListener("focus", syncDateKey);
+    document.addEventListener("visibilitychange", syncDateKey);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("focus", syncDateKey);
+      document.removeEventListener("visibilitychange", syncDateKey);
+    };
+  }, [currentDateKey]);
 
   useEffect(() => {
     if (
@@ -519,11 +823,12 @@ export function WeightLossPage() {
         />
         <WeightLossInsightMetric
           label="Energy gap"
-          value={formatSigned(energy.estimatedDailyEnergyBalanceKcal)}
+          value={energyGapValue(energy.estimatedDailyEnergyBalanceKcal)}
           detail={energyGapDetail(view)}
           icon={Gauge}
           tone="amber"
-          help="Energy gap estimates intake minus expenditure. Expenditure keeps active calories independent from the objective; the deficit or surplus comes from the selected weekly change rate."
+          help={energyGapHelp(view)}
+          helpMaxWidthPx={560}
         />
         <WeightLossInsightMetric
           label="Weight trend"

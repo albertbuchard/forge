@@ -54,14 +54,14 @@ function buildFlowNodes(
       data: {
         label: (
           <div
-            className="min-w-[232px] rounded-[22px] border px-4 py-4 shadow-[0_24px_70px_rgba(0,0,0,0.24)] transition"
+            className="w-[min(17rem,calc(100vw-5rem))] min-w-0 max-w-[17rem] rounded-[22px] border px-4 py-4 shadow-[var(--ui-shadow-soft)] transition"
             style={{
               borderColor: focused
-                ? "rgba(255,255,255,0.32)"
-                : "rgba(255,255,255,0.1)",
+                ? "var(--ui-border-strong)"
+                : "var(--ui-border-subtle)",
               background: focused
-                ? "rgba(11,17,30,0.98)"
-                : "rgba(8,14,26,0.92)",
+                ? "var(--ui-surface-active)"
+                : "var(--ui-surface-1)",
               opacity: highlighted ? 1 : 0.28
             }}
           >
@@ -82,7 +82,7 @@ function buildFlowNodes(
               />
             </div>
             {node.subtitle ? (
-              <div className="mt-2 text-sm leading-5 text-white/58">
+              <div className="mt-2 break-words text-sm leading-5 text-[var(--ui-ink-soft)]">
                 {node.subtitle}
               </div>
             ) : null}
@@ -121,18 +121,18 @@ function buildFlowEdges(
         markerEnd: {
           type: MarkerType.ArrowClosed,
           color: edge.secondary
-            ? "rgba(255,255,255,0.16)"
-            : "rgba(232,242,255,0.42)"
+            ? "var(--ui-border-subtle)"
+            : "var(--ui-border-strong)"
         },
         style: {
           opacity: highlighted ? 1 : 0.18,
           stroke: edge.secondary
-            ? "rgba(255,255,255,0.16)"
+            ? "var(--ui-border-subtle)"
             : edge.family === "taxonomy"
-              ? "rgba(162,245,189,0.34)"
+              ? "var(--success)"
               : edge.family === "structural"
-                ? "rgba(232,242,255,0.4)"
-                : "rgba(192,193,255,0.24)",
+                ? "var(--ui-border-strong)"
+                : "var(--primary)",
           strokeDasharray: edge.secondary ? "8 6" : undefined,
           strokeWidth: edge.secondary ? 1 : edge.family === "structural" ? 1.7 : 1.2
         }
@@ -175,7 +175,7 @@ export function KnowledgeGraphHierarchyView({
         {KNOWLEDGE_GRAPH_HIERARCHY_LANES.map((lane) => (
           <div
             key={lane.id}
-            className="min-w-[17rem] rounded-full border border-white/10 bg-[rgba(11,17,28,0.78)] px-4 py-2 text-center text-[11px] uppercase tracking-[0.16em] text-white/52 backdrop-blur"
+            className="min-w-[min(17rem,calc(100vw-5rem))] rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-2 text-center text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)] shadow-[var(--ui-shadow-soft)] backdrop-blur"
           >
             {lane.label}
           </div>
@@ -217,7 +217,7 @@ export function KnowledgeGraphHierarchyView({
         }}
       >
         <Controls showInteractive={false} />
-        <Background gap={28} size={1} color="rgba(255,255,255,0.05)" />
+        <Background gap={28} size={1} color="var(--ui-border-subtle)" />
       </ReactFlow>
     </div>
   );

@@ -1,9 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  ArrowUpRight,
-  LibraryBig
-} from "lucide-react";
+import { ArrowUpRight, LibraryBig } from "lucide-react";
 import { Link } from "react-router-dom";
 import { SettingsSectionNav } from "@/components/settings/settings-section-nav";
 import { PageHero } from "@/components/shell/page-hero";
@@ -18,6 +15,18 @@ import {
   reindexWiki,
   syncWikiVault
 } from "@/lib/api";
+
+const wikiActionLinkClass =
+  "inline-flex min-h-11 max-w-full items-center justify-center rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3 text-sm font-medium text-[var(--ui-ink-strong)] shadow-[var(--ui-shadow-soft)] transition hover:bg-[var(--ui-surface-hover)]";
+const wikiPanelClass =
+  "grid min-w-0 gap-3 rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4";
+const wikiRowClass =
+  "grid min-w-0 gap-1 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-4";
+const wikiSelectClass =
+  "min-w-0 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-3 text-sm text-[var(--ui-ink-strong)] outline-none transition focus:border-[var(--primary)]/35 focus:bg-[var(--ui-surface-3)]";
+const wikiTitleClass = "text-[var(--ui-ink-strong)]";
+const wikiBodyClass = "text-[var(--ui-ink-soft)]";
+const wikiFaintClass = "text-[var(--ui-ink-faint)]";
 
 export function SettingsWikiPage() {
   const queryClient = useQueryClient();
@@ -110,10 +119,7 @@ export function SettingsWikiPage() {
         badge={`${settings.spaces.length} spaces · ${settings.embeddingProfiles.length} embedding profiles`}
         actions={
           <>
-            <Link
-              to="/settings/models"
-              className="inline-flex min-h-11 items-center rounded-[16px] bg-white/[0.08] px-4 py-3 text-sm text-white transition hover:bg-white/[0.12]"
-            >
+            <Link to="/settings/models" className={wikiActionLinkClass}>
               Open model settings
               <ArrowUpRight className="ml-2 size-4" />
             </Link>
@@ -143,8 +149,10 @@ export function SettingsWikiPage() {
         <Card className="grid gap-4">
           <div className="flex items-center gap-3">
             <div>
-              <div className="text-sm text-white">Model configuration moved</div>
-              <div className="text-xs leading-5 text-white/50">
+              <div className={`text-sm ${wikiTitleClass}`}>
+                Model configuration moved
+              </div>
+              <div className={`text-xs leading-5 ${wikiFaintClass}`}>
                 KarpaWiki ingest uses the OpenAI Codex OAuth connection selected
                 in Models. OpenAI Platform API keys and embedding profile setup
                 are not configured from this page.
@@ -154,7 +162,7 @@ export function SettingsWikiPage() {
 
           <Link
             to="/settings/models"
-            className="inline-flex min-h-11 w-fit items-center rounded-[16px] bg-white/[0.08] px-4 py-3 text-sm text-white transition hover:bg-white/[0.12]"
+            className={`${wikiActionLinkClass} w-fit`}
           >
             Manage KarpaWiki models and embeddings
             <ArrowUpRight className="ml-2 size-4" />
@@ -167,13 +175,13 @@ export function SettingsWikiPage() {
               <LibraryBig className="size-4 text-[var(--secondary)]" />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <div className="text-sm text-white">Spaces</div>
+                  <div className={`text-sm ${wikiTitleClass}`}>Spaces</div>
                   <InfoTooltip
                     content={operatingModelTooltip}
                     label="Explain the wiki operating model"
                   />
                 </div>
-                <div className="text-xs leading-5 text-white/50">
+                <div className={`text-xs leading-5 ${wikiFaintClass}`}>
                   Personal and shared wiki spaces map to explicit SQLite
                   namespaces.
                 </div>
@@ -182,25 +190,32 @@ export function SettingsWikiPage() {
 
             <div className="grid gap-3">
               {settings.spaces.map((space) => (
-                <div
-                  key={space.id}
-                  className="grid gap-1 rounded-[18px] bg-white/[0.04] px-4 py-4"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-white">{space.label}</div>
-                    <div className="text-xs uppercase tracking-[0.16em] text-white/42">
+                <div key={space.id} className={wikiRowClass}>
+                  <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+                    <div
+                      className={`min-w-0 break-words [overflow-wrap:anywhere] ${wikiTitleClass}`}
+                    >
+                      {space.label}
+                    </div>
+                    <div
+                      className={`text-xs uppercase tracking-[0.16em] ${wikiFaintClass}`}
+                    >
                       {space.visibility}
                     </div>
                   </div>
-                  <div className="text-xs text-white/46">{space.slug}</div>
-                  <div className="text-sm text-white/60">
+                  <div
+                    className={`break-words text-xs [overflow-wrap:anywhere] ${wikiFaintClass}`}
+                  >
+                    {space.slug}
+                  </div>
+                  <div className={`text-sm ${wikiBodyClass}`}>
                     {space.description || "No description yet."}
                   </div>
                 </div>
               ))}
             </div>
 
-            <div className="grid gap-3 rounded-[20px] bg-white/[0.03] p-4">
+            <div className={wikiPanelClass}>
               <Input
                 value={spaceLabel}
                 onChange={(event) => setSpaceLabel(event.target.value)}
@@ -212,7 +227,7 @@ export function SettingsWikiPage() {
                 placeholder="Description"
               />
               <select
-                className="rounded-[16px] border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white"
+                className={wikiSelectClass}
                 value={spaceVisibility}
                 onChange={(event) =>
                   setSpaceVisibility(
@@ -233,10 +248,8 @@ export function SettingsWikiPage() {
               </Button>
             </div>
           </Card>
-
         </div>
       </div>
-
     </div>
   );
 }

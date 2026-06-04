@@ -6,6 +6,7 @@ import {
   getDefaultUser,
   resolveUserForMutation
 } from "./repositories/users.js";
+import { readEncryptedSecret } from "./repositories/calendar.js";
 import type {
   LlmManager,
   WikiLlmProfileLike
@@ -334,6 +335,11 @@ export const nutritionDailyActiveCaloriesUpdateSchema = z.object({
 export const nutritionFoodLogCreateSchema = z.object({
   userId: z.string().trim().min(1).optional(),
   loggedAt: z.string().datetime().optional(),
+  dayKey: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable()
+    .optional(),
   mealLabel: z.string().trim().default(""),
   source: z
     .enum(["manual", "search", "barcode", "chatgpt", "photo", "saved_meal"])
@@ -468,6 +474,13 @@ function dayKey(value: string) {
   return value.slice(0, 10);
 }
 
+function normalizeDayKey(
+  value: string | null | undefined,
+  fallbackIso: string
+) {
+  return value ?? dayKey(fallbackIso);
+}
+
 function jsonString(value: unknown) {
   return JSON.stringify(value ?? null);
 }
@@ -572,16 +585,20 @@ function getDailyEnergyOverride(userId: string, dateKey: string) {
 
 function buildStoredEnergyModel(input: {
   userId: string;
+  dateKey: string;
+  dayStartAt?: string | null;
+  dayEndAt?: string | null;
   inferredTdee: number | null;
   averageCalories: number;
+  recentFoodLogCount: number;
+  recentFoodLogDayCount: number;
   defaultActiveCalories: number | null;
   latestWeightKg: number | null;
   dailyActiveOverride: ReturnType<typeof mapDailyEnergyOverride>;
 }) {
-  const today = new Date();
-  const start = new Date(today);
-  start.setUTCDate(today.getUTCDate() - 6);
-  const todayKey = today.toISOString().slice(0, 10);
+  const todayKey = input.dateKey;
+  const start = new Date(`${todayKey}T00:00:00.000Z`);
+  start.setUTCDate(start.getUTCDate() - 6);
   const startKey = start.toISOString().slice(0, 10);
   const dailySummaryRows = getDatabase()
     .prepare(
@@ -639,6 +656,37 @@ function buildStoredEnergyModel(input: {
       n(row.movement_calories_kcal) || null
     ])
   );
+  const todayWorkoutEnergyFromRange =
+    input.dayStartAt && input.dayEndAt
+      ? (getDatabase()
+          .prepare(
+            `SELECT SUM(active_energy_kcal) AS active_energy_kcal,
+                    SUM(total_energy_kcal) AS total_energy_kcal
+             FROM health_workout_sessions
+             WHERE user_id = ?
+               AND started_at >= ?
+               AND started_at < ?`
+          )
+          .get(input.userId, input.dayStartAt, input.dayEndAt) as Pick<
+          WeightLossEnergyDayRow,
+          "active_energy_kcal" | "total_energy_kcal"
+        >)
+      : null;
+  const todayMovementCaloriesFromRange =
+    input.dayStartAt && input.dayEndAt
+      ? (getDatabase()
+          .prepare(
+            `SELECT SUM(calories_kcal) AS movement_calories_kcal
+             FROM movement_trips
+             WHERE user_id = ?
+               AND started_at >= ?
+               AND started_at < ?`
+          )
+          .get(input.userId, input.dayStartAt, input.dayEndAt) as Pick<
+          WeightLossEnergyDayRow,
+          "movement_calories_kcal"
+        >)
+      : null;
   const activeEnergyAverage = average(
     dailyHealthKit.map((day) => day.activeEnergyKcal)
   );
@@ -659,8 +707,16 @@ function buildStoredEnergyModel(input: {
     null;
   const todayStepCount =
     dailyHealthKit.find((day) => day.dateKey === todayKey)?.stepCount ?? null;
-  const todayWorkoutEnergy = workoutByDay.get(todayKey) ?? null;
-  const todayMovementCalories = movementByDay.get(todayKey) ?? null;
+  const todayWorkoutEnergy =
+    todayWorkoutEnergyFromRange != null
+      ? n(todayWorkoutEnergyFromRange.active_energy_kcal) ||
+        n(todayWorkoutEnergyFromRange.total_energy_kcal) ||
+        null
+      : (workoutByDay.get(todayKey) ?? null);
+  const todayMovementCalories =
+    todayMovementCaloriesFromRange != null
+      ? n(todayMovementCaloriesFromRange.movement_calories_kcal) || null
+      : (movementByDay.get(todayKey) ?? null);
   const todayWorkoutMovementCalories =
     todayWorkoutEnergy != null || todayMovementCalories != null
       ? n(todayWorkoutEnergy) + n(todayMovementCalories)
@@ -669,16 +725,23 @@ function buildStoredEnergyModel(input: {
     stepCount: todayStepCount,
     weightKg: input.latestWeightKg
   });
+  const todayStepCaloriesForActiveBudget =
+    todayStepEstimatedCalories != null &&
+    (todayWorkoutEnergy != null ||
+      todayMovementCalories != null ||
+      todayStepEstimatedCalories > baselineActiveCalories)
+      ? todayStepEstimatedCalories
+      : null;
   const todayFallbackPartCount = [
     todayWorkoutEnergy,
     todayMovementCalories,
-    todayStepEstimatedCalories
+    todayStepCaloriesForActiveBudget
   ].filter((value) => value != null).length;
   const todayFallbackActiveCalories =
     todayFallbackPartCount > 0
       ? n(todayWorkoutEnergy) +
         n(todayMovementCalories) +
-        n(todayStepEstimatedCalories)
+        n(todayStepCaloriesForActiveBudget)
       : null;
   const todayObservedActiveCalories =
     todayHealthKitActive ?? todayFallbackActiveCalories;
@@ -686,14 +749,20 @@ function buildStoredEnergyModel(input: {
     if (
       todayWorkoutEnergy != null &&
       todayMovementCalories != null &&
-      todayStepEstimatedCalories != null
+      todayStepCaloriesForActiveBudget != null
     ) {
       return "today_workout_movement_step_energy";
     }
-    if (todayWorkoutEnergy != null && todayStepEstimatedCalories != null) {
+    if (
+      todayWorkoutEnergy != null &&
+      todayStepCaloriesForActiveBudget != null
+    ) {
       return "today_workout_step_energy";
     }
-    if (todayMovementCalories != null && todayStepEstimatedCalories != null) {
+    if (
+      todayMovementCalories != null &&
+      todayStepCaloriesForActiveBudget != null
+    ) {
       return "today_movement_step_energy";
     }
     if (todayWorkoutEnergy != null && todayMovementCalories != null) {
@@ -705,7 +774,7 @@ function buildStoredEnergyModel(input: {
     if (todayMovementCalories != null) {
       return "today_movement_trip_calories";
     }
-    if (todayStepEstimatedCalories != null) {
+    if (todayStepCaloriesForActiveBudget != null) {
       return "today_step_estimate";
     }
     return "default_active_calories";
@@ -728,8 +797,9 @@ function buildStoredEnergyModel(input: {
     activeBurnKcal != null && restingEnergyAverage != null
       ? round(activeBurnKcal + restingEnergyAverage, 0)
       : input.inferredTdee;
+  const hasHealthKitDailyActiveEnergy = activeEnergyAverage != null;
   const hasHealthKitEnergy =
-    activeEnergyAverage != null ||
+    hasHealthKitDailyActiveEnergy ||
     restingEnergyAverage != null ||
     workoutEnergyAverage != null;
   const hasMovementEnergy = movementCaloriesAverage != null;
@@ -778,6 +848,8 @@ function buildStoredEnergyModel(input: {
     workoutEnergyKcal:
       workoutEnergyAverage != null ? round(workoutEnergyAverage, 0) : null,
     averageCalorieIntake: input.averageCalories,
+    recentFoodLogCount: input.recentFoodLogCount,
+    recentFoodLogDayCount: input.recentFoodLogDayCount,
     currentDeficitEstimate:
       estimatedTdeeKcal != null
         ? round(input.averageCalories - estimatedTdeeKcal, 0)
@@ -797,7 +869,7 @@ function buildStoredEnergyModel(input: {
     ),
     stepCountAverage: average(dailyHealthKit.map((day) => day.stepCount)),
     sourceAvailability: {
-      healthKitDailyEnergy: hasHealthKitEnergy,
+      healthKitDailyEnergy: hasHealthKitDailyActiveEnergy,
       movementTripCalories: hasMovementEnergy,
       workoutEnergy: workoutEnergyAverage != null
     }
@@ -1095,6 +1167,7 @@ export function createNutritionFoodLog(input: unknown) {
   const parsed = nutritionFoodLogCreateSchema.parse(input);
   const userId = resolveWriteUser(parsed.userId);
   const loggedAt = parsed.loggedAt ?? nowIso();
+  const logDayKey = normalizeDayKey(parsed.dayKey, loggedAt);
   const id = newId("meal");
   const now = nowIso();
   runInTransaction(() => {
@@ -1118,7 +1191,7 @@ export function createNutritionFoodLog(input: unknown) {
         parsed.stayId ?? null,
         parsed.workoutId ?? null,
         parsed.sleepId ?? null,
-        dayKey(loggedAt),
+        logDayKey,
         jsonString(parsed.imageRefs),
         jsonString(parsed.parserProvenance),
         jsonString(parsed.links),
@@ -1139,6 +1212,7 @@ export function patchNutritionFoodLog(logId: string, input: unknown) {
     return null;
   }
   const nextLoggedAt = parsed.loggedAt ?? existing.loggedAt;
+  const nextDayKey = normalizeDayKey(parsed.dayKey, nextLoggedAt);
   const now = nowIso();
   runInTransaction(() => {
     getDatabase()
@@ -1160,7 +1234,7 @@ export function patchNutritionFoodLog(logId: string, input: unknown) {
         parsed.stayId !== undefined ? parsed.stayId : existing.stayId,
         parsed.workoutId !== undefined ? parsed.workoutId : existing.workoutId,
         parsed.sleepId !== undefined ? parsed.sleepId : existing.sleepId,
-        dayKey(nextLoggedAt),
+        nextDayKey,
         jsonString(parsed.imageRefs ?? existing.imageRefs),
         jsonString(parsed.parserProvenance ?? existing.parserProvenance),
         jsonString(parsed.links ?? existing.links),
@@ -1702,12 +1776,12 @@ function listExperiments(userId: string, limit = 20) {
 function buildTodayLedger(
   logs: ReturnType<typeof listFoodLogs>,
   target: ReturnType<typeof mapTarget>,
+  dateKey: string,
   dynamicTargetCalories: number,
   activeAdjustmentCalories: number,
   activeCaloriesSource: string
 ) {
-  const today = new Date().toISOString().slice(0, 10);
-  const todayLogs = logs.filter((log) => log.dayKey === today);
+  const todayLogs = logs.filter((log) => log.dayKey === dateKey);
   const totals = todayLogs.reduce(
     (acc, log) => ({
       calories: acc.calories + log.totals.calories,
@@ -1731,7 +1805,7 @@ function buildTodayLedger(
     }
   );
   return {
-    dateKey: today,
+    dateKey,
     meals: todayLogs,
     totals,
     plannedTargetCalories: target.calorieTarget,
@@ -2020,10 +2094,17 @@ function buildGeneratedHypotheses(
   return cards;
 }
 
-export function getWeightLossViewData(userIds?: string[]) {
+export function getWeightLossViewData(
+  userIds?: string[],
+  options: {
+    dateKey?: string | null;
+    dayStartAt?: string | null;
+    dayEndAt?: string | null;
+  } = {}
+) {
   const generatedAt = new Date().toISOString();
   const userId = resolveReadUser(userIds);
-  const todayKey = generatedAt.slice(0, 10);
+  const todayKey = options.dateKey ?? generatedAt.slice(0, 10);
   const targetRow = getDatabase()
     .prepare(`SELECT * FROM nutrition_targets WHERE user_id = ?`)
     .get(userId) as NutritionTargetRow | undefined;
@@ -2045,8 +2126,11 @@ export function getWeightLossViewData(userIds?: string[]) {
   const recentLogs = logs.slice(0, 14);
   const recentTotals = sumItems(recentLogs.flatMap((log) => log.items));
   const trackedDays = new Set(logs.map((log) => log.dayKey)).size;
+  const recentTrackedDays = new Set(recentLogs.map((log) => log.dayKey)).size;
   const averageCalories =
-    trackedDays > 0 ? round(recentTotals.calories / trackedDays, 0) : 0;
+    recentTrackedDays > 0
+      ? round(recentTotals.calories / recentTrackedDays, 0)
+      : 0;
   const inferredTdee =
     target.calorieTarget != null
       ? round(
@@ -2061,8 +2145,13 @@ export function getWeightLossViewData(userIds?: string[]) {
   const dailyActiveOverride = getDailyEnergyOverride(userId, todayKey);
   const energyModel = buildStoredEnergyModel({
     userId,
+    dateKey: todayKey,
+    dayStartAt: options.dayStartAt,
+    dayEndAt: options.dayEndAt,
     inferredTdee,
     averageCalories,
+    recentFoodLogCount: recentLogs.length,
+    recentFoodLogDayCount: recentTrackedDays,
     defaultActiveCalories,
     latestWeightKg: weightTrend.latestWeightKg,
     dailyActiveOverride
@@ -2074,6 +2163,7 @@ export function getWeightLossViewData(userIds?: string[]) {
   const todayLedger = buildTodayLedger(
     logs,
     target,
+    todayKey,
     todayTargetCalories,
     energyModel.todayTargetAdjustmentKcal,
     energyModel.todayActiveCaloriesSource
@@ -2571,25 +2661,8 @@ function extractJsonObject(text: string) {
   return trimmed;
 }
 
-function getNutritionCodexProfile(
-  connectionId?: string | null
-): WikiLlmProfileLike | null {
-  const settings = getSettings();
-  const selectedConnectionId =
-    connectionId?.trim() ||
-    settings.modelSettings.forgeAgent.basicChat.connectionId ||
-    settings.modelSettings.forgeAgent.wiki.connectionId ||
-    "";
-  if (!selectedConnectionId) {
-    return null;
-  }
-  const row = getDatabase()
-    .prepare(
-      `SELECT provider, auth_mode, base_url, model, secret_id, enabled
-       FROM ai_model_connections
-       WHERE id = ?`
-    )
-    .get(selectedConnectionId) as
+function mapNutritionCodexProfileRow(
+  row:
     | {
         provider: string;
         auth_mode: string;
@@ -2598,13 +2671,15 @@ function getNutritionCodexProfile(
         secret_id: string | null;
         enabled: number;
       }
-    | undefined;
+    | undefined
+): WikiLlmProfileLike | null {
   if (
     !row ||
     row.enabled !== 1 ||
     row.provider !== "openai-codex" ||
     row.auth_mode !== "oauth" ||
-    !row.secret_id
+    !row.secret_id ||
+    !readEncryptedSecret(row.secret_id)
   ) {
     return null;
   }
@@ -2616,6 +2691,63 @@ function getNutritionCodexProfile(
     secretId: row.secret_id,
     metadata: {}
   };
+}
+
+function getNutritionCodexProfile(
+  connectionId?: string | null
+): WikiLlmProfileLike | null {
+  const settings = getSettings();
+  const selectedConnectionIds = [
+    connectionId?.trim(),
+    settings.modelSettings.forgeAgent.basicChat.connectionId,
+    settings.modelSettings.forgeAgent.wiki.connectionId
+  ].filter((id): id is string => Boolean(id));
+  for (const selectedConnectionId of new Set(selectedConnectionIds)) {
+    const row = getDatabase()
+      .prepare(
+        `SELECT provider, auth_mode, base_url, model, secret_id, enabled
+         FROM ai_model_connections
+         WHERE id = ?`
+      )
+      .get(selectedConnectionId) as
+      | {
+          provider: string;
+          auth_mode: string;
+          base_url: string;
+          model: string;
+          secret_id: string | null;
+          enabled: number;
+        }
+      | undefined;
+    const profile = mapNutritionCodexProfileRow(row);
+    if (profile) {
+      return profile;
+    }
+  }
+  const fallbackRows = getDatabase()
+    .prepare(
+      `SELECT provider, auth_mode, base_url, model, secret_id, enabled
+       FROM ai_model_connections
+       WHERE provider = 'openai-codex'
+         AND auth_mode = 'oauth'
+         AND enabled = 1
+       ORDER BY updated_at DESC`
+    )
+    .all() as Array<{
+    provider: string;
+    auth_mode: string;
+    base_url: string;
+    model: string;
+    secret_id: string | null;
+    enabled: number;
+  }>;
+  for (const row of fallbackRows) {
+    const profile = mapNutritionCodexProfileRow(row);
+    if (profile) {
+      return profile;
+    }
+  }
+  return null;
 }
 
 const parsedMealItemSchema = z.object({

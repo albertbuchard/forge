@@ -24,7 +24,7 @@ export function InlineNoteFields({
   return (
     <div className="grid gap-3">
       {notes.length === 0 ? (
-        <div className="rounded-[18px] bg-white/[0.04] px-4 py-4 text-sm leading-6 text-white/58">
+        <div className="rounded-[18px] bg-[var(--ui-surface-2)] px-4 py-4 text-sm leading-6 text-[var(--ui-ink-muted)]">
           Add an optional Markdown note if this {entityLabel} should start with
           context, evidence, or a clear handoff summary.
         </div>
@@ -33,10 +33,10 @@ export function InlineNoteFields({
       {notes.map((note, index) => (
         <div
           key={index}
-          className="rounded-[20px] border border-white/8 bg-white/[0.04] p-4"
+          className="rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4"
         >
           <div className="flex items-center justify-between gap-3">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
               Creation note {index + 1}
             </div>
             <Button
@@ -53,7 +53,7 @@ export function InlineNoteFields({
 
           <div className="mt-4 grid gap-4">
             <label className="grid gap-2">
-              <span className="text-sm text-white/58">Author</span>
+              <span className="text-sm text-[var(--ui-ink-muted)]">Author</span>
               <Input
                 value={note.author}
                 placeholder="Albert"
@@ -70,7 +70,7 @@ export function InlineNoteFields({
             </label>
 
             <label className="grid gap-2">
-              <span className="text-sm text-white/58">Markdown note</span>
+              <span className="text-sm text-[var(--ui-ink-muted)]">Markdown note</span>
               <Textarea
                 className="min-h-28"
                 value={note.contentMarkdown}

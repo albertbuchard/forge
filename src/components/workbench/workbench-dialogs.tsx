@@ -37,6 +37,15 @@ import type {
   ForgeBoxCatalogEntry
 } from "@/lib/types";
 
+const workbenchDialogPanelClass =
+  "min-w-0 rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]";
+const workbenchDialogItemClass =
+  "min-w-0 rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-left text-[var(--ui-ink-medium)] transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]";
+const workbenchDialogPillClass =
+  "rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-2.5 py-1 text-[11px] text-[var(--ui-ink-soft)]";
+const workbenchDialogMetaClass =
+  "text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]";
+
 export function WorkbenchDialog({
   open,
   onOpenChange,
@@ -162,7 +171,7 @@ export function WorkbenchAddNodeDialog({
             <button
               key={entry.type}
               type="button"
-              className="flex items-center gap-3 rounded-[20px] bg-white/[0.04] px-4 py-3 text-left text-white transition hover:bg-white/[0.08]"
+              className={`${workbenchDialogItemClass} flex items-center gap-3 px-4 py-3`}
               onClick={() => onAddNodeType(entry.type)}
             >
               {entry.icon}
@@ -188,14 +197,16 @@ export function WorkbenchAddNodeDialog({
             <button
               key={box.id}
               type="button"
-              className="rounded-[20px] bg-white/[0.04] px-4 py-3 text-left transition hover:bg-white/[0.08]"
+              className={`${workbenchDialogItemClass} px-4 py-3`}
               onClick={() => onAddBox(box)}
             >
               <div className="flex items-start justify-between gap-3">
-                <div className="text-sm font-medium text-white">
+                <div className="min-w-0 break-words text-sm font-medium text-[var(--ui-ink-strong)]">
                   {box.title}
                 </div>
-                <div className="flex shrink-0 flex-wrap gap-2 text-[10px] uppercase tracking-[0.14em] text-white/42">
+                <div
+                  className={`flex shrink-0 flex-wrap gap-2 ${workbenchDialogMetaClass}`}
+                >
                   <span>
                     {box.output.length} output
                     {box.output.length === 1 ? "" : "s"}
@@ -205,15 +216,13 @@ export function WorkbenchAddNodeDialog({
                   </span>
                 </div>
               </div>
-              <div className="mt-1 text-[12px] leading-5 text-white/50">
+              <div className="mt-1 text-[12px] leading-5 text-[var(--ui-ink-soft)]">
                 {box.description}
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
-                <div className="rounded-full bg-white/[0.05] px-2.5 py-1 text-[11px] text-white/56">
-                  {box.category}
-                </div>
+                <div className={workbenchDialogPillClass}>{box.category}</div>
                 {box.routePath ? (
-                  <div className="rounded-full bg-white/[0.05] px-2.5 py-1 text-[11px] text-white/56">
+                  <div className={workbenchDialogPillClass}>
                     {box.routePath}
                   </div>
                 ) : null}
@@ -293,7 +302,7 @@ export function WorkbenchFlowSettingsDialog({
           nodes={nodes}
           onChange={onPublicInputsChange}
         />
-        <div className="rounded-[18px] border border-white/8 bg-white/[0.03] px-4 py-3 text-sm text-white/58">
+        <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-code-bg)] px-4 py-3 font-mono text-sm text-[var(--ui-code-text)] [overflow-wrap:anywhere]">
           {flowId}
         </div>
         <div className="flex flex-wrap justify-between gap-2 pt-2">
@@ -404,8 +413,8 @@ export function WorkbenchRunFlowDialog({
           </div>
         ) : null}
         {publicInputs.length > 0 ? (
-          <div className="grid gap-3 rounded-[20px] border border-white/8 bg-white/[0.03] p-4">
-            <div className="flex items-center gap-2 text-sm text-white">
+          <div className={`grid gap-3 p-4 ${workbenchDialogPanelClass}`}>
+            <div className="flex items-center gap-2 text-sm text-[var(--ui-ink-strong)]">
               Flow inputs
               <InfoTooltip
                 content="These are the typed inputs this flow exposes through the API and the Run modal."
@@ -422,7 +431,7 @@ export function WorkbenchRunFlowDialog({
                   }
                 >
                   {inputDefinition.kind === "boolean" ? (
-                    <label className="flex items-center gap-2 text-sm text-white/68">
+                    <label className="flex items-center gap-2 text-sm text-[var(--ui-ink-medium)]">
                       <input
                         type="checkbox"
                         checked={Boolean(runInputs[inputDefinition.key])}
@@ -512,7 +521,7 @@ export function WorkbenchRunFlowDialog({
             className={WORKBENCH_FIELD_CLASS}
           />
         ) : null}
-        <label className="flex items-center gap-2 text-sm text-white/64">
+        <label className="flex items-center gap-2 text-sm text-[var(--ui-ink-soft)]">
           <input
             type="checkbox"
             checked={debugEnabled}
@@ -534,13 +543,13 @@ export function WorkbenchRunFlowDialog({
           {runs.slice(0, 5).map((run) => (
             <div
               key={run.id}
-              className="rounded-[18px] border border-white/8 bg-white/[0.04] px-4 py-3"
+              className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3"
             >
-              <div className="flex items-center justify-between gap-3 text-[12px] text-white/48">
+              <div className="flex items-center justify-between gap-3 text-[12px] text-[var(--ui-ink-faint)]">
                 <span>{run.mode}</span>
                 <span>{new Date(run.createdAt).toLocaleString()}</span>
               </div>
-              <div className="mt-2 text-sm text-white/78">
+              <div className="mt-2 text-sm text-[var(--ui-ink-medium)]">
                 {run.result?.primaryText ?? run.error ?? "No output yet."}
               </div>
             </div>

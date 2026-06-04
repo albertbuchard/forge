@@ -24,6 +24,36 @@ import {
 
 type SetConnectionDraft = (patch: Partial<ConnectionDraft>) => void;
 
+const PANEL_CLASS =
+  "rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]";
+const MUTED_PANEL_CLASS =
+  "rounded-[24px] border border-dashed border-[var(--ui-border-strong)] bg-[var(--ui-surface-1)]";
+const REVIEW_PANEL_CLASS =
+  "rounded-[26px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]";
+const SOFT_CELL_CLASS =
+  "rounded-[20px] bg-[var(--ui-surface-2)] px-4 py-3 text-sm text-[var(--ui-ink-soft)]";
+const EYEBROW_CLASS =
+  "text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]";
+const BODY_TEXT_CLASS = "text-sm leading-6 text-[var(--ui-ink-soft)]";
+const STRONG_TEXT_CLASS = "font-medium text-[var(--ui-ink-strong)]";
+const META_BADGE_CLASS = "bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]";
+const SUCCESS_BADGE_CLASS =
+  "bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_74%,var(--ui-ink-strong)_26%)]";
+const INFO_BADGE_CLASS =
+  "bg-[var(--ui-info-soft)] text-[color-mix(in_srgb,var(--info)_76%,var(--ui-ink-strong)_24%)]";
+const WARNING_CALLOUT_CLASS =
+  "rounded-[20px] border border-[var(--ui-warning-soft)] bg-[var(--ui-warning-soft)] px-4 py-3 text-sm leading-6 text-[var(--ui-ink-strong)]";
+const INFO_CALLOUT_CLASS =
+  "rounded-[24px] border border-[var(--ui-info-soft)] bg-[var(--ui-info-soft)] p-4 text-sm leading-6 text-[var(--ui-ink-strong)]";
+const SUCCESS_CALLOUT_CLASS =
+  "rounded-[24px] border border-[var(--ui-success-soft)] bg-[var(--ui-success-soft)] p-4 text-sm leading-6 text-[var(--ui-ink-strong)]";
+const TOGGLE_SELECTED_CLASS =
+  "border border-[color-mix(in_srgb,var(--primary)_34%,var(--ui-border-subtle)_66%)] bg-[var(--ui-accent-soft)] text-[var(--primary)]";
+const TOGGLE_SUCCESS_CLASS =
+  "border border-[var(--ui-success-soft)] bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_74%,var(--ui-ink-strong)_26%)]";
+const TOGGLE_IDLE_CLASS =
+  "border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)]";
+
 export function CalendarConnectionProviderStep({
   value,
   onProviderChange
@@ -76,29 +106,28 @@ export function CalendarConnectionProviderStep({
       </FlowField>
 
       <div className="grid gap-3 md:grid-cols-2">
-        <div className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4">
-          <div className="flex items-center gap-3 text-white">
+        <div className={`${PANEL_CLASS} p-4`}>
+          <div className="flex items-center gap-3 text-[var(--ui-ink-strong)]">
             <Cloud className="size-4 text-[var(--primary)]" />
             <div className="font-medium">Dedicated write calendar</div>
           </div>
-          <p className="mt-3 text-sm leading-6 text-white/60">
+          <p className={`mt-3 ${BODY_TEXT_CLASS}`}>
             {value.provider === "microsoft" ? (
               "Exchange Online is read-only for now. Forge mirrors selected calendars into Forge, but it does not publish work blocks or owned timeboxes back to Microsoft."
             ) : (
               <>
                 Forge writes work blocks and owned timeboxes into a dedicated
-                calendar named{" "}
-                <span className="font-medium text-white">Forge</span>.
+                calendar named <span className={STRONG_TEXT_CLASS}>Forge</span>.
               </>
             )}
           </p>
         </div>
-        <div className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4">
-          <div className="flex items-center gap-3 text-white">
+        <div className={`${PANEL_CLASS} p-4`}>
+          <div className="flex items-center gap-3 text-[var(--ui-ink-strong)]">
             <KeyRound className="size-4 text-[var(--primary)]" />
             <div className="font-medium">Discovery first</div>
           </div>
-          <p className="mt-3 text-sm leading-6 text-white/60">
+          <p className={`mt-3 ${BODY_TEXT_CLASS}`}>
             {value.provider === "google"
               ? "Forge opens a Google sign-in popup, exchanges the authorization code on the backend, stores a per-user refresh token, and then discovers the writable calendars for that account."
               : value.provider === "macos_local"
@@ -110,11 +139,9 @@ export function CalendarConnectionProviderStep({
         </div>
       </div>
 
-      <div className="rounded-[24px] border border-white/8 bg-white/[0.03] p-4">
-        <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
-          Setup guide
-        </div>
-        <p className="mt-2 text-sm leading-6 text-white/60">
+      <div className={`${PANEL_CLASS} p-4`}>
+        <div className={EYEBROW_CLASS}>Setup guide</div>
+        <p className={`mt-2 ${BODY_TEXT_CLASS}`}>
           These are the exact setup steps for the selected provider. They stay
           inside this guided flow so Settings can stay focused on connection
           health and actions.
@@ -185,28 +212,24 @@ export function CalendarConnectionDiscoveryStep({
 
       {discovery ? (
         <>
-          <div className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4 text-sm leading-6 text-white/64">
+          <div className={`${PANEL_CLASS} p-4 ${BODY_TEXT_CLASS}`}>
             {value.provider === "macos_local"
               ? "Discovered through the host calendar store"
               : "Discovered through"}{" "}
-            <span className="font-medium text-white">
-              {discovery.serverUrl}
-            </span>
+            <span className={STRONG_TEXT_CLASS}>{discovery.serverUrl}</span>
             {discovery.homeUrl ? (
               <>
                 {" "}
                 · home set{" "}
-                <span className="font-medium text-white">
-                  {discovery.homeUrl}
-                </span>
+                <span className={STRONG_TEXT_CLASS}>{discovery.homeUrl}</span>
               </>
             ) : null}
           </div>
 
           {value.provider !== "microsoft" && sharedForgeWriteTargetLabel ? (
-            <div className="rounded-[24px] border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm leading-6 text-emerald-50">
+            <div className={SUCCESS_CALLOUT_CLASS}>
               Forge already writes work blocks and owned timeboxes through{" "}
-              <span className="font-medium text-white">
+              <span className={STRONG_TEXT_CLASS}>
                 {sharedForgeWriteTargetLabel}
               </span>
               . This connection only needs a mirror selection.
@@ -220,16 +243,13 @@ export function CalendarConnectionDiscoveryStep({
               );
               const isWriteTarget = value.forgeCalendarUrl === calendar.url;
               return (
-                <div
-                  key={calendar.url}
-                  className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4"
-                >
+                <div key={calendar.url} className={`${PANEL_CLASS} p-4`}>
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <div className="font-medium text-white">
+                    <div className="min-w-0">
+                      <div className={STRONG_TEXT_CLASS}>
                         {readCalendarDisplayName(calendar)}
                       </div>
-                      <div className="mt-1 text-sm text-white/56">
+                      <div className="mt-1 break-all text-sm text-[var(--ui-ink-soft)]">
                         {calendar.timezone || "No timezone exposed"} ·{" "}
                         {calendar.url}
                       </div>
@@ -241,9 +261,7 @@ export function CalendarConnectionDiscoveryStep({
                         </Badge>
                       ) : null}
                       {calendar.isPrimary ? (
-                        <Badge className="bg-white/[0.08] text-white/74">
-                          Primary
-                        </Badge>
+                        <Badge className={META_BADGE_CLASS}>Primary</Badge>
                       ) : null}
                     </div>
                   </div>
@@ -261,9 +279,7 @@ export function CalendarConnectionDiscoveryStep({
                         })
                       }
                       className={`rounded-full px-3 py-2 text-sm transition ${
-                        selected
-                          ? "bg-[var(--primary)]/18 text-[var(--primary)] shadow-[inset_0_0_0_1px_rgba(192,193,255,0.24)]"
-                          : "bg-white/[0.05] text-white/62 hover:bg-white/[0.08]"
+                        selected ? TOGGLE_SELECTED_CLASS : TOGGLE_IDLE_CLASS
                       }`}
                     >
                       {selected ? "Mirrored" : "Mirror into Forge"}
@@ -280,8 +296,8 @@ export function CalendarConnectionDiscoveryStep({
                         }
                         className={`rounded-full px-3 py-2 text-sm transition ${
                           isWriteTarget
-                            ? "bg-emerald-500/18 text-emerald-100 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.28)]"
-                            : "bg-white/[0.05] text-white/62 hover:bg-white/[0.08]"
+                            ? TOGGLE_SUCCESS_CLASS
+                            : TOGGLE_IDLE_CLASS
                         }`}
                       >
                         {isWriteTarget
@@ -292,8 +308,8 @@ export function CalendarConnectionDiscoveryStep({
                       <Badge
                         className={
                           value.provider === "microsoft"
-                            ? "bg-sky-400/12 text-sky-100"
-                            : "bg-white/[0.08] text-white/74"
+                            ? INFO_BADGE_CLASS
+                            : META_BADGE_CLASS
                         }
                       >
                         {value.provider === "microsoft"
@@ -370,7 +386,7 @@ function CalendarConnectionDiscoveryActions({
             : "Sign in with Google"}
         </Button>
         {discovery ? (
-          <Badge className="bg-white/[0.08] text-white/74">
+          <Badge className={META_BADGE_CLASS}>
             {discovery.calendars.length} discovered
           </Badge>
         ) : null}
@@ -398,7 +414,7 @@ function CalendarConnectionDiscoveryActions({
             : "Sign in with Microsoft"}
         </Button>
         {discovery ? (
-          <Badge className="bg-white/[0.08] text-white/74">
+          <Badge className={META_BADGE_CLASS}>
             {discovery.calendars.length} discovered
           </Badge>
         ) : null}
@@ -422,7 +438,7 @@ function CalendarConnectionDiscoveryActions({
           : "Discover calendars"}
       </Button>
       {discovery ? (
-        <Badge className="bg-white/[0.08] text-white/74">
+        <Badge className={META_BADGE_CLASS}>
           {discovery.calendars.length} discovered
         </Badge>
       ) : null}
@@ -441,12 +457,12 @@ function CalendarConnectionDiscoveryWriteTarget({
 }) {
   if (value.provider !== "microsoft" && !sharedForgeWriteTargetLabel) {
     return (
-      <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] p-4">
-        <div className="font-medium text-white">No Forge calendar yet?</div>
-        <p className="mt-2 text-sm leading-6 text-white/60">
+      <div className={`${MUTED_PANEL_CLASS} p-4`}>
+        <div className={STRONG_TEXT_CLASS}>No Forge calendar yet?</div>
+        <p className={`mt-2 ${BODY_TEXT_CLASS}`}>
           If none of the discovered calendars should receive Forge-owned work
           blocks and timeboxes, let Forge create a dedicated calendar named{" "}
-          <span className="font-medium text-white">Forge</span>.
+          <span className={STRONG_TEXT_CLASS}>Forge</span>.
         </p>
         <div className="mt-4">
           <button
@@ -459,8 +475,8 @@ function CalendarConnectionDiscoveryWriteTarget({
             }
             className={`rounded-full px-3 py-2 text-sm transition ${
               value.createForgeCalendar
-                ? "bg-emerald-500/18 text-emerald-100 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.28)]"
-                : "bg-white/[0.05] text-white/62 hover:bg-white/[0.08]"
+                ? TOGGLE_SUCCESS_CLASS
+                : TOGGLE_IDLE_CLASS
             }`}
           >
             {value.createForgeCalendar
@@ -474,7 +490,7 @@ function CalendarConnectionDiscoveryWriteTarget({
 
   if (value.provider === "microsoft") {
     return (
-      <div className="rounded-[24px] border border-sky-400/20 bg-sky-400/10 p-4 text-sm leading-6 text-sky-50">
+      <div className={INFO_CALLOUT_CLASS}>
         Exchange Online is connected through Microsoft Graph in read-only mode.
         Forge will mirror the calendars you select here, but it will keep work
         blocks and owned timeboxes local or publish them through another
@@ -484,11 +500,9 @@ function CalendarConnectionDiscoveryWriteTarget({
   }
 
   return (
-    <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] p-4 text-sm leading-6 text-white/60">
+    <div className={`${MUTED_PANEL_CLASS} p-4 ${BODY_TEXT_CLASS}`}>
       Forge will keep{" "}
-      <span className="font-medium text-white">
-        {sharedForgeWriteTargetLabel}
-      </span>{" "}
+      <span className={STRONG_TEXT_CLASS}>{sharedForgeWriteTargetLabel}</span>{" "}
       as the canonical write target instead of creating another Forge calendar
       on this connection.
     </div>
@@ -501,7 +515,7 @@ function CalendarConnectionDiscoveryEmptyState({
   value: ConnectionDraft;
 }) {
   return (
-    <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] px-4 py-6 text-sm leading-6 text-white/58">
+    <div className={`${MUTED_PANEL_CLASS} px-4 py-6 ${BODY_TEXT_CLASS}`}>
       {value.provider === "google" ? (
         <>
           Start the guided Google sign-in first. Forge will bring the discovered
@@ -521,7 +535,7 @@ function CalendarConnectionDiscoveryEmptyState({
             <>
               Discover calendars after entering the credentials. For Apple,
               Forge starts from{" "}
-              <span className="font-medium text-white">
+              <span className={STRONG_TEXT_CLASS}>
                 https://caldav.icloud.com
               </span>{" "}
               and resolves the principal plus calendar home automatically.
@@ -547,9 +561,9 @@ export function CalendarConnectionReviewStep({
   return (
     <div className="grid gap-4">
       {value.provider === "macos_local" && value.sourceId ? (
-        <div className="rounded-[20px] border border-white/8 bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/70">
+        <div className={`${PANEL_CLASS} px-4 py-3 ${BODY_TEXT_CLASS}`}>
           Selected host source:{" "}
-          <span className="font-medium text-white">
+          <span className={STRONG_TEXT_CLASS}>
             {macosDiscovery?.sources.find(
               (source) => source.sourceId === value.sourceId
             )?.accountLabel ??
@@ -560,16 +574,16 @@ export function CalendarConnectionReviewStep({
           </span>
         </div>
       ) : null}
-      <div className="rounded-[26px] border border-white/8 bg-[linear-gradient(180deg,rgba(21,31,42,0.96),rgba(10,16,26,0.96))] p-5">
+      <div className={`${REVIEW_PANEL_CLASS} p-5`}>
         <div className="flex items-center gap-3">
           <div className="rounded-[18px] bg-[var(--primary)]/14 p-3 text-[var(--primary)]">
             <Link2 className="size-4" />
           </div>
           <div>
-            <div className="font-display text-xl text-white">
+            <div className="font-display text-xl text-[var(--ui-ink-strong)]">
               {normalizeLabel(value.provider, value.label)}
             </div>
-            <div className="mt-1 text-sm text-white/58">
+            <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
               {value.provider === "google"
                 ? "Google Calendar"
                 : value.provider === "macos_local"
@@ -583,15 +597,15 @@ export function CalendarConnectionReviewStep({
           </div>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
-          <div className="rounded-[20px] bg-white/[0.04] px-4 py-3 text-sm text-white/72">
+          <div className={SOFT_CELL_CLASS}>
             Mirrored calendars:{" "}
-            <span className="font-medium text-white">
+            <span className={STRONG_TEXT_CLASS}>
               {value.selectedCalendarUrls.length}
             </span>
           </div>
-          <div className="rounded-[20px] bg-white/[0.04] px-4 py-3 text-sm text-white/72">
+          <div className={SOFT_CELL_CLASS}>
             Forge writes:{" "}
-            <span className="font-medium text-white">
+            <span className={STRONG_TEXT_CLASS}>
               {value.provider === "microsoft"
                 ? "read only"
                 : value.forgeCalendarUrl
@@ -605,7 +619,7 @@ export function CalendarConnectionReviewStep({
           </div>
         </div>
         {value.replaceConnectionIds.length > 0 ? (
-          <div className="mt-4 rounded-[20px] border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm leading-6 text-amber-50">
+          <div className={`mt-4 ${WARNING_CALLOUT_CLASS}`}>
             Forge will replace {value.replaceConnectionIds.length} older
             overlapping connection
             {value.replaceConnectionIds.length === 1 ? "" : "s"} for this same

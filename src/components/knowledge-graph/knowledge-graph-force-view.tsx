@@ -1632,7 +1632,7 @@ export const KnowledgeGraphForceView = forwardRef<
   );
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-[radial-gradient(circle_at_top,rgba(125,211,252,0.1),transparent_34%),linear-gradient(180deg,rgba(7,12,23,0.98),rgba(6,11,20,0.98))]">
+    <div className="relative h-full w-full overflow-hidden bg-[var(--ui-surface-0)]">
       <div
         ref={containerRef}
         className="h-full w-full touch-none"
@@ -1744,14 +1744,18 @@ export const KnowledgeGraphForceView = forwardRef<
                               : node.viewportSize
                     }
                     fill={inNeighborhood ? node.color : fadeColor(node.color, 0.3)}
-                    stroke={focused ? "rgba(255,255,255,0.78)" : "rgba(255,255,255,0.12)"}
+                    stroke={
+                      focused
+                        ? "var(--ui-border-strong)"
+                        : "var(--ui-border-subtle)"
+                    }
                     strokeWidth={focused ? 2 : 1}
                   />
                   {(focused || hovered || detailed) && (
                     <text
                       x={node.viewportSize * 1.5}
                       y={4}
-                      fill="rgba(244,247,255,0.92)"
+                      fill="var(--ui-ink-strong)"
                       fontSize="12"
                     >
                       {node.data.title}

@@ -7525,9 +7525,28 @@ export async function buildServer(options = {}) {
     app.get("/api/v1/health/vitals", async (request) => ({
         vitals: getVitalsViewData(resolveScopedUserIds(request.query))
     }));
-    app.get("/api/v1/health/weight-loss", async (request) => ({
-        weightLoss: getWeightLossViewData(resolveScopedUserIds(request.query))
-    }));
+    app.get("/api/v1/health/weight-loss", async (request) => {
+        const query = request.query;
+        const dateKey = typeof query.dateKey === "string" &&
+            /^\d{4}-\d{2}-\d{2}$/.test(query.dateKey)
+            ? query.dateKey
+            : undefined;
+        const dayStartAt = typeof query.dayStartAt === "string" &&
+            z.string().datetime().safeParse(query.dayStartAt).success
+            ? query.dayStartAt
+            : undefined;
+        const dayEndAt = typeof query.dayEndAt === "string" &&
+            z.string().datetime().safeParse(query.dayEndAt).success
+            ? query.dayEndAt
+            : undefined;
+        return {
+            weightLoss: getWeightLossViewData(resolveScopedUserIds(query), {
+                dateKey,
+                dayStartAt,
+                dayEndAt
+            })
+        };
+    });
     app.patch("/api/v1/health/weight-loss/target", async (request) => {
         requireScopedAccess(request.headers, ["write"], {
             route: "/api/v1/health/weight-loss/target"

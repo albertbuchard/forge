@@ -71,15 +71,15 @@ function formatDateTime(value: string | null | undefined) {
 
 function runtimeStatusTone(status: AgentRuntimeSession["status"]) {
   if (status === "connected") {
-    return "text-emerald-300";
+    return "text-[color-mix(in_srgb,var(--success)_78%,var(--ui-ink-strong)_22%)]";
   }
   if (status === "stale" || status === "reconnecting") {
-    return "text-amber-300";
+    return "text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]";
   }
   if (status === "error") {
-    return "text-rose-300";
+    return "text-[color-mix(in_srgb,var(--danger)_78%,var(--ui-ink-strong)_22%)]";
   }
-  return "text-white/45";
+  return "text-[var(--ui-ink-muted)]";
 }
 
 function resolveRuntimeGroupStatus(sessions: AgentRuntimeSession[]) {
@@ -576,31 +576,31 @@ export function SettingsAgentsPage() {
 
         {/* ── Capability status ── */}
         <Card>
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
             Capability status
           </div>
           <div className="mt-4 grid gap-3">
             {capabilities.map((cap) => (
               <div
                 key={cap.label}
-                className="flex items-start justify-between gap-4 rounded-[18px] bg-white/[0.04] px-4 py-3"
+                className="flex items-start justify-between gap-4 rounded-[18px] bg-[var(--ui-surface-2)] px-4 py-3"
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2.5">
-                    <span className="font-medium text-white">{cap.label}</span>
+                    <span className="font-medium text-[var(--ui-ink-strong)]">{cap.label}</span>
                     <Badge
                       className={
                         cap.badgeTone === "emerald"
-                          ? "text-emerald-300"
+                          ? "text-[color-mix(in_srgb,var(--success)_78%,var(--ui-ink-strong)_22%)]"
                           : cap.badgeTone === "amber"
-                            ? "text-amber-300"
-                            : "text-white/45"
+                            ? "text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]"
+                            : "text-[var(--ui-ink-muted)]"
                       }
                     >
                       {cap.badge}
                     </Badge>
                   </div>
-                  <div className="mt-1 text-sm leading-6 text-white/55">
+                  <div className="mt-1 text-sm leading-6 text-[var(--ui-ink-muted)]">
                     {cap.detail}
                   </div>
                 </div>
@@ -608,7 +608,7 @@ export function SettingsAgentsPage() {
                   <button
                     type="button"
                     onClick={cap.action.onClick}
-                    className="mt-0.5 flex shrink-0 items-center gap-1.5 rounded-full bg-white/[0.07] px-3 py-1.5 text-xs font-medium text-white/72 transition hover:bg-white/[0.12] hover:text-white"
+                    className="mt-0.5 flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--ui-surface-2)] px-3 py-1.5 text-xs font-medium text-[var(--ui-ink-medium)] transition hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]"
                   >
                     {cap.action.label}
                     <ArrowRight className="size-3" />
@@ -622,16 +622,16 @@ export function SettingsAgentsPage() {
         <Card>
           <div className="flex items-center justify-between gap-4">
             <div>
-              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                 Runtime sessions
               </div>
-              <div className="mt-1 text-sm text-white/55">
+              <div className="mt-1 text-sm text-[var(--ui-ink-muted)]">
                 Live OpenClaw, Hermes, and Codex sessions registered against
                 this Forge runtime, with stale detection and reconnect guidance.
               </div>
             </div>
             {runtimeSessionGroups.length > 0 ? (
-              <Badge className="text-white/60">
+              <Badge className="text-[var(--ui-ink-medium)]">
                 {connectedRuntimeSessions.length} live ·{" "}
                 {staleRuntimeSessions.length} stale
               </Badge>
@@ -639,11 +639,11 @@ export function SettingsAgentsPage() {
           </div>
           <div className="mt-4 grid gap-3">
             {runtimeSessionsQuery.isLoading ? (
-              <div className="rounded-[18px] bg-white/[0.04] px-4 py-4 text-sm text-white/55">
+              <div className="rounded-[18px] bg-[var(--ui-surface-2)] px-4 py-4 text-sm text-[var(--ui-ink-muted)]">
                 Loading agent runtime sessions…
               </div>
             ) : runtimeSessionGroups.length === 0 ? (
-              <div className="rounded-[18px] bg-white/[0.04] px-4 py-4 text-sm text-white/55">
+              <div className="rounded-[18px] bg-[var(--ui-surface-2)] px-4 py-4 text-sm text-[var(--ui-ink-muted)]">
                 No runtime sessions have registered yet. OpenClaw, Hermes, and
                 Codex now self-register here when their Forge adapter starts.
               </div>
@@ -653,24 +653,24 @@ export function SettingsAgentsPage() {
                 return (
                   <div
                     key={group.key}
-                    className="min-w-0 rounded-[18px] bg-white/[0.04] p-4"
+                    className="min-w-0 rounded-[18px] bg-[var(--ui-surface-2)] p-4"
                   >
                     <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2.5">
-                          <div className="font-medium text-white">
+                          <div className="font-medium text-[var(--ui-ink-strong)]">
                             {group.agentLabel}
                           </div>
                           <Badge className={runtimeStatusTone(group.status)}>
                             {group.status}
                           </Badge>
                         </div>
-                        <div className="mt-1 text-sm text-white/52">
+                        <div className="mt-1 text-sm text-[var(--ui-ink-muted)]">
                           {group.provider} ·{" "}
                           {session.connectionMode.replaceAll("_", " ")} · last
                           heartbeat {formatDateTime(session.lastHeartbeatAt)}
                         </div>
-                        <div className="mt-2 flex min-w-0 flex-wrap gap-x-4 gap-y-1 text-xs text-white/42">
+                        <div className="mt-2 flex min-w-0 flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--ui-ink-muted)]">
                           <span>
                             {group.sessions.length} runtime session
                             {group.sessions.length === 1 ? "" : "s"}
@@ -682,7 +682,7 @@ export function SettingsAgentsPage() {
                           <span>{group.eventCount} session events</span>
                         </div>
                         {session.lastError ? (
-                          <div className="mt-3 text-sm text-rose-200/82">
+                          <div className="mt-3 text-sm text-[color-mix(in_srgb,var(--danger)_78%,var(--ui-ink-strong)_22%)]">
                             {session.lastError}
                           </div>
                         ) : null}
@@ -745,17 +745,17 @@ export function SettingsAgentsPage() {
                           .map((event: AgentRuntimeSessionEvent) => (
                             <div
                               key={event.id}
-                              className="flex items-start justify-between gap-3 rounded-[16px] bg-[rgba(255,255,255,0.03)] px-3 py-2.5"
+                              className="flex items-start justify-between gap-3 rounded-[16px] bg-[var(--ui-surface-2)] px-3 py-2.5"
                             >
                               <div className="min-w-0">
-                                <div className="text-sm text-white">
+                                <div className="text-sm text-[var(--ui-ink-strong)]">
                                   {event.title}
                                 </div>
-                                <div className="mt-0.5 text-xs leading-5 text-white/48">
+                                <div className="mt-0.5 text-xs leading-5 text-[var(--ui-ink-muted)]">
                                   {event.summary || event.eventType}
                                 </div>
                               </div>
-                              <div className="shrink-0 text-xs text-white/35">
+                              <div className="shrink-0 text-xs text-[var(--ui-ink-muted)]">
                                 {formatDateTime(event.createdAt)}
                               </div>
                             </div>
@@ -763,14 +763,14 @@ export function SettingsAgentsPage() {
                       </div>
                     ) : null}
 
-                    <div className="mt-4 rounded-[16px] bg-[rgba(8,13,28,0.52)] p-3">
-                      <div className="text-xs uppercase tracking-[0.14em] text-white/38">
+                    <div className="mt-4 rounded-[16px] bg-[var(--ui-code-bg)] p-3">
+                      <div className="text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-muted)]">
                         Reconnect plan
                       </div>
-                      <div className="mt-2 text-sm text-white/62">
+                      <div className="mt-2 text-sm text-[var(--ui-ink-medium)]">
                         {session.reconnectPlan.summary}
                       </div>
-                      <pre className="mt-3 whitespace-pre-wrap break-words text-xs leading-6 text-white/70 md:overflow-x-auto md:whitespace-pre">
+                      <pre className="mt-3 whitespace-pre-wrap break-words text-xs leading-6 text-[var(--ui-ink-medium)] md:overflow-x-auto md:whitespace-pre">
                         <code className="break-words">
                           {session.reconnectPlan.commands.join("\n")}
                         </code>
@@ -778,15 +778,15 @@ export function SettingsAgentsPage() {
                     </div>
 
                     {group.sessions.length > 1 ? (
-                      <div className="mt-4 rounded-[16px] bg-[rgba(8,13,28,0.38)] p-3">
-                        <div className="text-xs uppercase tracking-[0.14em] text-white/38">
+                      <div className="mt-4 rounded-[16px] bg-[var(--ui-code-bg)] p-3">
+                        <div className="text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-muted)]">
                           Session history under this agent
                         </div>
                         <div className="mt-2 grid gap-2">
                           {group.sessions.slice(0, 6).map((entry) => (
                             <div
                               key={entry.id}
-                              className="grid min-w-0 gap-1 rounded-[12px] bg-white/[0.035] px-3 py-2 text-xs text-white/50 sm:flex sm:items-center sm:justify-between sm:gap-2"
+                              className="grid min-w-0 gap-1 rounded-[12px] bg-[var(--ui-surface-2)] px-3 py-2 text-xs text-[var(--ui-ink-muted)] sm:flex sm:items-center sm:justify-between sm:gap-2"
                             >
                               <span className="min-w-0 break-all sm:truncate">
                                 {entry.sessionKey}
@@ -804,22 +804,22 @@ export function SettingsAgentsPage() {
                     ) : null}
 
                     {expandedRuntimeSessionId === session.id ? (
-                      <div className="mt-4 rounded-[16px] bg-[rgba(8,13,28,0.52)] p-3">
-                        <div className="text-xs uppercase tracking-[0.14em] text-white/38">
+                      <div className="mt-4 rounded-[16px] bg-[var(--ui-code-bg)] p-3">
+                        <div className="text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-muted)]">
                           Work history
                         </div>
                         {runtimeSessionHistoryQuery.isLoading ? (
-                          <div className="mt-3 text-sm text-white/55">
+                          <div className="mt-3 text-sm text-[var(--ui-ink-muted)]">
                             Loading session history…
                           </div>
                         ) : runtimeSessionHistoryQuery.isError ? (
-                          <div className="mt-3 text-sm text-rose-200/82">
+                          <div className="mt-3 text-sm text-[color-mix(in_srgb,var(--danger)_78%,var(--ui-ink-strong)_22%)]">
                             Could not load session history.
                           </div>
                         ) : runtimeSessionHistory?.session.id === session.id ? (
                           <div className="mt-3 grid gap-4 lg:grid-cols-2">
                             <div>
-                              <div className="text-xs uppercase tracking-[0.14em] text-white/38">
+                              <div className="text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-muted)]">
                                 Agent actions
                               </div>
                               <div className="mt-2 grid gap-2">
@@ -828,27 +828,27 @@ export function SettingsAgentsPage() {
                                     (action: AgentAction) => (
                                       <div
                                         key={action.id}
-                                        className="rounded-[14px] bg-white/[0.04] px-3 py-2.5"
+                                        className="rounded-[14px] bg-[var(--ui-surface-2)] px-3 py-2.5"
                                       >
                                         <div className="flex items-center justify-between gap-2">
-                                          <div className="text-sm text-white">
+                                          <div className="text-sm text-[var(--ui-ink-strong)]">
                                             {action.title}
                                           </div>
-                                          <Badge className="text-white/55">
+                                          <Badge className="text-[var(--ui-ink-muted)]">
                                             {action.status}
                                           </Badge>
                                         </div>
-                                        <div className="mt-1 text-xs leading-5 text-white/48">
+                                        <div className="mt-1 text-xs leading-5 text-[var(--ui-ink-muted)]">
                                           {action.summary || action.actionType}
                                         </div>
-                                        <div className="mt-1 text-xs text-white/35">
+                                        <div className="mt-1 text-xs text-[var(--ui-ink-muted)]">
                                           {formatDateTime(action.createdAt)}
                                         </div>
                                       </div>
                                     )
                                   )
                                 ) : (
-                                  <div className="rounded-[14px] bg-white/[0.04] px-3 py-2.5 text-sm text-white/50">
+                                  <div className="rounded-[14px] bg-[var(--ui-surface-2)] px-3 py-2.5 text-sm text-[var(--ui-ink-muted)]">
                                     No recorded agent actions for this session
                                     yet.
                                   </div>
@@ -856,7 +856,7 @@ export function SettingsAgentsPage() {
                               </div>
                             </div>
                             <div>
-                              <div className="text-xs uppercase tracking-[0.14em] text-white/38">
+                              <div className="text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-muted)]">
                                 Session events
                               </div>
                               <div className="mt-2 grid gap-2">
@@ -865,27 +865,27 @@ export function SettingsAgentsPage() {
                                     (event: AgentRuntimeSessionEvent) => (
                                       <div
                                         key={event.id}
-                                        className="rounded-[14px] bg-white/[0.04] px-3 py-2.5"
+                                        className="rounded-[14px] bg-[var(--ui-surface-2)] px-3 py-2.5"
                                       >
                                         <div className="flex items-center justify-between gap-2">
-                                          <div className="text-sm text-white">
+                                          <div className="text-sm text-[var(--ui-ink-strong)]">
                                             {event.title}
                                           </div>
-                                          <Badge className="text-white/55">
+                                          <Badge className="text-[var(--ui-ink-muted)]">
                                             {event.level}
                                           </Badge>
                                         </div>
-                                        <div className="mt-1 text-xs leading-5 text-white/48">
+                                        <div className="mt-1 text-xs leading-5 text-[var(--ui-ink-muted)]">
                                           {event.summary || event.eventType}
                                         </div>
-                                        <div className="mt-1 text-xs text-white/35">
+                                        <div className="mt-1 text-xs text-[var(--ui-ink-muted)]">
                                           {formatDateTime(event.createdAt)}
                                         </div>
                                       </div>
                                     )
                                   )
                                 ) : (
-                                  <div className="rounded-[14px] bg-white/[0.04] px-3 py-2.5 text-sm text-white/50">
+                                  <div className="rounded-[14px] bg-[var(--ui-surface-2)] px-3 py-2.5 text-sm text-[var(--ui-ink-muted)]">
                                     No session events recorded yet.
                                   </div>
                                 )}
@@ -905,7 +905,7 @@ export function SettingsAgentsPage() {
         {/* ── Token management ── */}
         <Card>
           <div className="flex items-center justify-between gap-4">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
               Agent tokens
             </div>
             <Button
@@ -923,7 +923,7 @@ export function SettingsAgentsPage() {
 
           <div className="mt-4 grid gap-3">
             {settings.agentTokens.length === 0 ? (
-              <div className="rounded-[18px] bg-white/[0.04] px-4 py-4 text-sm text-white/55">
+              <div className="rounded-[18px] bg-[var(--ui-surface-2)] px-4 py-4 text-sm text-[var(--ui-ink-muted)]">
                 No tokens yet. Issue one to let external agents or scripts
                 authenticate with Forge.
               </div>
@@ -931,14 +931,14 @@ export function SettingsAgentsPage() {
               settings.agentTokens.map((token) => (
                 <div
                   key={token.id}
-                  className="min-w-0 rounded-[18px] bg-white/[0.04] p-4"
+                  className="min-w-0 rounded-[18px] bg-[var(--ui-surface-2)] p-4"
                 >
                   <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
-                      <div className="font-medium text-white">
+                      <div className="font-medium text-[var(--ui-ink-strong)]">
                         {token.label}
                       </div>
-                      <div className="mt-0.5 text-sm text-white/50">
+                      <div className="mt-0.5 text-sm text-[var(--ui-ink-muted)]">
                         {token.agentLabel ?? "Unassigned agent"} ·{" "}
                         <span className="break-all font-mono text-xs">
                           {token.tokenPrefix}
@@ -946,19 +946,19 @@ export function SettingsAgentsPage() {
                       </div>
                     </div>
                     <Badge
-                      className={`${token.status === "active" ? "text-emerald-300" : "text-white/45"} self-start`}
+                      className={`${token.status === "active" ? "text-[color-mix(in_srgb,var(--success)_78%,var(--ui-ink-strong)_22%)]" : "text-[var(--ui-ink-muted)]"} self-start`}
                     >
                       {token.status}
                     </Badge>
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-2 text-xs text-white/55">
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs text-[var(--ui-ink-muted)]">
                     <span>{token.trustLevel}</span>
                     <span>·</span>
                     <span>{token.autonomyMode.replaceAll("_", " ")}</span>
                     <span>·</span>
                     <span>{token.approvalMode.replaceAll("_", " ")}</span>
                   </div>
-                  <div className="mt-2 text-xs text-white/45">
+                  <div className="mt-2 text-xs text-[var(--ui-ink-muted)]">
                     Bootstrap: {formatBootstrapMode(token.bootstrapPolicy.mode)}
                     {" · "}
                     {token.bootstrapPolicy.projectsLimit} projects
@@ -968,7 +968,7 @@ export function SettingsAgentsPage() {
                       ? ` · ${token.bootstrapPolicy.peoplePageLimit} people pages`
                       : " · no people pages"}
                   </div>
-                  <div className="mt-1 text-xs text-white/45">
+                  <div className="mt-1 text-xs text-[var(--ui-ink-muted)]">
                     Default read scope: {formatScopeSummary(token)}
                   </div>
                   <div className="mt-3 flex flex-wrap gap-1.5">
@@ -978,8 +978,8 @@ export function SettingsAgentsPage() {
                           key={scope}
                           className={
                             token.scopes.includes(scope)
-                              ? "text-emerald-300"
-                              : "text-white/30"
+                              ? "text-[color-mix(in_srgb,var(--success)_78%,var(--ui-ink-strong)_22%)]"
+                              : "text-[var(--ui-ink-muted)]"
                           }
                         >
                           {scope}
@@ -1011,7 +1011,7 @@ export function SettingsAgentsPage() {
               ))
             )}
           </div>
-          <div className="mt-3 px-1 text-xs text-white/35">
+          <div className="mt-3 px-1 text-xs text-[var(--ui-ink-muted)]">
             Raw token values are shown once and are never recoverable. If a
             token is lost, rotate or issue a new one.
           </div>
@@ -1020,32 +1020,32 @@ export function SettingsAgentsPage() {
         {/* ── Agent roster ── */}
         {settings.agents.length > 0 ? (
           <Card>
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
               Connected agents
             </div>
             <div className="mt-4 grid gap-3">
               {settings.agents.map((agent) => (
                 <div
                   key={agent.id}
-                  className="flex min-w-0 flex-col gap-3 rounded-[18px] bg-white/[0.04] p-4 sm:flex-row sm:items-start sm:justify-between"
+                  className="flex min-w-0 flex-col gap-3 rounded-[18px] bg-[var(--ui-surface-2)] p-4 sm:flex-row sm:items-start sm:justify-between"
                 >
                   <div className="min-w-0">
-                    <div className="font-medium text-white">{agent.label}</div>
+                    <div className="font-medium text-[var(--ui-ink-strong)]">{agent.label}</div>
                     {agent.description ? (
-                      <div className="mt-1 text-sm text-white/52">
+                      <div className="mt-1 text-sm text-[var(--ui-ink-muted)]">
                         {agent.description}
                       </div>
                     ) : null}
                     {agent.linkedUsers.length > 0 ? (
                       <div className="mt-2 flex flex-wrap gap-2">
                         {agent.linkedUsers.map((link) => (
-                          <Badge key={link.userId} className="text-white/55">
+                          <Badge key={link.userId} className="text-[var(--ui-ink-muted)]">
                             {link.user?.displayName ?? link.userId}
                           </Badge>
                         ))}
                       </div>
                     ) : null}
-                    <div className="mt-2 flex min-w-0 flex-wrap gap-x-4 gap-y-1 text-sm text-white/55">
+                    <div className="mt-2 flex min-w-0 flex-wrap gap-x-4 gap-y-1 text-sm text-[var(--ui-ink-muted)]">
                       <span>{agent.agentType}</span>
                       {agent.identityKey ? (
                         <span className="min-w-0 break-all font-mono text-xs">
@@ -1059,7 +1059,7 @@ export function SettingsAgentsPage() {
                       </span>
                     </div>
                   </div>
-                  <Badge className="self-start text-white/60">
+                  <Badge className="self-start text-[var(--ui-ink-medium)]">
                     {agent.trustLevel}
                   </Badge>
                 </div>
@@ -1072,7 +1072,7 @@ export function SettingsAgentsPage() {
         {operatorContext ? (
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
             <Card>
-              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                 Recommended next move
               </div>
               {operatorContext.recommendedNextTask ? (
@@ -1083,7 +1083,7 @@ export function SettingsAgentsPage() {
                     variant="heading"
                     size="lg"
                   />
-                  <div className="text-sm leading-6 text-white/58">
+                  <div className="text-sm leading-6 text-[var(--ui-ink-muted)]">
                     {operatorContext.recommendedNextTask.description ||
                       "No extra notes yet."}
                   </div>
@@ -1101,13 +1101,13 @@ export function SettingsAgentsPage() {
                   </div>
                 </div>
               ) : (
-                <div className="mt-4 text-sm text-white/55">
+                <div className="mt-4 text-sm text-[var(--ui-ink-muted)]">
                   Board is clear. No recommended task right now.
                 </div>
               )}
             </Card>
             <Card>
-              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                 Board pulse
               </div>
               <div className="mt-4 grid grid-cols-2 gap-3">
@@ -1131,12 +1131,12 @@ export function SettingsAgentsPage() {
                 ].map((col) => (
                   <div
                     key={col.label}
-                    className="rounded-[18px] bg-white/[0.04] p-4"
+                    className="rounded-[18px] bg-[var(--ui-surface-2)] p-4"
                   >
-                    <div className="text-xs uppercase tracking-[0.14em] text-white/38">
+                    <div className="text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-muted)]">
                       {col.label}
                     </div>
-                    <div className="mt-2 font-display text-3xl text-white">
+                    <div className="mt-2 font-display text-3xl text-[var(--ui-ink-strong)]">
                       {col.value}
                     </div>
                   </div>
@@ -1149,14 +1149,14 @@ export function SettingsAgentsPage() {
         {/* ── Active projects ── */}
         {operatorContext && operatorContext.activeProjects.length > 0 ? (
           <Card>
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
               Active projects
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {operatorContext.activeProjects.slice(0, 6).map((project) => (
                 <div
                   key={project.id}
-                  className="min-w-0 rounded-[18px] bg-white/[0.04] p-4"
+                  className="min-w-0 rounded-[18px] bg-[var(--ui-surface-2)] p-4"
                 >
                   <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
@@ -1172,7 +1172,7 @@ export function SettingsAgentsPage() {
                       gradient={false}
                     />
                   </div>
-                  <div className="mt-2 text-xs text-white/38">
+                  <div className="mt-2 text-xs text-[var(--ui-ink-muted)]">
                     {project.activeTaskCount} active ·{" "}
                     {project.completedTaskCount} done
                   </div>
@@ -1185,40 +1185,40 @@ export function SettingsAgentsPage() {
         {/* ── Approval queue ── */}
         <Card>
           <div className="flex items-center justify-between gap-4">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
               Approval queue
             </div>
             {approvals.filter((a) => a.status === "pending").length > 0 ? (
-              <Badge className="text-amber-300">
+              <Badge className="text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]">
                 {approvals.filter((a) => a.status === "pending").length} pending
               </Badge>
             ) : null}
           </div>
           <div className="mt-4 grid gap-3">
             {approvals.length === 0 ? (
-              <div className="rounded-[18px] bg-white/[0.04] px-4 py-4 text-sm text-white/55">
+              <div className="rounded-[18px] bg-[var(--ui-surface-2)] px-4 py-4 text-sm text-[var(--ui-ink-muted)]">
                 No pending approvals. Agent actions are flowing through.
               </div>
             ) : (
               approvals.map((approval) => (
                 <div
                   key={approval.id}
-                  className="rounded-[18px] bg-white/[0.04] p-4"
+                  className="rounded-[18px] bg-[var(--ui-surface-2)] p-4"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="font-medium text-white">
+                      <div className="font-medium text-[var(--ui-ink-strong)]">
                         {approval.title}
                       </div>
-                      <div className="mt-0.5 text-sm text-white/55">
+                      <div className="mt-0.5 text-sm text-[var(--ui-ink-muted)]">
                         {approval.summary || approval.actionType}
                       </div>
                     </div>
                     <Badge
                       className={
                         approval.status === "pending"
-                          ? "text-amber-300"
-                          : "text-white/45"
+                          ? "text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]"
+                          : "text-[var(--ui-ink-muted)]"
                       }
                     >
                       {approval.status}
@@ -1260,10 +1260,10 @@ export function SettingsAgentsPage() {
         <Card>
           <div className="flex items-center justify-between gap-4">
             <div>
-              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                 Retroactive work log
               </div>
-              <div className="mt-1 text-sm text-white/55">
+              <div className="mt-1 text-sm text-[var(--ui-ink-muted)]">
                 Capture work done outside the timer so it counts toward progress
                 and XP.
               </div>
@@ -1278,7 +1278,7 @@ export function SettingsAgentsPage() {
             </Button>
           </div>
           {logWorkMutation.data ? (
-            <div className="mt-4 rounded-[18px] bg-[rgba(192,193,255,0.10)] px-4 py-3 text-sm text-white">
+            <div className="mt-4 rounded-[18px] bg-[var(--ui-accent-soft)] px-4 py-3 text-sm text-[var(--ui-ink-strong)]">
               Logged{" "}
               <span className="inline-block align-middle">
                 <EntityName
@@ -1301,59 +1301,59 @@ export function SettingsAgentsPage() {
             onClick={() => setOnboardingExpanded((v) => !v)}
           >
             <div>
-              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                 Connection &amp; onboarding
               </div>
               {onboarding ? (
-                <div className="mt-1 text-sm text-white/55">
+                <div className="mt-1 text-sm text-[var(--ui-ink-muted)]">
                   {onboarding.forgeBaseUrl}
                 </div>
               ) : null}
             </div>
             {onboardingExpanded ? (
-              <ChevronUp className="size-4 shrink-0 text-white/38" />
+              <ChevronUp className="size-4 shrink-0 text-[var(--ui-ink-muted)]" />
             ) : (
-              <ChevronDown className="size-4 shrink-0 text-white/38" />
+              <ChevronDown className="size-4 shrink-0 text-[var(--ui-ink-muted)]" />
             )}
           </button>
 
           {onboardingExpanded && onboarding ? (
             <div className="mt-5 grid gap-4">
               <div className="grid gap-3 md:grid-cols-2">
-                <div className="rounded-[18px] bg-white/[0.04] p-4">
-                  <div className="text-xs uppercase tracking-[0.14em] text-white/40">
+                <div className="rounded-[18px] bg-[var(--ui-surface-2)] p-4">
+                  <div className="text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-muted)]">
                     Forge API
                   </div>
-                  <div className="mt-2 break-all text-sm text-white">
+                  <div className="mt-2 break-all text-sm text-[var(--ui-ink-strong)]">
                     {onboarding.forgeBaseUrl}
                   </div>
                 </div>
-                <div className="rounded-[18px] bg-white/[0.04] p-4">
-                  <div className="text-xs uppercase tracking-[0.14em] text-white/40">
+                <div className="rounded-[18px] bg-[var(--ui-surface-2)] p-4">
+                  <div className="text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-muted)]">
                     Web app
                   </div>
-                  <div className="mt-2 break-all text-sm text-white">
+                  <div className="mt-2 break-all text-sm text-[var(--ui-ink-strong)]">
                     {onboarding.webAppUrl}
                   </div>
                 </div>
-                <div className="rounded-[18px] bg-white/[0.04] p-4">
-                  <div className="text-xs uppercase tracking-[0.14em] text-white/40">
+                <div className="rounded-[18px] bg-[var(--ui-surface-2)] p-4">
+                  <div className="text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-muted)]">
                     OpenAPI spec
                   </div>
-                  <div className="mt-2 break-all text-sm text-white">
+                  <div className="mt-2 break-all text-sm text-[var(--ui-ink-strong)]">
                     {onboarding.openApiUrl}
                   </div>
                 </div>
-                <div className="rounded-[18px] bg-white/[0.04] p-4">
-                  <div className="text-xs uppercase tracking-[0.14em] text-white/40">
+                <div className="rounded-[18px] bg-[var(--ui-surface-2)] p-4">
+                  <div className="text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-muted)]">
                     Default policy
                   </div>
-                  <div className="mt-2 text-sm text-white">
+                  <div className="mt-2 text-sm text-[var(--ui-ink-strong)]">
                     {onboarding.recommendedTrustLevel} ·{" "}
                     {onboarding.recommendedAutonomyMode.replaceAll("_", " ")} ·{" "}
                     {onboarding.recommendedApprovalMode.replaceAll("_", " ")}
                   </div>
-                  <div className="mt-2 text-xs text-white/45">
+                  <div className="mt-2 text-xs text-[var(--ui-ink-muted)]">
                     Bootstrap default:{" "}
                     {formatBootstrapMode(
                       onboarding.defaultBootstrapPolicy.mode
@@ -1367,91 +1367,91 @@ export function SettingsAgentsPage() {
               </div>
 
               <div className="grid gap-3 md:grid-cols-2">
-                <div className="rounded-[18px] bg-white/[0.04] p-4">
-                  <div className="font-medium text-white">
+                <div className="rounded-[18px] bg-[var(--ui-surface-2)] p-4">
+                  <div className="font-medium text-[var(--ui-ink-strong)]">
                     {onboarding.authModes.operatorSession.label}
                   </div>
-                  <Badge className="mt-1 text-emerald-300">
+                  <Badge className="mt-1 text-[color-mix(in_srgb,var(--success)_78%,var(--ui-ink-strong)_22%)]">
                     {onboarding.defaultConnectionMode === "operator_session"
                       ? "default"
                       : "available"}
                   </Badge>
-                  <div className="mt-3 text-sm leading-6 text-white/60">
+                  <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-medium)]">
                     {onboarding.authModes.operatorSession.summary}
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {onboarding.authModes.operatorSession.trustedTargets.map(
                       (t) => (
-                        <Badge key={t} className="text-white/65">
+                        <Badge key={t} className="text-[var(--ui-ink-medium)]">
                           {t}
                         </Badge>
                       )
                     )}
                   </div>
                 </div>
-                <div className="rounded-[18px] bg-white/[0.04] p-4">
-                  <div className="font-medium text-white">
+                <div className="rounded-[18px] bg-[var(--ui-surface-2)] p-4">
+                  <div className="font-medium text-[var(--ui-ink-strong)]">
                     {onboarding.authModes.managedToken.label}
                   </div>
-                  <Badge className="mt-1 text-white/55">optional</Badge>
-                  <div className="mt-3 text-sm leading-6 text-white/60">
+                  <Badge className="mt-1 text-[var(--ui-ink-muted)]">optional</Badge>
+                  <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-medium)]">
                     {onboarding.authModes.managedToken.summary}
                   </div>
-                  <div className="mt-2 text-sm leading-6 text-white/48">
+                  <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-muted)]">
                     {onboarding.tokenRecovery.rotationSummary}
                   </div>
                 </div>
               </div>
 
               <div className="grid gap-3 md:grid-cols-3">
-                <div className="rounded-[18px] bg-white/[0.04] p-4">
-                  <div className="text-xs uppercase tracking-[0.14em] text-white/40">
+                <div className="rounded-[18px] bg-[var(--ui-surface-2)] p-4">
+                  <div className="text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-muted)]">
                     Shared runtime
                   </div>
-                  <div className="mt-3 text-sm leading-6 text-white/60">
+                  <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-medium)]">
                     Keep Forge, OpenClaw, Hermes, and the browser on the same
                     runtime when they should see one shared user directory, one
                     strategy graph, and one task history.
                   </div>
-                  <div className="mt-3 text-xs leading-5 text-white/46">
+                  <div className="mt-3 text-xs leading-5 text-[var(--ui-ink-muted)]">
                     Base URL: {onboarding.forgeBaseUrl}
                   </div>
                 </div>
-                <div className="rounded-[18px] bg-white/[0.04] p-4">
-                  <div className="text-xs uppercase tracking-[0.14em] text-white/40">
+                <div className="rounded-[18px] bg-[var(--ui-surface-2)] p-4">
+                  <div className="text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-muted)]">
                     Agent identity
                   </div>
-                  <div className="mt-3 text-sm leading-6 text-white/60">
+                  <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-medium)]">
                     Create each agent as a bot user, then write with that
                     user&apos;s `userId`. The relationship graph in Settings
                     -&gt; Users controls what each direction can see, message,
                     share, plan, and affect.
                   </div>
-                  <div className="mt-3 text-xs leading-5 text-white/46">
+                  <div className="mt-3 text-xs leading-5 text-[var(--ui-ink-muted)]">
                     Cross-owner links stay valid even when ownership differs.
                   </div>
                 </div>
-                <div className="rounded-[18px] bg-white/[0.04] p-4">
-                  <div className="text-xs uppercase tracking-[0.14em] text-white/40">
+                <div className="rounded-[18px] bg-[var(--ui-surface-2)] p-4">
+                  <div className="text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-muted)]">
                     Contract timing
                   </div>
-                  <div className="mt-3 text-sm leading-6 text-white/60">
+                  <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-medium)]">
                     Leave strategies editable while humans and bots refine the
                     graph. Lock them only when the plan becomes the contract the
                     alignment metrics should judge.
                   </div>
-                  <div className="mt-3 text-xs leading-5 text-white/46">
+                  <div className="mt-3 text-xs leading-5 text-[var(--ui-ink-muted)]">
                     Coverage, sequencing, scope discipline, and quality all
                     contribute to alignment now.
                   </div>
                 </div>
               </div>
 
-              <div className="rounded-[18px] bg-white/[0.04] p-4">
-                <div className="text-xs uppercase tracking-[0.14em] text-white/40">
+              <div className="rounded-[18px] bg-[var(--ui-surface-2)] p-4">
+                <div className="text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-muted)]">
                   Fast onboarding checklist
                 </div>
-                <div className="mt-3 grid gap-2 text-sm leading-6 text-white/60">
+                <div className="mt-3 grid gap-2 text-sm leading-6 text-[var(--ui-ink-medium)]">
                   <div>
                     1. Create the human and bot users in Settings -&gt; Users.
                   </div>
@@ -1475,11 +1475,11 @@ export function SettingsAgentsPage() {
               </div>
 
               <div className="grid gap-3 md:grid-cols-2">
-                <div className="rounded-[18px] bg-white/[0.04] p-4">
-                  <div className="text-xs uppercase tracking-[0.14em] text-white/40">
+                <div className="rounded-[18px] bg-[var(--ui-surface-2)] p-4">
+                  <div className="text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-muted)]">
                     Rights language
                   </div>
-                  <div className="mt-3 grid gap-2 text-sm leading-6 text-white/60">
+                  <div className="mt-3 grid gap-2 text-sm leading-6 text-[var(--ui-ink-medium)]">
                     <div>
                       `See` means discover, search, and read another owner.
                     </div>
@@ -1494,11 +1494,11 @@ export function SettingsAgentsPage() {
                     </div>
                   </div>
                 </div>
-                <div className="rounded-[18px] bg-white/[0.04] p-4">
-                  <div className="text-xs uppercase tracking-[0.14em] text-white/40">
+                <div className="rounded-[18px] bg-[var(--ui-surface-2)] p-4">
+                  <div className="text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-muted)]">
                     Strategy lifecycle
                   </div>
-                  <div className="mt-3 grid gap-2 text-sm leading-6 text-white/60">
+                  <div className="mt-3 grid gap-2 text-sm leading-6 text-[var(--ui-ink-medium)]">
                     <div>
                       1. Save an incomplete draft while the plan is still being
                       negotiated.
@@ -1519,11 +1519,11 @@ export function SettingsAgentsPage() {
                 </div>
               </div>
 
-              <div className="rounded-[18px] bg-white/[0.04] p-4">
-                <div className="text-xs uppercase tracking-[0.14em] text-white/40">
+              <div className="rounded-[18px] bg-[var(--ui-surface-2)] p-4">
+                <div className="text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-muted)]">
                   Quick-connect verification
                 </div>
-                <pre className="mt-3 overflow-x-auto rounded-[16px] bg-[rgba(8,13,28,0.78)] p-4 text-xs leading-6 text-white/72">
+                <pre className="mt-3 overflow-x-auto rounded-[16px] bg-[var(--ui-code-bg)] p-4 text-xs leading-6 text-[var(--ui-ink-medium)]">
                   <code>
                     {[
                       `curl -s ${onboarding.healthUrl}`,
@@ -1534,25 +1534,25 @@ export function SettingsAgentsPage() {
                 </pre>
               </div>
 
-              <div className="rounded-[18px] bg-white/[0.04] p-4">
-                <div className="text-xs uppercase tracking-[0.14em] text-white/40">
+              <div className="rounded-[18px] bg-[var(--ui-surface-2)] p-4">
+                <div className="text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-muted)]">
                   Required API headers
                 </div>
-                <div className="mt-3 grid gap-1 text-sm text-white/60">
+                <div className="mt-3 grid gap-1 text-sm text-[var(--ui-ink-medium)]">
                   <div>{onboarding.requiredHeaders.authorization}</div>
                   <div>{onboarding.requiredHeaders.source}</div>
                   <div>{onboarding.requiredHeaders.actor}</div>
                 </div>
               </div>
 
-              <div className="rounded-[18px] bg-white/[0.04] p-4">
-                <div className="text-xs uppercase tracking-[0.14em] text-white/40">
+              <div className="rounded-[18px] bg-[var(--ui-surface-2)] p-4">
+                <div className="text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-muted)]">
                   Session registry
                 </div>
-                <div className="mt-3 text-sm leading-6 text-white/60">
+                <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-medium)]">
                   {onboarding.sessionRegistry.summary}
                 </div>
-                <div className="mt-3 grid gap-1 text-xs leading-5 text-white/46">
+                <div className="mt-3 grid gap-1 text-xs leading-5 text-[var(--ui-ink-muted)]">
                   <div>Register: {onboarding.sessionRegistry.registerUrl}</div>
                   <div>
                     Heartbeat: {onboarding.sessionRegistry.heartbeatUrl}
@@ -1571,18 +1571,18 @@ export function SettingsAgentsPage() {
                 ).map((guide) => (
                   <div
                     key={guide.label}
-                    className="rounded-[18px] bg-white/[0.04] p-4"
+                    className="rounded-[18px] bg-[var(--ui-surface-2)] p-4"
                   >
-                    <div className="font-medium text-white">{guide.label}</div>
-                    <div className="mt-3 grid gap-2 text-sm leading-6 text-white/60">
+                    <div className="font-medium text-[var(--ui-ink-strong)]">{guide.label}</div>
+                    <div className="mt-3 grid gap-2 text-sm leading-6 text-[var(--ui-ink-medium)]">
                       {guide.installSteps.map((step) => (
                         <div key={step}>{step}</div>
                       ))}
                     </div>
-                    <pre className="mt-4 overflow-x-auto rounded-[16px] bg-[rgba(8,13,28,0.78)] p-4 text-xs leading-6 text-white/72">
+                    <pre className="mt-4 overflow-x-auto rounded-[16px] bg-[var(--ui-code-bg)] p-4 text-xs leading-6 text-[var(--ui-ink-medium)]">
                       <code>{guide.verifyCommands.join("\n")}</code>
                     </pre>
-                    <div className="mt-3 grid gap-1 text-sm leading-6 text-white/48">
+                    <div className="mt-3 grid gap-1 text-sm leading-6 text-[var(--ui-ink-muted)]">
                       {guide.configNotes.map((note) => (
                         <div key={note}>{note}</div>
                       ))}
@@ -1592,27 +1592,27 @@ export function SettingsAgentsPage() {
               </div>
 
               <div className="grid gap-3 md:grid-cols-2">
-                <div className="rounded-[18px] bg-white/[0.04] p-4">
-                  <div className="text-xs uppercase tracking-[0.14em] text-white/40">
+                <div className="rounded-[18px] bg-[var(--ui-surface-2)] p-4">
+                  <div className="text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-muted)]">
                     Multi-user model
                   </div>
-                  <div className="mt-3 text-sm leading-6 text-white/60">
+                  <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-medium)]">
                     {onboarding.multiUserModel.summary}
                   </div>
-                  <div className="mt-3 grid gap-1 text-sm leading-6 text-white/48">
+                  <div className="mt-3 grid gap-1 text-sm leading-6 text-[var(--ui-ink-muted)]">
                     {onboarding.multiUserModel.routeScoping.map((line) => (
                       <div key={line}>{line}</div>
                     ))}
                   </div>
                 </div>
-                <div className="rounded-[18px] bg-white/[0.04] p-4">
-                  <div className="text-xs uppercase tracking-[0.14em] text-white/40">
+                <div className="rounded-[18px] bg-[var(--ui-surface-2)] p-4">
+                  <div className="text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-muted)]">
                     Strategy contracts
                   </div>
-                  <div className="mt-3 text-sm leading-6 text-white/60">
+                  <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-medium)]">
                     {onboarding.strategyContractModel.lockSummary}
                   </div>
-                  <div className="mt-3 grid gap-1 text-sm leading-6 text-white/48">
+                  <div className="mt-3 grid gap-1 text-sm leading-6 text-[var(--ui-ink-muted)]">
                     {onboarding.strategyContractModel.metricBreakdown.map(
                       (line) => (
                         <div key={line}>{line}</div>
@@ -1623,11 +1623,11 @@ export function SettingsAgentsPage() {
               </div>
             </div>
           ) : onboardingExpanded && onboardingQuery.isError ? (
-            <div className="mt-4 rounded-[18px] bg-[rgba(120,33,33,0.22)] px-4 py-3 text-sm text-rose-100/80">
+            <div className="mt-4 rounded-[18px] bg-[var(--ui-danger-soft)] px-4 py-3 text-sm text-[color-mix(in_srgb,var(--danger)_78%,var(--ui-ink-strong)_22%)]">
               Could not load the onboarding contract. Check the API bridge.
             </div>
           ) : onboardingExpanded ? (
-            <div className="mt-4 text-sm text-white/50">Loading…</div>
+            <div className="mt-4 text-sm text-[var(--ui-ink-muted)]">Loading…</div>
           ) : null}
         </Card>
       </div>

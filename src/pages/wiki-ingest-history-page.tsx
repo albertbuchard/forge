@@ -7,10 +7,7 @@ import { PageHero } from "@/components/shell/page-hero";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import {
-  EmptyState,
-  ErrorState
-} from "@/components/ui/page-state";
+import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import {
   deleteWikiIngestJob,
@@ -191,10 +188,10 @@ export function WikiIngestHistoryPage() {
           <Card className="grid gap-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                   History Filters
                 </div>
-                <div className="mt-2 text-sm text-white/58">
+                <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
                   Narrow by free text, date range, space, or status tags.
                 </div>
               </div>
@@ -218,7 +215,9 @@ export function WikiIngestHistoryPage() {
 
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,0.8fr)]">
               <label className="grid gap-2">
-                <span className="text-sm text-white/58">Free text</span>
+                <span className="text-sm text-[var(--ui-ink-soft)]">
+                  Free text
+                </span>
                 <Input
                   value={queryText}
                   onChange={(event) => setFilter("q", event.target.value)}
@@ -226,7 +225,7 @@ export function WikiIngestHistoryPage() {
                 />
               </label>
               <label className="grid gap-2">
-                <span className="text-sm text-white/58">From</span>
+                <span className="text-sm text-[var(--ui-ink-soft)]">From</span>
                 <Input
                   type="date"
                   value={fromDate}
@@ -234,7 +233,7 @@ export function WikiIngestHistoryPage() {
                 />
               </label>
               <label className="grid gap-2">
-                <span className="text-sm text-white/58">To</span>
+                <span className="text-sm text-[var(--ui-ink-soft)]">To</span>
                 <Input
                   type="date"
                   value={toDate}
@@ -242,9 +241,9 @@ export function WikiIngestHistoryPage() {
                 />
               </label>
               <label className="grid gap-2">
-                <span className="text-sm text-white/58">Space</span>
+                <span className="text-sm text-[var(--ui-ink-soft)]">Space</span>
                 <select
-                  className="h-11 rounded-[18px] border border-white/10 bg-white/[0.04] px-3 text-sm text-white"
+                  className="h-11 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 text-sm text-[var(--ui-ink-strong)]"
                   value={selectedSpaceId}
                   onChange={(event) => setFilter("spaceId", event.target.value)}
                 >
@@ -267,9 +266,11 @@ export function WikiIngestHistoryPage() {
                     "rounded-full px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition",
                     tag === entry.value
                       ? "bg-[var(--primary)]/[0.18] text-[var(--primary)]"
-                      : "bg-white/[0.04] text-white/58 hover:bg-white/[0.08] hover:text-white"
+                      : "bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]"
                   )}
-                  onClick={() => setFilter("tag", entry.value === "all" ? "" : entry.value)}
+                  onClick={() =>
+                    setFilter("tag", entry.value === "all" ? "" : entry.value)
+                  }
                 >
                   {entry.label}
                 </button>
@@ -295,45 +296,47 @@ export function WikiIngestHistoryPage() {
                   entry.job.status
                 );
                 return (
-                  <Card key={entry.job.id} className="grid gap-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
+                  <Card key={entry.job.id} className="grid min-w-0 gap-4">
+                    <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
                       <button
                         type="button"
-                        className="min-w-0 flex-1 text-left"
+                        className="min-w-0 max-w-full text-left"
                         onClick={() => openModal(entry.job.id)}
                       >
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                             KarpaWiki ingest
                           </span>
-                          <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-white/60">
+                          <span className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-[var(--ui-ink-soft)]">
                             {entry.job.status}
                           </span>
-                          <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-white/44">
+                          <span className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                             {entry.job.phase}
                           </span>
                         </div>
-                        <div className="mt-3 text-lg font-semibold text-white">
+                        <div className="mt-3 break-words text-lg font-semibold text-[var(--ui-ink-strong)]">
                           {title}
                         </div>
-                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-white/56">
+                        <div className="mt-2 flex min-w-0 flex-wrap gap-x-4 gap-y-1 text-sm text-[var(--ui-ink-soft)]">
                           <span>
-                            {entry.job.progressPercent}% · {entry.job.createdPageCount} pages ·{" "}
+                            {entry.job.progressPercent}% ·{" "}
+                            {entry.job.createdPageCount} pages ·{" "}
                             {entry.job.createdEntityCount} entities
                           </span>
                           <span>{formatTimestamp(entry.job.createdAt)}</span>
                           {entry.job.sourceLocator ? (
-                            <span className="truncate">
+                            <span className="min-w-0 max-w-full break-all">
                               {entry.job.sourceLocator}
                             </span>
                           ) : null}
                         </div>
                       </button>
 
-                      <div className="flex shrink-0 flex-wrap gap-2">
+                      <div className="flex min-w-0 flex-wrap gap-2 sm:justify-end">
                         <Button
                           variant="secondary"
                           size="sm"
+                          className="max-sm:flex-1"
                           onClick={() => openModal(entry.job.id)}
                         >
                           Open review
@@ -341,6 +344,7 @@ export function WikiIngestHistoryPage() {
                         <Button
                           variant="secondary"
                           size="sm"
+                          className="max-sm:flex-1"
                           disabled={!deletable || deleteMutation.isPending}
                           pending={
                             deleteMutation.isPending &&
@@ -373,7 +377,7 @@ export function WikiIngestHistoryPage() {
                     ) : null}
 
                     {["queued", "processing"].includes(entry.job.status) ? (
-                      <div className="inline-flex items-center gap-2 text-sm text-white/50">
+                      <div className="inline-flex items-center gap-2 text-sm text-[var(--ui-ink-soft)]">
                         <LoaderCircle className="size-4 animate-spin" />
                         This ingest is still active and cannot be deleted yet.
                       </div>

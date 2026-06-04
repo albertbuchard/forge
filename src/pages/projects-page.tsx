@@ -432,7 +432,7 @@ export function ProjectsPage() {
         return (
           <Card
             key={project.id}
-            className="flex h-full flex-col transition hover:bg-white/[0.06]"
+            className="flex h-full flex-col transition hover:bg-[var(--ui-surface-hover)]"
           >
             <div className="flex items-center justify-between gap-3">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -442,10 +442,10 @@ export function ProjectsPage() {
               <Badge
                 className={
                   project.status === "completed"
-                    ? "text-emerald-300"
+                    ? "bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_76%,var(--ui-ink-strong)_24%)]"
                     : project.status === "paused"
-                      ? "text-amber-300"
-                      : "text-[var(--primary)]"
+                      ? "bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_76%,var(--ui-ink-strong)_24%)]"
+                      : "bg-[var(--ui-accent-soft)] text-[var(--primary)]"
                 }
               >
                 {project.status === "paused"
@@ -471,14 +471,17 @@ export function ProjectsPage() {
               </Link>
             </div>
 
-            <p className="mt-3 text-sm leading-6 text-white/58">
+            <p className="mt-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
               {project.description}
             </p>
 
             {visibleTags.length > 0 ? (
               <PillCluster className="mt-4">
                 {visibleTags.map((tag) => (
-                  <Badge key={tag.id} className="bg-white/[0.08] text-white/72">
+                  <Badge
+                    key={tag.id}
+                    className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]"
+                  >
                     {tag.name}
                   </Badge>
                 ))}
@@ -494,28 +497,32 @@ export function ProjectsPage() {
 
             <div className="mt-4 grid grid-cols-3 gap-3">
               <div>
-                <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
+                <div className="font-label text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   Active
                 </div>
-                <div className="mt-2 text-white">{project.activeTaskCount}</div>
+                <div className="mt-2 text-[var(--ui-ink-strong)]">
+                  {project.activeTaskCount}
+                </div>
               </div>
               <div>
-                <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
+                <div className="font-label text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   Completed
                 </div>
-                <div className="mt-2 text-white">
+                <div className="mt-2 text-[var(--ui-ink-strong)]">
                   {project.completedTaskCount}
                 </div>
               </div>
               <div>
-                <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/40">
+                <div className="font-label text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   XP
                 </div>
-                <div className="mt-2 text-white">{project.earnedPoints}</div>
+                <div className="mt-2 text-[var(--ui-ink-strong)]">
+                  {project.earnedPoints}
+                </div>
               </div>
             </div>
 
-            <div className="mt-5 text-[11px] uppercase tracking-[0.16em] text-white/40">
+            <div className="mt-5 break-words text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)] [overflow-wrap:anywhere]">
               {project.nextTaskTitle
                 ? `Next move: ${project.nextTaskTitle}`
                 : "Ready for the next task"}
@@ -605,10 +612,10 @@ export function ProjectsPage() {
             />
             {visibleProjects.length === 0 ? (
               <Card>
-                <div className="font-label text-[11px] uppercase tracking-[0.16em] text-white/42">
+                <div className="font-label text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   No matching projects
                 </div>
-                <div className="mt-3 text-sm leading-6 text-white/58">
+                <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
                   Nothing in this project collection matches the current search
                   and chips.
                 </div>
@@ -619,20 +626,20 @@ export function ProjectsPage() {
                   <Link
                     key={project.id}
                     to={`/projects/${project.id}`}
-                    className="block min-w-0 max-w-full rounded-[18px] bg-white/[0.04] px-4 py-3 transition hover:bg-white/[0.06]"
+                    className="block min-w-0 max-w-full rounded-[18px] bg-[var(--ui-surface-2)] px-4 py-3 transition hover:bg-[var(--ui-surface-hover)]"
                   >
                     <div className="flex min-w-0 items-center justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="truncate text-sm font-semibold text-white">
+                        <div className="truncate text-sm font-semibold text-[var(--ui-ink-strong)]">
                           {project.title}
                         </div>
-                        <div className="truncate text-sm text-white/54">
+                        <div className="truncate text-sm text-[var(--ui-ink-soft)]">
                           {project.goalTitle}
                         </div>
                       </div>
                       <Badge
                         wrap
-                        className="max-w-[7rem] shrink-0 bg-white/[0.08] text-white/72"
+                        className="max-w-[7rem] shrink-0 bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)]"
                       >
                         {project.earnedPoints} xp
                       </Badge>
@@ -662,31 +669,31 @@ export function ProjectsPage() {
             <div className="grid gap-3">
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
                 <Card className="p-4">
-                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                     Active
                   </div>
-                  <div className="mt-2 font-display text-4xl text-white">
+                  <div className="mt-2 font-display text-4xl text-[var(--ui-ink-strong)]">
                     {collectionCounts.active}
                   </div>
                 </Card>
                 <Card className="p-4">
-                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                     Finished
                   </div>
-                  <div className="mt-2 font-display text-4xl text-white">
+                  <div className="mt-2 font-display text-4xl text-[var(--ui-ink-strong)]">
                     {collectionCounts.completed}
                   </div>
                 </Card>
               </div>
               {spotlight ? (
                 <Card className="p-4">
-                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                     Spotlight
                   </div>
-                  <div className="mt-3 text-base font-semibold text-white">
+                  <div className="mt-3 text-base font-semibold text-[var(--ui-ink-strong)]">
                     {spotlight.title}
                   </div>
-                  <div className="mt-2 text-sm leading-6 text-white/56">
+                  <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                     {spotlight.description}
                   </div>
                   <div className="mt-3">
@@ -712,7 +719,7 @@ export function ProjectsPage() {
           action={
             <Link
               to="/goals"
-              className="inline-flex min-h-10 min-w-max shrink-0 items-center justify-center rounded-full bg-white/[0.08] px-4 py-3 text-sm whitespace-nowrap text-white transition hover:bg-white/[0.12]"
+              className="inline-flex min-h-10 min-w-max shrink-0 items-center justify-center rounded-full bg-[var(--ui-surface-2)] px-4 py-3 text-sm whitespace-nowrap text-[var(--ui-ink-strong)] transition hover:bg-[var(--ui-surface-hover)]"
             >
               Open goals
             </Link>

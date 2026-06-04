@@ -94,31 +94,31 @@ export function NoteFilterInput({
 
   return (
     <div className="grid gap-2">
-      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] uppercase tracking-[0.16em] text-white/40">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-muted)]">
         <span>Search hints: entity chips match linked records, free-text chips match note body or author.</span>
         <button
           type="button"
           onClick={() => addFreeText()}
           disabled={!canAddFreeText}
-          className="rounded-full border border-white/8 bg-white/[0.04] px-2.5 py-1 text-[10px] tracking-[0.14em] text-white/62 transition hover:bg-white/[0.08] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-2.5 py-1 text-[10px] tracking-[0.14em] text-[var(--ui-ink-medium)] transition hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)] disabled:cursor-not-allowed disabled:opacity-40"
         >
           Free text
         </button>
       </div>
 
-      <div className="rounded-[24px] border border-white/8 bg-[linear-gradient(135deg,rgba(19,28,48,0.88),rgba(10,14,26,0.98))] px-4 py-3 shadow-[0_24px_70px_rgba(3,8,18,0.2)]">
+      <div className="rounded-[24px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-section)] px-4 py-3 shadow-[var(--ui-shadow-floating)]">
         {selectedEntityOptions.length > 0 || selectedTextTerms.length > 0 ? (
           <div className="mb-3 flex flex-wrap gap-2">
             {selectedEntityOptions.map((option) => (
-              <span key={option.value} className="inline-flex max-w-full items-center gap-2 rounded-full border border-white/8 bg-white/[0.06] px-2.5 py-1.5">
+              <span key={option.value} className="inline-flex max-w-full items-center gap-2 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-2.5 py-1.5">
                 {option.kind ? (
                   <EntityBadge kind={option.kind} label={option.label} compact gradient={false} className="max-w-[16rem]" />
                 ) : (
-                  <Badge className="bg-white/[0.08] text-white/78">{option.label}</Badge>
+                  <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">{option.label}</Badge>
                 )}
                 <button
                   type="button"
-                  className="rounded-full text-white/50 transition hover:text-white"
+                  className="rounded-full text-[var(--ui-ink-muted)] transition hover:text-[var(--ui-ink-strong)]"
                   onClick={() => removeEntity(option.value)}
                   aria-label={`Remove ${option.label}`}
                 >
@@ -128,14 +128,14 @@ export function NoteFilterInput({
             ))}
 
             {selectedTextTerms.map((term) => (
-              <span key={term} className="inline-flex max-w-full items-center gap-2 rounded-full border border-cyan-300/16 bg-cyan-400/10 px-2.5 py-1.5 text-sm text-cyan-50">
+              <span key={term} className="inline-flex max-w-full items-center gap-2 rounded-full border border-[color-mix(in_srgb,var(--info)_24%,transparent)] bg-[var(--ui-info-soft)] px-2.5 py-1.5 text-sm text-[color-mix(in_srgb,var(--info)_78%,var(--ui-ink-strong)_22%)]">
                 <span className="inline-flex items-center gap-1.5">
                   <Type className="size-3.5" />
                   <span className="max-w-[16rem] truncate">{term}</span>
                 </span>
                 <button
                   type="button"
-                  className="rounded-full text-cyan-100/70 transition hover:text-white"
+                  className="rounded-full text-[color-mix(in_srgb,var(--info)_70%,var(--ui-ink-strong)_30%)] transition hover:text-[var(--ui-ink-strong)]"
                   onClick={() => removeTextTerm(term)}
                   aria-label={`Remove free-text filter ${term}`}
                 >
@@ -147,12 +147,12 @@ export function NoteFilterInput({
         ) : null}
 
         {selectedTextTerms.length > 1 ? (
-          <div className="mb-3 text-xs text-white/42">Free-text chips are combined with OR.</div>
+          <div className="mb-3 text-xs text-[var(--ui-ink-muted)]">Free-text chips are combined with OR.</div>
         ) : null}
 
         <div className="relative">
           <div className="flex items-center gap-3">
-            <Search className="size-4 text-white/34" />
+            <Search className="size-4 text-[var(--ui-ink-muted)]" />
             <input
               value={query}
               onChange={(event) => {
@@ -207,19 +207,19 @@ export function NoteFilterInput({
                 addFreeText();
               }}
               placeholder={placeholder}
-              className="min-w-0 flex-1 bg-transparent text-sm text-white placeholder:text-white/34 focus:outline-none"
+              className="min-w-0 flex-1 bg-transparent text-sm text-[var(--ui-ink-strong)] placeholder:text-[var(--ui-ink-muted)] focus:outline-none"
             />
           </div>
 
           {open ? (
-            <div className="absolute top-full z-20 mt-2 w-full rounded-[22px] border border-white/8 bg-[rgba(8,13,24,0.96)] p-2 shadow-[0_26px_60px_rgba(4,8,18,0.32)] backdrop-blur-xl">
+            <div className="absolute top-full z-20 mt-2 w-full rounded-[22px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-modal)] p-2 shadow-[var(--ui-shadow-floating)] backdrop-blur-xl">
               {filteredOptions.map((option, index) => (
                 <button
                   key={option.value}
                   type="button"
                   className={cn(
                     "flex w-full items-start justify-between gap-3 rounded-[18px] px-3 py-2.5 text-left transition",
-                    index === highlightedIndex ? "bg-white/[0.1] text-white" : "text-white/70 hover:bg-white/[0.06] hover:text-white"
+                    index === highlightedIndex ? "bg-[var(--ui-surface-2)] text-[var(--ui-ink-strong)]" : "text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]"
                   )}
                   onMouseEnter={() => setHighlightedIndex(index)}
                   onMouseDown={(event) => event.preventDefault()}
@@ -233,7 +233,7 @@ export function NoteFilterInput({
                         option.label
                       )}
                     </div>
-                    {option.description ? <div className="mt-1 text-xs leading-5 text-white/46">{option.description}</div> : null}
+                    {option.description ? <div className="mt-1 text-xs leading-5 text-[var(--ui-ink-muted)]">{option.description}</div> : null}
                   </div>
                 </button>
               ))}
@@ -241,7 +241,7 @@ export function NoteFilterInput({
               {canAddFreeText ? (
                 <button
                   type="button"
-                  className="mt-1 flex w-full items-center gap-2 rounded-[18px] px-3 py-2.5 text-left text-sm text-cyan-100 transition hover:bg-white/[0.06]"
+                  className="mt-1 flex w-full items-center gap-2 rounded-[18px] px-3 py-2.5 text-left text-sm text-[color-mix(in_srgb,var(--info)_78%,var(--ui-ink-strong)_22%)] transition hover:bg-[var(--ui-surface-2)]"
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => addFreeText()}
                 >
@@ -251,7 +251,7 @@ export function NoteFilterInput({
               ) : null}
 
               {filteredOptions.length === 0 && !canAddFreeText ? (
-                <div className="px-3 py-2.5 text-sm text-white/42">
+                <div className="px-3 py-2.5 text-sm text-[var(--ui-ink-muted)]">
                   Keep typing to find a linked entity, or press Enter to add a free-text badge.
                 </div>
               ) : null}

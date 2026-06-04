@@ -109,7 +109,10 @@ function formatBackupMode(mode: DataBackupEntry["mode"]) {
   }
 }
 
-function safeFormatDateTime(value: string | null | undefined, fallback = "Unknown time") {
+function safeFormatDateTime(
+  value: string | null | undefined,
+  fallback = "Unknown time"
+) {
   if (!value) {
     return fallback;
   }
@@ -132,9 +135,9 @@ function FeedbackBanner({
       className={cn(
         "rounded-[20px] border px-4 py-3 text-sm leading-6",
         tone === "success"
-          ? "border-emerald-400/20 bg-emerald-500/[0.08] text-emerald-100/88"
+          ? "border-[color-mix(in_srgb,var(--success)_26%,var(--ui-border-subtle)_74%)] bg-[var(--ui-success-soft)] text-[var(--success)]"
           : tone === "warning"
-            ? "border-amber-400/20 bg-amber-500/[0.08] text-amber-100/88"
+            ? "border-[color-mix(in_srgb,var(--warning)_26%,var(--ui-border-subtle)_74%)] bg-[var(--ui-warning-soft)] text-[var(--warning)]"
             : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)]"
       )}
     >
@@ -153,12 +156,12 @@ function DataFact({
   icon: typeof Database;
 }) {
   return (
-    <div className="rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
-      <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
+    <div className="min-w-0 overflow-hidden rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+      <div className="flex min-w-0 items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
         <Icon className="size-4" />
-        {label}
+        <span className="min-w-0 break-words">{label}</span>
       </div>
-      <div className="mt-3 break-all text-sm leading-6 text-[var(--ui-ink-soft)]">
+      <div className="mt-3 min-w-0 break-all text-sm leading-6 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
         {value}
       </div>
     </div>
@@ -219,7 +222,9 @@ export function SettingsDataPage() {
         backupFrequencyHours:
           backupFrequency === "off" ? null : Number(backupFrequency || "24"),
         backupRetentionDays:
-          backupRetention === "forever" ? null : Number(backupRetention || "30"),
+          backupRetention === "forever"
+            ? null
+            : Number(backupRetention || "30"),
         autoRepairEnabled
       }),
     onSuccess: async () => {
@@ -425,17 +430,15 @@ export function SettingsDataPage() {
                 {selectedTargetCandidate.databasePath}
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
-                <Badge className="bg-white/[0.08] text-white/78">
-                  {selectedTargetCandidate.sourceHint}
-                </Badge>
-                <Badge className="bg-white/[0.08] text-white/78">
+                <Badge tone="meta">{selectedTargetCandidate.sourceHint}</Badge>
+                <Badge tone="meta">
                   {selectedTargetCandidate.counts.notes} notes
                 </Badge>
-                <Badge className="bg-white/[0.08] text-white/78">
+                <Badge tone="meta">
                   {selectedTargetCandidate.counts.tasks} tasks
                 </Badge>
                 {selectedTargetCandidate.newerThanCurrent ? (
-                  <Badge className="bg-amber-500/16 text-amber-100">
+                  <Badge className="bg-[var(--ui-warning-soft)] text-[var(--warning)]">
                     Newer than the current copy
                   </Badge>
                 ) : null}
@@ -472,18 +475,16 @@ export function SettingsDataPage() {
               {restoreTarget?.note || "Forge backup archive"}
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
-              <Badge className="bg-white/[0.08] text-white/78">
+              <Badge tone="meta">
                 {restoreTarget
                   ? formatBackupMode(restoreTarget.mode)
                   : "Backup"}
               </Badge>
-              <Badge className="bg-white/[0.08] text-white/78">
+              <Badge tone="meta">
                 {restoreTarget ? formatBytes(restoreTarget.sizeBytes) : "0 B"}
               </Badge>
               {restoreTarget?.includesWiki ? (
-                <Badge className="bg-white/[0.08] text-white/78">
-                  Includes wiki
-                </Badge>
+                <Badge tone="meta">Includes wiki</Badge>
               ) : null}
             </div>
           </div>
@@ -510,9 +511,9 @@ export function SettingsDataPage() {
       description:
         "Use this only when you are confident this backup is the state you want back.",
       render: () => (
-        <div className="rounded-[22px] border border-amber-400/20 bg-amber-500/[0.08] p-4 text-sm leading-6 text-amber-100/88">
-          Forge will replace the live database with this backup,
-          then reopen the restored copy.
+        <div className="rounded-[22px] border border-[color-mix(in_srgb,var(--warning)_26%,var(--ui-border-subtle)_74%)] bg-[var(--ui-warning-soft)] p-4 text-sm leading-6 text-[var(--warning)]">
+          Forge will replace the live database with this backup, then reopen the
+          restored copy.
         </div>
       )
     }
@@ -588,9 +589,9 @@ export function SettingsDataPage() {
         <SettingsSectionNav />
 
         {operatorSessionQuery.data?.session ? (
-          <div className="rounded-[20px] border border-emerald-400/20 bg-emerald-500/[0.08] px-4 py-3 text-sm text-emerald-100/88">
+          <div className="rounded-[20px] border border-[color-mix(in_srgb,var(--success)_26%,var(--ui-border-subtle)_74%)] bg-[var(--ui-success-soft)] px-4 py-3 text-sm text-[var(--ui-ink-medium)]">
             You are managing Forge data as{" "}
-            <span className="font-medium text-white">
+            <span className="font-medium text-[var(--ui-ink-strong)]">
               {operatorSessionQuery.data.session.actorLabel}
             </span>
             .
@@ -603,12 +604,12 @@ export function SettingsDataPage() {
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
           <Card className="grid gap-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
+            <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
                 <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                   Live data folder
                 </div>
-                <div className="mt-2 text-xl font-semibold text-[var(--ui-ink-strong)]">
+                <div className="mt-2 min-w-0 break-all text-xl font-semibold text-[var(--ui-ink-strong)] [overflow-wrap:anywhere]">
                   {current.dataRoot}
                 </div>
                 <div className="mt-2 max-w-3xl text-sm leading-6 text-[var(--ui-ink-soft)]">
@@ -618,15 +619,15 @@ export function SettingsDataPage() {
               <Badge
                 className={cn(
                   current.integrityOk
-                    ? "bg-emerald-500/14 text-emerald-100"
-                    : "bg-amber-500/14 text-amber-100"
+                    ? "bg-[var(--ui-success-soft)] text-[var(--success)]"
+                    : "bg-[var(--ui-warning-soft)] text-[var(--warning)]"
                 )}
               >
                 {current.integrityMessage}
               </Badge>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-3">
               <DataFact
                 label="Database file"
                 value={current.databasePath}
@@ -648,7 +649,7 @@ export function SettingsDataPage() {
               />
             </div>
 
-            <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+            <div className="grid min-w-0 gap-3 md:grid-cols-3 xl:grid-cols-6">
               <MetricTile label="Notes" value={current.counts.notes} />
               <MetricTile label="Goals" value={current.counts.goals} />
               <MetricTile label="Projects" value={current.counts.projects} />
@@ -660,8 +661,8 @@ export function SettingsDataPage() {
 
           <Card className="grid gap-4">
             <div className="flex items-start gap-3">
-              <div className="flex size-11 items-center justify-center rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.12]">
-                <ShieldCheck className="size-5 text-emerald-200" />
+              <div className="flex size-11 items-center justify-center rounded-2xl border border-[color-mix(in_srgb,var(--success)_26%,var(--ui-border-subtle)_74%)] bg-[var(--ui-success-soft)]">
+                <ShieldCheck className="size-5 text-[var(--success)]" />
               </div>
               <div>
                 <div className="text-sm font-semibold text-[var(--ui-ink-strong)]">
@@ -924,7 +925,7 @@ export function SettingsDataPage() {
                           <div className="text-sm font-semibold text-[var(--ui-ink-strong)]">
                             {safeFormatDateTime(backup.createdAt)}
                           </div>
-                          <Badge className="bg-white/[0.08] text-white/78">
+                          <Badge tone="meta">
                             {formatBackupMode(backup.mode)}
                           </Badge>
                         </div>
@@ -989,9 +990,9 @@ export function SettingsDataPage() {
                     className={cn(
                       "rounded-[22px] border p-4",
                       candidate.sameAsCurrent
-                        ? "border-emerald-400/18 bg-emerald-500/[0.08]"
+                        ? "border-[color-mix(in_srgb,var(--success)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-success-soft)]"
                         : candidate.newerThanCurrent
-                          ? "border-amber-400/20 bg-amber-500/[0.08]"
+                          ? "border-[color-mix(in_srgb,var(--warning)_26%,var(--ui-border-subtle)_74%)] bg-[var(--ui-warning-soft)]"
                           : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]"
                     )}
                   >
@@ -1001,16 +1002,14 @@ export function SettingsDataPage() {
                           <div className="text-sm font-semibold text-[var(--ui-ink-strong)]">
                             {candidate.dataRoot}
                           </div>
-                          <Badge className="bg-white/[0.08] text-white/78">
-                            {candidate.sourceHint}
-                          </Badge>
+                          <Badge tone="meta">{candidate.sourceHint}</Badge>
                           {candidate.newerThanCurrent ? (
-                            <Badge className="bg-amber-500/16 text-amber-100">
+                            <Badge className="bg-[var(--ui-warning-soft)] text-[var(--warning)]">
                               Newer than current
                             </Badge>
                           ) : null}
                           {candidate.sameAsCurrent ? (
-                            <Badge className="bg-emerald-500/16 text-emerald-100">
+                            <Badge className="bg-[var(--ui-success-soft)] text-[var(--success)]">
                               Current copy
                             </Badge>
                           ) : null}
@@ -1054,7 +1053,7 @@ export function SettingsDataPage() {
             </div>
 
             {newestCandidate ? (
-              <div className="flex items-start gap-3 rounded-[20px] border border-amber-400/20 bg-amber-500/[0.08] px-4 py-3 text-sm text-amber-100/88">
+              <div className="flex items-start gap-3 rounded-[20px] border border-[color-mix(in_srgb,var(--warning)_26%,var(--ui-border-subtle)_74%)] bg-[var(--ui-warning-soft)] px-4 py-3 text-sm text-[var(--warning)]">
                 <AlertTriangle className="mt-0.5 size-4 shrink-0" />
                 <div>
                   Forge found a copy on disk that looks newer than the one you

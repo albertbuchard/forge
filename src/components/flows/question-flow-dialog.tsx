@@ -263,15 +263,15 @@ export function FlowField({
   children: ReactNode;
 }) {
   return (
-    <label className="grid gap-2">
-      <span className="flex items-center gap-2 text-sm font-medium text-[var(--ui-ink-strong)]">
-        <span>{label}</span>
+    <label className="grid min-w-0 max-w-full gap-2">
+      <span className="flex min-w-0 max-w-full items-center gap-2 text-sm font-medium text-[var(--ui-ink-strong)]">
+        <span className="min-w-0 break-words">{label}</span>
         {labelHelp ? (
           <InfoTooltip content={labelHelp} label={`Explain ${label}`} />
         ) : null}
       </span>
       {description ? (
-        <span className="text-sm leading-6 text-[var(--ui-ink-soft)]">
+        <span className="min-w-0 break-words text-sm leading-6 text-[var(--ui-ink-soft)]">
           {description}
         </span>
       ) : null}
@@ -296,7 +296,7 @@ export function FlowChoiceGrid({
   return (
     <div
       className={cn(
-        "grid gap-3",
+        "grid min-w-0 max-w-full gap-3",
         columns === 3 ? "md:grid-cols-3" : "md:grid-cols-2"
       )}
     >
@@ -307,16 +307,18 @@ export function FlowChoiceGrid({
             key={option.value}
             type="button"
             className={cn(
-              "rounded-[22px] border px-4 py-4 text-left transition",
+              "min-w-0 max-w-full overflow-hidden rounded-[22px] border px-4 py-4 text-left transition",
               selected
                 ? "border-[var(--primary)]/28 bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)] shadow-[var(--ui-shadow-soft)]"
                 : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)]"
             )}
             onClick={() => onChange(option.value)}
           >
-            <div className="font-medium">{option.label}</div>
+            <div className="min-w-0 break-words font-medium">
+              {option.label}
+            </div>
             {option.description ? (
-              <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
+              <div className="mt-2 min-w-0 break-words text-sm leading-6 text-[var(--ui-ink-soft)]">
                 {option.description}
               </div>
             ) : null}

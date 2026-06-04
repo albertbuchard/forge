@@ -61,9 +61,9 @@ function sourceDescription(
     case "today_movement_trip_calories":
       return "Forge found movement-trip calories today and is using them instead of the default.";
     case "today_step_estimate":
-      return "Forge found same-day steps but no active-energy kcal, so it estimates step calories from latest known body weight and uses that instead of the default.";
+      return "Forge found enough same-day steps to beat the default active allowance, so it estimates step calories from latest known body weight and uses that today.";
     default:
-      return "No same-day active evidence is available yet, so Forge is using the default from the plan.";
+      return "No meaningful same-day active evidence is available yet, so Forge is using the default from the plan. Tiny step-only syncs stay visible as evidence but do not lower the default.";
   }
 }
 
@@ -86,9 +86,9 @@ function sourceDecisionLabel(source: string) {
     case "today_movement_trip_calories":
       return "Using today's movement calories instead of the default.";
     case "today_step_estimate":
-      return "Using today's step estimate instead of the default.";
+      return "Using today's step estimate because it is above the default.";
     default:
-      return "No same-day active evidence yet, so the default active calories are used.";
+      return "No meaningful same-day active evidence yet, so the default active calories are used.";
   }
 }
 
@@ -210,7 +210,7 @@ export function WeightLossActiveCaloriesPanel({
                     Today active-calorie source
                     <InfoTooltip
                       label="Explain active calorie target"
-                      content="This is the active-energy allowance applied to today's food budget. Forge uses a manual override first, then same-day HealthKit active energy because it normally includes steps and workouts, then workout and movement calories, then a step estimate from body weight, then the default active calories from the plan."
+                      content="This is the active-energy allowance applied to today's food budget. Forge uses a manual override first, then same-day HealthKit active energy because it normally includes steps and workouts, then workout and movement calories, then a step estimate only when it is above the default active allowance, then the default active calories from the plan."
                     />
                   </div>
                   <h2 className="mt-1 text-3xl font-semibold leading-tight text-[var(--ui-ink-strong)]">
@@ -226,8 +226,10 @@ export function WeightLossActiveCaloriesPanel({
                     </span>{" "}
                     default active calories are the fallback. If Forge has
                     workouts, movement calories, HealthKit active energy, or
-                    steps for today, those same-day calories replace the
-                    fallback. A manual edit overrides today only.
+                    enough step calories for today, those same-day calories
+                    replace the fallback. Tiny step-only syncs stay visible but
+                    do not lower the default. A manual edit overrides today
+                    only.
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[var(--ui-ink-soft)]">
                     <span className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-1">

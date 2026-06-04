@@ -58,7 +58,15 @@ const CURVE_CHART_MARGIN = {
   bottom: 28,
   left: 42
 } as const;
-const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+const WEEKDAY_LABELS = [
+  "Sun",
+  "Mon",
+  "Tue",
+  "Wed",
+  "Thu",
+  "Fri",
+  "Sat"
+] as const;
 
 function buildFallbackTemplates(
   lifeForce: LifeForcePayload,
@@ -234,7 +242,10 @@ function getLifeForceMode(lifeForce: LifeForcePayload) {
   if (lifeForce.overloadApPerHour > 0 || lifeForce.instantFreeApPerHour <= 0) {
     return "Recovery";
   }
-  if (lifeForce.instantCapacityApPerHour >= lifeForce.currentDrainApPerHour + 4) {
+  if (
+    lifeForce.instantCapacityApPerHour >=
+    lifeForce.currentDrainApPerHour + 4
+  ) {
     return "Deep work";
   }
   return "Low-friction admin";
@@ -244,62 +255,62 @@ function LifeForceHeaderCards({ lifeForce }: { lifeForce: LifeForcePayload }) {
   return (
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
       <Card className="p-4">
-        <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+        <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
           Daily AP
         </div>
         <div className="mt-2 font-display text-4xl text-[var(--primary)]">
           {Math.round(lifeForce.spentTodayAp)}
-          <span className="ml-2 text-lg text-white/44">
+          <span className="ml-2 text-lg text-[var(--ui-ink-faint)]">
             / {Math.round(lifeForce.dailyBudgetAp)}
           </span>
         </div>
-        <div className="mt-2 text-sm text-white/58">
+        <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
           Target band {Math.round(lifeForce.targetBandMinAp)}-
           {Math.round(lifeForce.targetBandMaxAp)} AP
         </div>
-        <div className="mt-2 text-xs uppercase tracking-[0.14em] text-white/38">
+        <div className="mt-2 text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
           {getLifeForceUsageLabel(lifeForce)}
         </div>
       </Card>
       <Card className="p-4">
-        <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+        <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
           Instant headroom
         </div>
-        <div className="mt-2 font-display text-4xl text-white">
+        <div className="mt-2 font-display text-4xl text-[var(--ui-ink-strong)]">
           {lifeForce.instantFreeApPerHour.toFixed(1)}
         </div>
-        <div className="mt-2 text-sm text-white/58">
+        <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
           {formatRate(lifeForce.instantCapacityApPerHour)} capacity minus{" "}
           {formatRate(lifeForce.currentDrainApPerHour)} load
         </div>
-        <div className="mt-2 text-xs uppercase tracking-[0.14em] text-white/38">
+        <div className="mt-2 text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
           {lifeForce.overloadApPerHour > 0
             ? `${formatRate(lifeForce.overloadApPerHour)} overloaded`
             : "No overload right now"}
         </div>
       </Card>
       <Card className="p-4">
-        <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+        <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
           Fatigue buffer
         </div>
-        <div className="mt-2 font-display text-4xl text-white">
+        <div className="mt-2 font-display text-4xl text-[var(--ui-ink-strong)]">
           {lifeForce.fatigueBufferApPerHour.toFixed(1)}
         </div>
-        <div className="mt-2 text-sm text-white/58">
+        <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
           Short-term strain rises with overlap and falls with recovery.
         </div>
       </Card>
       <Card className="p-4">
-        <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+        <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
           Forecast
         </div>
-        <div className="mt-2 font-display text-4xl text-white">
+        <div className="mt-2 font-display text-4xl text-[var(--ui-ink-strong)]">
           {Math.round(lifeForce.forecastAp)}
         </div>
-        <div className="mt-2 text-sm text-white/58">
+        <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
           Planned remaining {formatAp(lifeForce.plannedRemainingAp)}
         </div>
-        <div className="mt-2 text-xs uppercase tracking-[0.14em] text-white/38">
+        <div className="mt-2 text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
           Remaining {formatAp(lifeForce.remainingAp)}
         </div>
       </Card>
@@ -313,17 +324,17 @@ function LifeForceStatsStrip({ lifeForce }: { lifeForce: LifeForcePayload }) {
       {lifeForce.stats.map((stat) => (
         <Card key={stat.key} className="p-4">
           <div className="flex items-center justify-between gap-3">
-            <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+            <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
               {stat.label}
             </div>
-            <Badge className="bg-white/[0.08] text-white/70">
+            <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
               L{stat.level}
             </Badge>
           </div>
-          <div className="mt-3 text-2xl font-semibold text-white">
+          <div className="mt-3 text-2xl font-semibold text-[var(--ui-ink-strong)]">
             {Math.round(stat.xp)} XP
           </div>
-          <div className="mt-1 text-sm text-white/54">
+          <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
             {stat.key === "life_force"
               ? `+${Math.round((stat.costModifier - 1) * 100)}% daily resilience`
               : `${Math.round((1 - stat.costModifier) * 100)}% cost relief`}
@@ -375,7 +386,8 @@ function LifeForceCurveEditor({
     return now.getHours() * 60 + now.getMinutes();
   }, []);
   const orderedPoints = useMemo(
-    () => [...points].sort((left, right) => left.minuteOfDay - right.minuteOfDay),
+    () =>
+      [...points].sort((left, right) => left.minuteOfDay - right.minuteOfDay),
     [points]
   );
   const visiblePoints = useMemo(
@@ -383,9 +395,7 @@ function LifeForceCurveEditor({
       orderedPoints.map((point) => ({
         ...point,
         locked:
-          weekday === todayWeekday
-            ? point.minuteOfDay <= minuteOfDayNow
-            : false
+          weekday === todayWeekday ? point.minuteOfDay <= minuteOfDayNow : false
       })),
     [minuteOfDayNow, orderedPoints, todayWeekday, weekday]
   );
@@ -571,7 +581,9 @@ function LifeForceCurveEditor({
           menuState.index === 0 ||
           menuState.index === visiblePoints.length - 1,
         onSelect: () => {
-          onChange(visiblePoints.filter((_, index) => index !== menuState.index));
+          onChange(
+            visiblePoints.filter((_, index) => index !== menuState.index)
+          );
         }
       },
       {
@@ -609,8 +621,7 @@ function LifeForceCurveEditor({
     () =>
       visiblePoints.map((point) => ({
         ...point,
-        x:
-          CURVE_CHART_MARGIN.left + (point.minuteOfDay / 1440) * plotWidth,
+        x: CURVE_CHART_MARGIN.left + (point.minuteOfDay / 1440) * plotWidth,
         y:
           CURVE_CHART_MARGIN.top +
           (1 - point.rateApPerHour / Math.max(1, yMax)) * plotHeight
@@ -623,8 +634,10 @@ function LifeForceCurveEditor({
       : {
           pointerX: dragState.pointerX,
           pointerY: dragState.pointerY,
-          constrainedX: handlePositions[dragState.index]?.x ?? dragState.pointerX,
-          constrainedY: handlePositions[dragState.index]?.y ?? dragState.pointerY
+          constrainedX:
+            handlePositions[dragState.index]?.x ?? dragState.pointerX,
+          constrainedY:
+            handlePositions[dragState.index]?.y ?? dragState.pointerY
         };
 
   return (
@@ -632,13 +645,13 @@ function LifeForceCurveEditor({
       <Card className="overflow-hidden p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
               Life Force view
             </div>
-            <div className="mt-2 text-xl font-semibold text-white">
+            <div className="mt-2 text-xl font-semibold text-[var(--ui-ink-strong)]">
               Instant Life Force editor
             </div>
-            <div className="mt-2 max-w-3xl text-sm leading-6 text-white/56">
+            <div className="mt-2 max-w-3xl text-sm leading-6 text-[var(--ui-ink-soft)]">
               One click adds a turn point. Drag future handles. Right click a
               handle to remove or flatten it. The ghost handle follows your
               finger or cursor while the real turn point stays constrained on
@@ -646,7 +659,7 @@ function LifeForceCurveEditor({
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <div className="flex flex-wrap items-center gap-1 rounded-full bg-white/[0.04] p-1">
+            <div className="flex flex-wrap items-center gap-1 rounded-full bg-[var(--ui-surface-2)] p-1">
               {WEEKDAY_LABELS.map((label, index) => (
                 <button
                   key={label}
@@ -655,7 +668,7 @@ function LifeForceCurveEditor({
                     "rounded-full px-3 py-1.5 text-[11px] font-medium transition",
                     weekday === index
                       ? "bg-[var(--primary)] text-slate-950"
-                      : "text-white/60 hover:bg-white/[0.05] hover:text-white"
+                      : "text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                   )}
                   onClick={() => onWeekdayChange(index)}
                 >
@@ -673,11 +686,11 @@ function LifeForceCurveEditor({
           </div>
         </div>
 
-        <div className="mt-4 rounded-[24px] bg-[linear-gradient(180deg,rgba(192,193,255,0.08),rgba(192,193,255,0.02))] p-3">
+        <div className="mt-4 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-3">
           <div
             ref={containerRef}
             className={cn(
-              "relative h-72 w-full overflow-hidden rounded-[20px] bg-[rgba(255,255,255,0.02)]",
+              "relative h-72 w-full overflow-hidden rounded-[20px] bg-[var(--ui-surface-1)]",
               dragState !== null ? "select-none touch-none" : ""
             )}
             style={{ touchAction: dragState === null ? "pan-y" : "none" }}
@@ -716,7 +729,8 @@ function LifeForceCurveEditor({
               nextPoints.splice(insertAt, 0, {
                 minuteOfDay,
                 rateApPerHour: Number(rateApPerHour.toFixed(3)),
-                locked: weekday === todayWeekday && minuteOfDay <= minuteOfDayNow
+                locked:
+                  weekday === todayWeekday && minuteOfDay <= minuteOfDayNow
               });
               onChange(nextPoints);
             }}
@@ -728,14 +742,20 @@ function LifeForceCurveEditor({
               margin={CURVE_CHART_MARGIN}
             >
               <defs>
-                <linearGradient id="life-force-chart-fill" x1="0" x2="0" y1="0" y2="1">
-                  <stop offset="0%" stopColor="rgba(192,193,255,0.24)" />
-                  <stop offset="100%" stopColor="rgba(192,193,255,0.02)" />
+                <linearGradient
+                  id="life-force-chart-fill"
+                  x1="0"
+                  x2="0"
+                  y1="0"
+                  y2="1"
+                >
+                  <stop offset="0%" stopColor="var(--ui-accent-soft)" />
+                  <stop offset="100%" stopColor="var(--ui-surface-1)" />
                 </linearGradient>
               </defs>
               <CartesianGrid
                 vertical={false}
-                stroke="rgba(255,255,255,0.08)"
+                stroke="var(--ui-border-subtle)"
                 strokeDasharray="3 4"
               />
               <XAxis
@@ -744,15 +764,15 @@ function LifeForceCurveEditor({
                 domain={[0, 1440]}
                 ticks={xTicks}
                 tickFormatter={formatMinuteTick}
-                tick={{ fill: "rgba(255,255,255,0.48)", fontSize: 10 }}
+                tick={{ fill: "var(--ui-ink-faint)", fontSize: 10 }}
                 tickLine={false}
-                axisLine={{ stroke: "rgba(255,255,255,0.12)" }}
+                axisLine={{ stroke: "var(--ui-border-subtle)" }}
               >
                 <Label
                   value="Time"
                   position="insideBottom"
                   offset={-10}
-                  fill="rgba(255,255,255,0.38)"
+                  fill="var(--ui-ink-faint)"
                   fontSize={10}
                 />
               </XAxis>
@@ -760,23 +780,23 @@ function LifeForceCurveEditor({
                 type="number"
                 domain={[0, yMax]}
                 ticks={yTicks}
-                tick={{ fill: "rgba(255,255,255,0.48)", fontSize: 10 }}
+                tick={{ fill: "var(--ui-ink-faint)", fontSize: 10 }}
                 tickLine={false}
-                axisLine={{ stroke: "rgba(255,255,255,0.12)" }}
+                axisLine={{ stroke: "var(--ui-border-subtle)" }}
                 width={34}
               >
                 <Label
                   value="AP/h"
                   angle={-90}
                   position="insideLeft"
-                  fill="rgba(255,255,255,0.38)"
+                  fill="var(--ui-ink-faint)"
                   fontSize={10}
                   style={{ textAnchor: "middle" }}
                 />
               </YAxis>
               <Tooltip
                 cursor={{
-                  stroke: "rgba(255,255,255,0.18)",
+                  stroke: "var(--ui-border-strong)",
                   strokeDasharray: "3 4"
                 }}
                 content={({ active, payload }) => {
@@ -785,9 +805,11 @@ function LifeForceCurveEditor({
                     return null;
                   }
                   return (
-                    <div className="rounded-[16px] border border-white/10 bg-[rgba(10,15,27,0.95)] px-3 py-2 text-xs text-white shadow-[0_18px_50px_rgba(4,8,18,0.3)] backdrop-blur-xl">
-                      <div className="font-medium text-white">{point.label}</div>
-                      <div className="mt-1 text-white/60">
+                    <div className="rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-2 text-xs text-[var(--ui-ink-strong)] shadow-[var(--ui-shadow-floating)] backdrop-blur-xl">
+                      <div className="font-medium text-[var(--ui-ink-strong)]">
+                        {point.label}
+                      </div>
+                      <div className="mt-1 text-[var(--ui-ink-soft)]">
                         {formatRate(point.rateApPerHour)}
                       </div>
                     </div>
@@ -797,7 +819,7 @@ function LifeForceCurveEditor({
               {weekday === todayWeekday ? (
                 <ReferenceLine
                   x={minuteOfDayNow}
-                  stroke="rgba(255,255,255,0.22)"
+                  stroke="var(--ui-border-strong)"
                   strokeDasharray="3 4"
                 />
               ) : null}
@@ -811,7 +833,7 @@ function LifeForceCurveEditor({
               <Line
                 type="linear"
                 dataKey="rateApPerHour"
-                stroke="rgba(214,215,255,0.95)"
+                stroke="var(--primary)"
                 strokeWidth={1.5}
                 dot={false}
                 activeDot={false}
@@ -828,7 +850,7 @@ function LifeForceCurveEditor({
                   y1={dragPreview.constrainedY}
                   x2={dragPreview.pointerX}
                   y2={dragPreview.pointerY}
-                  stroke="rgba(214,215,255,0.38)"
+                  stroke="var(--primary)"
                   strokeDasharray="4 5"
                   strokeWidth="1.5"
                 />
@@ -836,8 +858,8 @@ function LifeForceCurveEditor({
                   cx={dragPreview.pointerX}
                   cy={dragPreview.pointerY}
                   r="11"
-                  fill="rgba(214,215,255,0.12)"
-                  stroke="rgba(214,215,255,0.34)"
+                  fill="var(--ui-accent-soft)"
+                  stroke="var(--primary)"
                   strokeWidth="1.5"
                   data-testid="life-force-ghost-handle"
                 />
@@ -845,12 +867,13 @@ function LifeForceCurveEditor({
                   cx={dragPreview.pointerX}
                   cy={dragPreview.pointerY}
                   r="3.5"
-                  fill="rgba(255,255,255,0.44)"
+                  fill="var(--ui-ink-soft)"
                 />
               </svg>
             ) : null}
             {handlePositions.map((point, index) => {
-              const isEndpoint = index === 0 || index === handlePositions.length - 1;
+              const isEndpoint =
+                index === 0 || index === handlePositions.length - 1;
               const isDragging = dragState?.index === index;
               const visibleSize = isEndpoint ? 14 : 16;
               const hitSize = isEndpoint ? 22 : 28;
@@ -873,7 +896,9 @@ function LifeForceCurveEditor({
                     height: hitSize,
                     touchAction: "none"
                   }}
-                  onPointerDown={(event: ReactPointerEvent<HTMLButtonElement>) => {
+                  onPointerDown={(
+                    event: ReactPointerEvent<HTMLButtonElement>
+                  ) => {
                     event.preventDefault();
                     event.stopPropagation();
                     if (point.locked || isEndpoint || !containerRef.current) {
@@ -907,10 +932,8 @@ function LifeForceCurveEditor({
                 >
                   <span
                     className={cn(
-                      "pointer-events-none inline-flex rounded-full border border-[rgba(10,15,27,0.92)] shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_10px_24px_rgba(4,8,18,0.28)]",
-                      point.locked || isEndpoint
-                        ? "bg-white/55"
-                        : "bg-white"
+                      "pointer-events-none inline-flex rounded-full border border-[var(--ui-border-strong)] shadow-[var(--ui-shadow-soft)]",
+                      point.locked || isEndpoint ? "bg-[var(--ui-surface-2)]" : "bg-[var(--ui-surface-1)]"
                     )}
                     style={{
                       width: visibleSize,
@@ -922,7 +945,7 @@ function LifeForceCurveEditor({
               );
             })}
           </div>
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 px-1 text-[11px] text-white/42">
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 px-1 text-[11px] text-[var(--ui-ink-faint)]">
             <div>Editing {WEEKDAY_LABELS[weekday]} curve</div>
             <div>{Math.round(baselineDailyAp)} AP/day baseline</div>
           </div>
@@ -945,13 +968,13 @@ function LifeForceStudioCard() {
     <Card className="overflow-hidden p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
             Life Force studio
           </div>
-          <div className="mt-2 text-xl font-semibold text-white">
+          <div className="mt-2 text-xl font-semibold text-[var(--ui-ink-strong)]">
             Edit weekday curves in the dedicated view
           </div>
-          <div className="mt-2 max-w-3xl text-sm leading-6 text-white/56">
+          <div className="mt-2 max-w-3xl text-sm leading-6 text-[var(--ui-ink-soft)]">
             The full weekday editor, turn-point menu, and curve calibration now
             live in their own page so Overview can stay fast and readable.
           </div>
@@ -985,20 +1008,20 @@ function LifeForceDrains({
         <Card className="p-4">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                 Current drains
               </div>
-              <div className="mt-2 text-xl font-semibold text-white">
+              <div className="mt-2 text-xl font-semibold text-[var(--ui-ink-strong)]">
                 What is consuming Life Force now
               </div>
             </div>
-            <Badge className="bg-white/[0.08] text-white/70">
+            <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
               {drains.length} active
             </Badge>
           </div>
           <div className="mt-4 grid gap-3">
             {drains.length === 0 ? (
-              <div className="rounded-[18px] bg-white/[0.04] px-4 py-4 text-sm text-white/58">
+              <div className="rounded-[18px] bg-[var(--ui-surface-2)] px-4 py-4 text-sm text-[var(--ui-ink-soft)]">
                 No current drainers are active. This is a good moment to choose
                 your next intentional action.
               </div>
@@ -1006,14 +1029,14 @@ function LifeForceDrains({
               drains.map((drain) => (
                 <div
                   key={drain.id}
-                  className="rounded-[18px] bg-white/[0.04] px-4 py-4"
+                  className="rounded-[18px] bg-[var(--ui-surface-2)] px-4 py-4"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="text-base font-semibold text-white">
+                      <div className="text-base font-semibold text-[var(--ui-ink-strong)]">
                         {drain.title}
                       </div>
-                      <div className="mt-1 text-sm text-white/54">
+                      <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
                         {drain.why}
                       </div>
                     </div>
@@ -1021,7 +1044,7 @@ function LifeForceDrains({
                       <div className="text-base font-semibold text-[var(--primary)]">
                         {formatRate(drain.apPerHour)}
                       </div>
-                      <div className="mt-1 text-xs uppercase tracking-[0.14em] text-white/38">
+                      <div className="mt-1 text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
                         {summarizeDrainRole(drain.role)}
                       </div>
                     </div>
@@ -1034,31 +1057,34 @@ function LifeForceDrains({
         <Card className="p-4">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                 Planned drains
               </div>
-              <div className="mt-2 text-xl font-semibold text-white">
+              <div className="mt-2 text-xl font-semibold text-[var(--ui-ink-strong)]">
                 What the rest of today is already asking from you
               </div>
             </div>
-            <Badge className="bg-white/[0.08] text-white/70">
+            <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
               {plannedDrains.length} planned
             </Badge>
           </div>
           <div className="mt-4 grid gap-3">
             {plannedDrains.length === 0 ? (
-              <div className="rounded-[18px] bg-white/[0.04] px-4 py-4 text-sm text-white/58">
+              <div className="rounded-[18px] bg-[var(--ui-surface-2)] px-4 py-4 text-sm text-[var(--ui-ink-soft)]">
                 No future AP load has been forecast yet. The day is still open.
               </div>
             ) : (
               plannedDrains.slice(0, 6).map((drain) => (
-                <div key={drain.id} className="rounded-[18px] bg-white/[0.04] px-4 py-4">
+                <div
+                  key={drain.id}
+                  className="rounded-[18px] bg-[var(--ui-surface-2)] px-4 py-4"
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="text-base font-semibold text-white">
+                      <div className="text-base font-semibold text-[var(--ui-ink-strong)]">
                         {drain.title}
                       </div>
-                      <div className="mt-1 text-sm text-white/54">
+                      <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
                         {drain.why}
                       </div>
                     </div>
@@ -1066,7 +1092,7 @@ function LifeForceDrains({
                       <div className="text-base font-semibold text-[var(--primary)]">
                         {formatAp(drain.instantAp)}
                       </div>
-                      <div className="mt-1 text-xs uppercase tracking-[0.14em] text-white/38">
+                      <div className="mt-1 text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
                         {formatRate(drain.apPerHour)}
                       </div>
                     </div>
@@ -1080,14 +1106,17 @@ function LifeForceDrains({
 
       <div className="grid gap-4">
         <Card className="p-4">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
             Warnings
           </div>
           <div className="mt-4 grid gap-3">
             {warnings.map((warning) => (
               <div
                 key={warning.id}
-                className={cn("rounded-[18px] px-4 py-4", toneClass(warning.tone))}
+                className={cn(
+                  "rounded-[18px] px-4 py-4",
+                  toneClass(warning.tone)
+                )}
               >
                 <div className="text-sm font-semibold">{warning.title}</div>
                 <div className="mt-1 text-sm leading-6 text-current/80">
@@ -1098,14 +1127,14 @@ function LifeForceDrains({
           </div>
         </Card>
         <Card className="p-4">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
             Recommendations
           </div>
           <div className="mt-4 grid gap-2">
             {recommendations.map((entry, index) => (
               <div
                 key={`${entry}-${index}`}
-                className="rounded-[16px] bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/66"
+                className="rounded-[16px] bg-[var(--ui-surface-2)] px-4 py-3 text-sm leading-6 text-[var(--ui-ink-soft)]"
               >
                 {entry}
               </div>
@@ -1136,25 +1165,22 @@ function LifeForceCompact({
     <Card className="overflow-hidden p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
             Life Force now
           </div>
-          <div className="mt-2 text-2xl font-semibold text-white">
+          <div className="mt-2 text-2xl font-semibold text-[var(--ui-ink-strong)]">
             {lifeForce.instantFreeApPerHour.toFixed(1)} AP/h free
           </div>
-          <div className="mt-2 text-sm text-white/58">
-            {Math.round(lifeForce.spentTodayAp)} / {Math.round(lifeForce.dailyBudgetAp)} AP used today
+          <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
+            {Math.round(lifeForce.spentTodayAp)} /{" "}
+            {Math.round(lifeForce.dailyBudgetAp)} AP used today
           </div>
-          <div className="mt-2 text-xs uppercase tracking-[0.14em] text-white/38">
+          <div className="mt-2 text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
             {getLifeForceUsageLabel(lifeForce)}
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button
-            variant="secondary"
-            onClick={onTired}
-            pending={tiredPending}
-          >
+          <Button variant="secondary" onClick={onTired} pending={tiredPending}>
             <Moon className="mr-2 size-4" />
             I&apos;m getting tired
           </Button>
@@ -1170,44 +1196,45 @@ function LifeForceCompact({
       </div>
 
       {feedback ? (
-        <div className="mt-4 rounded-[18px] bg-[var(--primary)]/10 px-4 py-3 text-sm text-white/74">
+        <div className="mt-4 rounded-[18px] border border-[color-mix(in_srgb,var(--primary)_24%,transparent)] bg-[var(--ui-accent-soft)] px-4 py-3 text-sm text-[var(--ui-ink-medium)]">
           {feedback}
         </div>
       ) : null}
 
       <div className="mt-4 grid gap-3 md:grid-cols-3">
-        <div className="rounded-[18px] bg-white/[0.04] px-4 py-4">
-          <div className="flex items-center gap-2 text-sm font-medium text-white">
+        <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4">
+          <div className="flex items-center gap-2 text-sm font-medium text-[var(--ui-ink-strong)]">
             <Zap className="size-4 text-[var(--primary)]" />
             Instant capacity
           </div>
-          <div className="mt-2 text-sm text-white/58">
+          <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
             {formatRate(lifeForce.instantCapacityApPerHour)}
           </div>
         </div>
-        <div className="rounded-[18px] bg-white/[0.04] px-4 py-4">
-          <div className="flex items-center gap-2 text-sm font-medium text-white">
+        <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4">
+          <div className="flex items-center gap-2 text-sm font-medium text-[var(--ui-ink-strong)]">
             <Activity className="size-4 text-[var(--primary)]" />
             Current load
           </div>
-          <div className="mt-2 text-sm text-white/58">
+          <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
             {formatRate(lifeForce.currentDrainApPerHour)}
           </div>
-          <div className="mt-2 text-xs uppercase tracking-[0.14em] text-white/38">
+          <div className="mt-2 text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
             {lifeForce.overloadApPerHour > 0
               ? `${formatRate(lifeForce.overloadApPerHour)} overload`
               : "Inside instant limit"}
           </div>
         </div>
-        <div className="rounded-[18px] bg-white/[0.04] px-4 py-4">
-          <div className="flex items-center gap-2 text-sm font-medium text-white">
+        <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4">
+          <div className="flex items-center gap-2 text-sm font-medium text-[var(--ui-ink-strong)]">
             <Coffee className="size-4 text-[var(--primary)]" />
             Next move
           </div>
-          <div className="mt-2 text-sm text-white/58">
-            {lifeForce.recommendations[0] ?? "Favor the next clean, manageable action."}
+          <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
+            {lifeForce.recommendations[0] ??
+              "Favor the next clean, manageable action."}
           </div>
-          <div className="mt-2 text-xs uppercase tracking-[0.14em] text-white/38">
+          <div className="mt-2 text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
             {getLifeForceMode(lifeForce)}
           </div>
         </div>
@@ -1250,14 +1277,15 @@ export function LifeForceOverviewWorkspace({
   });
   const payload = lifeForceQuery.data?.lifeForce ?? fallbackLifeForce;
   const templates =
-    lifeForceQuery.data?.templates ?? buildFallbackTemplates(payload, todayWeekday);
-  const currentTemplate =
-    templates.find((entry) => entry.weekday === weekday) ??
-    {
-      weekday,
-      baselineDailyAp: payload.baselineDailyAp,
-      points: payload.currentCurve
-    };
+    lifeForceQuery.data?.templates ??
+    buildFallbackTemplates(payload, todayWeekday);
+  const currentTemplate = templates.find(
+    (entry) => entry.weekday === weekday
+  ) ?? {
+    weekday,
+    baselineDailyAp: payload.baselineDailyAp,
+    points: payload.currentCurve
+  };
   const [draftPoints, setDraftPoints] = useState<LifeForceCurvePoint[]>(
     currentTemplate.points
   );
@@ -1273,7 +1301,12 @@ export function LifeForceOverviewWorkspace({
     mutationFn: (points: LifeForceCurvePoint[]) =>
       updateLifeForceTemplate(
         currentTemplate.weekday,
-        { points: normalizeCurveToBudget(points, currentTemplate.baselineDailyAp) },
+        {
+          points: normalizeCurveToBudget(
+            points,
+            currentTemplate.baselineDailyAp
+          )
+        },
         selectedUserIds
       ),
     onSuccess: async (response) => {
@@ -1295,7 +1328,9 @@ export function LifeForceOverviewWorkspace({
       if (onRefresh) {
         await onRefresh();
       }
-      setFeedback("Tiredness signal applied. Today’s Life Force now reflects the extra strain.");
+      setFeedback(
+        "Tiredness signal applied. Today’s Life Force now reflects the extra strain."
+      );
     }
   });
   const okayAgainMutation = useMutation({
@@ -1307,7 +1342,9 @@ export function LifeForceOverviewWorkspace({
       if (onRefresh) {
         await onRefresh();
       }
-      setFeedback("Recovery signal applied. Instant strain has been eased for the rest of today.");
+      setFeedback(
+        "Recovery signal applied. Instant strain has been eased for the rest of today."
+      );
     }
   });
 
@@ -1359,13 +1396,13 @@ export function LifeForceOverviewWorkspace({
       />
       {payload.topTaskIdsNeedingSplit.length > 0 ? (
         <Card className="p-4">
-          <div className="flex items-center gap-2 text-sm font-semibold text-white">
+          <div className="flex items-center gap-2 text-sm font-semibold text-[var(--ui-ink-strong)]">
             <Scissors className="size-4 text-[var(--primary)]" />
             Tasks asking to be split
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
             {payload.topTaskIdsNeedingSplit.map((taskId) => (
-              <Badge key={taskId} className="bg-white/[0.08] text-white/74">
+              <Badge key={taskId} className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
                 {taskId}
               </Badge>
             ))}
@@ -1402,13 +1439,13 @@ export function LifeForceTodayCard({
   if (!payload) {
     return (
       <Card className="p-4">
-        <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+        <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
           Life Force
         </div>
-        <div className="mt-2 text-lg font-semibold text-white">
+        <div className="mt-2 text-lg font-semibold text-[var(--ui-ink-strong)]">
           Not calibrated yet
         </div>
-        <div className="mt-2 text-sm leading-6 text-white/58">
+        <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
           Today can still load without a Life Force snapshot, but the AP and
           instant headroom model is not available for this state yet.
         </div>
@@ -1425,7 +1462,9 @@ export function LifeForceTodayCard({
       if (onRefresh) {
         await onRefresh();
       }
-      setFeedback("Tiredness signal applied. Today’s headroom has been reduced.");
+      setFeedback(
+        "Tiredness signal applied. Today’s headroom has been reduced."
+      );
     }
   });
   const okayAgainMutation = useMutation({

@@ -282,22 +282,22 @@ function StylizedTripCard({
     .join(" ");
 
   return (
-    <Card className="overflow-hidden rounded-[30px] border border-white/10 bg-[radial-gradient(circle_at_top,rgba(114,204,255,0.18),transparent_44%),linear-gradient(180deg,rgba(6,11,26,0.98),rgba(8,14,28,0.92))] p-5">
+    <Card className="overflow-hidden rounded-[30px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-section)] p-5">
       <div className="flex items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
+            <div className="font-label text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-muted)]">
               Stylized trajectory
             </div>
             <InfoTooltip content="This graph is a softened trip trace. It emphasizes rhythm, stops, and endpoints instead of raw GPS jitter." />
           </div>
-          <div className="mt-2 text-sm text-white/64">
+          <div className="mt-2 text-sm text-[var(--ui-ink-medium)]">
             A softened path that prioritizes rhythm, stops, and landmarks over raw map noise.
           </div>
         </div>
         <Badge tone="signal">{startLabel} → {endLabel}</Badge>
       </div>
-      <div className="mt-5 rounded-[26px] border border-white/8 bg-[rgba(255,255,255,0.03)] p-4">
+      <div className="mt-5 rounded-[26px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
         <svg viewBox="0 0 100 60" className="h-48 w-full">
           <defs>
             <filter id="movementGlow">
@@ -311,7 +311,7 @@ function StylizedTripCard({
           <path
             d={path}
             fill="none"
-            stroke="rgba(255,255,255,0.86)"
+            stroke="var(--ui-ink-medium)"
             strokeWidth="1.5"
             strokeDasharray="2.8 2.8"
             filter="url(#movementGlow)"
@@ -322,14 +322,14 @@ function StylizedTripCard({
                 cx={point.x}
                 cy={point.y}
                 r={index === 0 || index === curve.length - 1 ? 2.6 : 1.6}
-                fill={index === 0 || index === curve.length - 1 ? "#ffffff" : "rgba(170,229,255,0.96)"}
+                fill={index === 0 || index === curve.length - 1 ? "var(--ui-ink-strong)" : "var(--info)"}
               />
             </g>
           ))}
         </svg>
         <div className="mt-4 flex flex-wrap gap-2">
           {stopLabels.map((label) => (
-            <Badge key={label} tone="default" className="bg-white/[0.06] text-white/74">
+            <Badge key={label} tone="default" className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
               {label}
             </Badge>
           ))}
@@ -346,17 +346,17 @@ function ExactTripCard({ points }: { points: MovementTripPointRecord[] }) {
     .join(" ");
 
   return (
-    <Card className="rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(8,13,25,0.95),rgba(10,17,30,0.88))] p-5">
+    <Card className="rounded-[30px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-section)] p-5">
       <div className="flex items-center gap-2">
-        <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
+        <div className="font-label text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-muted)]">
           Exact path
         </div>
         <InfoTooltip content="This keeps the recent raw location points. Use it when you want the literal recorded trace instead of the cleaned movement graph." />
       </div>
-      <div className="mt-2 text-sm text-white/62">
+      <div className="mt-2 text-sm text-[var(--ui-ink-medium)]">
         Recent raw points preserved by the companion before long-term simplification.
       </div>
-      <div className="mt-5 rounded-[24px] border border-white/8 bg-[rgba(255,255,255,0.03)] p-3">
+      <div className="mt-5 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-3">
         <svg viewBox="0 0 100 100" className="h-52 w-full">
           <rect
             x="0"
@@ -364,16 +364,16 @@ function ExactTripCard({ points }: { points: MovementTripPointRecord[] }) {
             width="100"
             height="100"
             rx="18"
-            fill="rgba(255,255,255,0.02)"
+            fill="var(--ui-surface-2)"
           />
-          <path d={path} fill="none" stroke="rgba(92,225,230,0.95)" strokeWidth="1.6" />
+          <path d={path} fill="none" stroke="var(--info)" strokeWidth="1.6" />
           {pathPoints.map((point, index) => (
             <circle
               key={`${point.x}-${point.y}-${index}`}
               cx={point.x}
               cy={point.y}
               r={index === 0 || index === pathPoints.length - 1 ? 2 : 1.1}
-              fill={index === 0 || index === pathPoints.length - 1 ? "#ffffff" : "rgba(92,225,230,0.9)"}
+              fill={index === 0 || index === pathPoints.length - 1 ? "var(--ui-ink-strong)" : "var(--info)"}
             />
           ))}
         </svg>
@@ -390,16 +390,16 @@ function MovementPointEditor({
   draft: MovementPointDraft;
 }) {
   return (
-    <Card className="grid gap-4 rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(12,18,32,0.98),rgba(8,13,24,0.98))] p-5">
+    <Card className="grid gap-4 rounded-[28px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-section)] p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
+          <div className="font-label text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-muted)]">
             Raw datapoint
           </div>
-          <div className="mt-2 text-lg text-white">
+          <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
             {formatPointTimestamp(point.recordedAt)}
           </div>
-          <div className="mt-2 text-sm text-white/58">
+          <div className="mt-2 text-sm text-[var(--ui-ink-muted)]">
             Raw phone measurements are immutable in product UI. To change the visible movement story, create or edit user-defined boxes in the Life Timeline instead.
           </div>
         </div>
@@ -410,7 +410,7 @@ function MovementPointEditor({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="grid gap-2">
-          <div className="text-xs uppercase tracking-[0.16em] text-white/40">
+          <div className="text-xs uppercase tracking-[0.16em] text-[var(--ui-ink-muted)]">
             Recorded at
           </div>
           <Input
@@ -420,7 +420,7 @@ function MovementPointEditor({
           />
         </div>
         <div className="grid gap-2">
-          <div className="text-xs uppercase tracking-[0.16em] text-white/40">
+          <div className="text-xs uppercase tracking-[0.16em] text-[var(--ui-ink-muted)]">
             Speed (m/s)
           </div>
           <Input
@@ -430,7 +430,7 @@ function MovementPointEditor({
           />
         </div>
         <div className="grid gap-2">
-          <div className="text-xs uppercase tracking-[0.16em] text-white/40">
+          <div className="text-xs uppercase tracking-[0.16em] text-[var(--ui-ink-muted)]">
             Latitude
           </div>
           <Input
@@ -439,7 +439,7 @@ function MovementPointEditor({
           />
         </div>
         <div className="grid gap-2">
-          <div className="text-xs uppercase tracking-[0.16em] text-white/40">
+          <div className="text-xs uppercase tracking-[0.16em] text-[var(--ui-ink-muted)]">
             Longitude
           </div>
           <Input
@@ -448,7 +448,7 @@ function MovementPointEditor({
           />
         </div>
         <div className="grid gap-2">
-          <div className="text-xs uppercase tracking-[0.16em] text-white/40">
+          <div className="text-xs uppercase tracking-[0.16em] text-[var(--ui-ink-muted)]">
             Accuracy (m)
           </div>
           <Input
@@ -458,7 +458,7 @@ function MovementPointEditor({
           />
         </div>
         <div className="grid gap-2">
-          <div className="text-xs uppercase tracking-[0.16em] text-white/40">
+          <div className="text-xs uppercase tracking-[0.16em] text-[var(--ui-ink-muted)]">
             Altitude (m)
           </div>
           <Input
@@ -475,20 +475,20 @@ function MovementPointEditor({
           className={cn(
             "h-10 rounded-full border px-4",
             draft.isStopAnchor
-              ? "border-[var(--primary)] bg-[var(--primary)]/16 text-white"
-              : "border-white/10 bg-white/[0.04] text-white/64"
+              ? "border-[var(--primary)] bg-[var(--primary)]/16 text-[var(--ui-ink-strong)]"
+              : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]"
           )}
           disabled
         >
           <Route className="mr-2 size-4" />
           {draft.isStopAnchor ? "Stop anchor" : "Path point"}
         </Button>
-        <div className="text-sm text-white/50">
-          External id: <span className="text-white/72">{point.externalUid}</span>
+        <div className="text-sm text-[var(--ui-ink-muted)]">
+          External id: <span className="text-[var(--ui-ink-medium)]">{point.externalUid}</span>
         </div>
       </div>
 
-      <div className="rounded-[20px] border border-white/8 bg-white/[0.03] px-4 py-3 text-sm leading-6 text-white/56">
+      <div className="rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3 text-sm leading-6 text-[var(--ui-ink-muted)]">
         This browser is read-only now. Raw points stay immutable so the web app and iPhone can both project the same repaired canonical boxes from the backend.
       </div>
     </Card>
@@ -750,6 +750,14 @@ export function MovementPage() {
   const movementMonth = movementMonthQuery.data;
   const movementAllTime = movementAllTimeQuery.data;
   const movementSettings = movementSettingsQuery.data;
+  const movementDaySegments = movementDay.segments.filter((segment, index, segments) => {
+    const key = `${segment.kind}:${segment.id}:${segment.startedAt}:${segment.endedAt}`;
+    return (
+      segments.findIndex((candidate) =>
+        `${candidate.kind}:${candidate.id}:${candidate.startedAt}:${candidate.endedAt}` === key
+      ) === index
+    );
+  });
   const selectionAggregate =
     selectionAggregateQuery.data ?? movementDay.selectionAggregate;
   const movementDayAp = movementDay.trips.reduce(
@@ -773,8 +781,8 @@ export function MovementPage() {
                 className={cn(
                   "h-9 rounded-full border px-4 text-sm",
                   viewMode === mode
-                    ? "border-[var(--primary)] bg-[var(--primary)]/16 text-white"
-                    : "border-white/10 bg-white/[0.04] text-white/64"
+                    ? "border-[var(--primary)] bg-[var(--primary)]/16 text-[var(--ui-ink-strong)]"
+                    : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]"
                 )}
                 onClick={() => setViewMode(mode)}
               >
@@ -789,20 +797,20 @@ export function MovementPage() {
         }
       />
 
-      <Card className="grid gap-3 rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(12,20,34,0.98),rgba(8,14,25,0.96))] p-4 md:grid-cols-3">
+      <Card className="grid gap-3 rounded-[28px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-section)] p-4 md:grid-cols-3">
         <div>
-          <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
             Movement AP today
           </div>
-          <div className="mt-2 text-3xl font-semibold text-white">
+          <div className="mt-2 text-3xl font-semibold text-[var(--ui-ink-strong)]">
             {formatLifeForceAp(movementDayAp)}
           </div>
-          <div className="mt-2 text-sm text-white/58">
+          <div className="mt-2 text-sm text-[var(--ui-ink-muted)]">
             Trips and transitions now contribute to the same Action Point ledger as work, habits, and notes.
           </div>
         </div>
         <div>
-          <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
             Typical trip drain
           </div>
           <div className="mt-2 text-2xl font-semibold text-[var(--primary)]">
@@ -812,20 +820,20 @@ export function MovementPage() {
                 )
               : "0 AP/h"}
           </div>
-          <div className="mt-2 text-sm text-white/58">
+          <div className="mt-2 text-sm text-[var(--ui-ink-muted)]">
             Movement uses a MET-like drain under the hood, translated into Forge Action Points.
           </div>
         </div>
         <div>
-          <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
             Life Force sync
           </div>
-          <div className="mt-2 text-2xl font-semibold text-white">
+          <div className="mt-2 text-2xl font-semibold text-[var(--ui-ink-strong)]">
             {lifeForceQuery.data
               ? `${Math.round(lifeForceQuery.data.spentTodayAp ?? 0)}/${Math.round(lifeForceQuery.data.dailyBudgetAp ?? 0)} AP`
               : "Loading..."}
           </div>
-          <div className="mt-2 text-sm text-white/58">
+          <div className="mt-2 text-sm text-[var(--ui-ink-muted)]">
             {lifeForceQuery.data
               ? `${formatLifeForceRate(lifeForceQuery.data.instantFreeApPerHour)} free right now`
               : "Movement can now be read against today’s live capacity."}
@@ -835,19 +843,19 @@ export function MovementPage() {
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(20rem,0.95fr)]">
         <MovementSummaryBox>
-          <Card className="overflow-hidden rounded-[30px] border border-white/8 bg-[radial-gradient(circle_at_top_left,rgba(107,214,255,0.16),transparent_42%),linear-gradient(180deg,rgba(10,18,35,0.98),rgba(9,15,28,0.92))]">
+          <Card className="overflow-hidden rounded-[30px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-section)]">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
-                <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
+                <div className="font-label text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-muted)]">
                   Movement operating mode
                 </div>
                 <InfoTooltip content="This is the passive capture state of the movement system: whether tracking is running, how much is published into Forge, and how aggressive retention is." />
               </div>
-              <div className="mt-2 text-[clamp(1.05rem,1.8vw,1.35rem)] text-white">
+              <div className="mt-2 text-[clamp(1.05rem,1.8vw,1.35rem)] text-[var(--ui-ink-strong)]">
                 Background stays and trips as structured life evidence
               </div>
-              <div className="mt-2 max-w-2xl text-sm leading-6 text-white/58">
+              <div className="mt-2 max-w-2xl text-sm leading-6 text-[var(--ui-ink-muted)]">
                 The companion samples quietly while stationary, switches to denser trip capture when you move, and keeps only simplified long-term traces.
               </div>
             </div>
@@ -855,12 +863,12 @@ export function MovementPage() {
               <Badge tone="signal">
                 {movementSettings.trackingEnabled ? "Tracking on" : "Tracking off"}
               </Badge>
-              <Badge tone="default" className="bg-white/[0.06] text-white/72">
+              <Badge tone="default" className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                 {movementSettings.publishMode.replaceAll("_", " ")}
               </Badge>
               <Button
                 variant="ghost"
-                className="h-9 rounded-full border border-white/10 bg-white/[0.04] px-4"
+                className="h-9 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4"
                 onClick={() =>
                   settingsMutation.mutate(!movementSettings.trackingEnabled)
                 }
@@ -871,80 +879,80 @@ export function MovementPage() {
           </div>
 
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
-            <Card className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4">
-              <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/40">
+            <Card className="rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
+              <div className="font-label text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-muted)]">
                 Distance today
               </div>
-              <div className="mt-3 font-display text-4xl text-white">
+              <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
                 {distanceLabel(movementDay.summary.totalDistanceMeters)}
               </div>
-              <div className="mt-2 text-sm text-white/56">
+              <div className="mt-2 text-sm text-[var(--ui-ink-muted)]">
                 Across trips, stops, and linked place changes.
               </div>
             </Card>
-            <Card className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4">
-              <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/40">
+            <Card className="rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
+              <div className="font-label text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-muted)]">
                 Idle time
               </div>
-              <div className="mt-3 font-display text-4xl text-white">
+              <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
                 {durationLabel(movementDay.summary.totalIdleSeconds)}
               </div>
-              <div className="mt-2 text-sm text-white/56">
+              <div className="mt-2 text-sm text-[var(--ui-ink-muted)]">
                 Time spent settled enough to count as a real stay.
               </div>
             </Card>
-            <Card className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4">
-              <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/40">
+            <Card className="rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
+              <div className="font-label text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-muted)]">
                 Estimated phone time
               </div>
-              <div className="mt-3 font-display text-4xl text-white">
+              <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
                 {durationLabel(movementDay.summary.estimatedScreenTimeSeconds)}
               </div>
-              <div className="mt-2 text-sm text-white/56">
+              <div className="mt-2 text-sm text-[var(--ui-ink-muted)]">
                 Estimated from hourly Screen Time bins, not exact foreground traces.
               </div>
             </Card>
-            <Card className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4">
-              <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/40">
+            <Card className="rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
+              <div className="font-label text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-muted)]">
                 Known places
               </div>
-              <div className="mt-3 font-display text-4xl text-white">
+              <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
                 {movementDay.summary.knownPlaceCount}
               </div>
-              <div className="mt-2 text-sm text-white/56">
+              <div className="mt-2 text-sm text-[var(--ui-ink-muted)]">
                 Shared between Forge and the iPhone companion.
               </div>
             </Card>
-            <Card className="rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(148,163,184,0.12),rgba(71,85,105,0.12))] p-4">
-              <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/40">
+            <Card className="rounded-[24px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-section)] p-4">
+              <div className="font-label text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-muted)]">
                 Missing data
               </div>
-              <div className="mt-3 font-display text-4xl text-white">
+              <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
                 {durationLabel(movementDay.summary.missingDurationSeconds)}
               </div>
-              <div className="mt-2 text-sm text-white/56">
+              <div className="mt-2 text-sm text-[var(--ui-ink-muted)]">
                 {movementDay.summary.missingCount} grey gap{movementDay.summary.missingCount === 1 ? "" : "s"} where Forge had over one hour without enough movement signal.
               </div>
             </Card>
-            <Card className="rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(251,191,36,0.12),rgba(16,185,129,0.08))] p-4">
-              <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/40">
+            <Card className="rounded-[24px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-section)] p-4">
+              <div className="font-label text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-muted)]">
                 Repaired gaps
               </div>
-              <div className="mt-3 font-display text-4xl text-white">
+              <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
                 {durationLabel(movementDay.summary.repairedGapDurationSeconds)}
               </div>
-              <div className="mt-2 text-sm text-white/56">
+              <div className="mt-2 text-sm text-[var(--ui-ink-muted)]">
                 {movementDay.summary.repairedGapCount} inferred span{movementDay.summary.repairedGapCount === 1 ? "" : "s"} classified as stay or move instead of leaving blank holes in the day.
               </div>
             </Card>
-            <Card className="rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(56,189,248,0.12),rgba(99,102,241,0.08))] p-4">
-              <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/40">
+            <Card className="rounded-[24px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-section)] p-4">
+              <div className="font-label text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-muted)]">
                 Continued stays
               </div>
-              <div className="mt-3 font-display text-4xl text-white">
+              <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
                 {durationLabel(movementDay.summary.continuedStayDurationSeconds)}
               </div>
-              <div className="mt-2 text-sm text-white/56">
+              <div className="mt-2 text-sm text-[var(--ui-ink-muted)]">
                 {movementDay.summary.continuedStayCount} short stationary span{movementDay.summary.continuedStayCount === 1 ? "" : "s"} carried forward so quiet home time stays continuous instead of disappearing.
               </div>
             </Card>
@@ -953,77 +961,77 @@ export function MovementPage() {
         </MovementSummaryBox>
 
         <MovementSelectionBox>
-          <Card className="rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(10,17,31,0.96),rgba(8,13,24,0.92))] p-5">
+          <Card className="rounded-[30px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-section)] p-5">
           <div className="flex items-center gap-2">
-            <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
+            <div className="font-label text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-muted)]">
               Selection aggregate
             </div>
             <InfoTooltip content="When you select stays or trips, Forge totals their span, distance, work overlap, notes, and places here." />
           </div>
-          <div className="mt-2 text-sm text-white/56">
+          <div className="mt-2 text-sm text-[var(--ui-ink-muted)]">
             Select any combination of stays and trips to sum movement, time, and work evidence.
           </div>
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
-            <div className="rounded-[22px] border border-white/8 bg-white/[0.04] p-4">
-              <div className="text-xs uppercase tracking-[0.18em] text-white/36">
+            <div className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
+              <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                 Span
               </div>
-              <div className="mt-2 text-lg text-white">
+              <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
                 {durationLabel(selectionAggregate.durationSeconds)}
               </div>
             </div>
-            <div className="rounded-[22px] border border-white/8 bg-white/[0.04] p-4">
-              <div className="text-xs uppercase tracking-[0.18em] text-white/36">
+            <div className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
+              <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                 Distance
               </div>
-              <div className="mt-2 text-lg text-white">
+              <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
                 {distanceLabel(selectionAggregate.distanceMeters)}
               </div>
             </div>
-            <div className="rounded-[22px] border border-white/8 bg-white/[0.04] p-4">
-              <div className="text-xs uppercase tracking-[0.18em] text-white/36">
+            <div className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
+              <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                 Work overlap
               </div>
-              <div className="mt-2 text-lg text-white">
+              <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
                 {durationLabel(selectionAggregate.trackedWorkSeconds)}
               </div>
             </div>
-            <div className="rounded-[22px] border border-white/8 bg-white/[0.04] p-4">
-              <div className="text-xs uppercase tracking-[0.18em] text-white/36">
+            <div className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
+              <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                 Notes
               </div>
-              <div className="mt-2 text-lg text-white">
+              <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
                 {selectionAggregate.noteCount}
               </div>
             </div>
-            <div className="rounded-[22px] border border-white/8 bg-white/[0.04] p-4">
-              <div className="text-xs uppercase tracking-[0.18em] text-white/36">
+            <div className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
+              <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                 Estimated phone time
               </div>
-              <div className="mt-2 text-lg text-white">
+              <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
                 {durationLabel(selectionAggregate.estimatedScreenTimeSeconds)}
               </div>
             </div>
-            <div className="rounded-[22px] border border-white/8 bg-white/[0.04] p-4">
-              <div className="text-xs uppercase tracking-[0.18em] text-white/36">
+            <div className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
+              <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                 Pickups
               </div>
-              <div className="mt-2 text-lg text-white">
+              <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
                 {selectionAggregate.pickupCount}
               </div>
             </div>
-            <div className="rounded-[22px] border border-white/8 bg-white/[0.04] p-4">
-              <div className="text-xs uppercase tracking-[0.18em] text-white/36">
+            <div className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
+              <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                 Notifications
               </div>
-              <div className="mt-2 text-lg text-white">
+              <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
                 {selectionAggregate.notificationCount}
               </div>
             </div>
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             {selectionAggregate.placeLabels.map((label) => (
-              <Badge key={label} tone="default" className="bg-white/[0.06] text-white/74">
+              <Badge key={label} tone="default" className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                 {label}
               </Badge>
             ))}
@@ -1031,7 +1039,7 @@ export function MovementPage() {
           {selectionAggregate.topApps.length > 0 ? (
             <div className="mt-4 flex flex-wrap gap-2">
               {selectionAggregate.topApps.map((app) => (
-                <Badge key={app.id} tone="default" className="bg-[rgba(114,204,255,0.12)] text-white/80">
+                <Badge key={app.id} tone="default" className="bg-[var(--ui-info-soft)] text-[var(--ui-ink-medium)]">
                   {(app.displayName || app.bundleIdentifier) + " · " + durationLabel(app.totalActivitySeconds)}
                 </Badge>
               ))}
@@ -1040,7 +1048,7 @@ export function MovementPage() {
           {selectionAggregate.topCategories.length > 0 ? (
             <div className="mt-3 flex flex-wrap gap-2">
               {selectionAggregate.topCategories.map((category) => (
-                <Badge key={category.id} tone="default" className="bg-white/[0.05] text-white/64">
+                <Badge key={category.id} tone="default" className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                   {category.categoryLabel}
                 </Badge>
               ))}
@@ -1055,7 +1063,7 @@ export function MovementPage() {
           <section className="grid gap-3">
           <div className="flex items-center justify-between gap-3 px-1">
             <div className="flex items-center gap-2">
-              <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/38">
+              <div className="font-label text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-muted)]">
                 Life graph
               </div>
               <InfoTooltip content="This graph shows the movement road of your life: stays are blocks, moves connect them, and the hour/day lines live in the background. Click a segment for details, then use edit when you want to correct it." />
@@ -1068,16 +1076,16 @@ export function MovementPage() {
 
       {viewMode === "day" ? (
         <section className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(22rem,1fr)]">
-          <Card className="rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(10,17,31,0.96),rgba(7,12,22,0.92))] p-5">
+          <Card className="rounded-[30px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-section)] p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
-                  <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
+                  <div className="font-label text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-muted)]">
                     Day strip
                   </div>
                   <InfoTooltip content="A compressed 24-hour strip. Each segment keeps its true order and duration, but the whole day stays navigable on one line." />
                 </div>
-                <div className="mt-2 text-sm text-white/58">
+                <div className="mt-2 text-sm text-[var(--ui-ink-muted)]">
                   A single-row timeline from 00:00 to 24:00, always compressed into one navigable strip.
                 </div>
               </div>
@@ -1089,14 +1097,14 @@ export function MovementPage() {
               />
             </div>
             <div className="mt-6 overflow-x-auto pb-2">
-              <div className="min-w-[52rem]">
-                <div className="mb-3 flex justify-between text-[11px] uppercase tracking-[0.18em] text-white/36">
+              <div className="w-full min-w-full sm:min-w-[52rem]">
+                <div className="mb-3 flex justify-between text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                   {["00:00", "06:00", "12:00", "18:00", "24:00"].map((label) => (
                     <span key={label}>{label}</span>
                   ))}
                 </div>
-                <div className="flex h-28 items-stretch overflow-hidden rounded-[28px] border border-white/10 bg-[rgba(255,255,255,0.03)] p-2">
-                  {movementDay.segments.map((segment) => {
+                <div className="flex h-28 items-stretch overflow-hidden rounded-[28px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-2">
+                  {movementDaySegments.map((segment, index) => {
                     const width = Math.max(
                       9,
                       (segment.durationSeconds / 86_400) * 100
@@ -1109,15 +1117,15 @@ export function MovementPage() {
                           : false;
                     return (
                       <button
-                        key={segment.id}
+                        key={`${segment.kind}:${segment.id}:${segment.startedAt}:${segment.endedAt}:${index}`}
                         type="button"
                         className={cn(
-                          "relative flex min-w-[5.5rem] flex-col justify-between rounded-[22px] border px-3 py-2 text-left transition",
+                          "relative flex min-w-0 flex-col justify-between rounded-[22px] border px-3 py-2 text-left transition sm:min-w-[5.5rem]",
                           segment.kind === "missing"
-                            ? "border-slate-400/20 bg-[linear-gradient(180deg,rgba(148,163,184,0.18),rgba(51,65,85,0.14))] hover:border-slate-300/30 hover:bg-[rgba(148,163,184,0.14)]"
+                            ? "border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-section)] hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-3)]"
                             : active
-                              ? "border-[rgba(171,232,255,0.5)] bg-[rgba(171,232,255,0.16)]"
-                              : "border-white/6 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.02))] hover:border-white/14 hover:bg-white/[0.08]"
+                              ? "border-[color-mix(in_srgb,var(--info)_34%,transparent)] bg-[var(--ui-info-soft)]"
+                              : "border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-section)] hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-3)]"
                         )}
                         style={{ width: `${width}%` }}
                         onClick={() => {
@@ -1157,19 +1165,19 @@ export function MovementPage() {
                                   ? "meta"
                                   : "default"
                             }
-                            className="bg-white/[0.08] text-white/82"
+                            className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]"
                           >
                             {segment.kind === "missing" ? "gap" : segment.kind}
                           </Badge>
-                          <span className="text-[11px] text-white/46">
+                          <span className="text-[11px] text-[var(--ui-ink-muted)]">
                             {durationLabel(segment.durationSeconds)}
                           </span>
                         </div>
                         <div>
-                          <div className="line-clamp-2 text-sm font-semibold text-white">
+                          <div className="line-clamp-2 text-sm font-semibold text-[var(--ui-ink-strong)]">
                             {segment.label}
                           </div>
-                          <div className="mt-1 text-[12px] leading-5 text-white/52">
+                          <div className="mt-1 text-[12px] leading-5 text-[var(--ui-ink-muted)]">
                             {segment.subtitle}
                           </div>
                         </div>
@@ -1181,10 +1189,10 @@ export function MovementPage() {
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               <Badge tone="signal">{formatDateLabel(targetDate)}</Badge>
-              <Badge tone="default" className="bg-white/[0.06] text-white/72">
+              <Badge tone="default" className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                 {movementDay.summary.tripCount} trips
               </Badge>
-              <Badge tone="default" className="bg-white/[0.06] text-white/72">
+              <Badge tone="default" className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                 {movementDay.summary.stayCount} stays
               </Badge>
               <Badge tone="meta">
@@ -1197,13 +1205,13 @@ export function MovementPage() {
             {selectedTripQuery.data ? (
               <>
                 <div className="flex items-center justify-between gap-2">
-                  <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
+                  <div className="font-label text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-muted)]">
                     Selected trip
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Button
                       variant="ghost"
-                      className="h-9 rounded-full border border-white/10 bg-white/[0.04] px-4"
+                      className="h-9 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4"
                       onClick={() => setShowExactPath((current) => !current)}
                     >
                       {showExactPath ? "Stylized graph" : "Exact path"}
@@ -1220,8 +1228,8 @@ export function MovementPage() {
                     stopLabels={selectedTripQuery.data.stylizedPath.stops.map((stop) => stop.label)}
                   />
                 )}
-                <Card className="rounded-[28px] border border-white/8 bg-white/[0.04] p-5">
-                  <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
+                <Card className="rounded-[28px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-5">
+                  <div className="font-label text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-muted)]">
                     Trip context
                   </div>
                   {(() => {
@@ -1232,61 +1240,61 @@ export function MovementPage() {
                           <Badge tone="signal">
                             {distanceLabel(selectedTripQuery.data.trip.distanceMeters)}
                           </Badge>
-                          <Badge tone="default" className="bg-white/[0.06] text-white/74">
+                          <Badge tone="default" className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                             {selectedTripQuery.data.trip.activityType || selectedTripQuery.data.trip.travelMode}
                           </Badge>
-                          <Badge tone="default" className="bg-white/[0.06] text-white/74">
+                          <Badge tone="default" className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                             {durationLabel(selectedTripQuery.data.trip.durationSeconds)}
                           </Badge>
                           <Badge tone="default" className="bg-[var(--primary)]/14 text-[var(--primary)]">
                             {formatLifeForceRate(apLoad.rateApPerHour)}
                           </Badge>
-                          <Badge tone="default" className="bg-white/[0.06] text-white/74">
+                          <Badge tone="default" className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                             {formatLifeForceAp(apLoad.totalAp)}
                           </Badge>
                         </div>
                       </>
                     );
                   })()}
-                  <div className="mt-4 text-sm leading-6 text-white/58">
+                  <div className="mt-4 text-sm leading-6 text-[var(--ui-ink-muted)]">
                     {formatTimeRange(
                       selectedTripQuery.data.trip.startedAt,
                       selectedTripQuery.data.trip.endedAt
                     )}
                   </div>
                   <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                    <div className="rounded-[20px] border border-white/8 bg-white/[0.04] p-3">
-                      <div className="text-[11px] uppercase tracking-[0.18em] text-white/38">
+                    <div className="rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-3">
+                      <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                         Hourly estimate
                       </div>
-                      <div className="mt-2 text-lg text-white">
+                      <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
                         {durationLabel(selectedTripQuery.data.trip.estimatedScreenTimeSeconds)}
                       </div>
                     </div>
-                    <div className="rounded-[20px] border border-white/8 bg-white/[0.04] p-3">
-                      <div className="text-[11px] uppercase tracking-[0.18em] text-white/38">
+                    <div className="rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-3">
+                      <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                         Pickups
                       </div>
-                      <div className="mt-2 text-lg text-white">
+                      <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
                         {selectedTripQuery.data.trip.pickupCount}
                       </div>
                     </div>
-                    <div className="rounded-[20px] border border-white/8 bg-white/[0.04] p-3">
-                      <div className="text-[11px] uppercase tracking-[0.18em] text-white/38">
+                    <div className="rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-3">
+                      <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                         Notifications
                       </div>
-                      <div className="mt-2 text-lg text-white">
+                      <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
                         {selectedTripQuery.data.trip.notificationCount}
                       </div>
                     </div>
                   </div>
-                  <div className="mt-3 text-xs leading-5 text-white/48">
+                  <div className="mt-3 text-xs leading-5 text-[var(--ui-ink-muted)]">
                     Derived from Screen Time hourly bins, not exact foreground traces.
                   </div>
                   {selectedTripQuery.data.trip.topApps.length > 0 ? (
                     <div className="mt-4 flex flex-wrap gap-2">
                       {selectedTripQuery.data.trip.topApps.map((app) => (
-                        <Badge key={app.id} tone="default" className="bg-[rgba(114,204,255,0.12)] text-white/80">
+                        <Badge key={app.id} tone="default" className="bg-[var(--ui-info-soft)] text-[var(--ui-ink-medium)]">
                           {(app.displayName || app.bundleIdentifier) + " · " + durationLabel(app.totalActivitySeconds)}
                         </Badge>
                       ))}
@@ -1295,7 +1303,7 @@ export function MovementPage() {
                   {selectedTripQuery.data.trip.topCategories.length > 0 ? (
                     <div className="mt-3 flex flex-wrap gap-2">
                       {selectedTripQuery.data.trip.topCategories.map((category) => (
-                        <Badge key={category.id} tone="default" className="bg-white/[0.05] text-white/64">
+                        <Badge key={category.id} tone="default" className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                           {category.categoryLabel}
                         </Badge>
                       ))}
@@ -1304,7 +1312,7 @@ export function MovementPage() {
                 </Card>
               </>
             ) : (
-              <Card className="rounded-[30px] border border-dashed border-white/12 bg-white/[0.03] p-6 text-white/58">
+              <Card className="rounded-[30px] border border-dashed border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-6 text-[var(--ui-ink-muted)]">
                 Select a trip segment to open the stylized trajectory card and exact path toggle.
               </Card>
             )}
@@ -1314,16 +1322,16 @@ export function MovementPage() {
 
       {viewMode === "month" ? (
         <section className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.85fr)]">
-          <Card className="rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(9,15,28,0.97),rgba(8,13,24,0.92))] p-5">
+          <Card className="rounded-[30px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-section)] p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
-                  <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
+                  <div className="font-label text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-muted)]">
                     Month view
                   </div>
                   <InfoTooltip content="This chart stays quantitative. Switch the metric to compare daily distance, moving time, idle time, or calories across the month." />
                 </div>
-                <div className="mt-2 text-sm text-white/58">
+                <div className="mt-2 text-sm text-[var(--ui-ink-muted)]">
                   Switch the Y-axis between motion, idle time, and energy without losing the same monthly frame.
                 </div>
               </div>
@@ -1341,8 +1349,8 @@ export function MovementPage() {
                     className={cn(
                       "h-9 rounded-full border px-4 text-sm",
                       monthMetric === metric
-                        ? "border-[var(--primary)] bg-[var(--primary)]/14 text-white"
-                        : "border-white/10 bg-white/[0.04] text-white/62"
+                        ? "border-[var(--primary)] bg-[var(--primary)]/14 text-[var(--ui-ink-strong)]"
+                        : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]"
                     )}
                     onClick={() => setMonthMetric(metric)}
                   >
@@ -1362,28 +1370,30 @@ export function MovementPage() {
                 <AreaChart data={movementMonth.days}>
                   <defs>
                     <linearGradient id="movementMonthFill" x1="0" x2="0" y1="0" y2="1">
-                      <stop offset="0%" stopColor="rgba(110,220,255,0.7)" />
-                      <stop offset="100%" stopColor="rgba(110,220,255,0.05)" />
+                      <stop offset="0%" stopColor="var(--info)" stopOpacity={0.7} />
+                      <stop offset="100%" stopColor="var(--info)" stopOpacity={0.08} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                  <CartesianGrid stroke="var(--ui-border-subtle)" vertical={false} />
                   <XAxis
                     dataKey="dateKey"
-                    tick={{ fill: "rgba(255,255,255,0.46)", fontSize: 11 }}
+                    tick={{ fill: "var(--ui-ink-muted)", fontSize: 11 }}
                     axisLine={false}
                     tickLine={false}
                   />
                   <YAxis
-                    tick={{ fill: "rgba(255,255,255,0.46)", fontSize: 11 }}
+                    tick={{ fill: "var(--ui-ink-muted)", fontSize: 11 }}
                     axisLine={false}
                     tickLine={false}
                   />
                   <Tooltip
                     contentStyle={{
-                      background: "rgba(7,12,24,0.94)",
-                      border: "1px solid rgba(255,255,255,0.1)",
+                      background: "var(--ui-surface-modal)",
+                      border: "1px solid var(--ui-border-subtle)",
                       borderRadius: 16
                     }}
+                    itemStyle={{ color: "var(--ui-ink-strong)" }}
+                    labelStyle={{ color: "var(--ui-ink-medium)" }}
                     formatter={(value) =>
                       metricLabel(monthMetric, Number(value))
                     }
@@ -1391,7 +1401,7 @@ export function MovementPage() {
                   <Area
                     type="monotone"
                     dataKey={monthMetric}
-                    stroke="rgba(126,233,255,0.95)"
+                    stroke="var(--info)"
                     fill="url(#movementMonthFill)"
                     strokeWidth={2.4}
                   />
@@ -1400,32 +1410,32 @@ export function MovementPage() {
             </div>
           </Card>
 
-          <Card className="rounded-[30px] border border-white/8 bg-white/[0.04] p-5">
-            <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
+          <Card className="rounded-[30px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-5">
+            <div className="font-label text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-muted)]">
               Month totals
             </div>
             <div className="mt-5 grid gap-3">
-              <div className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
-                <div className="text-xs uppercase tracking-[0.18em] text-white/36">
+              <div className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
+                <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                   Distance
                 </div>
-                <div className="mt-2 text-2xl text-white">
+                <div className="mt-2 text-2xl text-[var(--ui-ink-strong)]">
                   {distanceLabel(movementMonth.totals.distanceMeters)}
                 </div>
               </div>
-              <div className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
-                <div className="text-xs uppercase tracking-[0.18em] text-white/36">
+              <div className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
+                <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                   Moving time
                 </div>
-                <div className="mt-2 text-2xl text-white">
+                <div className="mt-2 text-2xl text-[var(--ui-ink-strong)]">
                   {durationLabel(movementMonth.totals.movingSeconds)}
                 </div>
               </div>
-              <div className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
-                <div className="text-xs uppercase tracking-[0.18em] text-white/36">
+              <div className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
+                <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                   Settled time
                 </div>
-                <div className="mt-2 text-2xl text-white">
+                <div className="mt-2 text-2xl text-[var(--ui-ink-strong)]">
                   {durationLabel(movementMonth.totals.idleSeconds)}
                 </div>
               </div>
@@ -1436,37 +1446,37 @@ export function MovementPage() {
 
       {viewMode === "all_time" ? (
         <section className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(20rem,0.95fr)]">
-          <Card className="rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(8,13,25,0.97),rgba(8,13,24,0.92))] p-5">
+          <Card className="rounded-[30px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-section)] p-5">
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <Card className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
-                <div className="text-xs uppercase tracking-[0.18em] text-white/36">
+              <Card className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
+                <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                   Trips
                 </div>
-                <div className="mt-2 text-3xl text-white">
+                <div className="mt-2 text-3xl text-[var(--ui-ink-strong)]">
                   {movementAllTime.summary.tripCount}
                 </div>
               </Card>
-              <Card className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
-                <div className="text-xs uppercase tracking-[0.18em] text-white/36">
+              <Card className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
+                <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                   Known places
                 </div>
-                <div className="mt-2 text-3xl text-white">
+                <div className="mt-2 text-3xl text-[var(--ui-ink-strong)]">
                   {movementAllTime.summary.knownPlaceCount}
                 </div>
               </Card>
-              <Card className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
-                <div className="text-xs uppercase tracking-[0.18em] text-white/36">
+              <Card className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
+                <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                   Distance
                 </div>
-                <div className="mt-2 text-3xl text-white">
+                <div className="mt-2 text-3xl text-[var(--ui-ink-strong)]">
                   {distanceLabel(movementAllTime.summary.totalDistanceMeters)}
                 </div>
               </Card>
-              <Card className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
-                <div className="text-xs uppercase tracking-[0.18em] text-white/36">
+              <Card className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
+                <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                   Countries
                 </div>
-                <div className="mt-2 text-3xl text-white">
+                <div className="mt-2 text-3xl text-[var(--ui-ink-strong)]">
                   {movementAllTime.summary.visitedCountries}
                 </div>
               </Card>
@@ -1477,7 +1487,7 @@ export function MovementPage() {
                 <button
                   key={trip.id}
                   type="button"
-                  className="rounded-[24px] border border-white/8 bg-white/[0.03] p-4 text-left transition hover:bg-white/[0.06]"
+                  className="rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4 text-left transition hover:bg-[var(--ui-surface-3)]"
                   onClick={() => {
                     setViewMode("day");
                     setSelectedTripId(trip.id);
@@ -1491,11 +1501,11 @@ export function MovementPage() {
                     });
                     return (
                       <>
-                        <div className="text-xs uppercase tracking-[0.18em] text-white/36">
+                        <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                           Recent travel
                         </div>
-                        <div className="mt-2 text-lg text-white">{trip.label || "Untitled trip"}</div>
-                        <div className="mt-1 text-sm text-white/56">
+                        <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">{trip.label || "Untitled trip"}</div>
+                        <div className="mt-1 text-sm text-[var(--ui-ink-muted)]">
                           {distanceLabel(trip.distanceMeters)} · {trip.activityType || "travel"}
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2">
@@ -1511,13 +1521,13 @@ export function MovementPage() {
             </div>
           </Card>
 
-          <Card className="rounded-[30px] border border-white/8 bg-white/[0.04] p-5">
-            <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
+          <Card className="rounded-[30px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-5">
+            <div className="font-label text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-muted)]">
               Place categories
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               {movementAllTime.categoryBreakdown.map((entry) => (
-                <Badge key={entry.tag} tone="default" className="bg-white/[0.06] text-white/74">
+                <Badge key={entry.tag} tone="default" className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                   {entry.tag} · {entry.count}
                 </Badge>
               ))}
@@ -1528,16 +1538,16 @@ export function MovementPage() {
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(22rem,0.95fr)]">
         <MovementPlacesBox>
-          <Card className="rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(8,14,28,0.96),rgba(9,15,28,0.92))] p-5">
+          <Card className="rounded-[30px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-section)] p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
-                <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
+                <div className="font-label text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-muted)]">
                   Known places
                 </div>
                 <InfoTooltip content="Known places turn raw stationary spans into named contexts like home, work, gym, nature, or any custom place tag you want Forge to remember." />
               </div>
-              <div className="mt-2 text-sm text-white/58">
+              <div className="mt-2 text-sm text-[var(--ui-ink-muted)]">
                 These landmarks anchor stays, travel XP, and contextual reasoning in both Forge and the companion. Seeded tags like home, workplace, gym, holiday, grocery, or nature matter for downstream calculations, but place tags stay open-ended.
               </div>
             </div>
@@ -1563,48 +1573,48 @@ export function MovementPage() {
               <button
                 key={place.id}
                 type="button"
-                className="flex items-start justify-between gap-3 rounded-[24px] border border-white/8 bg-white/[0.03] p-4 text-left transition hover:bg-white/[0.06]"
+                className="flex items-start justify-between gap-3 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4 text-left transition hover:bg-[var(--ui-surface-3)]"
                 onClick={() => {
                   setEditingPlace(place);
                   setPlaceEditorOpen(true);
                 }}
               >
                 <div>
-                  <div className="text-lg text-white">{place.label}</div>
-                  <div className="mt-1 text-sm text-white/56">
+                  <div className="text-lg text-[var(--ui-ink-strong)]">{place.label}</div>
+                  <div className="mt-1 text-sm text-[var(--ui-ink-muted)]">
                     {place.latitude.toFixed(4)}, {place.longitude.toFixed(4)} · radius {Math.round(place.radiusMeters)} m
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {place.categoryTags.map((tag) => (
-                      <Badge key={tag} tone="default" className="bg-white/[0.06] text-white/74">
+                      <Badge key={tag} tone="default" className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                         {tag}
                       </Badge>
                     ))}
                   </div>
                 </div>
-                <PencilLine className="mt-1 size-4 text-white/42" />
+                <PencilLine className="mt-1 size-4 text-[var(--ui-ink-muted)]" />
               </button>
             ))}
           </div>
           </Card>
         </MovementPlacesBox>
 
-        <Card className="rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(10,17,31,0.96),rgba(8,13,24,0.92))] p-5">
+        <Card className="rounded-[30px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-section)] p-5">
           <div className="flex items-center gap-2">
-            <div className="font-label text-[11px] uppercase tracking-[0.2em] text-white/42">
+            <div className="font-label text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-muted)]">
               Movement help
             </div>
             <InfoTooltip content="Most movement surfaces on this page have help buttons. Use them to understand the graph, the day strip, the month chart, and the place system without keeping a large prose block on screen." />
           </div>
-          <div className="mt-3 text-sm leading-6 text-white/58">
+          <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-muted)]">
             Use the small help icons across this page for graph explanations, timeline semantics, and metric meanings.
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
-            <Badge className="bg-white/[0.06] text-white/74">Life graph</Badge>
-            <Badge className="bg-white/[0.06] text-white/74">Day strip</Badge>
-            <Badge className="bg-white/[0.06] text-white/74">Month chart</Badge>
-            <Badge className="bg-white/[0.06] text-white/74">Known places</Badge>
-            <Badge className="bg-white/[0.06] text-white/74">Selection aggregate</Badge>
+            <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">Life graph</Badge>
+            <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">Day strip</Badge>
+            <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">Month chart</Badge>
+            <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">Known places</Badge>
+            <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">Selection aggregate</Badge>
           </div>
         </Card>
       </section>
@@ -1644,10 +1654,10 @@ export function MovementPage() {
               <Card className="grid gap-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+                    <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                       Raw datapoints
                     </div>
-                    <div className="mt-2 text-lg text-white">
+                    <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
                       Open a point to correct or delete it.
                     </div>
                   </div>
@@ -1656,10 +1666,10 @@ export function MovementPage() {
 
                 <div
                   ref={pointListRef}
-                  className="h-[34rem] overflow-y-auto rounded-[24px] border border-white/8 bg-white/[0.03]"
+                  className="h-[34rem] overflow-y-auto rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]"
                 >
                   {filteredPoints.length === 0 ? (
-                    <div className="flex h-full items-center justify-center p-6 text-center text-sm leading-6 text-white/50">
+                    <div className="flex h-full items-center justify-center p-6 text-center text-sm leading-6 text-[var(--ui-ink-muted)]">
                       No datapoint matches the current search. Clear some filters or search by time, anchor type, or accuracy.
                     </div>
                   ) : (
@@ -1682,8 +1692,8 @@ export function MovementPage() {
                               className={cn(
                                 "grid w-full gap-3 rounded-[20px] border px-4 py-3 text-left transition",
                                 selectedPointId === point.id
-                                  ? "border-[rgba(171,232,255,0.34)] bg-[rgba(171,232,255,0.12)]"
-                                  : "border-white/8 bg-white/[0.04] hover:bg-white/[0.07]"
+                                  ? "border-[color-mix(in_srgb,var(--info)_34%,transparent)] bg-[var(--ui-info-soft)]"
+                                  : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] hover:bg-[var(--ui-surface-3)]"
                               )}
                               onClick={() => {
                                 setSelectedPointId(point.id);
@@ -1692,13 +1702,13 @@ export function MovementPage() {
                             >
                               <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
-                                  <div className="flex items-center gap-2 text-white">
+                                  <div className="flex items-center gap-2 text-[var(--ui-ink-strong)]">
                                     <Clock3 className="size-4 shrink-0 text-[var(--primary)]" />
                                     <span className="truncate text-base font-medium">
                                       {formatPointTimestamp(point.recordedAt)}
                                     </span>
                                   </div>
-                                  <div className="mt-2 text-sm text-white/56">
+                                  <div className="mt-2 text-sm text-[var(--ui-ink-muted)]">
                                     {point.latitude.toFixed(5)}, {point.longitude.toFixed(5)}
                                   </div>
                                 </div>
@@ -1737,7 +1747,7 @@ export function MovementPage() {
                 draft={pointDraft}
               />
             ) : (
-              <Card className="rounded-[28px] border border-dashed border-white/12 bg-white/[0.03] p-6 text-white/56">
+              <Card className="rounded-[28px] border border-dashed border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-6 text-[var(--ui-ink-muted)]">
                 Pick a datapoint to inspect its raw measurement details. To correct what the user sees, use canonical user-defined movement boxes in the Life Timeline.
               </Card>
             )}

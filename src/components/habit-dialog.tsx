@@ -264,7 +264,11 @@ export function HabitDialog({
                     <button
                       key={day.value}
                       type="button"
-                      className={`rounded-full px-3 py-2 text-sm transition ${selected ? "bg-white/16 text-white" : "bg-white/6 text-white/58 hover:bg-white/10 hover:text-white"}`}
+                      className={`rounded-full border px-3 py-2 text-sm transition ${
+                        selected
+                          ? "border-[color-mix(in_srgb,var(--primary)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]"
+                          : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
+                      }`}
                       onClick={() =>
                         setValue({
                           weekDays: selected

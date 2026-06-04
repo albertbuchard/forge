@@ -437,7 +437,7 @@ export function TaskDetailPage() {
       <Card className="min-w-0 overflow-hidden">
         <div className="flex min-w-0 flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
               {workItemMeta.label}
             </div>
             <div className="mt-2">
@@ -451,7 +451,7 @@ export function TaskDetailPage() {
                 labelClassName="[overflow-wrap:anywhere]"
               />
             </div>
-            <div className="mt-3 text-sm leading-6 text-white/60">
+            <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
               {payload.task.description ? (
                 <NoteMarkdown
                   markdown={payload.task.description}
@@ -563,7 +563,7 @@ export function TaskDetailPage() {
               <Button
                 className={cn(
                   actionButtonClass,
-                  "text-rose-200 hover:bg-rose-500/10"
+                  "text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)] hover:bg-[var(--ui-danger-soft)]"
                 )}
                 variant="ghost"
                 pending={deleteTaskMutation.isPending}
@@ -580,32 +580,32 @@ export function TaskDetailPage() {
           <Badge className="bg-[var(--primary)]/14 text-[var(--primary)]">
             {workItemMeta.label}
           </Badge>
-          <Badge className="bg-white/[0.08] text-white/72">
+          <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]">
             {workItemMeta.descriptor}
           </Badge>
-          <Badge className="bg-white/[0.08] text-white/72">
+          <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]">
             {currentStatus.label}
           </Badge>
-          <Badge className="bg-white/[0.08] text-white/72">
+          <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]">
             {t(`common.enums.priority.${payload.task.priority}`)}
           </Badge>
-          <Badge className="bg-white/[0.08] text-white/72">
+          <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]">
             {t(`common.enums.effort.${payload.task.effort}`)}
           </Badge>
-          <Badge className="bg-white/[0.08] text-white/72">
+          <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]">
             {t(`common.enums.energy.${payload.task.energy}`)}
           </Badge>
-          <Badge className="bg-white/[0.08] text-white/72">
+          <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]">
             {payload.task.points} xp
           </Badge>
           {payload.task.time.totalCreditedSeconds > 0 ? (
-            <Badge className="bg-white/[0.08] text-white/72">
+            <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]">
               {Math.floor(payload.task.time.totalCreditedSeconds / 60)} min
               tracked
             </Badge>
           ) : null}
           {currentRun ? (
-            <Badge className="bg-emerald-500/12 text-emerald-200">
+            <Badge className="bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_76%,var(--ui-ink-strong)_24%)]">
               Timer active
             </Badge>
           ) : null}
@@ -613,18 +613,20 @@ export function TaskDetailPage() {
             <Badge
               className={
                 payload.task.executionMode === "afk"
-                  ? "bg-emerald-500/12 text-emerald-100"
-                  : "bg-amber-500/12 text-amber-100"
+                  ? "bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_76%,var(--ui-ink-strong)_24%)]"
+                  : "bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]"
               }
             >
               {payload.task.executionMode.toUpperCase()}
             </Badge>
           ) : null}
           {hasAiBrief ? (
-            <Badge className="bg-sky-500/12 text-sky-100">AI brief ready</Badge>
+            <Badge className="bg-[var(--ui-accent-soft)] text-[var(--primary)]">
+              AI brief ready
+            </Badge>
           ) : null}
           {botOwner || botAssignees.length > 0 ? (
-            <Badge className="bg-fuchsia-500/12 text-fuchsia-100">
+            <Badge className="bg-[var(--ui-accent-soft)] text-[var(--tertiary)]">
               Bot collaboration live
             </Badge>
           ) : null}
@@ -642,7 +644,7 @@ export function TaskDetailPage() {
 
         {!isMobile ? (
           <div className="mt-5">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
               Status
             </div>
             <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
@@ -656,8 +658,8 @@ export function TaskDetailPage() {
                     disabled={selected || updateTaskMutation.isPending}
                     className={`rounded-[18px] border px-3.5 py-3 text-left transition ${
                       selected
-                        ? "border-[rgba(192,193,255,0.28)] bg-[rgba(192,193,255,0.14)] text-white"
-                        : "border-white/8 bg-white/[0.04] text-white/72 hover:bg-white/[0.08]"
+                        ? "border-[color-mix(in_srgb,var(--primary)_34%,var(--ui-border-subtle)_66%)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]"
+                        : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-3)]"
                     }`}
                     onClick={() => void handleStatusChange(entry.status)}
                   >
@@ -665,7 +667,7 @@ export function TaskDetailPage() {
                       <Icon className="size-4 shrink-0 text-[var(--primary)]" />
                       <span className="font-medium">{entry.label}</span>
                     </div>
-                    <div className="mt-2 text-xs leading-5 text-white/54">
+                    <div className="mt-2 text-xs leading-5 text-[var(--ui-ink-faint)]">
                       {entry.description}
                     </div>
                   </button>
@@ -698,12 +700,12 @@ export function TaskDetailPage() {
               description="The narrative, criteria, and execution intent live together so the detail view can stand on its own."
             >
               <div className="grid gap-4">
-                <div className="rounded-[20px] border border-white/8 bg-white/[0.03] p-4">
-                  <div className="flex items-center gap-2 text-sm text-white/62">
+                <div className="rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+                  <div className="flex items-center gap-2 text-sm text-[var(--ui-ink-soft)]">
                     <Sparkles className="size-4 text-[var(--primary)]" />
                     <span>AI instructions</span>
                   </div>
-                  <div className="mt-3 text-sm leading-6 text-white/72">
+                  <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-medium)]">
                     {hasAiBrief ? (
                       <NoteMarkdown
                         markdown={aiInstructions}
@@ -714,9 +716,9 @@ export function TaskDetailPage() {
                     )}
                   </div>
                 </div>
-                <div className="rounded-[20px] border border-white/8 bg-white/[0.03] p-4">
-                  <div className="flex items-center gap-2 text-sm text-white/62">
-                    <Target className="size-4 text-emerald-200" />
+                <div className="rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+                  <div className="flex items-center gap-2 text-sm text-[var(--ui-ink-soft)]">
+                    <Target className="size-4 text-[var(--success)]" />
                     <span>Acceptance criteria</span>
                   </div>
                   {acceptanceCriteria.length > 0 ? (
@@ -724,14 +726,14 @@ export function TaskDetailPage() {
                       {acceptanceCriteria.map((criterion, index) => (
                         <div
                           key={`${payload.task.id}-criterion-${index}`}
-                          className="rounded-[16px] border border-white/8 bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white/72"
+                          className="rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3 text-sm leading-6 text-[var(--ui-ink-medium)]"
                         >
                           {criterion}
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <div className="mt-3 rounded-[16px] border border-dashed border-white/10 px-4 py-3 text-sm text-white/52">
+                    <div className="mt-3 rounded-[16px] border border-dashed border-[var(--ui-border-subtle)] px-4 py-3 text-sm text-[var(--ui-ink-faint)]">
                       No acceptance criteria captured yet.
                     </div>
                   )}
@@ -745,12 +747,12 @@ export function TaskDetailPage() {
               description="Show the work summary, file footprint, and linked refs directly in the detail view."
             >
               <div className="grid gap-4">
-                <div className="rounded-[20px] border border-white/8 bg-white/[0.03] p-4">
-                  <div className="flex items-center gap-2 text-sm text-white/62">
-                    <BriefcaseBusiness className="size-4 text-sky-200" />
+                <div className="rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+                  <div className="flex items-center gap-2 text-sm text-[var(--ui-ink-soft)]">
+                    <BriefcaseBusiness className="size-4 text-[var(--primary)]" />
                     <span>Work summary</span>
                   </div>
-                  <div className="mt-3 text-sm leading-6 text-white/72">
+                  <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-medium)]">
                     {completionReport?.workSummary ? (
                       <NoteMarkdown
                         markdown={completionReport.workSummary}
@@ -762,9 +764,9 @@ export function TaskDetailPage() {
                   </div>
                 </div>
 
-                <div className="rounded-[20px] border border-white/8 bg-white/[0.03] p-4">
-                  <div className="flex items-center gap-2 text-sm text-white/62">
-                    <Files className="size-4 text-amber-200" />
+                <div className="rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+                  <div className="flex items-center gap-2 text-sm text-[var(--ui-ink-soft)]">
+                    <Files className="size-4 text-[var(--warning)]" />
                     <span>Changed files</span>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -774,22 +776,22 @@ export function TaskDetailPage() {
                         <Badge
                           key={file}
                           wrap
-                          className="bg-white/[0.08] font-mono text-[11px] text-white/74"
+                          className="bg-[var(--ui-surface-3)] font-mono text-[11px] text-[var(--ui-ink-medium)]"
                         >
                           {file}
                         </Badge>
                       ))
                     ) : (
-                      <Badge className="bg-white/[0.08] text-white/65">
+                      <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-soft)]">
                         No changed files listed
                       </Badge>
                     )}
                   </div>
                 </div>
 
-                <div className="rounded-[20px] border border-white/8 bg-white/[0.03] p-4">
-                  <div className="flex items-center gap-2 text-sm text-white/62">
-                    <GitBranch className="size-4 text-fuchsia-200" />
+                <div className="rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+                  <div className="flex items-center gap-2 text-sm text-[var(--ui-ink-soft)]">
+                    <GitBranch className="size-4 text-[var(--tertiary)]" />
                     <span>Git refs</span>
                   </div>
                   <div className="mt-3 grid gap-3">
@@ -802,7 +804,7 @@ export function TaskDetailPage() {
                         >
                           {closeoutGitRefs.length > 0 &&
                           supportingGitRefs.length > 0 ? (
-                            <div className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                            <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                               {groupIndex === 0
                                 ? "Linked in completion report"
                                 : "Other recorded refs"}
@@ -811,16 +813,16 @@ export function TaskDetailPage() {
                           {group.map((ref) => {
                             const refMeta = GIT_REF_META[ref.refType];
                             const refBody = (
-                              <div className="rounded-[16px] border border-white/8 bg-white/[0.04] px-4 py-3">
+                              <div className="rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3">
                                 <div className="flex flex-wrap items-center gap-2">
                                   <Badge className={refMeta.className}>
                                     {refMeta.label}
                                   </Badge>
-                                  <div className="font-mono text-sm text-white/84">
+                                  <div className="font-mono text-sm text-[var(--ui-ink-strong)]">
                                     {ref.refValue}
                                   </div>
                                 </div>
-                                <div className="mt-2 text-sm text-white/58">
+                                <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
                                   {ref.displayTitle ||
                                     ref.repository ||
                                     ref.provider}
@@ -849,7 +851,7 @@ export function TaskDetailPage() {
                         </div>
                       ))}
                     {gitRefs.length === 0 ? (
-                      <Badge className="bg-white/[0.08] text-white/65">
+                      <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-soft)]">
                         No git refs recorded
                       </Badge>
                     ) : null}
@@ -893,17 +895,17 @@ export function TaskDetailPage() {
               />
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
-              <Badge className="bg-white/[0.08] text-white/72">
+              <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]">
                 Today credited{" "}
                 {formatDurationLabel(
                   payload.task.time.todayCreditedSeconds ?? 0
                 )}
               </Badge>
-              <Badge className="bg-white/[0.08] text-white/72">
+              <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]">
                 Live tracked{" "}
                 {formatDurationLabel(payload.task.time.liveTrackedSeconds)}
               </Badge>
-              <Badge className="bg-white/[0.08] text-white/72">
+              <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]">
                 Active runs {payload.task.time.activeRunCount}
               </Badge>
             </div>
@@ -946,16 +948,16 @@ export function TaskDetailPage() {
               />
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
-              <Badge className="bg-white/[0.08] text-white/72">
+              <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]">
                 Priority {t(`common.enums.priority.${payload.task.priority}`)}
               </Badge>
-              <Badge className="bg-white/[0.08] text-white/72">
+              <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]">
                 Effort {t(`common.enums.effort.${payload.task.effort}`)}
               </Badge>
-              <Badge className="bg-white/[0.08] text-white/72">
+              <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]">
                 Energy {t(`common.enums.energy.${payload.task.energy}`)}
               </Badge>
-              <Badge className="bg-white/[0.08] text-white/72">
+              <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]">
                 Duration{" "}
                 {formatDurationLabel(payload.task.plannedDurationSeconds)}
               </Badge>
@@ -963,38 +965,38 @@ export function TaskDetailPage() {
           </SectionCard>
         </div>
 
-        <div className="mt-5 rounded-[20px] bg-white/[0.04] p-4">
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+        <div className="mt-5 rounded-[20px] bg-[var(--ui-surface-2)] p-4">
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
             Action Point load
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-[16px] bg-white/[0.03] px-3.5 py-3">
+            <div className="rounded-[16px] bg-[var(--ui-surface-1)] px-3.5 py-3">
               <DetailLabel label="Total cost" />
-              <div className="mt-2 text-lg text-white">
+              <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
                 {actionPointSummary
                   ? formatLifeForceAp(actionPointSummary.totalCostAp)
                   : "Not calibrated"}
               </div>
             </div>
-            <div className="rounded-[16px] bg-white/[0.03] px-3.5 py-3">
+            <div className="rounded-[16px] bg-[var(--ui-surface-1)] px-3.5 py-3">
               <DetailLabel label="Today debit" />
-              <div className="mt-2 text-lg text-white">
+              <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
                 {actionPointSummary
                   ? formatLifeForceAp(actionPointSummary.spentTodayAp)
                   : "0 AP"}
               </div>
             </div>
-            <div className="rounded-[16px] bg-white/[0.03] px-3.5 py-3">
+            <div className="rounded-[16px] bg-[var(--ui-surface-1)] px-3.5 py-3">
               <DetailLabel label="Sustain rate" />
-              <div className="mt-2 text-lg text-white">
+              <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
                 {actionPointSummary
                   ? formatLifeForceRate(actionPointSummary.sustainRateApPerHour)
                   : "0 AP/h"}
               </div>
             </div>
-            <div className="rounded-[16px] bg-white/[0.03] px-3.5 py-3">
+            <div className="rounded-[16px] bg-[var(--ui-surface-1)] px-3.5 py-3">
               <DetailLabel label="Expected duration" />
-              <div className="mt-2 text-lg text-white">
+              <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
                 {actionPointSummary
                   ? `${Math.round(
                       actionPointSummary.expectedDurationSeconds / 3600
@@ -1005,46 +1007,48 @@ export function TaskDetailPage() {
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
             {payload.task.splitSuggestion?.shouldSplit ? (
-              <Badge className="bg-amber-400/12 text-amber-100">Split it</Badge>
+              <Badge className="bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]">
+                Split it
+              </Badge>
             ) : null}
             {actionPointSummary ? (
-              <Badge className="bg-white/[0.08] text-white/72">
+              <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]">
                 Remaining {formatLifeForceAp(actionPointSummary.remainingAp)}
               </Badge>
             ) : null}
             {actionPointSummary ? (
-              <Badge className="bg-white/[0.08] text-white/72">
+              <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]">
                 Spent total {formatLifeForceAp(actionPointSummary.spentTotalAp)}
               </Badge>
             ) : null}
             {actionPointSummary ? (
-              <Badge className="bg-white/[0.08] text-white/72">
+              <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]">
                 {actionPointSummary.costBand}
               </Badge>
             ) : null}
           </div>
-          <p className="mt-3 text-sm leading-6 text-white/58">
+          <p className="mt-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
             This task only debits the Action Points you actually worked today.
             Marking it done does not consume the full estimate by itself.
           </p>
         </div>
 
-        <div className="mt-5 rounded-[20px] bg-white/[0.04] p-4">
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+        <div className="mt-5 rounded-[20px] bg-[var(--ui-surface-2)] p-4">
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
             Today&apos;s Life Force context
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <div className="rounded-[16px] bg-white/[0.03] px-3.5 py-3">
+            <div className="rounded-[16px] bg-[var(--ui-surface-1)] px-3.5 py-3">
               <DetailLabel label="Daily AP" />
-              <div className="mt-2 text-lg text-white">
+              <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
                 {lifeForceQuery.data
                   ? `${formatLifeForceAp(lifeForceQuery.data.spentTodayAp)} / ${formatLifeForceAp(lifeForceQuery.data.dailyBudgetAp)}`
                   : "Loading..."}
               </div>
             </div>
-            <div className="rounded-[16px] bg-white/[0.03] px-3.5 py-3">
+            <div className="rounded-[16px] bg-[var(--ui-surface-1)] px-3.5 py-3">
               <DetailLabel label="Instant headroom" />
-              <div className="mt-2 text-lg text-white">
+              <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
                 {lifeForceQuery.data
                   ? formatLifeForceRate(
                       lifeForceQuery.data.instantFreeApPerHour
@@ -1052,9 +1056,9 @@ export function TaskDetailPage() {
                   : "Loading..."}
               </div>
             </div>
-            <div className="rounded-[16px] bg-white/[0.03] px-3.5 py-3">
+            <div className="rounded-[16px] bg-[var(--ui-surface-1)] px-3.5 py-3">
               <DetailLabel label="Forecast" />
-              <div className="mt-2 text-lg text-white">
+              <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
                 {lifeForceQuery.data
                   ? `${formatLifeForceAp(lifeForceQuery.data.forecastAp)} / ${formatLifeForceAp(lifeForceQuery.data.dailyBudgetAp)}`
                   : "Loading..."}
@@ -1063,15 +1067,15 @@ export function TaskDetailPage() {
           </div>
         </div>
 
-        <div className="mt-5 rounded-[20px] bg-white/[0.04] p-4">
-          <div className="flex items-center gap-2 text-sm text-white/58">
+        <div className="mt-5 rounded-[20px] bg-[var(--ui-surface-2)] p-4">
+          <div className="flex items-center gap-2 text-sm text-[var(--ui-ink-soft)]">
             <span>Current timer</span>
             <InfoTooltip
               content="This shows whether work is running on the task right now and how much time has been credited."
               label="Explain current timer"
             />
           </div>
-          <div className="mt-3 text-white">
+          <div className="mt-3 text-[var(--ui-ink-strong)]">
             {currentRun
               ? `${currentRun.timerMode === "planned" ? "Planned" : "Unlimited"} timer active with ${Math.floor(currentRun.creditedSeconds / 60)} credited minutes.`
               : "No timer is running on this task right now."}
@@ -1079,29 +1083,29 @@ export function TaskDetailPage() {
         </div>
 
         <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
-          <div className="rounded-[20px] bg-white/[0.04] p-4">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+          <div className="rounded-[20px] bg-[var(--ui-surface-2)] p-4">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
               Task scheduling
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-[16px] bg-white/[0.03] px-3.5 py-3">
+              <div className="rounded-[16px] bg-[var(--ui-surface-1)] px-3.5 py-3">
                 <DetailLabel label="Rule source" />
-                <div className="mt-2 text-white">
+                <div className="mt-2 text-[var(--ui-ink-strong)]">
                   {payload.task.schedulingRules
                     ? "Task-specific override"
                     : "Uses project defaults"}
                 </div>
               </div>
-              <div className="rounded-[16px] bg-white/[0.03] px-3.5 py-3">
+              <div className="rounded-[16px] bg-[var(--ui-surface-1)] px-3.5 py-3">
                 <DetailLabel label="Planned duration" />
-                <div className="mt-2 text-white">
+                <div className="mt-2 text-[var(--ui-ink-strong)]">
                   {payload.task.plannedDurationSeconds
                     ? `${Math.round(payload.task.plannedDurationSeconds / 60)} min`
                     : "No duration target"}
                 </div>
               </div>
             </div>
-            <p className="mt-4 text-sm leading-6 text-white/58">
+            <p className="mt-4 text-sm leading-6 text-[var(--ui-ink-soft)]">
               Scheduling rules now live behind the guided modal flow instead of
               an inline editor. Use it to change eligible blocks, blocked
               contexts, and the planning duration without overcrowding the task
@@ -1118,49 +1122,49 @@ export function TaskDetailPage() {
             </div>
           </div>
 
-          <div className="rounded-[20px] bg-white/[0.04] p-4">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+          <div className="rounded-[20px] bg-[var(--ui-surface-2)] p-4">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
               Calendar status
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               <Badge
                 className={
                   schedulingState.tone === "blocked"
-                    ? "bg-rose-500/14 text-rose-100"
+                    ? "bg-[var(--ui-danger-soft)] text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]"
                     : schedulingState.tone === "waiting"
-                      ? "bg-amber-500/14 text-amber-100"
-                      : "bg-emerald-500/14 text-emerald-100"
+                      ? "bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]"
+                      : "bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_76%,var(--ui-ink-strong)_24%)]"
                 }
               >
                 {schedulingState.label}
               </Badge>
-              <Badge className="bg-white/[0.08] text-white/72">
+              <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]">
                 {payload.task.schedulingRules
                   ? "Task override"
                   : "Using project defaults"}
               </Badge>
               {payload.task.plannedDurationSeconds ? (
-                <Badge className="bg-white/[0.08] text-white/72">
+                <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]">
                   {Math.round(payload.task.plannedDurationSeconds / 60)} min
                   target
                 </Badge>
               ) : null}
             </div>
-            <p className="mt-3 text-sm leading-6 text-white/58">
+            <p className="mt-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
               Forge checks these rules before a live run starts. If the current
               calendar context is blocked, you can still override with an
               explicit reason.
             </p>
             {schedulingState.context.length > 0 ? (
               <div className="mt-4">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   Current context
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {schedulingState.context.map((entry) => (
                     <Badge
                       key={entry}
-                      className="bg-white/[0.08] text-white/72"
+                      className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]"
                     >
                       {entry}
                     </Badge>
@@ -1173,7 +1177,7 @@ export function TaskDetailPage() {
                 {schedulingState.conflicts.map((entry) => (
                   <div
                     key={entry}
-                    className="rounded-[16px] bg-rose-500/10 px-3 py-2 text-sm text-rose-100"
+                    className="rounded-[16px] bg-[var(--ui-danger-soft)] px-3 py-2 text-sm text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]"
                   >
                     {entry}
                   </div>
@@ -1199,24 +1203,24 @@ export function TaskDetailPage() {
           </div>
         </div>
 
-        <div className="mt-5 rounded-[20px] bg-white/[0.04] p-4">
+        <div className="mt-5 rounded-[20px] bg-[var(--ui-surface-2)] p-4">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                 Scheduled blocks
               </div>
-              <p className="mt-2 text-sm leading-6 text-white/58">
+              <p className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                 Open a scheduled block to edit the day, the hour range, or the
                 AP profile tied to this task.
               </p>
             </div>
-            <Badge className="bg-white/[0.08] text-white/72">
+            <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]">
               {scheduledTimeboxes.length}
             </Badge>
           </div>
           <div className="mt-4 grid gap-3">
             {scheduledTimeboxes.length === 0 ? (
-              <div className="rounded-[18px] bg-white/[0.03] px-4 py-4 text-sm text-white/55">
+              <div className="rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-4 text-sm text-[var(--ui-ink-faint)]">
                 No future timeboxes are attached to this task yet.
               </div>
             ) : null}
@@ -1236,14 +1240,14 @@ export function TaskDetailPage() {
                     setTimeboxDialogOpen(true);
                   }
                 }}
-                className="rounded-[18px] border border-white/8 bg-[linear-gradient(180deg,rgba(26,32,49,0.86),rgba(16,21,34,0.86))] p-4 text-left transition hover:bg-[linear-gradient(180deg,rgba(30,36,54,0.92),rgba(18,23,37,0.92))]"
+                className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4 text-left transition hover:bg-[var(--ui-surface-hover)]"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <div className="line-clamp-2 font-medium leading-6 text-white">
+                    <div className="line-clamp-2 font-medium leading-6 text-[var(--ui-ink-strong)]">
                       {timebox.title}
                     </div>
-                    <div className="mt-1 flex items-center gap-2 text-sm text-white/58">
+                    <div className="mt-1 flex items-center gap-2 text-sm text-[var(--ui-ink-soft)]">
                       <Clock3 className="size-3.5 shrink-0" />
                       {formatDateTime(timebox.startsAt)} to{" "}
                       {formatDateTime(timebox.endsAt)}
@@ -1251,10 +1255,10 @@ export function TaskDetailPage() {
                   </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Badge className="bg-white/[0.08] text-white/72">
+                  <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]">
                     {timebox.source}
                   </Badge>
-                  <Badge className="bg-white/[0.08] text-white/72">
+                  <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]">
                     {timebox.status}
                   </Badge>
                   <Badge className="bg-[var(--primary)]/14 text-[var(--primary)]">
@@ -1262,25 +1266,25 @@ export function TaskDetailPage() {
                       estimateTaskTimeboxActionPointLoad(timebox).rateApPerHour
                     )}
                   </Badge>
-                  <Badge className="bg-white/[0.08] text-white/72">
+                  <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]">
                     {formatLifeForceAp(
                       estimateTaskTimeboxActionPointLoad(timebox).totalAp
                     )}
                   </Badge>
                   {timebox.overrideReason ? (
-                    <Badge className="bg-white/[0.08] text-white/72">
+                    <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]">
                       {timebox.overrideReason}
                     </Badge>
                   ) : null}
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <span className="rounded-[999px] bg-white/[0.08] px-3 py-1 text-xs text-white/72">
+                  <span className="rounded-[999px] bg-[var(--ui-surface-3)] px-3 py-1 text-xs text-[var(--ui-ink-medium)]">
                     Edit in guide
                   </span>
                   <Link
                     to={`/calendar?timeboxId=${encodeURIComponent(timebox.id)}`}
                     onClick={(event) => event.stopPropagation()}
-                    className="rounded-[999px] bg-white/[0.08] px-3 py-1 text-xs text-white/72 transition hover:bg-white/[0.12]"
+                    className="rounded-[999px] bg-[var(--ui-surface-3)] px-3 py-1 text-xs text-[var(--ui-ink-medium)] transition hover:bg-[var(--ui-surface-hover)]"
                   >
                     Open in calendar
                   </Link>
@@ -1306,29 +1310,29 @@ export function TaskDetailPage() {
         </div>
 
         <div className="mt-5">
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
             Activity
           </div>
           <div className="mt-4 grid gap-3">
             {payload.activity.length === 0 ? (
-              <div className="rounded-[18px] bg-white/[0.04] p-4 text-sm text-white/55">
+              <div className="rounded-[18px] bg-[var(--ui-surface-2)] p-4 text-sm text-[var(--ui-ink-faint)]">
                 No activity has been recorded for this task yet.
               </div>
             ) : null}
             {payload.activity.map((event) => (
               <div
                 key={event.id}
-                className="rounded-[18px] bg-white/[0.04] p-4"
+                className="rounded-[18px] bg-[var(--ui-surface-2)] p-4"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="font-medium text-white">
+                    <div className="font-medium text-[var(--ui-ink-strong)]">
                       {getReadableActivityTitle(event)}
                     </div>
-                    <div className="mt-2 text-sm leading-6 text-white/58">
+                    <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                       {getReadableActivityDescription(event)}
                     </div>
-                    <div className="mt-3 text-[11px] uppercase tracking-[0.16em] text-white/35">
+                    <div className="mt-3 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                       {formatDateTime(event.createdAt)}
                     </div>
                   </div>
@@ -1357,46 +1361,51 @@ export function TaskDetailPage() {
         </div>
 
         <div className="mt-5">
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
             Timer sessions
           </div>
           <div className="mt-4 grid gap-3">
             {payload.taskRuns.length === 0 ? (
-              <div className="rounded-[18px] bg-white/[0.04] p-4 text-sm text-white/55">
+              <div className="rounded-[18px] bg-[var(--ui-surface-2)] p-4 text-sm text-[var(--ui-ink-faint)]">
                 No timer sessions have been recorded for this task yet.
               </div>
             ) : null}
             {payload.taskRuns.map((run) => (
-              <div key={run.id} className="rounded-[18px] bg-white/[0.04] p-4">
+              <div
+                key={run.id}
+                className="rounded-[18px] bg-[var(--ui-surface-2)] p-4"
+              >
                 <div className="flex items-center justify-between gap-3">
-                  <div className="font-medium text-white">{run.actor}</div>
+                  <div className="font-medium text-[var(--ui-ink-strong)]">
+                    {run.actor}
+                  </div>
                   <Badge>{describeRunStatus(run.status)}</Badge>
                 </div>
                 {run.gitContext?.branch || run.gitContext?.pullRequestNumber ? (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {run.gitContext?.branch ? (
-                      <Badge className="bg-sky-500/12 text-sky-100">
+                      <Badge className="bg-[var(--ui-accent-soft)] text-[var(--primary)]">
                         <GitBranch className="mr-1 size-3" />
                         {run.gitContext.branch}
                       </Badge>
                     ) : null}
                     {run.gitContext?.pullRequestNumber ? (
-                      <Badge className="bg-fuchsia-500/12 text-fuchsia-100">
+                      <Badge className="bg-[var(--ui-accent-soft)] text-[var(--tertiary)]">
                         <GitPullRequest className="mr-1 size-3" />
                         PR #{run.gitContext.pullRequestNumber}
                       </Badge>
                     ) : null}
                     {run.gitContext?.repository ? (
-                      <Badge className="bg-white/[0.08] text-white/68">
+                      <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-soft)]">
                         {run.gitContext.repository}
                       </Badge>
                     ) : null}
                   </div>
                 ) : null}
-                <div className="mt-2 text-sm text-white/58">
+                <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
                   {run.note || t("common.labels.noRunNote")}
                 </div>
-                <div className="mt-3 text-[11px] uppercase tracking-[0.16em] text-white/35">
+                <div className="mt-3 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   {formatDateTime(run.updatedAt)}
                 </div>
               </div>
@@ -1512,8 +1521,8 @@ export function TaskDetailPage() {
                 disabled={selected || updateTaskMutation.isPending}
                 className={`rounded-[22px] border px-4 py-4 text-left transition ${
                   selected
-                    ? "border-[rgba(192,193,255,0.28)] bg-[rgba(192,193,255,0.14)] text-white"
-                    : "border-white/8 bg-white/[0.04] text-white/72 hover:bg-white/[0.08]"
+                    ? "border-[color-mix(in_srgb,var(--primary)_34%,var(--ui-border-subtle)_66%)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]"
+                    : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-3)]"
                 }`}
                 onClick={() => void handleStatusChange(entry.status)}
               >
@@ -1521,7 +1530,7 @@ export function TaskDetailPage() {
                   <Icon className="size-4 shrink-0 text-[var(--primary)]" />
                   <div>
                     <div className="font-medium">{entry.label}</div>
-                    <div className="mt-1 text-sm text-white/54">
+                    <div className="mt-1 text-sm text-[var(--ui-ink-faint)]">
                       {entry.description}
                     </div>
                   </div>

@@ -37,18 +37,18 @@ import { getTrainingLoadView } from "@/lib/api";
 import type { TrainingLoadViewData } from "@/lib/types";
 
 const INTENSITY_COLORS: Record<string, string> = {
-  low: "#22c55e",
-  moderate: "#f59e0b",
-  high: "#ef4444"
+  low: "var(--success)",
+  moderate: "var(--warning)",
+  high: "var(--danger)"
 };
 
 const ZONE_COLORS: Record<string, string> = {
-  below_z1: "#94a3b8",
-  zone_1: "#38bdf8",
-  zone_2: "#22c55e",
-  zone_3: "#eab308",
-  zone_4: "#f97316",
-  zone_5: "#ef4444"
+  below_z1: "var(--ui-ink-muted)",
+  zone_1: "var(--info)",
+  zone_2: "var(--success)",
+  zone_3: "var(--warning)",
+  zone_4: "var(--tertiary)",
+  zone_5: "var(--danger)"
 };
 
 const TRAINING_LOAD_HELP = {
@@ -138,19 +138,19 @@ function metricTile({
 }) {
   return (
     <Card className="relative min-h-[136px] overflow-hidden">
-      <div className="absolute right-3 top-3 rounded-[8px] border border-white/8 bg-white/[0.045] p-2 text-white/58">
+      <div className="absolute right-3 top-3 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-2 text-[var(--ui-ink-muted)]">
         <Icon className="size-4" />
       </div>
       <div className="flex max-w-[80%] items-center gap-1.5">
-        <div className="font-label text-[10px] uppercase tracking-[0.18em] text-white/45">
+        <div className="font-label text-[10px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
           {label}
         </div>
         <InfoTooltip label={`Explain ${label}`} title={label} content={help} />
       </div>
-      <div className="mt-4 font-display text-4xl leading-none text-white">
+      <div className="mt-4 font-display text-4xl leading-none text-[var(--ui-ink-strong)]">
         {value}
       </div>
-      <div className="mt-3 max-w-[24rem] text-[12px] leading-5 text-white/56">
+      <div className="mt-3 max-w-[24rem] text-[12px] leading-5 text-[var(--ui-ink-muted)]">
         {detail}
       </div>
     </Card>
@@ -174,7 +174,7 @@ function SectionHeading({
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
         <div className="flex items-center gap-1.5">
-          <div className="font-label text-[10px] uppercase tracking-[0.18em] text-white/45">
+          <div className="font-label text-[10px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
             {eyebrow}
           </div>
           <InfoTooltip
@@ -183,9 +183,9 @@ function SectionHeading({
             content={help}
           />
         </div>
-        <div className="mt-2 text-lg text-white">{title}</div>
+        <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">{title}</div>
         {description ? (
-          <div className="mt-1 max-w-2xl text-[12px] leading-5 text-white/50">
+          <div className="mt-1 max-w-2xl text-[12px] leading-5 text-[var(--ui-ink-muted)]">
             {description}
           </div>
         ) : null}
@@ -230,7 +230,7 @@ function distributionChartData(
     percent: Math.round(entry.percentage * 100),
     targetLow: Math.round(entry.targetRange[0] * 100),
     targetHigh: Math.round(entry.targetRange[1] * 100),
-    fill: INTENSITY_COLORS[entry.key] ?? "#f8fafc"
+    fill: INTENSITY_COLORS[entry.key] ?? "var(--ui-ink-medium)"
   }));
 }
 
@@ -246,7 +246,7 @@ function zoneChartData(
     ...zone,
     minutes: Math.round(zone.seconds / 60),
     percent: Math.round(zone.percentage * 100),
-    fill: ZONE_COLORS[zone.key] ?? "#f8fafc"
+    fill: ZONE_COLORS[zone.key] ?? "var(--ui-ink-medium)"
   }));
 }
 
@@ -292,14 +292,14 @@ function SessionSignalTable({
         {sessions.slice(0, 20).map((session) => (
           <div
             key={session.id}
-            className="rounded-[8px] border border-white/8 bg-white/[0.035] p-3"
+            className="rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-3"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <div className="truncate text-sm font-medium text-white/86">
+                <div className="truncate text-sm font-medium text-[var(--ui-ink-medium)]">
                   {session.workoutTypeLabel}
                 </div>
-                <div className="mt-1 text-[11px] text-white/46">
+                <div className="mt-1 text-[11px] text-[var(--ui-ink-muted)]">
                   {session.dateKey.slice(5)} ·{" "}
                   {numberLabel(session.durationMinutes, 0)}m ·{" "}
                   {session.confidence}
@@ -309,20 +309,20 @@ function SessionSignalTable({
                 {numberLabel(session.trainingLoad, 0)} load
               </Badge>
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-2 text-[12px] text-white/62">
-              <div className="rounded-[8px] bg-white/[0.04] px-2 py-1.5">
-                <div className="text-[10px] uppercase tracking-[0.14em] text-white/38">
+            <div className="mt-3 grid grid-cols-2 gap-2 text-[12px] text-[var(--ui-ink-medium)]">
+              <div className="rounded-[8px] bg-[var(--ui-surface-2)] px-2 py-1.5">
+                <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-muted)]">
                   Z4+Z5
                 </div>
-                <div className="mt-0.5 text-white">
+                <div className="mt-0.5 text-[var(--ui-ink-strong)]">
                   {pct(session.highIntensityPercentage)}
                 </div>
               </div>
-              <div className="rounded-[8px] bg-white/[0.04] px-2 py-1.5">
-                <div className="text-[10px] uppercase tracking-[0.14em] text-white/38">
+              <div className="rounded-[8px] bg-[var(--ui-surface-2)] px-2 py-1.5">
+                <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-muted)]">
                   HR
                 </div>
-                <div className="mt-0.5 text-white">
+                <div className="mt-0.5 text-[var(--ui-ink-strong)]">
                   {session.averageHr ? Math.round(session.averageHr) : "n/a"}
                   {session.maxHr ? `/${Math.round(session.maxHr)}` : ""}
                 </div>
@@ -332,8 +332,8 @@ function SessionSignalTable({
         ))}
       </div>
 
-      <div className="hidden overflow-hidden rounded-[8px] border border-white/8 md:block">
-        <div className="grid grid-cols-[88px_minmax(118px,1fr)_64px_72px_72px] bg-white/[0.045] px-3 py-2 text-[10px] uppercase tracking-[0.16em] text-white/42">
+      <div className="hidden overflow-hidden rounded-[8px] border border-[var(--ui-border-subtle)] md:block">
+        <div className="grid grid-cols-[88px_minmax(118px,1fr)_64px_72px_72px] bg-[var(--ui-surface-2)] px-3 py-2 text-[10px] uppercase tracking-[0.16em] text-[var(--ui-ink-muted)]">
           <div>Date</div>
           <div>Session</div>
           <div>Load</div>
@@ -344,19 +344,19 @@ function SessionSignalTable({
           {sessions.slice(0, 20).map((session) => (
             <div
               key={session.id}
-              className="grid grid-cols-[88px_minmax(118px,1fr)_64px_72px_72px] border-t border-white/6 px-3 py-2 text-[12px] text-white/66"
+              className="grid grid-cols-[88px_minmax(118px,1fr)_64px_72px_72px] border-t border-[var(--ui-border-subtle)] px-3 py-2 text-[12px] text-[var(--ui-ink-medium)]"
             >
-              <div className="text-white/52">{session.dateKey.slice(5)}</div>
+              <div className="text-[var(--ui-ink-strong)]/52">{session.dateKey.slice(5)}</div>
               <div className="min-w-0">
-                <div className="truncate text-white/86">
+                <div className="truncate text-[var(--ui-ink-medium)]">
                   {session.workoutTypeLabel}
                 </div>
-                <div className="mt-0.5 text-[10px] text-white/42">
+                <div className="mt-0.5 text-[10px] text-[var(--ui-ink-muted)]">
                   {numberLabel(session.durationMinutes, 0)}m ·{" "}
                   {session.confidence}
                 </div>
               </div>
-              <div className="text-white">
+              <div className="text-[var(--ui-ink-strong)]">
                 {numberLabel(session.trainingLoad, 0)}
               </div>
               <div>{pct(session.highIntensityPercentage)}</div>
@@ -515,42 +515,42 @@ export function TrainingLoadPage() {
                     >
                       <stop
                         offset="0%"
-                        stopColor="#38bdf8"
+                        stopColor="var(--info)"
                         stopOpacity={0.38}
                       />
                       <stop
                         offset="100%"
-                        stopColor="#38bdf8"
+                        stopColor="var(--info)"
                         stopOpacity={0.04}
                       />
                     </linearGradient>
                   </defs>
                   <CartesianGrid
-                    stroke="rgba(255,255,255,0.08)"
+                    stroke="var(--ui-border-subtle)"
                     vertical={false}
                   />
                   <XAxis
                     dataKey="week"
-                    tick={{ fill: "rgba(255,255,255,0.54)", fontSize: 10 }}
+                    tick={{ fill: "var(--ui-ink-muted)", fontSize: 10 }}
                   />
                   <YAxis
                     yAxisId="load"
-                    tick={{ fill: "rgba(255,255,255,0.54)", fontSize: 10 }}
+                    tick={{ fill: "var(--ui-ink-muted)", fontSize: 10 }}
                     width={42}
                   />
                   <YAxis
                     yAxisId="pct"
                     orientation="right"
                     domain={[0, 100]}
-                    tick={{ fill: "rgba(255,255,255,0.54)", fontSize: 10 }}
+                    tick={{ fill: "var(--ui-ink-muted)", fontSize: 10 }}
                     width={38}
                   />
                   <Tooltip
                     contentStyle={{
-                      background: "rgba(6,10,18,0.96)",
-                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: "var(--ui-surface-modal)",
+                      border: "1px solid var(--ui-border-subtle)",
                       borderRadius: 8,
-                      color: "white"
+                      color: "var(--ui-ink-strong)"
                     }}
                   />
                   <Area
@@ -558,7 +558,7 @@ export function TrainingLoadPage() {
                     type="monotone"
                     dataKey="load"
                     name="Training load"
-                    stroke="#38bdf8"
+                    stroke="var(--info)"
                     fill="url(#trainingLoadFill)"
                     strokeWidth={2}
                   />
@@ -566,7 +566,7 @@ export function TrainingLoadPage() {
                     yAxisId="load"
                     dataKey="hours"
                     name="Hours"
-                    fill="#a78bfa"
+                    fill="var(--primary)"
                     radius={[3, 3, 0, 0]}
                   />
                   <Line
@@ -574,7 +574,7 @@ export function TrainingLoadPage() {
                     type="monotone"
                     dataKey="high"
                     name="Z4+Z5 %"
-                    stroke="#ef4444"
+                    stroke="var(--danger)"
                     strokeWidth={2.4}
                     dot={{ r: 2 }}
                   />
@@ -595,23 +595,23 @@ export function TrainingLoadPage() {
             <ChartBox height={300}>
               {({ width, height }) => (
                 <RadarChart data={radarData} width={width} height={height}>
-                  <PolarGrid stroke="rgba(255,255,255,0.12)" />
+                  <PolarGrid stroke="var(--ui-border-subtle)" />
                   <PolarAngleAxis
                     dataKey="axis"
-                    tick={{ fill: "rgba(255,255,255,0.64)", fontSize: 10 }}
+                    tick={{ fill: "var(--ui-ink-muted)", fontSize: 10 }}
                   />
                   <Radar
                     dataKey="value"
-                    stroke="#22c55e"
-                    fill="#22c55e"
+                    stroke="var(--success)"
+                    fill="var(--success)"
                     fillOpacity={0.24}
                   />
                   <Tooltip
                     contentStyle={{
-                      background: "rgba(6,10,18,0.96)",
-                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: "var(--ui-surface-modal)",
+                      border: "1px solid var(--ui-border-subtle)",
                       borderRadius: 8,
-                      color: "white"
+                      color: "var(--ui-ink-strong)"
                     }}
                   />
                 </RadarChart>
@@ -629,7 +629,7 @@ export function TrainingLoadPage() {
             description="Compare the selected time window with broad low, moderate, and high intensity bands."
             help={TRAINING_LOAD_HELP.intensityTarget}
             action={
-              <div className="grid grid-cols-2 gap-1 rounded-[8px] border border-white/8 bg-white/[0.035] p-1">
+              <div className="grid grid-cols-2 gap-1 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-1">
                 {[
                   ["recent", "28d"],
                   ["all", "All"]
@@ -639,8 +639,8 @@ export function TrainingLoadPage() {
                     type="button"
                     className={`rounded-[6px] px-3 py-1.5 text-[12px] ${
                       timeWindow === value
-                        ? "bg-white/[0.12] text-white"
-                        : "text-white/54"
+                        ? "bg-[var(--ui-surface-2)] text-[var(--ui-ink-strong)]"
+                        : "text-[var(--ui-ink-muted)]"
                     }`}
                     onClick={() => setTimeWindow(value as TimeWindow)}
                   >
@@ -654,15 +654,15 @@ export function TrainingLoadPage() {
             {intensityData.map((entry) => (
               <div key={entry.key} className="grid gap-2">
                 <div className="flex items-center justify-between gap-3 text-[12px]">
-                  <span className="text-white/74">{entry.label}</span>
-                  <span className="text-white">
+                  <span className="text-[var(--ui-ink-medium)]">{entry.label}</span>
+                  <span className="text-[var(--ui-ink-strong)]">
                     {entry.percent}% · target {entry.targetLow}-
                     {entry.targetHigh}%
                   </span>
                 </div>
-                <div className="relative h-3 overflow-hidden rounded-full bg-white/[0.08]">
+                <div className="relative h-3 overflow-hidden rounded-full bg-[var(--ui-surface-2)]">
                   <div
-                    className="absolute inset-y-0 rounded-full bg-white/[0.12]"
+                    className="absolute inset-y-0 rounded-full bg-[var(--ui-surface-2)]"
                     style={{
                       left: `${entry.targetLow}%`,
                       width: `${Math.max(2, entry.targetHigh - entry.targetLow)}%`
@@ -679,7 +679,7 @@ export function TrainingLoadPage() {
               </div>
             ))}
           </div>
-          <div className="mt-5 grid gap-2 rounded-[8px] border border-white/8 bg-white/[0.035] p-3 text-[12px] leading-5 text-white/54">
+          <div className="mt-5 grid gap-2 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-3 text-[12px] leading-5 text-[var(--ui-ink-muted)]">
             {trainingLoad.targetModel.monitoringNotes.map((note) => (
               <div key={note} className="flex gap-2">
                 <Target className="mt-0.5 size-3.5 shrink-0 text-[var(--primary)]" />
@@ -704,16 +704,16 @@ export function TrainingLoadPage() {
               {({ width, height }) => (
                 <BarChart data={zoneData} width={width} height={height}>
                   <CartesianGrid
-                    stroke="rgba(255,255,255,0.08)"
+                    stroke="var(--ui-border-subtle)"
                     vertical={false}
                   />
                   <XAxis
                     dataKey="label"
                     interval={0}
-                    tick={{ fill: "rgba(255,255,255,0.56)", fontSize: 10 }}
+                    tick={{ fill: "var(--ui-ink-muted)", fontSize: 10 }}
                   />
                   <YAxis
-                    tick={{ fill: "rgba(255,255,255,0.56)", fontSize: 10 }}
+                    tick={{ fill: "var(--ui-ink-muted)", fontSize: 10 }}
                     width={38}
                   />
                   <Tooltip
@@ -722,10 +722,10 @@ export function TrainingLoadPage() {
                       name
                     ]}
                     contentStyle={{
-                      background: "rgba(6,10,18,0.96)",
-                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: "var(--ui-surface-modal)",
+                      border: "1px solid var(--ui-border-subtle)",
                       borderRadius: 8,
-                      color: "white"
+                      color: "var(--ui-ink-strong)"
                     }}
                   />
                   <Bar dataKey="minutes" name="minutes" radius={[4, 4, 0, 0]}>
@@ -756,58 +756,58 @@ export function TrainingLoadPage() {
                   height={height}
                 >
                   <CartesianGrid
-                    stroke="rgba(255,255,255,0.08)"
+                    stroke="var(--ui-border-subtle)"
                     vertical={false}
                   />
                   <XAxis
                     dataKey="date"
-                    tick={{ fill: "rgba(255,255,255,0.54)", fontSize: 10 }}
+                    tick={{ fill: "var(--ui-ink-muted)", fontSize: 10 }}
                   />
                   <YAxis
                     yAxisId="minutes"
-                    tick={{ fill: "rgba(255,255,255,0.54)", fontSize: 10 }}
+                    tick={{ fill: "var(--ui-ink-muted)", fontSize: 10 }}
                     width={38}
                   />
                   <YAxis
                     yAxisId="load"
                     orientation="right"
-                    tick={{ fill: "rgba(255,255,255,0.54)", fontSize: 10 }}
+                    tick={{ fill: "var(--ui-ink-muted)", fontSize: 10 }}
                     width={38}
                   />
                   <Tooltip
                     contentStyle={{
-                      background: "rgba(6,10,18,0.96)",
-                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: "var(--ui-surface-modal)",
+                      border: "1px solid var(--ui-border-subtle)",
                       borderRadius: 8,
-                      color: "white"
+                      color: "var(--ui-ink-strong)"
                     }}
                   />
                   <Bar
                     yAxisId="minutes"
                     dataKey="low"
                     stackId="zones"
-                    fill="#22c55e"
+                    fill="var(--success)"
                     name="low min"
                   />
                   <Bar
                     yAxisId="minutes"
                     dataKey="moderate"
                     stackId="zones"
-                    fill="#f59e0b"
+                    fill="var(--warning)"
                     name="threshold min"
                   />
                   <Bar
                     yAxisId="minutes"
                     dataKey="high"
                     stackId="zones"
-                    fill="#ef4444"
+                    fill="var(--danger)"
                     name="high min"
                   />
                   <Line
                     yAxisId="load"
                     type="monotone"
                     dataKey="load"
-                    stroke="#38bdf8"
+                    stroke="var(--info)"
                     strokeWidth={2.2}
                     dot={false}
                   />
@@ -843,31 +843,31 @@ export function TrainingLoadPage() {
             {trainingLoad.activityBreakdown.slice(0, 8).map((activity) => (
               <div
                 key={activity.workoutType}
-                className="grid gap-2 rounded-[8px] border border-white/8 bg-white/[0.035] p-3 sm:grid-cols-[minmax(0,1fr)_76px_76px_76px]"
+                className="grid gap-2 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-3 sm:grid-cols-[minmax(0,1fr)_76px_76px_76px]"
               >
                 <div>
-                  <div className="truncate text-sm text-white">
+                  <div className="truncate text-sm text-[var(--ui-ink-strong)]">
                     {activity.workoutTypeLabel}
                   </div>
-                  <div className="mt-1 text-[11px] text-white/46">
+                  <div className="mt-1 text-[11px] text-[var(--ui-ink-muted)]">
                     {activity.sessionCount} sessions ·{" "}
                     {activity.activityFamilyLabel}
                   </div>
                 </div>
-                <div className="text-[12px] text-white/62">
-                  <span className="block text-white">
+                <div className="text-[12px] text-[var(--ui-ink-medium)]">
+                  <span className="block text-[var(--ui-ink-strong)]">
                     {activity.durationHours}h
                   </span>
                   volume
                 </div>
-                <div className="text-[12px] text-white/62">
-                  <span className="block text-white">
+                <div className="text-[12px] text-[var(--ui-ink-medium)]">
+                  <span className="block text-[var(--ui-ink-strong)]">
                     {activity.trainingLoad}
                   </span>
                   load
                 </div>
-                <div className="text-[12px] text-white/62">
-                  <span className="block text-white">
+                <div className="text-[12px] text-[var(--ui-ink-medium)]">
+                  <span className="block text-[var(--ui-ink-strong)]">
                     {pct(activity.highPercentage)}
                   </span>
                   high
@@ -879,12 +879,12 @@ export function TrainingLoadPage() {
 
         <Card>
           <div className="flex items-center gap-2">
-            <AlertTriangle className="size-4 text-amber-300" />
-            <div className="font-label text-[10px] uppercase tracking-[0.18em] text-white/45">
+            <AlertTriangle className="size-4 text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]" />
+            <div className="font-label text-[10px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
               Interpretation guardrails
             </div>
           </div>
-          <div className="mt-4 grid gap-3 text-[12px] leading-5 text-white/56">
+          <div className="mt-4 grid gap-3 text-[12px] leading-5 text-[var(--ui-ink-muted)]">
             <p>
               Forge is estimating training stress from heart-rate reserve zones
               and a TRIMP-like load. This is good for trend decisions, but it is

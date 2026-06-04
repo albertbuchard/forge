@@ -194,39 +194,39 @@ export function WorkAdjustmentDialog({
             </div>
           </FlowField>
 
-          <div className="rounded-[24px] border border-white/8 bg-white/[0.04] p-4">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/42">
+          <div className="rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
               Preview
             </div>
             <div className="mt-3 grid gap-3 md:grid-cols-3">
-              <div className="rounded-[18px] bg-white/[0.03] px-4 py-3">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+              <div className="rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   Applied minutes
                 </div>
-                <div className="mt-2 text-lg text-white">
+                <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
                   {preview.appliedDeltaMinutes > 0 ? "+" : ""}
                   {preview.appliedDeltaMinutes}
                 </div>
               </div>
-              <div className="rounded-[18px] bg-white/[0.03] px-4 py-3">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+              <div className="rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   XP delta
                 </div>
-                <div className="mt-2 text-lg text-white">
+                <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
                   {preview.xpDelta > 0 ? "+" : ""}
                   {preview.xpDelta}
                 </div>
               </div>
-              <div className="rounded-[18px] bg-white/[0.03] px-4 py-3">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+              <div className="rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   New tracked total
                 </div>
-                <div className="mt-2 text-lg text-white">
+                <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
                   {Math.floor(preview.nextCreditedSeconds / 60)} min
                 </div>
               </div>
             </div>
-            <div className="mt-3 text-sm leading-6 text-white/58">
+            <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
               Reward cadence: {cadence.fixedXp} XP every{" "}
               {cadence.intervalMinutes} credited minutes.{" "}
               {preview.bucketDelta === 0

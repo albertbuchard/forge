@@ -67,8 +67,10 @@ function formatSyncSummary(payloadSummary: Record<string, unknown>) {
     payloadSummary.vitals &&
     typeof payloadSummary.vitals === "object" &&
     !Array.isArray(payloadSummary.vitals) &&
-    typeof (payloadSummary.vitals as Record<string, unknown>).metricEntries === "number"
-      ? ((payloadSummary.vitals as Record<string, unknown>).metricEntries as number)
+    typeof (payloadSummary.vitals as Record<string, unknown>).metricEntries ===
+      "number"
+      ? ((payloadSummary.vitals as Record<string, unknown>)
+          .metricEntries as number)
       : 0;
   return `${sleepNights || sleepSessions} nights · ${sleepSegments} segments · ${sleepRawRecords} raw records · ${workouts} workouts · ${vitals} vitals`;
 }
@@ -105,6 +107,19 @@ function formatTransportLabel(payload: CompanionPairingQrPayload) {
 function transportTone(payload: CompanionPairingQrPayload) {
   return payload.transportMode === "iroh" ? "signal" : "meta";
 }
+
+const mobileEyebrowClass =
+  "font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]";
+const mobileBodyClass = "text-[var(--ui-ink-soft)]";
+const mobileFaintClass = "text-[var(--ui-ink-faint)]";
+const mobilePanelClass =
+  "rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]";
+const mobileInsetPanelClass =
+  "rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]";
+const mobileDashedPanelClass =
+  "rounded-[24px] border border-dashed border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]";
+const mobileActionLinkClass =
+  "inline-flex min-h-11 items-center gap-2 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3 text-sm text-[var(--ui-ink-medium)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]";
 
 export function SettingsMobilePage() {
   const shell = useForgeShell();
@@ -214,7 +229,9 @@ export function SettingsMobilePage() {
     return (
       <ErrorState
         eyebrow="Companion"
-        error={overviewQuery.error ?? new Error("Companion overview unavailable")}
+        error={
+          overviewQuery.error ?? new Error("Companion overview unavailable")
+        }
         onRetry={() => void overviewQuery.refetch()}
       />
     );
@@ -263,7 +280,7 @@ export function SettingsMobilePage() {
   };
 
   return (
-    <div className="mx-auto grid w-full max-w-[1220px] gap-5 pb-24 lg:pb-0">
+    <div className="mx-auto grid min-w-0 w-full max-w-[1220px] gap-5 pb-24 lg:pb-0">
       <PageHero
         title="Mobile companion"
         description="Pair the native iPhone companion, sync Apple Health, and keep the bridge open for watch and location signals."
@@ -272,36 +289,35 @@ export function SettingsMobilePage() {
 
       <SettingsSectionNav />
 
-      <section className="grid gap-4">
+      <section className="grid min-w-0 gap-4">
         {import.meta.env.DEV ? (
-          <Card className="flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-dashed border-white/10 bg-white/[0.02] p-4">
+          <Card className="flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-dashed border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
             <div className="grid gap-1">
-              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/42">
-                QA lab
-              </div>
-              <div className="text-sm text-white/62">
-                Open deterministic source-state and movement-gap fixtures without a real phone.
+              <div className={mobileEyebrowClass}>QA lab</div>
+              <div className={`text-sm ${mobileBodyClass}`}>
+                Open deterministic source-state and movement-gap fixtures
+                without a real phone.
               </div>
             </div>
             <Link
               to="/settings/mobile/lab"
-              className="inline-flex h-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] px-4 text-sm font-medium text-white transition hover:bg-white/[0.1]"
+              className="inline-flex h-10 items-center justify-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 text-sm font-medium text-[var(--ui-ink-strong)] transition hover:bg-[var(--ui-surface-hover)]"
             >
               Open Companion Sync Lab
             </Link>
           </Card>
         ) : null}
 
-        <Card className="grid gap-4">
+        <Card className="grid min-w-0 gap-4 overflow-hidden">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-                Pair iPhone
-              </div>
-              <div className="mt-2 text-lg text-white">
+              <div className={mobileEyebrowClass}>Pair iPhone</div>
+              <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
                 Pair your iPhone privately
               </div>
-              <div className="mt-2 max-w-3xl text-sm leading-6 text-white/58">
+              <div
+                className={`mt-2 max-w-3xl text-sm leading-6 ${mobileBodyClass}`}
+              >
                 Forge uses its own Iroh/QUIC companion route by default. Scan
                 once from the iPhone app; manual HTTP stays as the advanced LAN
                 or Tailscale path.
@@ -348,21 +364,25 @@ export function SettingsMobilePage() {
           </div>
 
           {qrPanelOpen ? (
-            <div className="grid gap-4 rounded-[24px] border border-white/8 bg-white/[0.03] p-4 sm:p-5">
-              <div className="grid gap-4 lg:grid-cols-[minmax(260px,360px)_1fr]">
+            <div className="grid min-w-0 gap-4 overflow-hidden rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4 sm:p-5">
+              <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(260px,360px)_1fr]">
                 {qrDataUrl ? (
-                  <div className="grid justify-items-center gap-4 rounded-[24px] bg-white px-6 py-6 text-slate-950">
+                  <div className="grid justify-items-center gap-4 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-6 py-6 text-[var(--ui-ink-strong)]">
                     <img
                       src={qrDataUrl}
                       alt="Forge Companion pairing QR code"
                       className="w-full max-w-[320px]"
                     />
-                    <div className="max-w-[320px] text-center text-sm text-slate-600">
+                    <div
+                      className={`max-w-[320px] text-center text-sm ${mobileBodyClass}`}
+                    >
                       Scan this code from Forge Companion on iPhone.
                     </div>
                   </div>
                 ) : (
-                  <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] px-5 py-8 text-center text-sm text-white/55">
+                  <div
+                    className={`${mobileDashedPanelClass} px-5 py-8 text-center text-sm ${mobileBodyClass}`}
+                  >
                     Generating the QR code now.
                   </div>
                 )}
@@ -381,20 +401,30 @@ export function SettingsMobilePage() {
                     </Badge>
                   </div>
 
-                  <div className="grid gap-3 text-sm leading-6 text-white/66">
+                  <div
+                    className={`grid gap-3 text-sm leading-6 ${mobileBodyClass}`}
+                  >
                     <div className="flex gap-3">
-                      <ScanLine className="mt-1 size-4 shrink-0 text-white/45" />
-                      <span>Open Forge Companion and choose Scan Forge QR.</span>
+                      <ScanLine
+                        className={`mt-1 size-4 shrink-0 ${mobileFaintClass}`}
+                      />
+                      <span>
+                        Open Forge Companion and choose Scan Forge QR.
+                      </span>
                     </div>
                     <div className="flex gap-3">
-                      <LockKeyhole className="mt-1 size-4 shrink-0 text-white/45" />
+                      <LockKeyhole
+                        className={`mt-1 size-4 shrink-0 ${mobileFaintClass}`}
+                      />
                       <span>
                         The iPhone receives the desktop node, relay hint, and
                         pairing token for the Forge Iroh route.
                       </span>
                     </div>
                     <div className="flex gap-3">
-                      <Check className="mt-1 size-4 shrink-0 text-white/45" />
+                      <Check
+                        className={`mt-1 size-4 shrink-0 ${mobileFaintClass}`}
+                      />
                       <span>
                         After verification, the app moves straight into native
                         permissions and first sync.
@@ -402,8 +432,10 @@ export function SettingsMobilePage() {
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] bg-white/[0.04] p-4">
-                    <div className="text-sm text-white/62">
+                  <div
+                    className={`flex flex-wrap items-center justify-between gap-3 ${mobileInsetPanelClass} p-4`}
+                  >
+                    <div className={`text-sm ${mobileBodyClass}`}>
                       {latestPairing ? (
                         <span>
                           Expires{" "}
@@ -432,11 +464,17 @@ export function SettingsMobilePage() {
               </div>
 
               {latestPairing ? (
-                <div className="grid gap-3 rounded-[18px] bg-white/[0.04] p-4 text-sm text-white/62">
+                <div
+                  className={`grid gap-3 ${mobileInsetPanelClass} p-4 text-sm ${mobileBodyClass}`}
+                >
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="max-w-2xl">
-                      <div className="text-white/78">Fallback pairing payload</div>
-                      <div className="mt-1 text-xs leading-5 text-white/45">
+                      <div className="text-[var(--ui-ink-strong)]">
+                        Fallback pairing payload
+                      </div>
+                      <div
+                        className={`mt-1 text-xs leading-5 ${mobileFaintClass}`}
+                      >
                         Use this only when the iPhone camera cannot scan the QR.
                         The payload contains the same Forge Iroh connection
                         recipe.
@@ -468,7 +506,7 @@ export function SettingsMobilePage() {
                     </div>
                   </div>
                   {payloadPanelOpen ? (
-                    <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-[16px] bg-slate-950/60 p-3 font-mono text-[11px] leading-5 text-white/70">
+                    <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-code-bg)] p-3 font-mono text-[11px] leading-5 text-[var(--ui-code-text)]">
                       {pairingPayloadText}
                     </pre>
                   ) : null}
@@ -476,80 +514,88 @@ export function SettingsMobilePage() {
               ) : null}
             </div>
           ) : (
-            <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] px-5 py-6 text-sm leading-6 text-white/55">
-              Generate a one-time Forge QR when the iPhone is in your hand.
-              The code expires automatically and can be regenerated anytime.
+            <div
+              className={`${mobileDashedPanelClass} px-5 py-6 text-sm leading-6 ${mobileBodyClass}`}
+            >
+              Generate a one-time Forge QR when the iPhone is in your hand. The
+              code expires automatically and can be regenerated anytime.
             </div>
           )}
         </Card>
 
-        <Card className="grid gap-4">
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-            Companion state
-          </div>
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="rounded-[18px] bg-white/[0.04] p-4">
-              <div className="text-sm text-white/58">Pairings</div>
-              <div className="mt-2 font-display text-3xl text-white">
+        <Card className="grid min-w-0 gap-4 overflow-hidden">
+          <div className={mobileEyebrowClass}>Companion state</div>
+          <div className="grid min-w-0 max-w-full gap-3 md:grid-cols-3">
+            <div className={`${mobilePanelClass} p-4`}>
+              <div className={`text-sm ${mobileBodyClass}`}>Pairings</div>
+              <div className="mt-2 font-display text-3xl text-[var(--ui-ink-strong)]">
                 {activePairings.length}
               </div>
               {revokedPairingsCount > 0 ? (
-                <div className="mt-2 text-xs text-white/42">
+                <div className={`mt-2 text-xs ${mobileFaintClass}`}>
                   {revokedPairingsCount} revoked hidden
                 </div>
               ) : null}
             </div>
-            <div className="rounded-[18px] bg-white/[0.04] p-4">
-              <div className="text-sm text-white/58">Sleep sessions</div>
-              <div className="mt-2 font-display text-3xl text-white">
+            <div className={`${mobilePanelClass} p-4`}>
+              <div className={`text-sm ${mobileBodyClass}`}>Sleep sessions</div>
+              <div className="mt-2 font-display text-3xl text-[var(--ui-ink-strong)]">
                 {overview.counts.sleepSessions}
               </div>
             </div>
-            <div className="rounded-[18px] bg-white/[0.04] p-4">
-              <div className="text-sm text-white/58">Raw sleep records</div>
-              <div className="mt-2 font-display text-3xl text-white">
+            <div className={`${mobilePanelClass} p-4`}>
+              <div className={`text-sm ${mobileBodyClass}`}>
+                Raw sleep records
+              </div>
+              <div className="mt-2 font-display text-3xl text-[var(--ui-ink-strong)]">
                 {overview.counts.sleepRawRecords}
               </div>
             </div>
-            <div className="rounded-[18px] bg-white/[0.04] p-4">
-              <div className="text-sm text-white/58">Workouts</div>
-              <div className="mt-2 font-display text-3xl text-white">
+            <div className={`${mobilePanelClass} p-4`}>
+              <div className={`text-sm ${mobileBodyClass}`}>Workouts</div>
+              <div className="mt-2 font-display text-3xl text-[var(--ui-ink-strong)]">
                 {overview.counts.workouts}
               </div>
             </div>
-            <div className="rounded-[18px] bg-white/[0.04] p-4">
-              <div className="text-sm text-white/58">Vitals days</div>
-              <div className="mt-2 font-display text-3xl text-white">
+            <div className={`${mobilePanelClass} p-4`}>
+              <div className={`text-sm ${mobileBodyClass}`}>Vitals days</div>
+              <div className="mt-2 font-display text-3xl text-[var(--ui-ink-strong)]">
                 {overview.counts.vitalsDaySummaries ?? 0}
               </div>
             </div>
-            <div className="rounded-[18px] bg-white/[0.04] p-4">
-              <div className="text-sm text-white/58">Vital entries</div>
-              <div className="mt-2 font-display text-3xl text-white">
+            <div className={`${mobilePanelClass} p-4`}>
+              <div className={`text-sm ${mobileBodyClass}`}>Vital entries</div>
+              <div className="mt-2 font-display text-3xl text-[var(--ui-ink-strong)]">
                 {overview.counts.vitalsMetricEntries ?? 0}
               </div>
             </div>
-            <div className="rounded-[18px] bg-white/[0.04] p-4">
-              <div className="text-sm text-white/58">Reflected sleep</div>
-              <div className="mt-2 font-display text-3xl text-white">
+            <div className={`${mobilePanelClass} p-4`}>
+              <div className={`text-sm ${mobileBodyClass}`}>
+                Reflected sleep
+              </div>
+              <div className="mt-2 font-display text-3xl text-[var(--ui-ink-strong)]">
                 {overview.counts.reflectiveSleepSessions}
               </div>
             </div>
-            <div className="rounded-[18px] bg-white/[0.04] p-4">
-              <div className="text-sm text-white/58">Linked workouts</div>
-              <div className="mt-2 font-display text-3xl text-white">
+            <div className={`${mobilePanelClass} p-4`}>
+              <div className={`text-sm ${mobileBodyClass}`}>
+                Linked workouts
+              </div>
+              <div className="mt-2 font-display text-3xl text-[var(--ui-ink-strong)]">
                 {overview.counts.linkedWorkouts}
               </div>
             </div>
-            <div className="rounded-[18px] bg-white/[0.04] p-4">
-              <div className="text-sm text-white/58">Habit-generated</div>
-              <div className="mt-2 font-display text-3xl text-white">
+            <div className={`${mobilePanelClass} p-4`}>
+              <div className={`text-sm ${mobileBodyClass}`}>
+                Habit-generated
+              </div>
+              <div className="mt-2 font-display text-3xl text-[var(--ui-ink-strong)]">
                 {overview.counts.habitGeneratedWorkouts}
               </div>
             </div>
-            <div className="rounded-[18px] bg-white/[0.04] p-4">
-              <div className="text-sm text-white/58">Reconciled</div>
-              <div className="mt-2 font-display text-3xl text-white">
+            <div className={`${mobilePanelClass} p-4`}>
+              <div className={`text-sm ${mobileBodyClass}`}>Reconciled</div>
+              <div className="mt-2 font-display text-3xl text-[var(--ui-ink-strong)]">
                 {overview.counts.reconciledWorkouts}
               </div>
             </div>
@@ -562,14 +608,21 @@ export function SettingsMobilePage() {
                 Last sync {new Date(overview.lastSyncAt).toLocaleString()}
               </Badge>
             ) : null}
-            <Badge tone={permissionTone(overview.permissions.healthKitAuthorized)}>
-              HealthKit {overview.permissions.healthKitAuthorized ? "ready" : "needed"}
+            <Badge
+              tone={permissionTone(overview.permissions.healthKitAuthorized)}
+            >
+              HealthKit{" "}
+              {overview.permissions.healthKitAuthorized ? "ready" : "needed"}
             </Badge>
             <Badge
-              tone={permissionTone(overview.permissions.backgroundRefreshEnabled)}
+              tone={permissionTone(
+                overview.permissions.backgroundRefreshEnabled
+              )}
             >
               Background refresh{" "}
-              {overview.permissions.backgroundRefreshEnabled ? "ready" : "not yet"}
+              {overview.permissions.backgroundRefreshEnabled
+                ? "ready"
+                : "not yet"}
             </Badge>
             <Badge tone="meta">
               Location {overview.permissions.locationReady ? "ready" : "later"}
@@ -579,21 +632,27 @@ export function SettingsMobilePage() {
             </Badge>
           </div>
 
-          <div className="grid gap-3 rounded-[18px] bg-white/[0.04] p-4">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-              Pairing path
-            </div>
-            <div className="grid gap-2 text-sm text-white/62">
+          <div className={`grid gap-3 ${mobileInsetPanelClass} p-4`}>
+            <div className={mobileEyebrowClass}>Pairing path</div>
+            <div className={`grid gap-2 text-sm ${mobileBodyClass}`}>
               <div>1. Generate the Forge QR from this page.</div>
-              <div>2. Scan it in Forge Companion to pass the desktop node and pairing token.</div>
-              <div>3. Approve Health access on iPhone, then run the first sync.</div>
-              <div>4. Use Advanced HTTP only for a local, Tailscale, or direct TCP route.</div>
+              <div>
+                2. Scan it in Forge Companion to pass the desktop node and
+                pairing token.
+              </div>
+              <div>
+                3. Approve Health access on iPhone, then run the first sync.
+              </div>
+              <div>
+                4. Use Advanced HTTP only for a local, Tailscale, or direct TCP
+                route.
+              </div>
             </div>
           </div>
 
-          <div className="grid gap-3">
+          <div className="grid min-w-0 gap-3">
             {activePairings.length > 0 ? (
-              <div className="flex justify-end">
+              <div className="flex min-w-0 max-w-full justify-end overflow-hidden">
                 <Button
                   variant="secondary"
                   pending={revokeAllMutation.isPending}
@@ -608,19 +667,21 @@ export function SettingsMobilePage() {
             {activePairings.map((pairing) => (
               <div
                 key={pairing.id}
-                className="grid gap-3 rounded-[18px] bg-white/[0.04] px-4 py-4"
+                className={`grid min-w-0 max-w-full gap-3 overflow-hidden ${mobilePanelClass} px-4 py-4`}
               >
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <div className="text-base text-white">
+                <div className="flex min-w-0 max-w-full flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-base text-[var(--ui-ink-strong)]">
                       {pairing.deviceName ?? pairing.label}
                     </div>
-                    <div className="mt-1 text-sm text-white/56">
+                    <div className={`mt-1 text-sm ${mobileBodyClass}`}>
                       {pairing.platform ?? "ios"} · {pairing.status}
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Badge tone={pairing.status === "healthy" ? "signal" : "meta"}>
+                  <div className="flex min-w-0 flex-wrap gap-2">
+                    <Badge
+                      tone={pairing.status === "healthy" ? "signal" : "meta"}
+                    >
                       {pairing.status.replaceAll("_", " ")}
                     </Badge>
                     {pairing.lastSyncAt ? (
@@ -630,21 +691,25 @@ export function SettingsMobilePage() {
                     ) : null}
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex min-w-0 max-w-full flex-wrap gap-2 overflow-hidden">
                   {pairing.capabilities.map((capability) => (
                     <Badge key={capability} tone="meta" size="sm" wrap>
                       {formatCapabilityLabel(capability)}
                     </Badge>
                   ))}
                 </div>
-                <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-white/55">
-                  <div className="grid gap-1">
-                    <div>{pairing.apiBaseUrl}</div>
-                    <div>
+                <div
+                  className={`flex min-w-0 max-w-full flex-wrap items-center justify-between gap-3 overflow-hidden text-sm ${mobileBodyClass}`}
+                >
+                  <div className="grid min-w-0 max-w-full flex-1 basis-[16rem] gap-1">
+                    <div className="min-w-0 max-w-full break-all [overflow-wrap:anywhere]">
+                      {pairing.apiBaseUrl}
+                    </div>
+                    <div className="min-w-0 max-w-full break-words [overflow-wrap:anywhere]">
                       Expires {new Date(pairing.expiresAt).toLocaleString()}
                     </div>
                     {pairing.lastSyncError ? (
-                      <div className="text-rose-200/80">
+                      <div className="text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]">
                         {pairing.lastSyncError}
                       </div>
                     ) : null}
@@ -663,10 +728,8 @@ export function SettingsMobilePage() {
                     {pairing.status === "revoked" ? "Revoked" : "Revoke"}
                   </Button>
                 </div>
-                <div className="grid gap-3 rounded-[16px] border border-white/8 bg-white/[0.03] p-3">
-                  <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-                    Device sync sources
-                  </div>
+                <div className="grid min-w-0 gap-3 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3">
+                  <div className={mobileEyebrowClass}>Device sync sources</div>
                   {(
                     [
                       ["health", "Health"],
@@ -679,16 +742,19 @@ export function SettingsMobilePage() {
                       source.desiredEnabled !== source.appliedEnabled;
                     const loading =
                       sourceToggleMutation.isPending &&
-                      sourceToggleMutation.variables?.pairingSessionId === pairing.id &&
+                      sourceToggleMutation.variables?.pairingSessionId ===
+                        pairing.id &&
                       sourceToggleMutation.variables?.source === sourceKey;
                     return (
                       <div
                         key={sourceKey}
-                        className="flex flex-wrap items-center justify-between gap-3 rounded-[14px] border border-white/6 bg-white/[0.03] px-3 py-3"
+                        className="flex flex-wrap items-center justify-between gap-3 rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-3"
                       >
-                        <div className="grid gap-1">
+                        <div className="grid min-w-0 gap-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <div className="text-sm text-white">{label}</div>
+                            <div className="text-sm text-[var(--ui-ink-strong)]">
+                              {label}
+                            </div>
                             <Badge
                               tone={sourceTone(
                                 source.desiredEnabled,
@@ -708,10 +774,16 @@ export function SettingsMobilePage() {
                               </Badge>
                             )}
                           </div>
-                          <div className="text-xs text-white/55">
-                            Authorization {formatSourceAuthorization(source.authorizationStatus)}
+                          <div
+                            className={`break-words text-xs [overflow-wrap:anywhere] ${mobileBodyClass}`}
+                          >
+                            Authorization{" "}
+                            {formatSourceAuthorization(
+                              source.authorizationStatus
+                            )}
                             {" · "}
-                            Last seen {formatSourceObservedAt(source.lastObservedAt)}
+                            Last seen{" "}
+                            {formatSourceObservedAt(source.lastObservedAt)}
                           </div>
                         </div>
                         <button
@@ -729,12 +801,12 @@ export function SettingsMobilePage() {
                           }
                           className={`relative inline-flex h-7 w-12 items-center rounded-full border transition ${
                             source.desiredEnabled
-                              ? "border-[rgba(171,232,255,0.4)] bg-[rgba(111,133,232,0.36)]"
-                              : "border-white/10 bg-white/[0.06]"
+                              ? "border-[color-mix(in_srgb,var(--primary)_45%,var(--ui-border-subtle)_55%)] bg-[var(--ui-accent-soft)]"
+                              : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-3)]"
                           } ${loading ? "opacity-60" : ""}`}
                         >
                           <span
-                            className={`inline-block size-5 rounded-full bg-white shadow transition ${
+                            className={`inline-block size-5 rounded-full bg-[var(--ui-ink-strong)] shadow transition ${
                               source.desiredEnabled
                                 ? "translate-x-6"
                                 : "translate-x-1"
@@ -748,35 +820,32 @@ export function SettingsMobilePage() {
               </div>
             ))}
             {activePairings.length === 0 ? (
-              <div className="rounded-[18px] bg-white/[0.04] px-4 py-6 text-sm text-white/55">
-                No companion paired yet. Generate a QR code, then open the iOS companion and scan it.
+              <div
+                className={`${mobileInsetPanelClass} px-4 py-6 text-sm ${mobileBodyClass}`}
+              >
+                No companion paired yet. Generate a QR code, then open the iOS
+                companion and scan it.
               </div>
             ) : null}
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <Button variant="secondary" onClick={() => void overviewQuery.refetch()}>
+            <Button
+              variant="secondary"
+              onClick={() => void overviewQuery.refetch()}
+            >
               <RefreshCcw className="size-4" />
               Refresh status
             </Button>
-            <Link
-              to="/sleep"
-              className="inline-flex min-h-11 items-center gap-2 rounded-[16px] border border-white/8 bg-white/[0.03] px-4 py-3 text-sm text-white/72 transition hover:bg-white/[0.06] hover:text-white"
-            >
+            <Link to="/sleep" className={mobileActionLinkClass}>
               <Link2 className="size-4" />
               Open sleep view
             </Link>
-            <Link
-              to="/sports"
-              className="inline-flex min-h-11 items-center gap-2 rounded-[16px] border border-white/8 bg-white/[0.03] px-4 py-3 text-sm text-white/72 transition hover:bg-white/[0.06] hover:text-white"
-            >
+            <Link to="/sports" className={mobileActionLinkClass}>
               <Link2 className="size-4" />
               Open sports view
             </Link>
-            <Link
-              to="/vitals"
-              className="inline-flex min-h-11 items-center gap-2 rounded-[16px] border border-white/8 bg-white/[0.03] px-4 py-3 text-sm text-white/72 transition hover:bg-white/[0.06] hover:text-white"
-            >
+            <Link to="/vitals" className={mobileActionLinkClass}>
               <Link2 className="size-4" />
               Open vitals view
             </Link>
@@ -784,63 +853,68 @@ export function SettingsMobilePage() {
         </Card>
       </section>
 
-      <Card className="grid gap-4">
+      <Card className="grid min-w-0 gap-4 overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
-              Sync history
-            </div>
-            <div className="mt-2 text-lg text-white">
+            <div className={mobileEyebrowClass}>Sync history</div>
+            <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
               Recent HealthKit import runs
             </div>
           </div>
-          <Badge tone="meta">
-            {overview.importRuns.length} recent runs
-          </Badge>
+          <Badge tone="meta">{overview.importRuns.length} recent runs</Badge>
         </div>
 
-        <div className="grid gap-3">
+        <div className="grid min-w-0 gap-3">
           {overview.importRuns.map((run) => (
             <div
               key={run.id}
-              className="grid gap-3 rounded-[18px] bg-white/[0.04] px-4 py-4 lg:grid-cols-[minmax(0,1fr)_auto]"
+              className={`grid gap-3 ${mobilePanelClass} px-4 py-4 lg:grid-cols-[minmax(0,1fr)_auto]`}
             >
               <div className="grid gap-2">
                 <div className="flex flex-wrap items-center gap-2">
-                  <UploadCloud className="size-4 text-white/55" />
-                  <div className="text-base text-white">
+                  <UploadCloud className={`size-4 ${mobileFaintClass}`} />
+                  <div className="text-base text-[var(--ui-ink-strong)]">
                     {run.sourceDevice || "iPhone"} import
                   </div>
                   <Badge tone={run.status === "completed" ? "signal" : "meta"}>
                     {run.status}
                   </Badge>
                 </div>
-                <div className="text-sm text-white/60">
+                <div
+                  className={`break-words text-sm [overflow-wrap:anywhere] ${mobileBodyClass}`}
+                >
                   {new Date(run.importedAt).toLocaleString()} ·{" "}
                   {formatSyncSummary(run.payloadSummary)}
                 </div>
-                <div className="flex flex-wrap gap-2 text-sm text-white/60">
+                <div
+                  className={`flex flex-wrap gap-2 text-sm ${mobileBodyClass}`}
+                >
                   <Badge tone="meta">Imported {run.importedCount}</Badge>
                   <Badge tone="meta">Created {run.createdCount}</Badge>
                   <Badge tone="meta">Updated {run.updatedCount}</Badge>
                   <Badge tone="meta">Merged {run.mergedCount}</Badge>
                 </div>
                 {run.errorMessage ? (
-                  <div className="text-sm text-rose-200/80">
+                  <div className="text-sm text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]">
                     {run.errorMessage}
                   </div>
                 ) : null}
               </div>
               {run.pairingSessionId ? (
-                <div className="text-sm text-white/45 lg:text-right">
+                <div
+                  className={`break-words text-sm [overflow-wrap:anywhere] ${mobileFaintClass} lg:text-right`}
+                >
                   Pairing {run.pairingSessionId}
                 </div>
               ) : null}
             </div>
           ))}
           {overview.importRuns.length === 0 ? (
-            <div className="rounded-[18px] bg-white/[0.04] px-4 py-6 text-sm text-white/55">
-              No sync runs yet. Pair the iPhone companion and run the first HealthKit import.
+            <div
+              className={`${mobileInsetPanelClass} px-4 py-6 text-sm ${mobileBodyClass}`}
+            >
+              No sync runs yet. Pair the iPhone companion and run the first
+              HealthKit import.
             </div>
           ) : null}
         </div>

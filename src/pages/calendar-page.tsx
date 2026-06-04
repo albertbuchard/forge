@@ -63,7 +63,12 @@ import {
   formatLifeForceRate
 } from "@/lib/life-force-display";
 import { readCalendarDisplayName } from "@/lib/calendar-name-deduper";
-import { addDays, buildWeekDays, formatWeekday, startOfWeek } from "@/lib/calendar-ui";
+import {
+  addDays,
+  buildWeekDays,
+  formatWeekday,
+  startOfWeek
+} from "@/lib/calendar-ui";
 import { getEntityKindForCrudEntityType } from "@/lib/entity-visuals";
 import type {
   ActionProfile,
@@ -99,7 +104,9 @@ type CalendarMenuState =
       position: { x: number; y: number };
     };
 
-type CalendarOverviewQueryData = Awaited<ReturnType<typeof getCalendarOverview>>;
+type CalendarOverviewQueryData = Awaited<
+  ReturnType<typeof getCalendarOverview>
+>;
 type EventSyncStatus = {
   tone: "saving" | "error";
   message: string;
@@ -134,8 +141,7 @@ function buildPreviewActionProfile(input: {
     getCalendarActivityPresetOptions().find(
       (preset) => preset.key === input.activityPresetKey
     )?.defaultRateApPerHour ?? 100 / 24;
-  const sustainRateApPerHour =
-    input.customSustainRateApPerHour ?? presetRate;
+  const sustainRateApPerHour = input.customSustainRateApPerHour ?? presetRate;
   const totalCostAp = Number(
     ((durationSeconds / 3600) * sustainRateApPerHour).toFixed(2)
   );
@@ -177,7 +183,8 @@ function buildPreviewActionProfile(input: {
 }
 
 function normalizeCalendarEventPlace(event: CalendarEvent): CalendarEvent {
-  const fallbackLocation = typeof event.location === "string" ? event.location : "";
+  const fallbackLocation =
+    typeof event.location === "string" ? event.location : "";
   const place = event.place ?? {
     label: fallbackLocation,
     address: "",
@@ -209,7 +216,12 @@ function moveCalendarItemToDay(
   const sourceEnd = new Date(item.endAt);
   const duration = sourceEnd.getTime() - sourceStart.getTime();
   const nextStart = new Date(day);
-  nextStart.setUTCHours(sourceStart.getUTCHours(), sourceStart.getUTCMinutes(), 0, 0);
+  nextStart.setUTCHours(
+    sourceStart.getUTCHours(),
+    sourceStart.getUTCMinutes(),
+    0,
+    0
+  );
   const nextEnd = new Date(nextStart.getTime() + duration);
   return {
     startAt: nextStart.toISOString(),
@@ -217,7 +229,9 @@ function moveCalendarItemToDay(
   };
 }
 
-function toClipboardEventItem(event: CalendarEvent): ForgeClipboardCalendarEventItem {
+function toClipboardEventItem(
+  event: CalendarEvent
+): ForgeClipboardCalendarEventItem {
   return {
     type: "calendar_event",
     eventId: event.id,
@@ -310,19 +324,29 @@ export function CalendarPage() {
   const clipboardEntry = useForgeClipboardStore((state) => state.entry);
   const setClipboardEntry = useForgeClipboardStore((state) => state.setEntry);
   const clearClipboard = useForgeClipboardStore((state) => state.clear);
-  const completeClipboardPaste = useForgeClipboardStore((state) => state.completePaste);
+  const completeClipboardPaste = useForgeClipboardStore(
+    (state) => state.completePaste
+  );
   const [weekStart, setWeekStart] = useState(() => startOfWeek());
   const [draggedTimeboxId, setDraggedTimeboxId] = useState<string | null>(null);
   const [draggedEventId, setDraggedEventId] = useState<string | null>(null);
   const [workBlockDialogOpen, setWorkBlockDialogOpen] = useState(false);
-  const [selectedWorkBlockTemplate, setSelectedWorkBlockTemplate] = useState<WorkBlockTemplate | null>(null);
+  const [selectedWorkBlockTemplate, setSelectedWorkBlockTemplate] =
+    useState<WorkBlockTemplate | null>(null);
   const [taskRulesDialogOpen, setTaskRulesDialogOpen] = useState(false);
   const [timeboxDialogOpen, setTimeboxDialogOpen] = useState(false);
-  const [selectedTimebox, setSelectedTimebox] = useState<TaskTimebox | null>(null);
+  const [selectedTimebox, setSelectedTimebox] = useState<TaskTimebox | null>(
+    null
+  );
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
-  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(
+    null
+  );
   const [renameEvent, setRenameEvent] = useState<CalendarEvent | null>(null);
-  const displayPreferences = useMemo(() => readCalendarDisplayPreferences(), []);
+  const displayPreferences = useMemo(
+    () => readCalendarDisplayPreferences(),
+    []
+  );
   const [eventSeed, setEventSeed] = useState<Partial<{
     title: string;
     description: string;
@@ -341,7 +365,8 @@ export function CalendarPage() {
     }>;
   }> | null>(null);
   const [menuState, setMenuState] = useState<CalendarMenuState | null>(null);
-  const [eventSyncStatus, setEventSyncStatus] = useState<EventSyncStatus | null>(null);
+  const [eventSyncStatus, setEventSyncStatus] =
+    useState<EventSyncStatus | null>(null);
   const focusedTimeboxId = searchParams.get("timeboxId");
 
   const range = useMemo(() => {
@@ -351,7 +376,12 @@ export function CalendarPage() {
   }, [weekStart]);
 
   const calendarQuery = useQuery({
-    queryKey: ["forge-calendar-overview", range.from, range.to, ...selectedUserIds],
+    queryKey: [
+      "forge-calendar-overview",
+      range.from,
+      range.to,
+      ...selectedUserIds
+    ],
     queryFn: () =>
       getCalendarOverview({
         ...range,
@@ -369,7 +399,9 @@ export function CalendarPage() {
     ...selectedUserIds
   ] as const;
 
-  const isEventInVisibleRange = (event: Pick<CalendarEvent, "startAt" | "deletedAt">) => {
+  const isEventInVisibleRange = (
+    event: Pick<CalendarEvent, "startAt" | "deletedAt">
+  ) => {
     if (event.deletedAt) {
       return false;
     }
@@ -485,7 +517,10 @@ export function CalendarPage() {
         userId: input.userId ?? defaultUserId
       }),
     onMutate: async (input) => {
-      setEventSyncStatus({ tone: "saving", message: "Saving event changes in the background…" });
+      setEventSyncStatus({
+        tone: "saving",
+        message: "Saving event changes in the background…"
+      });
       await queryClient.cancelQueries({ queryKey: calendarOverviewQueryKey });
       const previous = queryClient.getQueryData<CalendarOverviewQueryData>(
         calendarOverviewQueryKey
@@ -503,7 +538,7 @@ export function CalendarPage() {
         connectionId: defaultWritableCalendar?.connectionId ?? null,
         calendarId:
           input.preferredCalendarId === undefined
-            ? defaultWritableCalendar?.id ?? null
+            ? (defaultWritableCalendar?.id ?? null)
             : input.preferredCalendarId,
         remoteId: null,
         ownership: "forge",
@@ -589,17 +624,16 @@ export function CalendarPage() {
         ...current,
         calendar: {
           ...current.calendar,
-          events: (
-            isEventInVisibleRange(event)
-              ? [
-                  event,
-                  ...current.calendar.events.filter(
-                    (entry) => entry.id !== context?.optimisticEventId
-                  )
-                ]
-              : current.calendar.events.filter(
+          events: (isEventInVisibleRange(event)
+            ? [
+                event,
+                ...current.calendar.events.filter(
                   (entry) => entry.id !== context?.optimisticEventId
                 )
+              ]
+            : current.calendar.events.filter(
+                (entry) => entry.id !== context?.optimisticEventId
+              )
           ).filter(
             (entry, index, all) =>
               all.findIndex((candidate) => candidate.id === entry.id) === index
@@ -619,7 +653,10 @@ export function CalendarPage() {
       patch: Parameters<typeof patchCalendarEvent>[1];
     }) => patchCalendarEvent(eventId, patch),
     onMutate: async ({ eventId, patch }) => {
-      setEventSyncStatus({ tone: "saving", message: "Saving event changes in the background…" });
+      setEventSyncStatus({
+        tone: "saving",
+        message: "Saving event changes in the background…"
+      });
       await queryClient.cancelQueries({ queryKey: calendarOverviewQueryKey });
       const previous = queryClient.getQueryData<CalendarOverviewQueryData>(
         calendarOverviewQueryKey
@@ -627,11 +664,14 @@ export function CalendarPage() {
 
       if (previous) {
         setCalendarOverviewData((current) => {
-          const existingEvent = current.calendar.events.find((entry) => entry.id === eventId);
+          const existingEvent = current.calendar.events.find(
+            (entry) => entry.id === eventId
+          );
           if (!existingEvent) {
             return current;
           }
-          const normalizedExistingEvent = normalizeCalendarEventPlace(existingEvent);
+          const normalizedExistingEvent =
+            normalizeCalendarEventPlace(existingEvent);
           const nextEvent: CalendarEvent = {
             ...normalizedExistingEvent,
             ...patch,
@@ -666,16 +706,16 @@ export function CalendarPage() {
               endsAt: patch.endAt ?? normalizedExistingEvent.endAt,
               activityPresetKey:
                 patch.activityPresetKey === undefined
-                  ? normalizedExistingEvent.actionProfile?.metadata
-                      ?.activityPresetKey as string | null | undefined
+                  ? (normalizedExistingEvent.actionProfile?.metadata
+                      ?.activityPresetKey as string | null | undefined)
                   : patch.activityPresetKey,
               customSustainRateApPerHour:
                 patch.customSustainRateApPerHour === undefined
-                  ? (typeof normalizedExistingEvent.actionProfile?.metadata
+                  ? typeof normalizedExistingEvent.actionProfile?.metadata
                       ?.customSustainRateApPerHour === "number"
-                      ? normalizedExistingEvent.actionProfile.metadata
-                          .customSustainRateApPerHour
-                      : null)
+                    ? normalizedExistingEvent.actionProfile.metadata
+                        .customSustainRateApPerHour
+                    : null
                   : patch.customSustainRateApPerHour
             }),
             updatedAt: new Date().toISOString()
@@ -724,7 +764,10 @@ export function CalendarPage() {
   const deleteEventMutation = useMutation({
     mutationFn: deleteCalendarEvent,
     onMutate: async (eventId) => {
-      setEventSyncStatus({ tone: "saving", message: "Removing the event in the background…" });
+      setEventSyncStatus({
+        tone: "saving",
+        message: "Removing the event in the background…"
+      });
       await queryClient.cancelQueries({ queryKey: calendarOverviewQueryKey });
       const previous = queryClient.getQueryData<CalendarOverviewQueryData>(
         calendarOverviewQueryKey
@@ -735,7 +778,9 @@ export function CalendarPage() {
           ...current,
           calendar: {
             ...current.calendar,
-            events: current.calendar.events.filter((entry) => entry.id !== eventId)
+            events: current.calendar.events.filter(
+              (entry) => entry.id !== eventId
+            )
           }
         }));
       }
@@ -760,10 +805,7 @@ export function CalendarPage() {
     onSettled: invalidateCalendar
   });
   const calendarData = calendarQuery.data?.calendar;
-  const days = useMemo(
-    () => buildWeekDays(weekStart),
-    [weekStart]
-  );
+  const days = useMemo(() => buildWeekDays(weekStart), [weekStart]);
   const overview = useMemo(
     () =>
       calendarData
@@ -794,15 +836,23 @@ export function CalendarPage() {
     [overview.calendars]
   );
   const calendarDisplayColors = useMemo(
-    () => buildCalendarDisplayColorMap(overview.calendars, displayPreferences.calendarColors),
+    () =>
+      buildCalendarDisplayColorMap(
+        overview.calendars,
+        displayPreferences.calendarColors
+      ),
     [displayPreferences.calendarColors, overview.calendars]
   );
   const eventSyncPending =
     createEventMutation.isPending ||
     patchEventMutation.isPending ||
     deleteEventMutation.isPending;
-  const plannedTimeboxes = overview.timeboxes.filter((timebox) => timebox.status === "planned");
-  const writableCalendars = overview.calendars.filter((calendar) => calendar.canWrite);
+  const plannedTimeboxes = overview.timeboxes.filter(
+    (timebox) => timebox.status === "planned"
+  );
+  const writableCalendars = overview.calendars.filter(
+    (calendar) => calendar.canWrite
+  );
   const describeLinkOwner = (label: string, ownerSummary: string) =>
     ownerSummary ? `${label} · ${ownerSummary}` : label;
   const linkOptions = [
@@ -816,7 +866,10 @@ export function CalendarPage() {
       entityType: "project" as const,
       entityId: project.id,
       label: project.title,
-      subtitle: describeLinkOwner("Project", formatUserSummaryLine(project.user))
+      subtitle: describeLinkOwner(
+        "Project",
+        formatUserSummaryLine(project.user)
+      )
     })),
     ...shell.snapshot.tasks.map((task) => ({
       entityType: "task" as const,
@@ -854,11 +907,11 @@ export function CalendarPage() {
     overview.connections.length === 0
       ? "No providers connected"
       : `${overview.connections.filter((connection) => connection.status === "connected").length}/${overview.connections.length} healthy`;
-  const clipboardCalendarEvents = (
+  const clipboardCalendarEvents =
     clipboardEntry?.items.filter(
-      (item): item is ForgeClipboardCalendarEventItem => item.type === "calendar_event"
-    ) ?? []
-  );
+      (item): item is ForgeClipboardCalendarEventItem =>
+        item.type === "calendar_event"
+    ) ?? [];
 
   useEffect(() => {
     if (!focusedTimeboxId) {
@@ -879,7 +932,13 @@ export function CalendarPage() {
       setSelectedTimebox(matchingTimebox);
       setTimeboxDialogOpen(true);
     }
-  }, [focusedTimeboxId, overview.timeboxes, selectedTimebox?.id, timeboxDialogOpen, weekStart]);
+  }, [
+    focusedTimeboxId,
+    overview.timeboxes,
+    selectedTimebox?.id,
+    timeboxDialogOpen,
+    weekStart
+  ]);
 
   const clearFocusedTimeboxParam = () => {
     if (!focusedTimeboxId) {
@@ -955,7 +1014,9 @@ export function CalendarPage() {
     }
 
     if (menuState.kind === "day") {
-      const day = days.find((entry) => entry.toISOString().slice(0, 10) === menuState.dayKey);
+      const day = days.find(
+        (entry) => entry.toISOString().slice(0, 10) === menuState.dayKey
+      );
       if (!day) {
         return [];
       }
@@ -970,7 +1031,8 @@ export function CalendarPage() {
         {
           id: "create-work-block",
           label: "Create work block",
-          description: "Open the guided work-block flow while you are looking at this day.",
+          description:
+            "Open the guided work-block flow while you are looking at this day.",
           icon: ShieldBan,
           onSelect: () => {
             setSelectedWorkBlockTemplate(null);
@@ -980,7 +1042,9 @@ export function CalendarPage() {
         {
           id: "paste",
           label:
-            clipboardEntry?.mode === "cut" ? "Paste moved event" : "Paste copied event",
+            clipboardEntry?.mode === "cut"
+              ? "Paste moved event"
+              : "Paste copied event",
           description:
             clipboardCalendarEvents.length > 0
               ? `${clipboardCalendarEvents.length} calendar item${clipboardCalendarEvents.length === 1 ? "" : "s"} ready to paste here.`
@@ -995,7 +1059,9 @@ export function CalendarPage() {
     }
 
     if (menuState.kind === "work-block") {
-      const template = overview.workBlockTemplates.find((entry) => entry.id === menuState.templateId);
+      const template = overview.workBlockTemplates.find(
+        (entry) => entry.id === menuState.templateId
+      );
       if (!template) {
         return [];
       }
@@ -1003,7 +1069,8 @@ export function CalendarPage() {
         {
           id: "edit-work-block",
           label: "Edit",
-          description: "Adjust the recurring pattern, date bounds, or work policy.",
+          description:
+            "Adjust the recurring pattern, date bounds, or work policy.",
           icon: PencilLine,
           onSelect: () => {
             setSelectedWorkBlockTemplate(template);
@@ -1026,7 +1093,9 @@ export function CalendarPage() {
       ];
     }
 
-    const event = overview.events.find((entry) => entry.id === menuState.eventId);
+    const event = overview.events.find(
+      (entry) => entry.id === menuState.eventId
+    );
     if (!event) {
       return [];
     }
@@ -1035,14 +1104,16 @@ export function CalendarPage() {
       {
         id: "rename",
         label: "Quick rename",
-        description: "Change the event title without opening the full event flow.",
+        description:
+          "Change the event title without opening the full event flow.",
         icon: PencilLine,
         onSelect: () => setRenameEvent(event)
       },
       {
         id: "copy",
         label: "Copy",
-        description: "Put this event on the Forge clipboard so you can paste it into another day.",
+        description:
+          "Put this event on the Forge clipboard so you can paste it into another day.",
         icon: Copy,
         onSelect: () =>
           setClipboardEntry({
@@ -1072,11 +1143,15 @@ export function CalendarPage() {
       {
         id: "delete",
         label: "Delete",
-        description: "Remove the event from Forge and delete any connected remote projection.",
+        description:
+          "Remove the event from Forge and delete any connected remote projection.",
         icon: Trash2,
         tone: "danger",
         onSelect: () => {
-          if (clipboardEntry?.mode === "cut" && clipboardCalendarEvents.some((item) => item.eventId === event.id)) {
+          if (
+            clipboardEntry?.mode === "cut" &&
+            clipboardCalendarEvents.some((item) => item.eventId === event.id)
+          ) {
             clearClipboard();
           }
           void deleteEventMutation.mutateAsync(event.id);
@@ -1122,44 +1197,48 @@ export function CalendarPage() {
       />
 
       {lifeForceQuery.data?.lifeForce ? (
-        <Card className="grid gap-3 rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(15,25,36,0.98),rgba(9,15,26,0.96))] p-4 md:grid-cols-3">
+        <Card className="grid gap-3 rounded-[28px] border border-[var(--ui-border-subtle)] !bg-[var(--ui-surface-1)] p-4 shadow-[var(--ui-shadow-soft)] md:grid-cols-3">
           <div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
               Life Force today
             </div>
-            <div className="mt-2 text-3xl font-semibold text-white">
+            <div className="mt-2 text-3xl font-semibold text-[var(--ui-ink-strong)]">
               {Math.round(lifeForceQuery.data.lifeForce.spentTodayAp)}
-              <span className="ml-2 text-lg text-white/44">
+              <span className="ml-2 text-lg text-[var(--ui-ink-muted)]">
                 / {Math.round(lifeForceQuery.data.lifeForce.dailyBudgetAp)} AP
               </span>
             </div>
           </div>
           <div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
               Instant headroom
             </div>
             <div className="mt-2 text-2xl font-semibold text-[var(--primary)]">
-              {lifeForceQuery.data.lifeForce.instantFreeApPerHour.toFixed(1)} AP/h
+              {lifeForceQuery.data.lifeForce.instantFreeApPerHour.toFixed(1)}{" "}
+              AP/h
             </div>
-            <div className="mt-2 text-sm text-white/58">
+            <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
               Calendar containers now speak the same AP language as live work.
             </div>
           </div>
           <div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
               Forecast
             </div>
-            <div className="mt-2 text-2xl font-semibold text-white">
+            <div className="mt-2 text-2xl font-semibold text-[var(--ui-ink-strong)]">
               {Math.round(lifeForceQuery.data.lifeForce.forecastAp)} AP
             </div>
-            <div className="mt-2 text-sm text-white/58">
-              Planned remaining {formatLifeForceAp(lifeForceQuery.data.lifeForce.plannedRemainingAp)}
+            <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
+              Planned remaining{" "}
+              {formatLifeForceAp(
+                lifeForceQuery.data.lifeForce.plannedRemainingAp
+              )}
             </div>
           </div>
         </Card>
       ) : null}
 
-      <Card className="grid gap-4 rounded-[32px] border border-white/8 bg-[linear-gradient(180deg,rgba(17,28,39,0.985),rgba(10,17,29,0.985))]">
+      <Card className="grid gap-4 rounded-[32px] border border-[var(--ui-border-subtle)] !bg-[var(--ui-surface-1)] shadow-[var(--ui-shadow-soft)]">
         <CalendarWeekToolbar
           description="The calendar is the priority surface here. Connected provider events, recurring work blocks, and owned task timeboxes all stay visible together."
           weekStart={weekStart}
@@ -1168,7 +1247,7 @@ export function CalendarPage() {
               <div
                 className={`inline-flex max-w-full items-center gap-2 rounded-full px-3 py-1.5 text-xs ${
                   eventSyncStatus.tone === "error"
-                    ? "border border-rose-400/20 bg-rose-400/10 text-rose-200"
+                    ? "border border-[color-mix(in_srgb,var(--danger)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-danger-soft)] text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]"
                     : "border border-[var(--primary)]/18 bg-[var(--primary)]/12 text-[var(--primary)]"
                 }`}
               >
@@ -1179,20 +1258,21 @@ export function CalendarPage() {
           badges={
             <>
               {lifeForceQuery.data?.lifeForce ? (
-                <Badge className="bg-white/[0.08] text-white/74">
+                <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                   {Math.round(lifeForceQuery.data.lifeForce.spentTodayAp)}/
                   {Math.round(lifeForceQuery.data.lifeForce.dailyBudgetAp)} AP
                 </Badge>
               ) : null}
               {eventSyncPending ? (
-                <Badge className="bg-white/[0.08] text-white/78">
+                <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                   <RefreshCcw className="mr-1 size-3.5 animate-spin" />
                   Syncing changes
                 </Badge>
               ) : null}
               {clipboardEntry ? (
-                <Badge className="bg-white/[0.08] text-white/74">
-                  {clipboardEntry.mode === "cut" ? "Cut" : "Copied"} · {clipboardEntry.label}
+                <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
+                  {clipboardEntry.mode === "cut" ? "Cut" : "Copied"} ·{" "}
+                  {clipboardEntry.label}
                 </Badge>
               ) : null}
             </>
@@ -1206,7 +1286,8 @@ export function CalendarPage() {
           {days.map((day) => {
             const dayKey = day.toISOString().slice(0, 10);
             const dayEvents = overview.events.filter(
-              (event) => event.startAt.slice(0, 10) === dayKey && !event.deletedAt
+              (event) =>
+                event.startAt.slice(0, 10) === dayKey && !event.deletedAt
             );
             const dayBlocks = overview.workBlockInstances.filter(
               (block) => block.dateKey === dayKey
@@ -1220,7 +1301,11 @@ export function CalendarPage() {
                 key={dayKey}
                 data-calendar-day={dayKey}
                 onClick={(event) => {
-                  if ((event.target as HTMLElement).closest("[data-calendar-item='true']")) {
+                  if (
+                    (event.target as HTMLElement).closest(
+                      "[data-calendar-item='true']"
+                    )
+                  ) {
                     return;
                   }
                   setMenuState({
@@ -1235,9 +1320,12 @@ export function CalendarPage() {
                 onDrop={(event) => {
                   event.preventDefault();
                   const eventId =
-                    event.dataTransfer.getData("text/forge-event-id") || draggedEventId;
+                    event.dataTransfer.getData("text/forge-event-id") ||
+                    draggedEventId;
                   if (eventId) {
-                    const calendarEvent = overview.events.find((entry) => entry.id === eventId);
+                    const calendarEvent = overview.events.find(
+                      (entry) => entry.id === eventId
+                    );
                     if (calendarEvent) {
                       void moveEventToDay(calendarEvent, day);
                     }
@@ -1246,11 +1334,14 @@ export function CalendarPage() {
                   }
 
                   const timeboxId =
-                    event.dataTransfer.getData("text/forge-timebox-id") || draggedTimeboxId;
+                    event.dataTransfer.getData("text/forge-timebox-id") ||
+                    draggedTimeboxId;
                   if (!timeboxId) {
                     return;
                   }
-                  const timebox = overview.timeboxes.find((entry) => entry.id === timeboxId);
+                  const timebox = overview.timeboxes.find(
+                    (entry) => entry.id === timeboxId
+                  );
                   if (!timebox) {
                     return;
                   }
@@ -1272,14 +1363,14 @@ export function CalendarPage() {
                   });
                   setDraggedTimeboxId(null);
                 }}
-                className="min-w-0 overflow-hidden rounded-[24px] border border-white/6 bg-white/[0.03] p-3 transition hover:border-white/12 hover:bg-white/[0.045]"
+                className="min-w-0 overflow-hidden rounded-[24px] border border-[var(--ui-border-subtle)] !bg-[var(--ui-surface-2)] p-3 transition hover:border-[var(--ui-border-strong)] hover:!bg-[var(--ui-surface-hover)]"
               >
-                <div className="flex items-center justify-between gap-3 rounded-[18px] bg-[rgba(10,16,30,0.96)] px-3 py-2 text-sm font-medium text-white">
+                <div className="flex items-center justify-between gap-3 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-2 text-sm font-medium text-[var(--ui-ink-strong)]">
                   <span className="min-w-0 truncate">{formatWeekday(day)}</span>
                   <button
                     type="button"
                     aria-label={`Open actions for ${formatWeekday(day)}`}
-                    className="rounded-full bg-white/[0.06] p-2 text-white/58 transition hover:bg-white/[0.1] hover:text-white"
+                    className="rounded-full bg-[var(--ui-surface-2)] p-2 text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                     onClick={(event) => {
                       event.stopPropagation();
                       setMenuState({
@@ -1297,60 +1388,83 @@ export function CalendarPage() {
                     <div
                       key={block.id}
                       data-calendar-item="true"
-                      className="min-w-0 overflow-hidden rounded-[18px] px-3 py-2 text-sm text-white"
+                      className="min-w-0 overflow-hidden rounded-[18px] px-3 py-2 text-sm text-[var(--ui-ink-strong)]"
                       style={{
                         backgroundColor: `${block.color}22`,
                         border: `1px solid ${block.color}55`
                       }}
                     >
                       {(() => {
-                        const actionLoad = estimateWorkBlockActionPointLoad(block);
+                        const actionLoad =
+                          estimateWorkBlockActionPointLoad(block);
                         return (
-                      <div className="flex min-w-0 items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <div className="min-w-0 [overflow-wrap:anywhere] font-medium">{block.title}</div>
-                          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
-                            <Badge size="sm" className="shrink-0 bg-white/[0.08] text-white/78">
-                              {block.blockingState}
-                            </Badge>
-                            <Badge size="sm" className="shrink-0 bg-white/[0.08] text-white/78">
-                              {formatWorkBlockKindLabel(block.kind)}
-                            </Badge>
-                            {actionLoad.rateApPerHour > 0 ? (
-                              <>
-                                <Badge size="sm" className="shrink-0 bg-[var(--primary)]/14 text-[var(--primary)]">
-                                  {formatLifeForceRate(actionLoad.rateApPerHour)}
+                          <div className="flex min-w-0 items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="min-w-0 [overflow-wrap:anywhere] font-medium">
+                                {block.title}
+                              </div>
+                              <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
+                                <Badge
+                                  size="sm"
+                                  className="shrink-0 bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]"
+                                >
+                                  {block.blockingState}
                                 </Badge>
-                                <Badge size="sm" className="shrink-0 bg-white/[0.08] text-white/72">
-                                  {formatLifeForceAp(actionLoad.totalAp)}
+                                <Badge
+                                  size="sm"
+                                  className="shrink-0 bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]"
+                                >
+                                  {formatWorkBlockKindLabel(block.kind)}
                                 </Badge>
-                              </>
-                            ) : (
-                              <Badge size="sm" className="shrink-0 bg-emerald-400/12 text-emerald-100">
-                                Recovery
-                              </Badge>
-                            )}
+                                {actionLoad.rateApPerHour > 0 ? (
+                                  <>
+                                    <Badge
+                                      size="sm"
+                                      className="shrink-0 bg-[var(--primary)]/14 text-[var(--primary)]"
+                                    >
+                                      {formatLifeForceRate(
+                                        actionLoad.rateApPerHour
+                                      )}
+                                    </Badge>
+                                    <Badge
+                                      size="sm"
+                                      className="shrink-0 bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]"
+                                    >
+                                      {formatLifeForceAp(actionLoad.totalAp)}
+                                    </Badge>
+                                  </>
+                                ) : (
+                                  <Badge
+                                    size="sm"
+                                    className="shrink-0 bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_76%,var(--ui-ink-strong)_24%)]"
+                                  >
+                                    Recovery
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              aria-label={`Open actions for ${block.title}`}
+                              className="rounded-full bg-[var(--ui-surface-2)] p-1.5 text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
+                              onClick={(menuEvent) => {
+                                menuEvent.stopPropagation();
+                                setMenuState({
+                                  kind: "work-block",
+                                  templateId: block.templateId,
+                                  position: {
+                                    x: menuEvent.clientX,
+                                    y: menuEvent.clientY
+                                  }
+                                });
+                              }}
+                            >
+                              <MoreHorizontal className="size-4" />
+                            </button>
                           </div>
-                        </div>
-                        <button
-                          type="button"
-                          aria-label={`Open actions for ${block.title}`}
-                          className="rounded-full bg-white/[0.05] p-1.5 text-white/56 transition hover:bg-white/[0.1] hover:text-white"
-                          onClick={(menuEvent) => {
-                            menuEvent.stopPropagation();
-                            setMenuState({
-                              kind: "work-block",
-                              templateId: block.templateId,
-                              position: { x: menuEvent.clientX, y: menuEvent.clientY }
-                            });
-                          }}
-                        >
-                          <MoreHorizontal className="size-4" />
-                        </button>
-                      </div>
                         );
                       })()}
-                      <div className="mt-1 text-white/60">
+                      <div className="mt-1 text-[var(--ui-ink-soft)]">
                         {new Date(block.startAt).toLocaleTimeString([], {
                           hour: "2-digit",
                           minute: "2-digit"
@@ -1361,9 +1475,11 @@ export function CalendarPage() {
                           minute: "2-digit"
                         })}
                       </div>
-                      <div className="mt-2 text-xs text-white/48">
+                      <div className="mt-2 text-xs text-[var(--ui-ink-muted)]">
                         {formatTemplateDateRange(
-                          overview.workBlockTemplates.find((template) => template.id === block.templateId) ?? {
+                          overview.workBlockTemplates.find(
+                            (template) => template.id === block.templateId
+                          ) ?? {
                             id: block.templateId,
                             title: block.title,
                             kind: block.kind,
@@ -1391,7 +1507,10 @@ export function CalendarPage() {
                       draggable
                       onDragStart={(dragEvent) => {
                         setDraggedEventId(event.id);
-                        dragEvent.dataTransfer.setData("text/forge-event-id", event.id);
+                        dragEvent.dataTransfer.setData(
+                          "text/forge-event-id",
+                          event.id
+                        );
                       }}
                       onClick={(clickEvent) => {
                         clickEvent.stopPropagation();
@@ -1399,82 +1518,111 @@ export function CalendarPage() {
                         setEventSeed(null);
                         setEventDialogOpen(true);
                       }}
-                      className={`min-w-0 cursor-move overflow-hidden rounded-[18px] px-3 py-2 text-left text-sm text-white/82 transition ${
+                      className={`min-w-0 cursor-move overflow-hidden rounded-[18px] px-3 py-2 text-left text-sm text-[var(--ui-ink-strong)] transition ${
                         displayPreferences.useCalendarColors
                           ? "hover:brightness-110"
-                          : "border border-white/10 bg-white/[0.05] hover:border-white/18 hover:bg-white/[0.08] hover:shadow-[0_12px_32px_rgba(4,9,20,0.22)]"
+                          : "border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)] hover:shadow-[var(--ui-shadow-soft)]"
                       }`}
                       style={
                         displayPreferences.useCalendarColors
                           ? {
                               backgroundColor: `${(event.calendarId ? calendarDisplayColors[event.calendarId] : null) ?? getFallbackCalendarColor(`origin:${event.originType}`)}1f`,
-                              border: `1px solid ${((event.calendarId ? calendarDisplayColors[event.calendarId] : null) ?? getFallbackCalendarColor(`origin:${event.originType}`))}55`
+                              border: `1px solid ${(event.calendarId ? calendarDisplayColors[event.calendarId] : null) ?? getFallbackCalendarColor(`origin:${event.originType}`)}55`
                             }
                           : undefined
                       }
                     >
                       {(() => {
-                        const actionLoad = estimateCalendarEventActionPointLoad(event);
+                        const actionLoad =
+                          estimateCalendarEventActionPointLoad(event);
                         return (
-                      <div className="flex min-w-0 items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <div className="line-clamp-2 [overflow-wrap:anywhere] font-medium">{event.title}</div>
-                          <div className="mt-1 text-white/55">
-                            {new Date(event.startAt).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit"
-                            })}{" "}
-                            -{" "}
-                            {new Date(event.endAt).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit"
-                            })}
+                          <div className="flex min-w-0 items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="line-clamp-2 [overflow-wrap:anywhere] font-medium">
+                                {event.title}
+                              </div>
+                              <div className="mt-1 text-[var(--ui-ink-soft)]">
+                                {new Date(event.startAt).toLocaleTimeString(
+                                  [],
+                                  {
+                                    hour: "2-digit",
+                                    minute: "2-digit"
+                                  }
+                                )}{" "}
+                                -{" "}
+                                {new Date(event.endAt).toLocaleTimeString([], {
+                                  hour: "2-digit",
+                                  minute: "2-digit"
+                                })}
+                              </div>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-1.5">
+                              <button
+                                type="button"
+                                aria-label={`Open quick actions for ${event.title}`}
+                                className="rounded-full bg-[var(--ui-surface-2)] p-1.5 text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
+                                onClick={(menuEvent) => {
+                                  menuEvent.stopPropagation();
+                                  setMenuState({
+                                    kind: "event",
+                                    eventId: event.id,
+                                    position: {
+                                      x: menuEvent.clientX,
+                                      y: menuEvent.clientY
+                                    }
+                                  });
+                                }}
+                              >
+                                <MoreHorizontal className="size-4" />
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-1.5">
-                          <button
-                            type="button"
-                            aria-label={`Open quick actions for ${event.title}`}
-                            className="rounded-full bg-white/[0.05] p-1.5 text-white/56 transition hover:bg-white/[0.1] hover:text-white"
-                            onClick={(menuEvent) => {
-                              menuEvent.stopPropagation();
-                              setMenuState({
-                                kind: "event",
-                                eventId: event.id,
-                                position: { x: menuEvent.clientX, y: menuEvent.clientY }
-                              });
-                            }}
-                          >
-                            <MoreHorizontal className="size-4" />
-                          </button>
-                        </div>
-                      </div>
                         );
                       })()}
                       <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
-                        <Badge size="sm" className="max-w-full bg-white/[0.08] px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-white/70">
+                        <Badge
+                          size="sm"
+                          className="max-w-full bg-[var(--ui-surface-2)] px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-medium)]"
+                        >
                           {getEventBadgeLabel(event, calendarTitleById)}
                         </Badge>
-                        {estimateCalendarEventActionPointLoad(event).rateApPerHour > 0 ? (
+                        {estimateCalendarEventActionPointLoad(event)
+                          .rateApPerHour > 0 ? (
                           <>
-                            <Badge size="sm" className="bg-[var(--primary)]/14 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-[var(--primary)]">
-                              {formatLifeForceRate(estimateCalendarEventActionPointLoad(event).rateApPerHour)}
+                            <Badge
+                              size="sm"
+                              className="bg-[var(--primary)]/14 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-[var(--primary)]"
+                            >
+                              {formatLifeForceRate(
+                                estimateCalendarEventActionPointLoad(event)
+                                  .rateApPerHour
+                              )}
                             </Badge>
-                            <Badge size="sm" className="bg-white/[0.08] px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-white/70">
-                              {formatLifeForceAp(estimateCalendarEventActionPointLoad(event).totalAp)}
+                            <Badge
+                              size="sm"
+                              className="bg-[var(--ui-surface-2)] px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-medium)]"
+                            >
+                              {formatLifeForceAp(
+                                estimateCalendarEventActionPointLoad(event)
+                                  .totalAp
+                              )}
                             </Badge>
                           </>
                         ) : null}
-                        {event.calendarId && displayPreferences.useCalendarColors ? (
+                        {event.calendarId &&
+                        displayPreferences.useCalendarColors ? (
                           <span
                             aria-hidden="true"
                             className="size-2.5 shrink-0 rounded-full"
-                            style={{ backgroundColor: calendarDisplayColors[event.calendarId] }}
+                            style={{
+                              backgroundColor:
+                                calendarDisplayColors[event.calendarId]
+                            }}
                           />
                         ) : null}
                       </div>
                       {event.place.address || event.place.timezone ? (
-                        <div className="mt-2 text-xs leading-5 text-white/50">
+                        <div className="mt-2 text-xs leading-5 text-[var(--ui-ink-muted)]">
                           {event.place.address || event.location}
                           {event.place.address && event.place.timezone
                             ? " · "
@@ -1493,14 +1641,18 @@ export function CalendarPage() {
                                 key={link.id}
                                 kind={entityKind}
                                 label={
-                                  linkLabelByKey.get(`${link.entityType}:${link.entityId}`) ??
-                                  link.entityType
+                                  linkLabelByKey.get(
+                                    `${link.entityType}:${link.entityId}`
+                                  ) ?? link.entityType
                                 }
                                 compact
                                 gradient={false}
                               />
                             ) : (
-                              <Badge key={link.id} className="bg-white/[0.08] text-white/72">
+                              <Badge
+                                key={link.id}
+                                className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]"
+                              >
                                 {link.entityType}
                               </Badge>
                             );
@@ -1517,49 +1669,67 @@ export function CalendarPage() {
                       draggable
                       onDragStart={(event) => {
                         setDraggedTimeboxId(timebox.id);
-                        event.dataTransfer.setData("text/forge-timebox-id", timebox.id);
+                        event.dataTransfer.setData(
+                          "text/forge-timebox-id",
+                          timebox.id
+                        );
                       }}
                       onClick={() => {
                         setSelectedTimebox(timebox);
                         setTimeboxDialogOpen(true);
                       }}
-                      className="min-w-0 cursor-move overflow-hidden rounded-[18px] border border-[rgba(192,193,255,0.18)] bg-[linear-gradient(180deg,rgba(67,72,112,0.34),rgba(43,47,80,0.32))] px-3 py-2 text-left text-sm text-white/82 shadow-[inset_0_0_0_1px_rgba(192,193,255,0.08)] transition hover:border-[rgba(192,193,255,0.32)] hover:bg-[linear-gradient(180deg,rgba(74,79,122,0.4),rgba(48,53,92,0.36))]"
+                      className="min-w-0 cursor-move overflow-hidden rounded-[18px] border border-[color-mix(in_srgb,var(--primary)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-accent-soft)] px-3 py-2 text-left text-sm text-[var(--ui-ink-strong)] shadow-[var(--ui-shadow-soft)] transition hover:border-[color-mix(in_srgb,var(--primary)_42%,var(--ui-border-strong)_58%)] hover:bg-[var(--ui-accent-soft-hover)]"
                     >
                       {(() => {
-                        const actionLoad = estimateTaskTimeboxActionPointLoad(timebox);
+                        const actionLoad =
+                          estimateTaskTimeboxActionPointLoad(timebox);
                         return (
-                      <>
-                        <div className="flex min-w-0 items-start justify-between gap-2">
-                          <div className="min-w-0 flex-1">
-                            <div className="line-clamp-2 font-medium leading-5 text-white">
-                              {timebox.title}
+                          <>
+                            <div className="flex min-w-0 items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1">
+                                <div className="line-clamp-2 font-medium leading-5 text-[var(--ui-ink-strong)]">
+                                  {timebox.title}
+                                </div>
+                                <div className="mt-1 flex items-center gap-2 text-[var(--ui-ink-soft)]">
+                                  <Clock3 className="size-3.5 shrink-0" />
+                                  {new Date(
+                                    timebox.startsAt
+                                  ).toLocaleTimeString([], {
+                                    hour: "2-digit",
+                                    minute: "2-digit"
+                                  })}{" "}
+                                  -{" "}
+                                  {new Date(timebox.endsAt).toLocaleTimeString(
+                                    [],
+                                    {
+                                      hour: "2-digit",
+                                      minute: "2-digit"
+                                    }
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                            <div className="mt-1 flex items-center gap-2 text-white/58">
-                              <Clock3 className="size-3.5 shrink-0" />
-                              {new Date(timebox.startsAt).toLocaleTimeString([], {
-                                hour: "2-digit",
-                                minute: "2-digit"
-                              })}{" "}
-                              -{" "}
-                              {new Date(timebox.endsAt).toLocaleTimeString([], {
-                                hour: "2-digit",
-                                minute: "2-digit"
-                              })}
+                            <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
+                              <Badge
+                                size="sm"
+                                className="bg-[var(--ui-surface-2)] px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-medium)]"
+                              >
+                                {timebox.status}
+                              </Badge>
+                              <Badge
+                                size="sm"
+                                className="bg-[var(--primary)]/14 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-[var(--primary)]"
+                              >
+                                {formatLifeForceRate(actionLoad.rateApPerHour)}
+                              </Badge>
+                              <Badge
+                                size="sm"
+                                className="bg-[var(--ui-surface-2)] px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-medium)]"
+                              >
+                                {formatLifeForceAp(actionLoad.totalAp)}
+                              </Badge>
                             </div>
-                          </div>
-                        </div>
-                        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
-                          <Badge size="sm" className="bg-white/[0.08] px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-white/72">
-                            {timebox.status}
-                          </Badge>
-                          <Badge size="sm" className="bg-[var(--primary)]/14 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-[var(--primary)]">
-                            {formatLifeForceRate(actionLoad.rateApPerHour)}
-                          </Badge>
-                          <Badge size="sm" className="bg-white/[0.08] px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-white/72">
-                            {formatLifeForceAp(actionLoad.totalAp)}
-                          </Badge>
-                        </div>
-                      </>
+                          </>
                         );
                       })()}
                       <div className="mt-2 flex flex-wrap gap-2">
@@ -1570,7 +1740,7 @@ export function CalendarPage() {
                             setSelectedTimebox(timebox);
                             setTimeboxDialogOpen(true);
                           }}
-                          className="rounded-[999px] bg-white/[0.08] px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] text-white/78 transition hover:bg-white/[0.14]"
+                          className="rounded-[999px] bg-[var(--ui-surface-2)] px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-medium)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                         >
                           Edit
                         </button>
@@ -1580,7 +1750,7 @@ export function CalendarPage() {
                             event.stopPropagation();
                             navigate(`/tasks/${timebox.taskId}`);
                           }}
-                          className="rounded-[999px] bg-white/[0.08] px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] text-white/78 transition hover:bg-white/[0.14]"
+                          className="rounded-[999px] bg-[var(--ui-surface-2)] px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-medium)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                         >
                           Open task
                         </button>
@@ -1588,9 +1758,12 @@ export function CalendarPage() {
                     </div>
                   ))}
 
-                  {dayBlocks.length === 0 && dayEvents.length === 0 && dayTimeboxes.length === 0 ? (
-                    <div className="min-h-[10rem] rounded-[18px] border border-dashed border-white/8 px-3 py-4 text-sm leading-8 text-white/42">
-                      Nothing scheduled here yet. Click inside this day to create, block, or paste.
+                  {dayBlocks.length === 0 &&
+                  dayEvents.length === 0 &&
+                  dayTimeboxes.length === 0 ? (
+                    <div className="min-h-[10rem] rounded-[18px] border border-dashed border-[var(--ui-border-subtle)] px-3 py-4 text-sm leading-8 text-[var(--ui-ink-muted)]">
+                      Nothing scheduled here yet. Click inside this day to
+                      create, block, or paste.
                     </div>
                   ) : null}
                 </div>
@@ -1602,20 +1775,23 @@ export function CalendarPage() {
 
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
         <div className="grid gap-4 md:grid-cols-3">
-          <Card className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(18,28,38,0.98),rgba(11,17,28,0.98))]">
+          <Card className="rounded-[28px] border border-[var(--ui-border-subtle)] !bg-[var(--ui-surface-1)] shadow-[var(--ui-shadow-soft)]">
             <div className="flex items-center gap-3">
               <div className="rounded-[18px] bg-[var(--primary)]/14 p-3 text-[var(--primary)]">
                 <PencilLine className="size-4" />
               </div>
               <div>
-                <div className="font-medium text-white">Create event</div>
-                <div className="mt-1 text-sm text-white/56">
+                <div className="font-medium text-[var(--ui-ink-strong)]">
+                  Create event
+                </div>
+                <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
                   Add a native Forge event with linked context.
                 </div>
               </div>
             </div>
-            <p className="mt-4 text-sm leading-6 text-white/62">
-              Create a real calendar event even with no provider connected, then project it remotely whenever you choose.
+            <p className="mt-4 text-sm leading-6 text-[var(--ui-ink-medium)]">
+              Create a real calendar event even with no provider connected, then
+              project it remotely whenever you choose.
             </p>
             <div className="mt-4">
               <Button
@@ -1632,20 +1808,23 @@ export function CalendarPage() {
             </div>
           </Card>
 
-          <Card className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(18,28,38,0.98),rgba(11,17,28,0.98))]">
+          <Card className="rounded-[28px] border border-[var(--ui-border-subtle)] !bg-[var(--ui-surface-1)] shadow-[var(--ui-shadow-soft)]">
             <div className="flex items-center gap-3">
               <div className="rounded-[18px] bg-[var(--primary)]/14 p-3 text-[var(--primary)]">
                 <ShieldBan className="size-4" />
               </div>
               <div>
-                <div className="font-medium text-white">Create work block</div>
-                <div className="mt-1 text-sm text-white/56">
+                <div className="font-medium text-[var(--ui-ink-strong)]">
+                  Create work block
+                </div>
+                <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
                   Block main activity or protect creative windows.
                 </div>
               </div>
             </div>
-            <p className="mt-4 text-sm leading-6 text-white/62">
-              Open the guided flow to create half-day presets, holidays, or custom recurring work blocks.
+            <p className="mt-4 text-sm leading-6 text-[var(--ui-ink-medium)]">
+              Open the guided flow to create half-day presets, holidays, or
+              custom recurring work blocks.
             </p>
             <div className="mt-4">
               <Button
@@ -1660,20 +1839,23 @@ export function CalendarPage() {
             </div>
           </Card>
 
-          <Card className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(18,28,38,0.98),rgba(11,17,28,0.98))]">
+          <Card className="rounded-[28px] border border-[var(--ui-border-subtle)] !bg-[var(--ui-surface-1)] shadow-[var(--ui-shadow-soft)]">
             <div className="flex items-center gap-3">
               <div className="rounded-[18px] bg-[var(--primary)]/14 p-3 text-[var(--primary)]">
                 <Sparkles className="size-4" />
               </div>
               <div>
-                <div className="font-medium text-white">Plan timebox</div>
-                <div className="mt-1 text-sm text-white/56">
+                <div className="font-medium text-[var(--ui-ink-strong)]">
+                  Plan timebox
+                </div>
+                <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
                   Let Forge recommend valid upcoming slots.
                 </div>
               </div>
             </div>
-            <p className="mt-4 text-sm leading-6 text-white/62">
-              Choose a task, review the suggested windows, and schedule directly into the calendar.
+            <p className="mt-4 text-sm leading-6 text-[var(--ui-ink-medium)]">
+              Choose a task, review the suggested windows, and schedule directly
+              into the calendar.
             </p>
             <div className="mt-4">
               <Button onClick={() => setTimeboxDialogOpen(true)}>
@@ -1683,21 +1865,29 @@ export function CalendarPage() {
             </div>
           </Card>
 
-          <Card className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(18,28,38,0.98),rgba(11,17,28,0.98))]">
+          <Card className="rounded-[28px] border border-[var(--ui-border-subtle)] !bg-[var(--ui-surface-1)] shadow-[var(--ui-shadow-soft)]">
             <div className="flex items-center gap-3">
               <div className="rounded-[18px] bg-[var(--primary)]/14 p-3 text-[var(--primary)]">
                 <Link2 className="size-4" />
               </div>
               <div>
-                <div className="font-medium text-white">Manage provider settings</div>
-                <div className="mt-1 text-sm text-white/56">{providerHealthLabel}</div>
+                <div className="font-medium text-[var(--ui-ink-strong)]">
+                  Manage provider settings
+                </div>
+                <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
+                  {providerHealthLabel}
+                </div>
               </div>
             </div>
-            <p className="mt-4 text-sm leading-6 text-white/62">
-              Provider connections and setup instructions now live in Settings so the calendar view can stay focused on the week.
+            <p className="mt-4 text-sm leading-6 text-[var(--ui-ink-medium)]">
+              Provider connections and setup instructions now live in Settings
+              so the calendar view can stay focused on the week.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
-              <Button variant="secondary" onClick={() => navigate("/settings/calendar")}>
+              <Button
+                variant="secondary"
+                onClick={() => navigate("/settings/calendar")}
+              >
                 <ArrowUpRight className="size-4" />
                 Open calendar settings
               </Button>
@@ -1713,62 +1903,82 @@ export function CalendarPage() {
         </div>
 
         <div className="grid gap-4">
-          <Card className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(18,28,38,0.98),rgba(11,17,28,0.98))]">
+          <Card className="rounded-[28px] border border-[var(--ui-border-subtle)] !bg-[var(--ui-surface-1)] shadow-[var(--ui-shadow-soft)]">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                   This week
                 </div>
-                <p className="mt-2 text-sm leading-6 text-white/60">
+                <p className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                   Quick status for the currently visible week.
                 </p>
               </div>
-              <Button variant="secondary" onClick={() => void calendarQuery.refetch()}>
+              <Button
+                variant="secondary"
+                onClick={() => void calendarQuery.refetch()}
+              >
                 <RefreshCcw className="size-4" />
                 Refresh view
               </Button>
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-[22px] bg-white/[0.04] px-4 py-4">
-                <div className="text-sm text-white/54">Provider events</div>
-                <div className="mt-2 font-display text-3xl text-white">{overview.events.length}</div>
+              <div className="rounded-[22px] border border-[var(--ui-border-subtle)] !bg-[var(--ui-surface-2)] px-4 py-4">
+                <div className="text-sm text-[var(--ui-ink-soft)]">
+                  Provider events
+                </div>
+                <div className="mt-2 font-display text-3xl text-[var(--ui-ink-strong)]">
+                  {overview.events.length}
+                </div>
               </div>
-              <div className="rounded-[22px] bg-white/[0.04] px-4 py-4">
-                <div className="text-sm text-white/54">Work blocks</div>
-                <div className="mt-2 font-display text-3xl text-white">
+              <div className="rounded-[22px] border border-[var(--ui-border-subtle)] !bg-[var(--ui-surface-2)] px-4 py-4">
+                <div className="text-sm text-[var(--ui-ink-soft)]">
+                  Work blocks
+                </div>
+                <div className="mt-2 font-display text-3xl text-[var(--ui-ink-strong)]">
                   {overview.workBlockInstances.length}
                 </div>
               </div>
-              <div className="rounded-[22px] bg-white/[0.04] px-4 py-4">
-                <div className="text-sm text-white/54">Planned timeboxes</div>
-                <div className="mt-2 font-display text-3xl text-white">
+              <div className="rounded-[22px] border border-[var(--ui-border-subtle)] !bg-[var(--ui-surface-2)] px-4 py-4">
+                <div className="text-sm text-[var(--ui-ink-soft)]">
+                  Planned timeboxes
+                </div>
+                <div className="mt-2 font-display text-3xl text-[var(--ui-ink-strong)]">
                   {plannedTimeboxes.length}
                 </div>
               </div>
             </div>
           </Card>
 
-          <Card className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(18,28,38,0.98),rgba(11,17,28,0.98))]">
-            <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">Guided actions</div>
+          <Card className="rounded-[28px] border border-[var(--ui-border-subtle)] !bg-[var(--ui-surface-1)] shadow-[var(--ui-shadow-soft)]">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
+              Guided actions
+            </div>
             <div className="mt-3 grid gap-3">
               <button
                 type="button"
                 onClick={() => setTaskRulesDialogOpen(true)}
-                className="rounded-[22px] border border-white/8 bg-white/[0.04] px-4 py-4 text-left transition hover:bg-white/[0.06]"
+                className="rounded-[22px] border border-[var(--ui-border-subtle)] !bg-[var(--ui-surface-2)] px-4 py-4 text-left transition hover:border-[var(--ui-border-strong)] hover:!bg-[var(--ui-surface-hover)]"
               >
                 <div className="flex items-center justify-between gap-3">
-                  <div className="font-medium text-white">Adjust task blocking rules</div>
-                  <Badge className="bg-white/[0.08] text-white/74">Guided</Badge>
+                  <div className="font-medium text-[var(--ui-ink-strong)]">
+                    Adjust task blocking rules
+                  </div>
+                  <Badge className="bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)]">
+                    Guided
+                  </Badge>
                 </div>
-                <div className="mt-2 text-sm leading-6 text-white/58">
-                  Decide which work blocks, calendar conditions, and event keywords should block or allow a task.
+                <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
+                  Decide which work blocks, calendar conditions, and event
+                  keywords should block or allow a task.
                 </div>
               </button>
 
-              <div className="rounded-[22px] border border-white/8 bg-white/[0.04] px-4 py-4">
+              <div className="rounded-[22px] border border-[var(--ui-border-subtle)] !bg-[var(--ui-surface-2)] px-4 py-4">
                 <div className="flex items-center justify-between gap-3">
-                  <div className="font-medium text-white">Active templates</div>
-                  <Badge className="bg-white/[0.08] text-white/74">
+                  <div className="font-medium text-[var(--ui-ink-strong)]">
+                    Active templates
+                  </div>
+                  <Badge className="bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)]">
                     {overview.workBlockTemplates.length}
                   </Badge>
                 </div>
@@ -1776,14 +1986,20 @@ export function CalendarPage() {
                   {overview.workBlockTemplates.slice(0, 4).map((template) => (
                     <div
                       key={template.id}
-                      className="rounded-[18px] bg-white/[0.04] px-3 py-3 text-sm text-white/74"
+                      className="rounded-[18px] border border-[var(--ui-border-subtle)] !bg-[var(--ui-surface-1)] px-3 py-3 text-sm text-[var(--ui-ink-medium)]"
                     >
-                      <div className="font-medium text-white">{template.title}</div>
-                      <div className="mt-1 text-white/56">
-                        {formatWorkBlockKindLabel(template.kind)} · {template.weekDays.length} day
-                        {template.weekDays.length === 1 ? "" : "s"} · {template.blockingState}
+                      <div className="font-medium text-[var(--ui-ink-strong)]">
+                        {template.title}
                       </div>
-                      <div className="mt-1 text-white/46">{formatTemplateDateRange(template)}</div>
+                      <div className="mt-1 text-[var(--ui-ink-soft)]">
+                        {formatWorkBlockKindLabel(template.kind)} ·{" "}
+                        {template.weekDays.length} day
+                        {template.weekDays.length === 1 ? "" : "s"} ·{" "}
+                        {template.blockingState}
+                      </div>
+                      <div className="mt-1 text-[var(--ui-ink-muted)]">
+                        {formatTemplateDateRange(template)}
+                      </div>
                       <div className="mt-3 flex flex-wrap gap-2">
                         <Button
                           variant="secondary"
@@ -1799,7 +2015,11 @@ export function CalendarPage() {
                         <Button
                           variant="secondary"
                           size="sm"
-                          onClick={() => void deleteWorkBlockMutation.mutateAsync(template.id)}
+                          onClick={() =>
+                            void deleteWorkBlockMutation.mutateAsync(
+                              template.id
+                            )
+                          }
                         >
                           <Trash2 className="size-3.5" />
                           Delete
@@ -1808,8 +2028,9 @@ export function CalendarPage() {
                     </div>
                   ))}
                   {overview.workBlockTemplates.length === 0 ? (
-                    <div className="text-sm text-white/52">
-                      No recurring templates yet. Open the work-block guide to create the first one.
+                    <div className="text-sm text-[var(--ui-ink-soft)]">
+                      No recurring templates yet. Open the work-block guide to
+                      create the first one.
                     </div>
                   ) : null}
                 </div>
@@ -1827,7 +2048,9 @@ export function CalendarPage() {
             setSelectedWorkBlockTemplate(null);
           }
         }}
-        pending={createWorkBlockMutation.isPending || patchWorkBlockMutation.isPending}
+        pending={
+          createWorkBlockMutation.isPending || patchWorkBlockMutation.isPending
+        }
         template={selectedWorkBlockTemplate}
         onSubmit={async (input) => {
           if (selectedWorkBlockTemplate) {
@@ -1852,7 +2075,9 @@ export function CalendarPage() {
           });
           await shell.refresh();
           await invalidateCalendar();
-          await queryClient.invalidateQueries({ queryKey: ["task-context", taskId] });
+          await queryClient.invalidateQueries({
+            queryKey: ["task-context", taskId]
+          });
         }}
       />
 
@@ -1943,21 +2168,29 @@ export function CalendarPage() {
         open={menuState !== null}
         title={
           menuState?.kind === "event"
-            ? overview.events.find((entry) => entry.id === menuState.eventId)?.title ?? "Event actions"
+            ? (overview.events.find((entry) => entry.id === menuState.eventId)
+                ?.title ?? "Event actions")
             : menuState?.kind === "work-block"
-              ? overview.workBlockTemplates.find((entry) => entry.id === menuState.templateId)?.title ?? "Work block actions"
-            : menuState?.kind === "day"
-              ? formatWeekday(days.find((entry) => entry.toISOString().slice(0, 10) === menuState.dayKey) ?? weekStart)
-              : "Calendar actions"
+              ? (overview.workBlockTemplates.find(
+                  (entry) => entry.id === menuState.templateId
+                )?.title ?? "Work block actions")
+              : menuState?.kind === "day"
+                ? formatWeekday(
+                    days.find(
+                      (entry) =>
+                        entry.toISOString().slice(0, 10) === menuState.dayKey
+                    ) ?? weekStart
+                  )
+                : "Calendar actions"
         }
         subtitle={
           menuState?.kind === "day"
             ? "Choose what to create or paste into this day."
             : menuState?.kind === "work-block"
               ? "Edit or remove this recurring work block."
-            : clipboardEntry
-              ? `Clipboard ready: ${clipboardEntry.label}`
-              : "Quick calendar event actions."
+              : clipboardEntry
+                ? `Clipboard ready: ${clipboardEntry.label}`
+                : "Quick calendar event actions."
         }
         items={activeMenuItems}
         position={menuState?.position ?? null}

@@ -120,7 +120,7 @@ function CreateActionButton({
   return (
     <button
       type="button"
-      className="w-full min-w-0 rounded-[22px] border border-white/8 bg-white/[0.04] px-4 py-4 text-left transition hover:bg-white/[0.08]"
+      className="w-full min-w-0 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-4 text-left transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]"
       onClick={onClick}
     >
       <EntityBadge
@@ -130,7 +130,9 @@ function CreateActionButton({
         gradient={false}
         className="max-w-full"
       />
-      <div className="mt-1 text-sm text-white/55">{description}</div>
+      <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
+        {description}
+      </div>
     </button>
   );
 }
@@ -474,10 +476,10 @@ export function CreateMenu({
           aria-expanded={menuOpen}
           aria-haspopup="dialog"
           onClick={() => setMenuOpen((current) => (isMobile ? true : !current))}
-          className={`min-w-max max-w-[calc(100vw-2rem)] shrink-0 rounded-full px-3.5 py-2 text-[12px] shadow-[0_20px_60px_rgba(4,8,18,0.34)] ${menuOpen ? "bg-[linear-gradient(135deg,rgba(192,193,255,0.52),rgba(125,211,252,0.24))] text-white" : ""}`}
+          className={`min-w-max max-w-[calc(100vw-2rem)] shrink-0 rounded-full px-3.5 py-2 text-[12px] shadow-[var(--ui-shadow-soft)] ${menuOpen ? "border-[color-mix(in_srgb,var(--primary)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-accent-soft-hover)] text-[var(--ui-ink-strong)]" : ""}`}
         >
           <Sparkles
-            className={`size-4 transition ${menuOpen ? "text-white" : "text-white/72"}`}
+            className={`size-4 transition ${menuOpen ? "text-[var(--ui-ink-strong)]" : "text-[var(--ui-ink-medium)]"}`}
           />
           {t("common.navigation.create")}
         </Button>
@@ -491,26 +493,26 @@ export function CreateMenu({
             <div
               ref={desktopMenuRef}
               data-testid="create-desktop-menu"
-              className="fixed z-50 w-[min(26rem,calc(100vw-2rem))] max-h-[min(34rem,calc(100vh-4rem))] overflow-y-auto rounded-[30px] border border-white/8 bg-[linear-gradient(180deg,rgba(18,24,40,0.985),rgba(10,15,27,0.985))] p-4 shadow-[0_28px_90px_rgba(3,8,18,0.46)]"
+              className="fixed z-50 max-h-[min(34rem,calc(100vh-4rem))] w-[min(26rem,calc(100vw-2rem))] overflow-y-auto rounded-[30px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-modal)] p-4 shadow-[var(--ui-shadow-floating)]"
               style={{
                 top: `${desktopMenuPosition.top}px`,
                 right: `${desktopMenuPosition.right}px`,
                 transform: "translateY(-100%)"
               }}
             >
-              <div className="text-[11px] uppercase tracking-[0.18em] text-white/42">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                 Create
               </div>
-              <div className="mt-2 text-lg font-medium text-white">
+              <div className="mt-2 text-lg font-medium text-[var(--ui-ink-strong)]">
                 Start the next move
               </div>
-              <div className="mt-1 text-sm leading-6 text-white/56">
+              <div className="mt-1 text-sm leading-6 text-[var(--ui-ink-soft)]">
                 Pick one thing to create. The flow keeps the first step light
                 and visible.
               </div>
               {CREATE_ACTION_GROUPS.map((group) => (
                 <div key={group} className="mt-4">
-                  <div className="text-[11px] uppercase tracking-[0.18em] text-white/38">
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                     {group}
                   </div>
                   <div className="mt-2 grid gap-2">
@@ -538,25 +540,25 @@ export function CreateMenu({
 
       <Dialog.Root open={menuOpen && isMobile} onOpenChange={setMenuOpen}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-40 bg-[rgba(4,8,18,0.72)] backdrop-blur-xl lg:hidden" />
+          <Dialog.Overlay className="surface-overlay fixed inset-0 z-40 backdrop-blur-xl lg:hidden" />
           <Dialog.Content
             data-testid="create-mobile-sheet"
-            className="fixed inset-x-4 bottom-28 z-50 flex max-h-[min(30rem,calc(100vh-8rem))] flex-col overflow-hidden rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(24,31,50,0.98),rgba(15,21,36,0.98))] p-0 shadow-[0_30px_90px_rgba(3,8,18,0.45)] lg:hidden"
+            className="surface-modal-panel fixed inset-x-4 bottom-28 z-50 flex max-h-[min(30rem,calc(100vh-8rem))] flex-col overflow-hidden rounded-[28px] border p-0 lg:hidden"
             style={{
               left: "max(1rem, calc(var(--forge-safe-area-left) + 1rem))",
               right: "max(1rem, calc(var(--forge-safe-area-right) + 1rem))",
               bottom: "calc(var(--forge-mobile-nav-clearance) - 0.5rem)"
             }}
           >
-            <div className="flex items-start justify-between gap-4 border-b border-white/8 px-5 py-5">
+            <div className="flex items-start justify-between gap-4 border-b border-[var(--ui-border-subtle)] px-5 py-5">
               <div>
-                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                   {t("common.navigation.create")}
                 </div>
-                <Dialog.Title className="mt-2 font-display text-2xl text-white">
+                <Dialog.Title className="mt-2 font-display text-2xl text-[var(--ui-ink-strong)]">
                   {t("common.navigation.createTitle")}
                 </Dialog.Title>
-                <Dialog.Description className="mt-2 text-sm leading-6 text-white/60">
+                <Dialog.Description className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                   {t("common.navigation.createDescription")}
                 </Dialog.Description>
               </div>
@@ -564,7 +566,7 @@ export function CreateMenu({
                 <button
                   type="button"
                   aria-label={t("common.navigation.closeCreateMenu")}
-                  className="rounded-full bg-white/6 p-2 text-white/65 transition hover:bg-white/10 hover:text-white"
+                  className="rounded-full bg-[var(--ui-surface-2)] p-2 text-[var(--ui-ink-medium)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                 >
                   <X className="size-4" />
                 </button>
@@ -573,7 +575,7 @@ export function CreateMenu({
             <div className="overflow-y-auto p-4 overscroll-contain">
               {CREATE_ACTION_GROUPS.map((group) => (
                 <div key={group} className="mt-1 grid gap-2 first:mt-0">
-                  <div className="px-1 text-[11px] uppercase tracking-[0.18em] text-white/38">
+                  <div className="px-1 text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                     {group}
                   </div>
                   {actions

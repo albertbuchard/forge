@@ -6448,8 +6448,7 @@ function buildAgentOnboardingPayload(request: {
       weightLossGutCheckins: "/api/v1/health/weight-loss/gut-checkins",
       weightLossPatterns: "/api/v1/health/weight-loss/patterns",
       weightLossExperiments: "/api/v1/health/weight-loss/experiments",
-      weightLossExperimentDetail:
-        "/api/v1/health/weight-loss/experiments/:id"
+      weightLossExperimentDetail: "/api/v1/health/weight-loss/experiments/:id"
     },
     recommendedPluginTools: {
       bootstrap: ["forge_get_operator_overview"],
@@ -9343,11 +9342,31 @@ export async function buildServer(
       resolveScopedUserIds(request.query as Record<string, unknown>)
     )
   }));
-  app.get("/api/v1/health/weight-loss", async (request) => ({
-    weightLoss: getWeightLossViewData(
-      resolveScopedUserIds(request.query as Record<string, unknown>)
-    )
-  }));
+  app.get("/api/v1/health/weight-loss", async (request) => {
+    const query = request.query as Record<string, unknown>;
+    const dateKey =
+      typeof query.dateKey === "string" &&
+      /^\d{4}-\d{2}-\d{2}$/.test(query.dateKey)
+        ? query.dateKey
+        : undefined;
+    const dayStartAt =
+      typeof query.dayStartAt === "string" &&
+      z.string().datetime().safeParse(query.dayStartAt).success
+        ? query.dayStartAt
+        : undefined;
+    const dayEndAt =
+      typeof query.dayEndAt === "string" &&
+      z.string().datetime().safeParse(query.dayEndAt).success
+        ? query.dayEndAt
+        : undefined;
+    return {
+      weightLoss: getWeightLossViewData(resolveScopedUserIds(query), {
+        dateKey,
+        dayStartAt,
+        dayEndAt
+      })
+    };
+  });
   app.patch("/api/v1/health/weight-loss/target", async (request) => {
     requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
       route: "/api/v1/health/weight-loss/target"
