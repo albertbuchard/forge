@@ -1,9 +1,18 @@
-Forge Companion 1.0.78 fixes HealthKit historical workout evidence replay.
+Forge Companion 1.0.79 improves the watchOS command surface and keeps the
+historical HealthKit evidence replay fix from 1.0.78.
 
 Historical workouts whose heart-rate, time-series, and route evidence was already
 uploaded are no longer treated as missing just because they used an older raw
 evidence contract. Truly missing evidence remains replayable, but completed
 workouts should not restart the historical import on app launch.
 
-This build also includes the Forge plugin/runtime 0.2.102 release and clearer
-sync-state reporting for missing versus stale workout evidence.
+The Watch app now opens into a clear Forge surface navigator: the Digital Crown
+moves between Now, Work, Habits, Goals, Today, Health, Movement, Psyche, Inbox,
+and Sync, while horizontal paging selects the current card inside each surface.
+Every surface now has a fast action or logging path instead of leaving the user
+stuck on one command page.
+
+The Watch asks the iPhone to refresh and relay automatically when it opens or
+regains connectivity. The iPhone now acknowledges only backend-confirmed watch
+commands, keeps unacknowledged actions queued for retry, and applies fresh
+snapshots from backend receipts.

@@ -5,6 +5,7 @@ struct ContentView: View {
     @StateObject private var navigation = WatchNavigationModel()
     @State private var selectedHabit: ForgeWatchHabitSummary?
     @State private var selectedCommand: WatchCommandModalItem?
+    @FocusState private var crownFocused: Bool
 
     private let surfaces = WatchSurface.allCases
 
@@ -22,7 +23,9 @@ struct ContentView: View {
                     onHabitTap: { selectedHabit = $0 },
                     onCommandTap: { selectedCommand = $0 },
                     onCommand: appModel.queueCommand,
-                    onCapture: appModel.queueCaptureEvent
+                    onCapture: appModel.queueCaptureEvent,
+                    onRefresh: { appModel.requestPhoneRefresh(reason: "surface_refresh") },
+                    onRetry: appModel.flushPendingActions
                 )
                 .id(navigation.selectedSurface)
                 .transition(.opacity.combined(with: .scale(scale: 0.97)))
@@ -30,6 +33,8 @@ struct ContentView: View {
             .padding(.horizontal, 8)
             .padding(.top, 2)
         }
+        .focusable(true)
+        .focused($crownFocused)
         .digitalCrownRotation(
             $navigation.crownValue,
             from: 0,
@@ -42,6 +47,8 @@ struct ContentView: View {
         .onAppear {
             appModel.consumePendingLaunchDestination()
             navigation.selectSurface(appModel.selectedSurface)
+            crownFocused = true
+            appModel.requestPhoneRefresh(reason: "watch_open")
         }
         .onChange(of: navigation.crownValue) { _, value in
             withAnimation(.snappy(duration: 0.22)) {
@@ -80,12 +87,34 @@ struct ContentView: View {
 
             Spacer(minLength: 4)
 
+            Button {
+                withAnimation(.snappy(duration: 0.18)) {
+                    navigation.selectPreviousSurface()
+                }
+            } label: {
+                Image(systemName: "chevron.up")
+                    .font(.system(size: 10, weight: .black))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(WatchTheme.textMuted)
+
             Text("\(surfaceIndex(navigation.selectedSurface) + 1)/\(surfaces.count)")
                 .font(.system(size: 10, weight: .bold, design: .rounded))
                 .foregroundStyle(WatchTheme.accent)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 5)
                 .background(Capsule().fill(Color.white.opacity(0.1)))
+
+            Button {
+                withAnimation(.snappy(duration: 0.18)) {
+                    navigation.selectNextSurface()
+                }
+            } label: {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .black))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(WatchTheme.textMuted)
         }
     }
 
@@ -100,101 +129,6 @@ struct ContentView: View {
     }
 }
 
-@MainActor
-private final class WatchNavigationModel: ObservableObject {
-    @Published var selectedSurface: WatchSurface = .now
-    @Published var crownValue = 0.0
-
-    private var selectedCardIndexes: [WatchSurface: Int] = [:]
-    private var cardCounts: [WatchSurface: Int] = [:]
-    private let surfaces = WatchSurface.allCases
-
-    func selectSurface(_ surface: WatchSurface) {
-        selectedSurface = surface
-        crownValue = Double(surfaceIndex(surface))
-        clampCardIndex(for: surface)
-    }
-
-    func selectSurfaceFromCrown(_ value: Double) {
-        let index = min(max(Int(value.rounded()), 0), surfaces.count - 1)
-        selectSurface(surfaces[index])
-    }
-
-    func cardIndexBinding(for surface: WatchSurface) -> Binding<Int> {
-        Binding(
-            get: { [weak self] in self?.selectedCardIndexes[surface] ?? 0 },
-            set: { [weak self] value in self?.setCardIndex(value, for: surface) }
-        )
-    }
-
-    func registerCardCount(_ count: Int, for surface: WatchSurface) {
-        cardCounts[surface] = max(1, count)
-        clampCardIndex(for: surface)
-    }
-
-    private func setCardIndex(_ value: Int, for surface: WatchSurface) {
-        let maxIndex = max(0, (cardCounts[surface] ?? 1) - 1)
-        selectedCardIndexes[surface] = min(max(value, 0), maxIndex)
-    }
-
-    private func clampCardIndex(for surface: WatchSurface) {
-        setCardIndex(selectedCardIndexes[surface] ?? 0, for: surface)
-    }
-
-    private func surfaceIndex(_ surface: WatchSurface) -> Int {
-        surfaces.firstIndex(of: surface) ?? 0
-    }
-}
-
-private struct WatchCommandModalAction: Identifiable {
-    let id: String
-    let title: String
-    let systemImage: String
-    let tint: Color
-    let perform: () -> Void
-}
-
-private struct WatchCommandModalItem: Identifiable {
-    let id: String
-    let title: String
-    let subtitle: String
-    let actions: [WatchCommandModalAction]
-}
-
-private struct WatchCommandModalView: View {
-    @Environment(\.dismiss) private var dismiss
-    let item: WatchCommandModalItem
-
-    var body: some View {
-        WatchSurfaceBackground()
-            .overlay {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(item.title)
-                        .font(.system(size: 16, weight: .bold, design: .rounded))
-                        .foregroundStyle(WatchTheme.textPrimary)
-                        .lineLimit(3)
-                    Text(item.subtitle)
-                        .font(.system(size: 10, weight: .medium, design: .rounded))
-                        .foregroundStyle(WatchTheme.textMuted)
-                        .lineLimit(2)
-
-                    ForEach(item.actions) { action in
-                        Button {
-                            action.perform()
-                            dismiss()
-                        } label: {
-                            Label(action.title, systemImage: action.systemImage)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(action.tint)
-                    }
-                }
-                .padding(10)
-            }
-    }
-}
-
 private struct WatchSurfacePager: View {
     let surface: WatchSurface
     @ObservedObject var navigation: WatchNavigationModel
@@ -203,6 +137,8 @@ private struct WatchSurfacePager: View {
     let onCommandTap: (WatchCommandModalItem) -> Void
     let onCommand: (ForgeWatchActionKind, [String: String]) -> Void
     let onCapture: (String, String?, ForgeWatchLinkedContext, [String: String]) -> Void
+    let onRefresh: () -> Void
+    let onRetry: () -> Void
 
     var body: some View {
         Group {
@@ -212,38 +148,52 @@ private struct WatchSurfacePager: View {
                     bootstrap: bootstrap,
                     selection: navigation.cardIndexBinding(for: surface),
                     onCommandTap: onCommandTap,
-                    onCommand: onCommand
+                    onCommand: onCommand,
+                    onCapture: onCapture,
+                    onRefresh: onRefresh
                 )
             case .work:
                 WorkSurface(
                     work: bootstrap.work,
                     selection: navigation.cardIndexBinding(for: surface),
                     onCommandTap: onCommandTap,
-                    onCommand: onCommand
+                    onCommand: onCommand,
+                    onRefresh: onRefresh
                 )
             case .habits:
                 HabitSurface(
                     habits: bootstrap.habits,
                     selection: navigation.cardIndexBinding(for: surface),
-                    onHabitTap: onHabitTap
+                    onHabitTap: onHabitTap,
+                    onRefresh: onRefresh
                 )
             case .goals:
                 GoalSurface(
                     goals: bootstrap.goals ?? [],
                     projects: bootstrap.projects ?? [],
-                    selection: navigation.cardIndexBinding(for: surface)
+                    selection: navigation.cardIndexBinding(for: surface),
+                    onCapture: onCapture
                 )
             case .today:
                 TodaySurface(
                     today: bootstrap.today,
                     selection: navigation.cardIndexBinding(for: surface),
                     onCommandTap: onCommandTap,
-                    onCommand: onCommand
+                    onCommand: onCommand,
+                    onCapture: onCapture
                 )
             case .health:
-                HealthSurface(health: bootstrap.health, selection: navigation.cardIndexBinding(for: surface))
+                HealthSurface(
+                    health: bootstrap.health,
+                    selection: navigation.cardIndexBinding(for: surface),
+                    onCapture: onCapture
+                )
             case .movement:
-                MovementSurface(movement: bootstrap.movement, selection: navigation.cardIndexBinding(for: surface))
+                MovementSurface(
+                    movement: bootstrap.movement,
+                    selection: navigation.cardIndexBinding(for: surface),
+                    onCapture: onCapture
+                )
             case .psyche:
                 PsycheSurface(
                     psyche: bootstrap.psyche,
@@ -257,7 +207,7 @@ private struct WatchSurfacePager: View {
                     onCapture: onCapture
                 )
             case .sync:
-                SyncSurface(sync: bootstrap.sync)
+                SyncSurface(sync: bootstrap.sync, onRefresh: onRefresh, onRetry: onRetry)
             }
         }
         .animation(.snappy(duration: 0.24), value: surface)
@@ -289,37 +239,12 @@ private struct WatchSurfacePager: View {
                 1 + (bootstrap.movement?.latestTrip == nil ? 0 : 1) + (bootstrap.movement?.latestStay == nil ? 0 : 1)
             )
         case .psyche:
-            return 3
+            return 4
         case .inbox:
             return max(1, (bootstrap.inbox?.prompts ?? bootstrap.pendingPrompts).count)
         case .sync:
             return 1
         }
-    }
-}
-
-private struct SurfaceCarousel<Content: View>: View {
-    @Binding var selection: Int
-    let count: Int
-    private let content: () -> Content
-
-    init(selection: Binding<Int>, count: Int, @ViewBuilder content: @escaping () -> Content) {
-        self._selection = selection
-        self.count = count
-        self.content = content
-    }
-
-    var body: some View {
-        TabView(selection: $selection) {
-            content()
-        }
-        .tabViewStyle(.carousel)
-        .onAppear(perform: clampSelection)
-        .onChange(of: count) { _, _ in clampSelection() }
-    }
-
-    private func clampSelection() {
-        selection = min(max(selection, 0), max(0, count - 1))
     }
 }
 
@@ -376,60 +301,20 @@ private func runCommandModal(
     )
 }
 
-private struct DenseMetric: View {
-    let title: String
-    let value: String
-    let tint: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(value)
-                .font(.system(size: 18, weight: .bold, design: .rounded))
-                .foregroundStyle(tint)
-                .lineLimit(1)
-            Text(title)
-                .font(.system(size: 9, weight: .semibold, design: .rounded))
-                .foregroundStyle(WatchTheme.textMuted)
-                .lineLimit(1)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-private struct EmptySurfaceCard: View {
-    let title: String
-    let message: String
-
-    var body: some View {
-        WatchCard {
-            VStack(alignment: .leading, spacing: 8) {
-                Image(systemName: "applewatch")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(WatchTheme.accent)
-                Text(title)
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
-                    .foregroundStyle(WatchTheme.textPrimary)
-                Text(message)
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
-                    .foregroundStyle(WatchTheme.textMuted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-}
-
 private struct NowSurface: View {
     let bootstrap: ForgeWatchBootstrap
     @Binding var selection: Int
     let onCommandTap: (WatchCommandModalItem) -> Void
     let onCommand: (ForgeWatchActionKind, [String: String]) -> Void
+    let onCapture: (String, String?, ForgeWatchLinkedContext, [String: String]) -> Void
+    let onRefresh: () -> Void
 
     var body: some View {
         let run = bootstrap.now?.currentRun ?? bootstrap.work?.currentRun
         SurfaceCarousel(selection: $selection, count: run == nil ? 1 : 2) {
             WatchCard {
                 VStack(alignment: .leading, spacing: 9) {
-                    Text("Command Center")
+                    Text("Now")
                         .font(.system(size: 14, weight: .bold, design: .rounded))
                         .foregroundStyle(WatchTheme.textPrimary)
                     HStack(spacing: 8) {
@@ -452,7 +337,26 @@ private struct NowSurface: View {
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .buttonStyle(.plain)
+                            .buttonStyle(.plain)
+                    }
+                    HStack(spacing: 6) {
+                        Button {
+                            onCapture("mark_moment", nil, .empty, ["surface": "now"])
+                        } label: {
+                            Label("Moment", systemImage: "bookmark.fill")
+                                .font(.system(size: 10, weight: .bold, design: .rounded))
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(WatchTheme.accent)
+
+                        Button {
+                            onRefresh()
+                        } label: {
+                            Label("Sync", systemImage: "arrow.clockwise")
+                                .font(.system(size: 10, weight: .bold, design: .rounded))
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(WatchTheme.success)
                     }
                 }
             }
@@ -471,6 +375,7 @@ private struct WorkSurface: View {
     @Binding var selection: Int
     let onCommandTap: (WatchCommandModalItem) -> Void
     let onCommand: (ForgeWatchActionKind, [String: String]) -> Void
+    let onRefresh: () -> Void
 
     var body: some View {
         if let work {
@@ -486,7 +391,13 @@ private struct WorkSurface: View {
                 }
             }
         } else {
-            EmptySurfaceCard(title: "No work snapshot", message: "Open Forge on iPhone once to refresh the watch command surface.")
+            EmptySurfaceCard(
+                title: "No work snapshot",
+                message: "Ask the iPhone bridge to refresh Forge work and task runs.",
+                actionTitle: "Refresh work",
+                systemImage: "arrow.clockwise",
+                action: onRefresh
+            )
         }
     }
 }
@@ -568,10 +479,17 @@ private struct HabitSurface: View {
     let habits: [ForgeWatchHabitSummary]
     @Binding var selection: Int
     let onHabitTap: (ForgeWatchHabitSummary) -> Void
+    let onRefresh: () -> Void
 
     var body: some View {
         if habits.isEmpty {
-            EmptySurfaceCard(title: "No habits loaded", message: "Forge will send active habits to the watch after the next iPhone refresh.")
+            EmptySurfaceCard(
+                title: "No habits loaded",
+                message: "Ask the iPhone bridge to fetch active habits from Forge.",
+                actionTitle: "Refresh habits",
+                systemImage: "arrow.clockwise",
+                action: onRefresh
+            )
         } else {
             SurfaceCarousel(selection: $selection, count: habits.count) {
                 ForEach(Array(habits.enumerated()), id: \.element.id) { index, habit in
@@ -610,11 +528,20 @@ private struct GoalSurface: View {
     let goals: [ForgeWatchGoalSummary]
     let projects: [ForgeWatchProjectSummary]
     @Binding var selection: Int
+    let onCapture: (String, String?, ForgeWatchLinkedContext, [String: String]) -> Void
 
     var body: some View {
         let count = goals.count + projects.count
         if count == 0 {
-            EmptySurfaceCard(title: "No goals loaded", message: "The iPhone bridge will send active goals and projects after Forge refreshes.")
+            EmptySurfaceCard(
+                title: "No goals loaded",
+                message: "Mark a direction note now; richer goals arrive after the next iPhone refresh.",
+                actionTitle: "Capture note",
+                systemImage: "square.and.pencil",
+                action: {
+                    onCapture("mark_moment", nil, .empty, ["surface": "goals"])
+                }
+            )
         } else {
             SurfaceCarousel(selection: $selection, count: count) {
                 ForEach(Array(goals.enumerated()), id: \.element.id) { index, goal in
@@ -630,6 +557,10 @@ private struct GoalSurface: View {
                             Text("\(goal.targetPoints) target pts")
                                 .font(.system(size: 11, weight: .medium, design: .rounded))
                                 .foregroundStyle(WatchTheme.textMuted)
+                            Button("Mark goal") {
+                                onCapture("mark_moment", nil, .empty, ["goalId": goal.id, "surface": "goals"])
+                            }
+                            .buttonStyle(.bordered)
                         }
                     }
                     .tag(index)
@@ -648,6 +579,10 @@ private struct GoalSurface: View {
                                 DenseMetric(title: "Open", value: "\(project.openTaskCount)", tint: WatchTheme.accent)
                                 DenseMetric(title: "Runs", value: "\(project.activeRunCount)", tint: WatchTheme.success)
                             }
+                            Button("Mark project") {
+                                onCapture("mark_moment", nil, .empty, ["projectId": project.id, "surface": "projects"])
+                            }
+                            .buttonStyle(.bordered)
                         }
                     }
                     .tag(goals.count + index)
@@ -662,6 +597,7 @@ private struct TodaySurface: View {
     @Binding var selection: Int
     let onCommandTap: (WatchCommandModalItem) -> Void
     let onCommand: (ForgeWatchActionKind, [String: String]) -> Void
+    let onCapture: (String, String?, ForgeWatchLinkedContext, [String: String]) -> Void
 
     var body: some View {
         if let today {
@@ -675,6 +611,10 @@ private struct TodaySurface: View {
                             DenseMetric(title: "Due", value: "\(today.dueCount)", tint: WatchTheme.accent)
                             DenseMetric(title: "Done", value: "\(today.recentDone.count)", tint: WatchTheme.success)
                         }
+                        Button("Checkpoint") {
+                            onCapture("mark_moment", nil, .empty, ["surface": "today", "dateKey": today.dateKey])
+                        }
+                        .buttonStyle(.bordered)
                     }
                 }
                 .tag(0)
@@ -699,7 +639,15 @@ private struct TodaySurface: View {
                 }
             }
         } else {
-            EmptySurfaceCard(title: "Today not loaded", message: "The next iPhone bridge refresh will send due tasks and recent completions.")
+            EmptySurfaceCard(
+                title: "Today not loaded",
+                message: "Mark a checkpoint now; due work arrives after refresh.",
+                actionTitle: "Checkpoint",
+                systemImage: "checkmark.seal",
+                action: {
+                    onCapture("mark_moment", nil, .empty, ["surface": "today"])
+                }
+            )
         }
     }
 }
@@ -707,6 +655,7 @@ private struct TodaySurface: View {
 private struct HealthSurface: View {
     let health: ForgeWatchHealthSnapshot?
     @Binding var selection: Int
+    let onCapture: (String, String?, ForgeWatchLinkedContext, [String: String]) -> Void
 
     var body: some View {
         if let health {
@@ -720,6 +669,10 @@ private struct HealthSurface: View {
                             DenseMetric(title: "Vitals", value: "\(health.latestVitals?.metricCount ?? 0)", tint: WatchTheme.accent)
                             DenseMetric(title: "HR samples", value: "\(health.lastWorkout?.heartRateSampleCount ?? 0)", tint: WatchTheme.success)
                         }
+                        Button("Mark recovery") {
+                            onCapture("mark_moment", nil, .empty, ["surface": "health", "context": "recovery"])
+                        }
+                        .buttonStyle(.bordered)
                     }
                 }
                 .tag(0)
@@ -734,13 +687,31 @@ private struct HealthSurface: View {
                                 DenseMetric(title: "Avg HR", value: workout.averageHeartRate.map { "\(Int($0))" } ?? "--", tint: WatchTheme.accent)
                                 DenseMetric(title: "Load", value: workout.trainingLoad.map { "\(Int($0))" } ?? "--", tint: WatchTheme.success)
                             }
+                            HStack(spacing: 6) {
+                                Button("Good") {
+                                    onCapture("workout_annotation", nil, ForgeWatchLinkedContext(placeId: nil, stayId: nil, tripId: nil, workoutId: workout.id), ["moodAfter": "Good"])
+                                }
+                                .buttonStyle(.bordered)
+                                Button("Hard") {
+                                    onCapture("workout_annotation", nil, ForgeWatchLinkedContext(placeId: nil, stayId: nil, tripId: nil, workoutId: workout.id), ["moodAfter": "Hard"])
+                                }
+                                .buttonStyle(.bordered)
+                            }
                         }
                     }
                     .tag(1)
                 }
             }
         } else {
-            EmptySurfaceCard(title: "Health not loaded", message: "Forge will send compact health context after the next sync.")
+            EmptySurfaceCard(
+                title: "Health not loaded",
+                message: "Log recovery context now; Forge health context arrives after sync.",
+                actionTitle: "Mark recovery",
+                systemImage: "heart.text.square",
+                action: {
+                    onCapture("mark_moment", nil, .empty, ["surface": "health", "context": "recovery"])
+                }
+            )
         }
     }
 }
@@ -748,6 +719,7 @@ private struct HealthSurface: View {
 private struct MovementSurface: View {
     let movement: ForgeWatchMovementSnapshot?
     @Binding var selection: Int
+    let onCapture: (String, String?, ForgeWatchLinkedContext, [String: String]) -> Void
 
     var body: some View {
         if let movement {
@@ -764,20 +736,36 @@ private struct MovementSurface: View {
                             DenseMetric(title: "Unlabeled", value: "\(movement.unlabeledPlaceCount)", tint: WatchTheme.accent)
                             DenseMetric(title: "Latest", value: movement.latestTrip == nil ? "Stay" : "Trip", tint: WatchTheme.success)
                         }
+                        Button("Mark context") {
+                            onCapture("mark_moment", nil, .empty, ["surface": "movement"])
+                        }
+                        .buttonStyle(.bordered)
                     }
                 }
                 .tag(0)
                 if let trip = movement.latestTrip {
-                    SegmentCard(title: "Latest trip", segment: trip)
+                    SegmentCard(title: "Latest trip", segment: trip) {
+                        onCapture("mark_moment", nil, ForgeWatchLinkedContext(placeId: nil, stayId: nil, tripId: trip.id, workoutId: nil), ["surface": "movement", "kind": "trip"])
+                    }
                         .tag(1)
                 }
                 if let stay = movement.latestStay {
-                    SegmentCard(title: "Latest stay", segment: stay)
+                    SegmentCard(title: "Latest stay", segment: stay) {
+                        onCapture("mark_moment", nil, ForgeWatchLinkedContext(placeId: nil, stayId: stay.id, tripId: nil, workoutId: nil), ["surface": "movement", "kind": "stay"])
+                    }
                         .tag(movement.latestTrip == nil ? 1 : 2)
                 }
             }
         } else {
-            EmptySurfaceCard(title: "Movement not loaded", message: "Location context appears here after iPhone sync.")
+            EmptySurfaceCard(
+                title: "Movement not loaded",
+                message: "Mark movement context now; exact stays and trips arrive after sync.",
+                actionTitle: "Mark context",
+                systemImage: "location.fill",
+                action: {
+                    onCapture("mark_moment", nil, .empty, ["surface": "movement"])
+                }
+            )
         }
     }
 }
@@ -785,6 +773,7 @@ private struct MovementSurface: View {
 private struct SegmentCard: View {
     let title: String
     let segment: ForgeWatchMovementSnapshot.Segment
+    var onMark: (() -> Void)? = nil
 
     var body: some View {
         WatchCard {
@@ -800,6 +789,12 @@ private struct SegmentCard: View {
                     .font(.system(size: 10, weight: .medium, design: .rounded))
                     .foregroundStyle(WatchTheme.textMuted)
                     .lineLimit(1)
+                if let onMark {
+                    Button("Mark") {
+                        onMark()
+                    }
+                    .buttonStyle(.bordered)
+                }
             }
         }
     }
@@ -811,20 +806,32 @@ private struct PsycheSurface: View {
     let onCapture: (String, String?, ForgeWatchLinkedContext, [String: String]) -> Void
 
     var body: some View {
-        SurfaceCarousel(selection: $selection, count: 3) {
-            ChoiceCard(title: "Emotion", options: psyche?.emotionOptions ?? []) { choice in
+        let emotions = nonEmpty(psyche?.emotionOptions, fallback: ["Calm", "Focused", "Tired", "Tense"])
+        let triggers = nonEmpty(psyche?.triggerOptions, fallback: ["Urge", "Rumination", "Avoidance", "Victory"])
+        let routines = nonEmpty(psyche?.routinePromptOptions, fallback: ["Medication taken?", "Meal?", "Sunlight?", "Wind-down?"])
+        SurfaceCarousel(selection: $selection, count: 4) {
+            ChoiceCard(title: "Emotion", options: emotions) { choice in
                 onCapture("emotion_check_in", nil, .empty, ["emotion": choice])
             }
             .tag(0)
-            ChoiceCard(title: "Trigger", options: psyche?.triggerOptions ?? []) { choice in
+            ChoiceCard(title: "Trigger", options: triggers) { choice in
                 onCapture("trigger_capture", nil, .empty, ["trigger": choice])
             }
             .tag(1)
-            ChoiceCard(title: "Routine", options: psyche?.routinePromptOptions ?? []) { choice in
-                onCapture("routine_check", nil, .empty, ["routine": choice])
+            ChoiceCard(title: "Urge", options: ["Resisted", "Indulged"]) { choice in
+                onCapture("trigger_capture", nil, .empty, ["trigger": "Urge", "outcome": choice])
             }
             .tag(2)
+            ChoiceCard(title: "Routine", options: routines) { choice in
+                onCapture("routine_check", nil, .empty, ["routine": choice])
+            }
+            .tag(3)
         }
+    }
+
+    private func nonEmpty(_ options: [String]?, fallback: [String]) -> [String] {
+        guard let options, options.isEmpty == false else { return fallback }
+        return options
     }
 }
 
@@ -883,6 +890,8 @@ private struct InboxSurface: View {
 
 private struct SyncSurface: View {
     let sync: ForgeWatchSyncSnapshot?
+    let onRefresh: () -> Void
+    let onRetry: () -> Void
 
     var body: some View {
         WatchCard {
@@ -898,6 +907,25 @@ private struct SyncSurface: View {
                     .font(.system(size: 10, weight: .medium, design: .rounded))
                     .foregroundStyle(WatchTheme.textMuted)
                     .lineLimit(2)
+                HStack(spacing: 6) {
+                    Button {
+                        onRefresh()
+                    } label: {
+                        Label("Refresh", systemImage: "arrow.clockwise")
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(WatchTheme.accent)
+
+                    Button {
+                        onRetry()
+                    } label: {
+                        Label("Retry", systemImage: "paperplane.fill")
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(WatchTheme.success)
+                }
             }
         }
     }
@@ -923,15 +951,6 @@ private struct ChoiceCard: View {
             }
         }
     }
-}
-
-private func formatSeconds(_ seconds: Double) -> String {
-    let total = max(0, Int(seconds.rounded()))
-    let minutes = total / 60
-    if minutes < 60 {
-        return "\(minutes)m"
-    }
-    return "\(minutes / 60)h\(minutes % 60)"
 }
 
 #Preview {

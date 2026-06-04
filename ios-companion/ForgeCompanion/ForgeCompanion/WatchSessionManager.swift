@@ -131,6 +131,14 @@ final class WatchSessionManager: NSObject, ObservableObject {
         }
     }
 
+    private func handleControlRequestData(_ data: Data) async -> Bool {
+        guard let request = try? decoder.decode(ForgeWatchControlRequest.self, from: data) else {
+            return false
+        }
+        await refreshBootstrapIfPossible(reason: "watch-\(request.reason)")
+        return true
+    }
+
     func processPendingQueue() async {
         processingTask?.cancel()
         processingTask = Task { [weak self] in
@@ -148,7 +156,7 @@ final class WatchSessionManager: NSObject, ObservableObject {
             }
 
             do {
-                let bootstrap = try await self.syncClient.submitWatchCommandBatch(
+                let result = try await self.syncClient.submitWatchCommandBatch(
                     device: remaining.first?.device ?? ForgeWatchDeviceDescriptor(
                         name: "Apple Watch",
                         platform: "watchos",
@@ -158,19 +166,26 @@ final class WatchSessionManager: NSObject, ObservableObject {
                     envelopes: remaining,
                     pairing: pairing
                 )
+                let bootstrap = result.watch
                 self.saveBootstrap(bootstrap)
                 self.publishBootstrap(bootstrap)
-                for envelope in remaining {
+                let acknowledgedIds = Set(result.receipt.receipts.map(\.actionId))
+                for receipt in result.receipt.receipts {
                     self.sendAck(
                         ForgeWatchAckEnvelope(
-                            actionId: envelope.id,
-                            processedAt: Date().formatted(.iso8601),
+                            actionId: receipt.actionId,
+                            processedAt: receipt.processedAt,
+                            status: receipt.status,
+                            error: nil,
                             bootstrap: bootstrap
                         )
                     )
                 }
-                self.saveQueue([])
-                self.lastStatusMessage = "Watch bridge caught up"
+                let stillPending = remaining.filter { acknowledgedIds.contains($0.id) == false }
+                self.saveQueue(stillPending)
+                self.lastStatusMessage = stillPending.isEmpty
+                    ? "Watch bridge caught up"
+                    : "Watch bridge kept \(stillPending.count) unacknowledged action\(stillPending.count == 1 ? "" : "s")"
             } catch {
                 self.lastStatusMessage = "Watch sync deferred: \(error.localizedDescription)"
             }
@@ -204,7 +219,7 @@ extension WatchSessionManager: WCSessionDelegate {
             self.lastStatusMessage = activationState == .activated
                 ? "Watch activated"
                 : "Watch activation pending"
-            await self.processPendingQueue()
+            await self.refreshBootstrapIfPossible(reason: "watch-activation")
         }
     }
 
@@ -225,6 +240,12 @@ extension WatchSessionManager: WCSessionDelegate {
         _ session: WCSession,
         didReceiveUserInfo userInfo: [String : Any] = [:]
     ) {
+        if let data = userInfo[ForgeWatchStorage.syncRequestMessageKey] as? Data {
+            Task { @MainActor in
+                _ = await self.handleControlRequestData(data)
+            }
+            return
+        }
         if let data = userInfo[ForgeWatchStorage.actionMessageKey] as? Data {
             Task { @MainActor in
                 guard let envelope = try? self.decoder.decode(ForgeWatchOutboundEnvelope.self, from: data) else {
@@ -239,6 +260,9 @@ extension WatchSessionManager: WCSessionDelegate {
 
     nonisolated func session(_ session: WCSession, didReceiveMessageData messageData: Data) {
         Task { @MainActor in
+            if await self.handleControlRequestData(messageData) {
+                return
+            }
             guard let envelope = try? self.decoder.decode(ForgeWatchOutboundEnvelope.self, from: messageData) else {
                 self.lastStatusMessage = "Ignored invalid watch payload"
                 return

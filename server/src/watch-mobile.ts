@@ -1324,8 +1324,29 @@ function processWatchCommand(
     }
     case "capture_event": {
       const rawPayload = command.payload;
+      const reservedCapturePayloadKeys = new Set([
+        "eventType",
+        "recordedAt",
+        "promptId",
+        "linkedContext",
+        "placeId",
+        "stayId",
+        "tripId",
+        "workoutId"
+      ]);
+      const eventPayload =
+        typeof rawPayload.payload === "object" &&
+        rawPayload.payload != null &&
+        Array.isArray(rawPayload.payload) === false
+          ? rawPayload.payload
+          : Object.fromEntries(
+              Object.entries(rawPayload).filter(
+                ([key]) => !reservedCapturePayloadKeys.has(key)
+              )
+            );
       const payload = captureCommandPayloadSchema.parse({
         ...rawPayload,
+        payload: eventPayload,
         linkedContext:
           typeof rawPayload.linkedContext === "object" &&
           rawPayload.linkedContext != null &&
@@ -1490,6 +1511,16 @@ function commandErrorPayload(error: unknown) {
   };
 }
 
+function isPermanentWatchCommandError(error: unknown) {
+  if (error instanceof ZodError) {
+    return true;
+  }
+  if (error instanceof HttpError) {
+    return error.statusCode >= 400 && error.statusCode < 500;
+  }
+  return false;
+}
+
 export function ingestWatchCommandBatch(
   pairing: PairingSessionLike,
   input: z.infer<typeof mobileWatchCommandBatchSchema>
@@ -1527,6 +1558,9 @@ export function ingestWatchCommandBatch(
         })
       );
     } catch (error) {
+      if (!isPermanentWatchCommandError(error)) {
+        throw error;
+      }
       const errorPayload = commandErrorPayload(error);
       receipts.push(
         writeActionReceipt(pairing, command, {

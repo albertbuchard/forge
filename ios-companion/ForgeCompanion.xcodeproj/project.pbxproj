@@ -44,6 +44,7 @@
 		3F10F96B9C2C07531C16B9AC /* UnpairedHeroScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1888282FD5F1CA2A97B43B8 /* UnpairedHeroScreen.swift */; };
 		41871B301221A3D7554F44F8 /* gruvbox-dark-hard.json in Resources */ = {isa = PBXBuildFile; fileRef = 50A6D20A029C08AB4EA10B31 /* gruvbox-dark-hard.json */; };
 		42097E36F9FB6D3EE6C611C0 /* WatchComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 039C36D8E30A3B07C3440B41 /* WatchComponents.swift */; };
+		42A7B8C9D0E1F234567890AB /* WatchCommandSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42A7B8C9D0E1F234567890AC /* WatchCommandSurface.swift */; };
 		43094AC60C266A1057B74281 /* light-plus.json in Resources */ = {isa = PBXBuildFile; fileRef = FA16DA13A8E1ACE9812BA184 /* light-plus.json */; };
 		4482EEB11B69F4DA7C7352DE /* WatchHabitsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24B3F3B220747765ACA926E8 /* WatchHabitsView.swift */; };
 		469371D3997E457D3492808B /* WatchAppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 442250B4A055510386087866 /* WatchAppModel.swift */; };
@@ -205,6 +206,7 @@
 		0273258C74CFF59B515D3923 /* lobster-dark-dxSKfHK-.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "lobster-dark-dxSKfHK-.json"; sourceTree = "<group>"; };
 		0289C0EB6BFA22514FE6E019 /* PairedForgeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairedForgeScreen.swift; sourceTree = "<group>"; };
 		039C36D8E30A3B07C3440B41 /* WatchComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchComponents.swift; sourceTree = "<group>"; };
+		42A7B8C9D0E1F234567890AC /* WatchCommandSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchCommandSurface.swift; sourceTree = "<group>"; };
 		0B16BD6500AACAA761DED54F /* temple-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "temple-dark.json"; sourceTree = "<group>"; };
 		0BB7C4D639104DAE20AB76F2 /* slack-ochin-CRg.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "slack-ochin-CRg.json"; sourceTree = "<group>"; };
 		10872B0DA517770C134D17B7 /* ForgeWatchBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeWatchBundle.swift; sourceTree = "<group>"; };
@@ -456,6 +458,7 @@
 				442250B4A055510386087866 /* WatchAppModel.swift */,
 				10F1932A79199E826E23023A /* WatchCheckInView.swift */,
 				039C36D8E30A3B07C3440B41 /* WatchComponents.swift */,
+				42A7B8C9D0E1F234567890AC /* WatchCommandSurface.swift */,
 				24B3F3B220747765ACA926E8 /* WatchHabitsView.swift */,
 				FC17986B56F2BD2558DB6E1D /* WatchMarkMomentView.swift */,
 				F00E73F45F82A77F382467A7 /* WatchPromptInboxView.swift */,
@@ -982,6 +985,7 @@
 				469371D3997E457D3492808B /* WatchAppModel.swift in Sources */,
 				11A5CF96FDEF553EFF861B84 /* WatchCheckInView.swift in Sources */,
 				42097E36F9FB6D3EE6C611C0 /* WatchComponents.swift in Sources */,
+				42A7B8C9D0E1F234567890AB /* WatchCommandSurface.swift in Sources */,
 				4482EEB11B69F4DA7C7352DE /* WatchHabitsView.swift in Sources */,
 				51A86A3F992FD5D14E542DC6 /* WatchMarkMomentView.swift in Sources */,
 				FF4A3FAF66EB69EEFED1F856 /* WatchPromptInboxView.swift in Sources */,
@@ -1040,13 +1044,13 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = "ForgeCompanion/ForgeWatch Watch App/ForgeWatch Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 27;
+				CURRENT_PROJECT_VERSION = 29;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Forge;
 				INFOPLIST_KEY_CFBundleIconName = AppIcon;
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.albertbuchard.ForgeCompanion;
-				MARKETING_VERSION = 1.0.78;
+				MARKETING_VERSION = 1.0.79;
 				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.watchkitapp;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -1115,13 +1119,13 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = "ForgeCompanion/ForgeWatch Watch App/ForgeWatch Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 27;
+				CURRENT_PROJECT_VERSION = 29;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Forge;
 				INFOPLIST_KEY_CFBundleIconName = AppIcon;
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.albertbuchard.ForgeCompanion;
-				MARKETING_VERSION = 1.0.78;
+				MARKETING_VERSION = 1.0.79;
 				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.watchkitapp;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -1155,7 +1159,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ForgeCompanion/ForgeWatchExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 27;
+				CURRENT_PROJECT_VERSION = 29;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				INFOPLIST_FILE = ForgeCompanion/ForgeWatch/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1163,7 +1167,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.78;
+				MARKETING_VERSION = 1.0.79;
 				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.watchkitapp.ForgeWatch;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -1196,7 +1200,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ForgeCompanion/ForgeWatchExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 27;
+				CURRENT_PROJECT_VERSION = 29;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				INFOPLIST_FILE = ForgeCompanion/ForgeWatch/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1204,7 +1208,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.78;
+				MARKETING_VERSION = 1.0.79;
 				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.watchkitapp.ForgeWatch;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -1243,7 +1247,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = ForgeCompanion/ForgeCompanion/ForgeCompanion.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 27;
+				CURRENT_PROJECT_VERSION = 29;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				INFOPLIST_FILE = ForgeCompanion/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -1260,7 +1264,7 @@
 					"$(inherited)",
 					"$(SRCROOT)/RustBridge/build/$(PLATFORM_NAME)-$(CURRENT_ARCH)",
 				);
-				MARKETING_VERSION = 1.0.78;
+				MARKETING_VERSION = 1.0.79;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-lforge_companion_iroh",
@@ -1323,7 +1327,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = ForgeCompanion/ForgeCompanion/ForgeCompanion.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 27;
+				CURRENT_PROJECT_VERSION = 29;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				INFOPLIST_FILE = ForgeCompanion/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -1340,7 +1344,7 @@
 					"$(inherited)",
 					"$(SRCROOT)/RustBridge/build/$(PLATFORM_NAME)-$(CURRENT_ARCH)",
 				);
-				MARKETING_VERSION = 1.0.78;
+				MARKETING_VERSION = 1.0.79;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-lforge_companion_iroh",
