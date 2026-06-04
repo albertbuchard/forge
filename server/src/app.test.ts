@@ -4202,7 +4202,7 @@ test("mobile health chunked sync applies movement chunks before final completion
   }
 });
 
-test("mobile health workout import state replays legacy workouts until evidence metadata exists", async () => {
+test("mobile health workout import state reuses count-complete historical evidence", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-health-legacy-route-only-")
   );
@@ -4290,7 +4290,19 @@ test("mobile health workout import state replays legacy workouts until evidence 
       qrPayload.sessionId,
       "2024-04-09T07:00:00.000Z",
       "2024-04-09T08:00:00.000Z",
-      "{}",
+      JSON.stringify({
+        captureQuality: {
+          status: "complete",
+          heartRateSamples: 1,
+          routePoints: 2
+        },
+        syncCursor: {
+          timeSeriesSampleCount: 1,
+          routePointCount: 2,
+          rawEvidenceVersion: "healthkit-workout-raw-bulk-v3",
+          phoneMappingMode: "summary_plus_bulk_evidence"
+        }
+      }),
       now,
       now
     );
@@ -4403,6 +4415,7 @@ test("mobile health workout import state replays legacy workouts until evidence 
             alreadyUploadedWorkoutCount: number;
             existingWorkoutCount: number;
             incompleteWorkoutCount: number;
+            staleEvidenceVersionWorkoutCount: number;
             heartRateSampleCount: number;
             routePointCount: number;
           };
@@ -4412,13 +4425,14 @@ test("mobile health workout import state replays legacy workouts until evidence 
 
     assert.deepEqual(
       upload.workoutImportState.alreadyUploadedWorkoutExternalUids,
-      ["hk-explicit-zero-hr"]
+      ["hk-legacy-hr-and-route", "hk-explicit-zero-hr"]
     );
-    assert.equal(upload.workoutImportState.alreadyUploadedWorkoutCount, 1);
+    assert.equal(upload.workoutImportState.alreadyUploadedWorkoutCount, 2);
     assert.equal(upload.workoutImportState.existingWorkoutCount, 5);
-    assert.equal(upload.workoutImportState.incompleteWorkoutCount, 4);
-    assert.equal(upload.workoutImportState.heartRateSampleCount, 0);
-    assert.equal(upload.workoutImportState.routePointCount, 2);
+    assert.equal(upload.workoutImportState.incompleteWorkoutCount, 3);
+    assert.equal(upload.workoutImportState.staleEvidenceVersionWorkoutCount, 1);
+    assert.equal(upload.workoutImportState.heartRateSampleCount, 1);
+    assert.equal(upload.workoutImportState.routePointCount, 4);
   } finally {
     await app.close();
     closeDatabase();

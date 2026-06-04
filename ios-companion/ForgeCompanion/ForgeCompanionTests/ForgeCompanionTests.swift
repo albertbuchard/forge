@@ -3030,9 +3030,11 @@ final class ForgeCompanionTests: XCTestCase {
           "receivedChunkIds": ["chunk-1", "chunk-2"],
           "workoutImportState": {
             "alreadyUploadedWorkoutExternalUids": ["workout-a", "workout-b"],
+            "incompleteWorkoutExternalUids": ["workout-c"],
             "alreadyUploadedWorkoutCount": 2,
             "existingWorkoutCount": 3,
             "incompleteWorkoutCount": 1,
+            "staleEvidenceVersionWorkoutCount": 1,
             "heartRateSampleCount": 180,
             "timeSeriesSampleCount": 240,
             "routePointCount": 40,
@@ -3055,9 +3057,11 @@ final class ForgeCompanionTests: XCTestCase {
             session.workoutImportState?.alreadyUploadedWorkoutExternalUids,
             ["workout-a", "workout-b"]
         )
+        XCTAssertEqual(session.workoutImportState?.incompleteWorkoutExternalUids, ["workout-c"])
         XCTAssertEqual(session.workoutImportState?.alreadyUploadedWorkoutCount, 2)
         XCTAssertEqual(session.workoutImportState?.existingWorkoutCount, 3)
         XCTAssertEqual(session.workoutImportState?.incompleteWorkoutCount, 1)
+        XCTAssertEqual(session.workoutImportState?.staleEvidenceVersionWorkoutCount, 1)
         XCTAssertEqual(session.workoutImportState?.heartRateSampleCount, 180)
         XCTAssertEqual(session.workoutImportState?.timeSeriesSampleCount, 240)
         XCTAssertEqual(session.workoutImportState?.routePointCount, 40)
