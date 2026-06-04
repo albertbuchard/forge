@@ -5467,6 +5467,7 @@ export function buildOpenApiDocument() {
       brand: nullable({ type: "string" }),
       quantity: { type: "number" },
       unit: nullable({ type: "string" }),
+      grams: nullable({ type: "number" }),
       calories: nullable({ type: "number" }),
       proteinGrams: nullable({ type: "number" }),
       carbohydrateGrams: nullable({ type: "number" }),

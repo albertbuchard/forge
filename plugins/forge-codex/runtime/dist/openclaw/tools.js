@@ -275,6 +275,7 @@ const nutritionMealItemInputSchema = () => Type.Object({
     brand: optionalNullableString(),
     quantity: Type.Number({ minimum: 0 }),
     unit: optionalNullableString(),
+    grams: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
     caloriesKcal: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
     proteinG: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
     carbsG: Type.Optional(Type.Union([Type.Number(), Type.Null()])),

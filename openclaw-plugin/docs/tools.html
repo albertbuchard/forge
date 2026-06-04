@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Forge Agent Tools</title>
+    <meta
+      name="description"
+      content="Plain reference for the Forge tools exposed to OpenClaw, Hermes, and Codex agents."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Sora:wght@600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="./tools.js" defer></script>
+  </head>
+  <body>
+    <div class="page-shell">
+      <div class="ambient a"></div>
+      <div class="ambient b"></div>
+
+      <header class="topbar">
+        <a class="brand" href="./index.html">
+          <span class="brand-mark">F</span>
+          <span class="brand-copy">
+            <strong>Forge</strong>
+            <span>Project Guide</span>
+          </span>
+        </a>
+        <nav class="topnav">
+          <a href="./index.html">Home</a>
+          <a href="./features.html">Features</a>
+          <a href="./engineering.html">Engineering</a>
+          <a href="./development.html">Development</a>
+          <a href="./integrations.html">Integrations</a>
+          <a class="active" href="./tools.html">Agent Tools</a>
+          <a href="./api/">API</a>
+          <a href="https://github.com/albertbuchard/forge">GitHub</a>
+        </nav>
+      </header>
+
+      <main class="page">
+        <div class="breadcrumbs">
+          <a href="./index.html">Docs</a>
+          <span>/</span>
+          <span>Agent Tools</span>
+        </div>
+
+        <section class="hero split">
+          <div class="hero-card">
+            <p class="eyebrow">Agent Tools</p>
+            <h1>Every Forge tool exposed to agents.</h1>
+            <p class="lede">
+              This page lists the tools registered in the Forge OpenClaw
+              manifest. The descriptions come from the same onboarding catalog
+              agents read before they act. Use this page to check what an agent
+              can read or write, when to use each tool, and which inputs matter.
+            </p>
+            <p class="lede" style="margin-top: 14px">
+              Normal stored entities use the shared batch tools. Movement, Life
+              Force, Workbench, wiki, calendar helpers, and health read models
+              use their dedicated tool or route family.
+            </p>
+            <div class="pill-row">
+              <span class="pill"><span id="tool-count">-</span> tools</span>
+              <span class="pill secondary"
+                ><span id="group-count">-</span> groups</span
+              >
+              <span class="pill"
+                ><span id="visible-tool-count">-</span> visible</span
+              >
+            </div>
+          </div>
+
+          <aside class="hero-card">
+            <p class="eyebrow">Find A Tool</p>
+            <label class="runtime-label" for="tool-search">Search tools</label>
+            <input
+              id="tool-search"
+              class="runtime-input"
+              type="search"
+              placeholder="food, wiki, movement, task..."
+              autocomplete="off"
+            />
+            <div class="note">
+              Food logging has a hard rule: search the food catalog first. If a
+              custom food is needed, calories plus protein, carbohydrate, and
+              fat are required. Name-only custom foods are rejected.
+            </div>
+          </aside>
+        </section>
+
+        <section class="section">
+          <div class="section-heading">
+            <p class="eyebrow">Access Rules</p>
+            <h2>The tools are grouped by the API path an agent should use.</h2>
+          </div>
+          <div class="card-grid three">
+            <article class="card">
+              <h3>Shared batch CRUD</h3>
+              <p>
+                Goals, projects, tasks, habits, notes, Psyche records,
+                preferences, questionnaires, sleep sessions, workout sessions,
+                and most stored records use search, create, update, delete, and
+                restore batch tools.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Dedicated domain tools</h3>
+              <p>
+                Movement, Life Force, Workbench, wiki, calendar helpers,
+                nutrition, and training read models use dedicated tools because
+                those surfaces have richer route contracts than generic CRUD.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Read before writing</h3>
+              <p>
+                Agents should read the relevant overview or search endpoint
+                before mutating. That prevents duplicate records, wrong owners,
+                missing ids, and weak context.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <div id="tools-container" aria-live="polite"></div>
+
+        <footer class="footer">
+          Tool data is generated into <code>agent-tools.json</code> from
+          <code>openclaw.plugin.json</code> and the Forge onboarding catalog.
+        </footer>
+      </main>
+    </div>
+  </body>
+</html>

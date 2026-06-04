@@ -4052,7 +4052,7 @@ function enrichConversationPlaybookWithRouteInfo(playbook) {
         ...buildPlaybookRouteInfo(playbook.focus)
     };
 }
-const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
+export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     {
         toolName: "forge_get_user_directory",
         summary: "Read the live human/bot directory and directional relationship graph.",
@@ -4347,7 +4347,7 @@ const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
         toolName: "forge_log_food",
         summary: "Create a food log with explicit food items, calories, macros, quality tags, hunger, satiety, cravings, and context.",
         whenToUse: "Use for confirmed manual entries, search/barcode-selected foods, or corrected ChatGPT candidates.",
-        inputShape: "{ mealLabel?: string, loggedAt?: string, source?: string, confirmationState?: string, notes?: string, items: Array<{ foodId?, name, quantity, unit?, caloriesKcal?, proteinG?, carbsG?, fatG?, fiberG?, tags? }>, userIds?: string[] }",
+        inputShape: "{ mealLabel?: string, loggedAt?: string, source?: string, confirmationState?: string, notes?: string, items: Array<{ foodId?, name, quantity, unit?, grams?, caloriesKcal?, proteinG?, carbsG?, fatG?, fiberG?, tags? }>, userIds?: string[] }",
         requiredFields: ["items"],
         notes: [
             "Always call forge_search_foods/forge_search_nutrition_foods or barcode lookup first and pass item.foodId when there is a good match.",

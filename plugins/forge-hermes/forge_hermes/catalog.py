@@ -408,6 +408,7 @@ NUTRITION_MEAL_ITEM = object_schema(
         "brand": optional_nullable_string("Optional brand."),
         "quantity": {"type": "number", "minimum": 0},
         "unit": optional_nullable_string("Serving unit."),
+        "grams": {"anyOf": [{"type": "number"}, {"type": "null"}]},
         "caloriesKcal": {"anyOf": [{"type": "number"}, {"type": "null"}]},
         "proteinG": {"anyOf": [{"type": "number"}, {"type": "null"}]},
         "carbsG": {"anyOf": [{"type": "number"}, {"type": "null"}]},
