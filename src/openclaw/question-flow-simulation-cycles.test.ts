@@ -302,6 +302,7 @@ describe("question flow simulation cycles", () => {
     sleep_overview: "Sleep Overview",
     sports_overview: "Sports Overview",
     training_load: "Training Load",
+    weight_loss: "Weight Loss",
     calendar_connection: "Calendar Connection",
     wiki_page: "Wiki Page",
     preference_catalog: "Preference Catalog",
@@ -1245,14 +1246,15 @@ describe("question flow simulation cycles", () => {
 
   it("cycle 3 report retest: durable automation report covers this full run", () => {
     const report = readRepoFile("docs/question-flow-improvement-cycles.md");
-    const latestRun = getSectionSlice(report, "2026-06-03 Automation Pass");
+    const latestRun = getSectionSlice(report, "2026-06-05 Automation Pass");
 
-    expect(report).toMatch(/Latest run date: 2026-06-03/);
+    expect(report).toMatch(/Latest run date: 2026-06-05/);
     expect(latestRun).toMatch(/data\/forge\/forge\.sqlite/i);
     expect(latestRun).toMatch(/repo-local[\s\S]*openclaw-plugin\/dist\/openclaw\/index\.js/i);
-    expect(latestRun).toMatch(/forge-hermes-plugin 0\.2\.101/i);
-    expect(latestRun).toMatch(/42 entity catalog\s+entries/i);
-    expect(latestRun).toMatch(/197 OpenAPI paths/i);
+    expect(latestRun).toMatch(/forge-hermes-plugin 0\.2\.106/i);
+    expect(latestRun).toMatch(/43 entity catalog\s+entries/i);
+    expect(latestRun).toMatch(/199 OpenAPI paths/i);
+    expect(latestRun).toMatch(/\/api\/v1\/strategies[\s\S]*\/api\/v1\/strategies\/\{id\}/i);
     expect(latestRun).toMatch(/training_load[\s\S]*weight_loss/i);
     expect(latestRun).toMatch(
       /goal, project, strategy, task,\s+habit, tag, note, insight, task_run, work_adjustment/i
@@ -1266,15 +1268,15 @@ describe("question flow simulation cycles", () => {
     expect(latestRun).toMatch(/training_load[\s\S]*weight_loss/i);
     expect(latestRun).toMatch(/Movement[\s\S]*Life Force[\s\S]*Workbench/i);
     expect(latestRun).toMatch(
-      /Cycle 1[\s\S]*Weight Loss[\s\S]*simulated full-cycle matrix/i
+      /Cycle 1[\s\S]*simulation freshness assertions[\s\S]*OpenAPI path-count/i
     );
     expect(latestRun).toMatch(
-      /Cycle 2[\s\S]*explicit Weight Loss\/nutrition keys/i
+      /Cycle 2[\s\S]*weight_loss[\s\S]*read-model-only health\s+surface[\s\S]*Read:\s+\/api\/v1/i
     );
     expect(latestRun).toMatch(
-      /Cycle 3[\s\S]*verificationPaths[\s\S]*OpenAPI/i
+      /Cycle 3[\s\S]*readModelOnlySurfaces[\s\S]*preferredReadPath[\s\S]*generated OpenAPI/i
     );
-    expect(latestRun).toMatch(/29 tests/i);
+    expect(latestRun).toMatch(/focused retest passed/i);
     expect(latestRun).toMatch(/What happened after retesting/i);
   });
 });

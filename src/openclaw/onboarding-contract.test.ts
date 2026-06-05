@@ -196,6 +196,7 @@ describe("forge onboarding contract", () => {
       "workout_session",
       "sports_overview",
       "training_load",
+      "weight_loss",
       "wiki_page",
       "movement",
       "life_force",
@@ -303,6 +304,8 @@ describe("forge onboarding contract", () => {
       "sleep_overview",
       "workout_session",
       "sports_overview",
+      "training_load",
+      "weight_loss",
       "wiki_page",
       "movement",
       "life_force",
@@ -636,7 +639,10 @@ describe("forge onboarding contract", () => {
         sports_overview: "/api/v1/health/fitness",
         trainingLoad: "/api/v1/health/training-load",
         training_load: "/api/v1/health/training-load",
+        weightLoss: "/api/v1/health/weight-loss",
+        weight_loss: "/api/v1/health/weight-loss",
         selfObservation: "/api/v1/psyche/self-observation/calendar",
+        self_observation: "/api/v1/psyche/self-observation/calendar",
         calendarOverview: "/api/v1/calendar/overview",
         calendar_overview: "/api/v1/calendar/overview",
         operatorOverview: "/api/v1/operator/overview",
@@ -776,6 +782,18 @@ describe("forge onboarding contract", () => {
       expect.objectContaining({
         preferredMutationTool: expect.stringMatching(
           /forge_update_workout_session for reflective enrichment after review/
+        )
+      })
+    );
+    expect(entityByType.get("weight_loss")).toEqual(
+      expect.objectContaining({
+        classification: "read_model_only_surface",
+        preferredMutationPath: expect.stringMatching(
+          /Read-only surface[\s\S]*dedicated nutrition tools/
+        ),
+        preferredReadPath: "/api/v1/health/weight-loss",
+        preferredMutationTool: expect.stringMatching(
+          /forge_get_weight_loss_overview[\s\S]*forge_log_food[\s\S]*forge_start_nutrition_experiment/
         )
       })
     );
@@ -992,6 +1010,14 @@ describe("forge onboarding contract", () => {
       expect(entry.apiAccessHint, `${entry.focus} API hint`).toMatch(
         /Route posture:/
       );
+    }
+    for (const entry of onboarding.entityConversationPlaybooks) {
+      if (entry.routePosture === "read_model_only_surface") {
+        expect(
+          entry.apiAccessHint,
+          `${entry.focus} read-model playbook should publish its exact read path`
+        ).toMatch(/Read: \/api\/v1\//);
+      }
     }
 
     for (const entry of onboarding.psycheCoachingPlaybooks) {
@@ -1556,6 +1582,25 @@ describe("forge onboarding contract", () => {
           `${entityName} action route ${route} should exist in OpenAPI`
         ).toBe(true);
       }
+    }
+
+    for (const [surfaceName, route] of Object.entries(
+      onboarding.entityRouteModel.readModelOnlySurfaces
+    )) {
+      expect(
+        openApiPaths.has(normalizeRouteTemplate(route)),
+        `${surfaceName} read-model route ${route} should exist in OpenAPI`
+      ).toBe(true);
+    }
+
+    for (const catalogEntry of onboarding.entityCatalog) {
+      if (!catalogEntry.preferredReadPath?.startsWith("/api/v1/")) {
+        continue;
+      }
+      expect(
+        openApiPaths.has(normalizeRouteTemplate(catalogEntry.preferredReadPath)),
+        `${catalogEntry.entityType} preferred read path ${catalogEntry.preferredReadPath} should exist in OpenAPI`
+      ).toBe(true);
     }
 
     for (const [routeName, route] of Object.entries(

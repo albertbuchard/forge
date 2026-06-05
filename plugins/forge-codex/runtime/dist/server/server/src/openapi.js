@@ -8862,6 +8862,98 @@ export function buildOpenApiDocument() {
                     }
                 }
             },
+            "/api/v1/strategies": {
+                get: {
+                    summary: "List strategies",
+                    parameters: [
+                        {
+                            name: "status",
+                            in: "query",
+                            schema: {
+                                type: "string",
+                                enum: ["active", "paused", "completed"]
+                            }
+                        },
+                        {
+                            name: "userIds",
+                            in: "query",
+                            schema: { type: "array", items: { type: "string" } }
+                        },
+                        {
+                            name: "limit",
+                            in: "query",
+                            schema: { type: "integer", minimum: 1, maximum: 100 }
+                        }
+                    ],
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["strategies"],
+                            properties: {
+                                strategies: arrayOf({ $ref: "#/components/schemas/Strategy" })
+                            }
+                        }, "Strategy collection"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                },
+                post: {
+                    summary: "Create a strategy",
+                    responses: {
+                        "201": jsonResponse({
+                            type: "object",
+                            required: ["strategy"],
+                            properties: {
+                                strategy: { $ref: "#/components/schemas/Strategy" }
+                            }
+                        }, "Created strategy"),
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
+            "/api/v1/strategies/{id}": {
+                get: {
+                    summary: "Get a strategy",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["strategy"],
+                            properties: {
+                                strategy: { $ref: "#/components/schemas/Strategy" }
+                            }
+                        }, "Strategy"),
+                        "404": { $ref: "#/components/responses/Error" },
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                },
+                patch: {
+                    summary: "Update a strategy",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["strategy"],
+                            properties: {
+                                strategy: { $ref: "#/components/schemas/Strategy" }
+                            }
+                        }, "Updated strategy"),
+                        "404": { $ref: "#/components/responses/Error" },
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                },
+                delete: {
+                    summary: "Delete a strategy",
+                    responses: {
+                        "200": jsonResponse({
+                            type: "object",
+                            required: ["strategy"],
+                            properties: {
+                                strategy: { $ref: "#/components/schemas/Strategy" }
+                            }
+                        }, "Deleted strategy"),
+                        "404": { $ref: "#/components/responses/Error" },
+                        default: { $ref: "#/components/responses/Error" }
+                    }
+                }
+            },
             "/api/v1/projects": {
                 get: {
                     summary: "List projects",
