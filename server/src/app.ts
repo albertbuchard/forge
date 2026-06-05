@@ -2972,6 +2972,25 @@ type OnboardingEntityClassification =
   | "specialized_domain_surface"
   | "read_model_only_surface";
 
+const AGENT_ONBOARDING_READ_MODEL_ROUTES = {
+  sleepOverview: "/api/v1/health/sleep",
+  sleep_overview: "/api/v1/health/sleep",
+  sportsOverview: "/api/v1/health/fitness",
+  sports_overview: "/api/v1/health/fitness",
+  trainingLoad: "/api/v1/health/training-load",
+  training_load: "/api/v1/health/training-load",
+  weightLoss: "/api/v1/health/weight-loss",
+  weight_loss: "/api/v1/health/weight-loss",
+  selfObservation: "/api/v1/psyche/self-observation/calendar",
+  self_observation: "/api/v1/psyche/self-observation/calendar",
+  calendarOverview: "/api/v1/calendar/overview",
+  calendar_overview: "/api/v1/calendar/overview",
+  operatorOverview: "/api/v1/operator/overview",
+  operator_overview: "/api/v1/operator/overview",
+  operatorContext: "/api/v1/operator/context",
+  operator_context: "/api/v1/operator/context"
+} as const satisfies Record<string, string>;
+
 function classifyOnboardingEntity(
   entityType: string
 ): OnboardingEntityClassification {
@@ -3034,6 +3053,8 @@ function buildPreferredMutationPath(entityType: string) {
       return "Read-only surface. Use batch CRUD for workout_session records or the review enrichment route for reflective notes.";
     case "training_load":
       return "Read-only surface. Use it for cardiovascular load, HR zones, zone-time buckets, smart training modes, acute/chronic stress, VO2max context, next-workout guidance, and target analysis; use batch CRUD for underlying workout_session records.";
+    case "weight_loss":
+      return "Read-only surface for the nutrition and body-composition overview. Use dedicated nutrition tools for food logs, body check-ins, appearance check-ins, subjective effects, gut check-ins, and N-of-1 experiments.";
     default:
       return "Read-only surface.";
   }
@@ -3072,6 +3093,8 @@ function buildPreferredMutationTool(entityType: string) {
       return "forge_call_life_force_route";
     case "workbench":
       return "forge_call_workbench_route";
+    case "weight_loss":
+      return "forge_get_weight_loss_overview | forge_search_foods | forge_search_nutrition_foods | forge_lookup_nutrition_barcode | forge_log_food | forge_parse_food_log_with_chatgpt | forge_log_body_checkin | forge_log_appearance_checkin | forge_log_subjective_food_effect | forge_log_gut_checkin | forge_get_nutrition_patterns | forge_start_nutrition_experiment | forge_update_nutrition_experiment";
     default:
       return null;
   }
@@ -3081,6 +3104,11 @@ function buildPreferredReadPath(entityType: string) {
   if (entityType in AGENT_ONBOARDING_BATCH_ROUTE_BASES) {
     return AGENT_ONBOARDING_BATCH_ROUTE_BASES[
       entityType as keyof typeof AGENT_ONBOARDING_BATCH_ROUTE_BASES
+    ];
+  }
+  if (entityType in AGENT_ONBOARDING_READ_MODEL_ROUTES) {
+    return AGENT_ONBOARDING_READ_MODEL_ROUTES[
+      entityType as keyof typeof AGENT_ONBOARDING_READ_MODEL_ROUTES
     ];
   }
   switch (entityType) {
@@ -3105,12 +3133,6 @@ function buildPreferredReadPath(entityType: string) {
       return "/api/v1/workbench/flows";
     case "self_observation":
       return "/api/v1/psyche/self-observation/calendar";
-    case "sleep_overview":
-      return "/api/v1/health/sleep";
-    case "sports_overview":
-      return "/api/v1/health/fitness";
-    case "training_load":
-      return "/api/v1/health/training-load";
     default:
       return null;
   }
@@ -3879,6 +3901,21 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
     ],
     searchHints: [
       "Read this surface before advising on high-intensity balance, recovery load, Zone 2/base work, 4x4 suitability, next-workout guidance, or cardiovascular training targets."
+    ],
+    fieldGuide: []
+  }),
+  enrichOnboardingEntityGuide({
+    entityType: "weight_loss",
+    purpose:
+      "The read-model nutrition and body-composition workspace for food ledger review, energy balance, sport-fuel context, body trend, appearance signals, gut comfort, cravings, subjective energy, hypotheses, and experiments.",
+    minimumCreateFields: [],
+    relationshipRules: [
+      "Use this surface for review and interpretation.",
+      "Use dedicated nutrition tools for food logs, body check-ins, appearance check-ins, subjective food effects, gut check-ins, patterns, and experiments instead of generic batch CRUD."
+    ],
+    searchHints: [
+      "Read this surface before coaching on food, weight trend, sport fueling, cravings, gut comfort, appearance, subjective energy, or nutrition experiments.",
+      "Search the nutrition food catalog before logging food, and use a returned foodId when there is a good match."
     ],
     fieldGuide: []
   })
@@ -4950,13 +4987,20 @@ function buildPlaybookRouteInfo(focus: string) {
     (entry) => entry.entityType === focus
   );
   const routePosture = guide?.classification ?? classifyOnboardingEntity(focus);
+  const preferredReadPath =
+    guide?.preferredReadPath ??
+    (focus in AGENT_ONBOARDING_READ_MODEL_ROUTES
+      ? AGENT_ONBOARDING_READ_MODEL_ROUTES[
+          focus as keyof typeof AGENT_ONBOARDING_READ_MODEL_ROUTES
+        ]
+      : null);
   const apiAccessHint = [
     `Focus: ${focus}.`,
     `Route posture: ${routePosture}.`,
     guide?.preferredMutationPath
       ? `Mutation: ${guide.preferredMutationPath}.`
       : null,
-    guide?.preferredReadPath ? `Read: ${guide.preferredReadPath}.` : null,
+    preferredReadPath ? `Read: ${preferredReadPath}.` : null,
     guide?.preferredMutationTool
       ? `Tool: ${guide.preferredMutationTool}.`
       : null,
@@ -6299,22 +6343,7 @@ function buildAgentOnboardingPayload(request: {
           ]
         }
       },
-      readModelOnlySurfaces: {
-        sleepOverview: "/api/v1/health/sleep",
-        sleep_overview: "/api/v1/health/sleep",
-        sportsOverview: "/api/v1/health/fitness",
-        sports_overview: "/api/v1/health/fitness",
-        trainingLoad: "/api/v1/health/training-load",
-        training_load: "/api/v1/health/training-load",
-        selfObservation: "/api/v1/psyche/self-observation/calendar",
-        self_observation: "/api/v1/psyche/self-observation/calendar",
-        calendarOverview: "/api/v1/calendar/overview",
-        calendar_overview: "/api/v1/calendar/overview",
-        operatorOverview: "/api/v1/operator/overview",
-        operator_overview: "/api/v1/operator/overview",
-        operatorContext: "/api/v1/operator/context",
-        operator_context: "/api/v1/operator/context"
-      }
+      readModelOnlySurfaces: AGENT_ONBOARDING_READ_MODEL_ROUTES
     },
     multiUserModel: {
       summary:

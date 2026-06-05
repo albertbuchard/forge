@@ -1,10 +1,132 @@
 # Forge Question Flow Improvement Cycles
 
-Latest run date: 2026-06-04
+Latest run date: 2026-06-05
 
 This report records the three-cycle evaluation for Forge agent question flows. The
 same full flow set was tested in each cycle so improvements were kept only where they
 helped the entity or specialized surface.
+
+## 2026-06-05 Automation Pass
+
+Setup verification:
+
+- Confirmed the Forge worktree was on `main` before plugin work and edits.
+- Read the prior automation memory for
+  `improvement-of-question-flows-in-forge` and continued from the existing Forge
+  data root rather than creating or moving user data.
+- Verified OpenClaw and Hermes configs both point at
+  `/Users/omarclaw/Documents/aurel-monorepo/data/forge`; the live Forge process had
+  `/Users/omarclaw/Documents/aurel-monorepo/data/forge/forge.sqlite` open. No
+  database, data root, backup, or user data was moved, merged, deleted, or
+  overwritten.
+- Built the repo-local OpenClaw plugin and Hermes packaged runtime, reinstalled
+  OpenClaw from `./openclaw-plugin`, and reinstalled Hermes editable from
+  `./plugins/forge-hermes` before starting the cycles.
+- Verified OpenClaw loads `forge-openclaw-plugin 0.2.106` from the repo-local
+  `openclaw-plugin/dist/openclaw/index.js` source path and Hermes imports
+  `forge-hermes-plugin 0.2.106` from the local editable package.
+- Verified live health, onboarding, and OpenAPI before the cycles: 42 entity catalog
+  entries, 23 Movement route keys, four Life Force route keys under both
+  `lifeForce` and `life_force`, 16 Workbench route keys, dedicated route-key tools
+  for the three specialized surfaces, and 197 OpenAPI paths. After kept changes, the
+  final contract contains 43 entity catalog entries, includes `weight_loss` as a
+  read-model-only health surface, and publishes 199 OpenAPI paths including
+  `/api/v1/strategies` and `/api/v1/strategies/{id}`.
+
+Every cycle retested the full current flow set: goal, project, strategy, task,
+habit, tag, note, insight, task_run, work_adjustment, calendar_event,
+work_block_template, task_timebox, calendar_connection, preference_catalog,
+preference_catalog_item, preference_context, preference_item,
+preference_judgment, preference_signal, questionnaire_instrument,
+questionnaire_run, self_observation, sleep_session, sleep_overview,
+workout_session, sports_overview, training_load, weight_loss, wiki_page,
+movement, life_force, workbench, psyche_value, behavior_pattern, behavior,
+belief_entry, mode_profile, mode_guide_session, flashcard, trigger_report,
+event_type, and emotion_definition.
+
+Specialized route scenarios covered all live Movement lanes for day, month,
+all-time, timeline, places, box detail, trip detail, selected-span aggregate,
+settings, settings updates, place create/update, user-box preflight/create/update/delete,
+automatic-box invalidation, stay/trip update/delete, and trip-point update/delete;
+Life Force overview, profile, weekday template, and fatigue signal; and Workbench
+flow catalog, flow detail by id or slug, flow CRUD, saved-flow execution, one-off
+execution, chat follow-up, run history, run detail, run nodes, node result, latest
+node output, published output, and box catalog.
+
+Cycle 1 tested all entity and specialized-surface flows after the plugin refresh.
+Strengths: the Psyche questioning, normal batch CRUD posture, and dedicated
+Movement/Life Force/Workbench route-key guidance stayed strong. Weakness: the
+durable simulation freshness check still pointed at an older report section and did
+not force the report to name the current OpenAPI path count, so a stale automation
+report could pass while the real route catalog changed.
+
+What changed in Cycle 1:
+
+- Updated the three-cycle simulation freshness assertions to the latest report
+  section, current Hermes plugin version, current focused-suite size, and explicit
+  OpenAPI path-count language.
+- Updated the June 4 report section to name the 197-path baseline at
+  `/api/v1/openapi.json`.
+
+What happened after retesting Cycle 1:
+
+- The focused retest passed across question-flow quality, three-cycle simulation,
+  onboarding contract, and tool contracts.
+- The change improved automation freshness and API-count visibility without
+  changing user-facing question wording, so it was kept. Nothing was reverted.
+
+Cycle 2 retested the same full flow set with attention to read-model surfaces and
+dedicated health workflows. Strengths: Movement, Life Force, Workbench, and most
+read-model playbooks already chose the right route family. Weaknesses: `weight_loss`
+had tools and a playbook but was missing from the entity catalog and read-model
+surface map; several read-model playbooks had useful prose but no exact `Read:
+/api/v1/...` path, leaving agents too much room to guess.
+
+What changed in Cycle 2:
+
+- Added `weight_loss` to the onboarding entity catalog as a read-model-only health
+  surface backed by the dedicated nutrition and body-check-in tool family rather
+  than generic batch CRUD.
+- Added Weight Loss to `readModelOnlySurfaces`, simulation coverage, and route
+  posture assertions.
+- Centralized read-model route hints for sleep overview, sports overview, training
+  load, Weight Loss, self-observation, calendar overview, operator overview, and
+  operator context.
+- Added a fallback so playbook-only read-model surfaces publish exact `Read:
+  /api/v1/...` hints even when they do not have a normal entity catalog guide.
+
+What happened after retesting Cycle 2:
+
+- The first retest caught `calendar_overview` still missing an exact read path in
+  its playbook API hint.
+- The fallback fixed that gap, and the focused retest passed afterward.
+- The change improved API path clarity and health-surface coverage without treating
+  dedicated nutrition writes as generic CRUD, so it was kept. Nothing was reverted.
+
+Cycle 3 retested all flows with attention to whether every advertised read path was
+actually present in generated OpenAPI. Strengths: batch routes, specialized
+Movement/Life Force/Workbench method routes, specialized CRUD routes, action routes,
+and verification paths were already mechanically checked. Weaknesses:
+`readModelOnlySurfaces` and `entityCatalog[].preferredReadPath` were not checked
+against OpenAPI; the new guard immediately exposed that `strategy` correctly had
+live Fastify routes but those routes were missing from generated OpenAPI.
+
+What changed in Cycle 3:
+
+- Extended the onboarding-contract test so every `readModelOnlySurfaces` route and
+  every catalog `preferredReadPath` that starts with `/api/v1/` must exist in the
+  generated OpenAPI document.
+- Added the missing OpenAPI entries for `/api/v1/strategies` and
+  `/api/v1/strategies/{id}`, covering list, create, get, update, and delete.
+
+What happened after retesting Cycle 3:
+
+- The first retest failed on the missing strategy OpenAPI paths, confirming the new
+  guard was catching a real contract drift.
+- After adding the strategy paths, the focused retest passed across all 34 tests.
+- The change improved API truthfulness for normal stored entities without weakening
+  Psyche depth, normal batch CRUD, or specialized route posture, so it was kept.
+  Nothing was reverted.
 
 ## 2026-06-04 Automation Pass
 
@@ -27,8 +149,9 @@ Setup verification:
 - Verified live health, onboarding, and OpenAPI before the cycles: 42 entity catalog
   entries, 23 Movement route keys, four Life Force route keys under both
   `lifeForce` and `life_force`, 16 Workbench route keys, dedicated route-key tools
-  for the three specialized surfaces, and OpenAPI at `/api/v1/openapi.json` with
-  Movement, Life Force, Entity Batch, Agents, and Workbench tags.
+  for the three specialized surfaces, and 197 OpenAPI paths at
+  `/api/v1/openapi.json` with Movement, Life Force, Entity Batch, Agents, and
+  Workbench tags.
 
 Every cycle retested the full current flow set: goal, project, strategy, task,
 habit, tag, note, insight, task_run, work_adjustment, calendar_event,
