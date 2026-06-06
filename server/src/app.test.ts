@@ -131,6 +131,34 @@ function healthChunkPayloadJsonRawDeflateBase64(value: unknown) {
   };
 }
 
+test("companion pairing requires an authenticated operator session", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-companion-pairing-auth-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        host: "127.0.0.1:4317"
+      },
+      payload: {
+        userId: "user_operator"
+      }
+    });
+    assert.equal(response.statusCode, 401);
+    const payload = response.json() as { code: string; route: string };
+    assert.equal(payload.code, "auth_required");
+    assert.equal(payload.route, "/api/v1/health/pairing-sessions");
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("companion pairing defaults to Iroh transport", async () => {
   const originalIrohBin = process.env.FORGE_COMPANION_IROH_BIN;
   const rootDir = await mkdtemp(

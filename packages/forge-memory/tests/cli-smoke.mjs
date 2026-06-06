@@ -1,5 +1,6 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -45,6 +46,228 @@ function runFailure(args, options = {}) {
     );
   }
   return result;
+}
+
+function runAsync(args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [bin, ...args], {
+      cwd: packageRoot,
+      env,
+      ...options
+    });
+    let stdout = "";
+    let stderr = "";
+    const timeout = setTimeout(() => {
+      child.kill("SIGKILL");
+      reject(new Error(`forge-memory ${args.join(" ")} timed out`));
+    }, 20_000);
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.on("close", (status) => {
+      clearTimeout(timeout);
+      if (status !== 0) {
+        reject(
+          new Error(
+            `forge-memory ${args.join(" ")} failed\nstdout:\n${stdout}\nstderr:\n${stderr}`
+          )
+        );
+        return;
+      }
+      resolve({ stdout, stderr, status });
+    });
+  });
+}
+
+function runAsyncFailure(args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [bin, ...args], {
+      cwd: packageRoot,
+      env,
+      ...options
+    });
+    let stdout = "";
+    let stderr = "";
+    const timeout = setTimeout(() => {
+      child.kill("SIGKILL");
+      reject(new Error(`forge-memory ${args.join(" ")} timed out`));
+    }, 20_000);
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.on("close", (status) => {
+      clearTimeout(timeout);
+      if (status === 0) {
+        reject(
+          new Error(
+            `forge-memory ${args.join(" ")} unexpectedly succeeded\nstdout:\n${stdout}\nstderr:\n${stderr}`
+          )
+        );
+        return;
+      }
+      resolve({ stdout, stderr, status });
+    });
+  });
+}
+
+function writeSmokeConfig(overrides = {}) {
+  const configPath = path.join(tempHome, ".forge", "config.json");
+  const current = fs.existsSync(configPath)
+    ? JSON.parse(fs.readFileSync(configPath, "utf8"))
+    : {};
+  fs.mkdirSync(path.dirname(configPath), { recursive: true });
+  fs.writeFileSync(
+    configPath,
+    `${JSON.stringify({ ...current, ...overrides }, null, 2)}\n`
+  );
+  return JSON.parse(fs.readFileSync(configPath, "utf8"));
+}
+
+async function withFakeForgeServer(handler, callback) {
+  const requests = [];
+  const server = http.createServer(async (request, response) => {
+    let body = "";
+    request.setEncoding("utf8");
+    request.on("data", (chunk) => {
+      body += chunk;
+    });
+    request.on("end", async () => {
+      requests.push({
+        method: request.method,
+        url: request.url,
+        headers: request.headers,
+        body
+      });
+      const result = await handler(request, body);
+      response.statusCode = result.statusCode ?? 200;
+      for (const [key, value] of Object.entries(result.headers ?? {})) {
+        response.setHeader(key, value);
+      }
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify(result.body ?? {}));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    return await callback({ port: address.port, requests });
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+}
+
+function forgeHealthResponse() {
+  return {
+    app: "forge",
+    apiVersion: "v1",
+    backend: "forge-node-runtime",
+    runtime: { basePath: "/forge/", storageRoot: dataRoot }
+  };
+}
+
+async function startLiveForgeHealthChild() {
+  const child = spawn(
+    process.execPath,
+    [
+      "-e",
+      `
+const http = require("node:http");
+const server = http.createServer((request, response) => {
+  if (request.url === "/api/v1/health") {
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({
+      ok: true,
+      app: "forge",
+      apiVersion: "v1",
+      backend: "forge-node-runtime",
+      runtime: {
+        pid: process.pid,
+        basePath: "/forge/",
+        storageRoot: process.env.FORGE_DATA_ROOT
+      }
+    }));
+    return;
+  }
+  response.statusCode = 404;
+  response.setHeader("content-type", "application/json");
+  response.end(JSON.stringify({ error: "not found" }));
+});
+server.listen(0, "127.0.0.1", () => {
+  console.log(server.address().port);
+});
+      `
+    ],
+    {
+      env: { ...env, FORGE_DATA_ROOT: dataRoot },
+      stdio: ["ignore", "pipe", "pipe"]
+    }
+  );
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  let stderr = "";
+  child.stderr.on("data", (chunk) => {
+    stderr += chunk;
+  });
+  const port = await new Promise((resolve, reject) => {
+    const failBeforeListen = (code) => {
+      clearTimeout(timeout);
+      reject(new Error(`Live Forge health child exited before listening: ${code}\n${stderr}`));
+    };
+    const timeout = setTimeout(() => {
+      child.off("exit", failBeforeListen);
+      child.kill("SIGKILL");
+      reject(new Error(`Timed out waiting for live Forge health child\n${stderr}`));
+    }, 5_000);
+    child.stdout.once("data", (chunk) => {
+      clearTimeout(timeout);
+      child.off("exit", failBeforeListen);
+      const parsed = Number(String(chunk).trim());
+      if (!Number.isInteger(parsed) || parsed <= 0) {
+        child.kill("SIGKILL");
+        reject(new Error(`Invalid child health port: ${chunk}`));
+        return;
+      }
+      resolve(parsed);
+    });
+    child.once("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.once("exit", failBeforeListen);
+  });
+  return { child, port, pid: child.pid };
+}
+
+async function waitForExit(child, label) {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  await new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      child.kill("SIGKILL");
+      reject(new Error(`${label} did not exit after stop/uninstall`));
+    }, 5_000);
+    child.once("exit", () => {
+      clearTimeout(timeout);
+      resolve();
+    });
+  });
 }
 
 async function inspectMcp() {
@@ -159,6 +382,124 @@ const manualHttpFailure = runFailure(["pair-ios", "--json", "--manual-http", "--
 if (!manualHttpFailure.stderr.includes("loopback-only")) {
   throw new Error("Expected manual HTTP pairing to reject loopback public URLs for physical iPhones");
 }
+await withFakeForgeServer(async (request, body) => {
+  if (request.url === "/api/v1/health") {
+    return { body: forgeHealthResponse() };
+  }
+  if (request.url === "/api/v1/auth/operator-session") {
+    return {
+      headers: { "set-cookie": "forge_operator_session=test-session; Path=/; HttpOnly" },
+      body: { session: { id: "ses_test", actorLabel: "Test", expiresAt: new Date(Date.now() + 60_000).toISOString() } }
+    };
+  }
+  if (request.url === "/api/v1/health/pairing-sessions") {
+    if (request.headers.cookie !== "forge_operator_session=test-session") {
+      return {
+        statusCode: 401,
+        body: { code: "auth_required", error: "An authenticated operator session is required." }
+      };
+    }
+    const parsed = JSON.parse(body || "{}");
+    return {
+      statusCode: 201,
+      body: {
+        qrPayload: {
+          kind: "forge_companion_pairing",
+          apiBaseUrl: "forge-iroh://fake-node/api/v1",
+          uiBaseUrl: "forge-iroh://fake-node/forge/",
+          transportMode: parsed.transportMode,
+          transport: { protocol: "iroh", provider: "forge-companion-iroh" },
+          sessionId: "pair_test",
+          pairingToken: "pairing-token",
+          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+          capabilities: ["health-sync"]
+        }
+      }
+    };
+  }
+  return { statusCode: 404, body: { error: "not found" } };
+}, async ({ port, requests }) => {
+  writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
+  const pairing = await runAsync(["pair-ios", "--json", "--no-start"]);
+  const payload = JSON.parse(pairing.stdout);
+  if (payload.qrPayload.sessionId !== "pair_test") {
+    throw new Error("Expected pair-ios --json to return the fake pairing payload");
+  }
+  const authRequest = requests.find((entry) => entry.url === "/api/v1/auth/operator-session");
+  if (!authRequest) {
+    throw new Error("Expected pair-ios to bootstrap a local operator session before pairing");
+  }
+  const pairingRequest = requests.find((entry) => entry.url === "/api/v1/health/pairing-sessions");
+  if (pairingRequest?.headers.cookie !== "forge_operator_session=test-session") {
+    throw new Error("Expected pair-ios to send the local operator session cookie to the pairing route");
+  }
+});
+await withFakeForgeServer(async (request) => {
+  if (request.url === "/api/v1/health") return { body: forgeHealthResponse() };
+  if (request.url === "/api/v1/auth/operator-session") {
+    return { body: { session: { id: "ses_missing_cookie" } } };
+  }
+  return { statusCode: 404, body: { error: "not found" } };
+}, async ({ port }) => {
+  writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
+  const failure = await runAsyncFailure(["pair-ios", "--json", "--no-start"]);
+  const payload = JSON.parse(failure.stderr);
+  if (payload.code !== "pairing_auth_failed") {
+    throw new Error(`Expected pairing_auth_failed, got ${payload.code}`);
+  }
+  if (payload.error.includes("doctor --repair")) {
+    throw new Error("Expected auth bootstrap failure not to point primarily at doctor --repair");
+  }
+});
+await withFakeForgeServer(async (request) => {
+  if (request.url === "/api/v1/health") return { body: forgeHealthResponse() };
+  if (request.url === "/api/v1/auth/operator-session") {
+    return {
+      headers: { "set-cookie": "forge_operator_session=test-session; Path=/" },
+      body: { session: { id: "ses_test" } }
+    };
+  }
+  if (request.url === "/api/v1/health/pairing-sessions") {
+    return {
+      statusCode: 401,
+      body: { code: "auth_required", error: "An authenticated operator session is required." }
+    };
+  }
+  return { statusCode: 404, body: { error: "not found" } };
+}, async ({ port }) => {
+  writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
+  const failure = await runAsyncFailure(["pair-ios", "--json", "--no-start"]);
+  const payload = JSON.parse(failure.stderr);
+  if (payload.code !== "pairing_request_failed") {
+    throw new Error(`Expected pairing_request_failed, got ${payload.code}`);
+  }
+  if (payload.guidance.some((entry) => entry.includes("doctor --repair"))) {
+    throw new Error("Expected authenticated pairing 401 to avoid generic doctor --repair guidance");
+  }
+});
+await withFakeForgeServer(async (request) => {
+  if (request.url === "/api/v1/health") return { body: forgeHealthResponse() };
+  return { statusCode: 404, body: { error: "not found" } };
+}, async ({ port }) => {
+  writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
+  fs.rmSync(path.join(tempHome, ".forge", "run", "forge-memory-runtime.json"), { force: true });
+  const start = await runAsync(["start"]);
+  const payload = JSON.parse(start.stdout);
+  if (!payload.ok || payload.started !== false || payload.adopted !== true) {
+    throw new Error(`Expected healthy runtime adoption without spawning, got ${start.stdout}`);
+  }
+});
+await withFakeForgeServer(async () => ({
+  statusCode: 404,
+  body: { error: "not Forge" }
+}), async ({ port }) => {
+  writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
+  const start = await runAsync(["start"]);
+  const payload = JSON.parse(start.stdout);
+  if (payload.ok || !payload.portConflict) {
+    throw new Error(`Expected occupied non-Forge port to be reported as a port conflict, got ${start.stdout}`);
+  }
+});
 run(["stop"]);
 
 fs.mkdirSync(dataRoot, { recursive: true });
@@ -206,7 +547,34 @@ if (!mcpToolNames.includes("forge_search_wiki")) {
   }
 }
 
-run(["uninstall", "--yes", "--json"]);
+const liveRuntime = await startLiveForgeHealthChild();
+try {
+  writeSmokeConfig({
+    ...config,
+    mode: "packaged",
+    port: liveRuntime.port,
+    dataRoot,
+    adapters: []
+  });
+  fs.rmSync(path.join(tempHome, ".forge", "run", "forge-memory-runtime.json"), { force: true });
+  const uninstall = run(["uninstall", "--yes", "--json"]);
+  const uninstallPayload = JSON.parse(uninstall.stdout);
+  if (!uninstallPayload.stop?.stopped) {
+    throw new Error(
+      `Expected uninstall to stop a live adopted Forge runtime, got ${uninstall.stdout}`
+    );
+  }
+  if (!uninstallPayload.stop.pids?.includes(liveRuntime.pid)) {
+    throw new Error(
+      `Expected uninstall to stop pid ${liveRuntime.pid}, got ${uninstall.stdout}`
+    );
+  }
+  await waitForExit(liveRuntime.child, "live Forge runtime child");
+} finally {
+  if (liveRuntime.child.exitCode === null && liveRuntime.child.signalCode === null) {
+    liveRuntime.child.kill("SIGKILL");
+  }
+}
 if (fs.existsSync(configPath)) {
   throw new Error(
     "Expected forge-memory uninstall to remove the manager config"

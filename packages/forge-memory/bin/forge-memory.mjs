@@ -179,6 +179,14 @@ function webUrl(config) {
   return `${baseUrl(config)}/forge/`;
 }
 
+function localHostHeader(config) {
+  return `127.0.0.1:${config.port || DEFAULT_PORT}`;
+}
+
+function forgeApiUrl(config, pathname) {
+  return new URL(pathname, baseUrl(config));
+}
+
 async function readJson(filePath, fallback = null) {
   try {
     return JSON.parse(await fsp.readFile(filePath, "utf8"));
@@ -895,12 +903,28 @@ async function health(config, timeoutMs = 1_500) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(new URL("/api/v1/health", baseUrl(config)), {
-      headers: { accept: "application/json" },
+    const response = await fetch(forgeApiUrl(config, "/api/v1/health"), {
+      headers: { accept: "application/json", "x-forge-runtime-probe": "1" },
       signal: controller.signal
     });
     if (!response.ok) return { ok: false, status: response.status };
-    return { ok: true, payload: await response.json() };
+    const text = await response.text();
+    let payload;
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      return {
+        ok: true,
+        status: response.status,
+        error: "HTTP health endpoint returned non-JSON content",
+        forge: false
+      };
+    }
+    return {
+      ok: true,
+      payload,
+      forge: isForgeHealthPayload(payload)
+    };
   } catch (error) {
     return {
       ok: false,
@@ -909,6 +933,11 @@ async function health(config, timeoutMs = 1_500) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function isForgeHealthPayload(payload) {
+  if (!payload || typeof payload !== "object") return false;
+  return payload.app === "forge" && payload.backend === "forge-node-runtime";
 }
 
 function describeNetworkError(error) {
@@ -922,10 +951,15 @@ function describeNetworkError(error) {
 }
 
 function describeHealthResult(result) {
+  if (result.ok && result.forge === false) return "HTTP 200 from a non-Forge service";
   if (result.ok) return "healthy";
   if (result.status) return `HTTP ${result.status}`;
   if (result.error) return result.error;
   return "not reachable";
+}
+
+function isHealthyForgeRuntime(result) {
+  return Boolean(result?.ok && result.forge !== false);
 }
 
 async function readRuntimeState() {
@@ -1077,10 +1111,48 @@ async function repairPackagedRuntimeCache(config) {
 }
 
 async function startRuntime(config) {
+  const current = await health(config);
+  if (isHealthyForgeRuntime(current)) {
+    const existing = await readRuntimeState();
+    return {
+      ok: true,
+      started: false,
+      adopted: true,
+      state: existing,
+      health: current
+    };
+  }
+  if (current.ok && current.forge === false) {
+    return {
+      ok: false,
+      started: false,
+      state: await readRuntimeState(),
+      health: current,
+      portConflict: true,
+      message: `Port ${config.port || DEFAULT_PORT} is already serving a non-Forge HTTP service.`
+    };
+  }
+  if (!(await isPortAvailable(config.port || DEFAULT_PORT))) {
+    return {
+      ok: false,
+      started: false,
+      state: await readRuntimeState(),
+      health: current,
+      portConflict: true,
+      message: `Port ${config.port || DEFAULT_PORT} is already in use.`
+    };
+  }
   const existing = await readRuntimeState();
   if (existing?.pid && processExists(existing.pid)) {
-    const current = await health(config);
-    if (current.ok) return { ok: true, started: false, state: existing };
+    const existingHealth = await health(config);
+    if (isHealthyForgeRuntime(existingHealth))
+      return {
+        ok: true,
+        started: false,
+        adopted: true,
+        state: existing,
+        health: existingHealth
+      };
   }
 
   await fsp.mkdir(path.dirname(logPath()), { recursive: true });
@@ -1178,6 +1250,18 @@ async function startRuntime(config) {
 
 function assertRuntimeStartedForPairing(result, config) {
   if (result?.ok) return;
+  if (result?.portConflict) {
+    throw new Error(
+      [
+        `Forge runtime did not start because ${baseUrl(config)} is already in use by another service.`,
+        `Health check: ${describeHealthResult(result?.health ?? { ok: false })}.`,
+        "Run npx forge-memory status to inspect the configured runtime.",
+        "If Forge Memory owns the running process, run npx forge-memory stop; otherwise stop the conflicting process or choose another --port.",
+        `Runtime log: ${logPath()}.`,
+        "Your data folder is unchanged."
+      ].join(" ")
+    );
+  }
   throw new Error(
     [
       `Forge runtime did not become healthy at ${baseUrl(config)}, so iOS pairing was not started.`,
@@ -1188,22 +1272,38 @@ function assertRuntimeStartedForPairing(result, config) {
   );
 }
 
-async function stopRuntime() {
+async function stopRuntime(config = null) {
+  const effectiveConfig = config ?? (await readConfig());
   const state = await readRuntimeState();
-  if (!state?.children?.length)
-    return {
-      ok: true,
-      stopped: false,
-      message: "No forge-memory runtime state found."
-    };
   const stopped = [];
-  for (const child of state.children) {
+  for (const child of state?.children ?? []) {
     if (!child?.pid || !processExists(child.pid)) continue;
     process.kill(child.pid, "SIGTERM");
     stopped.push(child.pid);
   }
+  const current = await health(effectiveConfig);
+  const runtimePid = Number(current?.payload?.runtime?.pid);
+  if (
+    isHealthyForgeRuntime(current) &&
+    Number.isInteger(runtimePid) &&
+    runtimePid > 0 &&
+    !stopped.includes(runtimePid) &&
+    processExists(runtimePid)
+  ) {
+    process.kill(runtimePid, "SIGTERM");
+    stopped.push(runtimePid);
+  }
   await fsp.rm(runtimeStatePath(), { force: true });
-  return { ok: true, stopped: stopped.length > 0, pids: stopped };
+  if (stopped.length === 0) {
+    return {
+      ok: true,
+      stopped: false,
+      message: state?.children?.length
+        ? "No recorded Forge Memory runtime processes were alive."
+        : "No Forge Memory runtime state or live Forge runtime was found."
+    };
+  }
+  return { ok: true, stopped: true, pids: stopped };
 }
 
 async function exportForgeData(parsed) {
@@ -1419,10 +1519,100 @@ function normalizePublicPairingUrl(value) {
   }
 }
 
+function readSetCookieHeader(headers) {
+  if (typeof headers.getSetCookie === "function") {
+    const values = headers.getSetCookie();
+    if (values.length > 0) return values[0];
+  }
+  return headers.get("set-cookie");
+}
+
+function cookiePairFromSetCookie(value) {
+  if (!value) return null;
+  return value.split(";")[0]?.trim() || null;
+}
+
+class PairingAuthError extends Error {
+  constructor(message, detail = {}) {
+    super(message);
+    this.name = "PairingAuthError";
+    this.code = "pairing_auth_failed";
+    this.detail = detail;
+    this.guidance = [
+      "Forge is reachable, but Forge Memory could not create a local operator session for iOS pairing.",
+      "Run npx forge-memory doctor to confirm the runtime is healthy.",
+      "Then rerun npx forge-memory pair-ios."
+    ];
+  }
+}
+
+class PairingRequestError extends Error {
+  constructor(message, detail = {}) {
+    super(message);
+    this.name = "PairingRequestError";
+    this.code = "pairing_request_failed";
+    this.detail = detail;
+    this.guidance =
+      detail.status === 401
+        ? [
+            "Forge is reachable, but the pairing request was not authenticated.",
+            "Forge Memory should bootstrap a local operator session before pairing; rerun npx forge-memory pair-ios after updating.",
+            "Run npx forge-memory doctor only if runtime health also fails."
+          ]
+        : [
+            "Forge is reachable, but it rejected the iOS pairing request.",
+            "Run npx forge-memory doctor to confirm runtime health, then inspect the response above."
+          ];
+  }
+}
+
+async function bootstrapLocalOperatorSession(config) {
+  const sessionUrl = forgeApiUrl(config, "/api/v1/auth/operator-session");
+  let response;
+  try {
+    response = await fetch(sessionUrl, {
+      method: "GET",
+      headers: {
+        accept: "application/json",
+        host: localHostHeader(config)
+      }
+    });
+  } catch (error) {
+    throw new PairingAuthError(
+      [
+        `Could not create a local operator session at ${sessionUrl}.`,
+        `Network: ${describeNetworkError(error)}.`
+      ].join(" "),
+      { url: sessionUrl.toString() }
+    );
+  }
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new PairingAuthError(
+      [
+        `Could not create a local operator session at ${sessionUrl}: Forge returned HTTP ${response.status}.`,
+        body ? `Response: ${body.slice(0, 500)}` : ""
+      ]
+        .filter(Boolean)
+        .join(" "),
+      { url: sessionUrl.toString(), status: response.status }
+    );
+  }
+  const cookie = cookiePairFromSetCookie(readSetCookieHeader(response.headers));
+  if (!cookie) {
+    throw new PairingAuthError(
+      `Could not create a local operator session at ${sessionUrl}: Forge did not return a session cookie.`,
+      { url: sessionUrl.toString(), status: response.status }
+    );
+  }
+  return cookie;
+}
+
 async function createPairing(config, options = {}) {
   const transportMode = options.transportMode ?? "iroh";
   const publicUrl = validatePairingOptions({ transportMode, publicUrl: options.publicUrl });
-  const pairingUrl = new URL("/api/v1/health/pairing-sessions", baseUrl(config));
+  const pairingUrl = forgeApiUrl(config, "/api/v1/health/pairing-sessions");
+  const operatorCookie = await bootstrapLocalOperatorSession(config);
   let response;
   try {
     response = await fetch(pairingUrl, {
@@ -1430,6 +1620,7 @@ async function createPairing(config, options = {}) {
       headers: {
         "content-type": "application/json",
         accept: "application/json",
+        cookie: operatorCookie,
         ...(publicUrl ? { referer: publicUrl } : {})
       },
       body: JSON.stringify({ userId: null, transportMode })
@@ -1452,14 +1643,17 @@ async function createPairing(config, options = {}) {
   }
   if (!response.ok) {
     const body = await response.text().catch(() => "");
-    throw new Error(
+    throw new PairingRequestError(
       [
         `Could not create iOS pairing at ${pairingUrl}: Forge returned HTTP ${response.status}.`,
         body ? `Response: ${body.slice(0, 500)}` : "",
-        `Run npx forge-memory doctor --repair and inspect ${logPath()}.`
+        response.status === 401
+          ? "Forge Memory did not obtain or pass a valid local operator session cookie."
+          : "Inspect the response and rerun npx forge-memory doctor if runtime health is uncertain."
       ]
         .filter(Boolean)
-        .join(" ")
+        .join(" "),
+      { url: pairingUrl.toString(), status: response.status }
     );
   }
   return response.json();
@@ -1773,25 +1967,34 @@ async function runStatus(parsed) {
   const config = await readConfig();
   const state = await readRuntimeState();
   const currentHealth = await health(config);
+  const stateExists = fs.existsSync(runtimeStatePath());
+  const running = isHealthyForgeRuntime(currentHealth);
   const payload = {
-    ok: currentHealth.ok,
-    running: currentHealth.ok,
+    ok: running,
+    running,
     mode: config.mode,
     baseUrl: baseUrl(config),
     webUrl: webUrl(config),
     dataRoot: config.dataRoot,
     adapters: config.adapters,
+    health: currentHealth,
+    runtimeStatePath: runtimeStatePath(),
+    runtimeStateExists: stateExists,
+    adoptedRuntime: running && !stateExists,
     state
   };
   if (parsed.flags.json) console.log(JSON.stringify(payload, null, 2));
   else {
     console.log(`${color.bold("Forge Memory Status")}`);
     console.log(
-      `Runtime: ${currentHealth.ok ? color.green("healthy") : color.yellow("not reachable")}`
+      `Runtime: ${running ? color.green("healthy") : color.yellow(describeHealthResult(currentHealth))}`
     );
     console.log(`Mode: ${config.mode}`);
     console.log(`UI: ${webUrl(config)}`);
     console.log(`Data: ${config.dataRoot}`);
+    console.log(
+      `Runtime state: ${stateExists ? runtimeStatePath() : color.yellow("missing; healthy runtimes will be adopted")}`
+    );
     console.log(
       `Adapters: ${config.adapters.length ? config.adapters.join(", ") : "none configured"}`
     );
@@ -1803,20 +2006,35 @@ async function doctorCheckRuntime(config, options) {
   let result = await health(config);
   let repaired = false;
   let repairRecordPath = null;
-  if (!result.ok && options.repair && !options.noStart && !options.dryRun) {
+  if (
+    !isHealthyForgeRuntime(result) &&
+    !(result.ok && result.forge === false) &&
+    options.repair &&
+    !options.noStart &&
+    !options.dryRun
+  ) {
     const repair = await repairPackagedRuntimeCache(config);
     repairRecordPath = repair.repairRecordPath ?? null;
     result = await health(config, 3_000);
-    repaired = result.ok;
+    repaired = isHealthyForgeRuntime(result);
   }
+  const ok = isHealthyForgeRuntime(result);
   return {
     id: "runtime",
-    ok: result.ok,
-    detail: baseUrl(config),
+    ok,
+    detail:
+      result.ok && result.forge === false
+        ? `${baseUrl(config)} (non-Forge service responded)`
+        : baseUrl(config),
     repaired,
     repairRecordPath,
-    guidance: result.ok
+    health: result,
+    statePath: runtimeStatePath(),
+    stateExists: fs.existsSync(runtimeStatePath()),
+    guidance: ok
       ? "Forge API is reachable."
+      : result.ok && result.forge === false
+        ? `Port ${config.port || DEFAULT_PORT} responded, but not with Forge runtime health. Stop the conflicting process or choose another --port.`
       : `Run npx forge-memory doctor --repair, then inspect ${logPath()} if the runtime still does not start. Repair reinstalls only the owned runtime cache and preserves the data folder.`
   };
 }
@@ -2378,14 +2596,22 @@ async function main() {
 
 function printFatalError(error, { json = false } = {}) {
   const message = error instanceof Error ? error.message : String(error);
+  const guidance =
+    error && typeof error === "object" && Array.isArray(error.guidance)
+      ? error.guidance
+      : [
+          "Run npx forge-memory doctor --repair to check and repair the local install.",
+          "Run npx forge-memory logs to inspect the runtime log.",
+          "Forge Memory repair never deletes your data folder."
+        ];
   const payload = {
     ok: false,
+    code:
+      error && typeof error === "object" && typeof error.code === "string"
+        ? error.code
+        : "forge_memory_failed",
     error: message,
-    guidance: [
-      "Run npx forge-memory doctor --repair to check and repair the local install.",
-      "Run npx forge-memory logs to inspect the runtime log.",
-      "Forge Memory repair never deletes your data folder."
-    ],
+    guidance,
     logPath: logPath()
   };
   if (json) {
