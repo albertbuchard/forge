@@ -304,7 +304,7 @@ test("weight loss overview reflects food logs and body check-ins", async () => {
       typeof overviewBody.weightLoss.energyModel.activeBurnKcal === "number" ||
         overviewBody.weightLoss.energyModel.activeBurnKcal === null
     );
-    assert.equal(overviewBody.weightLoss.energyModel.activeBurnKcal, 420);
+    assert.equal(overviewBody.weightLoss.energyModel.activeBurnKcal, 300);
     assert.equal(
       overviewBody.weightLoss.energyModel.baselineActiveCaloriesKcal,
       300
@@ -349,13 +349,13 @@ test("weight loss overview reflects food logs and body check-ins", async () => {
         (reason) => reason.includes("current_day_or_future_day")
       )
     );
-    assert.equal(overviewBody.weightLoss.energyModel.estimatedTdeeKcal, 2179);
+    assert.equal(overviewBody.weightLoss.energyModel.estimatedTdeeKcal, 2059);
     assert.ok(
       typeof overviewBody.weightLoss.energyModel.movementCaloriesKcal ===
         "number" ||
         overviewBody.weightLoss.energyModel.movementCaloriesKcal === null
     );
-    assert.equal(overviewBody.weightLoss.energyModel.movementCaloriesKcal, 120);
+    assert.equal(overviewBody.weightLoss.energyModel.movementCaloriesKcal, null);
     assert.equal(
       typeof overviewBody.weightLoss.energyModel
         .estimatedDailyEnergyBalanceKcal,
@@ -548,7 +548,7 @@ test("weight loss overview keeps formula resting baseline despite partial Health
     );
     assert.equal(
       overviewBody.weightLoss.energyModel.baselineActiveCaloriesKcal,
-      388
+      895
     );
     assert.equal(overviewBody.weightLoss.energyModel.todayActiveCaloriesKcal, 52);
     assert.equal(overviewBody.weightLoss.energyModel.todayActiveSurplusKcal, 0);
@@ -565,6 +565,111 @@ test("weight loss overview keeps formula resting baseline despite partial Health
     assert.equal(
       overviewBody.weightLoss.todayLedger.activeAdjustmentCalories,
       0
+    );
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("weight loss active baseline averages only measured prior days across the past week", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-weight-loss-active-baseline-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: false });
+
+  try {
+    const cookie = await issueOperatorSessionCookie(app);
+    const now = new Date().toISOString();
+    const updateTarget = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/health/weight-loss/target",
+      headers: { cookie },
+      payload: {
+        calorieTarget: 2000,
+        proteinGramsTarget: 150,
+        fiberGramsTarget: 28,
+        carbohydrateGramsTarget: 220,
+        fatGramsTarget: 60,
+        weightGoalKg: 76,
+        weeklyRateGoalKg: -0.35,
+        dietStyle: "balanced",
+        bodyGoal: "lose fat",
+        notes:
+          "Forge science plan; sex=male; age_years=39; height_cm=180; resting_kcal=1775"
+      }
+    });
+    assert.equal(updateTarget.statusCode, 200);
+
+    const activeRows = [
+      ["2030-01-01", 100],
+      ["2030-01-02", null],
+      ["2030-01-03", 300],
+      ["2030-01-04", 1000]
+    ] as const;
+    for (const [dayKey, activeTotal] of activeRows) {
+      insertVitalsDay({
+        id: `hds_active_baseline_${dayKey}`,
+        dayKey,
+        createdAt: now,
+        metrics:
+          activeTotal == null
+            ? {}
+            : {
+                activeEnergyBurned: {
+                  metric: "activeEnergyBurned",
+                  unit: "kcal",
+                  total: activeTotal,
+                  sampleCount: 24,
+                  latestSampleAt: `${dayKey}T21:00:00.000Z`
+                }
+              }
+      });
+    }
+
+    const overview = await app.inject({
+      method: "GET",
+      url: "/api/v1/health/weight-loss?dateKey=2030-01-04"
+    });
+    assert.equal(overview.statusCode, 200);
+    const overviewBody = overview.json() as {
+      weightLoss: {
+        energyModel: {
+          activeBurnKcal: number | null;
+          activeBaselineWindowDays: number;
+          activeBaselineEvidenceDays: number;
+          baselineActiveCaloriesKcal: number;
+          todayActiveCaloriesKcal: number;
+          todayActiveSurplusKcal: number;
+          todayActivityBufferKcal: number;
+          todayTargetAdjustmentKcal: number;
+        };
+        todayLedger: {
+          targetCalories: number;
+          activeAdjustmentCalories: number;
+        };
+      };
+    };
+
+    assert.equal(overviewBody.weightLoss.energyModel.activeBurnKcal, 200);
+    assert.equal(overviewBody.weightLoss.energyModel.activeBaselineWindowDays, 7);
+    assert.equal(overviewBody.weightLoss.energyModel.activeBaselineEvidenceDays, 2);
+    assert.equal(
+      overviewBody.weightLoss.energyModel.baselineActiveCaloriesKcal,
+      200
+    );
+    assert.equal(overviewBody.weightLoss.energyModel.todayActiveCaloriesKcal, 1000);
+    assert.equal(overviewBody.weightLoss.energyModel.todayActiveSurplusKcal, 800);
+    assert.equal(overviewBody.weightLoss.energyModel.todayActivityBufferKcal, 400);
+    assert.equal(
+      overviewBody.weightLoss.energyModel.todayTargetAdjustmentKcal,
+      400
+    );
+    assert.equal(overviewBody.weightLoss.todayLedger.targetCalories, 2400);
+    assert.equal(
+      overviewBody.weightLoss.todayLedger.activeAdjustmentCalories,
+      400
     );
   } finally {
     await app.close();

@@ -279,6 +279,8 @@ export type WeightLossViewData = {
     inferredTdee: number | null;
     estimatedTdeeKcal: number | null;
     activeBurnKcal: number | null;
+    activeBaselineWindowDays: number;
+    activeBaselineEvidenceDays: number;
     baselineActiveCaloriesKcal: number;
     todayActiveCaloriesKcal: number;
     todayObservedActiveCaloriesKcal: number | null;

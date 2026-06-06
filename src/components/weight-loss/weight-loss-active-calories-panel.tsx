@@ -35,7 +35,7 @@ function sourceLabel(source: string) {
     case "today_step_estimate":
       return "Step estimate today";
     default:
-      return "Default daily active calories";
+      return "Past-week active baseline";
   }
 }
 
@@ -49,21 +49,21 @@ function sourceDescription(
     case "today_healthkit_active_energy":
       return "Forge is using same-day HealthKit active energy, which normally includes steps and workouts.";
     case "today_workout_movement_energy":
-      return "Forge found same-day workout or movement calories and is using them instead of the default.";
+      return "Forge found same-day workout or movement calories and is using them instead of the baseline.";
     case "today_workout_movement_step_energy":
-      return "Forge found same-day workout calories, movement-trip calories, and estimated step calories, so those replace the default active calories today.";
+      return "Forge found same-day workout calories, movement-trip calories, and estimated step calories, so those replace the baseline active calories today.";
     case "today_workout_step_energy":
-      return "Forge found same-day workout calories and estimated step calories, so those replace the default active calories today.";
+      return "Forge found same-day workout calories and estimated step calories, so those replace the baseline active calories today.";
     case "today_movement_step_energy":
-      return "Forge found same-day movement-trip calories and estimated step calories, so those replace the default active calories today.";
+      return "Forge found same-day movement-trip calories and estimated step calories, so those replace the baseline active calories today.";
     case "today_workout_energy":
-      return "Forge found workout calories today and is using them instead of the default.";
+      return "Forge found workout calories today and is using them instead of the baseline.";
     case "today_movement_trip_calories":
-      return "Forge found movement-trip calories today and is using them instead of the default.";
+      return "Forge found movement-trip calories today and is using them instead of the baseline.";
     case "today_step_estimate":
-      return "Forge found enough same-day steps to beat the default active allowance, so it estimates step calories from latest known body weight and uses that today.";
+      return "Forge found enough same-day steps to beat the baseline active allowance, so it estimates step calories from latest known body weight and uses that today.";
     default:
-      return "No meaningful same-day active evidence is available yet, so Forge is using the default from the plan. Tiny step-only syncs stay visible as evidence but do not lower the default.";
+      return `No meaningful same-day active evidence is available yet, so Forge is using the ${energy.activeBaselineWindowDays}-day measured baseline from the plan. Missing sync days are ignored rather than averaged as zero.`;
   }
 }
 
@@ -72,23 +72,23 @@ function sourceDecisionLabel(source: string) {
     case "user_override":
       return "Using your manual value for today.";
     case "today_healthkit_active_energy":
-      return "Using same-day HealthKit active energy instead of the default.";
+      return "Using same-day HealthKit active energy instead of the baseline.";
     case "today_workout_movement_energy":
-      return "Using today's workout and movement calories instead of the default.";
+      return "Using today's workout and movement calories instead of the baseline.";
     case "today_workout_movement_step_energy":
-      return "Using today's workouts, movement, and steps instead of the default.";
+      return "Using today's workouts, movement, and steps instead of the baseline.";
     case "today_workout_step_energy":
-      return "Using today's workouts and steps instead of the default.";
+      return "Using today's workouts and steps instead of the baseline.";
     case "today_movement_step_energy":
-      return "Using today's movement and steps instead of the default.";
+      return "Using today's movement and steps instead of the baseline.";
     case "today_workout_energy":
-      return "Using today's workout calories instead of the default.";
+      return "Using today's workout calories instead of the baseline.";
     case "today_movement_trip_calories":
-      return "Using today's movement calories instead of the default.";
+      return "Using today's movement calories instead of the baseline.";
     case "today_step_estimate":
-      return "Using today's step estimate because it is above the default.";
+      return "Using today's step estimate because it is above the baseline.";
     default:
-      return "No meaningful same-day active evidence yet, so the default active calories are used.";
+      return "No meaningful same-day active evidence yet, so the past-week active baseline is used.";
   }
 }
 
@@ -210,7 +210,7 @@ export function WeightLossActiveCaloriesPanel({
                     Today active-calorie source
                     <InfoTooltip
                       label="Explain active calorie target"
-                      content="This is the active-energy allowance applied to today's food budget. Forge uses a manual override first, then same-day HealthKit active energy because it normally includes steps and workouts, then workout and movement calories, then a step estimate only when it is above the default active allowance, then the default active calories from the plan."
+                      content="This is the active-energy allowance applied to today's food budget. Forge uses a manual override first, then same-day HealthKit active energy because it normally includes steps and workouts, then workout and movement calories, then a step estimate only when it is above the baseline active allowance, then the prior-week measured baseline from the plan."
                     />
                   </div>
                   <h2 className="mt-1 text-3xl font-semibold leading-tight text-[var(--ui-ink-strong)]">
@@ -224,7 +224,7 @@ export function WeightLossActiveCaloriesPanel({
                     <span className="font-semibold text-[var(--ui-ink-strong)]">
                       Rule:
                     </span>{" "}
-                    default active calories stay inside the baseline target.
+                    baseline active calories stay inside the baseline target.
                     Same-day workouts, movement calories, HealthKit active
                     energy, or enough step calories create only a positive
                     activity buffer above that baseline. Tiny or early partial
@@ -236,7 +236,7 @@ export function WeightLossActiveCaloriesPanel({
                       Applied {energy.todayActiveCaloriesKcal.toFixed(0)} kcal
                     </span>
                     <span className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-1">
-                      Default fallback{" "}
+                      Past-week baseline{" "}
                       {energy.baselineActiveCaloriesKcal.toFixed(0)} kcal
                     </span>
                     <span className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-1">
@@ -256,7 +256,7 @@ export function WeightLossActiveCaloriesPanel({
                     </div>
                     <div className="inline-flex max-w-full items-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-1 text-xs font-medium text-[var(--ui-ink-medium)]">
                       <span className="min-w-0 truncate">
-                        Default {energy.baselineActiveCaloriesKcal.toFixed(0)}{" "}
+                        Baseline {energy.baselineActiveCaloriesKcal.toFixed(0)}{" "}
                         kcal
                       </span>
                     </div>
@@ -280,7 +280,7 @@ export function WeightLossActiveCaloriesPanel({
                     </div>
                     <div className="min-w-0 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-3">
                       <div className="text-[11px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
-                        Default fallback
+                        Past-week baseline
                       </div>
                       <div className="mt-1 text-2xl font-semibold text-[var(--ui-ink-strong)]">
                         {energy.baselineActiveCaloriesKcal.toFixed(0)} kcal
@@ -300,7 +300,7 @@ export function WeightLossActiveCaloriesPanel({
                       Budget equation:
                     </span>{" "}
                     {formula}. Forge uses {energy.activityEatBackFraction * 100}
-                    % of the positive active surplus above the default day, so
+                    % of the positive active surplus above the baseline day, so
                     same-day activity cannot reduce the target.
                   </div>
                 </div>
@@ -309,15 +309,15 @@ export function WeightLossActiveCaloriesPanel({
 
             <div className="grid min-w-0 gap-3 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-3">
               <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
-                Edit default day
+                Edit active baseline
                 <InfoTooltip
-                  label="Explain default daily active calories"
-                  content="This is the baseline active-calorie value saved in the plan. Forge uses it on days with no same-day active evidence. Changing it recalculates the plan target, macros, and maintenance calories; it does not change today's workout or movement evidence."
+                  label="Explain active baseline"
+                  content={`This is the baseline active-calorie value saved in the plan. Forge refreshes it from measured active-energy days in the prior ${energy.activeBaselineWindowDays} days when evidence is available, excluding today and ignoring days with no measurement. Changing it recalculates the plan target, macros, and maintenance calories; it does not change today's workout or movement evidence.`}
                 />
               </div>
               <label className="grid gap-2">
                 <span className="text-sm font-medium text-[var(--ui-ink-medium)]">
-                  Default daily active calories
+                  Baseline active calories/day
                 </span>
                 <div className="grid max-w-[calc(100%-6.5rem)] min-w-0 gap-2 sm:max-w-none sm:grid-cols-[minmax(0,1fr)_auto]">
                   <Input
@@ -326,7 +326,7 @@ export function WeightLossActiveCaloriesPanel({
                     onChange={(event) =>
                       onBaselineDraftChange(event.target.value)
                     }
-                    aria-label="Default daily active calories"
+                    aria-label="Baseline active calories per day"
                   />
                   <span className="flex items-center justify-start rounded-[8px] bg-[var(--ui-surface-1)] px-3 py-2 text-sm font-semibold text-[var(--ui-ink-medium)] sm:justify-center">
                     kcal
@@ -338,10 +338,10 @@ export function WeightLossActiveCaloriesPanel({
                 variant="secondary"
                 onClick={onSaveBaseline}
                 pending={baselinePending}
-                pendingLabel="Saving default"
+                pendingLabel="Saving baseline"
               >
                 <Save className="size-4" />
-                Save default
+                Save baseline
               </Button>
 
               <div className="mt-1 border-t border-[var(--ui-border-subtle)] pt-3">
@@ -451,9 +451,9 @@ export function WeightLossActiveCaloriesPanel({
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <EvidenceTile
-          label="Default daily active"
+          label="Past-week baseline"
           value={`${energy.baselineActiveCaloriesKcal.toFixed(0)} kcal`}
-          detail="Used when today has no active-energy evidence."
+          detail={`${energy.activeBaselineEvidenceDays}/${energy.activeBaselineWindowDays} measured prior days; missing days ignored.`}
           active={sourceIsDefault}
         />
         <EvidenceTile
@@ -479,7 +479,7 @@ export function WeightLossActiveCaloriesPanel({
           detail={
             override
               ? "Manual value is controlling today."
-              : "Measured/default source is controlling today."
+              : "Measured/baseline source is controlling today."
           }
           active={source === "user_override"}
         />
@@ -520,7 +520,8 @@ export function WeightLossActiveCaloriesPanel({
             HealthKit active energy is missing, Forge adds same-day workout
             calories, movement-trip calories, and estimated step calories from
             latest known body weight. The baseline target stays fixed; only the
-            positive surplus above the default day creates an activity buffer.
+            positive surplus above the past-week measured baseline creates an
+            activity buffer.
           </span>
         </div>
       </div>
@@ -559,7 +560,7 @@ export function WeightLossActiveCaloriesMiniCard({
             Active kcal
             <InfoTooltip
               label="Explain active calories"
-              content={`Today target = baseline food target + positive activity buffer. ${formula}. Same-day activity can only add ${Math.round(energy.activityEatBackFraction * 100)}% of the positive surplus above the default day, so early or low activity cannot lower the target. A manual edit overrides today only.`}
+              content={`Today target = baseline food target + positive activity buffer. ${formula}. Same-day activity can only add ${Math.round(energy.activityEatBackFraction * 100)}% of the positive surplus above the baseline day, so early or low activity cannot lower the target. A manual edit overrides today only.`}
             />
           </div>
           <div className="mt-1 text-2xl font-semibold leading-tight text-[var(--ui-ink-strong)]">
@@ -576,7 +577,7 @@ export function WeightLossActiveCaloriesMiniCard({
           {sourceDecisionLabel(source)}
         </div>
         <div>
-          Default {energy.baselineActiveCaloriesKcal.toFixed(0)} kcal
+          Baseline {energy.baselineActiveCaloriesKcal.toFixed(0)} kcal
           {" · "}
           observed{" "}
           {energy.todayObservedActiveCaloriesKcal != null

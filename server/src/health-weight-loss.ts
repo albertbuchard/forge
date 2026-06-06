@@ -145,6 +145,8 @@ type DailyEnergyOverrideRow = {
   updated_at: string;
 };
 
+const ACTIVE_BASELINE_WINDOW_DAYS = 7;
+
 type AppearanceCheckinRow = {
   id: string;
   user_id: string;
@@ -721,7 +723,7 @@ function buildStoredEnergyModel(input: {
 }) {
   const todayKey = input.dateKey;
   const start = new Date(`${todayKey}T00:00:00.000Z`);
-  start.setUTCDate(start.getUTCDate() - 6);
+  start.setUTCDate(start.getUTCDate() - ACTIVE_BASELINE_WINDOW_DAYS);
   const startKey = start.toISOString().slice(0, 10);
   const dailySummaryRows = getDatabase()
     .prepare(
@@ -730,9 +732,10 @@ function buildStoredEnergyModel(input: {
        WHERE user_id = ?
          AND summary_type = 'vitals'
          AND date_key >= ?
+         AND date_key <= ?
        ORDER BY date_key DESC`
     )
-    .all(input.userId, startKey) as WeightLossDailySummaryRow[];
+    .all(input.userId, startKey, todayKey) as WeightLossDailySummaryRow[];
   const dailyHealthKit = dailySummaryRows.map((row) => {
     const metrics = parseJson<Record<string, unknown>>(row.metrics_json, {});
     return {
@@ -754,9 +757,10 @@ function buildStoredEnergyModel(input: {
        FROM health_workout_sessions
        WHERE user_id = ?
          AND date(started_at) >= ?
+         AND date(started_at) <= ?
        GROUP BY date(started_at)`
     )
-    .all(input.userId, startKey) as WeightLossEnergyDayRow[];
+    .all(input.userId, startKey, todayKey) as WeightLossEnergyDayRow[];
   const movementRows = getDatabase()
     .prepare(
       `SELECT date(started_at) AS date_key,
@@ -766,9 +770,10 @@ function buildStoredEnergyModel(input: {
        FROM movement_trips
        WHERE user_id = ?
          AND date(started_at) >= ?
+         AND date(started_at) <= ?
        GROUP BY date(started_at)`
     )
-    .all(input.userId, startKey) as WeightLossEnergyDayRow[];
+    .all(input.userId, startKey, todayKey) as WeightLossEnergyDayRow[];
   const workoutByDay = new Map(
     workoutRows.map((row) => [
       row.date_key,
@@ -812,8 +817,11 @@ function buildStoredEnergyModel(input: {
           "movement_calories_kcal"
         >)
       : null;
+  const activeBaselineHealthKitDays = dailyHealthKit.filter(
+    (day) => day.dateKey < todayKey && day.activeEnergyKcal != null
+  );
   const activeEnergyAverage = average(
-    dailyHealthKit.map((day) => day.activeEnergyKcal)
+    activeBaselineHealthKitDays.map((day) => day.activeEnergyKcal)
   );
   const restingEvidenceDays = dailyHealthKit.filter(
     (day) => day.restingEnergyKcal != null
@@ -877,15 +885,23 @@ function buildStoredEnergyModel(input: {
     }
     return qualifiedRestingDays.length > 0 ? "high" : "medium";
   })();
-  const workoutEnergyAverage = average([...workoutByDay.values()]);
-  const movementCaloriesAverage = average([...movementByDay.values()]);
+  const workoutBaselineEntries = [...workoutByDay.entries()].filter(
+    ([dateKey, value]) => dateKey < todayKey && value != null
+  );
+  const movementBaselineEntries = [...movementByDay.entries()].filter(
+    ([dateKey, value]) => dateKey < todayKey && value != null
+  );
+  const workoutBaselineValues = workoutBaselineEntries.map(([, value]) => value);
+  const movementBaselineValues = movementBaselineEntries.map(([, value]) => value);
+  const workoutEnergyAverage = average(workoutBaselineValues);
+  const movementCaloriesAverage = average(movementBaselineValues);
   const fallbackActiveBurn =
     workoutEnergyAverage != null || movementCaloriesAverage != null
       ? n(workoutEnergyAverage) + n(movementCaloriesAverage)
       : null;
-  const activeBurnKcal = activeEnergyAverage ?? fallbackActiveBurn;
-  const baselineActiveCalories =
-    input.defaultActiveCalories ?? activeBurnKcal ?? 0;
+  const activeBurnKcal =
+    activeEnergyAverage ?? fallbackActiveBurn ?? input.defaultActiveCalories;
+  const baselineActiveCalories = activeBurnKcal ?? 0;
   const todayHealthKitActive =
     dailyHealthKit.find((day) => day.dateKey === todayKey)?.activeEnergyKcal ??
     null;
@@ -1025,6 +1041,12 @@ function buildStoredEnergyModel(input: {
     inferredTdee: input.inferredTdee,
     estimatedTdeeKcal,
     activeBurnKcal: activeBurnKcal != null ? round(activeBurnKcal, 0) : null,
+    activeBaselineWindowDays: ACTIVE_BASELINE_WINDOW_DAYS,
+    activeBaselineEvidenceDays: new Set([
+      ...activeBaselineHealthKitDays.map((day) => day.dateKey),
+      ...workoutBaselineEntries.map(([dateKey]) => dateKey),
+      ...movementBaselineEntries.map(([dateKey]) => dateKey)
+    ]).size,
     baselineActiveCaloriesKcal: round(baselineActiveCalories, 0),
     todayActiveCaloriesKcal: round(todayActiveCalories, 0),
     todayObservedActiveCaloriesKcal:
@@ -1072,9 +1094,15 @@ function buildStoredEnergyModel(input: {
       ...movementRows.map((row) => row.date_key)
     ]).size,
     exerciseMinutesAverage: average(
-      dailyHealthKit.map((day) => day.exerciseMinutes)
+      dailyHealthKit
+        .filter((day) => day.dateKey < todayKey)
+        .map((day) => day.exerciseMinutes)
     ),
-    stepCountAverage: average(dailyHealthKit.map((day) => day.stepCount)),
+    stepCountAverage: average(
+      dailyHealthKit
+        .filter((day) => day.dateKey < todayKey)
+        .map((day) => day.stepCount)
+    ),
     sourceAvailability: {
       healthKitDailyEnergy: hasHealthKitDailyActiveEnergy,
       movementTripCalories: hasMovementEnergy,

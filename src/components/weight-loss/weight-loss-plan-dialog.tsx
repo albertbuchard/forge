@@ -206,13 +206,17 @@ export function isWeightLossPlanConfigured(view: WeightLossViewData) {
 
 function activeBurnEvidenceHint(view: WeightLossViewData) {
   const energy = view.energyModel;
+  const baseline =
+    energy.activeBaselineEvidenceDays > 0
+      ? `Forge is averaging ${energy.activeBaselineEvidenceDays} measured prior day${energy.activeBaselineEvidenceDays === 1 ? "" : "s"} inside the past ${energy.activeBaselineWindowDays} days, excluding today and ignoring missing sync days instead of counting them as zero.`
+      : `Forge has no measured prior-day active evidence in the past ${energy.activeBaselineWindowDays} days, so it is falling back to the saved plan estimate.`;
   const source =
     energy.energySourceConfidence === "healthkit_daily_active_energy"
       ? "HealthKit daily active energy is the active-burn source; workout and movement values are only visible evidence and are not added again."
       : energy.energySourceConfidence === "workout_movement_fallback"
         ? "HealthKit daily active energy is missing, so active burn already equals workout average plus movement-trip average."
-        : "No measured active-burn stream is available, so Forge is using the plan/default estimate.";
-  return `This is the default active allowance used when today has no same-day workout, movement, step, or active-energy evidence. ${source} Current evidence: active burn ${formatNumber(energy.activeBurnKcal)} kcal/day, workout average ${formatNumber(energy.workoutEnergyKcal)} kcal/day, movement average ${formatNumber(energy.movementCaloriesKcal)} kcal/day, today's workout ${formatNumber(energy.todayWorkoutEnergyKcal)} kcal, today's movement ${formatNumber(energy.todayMovementCaloriesKcal)} kcal.`;
+        : "No measured active-burn stream is available, so Forge is using the saved plan estimate.";
+  return `This is the baseline active allowance used when today has no same-day workout, movement, step, or active-energy evidence. ${baseline} ${source} Current evidence: active burn ${formatNumber(energy.activeBurnKcal)} kcal/day, workout average ${formatNumber(energy.workoutEnergyKcal)} kcal/day, movement average ${formatNumber(energy.movementCaloriesKcal)} kcal/day, today's workout ${formatNumber(energy.todayWorkoutEnergyKcal)} kcal, today's movement ${formatNumber(energy.todayMovementCaloriesKcal)} kcal.`;
 }
 
 export function calculatePlan(draft: WeightLossPlanDraft) {
