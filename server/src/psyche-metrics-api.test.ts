@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import type { DevrageReport } from "forge-devrage";
+import type { DevrageReport } from "./services/devrage-scanner.js";
 import { buildServer } from "./app.js";
 import { closeDatabase } from "./db.js";
 import { storeDevrageReport } from "./services/devrage.js";

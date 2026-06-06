@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto";
-import { scanConversations, type DevrageReport, type MessageRole } from "forge-devrage";
+import {
+  scanConversations,
+  type DevrageReport,
+  type MessageRole
+} from "./devrage-scanner.js";
 import { getDatabase, runInTransaction } from "../db.js";
 import { psycheMetricsViewDataSchema, type PsycheMetricsViewData } from "../psyche-types.js";
 

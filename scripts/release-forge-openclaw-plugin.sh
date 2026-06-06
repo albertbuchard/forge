@@ -43,6 +43,7 @@ VERIFY_TESTS=(
   "npm run build"
   "node --import tsx --test --test-concurrency=1 server/src/app.test.ts"
   "npm run build:openclaw-plugin"
+  "npm run smoke:packed-openclaw-runtime"
 )
 
 usage() {

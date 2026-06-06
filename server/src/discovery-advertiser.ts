@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import os from "node:os";
 import { promisify } from "node:util";
-import { Bonjour } from "bonjour-service";
+import bonjourService from "bonjour-service";
 import { logForgeDebug } from "./debug.js";
 import {
   companionIrohApiBaseUrlFromNodeId,
@@ -29,6 +29,21 @@ type TailscaleStatus = {
   };
 };
 
+const BonjourConstructor =
+  (bonjourService as { Bonjour?: new (...args: unknown[]) => BonjourLike }).Bonjour ??
+  (bonjourService as { default?: new (...args: unknown[]) => BonjourLike }).default ??
+  (bonjourService as unknown as new (...args: unknown[]) => BonjourLike);
+
+type BonjourLike = {
+  publish: (options: Record<string, unknown>) => BonjourServiceLike;
+  destroy: () => void;
+};
+
+type BonjourServiceLike = {
+  start?: () => void;
+  stop?: (callback?: () => void) => void;
+};
+
 export async function startForgeDiscoveryAdvertiser(
   options: ForgeDiscoveryAdvertiserOptions
 ): Promise<ForgeDiscoveryAdvertiserHandle | null> {
@@ -48,13 +63,13 @@ export async function startForgeDiscoveryAdvertiser(
   const irohTransport = getCompanionIrohStatus();
   const irohNodeId = irohTransport.pairPayload?.node_id;
 
-  const bonjour = new Bonjour({}, (error: unknown) => {
+  const bonjour = new BonjourConstructor({}, (error: unknown) => {
     logForgeDebug(
       `[forge-discovery] ignored mDNS advertisement error: ${formatDiscoveryError(error)}`
     );
   });
 
-  let service: ReturnType<Bonjour["publish"]>;
+  let service: BonjourServiceLike;
   try {
     service = bonjour.publish({
       name: buildServiceName(),

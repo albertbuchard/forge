@@ -1,0 +1,110 @@
+import { spawn, spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+const repoRoot = path.resolve(import.meta.dirname, "..");
+const pluginRoot = path.join(repoRoot, "openclaw-plugin");
+const tempRoot = mkdtempSync(path.join(os.tmpdir(), "forge-packed-runtime-"));
+const installRoot = path.join(tempRoot, "install");
+const dataRoot = path.join(tempRoot, "data");
+const port = 43170 + Math.floor(Math.random() * 1000);
+let child = null;
+
+function run(command, args, options = {}) {
+  const result = spawnSync(command, args, {
+    cwd: repoRoot,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: 120_000,
+    ...options
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      `${command} ${args.join(" ")} failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`
+    );
+  }
+  return result;
+}
+
+async function waitForHealth() {
+  const deadline = Date.now() + 30_000;
+  let lastError = null;
+  while (Date.now() < deadline) {
+    if (child?.exitCode !== null) {
+      throw new Error(
+        `packed runtime exited before health became ready\nstdout:\n${child.stdoutLog}\nstderr:\n${child.stderrLog}`
+      );
+    }
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/api/v1/health`);
+      if (response.ok) {
+        const body = await response.json();
+        if (body?.ok === true) return body;
+      }
+    } catch (error) {
+      lastError = error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  }
+  throw new Error(`packed runtime did not become healthy: ${lastError?.message ?? "timed out"}`);
+}
+
+try {
+  const pack = run("npm", ["pack", "--pack-destination", tempRoot, "--json"], {
+    cwd: pluginRoot
+  });
+  const packed = JSON.parse(pack.stdout);
+  const tarball = path.join(tempRoot, packed[0].filename);
+
+  writeFileSync(
+    path.join(tempRoot, "package.json"),
+    `${JSON.stringify({ name: "forge-packed-runtime-smoke", private: true, type: "module" }, null, 2)}\n`
+  );
+  run("npm", ["install", "--silent", "--ignore-scripts", "--legacy-peer-deps", tarball], {
+    cwd: tempRoot
+  });
+
+  mkdirSync(installRoot, { recursive: true });
+  child = spawn(
+    process.execPath,
+    [path.join(tempRoot, "node_modules", "forge-openclaw-plugin", "server", "index.js")],
+    {
+      cwd: installRoot,
+      env: {
+        ...process.env,
+        FORGE_DATA_ROOT: dataRoot,
+        HOST: "127.0.0.1",
+        PORT: String(port)
+      },
+      stdio: ["ignore", "pipe", "pipe"]
+    }
+  );
+  child.stdoutLog = "";
+  child.stderrLog = "";
+  child.stdout.on("data", (chunk) => {
+    child.stdoutLog += chunk.toString();
+  });
+  child.stderr.on("data", (chunk) => {
+    child.stderrLog += chunk.toString();
+  });
+
+  const health = await waitForHealth();
+  if (health.backend !== "forge-node-runtime") {
+    throw new Error(`packed runtime health returned unexpected backend ${health.backend}`);
+  }
+  console.log("packed openclaw runtime smoke passed");
+} finally {
+  if (child && child.exitCode === null) {
+    child.kill("SIGTERM");
+    await new Promise((resolve) => {
+      const timeout = setTimeout(resolve, 2_000);
+      child.once("exit", () => {
+        clearTimeout(timeout);
+        resolve();
+      });
+    });
+    if (child.exitCode === null) child.kill("SIGKILL");
+  }
+  rmSync(tempRoot, { recursive: true, force: true });
+}

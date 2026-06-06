@@ -149,11 +149,15 @@ if (!dataRootCheck?.ok || !dataRootCheck.repaired) {
 }
 run(["doctor", "--json"]);
 const pairingFailure = runFailure(["pair-ios", "--json", "--no-start"]);
-if (!pairingFailure.stderr.includes("Could not create iOS pairing")) {
-  throw new Error("Expected unreachable pairing to explain the pairing failure");
+if (!pairingFailure.stderr.includes("iOS pairing was not started")) {
+  throw new Error("Expected unreachable pairing to stop before creating a pairing");
 }
 if (!pairingFailure.stderr.includes("doctor --repair")) {
   throw new Error("Expected unreachable pairing to point at doctor --repair");
+}
+const manualHttpFailure = runFailure(["pair-ios", "--json", "--manual-http", "--public-url", "http://127.0.0.1:4317/forge/"]);
+if (!manualHttpFailure.stderr.includes("loopback-only")) {
+  throw new Error("Expected manual HTTP pairing to reject loopback public URLs for physical iPhones");
 }
 run(["stop"]);
 

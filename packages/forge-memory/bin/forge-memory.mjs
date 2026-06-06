@@ -951,14 +951,17 @@ async function waitForHealth(config, timeoutMs = 30_000) {
   return health(config);
 }
 
-function resolveOpenClawPluginRoot() {
-  const candidates = [require];
+function resolveOpenClawPluginRoot(options = {}) {
+  const candidates = [];
   const installedRuntimePackageJson = path.join(
     runtimeInstallRoot(),
     "package.json"
   );
   if (fs.existsSync(installedRuntimePackageJson)) {
     candidates.push(createRequire(installedRuntimePackageJson));
+  }
+  if (!options.installedOnly) {
+    candidates.push(require);
   }
 
   for (const candidateRequire of candidates) {
@@ -975,8 +978,10 @@ function resolveOpenClawPluginRoot() {
   return null;
 }
 
-async function ensurePackagedRuntimeInstalled() {
-  const existing = resolveOpenClawPluginRoot();
+async function ensurePackagedRuntimeInstalled(options = {}) {
+  const existing = options.forceInstall
+    ? null
+    : resolveOpenClawPluginRoot();
   if (existing) return existing;
   const installRoot = runtimeInstallRoot();
   await fsp.mkdir(installRoot, { recursive: true });
@@ -1012,12 +1017,63 @@ async function ensurePackagedRuntimeInstalled() {
       ].join(" ")
     );
   }
-  const installed = resolveOpenClawPluginRoot();
+  const installed = resolveOpenClawPluginRoot({ installedOnly: true });
   if (!installed)
     throw new Error(
       `${RUNTIME_PACKAGE} installed but its runtime entry could not be resolved. Log: ${logPath()}`
     );
+  const entry = path.join(installed, "server", "index.js");
+  if (!fs.existsSync(entry)) {
+    throw new Error(
+      `${RUNTIME_PACKAGE} installed but ${entry} is missing. Log: ${logPath()}`
+    );
+  }
   return installed;
+}
+
+async function rotateRuntimeLog(reason) {
+  if (!fs.existsSync(logPath())) return null;
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const backupPath = `${logPath()}.${reason}-${stamp}.log`;
+  await fsp.mkdir(path.dirname(backupPath), { recursive: true });
+  await fsp.copyFile(logPath(), backupPath);
+  return backupPath;
+}
+
+async function repairPackagedRuntimeCache(config) {
+  if (config.mode === "dev") {
+    const result = await startRuntime(config);
+    return {
+      ok: result.ok,
+      mode: "dev",
+      dataRoot: config.dataRoot,
+      health: result.health ?? { ok: result.ok }
+    };
+  }
+
+  await stopRuntime();
+  const rotatedLogPath = await rotateRuntimeLog("repair");
+  await fsp.rm(runtimeStatePath(), { force: true });
+  await fsp.rm(runtimeInstallRoot(), { recursive: true, force: true });
+  const pluginRoot = await ensurePackagedRuntimeInstalled({ forceInstall: true });
+  const result = await startRuntime(config);
+  const record = {
+    repairedAt: new Date().toISOString(),
+    ok: result.ok,
+    mode: config.mode,
+    runtimePackage: RUNTIME_PACKAGE,
+    runtimePackageVersion: RUNTIME_PACKAGE_VERSION,
+    pluginRoot,
+    dataRoot: config.dataRoot,
+    dataPreserved: true,
+    rotatedLogPath,
+    health: result.health ?? { ok: result.ok }
+  };
+  const stamp = record.repairedAt.replace(/[:.]/g, "-");
+  const repairRecordPath = path.join(forgeHome(), "run", `runtime-repair-${stamp}.json`);
+  await fsp.mkdir(path.dirname(repairRecordPath), { recursive: true });
+  await fsp.writeFile(repairRecordPath, `${JSON.stringify(record, null, 2)}\n`, "utf8");
+  return { ...record, repairRecordPath };
 }
 
 async function startRuntime(config) {
@@ -1365,7 +1421,7 @@ function normalizePublicPairingUrl(value) {
 
 async function createPairing(config, options = {}) {
   const transportMode = options.transportMode ?? "iroh";
-  const publicUrl = normalizePublicPairingUrl(options.publicUrl);
+  const publicUrl = validatePairingOptions({ transportMode, publicUrl: options.publicUrl });
   const pairingUrl = new URL("/api/v1/health/pairing-sessions", baseUrl(config));
   let response;
   try {
@@ -1409,6 +1465,33 @@ async function createPairing(config, options = {}) {
   return response.json();
 }
 
+function validatePairingOptions({ transportMode, publicUrl }) {
+  const normalizedPublicUrl = normalizePublicPairingUrl(publicUrl);
+  if (transportMode !== "manual-http") {
+    return normalizedPublicUrl;
+  }
+  if (!normalizedPublicUrl) {
+    throw new Error(
+      [
+        "Manual HTTP pairing for a physical iPhone requires --public-url.",
+        "Use a phone-reachable Tailscale or LAN Forge URL, for example:",
+        "npx forge-memory pair-ios --manual-http --public-url https://your-mac.tailnet.ts.net/forge/",
+        "For normal pairing, omit --manual-http and use the default Iroh transport."
+      ].join(" ")
+    );
+  }
+  if (isLoopbackPairingUrl(normalizedPublicUrl)) {
+    throw new Error(
+      [
+        `Manual HTTP --public-url points at ${normalizedPublicUrl}, which is loopback-only.`,
+        "A physical iPhone cannot reach localhost on this Mac.",
+        "Use a Tailscale or LAN URL, or omit --manual-http and use Iroh pairing."
+      ].join(" ")
+    );
+  }
+  return normalizedPublicUrl;
+}
+
 function compactPairingPayload(payload) {
   const transport = payload.transport
     ? {
@@ -1426,7 +1509,7 @@ function compactPairingPayload(payload) {
         notes: []
       }
     : undefined;
-  return {
+  return compactObject({
     kind: payload.kind,
     apiBaseUrl: payload.apiBaseUrl,
     uiBaseUrl: payload.uiBaseUrl,
@@ -1436,7 +1519,25 @@ function compactPairingPayload(payload) {
     pairingToken: payload.pairingToken,
     expiresAt: payload.expiresAt,
     capabilities: payload.capabilities
-  };
+  });
+}
+
+function compactObject(value) {
+  if (Array.isArray(value)) {
+    const compacted = value.map((entry) => compactObject(entry)).filter((entry) => entry !== undefined);
+    return compacted.length ? compacted : undefined;
+  }
+  if (!value || typeof value !== "object") {
+    return value ?? undefined;
+  }
+  const output = {};
+  for (const [key, entry] of Object.entries(value)) {
+    const compacted = compactObject(entry);
+    if (compacted !== undefined && !(Array.isArray(compacted) && compacted.length === 0)) {
+      output[key] = compacted;
+    }
+  }
+  return Object.keys(output).length ? output : undefined;
 }
 
 async function writePairingPayloadFile(payload) {
@@ -1462,8 +1563,15 @@ function isLoopbackPairingUrl(value) {
 async function printPairing(pairing) {
   const payload = compactPairingPayload(pairing.qrPayload);
   const payloadText = JSON.stringify(payload);
-  console.log("\nScan this compact QR in Forge Companion:\n");
-  qrcode.generate(payloadText, { small: true });
+  const terminalColumns = process.stdout.columns ?? 120;
+  if (terminalColumns >= 72 && payloadText.length <= 2_950) {
+    console.log("\nScan this compact QR in Forge Companion:\n");
+    qrcode.generate(payloadText, { small: true });
+  } else {
+    console.log("");
+    console.log(color.yellow("QR skipped because the terminal is too narrow or the payload is too large to scan reliably."));
+    console.log("Use Manual connection in the iPhone app and paste the saved payload below.");
+  }
   const transport = payload.transport;
   if (transport?.provider) {
     const label =
@@ -1694,8 +1802,10 @@ async function runStatus(parsed) {
 async function doctorCheckRuntime(config, options) {
   let result = await health(config);
   let repaired = false;
+  let repairRecordPath = null;
   if (!result.ok && options.repair && !options.noStart && !options.dryRun) {
-    await startRuntime(config);
+    const repair = await repairPackagedRuntimeCache(config);
+    repairRecordPath = repair.repairRecordPath ?? null;
     result = await health(config, 3_000);
     repaired = result.ok;
   }
@@ -1704,9 +1814,10 @@ async function doctorCheckRuntime(config, options) {
     ok: result.ok,
     detail: baseUrl(config),
     repaired,
+    repairRecordPath,
     guidance: result.ok
       ? "Forge API is reachable."
-      : `Run npx forge-memory doctor --repair, then inspect ${logPath()} if the runtime still does not start.`
+      : `Run npx forge-memory doctor --repair, then inspect ${logPath()} if the runtime still does not start. Repair reinstalls only the owned runtime cache and preserves the data folder.`
   };
 }
 
@@ -1816,6 +1927,11 @@ async function runUi(parsed) {
 
 async function runPairIos(parsed) {
   const config = await readConfig();
+  const transportMode = parsed.flags.manualHttp ? "manual-http" : "iroh";
+  const publicUrl = validatePairingOptions({
+    transportMode,
+    publicUrl: parsed.values.publicUrl
+  });
   if (!parsed.flags.noStart) {
     const runtimeResult = await withProgress(
       "Starting Forge runtime for iOS pairing",
@@ -1824,10 +1940,16 @@ async function runPairIos(parsed) {
       () => startRuntime(config)
     );
     assertRuntimeStartedForPairing(runtimeResult, config);
+  } else {
+    const currentHealth = await health(config, 3_000);
+    assertRuntimeStartedForPairing(
+      { ok: currentHealth.ok, started: false, health: currentHealth },
+      config
+    );
   }
   const pairing = await createPairing(config, {
-    transportMode: parsed.flags.manualHttp ? "manual-http" : "iroh",
-    publicUrl: parsed.values.publicUrl
+    transportMode,
+    publicUrl
   });
   if (parsed.flags.json) {
     console.log(JSON.stringify(pairing, null, 2));
