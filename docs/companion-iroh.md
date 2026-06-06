@@ -14,12 +14,19 @@ npx forge-memory pair-ios
 ```
 
 Those commands start the local Forge runtime, create an Iroh pairing payload, and
-show a QR code for the iPhone app. Manual HTTP/TCP remains available for explicit
-LAN, Tailscale, or debugging setups:
+show a compact QR code for the iPhone app. The CLI also saves the compact payload
+under `~/.forge/pairing/` so it can be pasted into the iPhone app when a terminal QR is
+too large or the camera cannot scan it.
+
+Manual HTTP/TCP remains available for explicit LAN, Tailscale, or debugging setups. A
+physical iPhone needs a phone-reachable URL:
 
 ```bash
-npx forge-memory pair-ios --manual-http
+npx forge-memory pair-ios --manual-http --public-url https://your-mac.tailnet.ts.net/forge/
 ```
+
+Without `--public-url`, manual HTTP can resolve to `127.0.0.1`. That is useful for the
+iOS Simulator but not for a real phone.
 
 ## What The Default Transport Is
 

@@ -54,7 +54,9 @@ function parseArgs(argv) {
     printUrl: false,
     removeData: false,
     removeAdapters: false,
-    manualHttp: false
+    manualHttp: false,
+    repair: false,
+    noDoctor: false
   };
   const values = {};
   const positionals = [];
@@ -79,6 +81,8 @@ function parseArgs(argv) {
     else if (arg === "--remove-adapters") flags.removeAdapters = true;
     else if (arg === "--manual-http" || arg === "--no-iroh")
       flags.manualHttp = true;
+    else if (arg === "--repair") flags.repair = true;
+    else if (arg === "--no-doctor") flags.noDoctor = true;
     else if (arg.startsWith("--output="))
       values.output = arg.slice("--output=".length);
     else if (arg === "--output") values.output = argv[++index];
@@ -100,6 +104,10 @@ function parseArgs(argv) {
     else if (arg.startsWith("--repo="))
       values.repo = arg.slice("--repo=".length);
     else if (arg === "--repo") values.repo = argv[++index];
+    else if (arg.startsWith("--public-url="))
+      values.publicUrl = arg.slice("--public-url=".length);
+    else if (arg === "--public-url" || arg === "--phone-url")
+      values.publicUrl = argv[++index];
     else if (arg === "--help" || arg === "-h") flags.help = true;
     else if (arg === "--version" || arg === "-v") flags.version = true;
     else throw new Error(`Unknown option: ${arg}`);
@@ -239,15 +247,17 @@ async function writeConfig(next, options) {
 }
 
 function commandExists(command) {
-  const result = spawnSync(
-    process.platform === "win32" ? "where" : "command",
-    process.platform === "win32" ? [command] : ["-v", command],
-    {
-      shell: process.platform !== "win32",
-      stdio: "ignore"
-    }
-  );
+  const result =
+    process.platform === "win32"
+      ? spawnSync("where", [command], { stdio: "ignore" })
+      : spawnSync("sh", ["-c", `command -v ${shellQuote(command)}`], {
+          stdio: "ignore"
+        });
   return result.status === 0;
+}
+
+function shellQuote(value) {
+  return `'${String(value).replaceAll("'", "'\\''")}'`;
 }
 
 function runCapture(command, args, timeoutMs = 2_000) {
@@ -334,6 +344,71 @@ function printBanner() {
   console.log(color.bold("Forge Memory"));
   console.log(color.dim(`Guided Forge installer ${VERSION}`));
   console.log("");
+}
+
+function progressEnabled(options = {}) {
+  return !options.json;
+}
+
+function formatElapsed(startedAt) {
+  const seconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
+
+function clearLine() {
+  process.stdout.write("\r\u001b[2K");
+}
+
+async function withProgress(title, detail, options, task) {
+  if (!progressEnabled(options)) return task();
+  const startedAt = Date.now();
+  const interactive = process.stdout.isTTY;
+  const frames = ["-", "\\", "|", "/"];
+  let frameIndex = 0;
+  let timer = null;
+  const suffix = detail ? color.dim(` ${detail}`) : "";
+
+  if (interactive) {
+    process.stdout.write("\u001b[?25l");
+    timer = setInterval(() => {
+      clearLine();
+      process.stdout.write(
+        `${color.cyan(frames[frameIndex % frames.length])} ${title}${suffix} ${color.dim(formatElapsed(startedAt))}`
+      );
+      frameIndex += 1;
+    }, 120);
+  } else {
+    console.log(`${color.cyan("...")} ${title}${suffix}`);
+  }
+
+  try {
+    const result = await task();
+    if (timer) clearInterval(timer);
+    if (interactive) {
+      clearLine();
+      process.stdout.write("\u001b[?25h");
+    }
+    console.log(
+      `${color.green("ok")} ${title} ${color.dim(formatElapsed(startedAt))}`
+    );
+    return result;
+  } catch (error) {
+    if (timer) clearInterval(timer);
+    if (interactive) {
+      clearLine();
+      process.stdout.write("\u001b[?25h");
+    }
+    console.log(
+      `${color.red("fail")} ${title} ${color.dim(formatElapsed(startedAt))}`
+    );
+    throw error;
+  }
+}
+
+function printStep(title, detail, options = {}) {
+  if (!progressEnabled(options)) return;
+  console.log(`${color.cyan("->")} ${title}${detail ? color.dim(` ${detail}`) : ""}`);
 }
 
 async function promptLine(question, defaultValue) {
@@ -693,6 +768,33 @@ async function runCommand(
   });
 }
 
+async function runLoggedCommand(
+  command,
+  args,
+  { cwd, dryRun = false, env = process.env, logFile = logPath() } = {}
+) {
+  if (dryRun) {
+    return { ok: true, dryRun: true, command, args, cwd, logFile };
+  }
+  await fsp.mkdir(path.dirname(logFile), { recursive: true });
+  return await new Promise((resolve) => {
+    const out = fs.openSync(logFile, "a");
+    const child = spawn(command, args, {
+      cwd,
+      env,
+      stdio: ["ignore", out, out]
+    });
+    child.once("error", (error) => {
+      fs.closeSync(out);
+      resolve({ ok: false, error, logFile });
+    });
+    child.once("exit", (code) => {
+      fs.closeSync(out);
+      resolve({ ok: code === 0, code, logFile });
+    });
+  });
+}
+
 async function installOpenClawAdapter(config, options) {
   await patchOpenClawConfig(config, options);
   if (!commandExists("openclaw")) {
@@ -802,11 +904,28 @@ async function health(config, timeoutMs = 1_500) {
   } catch (error) {
     return {
       ok: false,
-      error: error instanceof Error ? error.message : String(error)
+      error: describeNetworkError(error)
     };
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function describeNetworkError(error) {
+  if (error instanceof Error) {
+    if (error.name === "AbortError") return "request timed out";
+    if (error.message === "fetch failed")
+      return "connection failed before Forge responded";
+    return error.message;
+  }
+  return String(error);
+}
+
+function describeHealthResult(result) {
+  if (result.ok) return "healthy";
+  if (result.status) return `HTTP ${result.status}`;
+  if (result.error) return result.error;
+  return "not reachable";
 }
 
 async function readRuntimeState() {
@@ -869,36 +988,34 @@ async function ensurePackagedRuntimeInstalled() {
       "utf8"
     );
   }
-  await fsp.mkdir(path.dirname(logPath()), { recursive: true });
-  const out = fs.openSync(logPath(), "a");
-  try {
-    const result = spawnSync(
-      "npm",
-      [
-        "install",
-        `${RUNTIME_PACKAGE}@${RUNTIME_PACKAGE_VERSION}`,
-        "--omit=dev",
-        "--ignore-scripts",
-        "--silent"
-      ],
-      {
-        cwd: installRoot,
-        stdio: ["ignore", out, out],
-        env: process.env
-      }
-    );
-    if (result.status !== 0) {
-      throw new Error(
-        `Failed to install ${RUNTIME_PACKAGE}@${RUNTIME_PACKAGE_VERSION}. Check ${logPath()}.`
-      );
+  const result = await runLoggedCommand(
+    "npm",
+    [
+      "install",
+      `${RUNTIME_PACKAGE}@${RUNTIME_PACKAGE_VERSION}`,
+      "--omit=dev",
+      "--ignore-scripts",
+      "--silent"
+    ],
+    {
+      cwd: installRoot,
+      env: process.env,
+      logFile: logPath()
     }
-  } finally {
-    fs.closeSync(out);
+  );
+  if (!result.ok) {
+    throw new Error(
+      [
+        `Failed to install ${RUNTIME_PACKAGE}@${RUNTIME_PACKAGE_VERSION}.`,
+        `Log: ${logPath()}`,
+        "Run npx forge-memory doctor --repair after fixing network or npm access."
+      ].join(" ")
+    );
   }
   const installed = resolveOpenClawPluginRoot();
   if (!installed)
     throw new Error(
-      `${RUNTIME_PACKAGE} installed but its runtime entry could not be resolved.`
+      `${RUNTIME_PACKAGE} installed but its runtime entry could not be resolved. Log: ${logPath()}`
     );
   return installed;
 }
@@ -1001,6 +1118,18 @@ async function startRuntime(config) {
   await writeJson(runtimeStatePath(), state, { backup: false });
   const result = await waitForHealth(config);
   return { ok: result.ok, started: true, state, health: result };
+}
+
+function assertRuntimeStartedForPairing(result, config) {
+  if (result?.ok) return;
+  throw new Error(
+    [
+      `Forge runtime did not become healthy at ${baseUrl(config)}, so iOS pairing was not started.`,
+      `Health check: ${describeHealthResult(result?.health ?? { ok: false })}.`,
+      `Run npx forge-memory doctor --repair and inspect ${logPath()}.`,
+      `Your data folder is unchanged.`
+    ].join(" ")
+  );
 }
 
 async function stopRuntime() {
@@ -1222,72 +1351,248 @@ async function uninstallForgeMemory(parsed) {
   };
 }
 
+function normalizePublicPairingUrl(value) {
+  if (!value?.trim()) return null;
+  try {
+    const url = new URL(value.trim());
+    return url.toString();
+  } catch {
+    throw new Error(
+      `Invalid --public-url value: ${value}. Use a full URL such as https://your-mac.tailnet.ts.net/forge/`
+    );
+  }
+}
+
 async function createPairing(config, options = {}) {
   const transportMode = options.transportMode ?? "iroh";
-  const response = await fetch(
-    new URL("/api/v1/health/pairing-sessions", baseUrl(config)),
-    {
+  const publicUrl = normalizePublicPairingUrl(options.publicUrl);
+  const pairingUrl = new URL("/api/v1/health/pairing-sessions", baseUrl(config));
+  let response;
+  try {
+    response = await fetch(pairingUrl, {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        accept: "application/json"
+        accept: "application/json",
+        ...(publicUrl ? { referer: publicUrl } : {})
       },
       body: JSON.stringify({ userId: null, transportMode })
-    }
-  );
-  if (!response.ok)
-    throw new Error(`Pairing request failed with ${response.status}`);
+    });
+  } catch (error) {
+    const healthResult = await health(config, 1_500);
+    const manualHttpHint =
+      transportMode === "manual-http" && !publicUrl
+        ? " For a physical iPhone using manual HTTP, rerun with --public-url set to your Tailscale or LAN Forge URL, for example: npx forge-memory pair-ios --manual-http --public-url https://your-mac.tailnet.ts.net/forge/"
+        : "";
+    throw new Error(
+      [
+        `Could not create iOS pairing because Forge did not respond at ${pairingUrl}.`,
+        `Network: ${describeNetworkError(error)}.`,
+        `Health check: ${describeHealthResult(healthResult)}.`,
+        `Run npx forge-memory doctor --repair, then npx forge-memory pair-ios again.`,
+        `Runtime log: ${logPath()}.${manualHttpHint}`
+      ].join(" ")
+    );
+  }
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new Error(
+      [
+        `Could not create iOS pairing at ${pairingUrl}: Forge returned HTTP ${response.status}.`,
+        body ? `Response: ${body.slice(0, 500)}` : "",
+        `Run npx forge-memory doctor --repair and inspect ${logPath()}.`
+      ]
+        .filter(Boolean)
+        .join(" ")
+    );
+  }
   return response.json();
 }
 
-function printPairing(pairing) {
-  console.log("\nScan this QR in Forge Companion:\n");
-  qrcode.generate(JSON.stringify(pairing.qrPayload), { small: true });
-  const transport = pairing.qrPayload?.transport;
+function compactPairingPayload(payload) {
+  const transport = payload.transport
+    ? {
+        protocol: payload.transport.protocol,
+        provider: payload.transport.provider,
+        status: payload.transport.status,
+        publicBaseUrl: payload.transport.publicBaseUrl,
+        localBaseUrl: payload.transport.localBaseUrl,
+        nodeId: payload.transport.nodeId,
+        relay: payload.transport.relay,
+        alpn: payload.transport.alpn,
+        agent: payload.transport.agent,
+        pairPayload: payload.transport.pairPayload,
+        lastError: payload.transport.lastError,
+        notes: []
+      }
+    : undefined;
+  return {
+    kind: payload.kind,
+    apiBaseUrl: payload.apiBaseUrl,
+    uiBaseUrl: payload.uiBaseUrl,
+    transportMode: payload.transportMode,
+    transport,
+    sessionId: payload.sessionId,
+    pairingToken: payload.pairingToken,
+    expiresAt: payload.expiresAt,
+    capabilities: payload.capabilities
+  };
+}
+
+async function writePairingPayloadFile(payload) {
+  const pairingDir = path.join(forgeHome(), "pairing");
+  await fsp.mkdir(pairingDir, { recursive: true });
+  const filePath = path.join(
+    pairingDir,
+    `forge-companion-${payload.sessionId}.json`
+  );
+  await fsp.writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  return filePath;
+}
+
+function isLoopbackPairingUrl(value) {
+  try {
+    const host = new URL(value).hostname.toLowerCase();
+    return host === "127.0.0.1" || host === "localhost" || host === "::1";
+  } catch {
+    return false;
+  }
+}
+
+async function printPairing(pairing) {
+  const payload = compactPairingPayload(pairing.qrPayload);
+  const payloadText = JSON.stringify(payload);
+  console.log("\nScan this compact QR in Forge Companion:\n");
+  qrcode.generate(payloadText, { small: true });
+  const transport = payload.transport;
   if (transport?.provider) {
     const label =
-      pairing.qrPayload.transport?.protocol === "iroh"
+      payload.transport?.protocol === "iroh"
         ? "Iroh"
-        : pairing.qrPayload.transportMode === "iroh"
+        : payload.transportMode === "iroh"
           ? "Iroh"
           : "Manual HTTP";
-    console.log(`${color.cyan(label)}: ${pairing.qrPayload.apiBaseUrl}`);
-    if (transport.recreateCommand) {
-      console.log(`${color.dim("recreate:")} ${transport.recreateCommand}`);
+    console.log(`${color.cyan(label)}: ${payload.apiBaseUrl}`);
+    if (label === "Manual HTTP" && isLoopbackPairingUrl(payload.apiBaseUrl)) {
+      console.log(
+        color.yellow(
+          "Manual HTTP points at this machine's loopback address. That is only useful for the iOS Simulator; a real iPhone needs Iroh, Tailscale, or a LAN URL passed with --public-url."
+        )
+      );
     }
-    for (const note of transport.notes ?? []) {
+    for (const note of pairing.qrPayload?.transport?.notes ?? []) {
       console.log(color.dim(note));
     }
   }
-  console.log(JSON.stringify(pairing.qrPayload, null, 2));
+  try {
+    const filePath = await writePairingPayloadFile(payload);
+    console.log("");
+    console.log(color.bold("If the QR is too large or the camera will not scan:"));
+    console.log("1. Open Manual connection in the iPhone app.");
+    console.log("2. Tap Paste pairing payload.");
+    console.log(`3. Paste the payload saved at: ${filePath}`);
+    console.log(color.dim(`   cat ${filePath}`));
+    console.log("");
+    console.log(color.dim(`Compact payload bytes: ${payloadText.length}`));
+  } catch (error) {
+    console.log(
+      color.yellow(
+        `Could not save pairing payload file: ${error instanceof Error ? error.message : String(error)}`
+      )
+    );
+    console.log(payloadText);
+  }
 }
 
 async function runInstall(parsed, command) {
   const currentConfig = await readConfig();
-  const discovery = discover();
   if (!parsed.flags.yes) {
     printBanner();
     console.log(
       color.dim(
-        "Discovery runs in the background. Forge UI/runtime is always installed.\n"
+        "Forge UI/runtime is always installed. Host adapter discovery runs first.\n"
       )
     );
   }
+  const discovery = await withProgress(
+    "Looking for host adapters",
+    "OpenClaw, Hermes, and Codex",
+    parsed.flags,
+    async () => discover()
+  );
   const config = await buildInstallConfig(
     parsed,
     currentConfig,
     discovery,
     command
   );
-  const writeResult = await writeConfig(config, {
-    dryRun: parsed.flags.dryRun
-  });
-  const adapterResults = await configureAdapters(config, {
-    dryRun: parsed.flags.dryRun
-  });
+  const writeResult = await withProgress(
+    "Saving Forge settings",
+    configPath(),
+    parsed.flags,
+    () =>
+      writeConfig(config, {
+        dryRun: parsed.flags.dryRun
+      })
+  );
+  await withProgress(
+    "Preparing Forge data folder",
+    config.dataRoot,
+    parsed.flags,
+    async () => {
+      if (!parsed.flags.dryRun) {
+        await fsp.mkdir(config.dataRoot, { recursive: true });
+      }
+      return { ok: true, dataRoot: config.dataRoot };
+    }
+  );
+  const adapterResults = await withProgress(
+    config.adapters.length
+      ? "Configuring selected host adapters"
+      : "Skipping host adapter configuration",
+    config.adapters.length ? config.adapters.join(", ") : "none selected",
+    parsed.flags,
+    () =>
+      configureAdapters(config, {
+        dryRun: parsed.flags.dryRun
+      })
+  );
   let runtimeResult = null;
   if (!parsed.flags.noStart && !parsed.flags.dryRun) {
-    runtimeResult = await startRuntime(config);
+    runtimeResult = await withProgress(
+      config.mode === "dev"
+        ? "Starting source-backed Forge runtime"
+        : "Installing and starting Forge runtime",
+      `logs: ${logPath()}`,
+      parsed.flags,
+      () => startRuntime(config)
+    );
+  } else if (parsed.flags.noStart) {
+    printStep(
+      "Runtime start skipped",
+      "run npx forge-memory ui or npx forge-memory restart later",
+      parsed.flags
+    );
+  }
+  let doctorResult = null;
+  if (!parsed.flags.noDoctor) {
+    doctorResult = await withProgress(
+      "Running Forge doctor",
+      parsed.flags.noStart ? "offline checks" : "health and repair checks",
+      parsed.flags,
+      () =>
+        runDoctorChecks(parsed, config, {
+          repair: true,
+          noStart: parsed.flags.noStart,
+          dryRun: parsed.flags.dryRun
+        })
+    );
+    if (!doctorResult.ok && !parsed.flags.json && !parsed.flags.dryRun) {
+      console.log(color.yellow("Forge doctor found follow-up work:"));
+      for (const check of doctorResult.checks.filter((entry) => !entry.ok)) {
+        console.log(`- ${check.id}: ${check.guidance}`);
+      }
+    }
   }
   const shouldPair =
     parsed.flags.pairIos ||
@@ -1297,13 +1602,34 @@ async function runInstall(parsed, command) {
         : await promptYesNo("Pair the iOS companion now?", true)));
   let pairing = null;
   if (shouldPair && !parsed.flags.dryRun) {
-    if (!runtimeResult) await startRuntime(config);
-    pairing = await createPairing(config, {
-      transportMode: parsed.flags.manualHttp ? "manual-http" : "iroh"
-    });
-    if (pairing?.qrPayload && !parsed.flags.json) {
-      printPairing(pairing);
+    if (!runtimeResult) {
+      runtimeResult = await withProgress(
+        "Starting Forge runtime for iOS pairing",
+        `logs: ${logPath()}`,
+        parsed.flags,
+        () => startRuntime(config)
+      );
     }
+    assertRuntimeStartedForPairing(runtimeResult, config);
+    pairing = await withProgress(
+      "Creating iOS companion pairing",
+      parsed.flags.manualHttp ? "manual HTTP" : "Iroh QR",
+      parsed.flags,
+      () =>
+        createPairing(config, {
+          transportMode: parsed.flags.manualHttp ? "manual-http" : "iroh",
+          publicUrl: parsed.values.publicUrl
+        })
+    );
+    if (pairing?.qrPayload && !parsed.flags.json) {
+      await printPairing(pairing);
+    }
+  } else if (parsed.flags.skipPairIos) {
+    printStep(
+      "iOS pairing skipped",
+      "run npx forge-memory pair-ios when you want the QR",
+      parsed.flags
+    );
   }
   const summary = {
     ok: true,
@@ -1311,13 +1637,23 @@ async function runInstall(parsed, command) {
     writeResult,
     adapterResults,
     runtimeResult,
+    doctorResult,
     pairing: Boolean(pairing)
   };
   if (parsed.flags.json) console.log(JSON.stringify(summary, null, 2));
   else {
-    console.log(color.green("Forge Memory configured."));
+    console.log(color.green("Forge Memory configured and checked."));
     console.log(`UI: ${webUrl(config)}`);
     console.log(`Data: ${config.dataRoot}`);
+    console.log(
+      `Doctor: ${
+        parsed.flags.dryRun
+          ? color.yellow("preview only")
+          : doctorResult?.ok === false
+            ? color.yellow("needs attention")
+            : color.green("passed")
+      }`
+    );
     if (parsed.flags.dryRun)
       console.log(
         color.yellow("Dry run only; no files or adapter installs were changed.")
@@ -1355,39 +1691,111 @@ async function runStatus(parsed) {
   }
 }
 
-async function runDoctor(parsed) {
-  const config = await readConfig();
+async function doctorCheckRuntime(config, options) {
+  let result = await health(config);
+  let repaired = false;
+  if (!result.ok && options.repair && !options.noStart && !options.dryRun) {
+    await startRuntime(config);
+    result = await health(config, 3_000);
+    repaired = result.ok;
+  }
+  return {
+    id: "runtime",
+    ok: result.ok,
+    detail: baseUrl(config),
+    repaired,
+    guidance: result.ok
+      ? "Forge API is reachable."
+      : `Run npx forge-memory doctor --repair, then inspect ${logPath()} if the runtime still does not start.`
+  };
+}
+
+async function runDoctorChecks(parsed, config, options = {}) {
   const discovery = discover();
-  const checks = [
-    {
-      id: "node",
-      ok: Number(process.versions.node.split(".")[0]) >= 22,
-      detail: process.versions.node
-    },
-    { id: "config", ok: fs.existsSync(configPath()), detail: configPath() },
-    {
-      id: "dataRoot",
-      ok: fs.existsSync(config.dataRoot),
-      detail: config.dataRoot
-    },
-    { id: "runtime", ok: (await health(config)).ok, detail: baseUrl(config) },
-    ...discovery.adapters.map((adapter) => ({
+  const checks = [];
+
+  checks.push({
+    id: "node",
+    ok: Number(process.versions.node.split(".")[0]) >= 22,
+    detail: process.versions.node,
+    guidance:
+      "Forge Memory requires Node 22 or newer. Install a current Node release, then rerun npx forge-memory configure."
+  });
+
+  const configExists = fs.existsSync(configPath());
+  checks.push({
+    id: "config",
+    ok: configExists,
+    detail: configPath(),
+    guidance:
+      "Run npx forge-memory configure to create the runtime manager config."
+  });
+
+  let dataRootExists = fs.existsSync(config.dataRoot);
+  let dataRootRepaired = false;
+  if (!dataRootExists && options.repair && !options.dryRun) {
+    await fsp.mkdir(config.dataRoot, { recursive: true });
+    dataRootExists = true;
+    dataRootRepaired = true;
+  }
+  checks.push({
+    id: "dataRoot",
+    ok: dataRootExists,
+    detail: config.dataRoot,
+    repaired: dataRootRepaired,
+    guidance:
+      "Forge data is preserved here. Doctor can create the folder, but it will not delete existing data."
+  });
+
+  checks.push(await doctorCheckRuntime(config, options));
+
+  for (const adapter of discovery.adapters) {
+    const selected = config.adapters.includes(adapter.id);
+    checks.push({
       id: adapter.id,
-      ok: adapter.installed,
-      detail: adapter.status
-    }))
-  ];
-  const payload = {
-    ok: checks.every((check) => check.ok || ADAPTERS.includes(check.id)),
+      ok: selected ? adapter.installed : true,
+      detail: selected
+        ? adapter.status
+        : adapter.installed
+          ? `${adapter.status}; not selected`
+          : "not selected",
+      selected,
+      guidance: selected
+        ? adapter.hint
+        : `${adapter.label} is not selected for this Forge install.`
+    });
+  }
+
+  return {
+    ok: checks.every((check) => check.ok),
     checks
   };
+}
+
+async function runDoctor(parsed) {
+  const config = await readConfig();
+  const payload = await withProgress(
+    "Checking Forge Memory install",
+    parsed.flags.repair ? "repair enabled" : "read-only",
+    parsed.flags,
+    () =>
+      runDoctorChecks(parsed, config, {
+        repair: parsed.flags.repair,
+        noStart: parsed.flags.noStart,
+        dryRun: parsed.flags.dryRun
+      })
+  );
   if (parsed.flags.json) console.log(JSON.stringify(payload, null, 2));
   else {
     console.log(color.bold("Forge Memory Doctor"));
-    for (const check of checks) {
+    for (const check of payload.checks) {
+      const repaired = check.repaired ? color.cyan(" repaired") : "";
       console.log(
-        `${check.ok ? color.green("ok") : color.yellow("warn")} ${check.id}: ${check.detail}`
+        `${check.ok ? color.green("ok") : color.yellow("warn")} ${check.id}: ${check.detail}${repaired}`
       );
+      if (!check.ok && check.guidance) {
+        console.log(color.dim(`   ${check.guidance}`));
+      }
     }
   }
 }
@@ -1408,15 +1816,24 @@ async function runUi(parsed) {
 
 async function runPairIos(parsed) {
   const config = await readConfig();
-  await startRuntime(config);
+  if (!parsed.flags.noStart) {
+    const runtimeResult = await withProgress(
+      "Starting Forge runtime for iOS pairing",
+      `logs: ${logPath()}`,
+      parsed.flags,
+      () => startRuntime(config)
+    );
+    assertRuntimeStartedForPairing(runtimeResult, config);
+  }
   const pairing = await createPairing(config, {
-    transportMode: parsed.flags.manualHttp ? "manual-http" : "iroh"
+    transportMode: parsed.flags.manualHttp ? "manual-http" : "iroh",
+    publicUrl: parsed.values.publicUrl
   });
   if (parsed.flags.json) {
     console.log(JSON.stringify(pairing, null, 2));
     return;
   }
-  printPairing(pairing);
+  await printPairing(pairing);
 }
 
 async function runLogs() {
@@ -1748,7 +2165,10 @@ Options:
   --skip-adapters       Configure UI/runtime only
   --skip-pair-ios       Do not prompt or create iOS pairing
   --manual-http         Use direct HTTP/TCP for iOS pairing instead of the default Iroh transport
+  --public-url <url>    Phone-reachable URL for manual HTTP pairing, such as a Tailscale or LAN Forge URL
   --no-start            Configure without starting runtime
+  --no-doctor           Skip install-time doctor checks
+  --repair              Let doctor create missing folders and restart unhealthy runtime
   --output <path>        Export destination for forge-memory export
   --remove-adapters      During uninstall, remove host adapter config entries
   --remove-data          During uninstall, delete the Forge data folder too
@@ -1834,9 +2254,33 @@ async function main() {
   }
 }
 
+function printFatalError(error, { json = false } = {}) {
+  const message = error instanceof Error ? error.message : String(error);
+  const payload = {
+    ok: false,
+    error: message,
+    guidance: [
+      "Run npx forge-memory doctor --repair to check and repair the local install.",
+      "Run npx forge-memory logs to inspect the runtime log.",
+      "Forge Memory repair never deletes your data folder."
+    ],
+    logPath: logPath()
+  };
+  if (json) {
+    console.error(JSON.stringify(payload, null, 2));
+    return;
+  }
+  console.error(color.red("Forge Memory could not finish this step."));
+  console.error(color.red(message));
+  console.error("");
+  console.error(color.cyan("Next steps:"));
+  for (const item of payload.guidance) {
+    console.error(`- ${item}`);
+  }
+  console.error(`- Runtime log: ${payload.logPath}`);
+}
+
 main().catch((error) => {
-  console.error(
-    color.red(error instanceof Error ? error.message : String(error))
-  );
+  printFatalError(error, { json: process.argv.includes("--json") });
   process.exitCode = 1;
 });

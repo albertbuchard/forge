@@ -22,6 +22,7 @@ Useful commands:
 npx forge-memory configure
 npx forge-memory status
 npx forge-memory doctor
+npx forge-memory doctor --repair
 npx forge-memory ui
 npx forge-memory restart
 npx forge-memory stop
@@ -38,15 +39,27 @@ show up as a tool result instead of a closed MCP transport.
 
 `pair-ios` prefers the Iroh QR. Forge starts a Rust Iroh host, prints a QR payload
 with the desktop node id, pairing token, optional relay hint, and ALPN
-`forge-companion/1`, and the iPhone app connects through its native Rust bridge. Use
-`--manual-http` only when you intentionally want a LAN, Tailscale, or direct HTTP/TCP
-route.
+`forge-companion/1`, and the iPhone app connects through its native Rust bridge. The
+CLI renders a compact QR and saves the same compact payload under
+`~/.forge/pairing/` so you can paste it into the iPhone app if the camera cannot scan.
+Use `--manual-http` only when you intentionally want a LAN, Tailscale, or direct
+HTTP/TCP route. For a real iPhone, pass a phone-reachable URL:
+
+```bash
+npx forge-memory pair-ios --manual-http --public-url https://your-mac.tailnet.ts.net/forge/
+```
+
+Without `--public-url`, manual HTTP may resolve to `127.0.0.1`, which is useful for
+the iOS Simulator but not for a physical phone.
 
 The base install stays one command on purpose. The detailed companion transport
 reference lives in the Forge repo at `docs/companion-iroh.md` and in the published
 docs at `https://albertbuchard.github.io/forge/companion-transport.html`.
 
 `configure` reruns the full guided flow using the current config as defaults.
+Install and configure run Forge doctor before finishing. `doctor --repair` creates
+missing local folders, starts or restarts the runtime when allowed, and prints concrete
+next steps without deleting Forge data.
 `export` writes a portable backup of the real Forge data folder. `uninstall` removes the Forge Memory runtime manager and cache while keeping the data folder by default; pass `--remove-data` only when you intentionally want the data deleted too.
 
 Typical first run:

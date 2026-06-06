@@ -9,6 +9,7 @@ import XCTest
 import CoreLocation
 import HealthKit
 import CryptoKit
+import WebKit
 @testable import ForgeCompanion
 
 private struct SharedMovementFixtureCatalog: Decodable {
@@ -97,6 +98,33 @@ final class ForgeCompanionTests: XCTestCase {
             createdAt: "2026-04-07T09:00:00Z",
             updatedAt: "2026-04-07T10:00:00Z"
         )
+    }
+
+    func testForgeWebViewFreshRequestBypassesCacheAndAddsRefreshToken() throws {
+        let token = UUID(uuidString: "11111111-2222-3333-4444-555555555555")!
+        let url = URL(string: "https://forge.example/forge/?tab=settings")!
+
+        let request = ForgeWebView.freshRequest(for: url, reloadToken: token)
+        let components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false))
+        let queryItems = components.queryItems ?? []
+
+        XCTAssertEqual(request.cachePolicy, .reloadIgnoringLocalCacheData)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Cache-Control"), "no-cache")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Pragma"), "no-cache")
+        XCTAssertEqual(queryItems.first(where: { $0.name == "tab" })?.value, "settings")
+        XCTAssertEqual(
+            queryItems.first(where: { $0.name == "forgeWebRefresh" })?.value,
+            token.uuidString
+        )
+    }
+
+    func testForgeWebViewHardRefreshClearsOnlyWebCaches() {
+        XCTAssertTrue(ForgeWebView.cacheDataTypesForHardRefresh.contains(WKWebsiteDataTypeDiskCache))
+        XCTAssertTrue(ForgeWebView.cacheDataTypesForHardRefresh.contains(WKWebsiteDataTypeMemoryCache))
+        XCTAssertFalse(ForgeWebView.cacheDataTypesForHardRefresh.contains(WKWebsiteDataTypeCookies))
+        XCTAssertFalse(ForgeWebView.cacheDataTypesForHardRefresh.contains(WKWebsiteDataTypeLocalStorage))
+        XCTAssertFalse(ForgeWebView.cacheDataTypesForHardRefresh.contains(WKWebsiteDataTypeSessionStorage))
+        XCTAssertFalse(ForgeWebView.cacheDataTypesForHardRefresh.contains(WKWebsiteDataTypeIndexedDBDatabases))
     }
 
     func testNormalizedPayloadPreservesPreferredUiBaseUrl() {

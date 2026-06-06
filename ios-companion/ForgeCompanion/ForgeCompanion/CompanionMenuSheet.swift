@@ -225,7 +225,7 @@ struct CompanionSettingsSheet: View {
     private var permissionsCard: some View {
         CompanionSectionCard {
             VStack(alignment: .leading, spacing: 14) {
-                sectionHeader("Permissions", subtitle: "Read-only grant state from the phone. Use the switches above to decide what Forge should keep in sync.")
+                sectionHeader("Permissions", subtitle: "Check whether iOS currently allows Forge to read HealthKit, location, and motion data.")
 
                 detailRow("Health", value: appModel.healthAccessLabel)
                 detailRow("Location", value: appModel.movementPermissionGateLabel)
@@ -263,11 +263,11 @@ struct CompanionSettingsSheet: View {
     private var dataSourcesCard: some View {
         CompanionSectionCard {
             VStack(alignment: .leading, spacing: 14) {
-                sectionHeader("Data sources", subtitle: "One toggle per source. Off means no capture and no sync. On means Forge checks authorization and syncs when allowed.")
+                sectionHeader("Data sources", subtitle: "Choose which phone signals Forge may capture and upload during sync.")
 
                 sourceToggleRow(
                     title: "Health",
-                    detail: "Sleep, vitals, and workouts from Apple Health",
+                    detail: "Sleep, vitals, workouts, routes, and heart-rate evidence from Apple Health.",
                     status: appModel.healthAccessLabel,
                     isOn: Binding(
                         get: { appModel.healthSyncEnabled },
@@ -277,7 +277,7 @@ struct CompanionSettingsSheet: View {
 
                 sourceToggleRow(
                     title: "Movement",
-                    detail: "Passive stays, trips, and place continuity",
+                    detail: "Background stays, trips, known places, and gaps that explain where days happened.",
                     status: appModel.movementAccessLabel,
                     isOn: Binding(
                         get: { appModel.movementStore.trackingEnabled },
@@ -291,7 +291,7 @@ struct CompanionSettingsSheet: View {
     private var syncCard: some View {
         CompanionSectionCard {
             VStack(alignment: .leading, spacing: 14) {
-                sectionHeader("Sync", subtitle: "Refresh the native signals and send a new payload to Forge.")
+                sectionHeader("Sync", subtitle: "Send the latest phone data to Forge and resume unfinished HealthKit evidence uploads.")
 
                 detailRow("State", value: appModel.syncStateLabel)
                 detailRow("Last sync", value: appModel.lastSuccessfulSyncLabel)
@@ -462,7 +462,7 @@ struct CompanionSettingsSheet: View {
     private var movementCard: some View {
         CompanionSectionCard {
             VStack(alignment: .leading, spacing: 14) {
-                sectionHeader("Movement", subtitle: "Known places, publish mode, and capture heuristics.")
+                sectionHeader("Movement", subtitle: "Tune how the phone turns location samples into stays, trips, and known places.")
 
                 detailRow("Capture", value: appModel.movementStore.captureSummary)
                 detailRow("Latest", value: appModel.movementStore.latestLocationSummary)
@@ -482,7 +482,7 @@ struct CompanionSettingsSheet: View {
     private var toolsCard: some View {
         CompanionSectionCard {
             VStack(alignment: .leading, spacing: 14) {
-                sectionHeader("Tools", subtitle: "Troubleshooting and setup actions.")
+                sectionHeader("Tools", subtitle: "Use these when pairing, diagnostics, or the embedded Forge web app need manual attention.")
 
                 toolButton("Diagnostics") {
                     close()
@@ -498,7 +498,7 @@ struct CompanionSettingsSheet: View {
                     }
                 }
 
-                toolButton("Reload Forge") {
+                toolButton("Refresh Forge cache") {
                     reloadForge()
                     close()
                 }

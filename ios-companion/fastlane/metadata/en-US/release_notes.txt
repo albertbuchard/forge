@@ -1,12 +1,7 @@
-Forge Companion 1.0.82 fixes HealthKit sync recovery when uploads are
-interrupted before Forge accepts any chunks.
+Forge Companion 1.0.83 improves first-run onboarding and pairing recovery.
 
-Interrupted sleep, movement, and historical workout uploads now reset cleanly
-and retry instead of surfacing stale empty-session errors.
+Forge Memory now shows visible installer progress after every prompt, runs doctor checks before finishing, and gives repair steps instead of raw network errors when pairing cannot reach the desktop runtime.
 
-Historical workout import now treats an empty upload as complete only when the
-Forge backend agrees all workout evidence is already present. Missing heart
-rate, time-series, or route evidence still remains eligible for replay.
+The iOS setup flow now matches the CLI: scan the compact Iroh QR, or paste the saved payload from ~/.forge/pairing/ when the terminal QR is too large to scan.
 
-The Forge web view also ignores benign cancelled navigations so normal reloads
-do not leave the companion status stuck on an error.
+Manual HTTP setup now clearly requires a Tailscale or LAN URL for a real iPhone, while localhost remains limited to simulator/debugging setups.

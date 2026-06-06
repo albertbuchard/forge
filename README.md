@@ -53,6 +53,7 @@ Useful runtime commands:
 ```bash
 npx forge-memory status
 npx forge-memory doctor
+npx forge-memory doctor --repair
 npx forge-memory ui
 npx forge-memory restart
 npx forge-memory stop
@@ -61,11 +62,25 @@ npx forge-memory uninstall
 npx forge-memory pair-ios
 ```
 
+`doctor --repair` checks the local install, recreates missing local folders, starts or
+restarts the runtime when allowed, and prints concrete next steps without deleting Forge
+data.
+
 `pair-ios` now generates an Iroh QR by default. The QR contains the desktop Iroh
-node id, pairing token, optional relay hint, and ALPN `forge-companion/1`; the iPhone app
-uses its native Rust bridge to speak QUIC to Forge. Direct HTTP/TCP pairing remains
-available with `npx forge-memory pair-ios --manual-http` for deliberate LAN, Tailscale,
-or debugging setups.
+node id, pairing token, optional relay hint, and ALPN `forge-companion/1`; the iPhone
+app uses its native Rust bridge to speak QUIC to Forge. The CLI uses a compact QR and
+saves the same compact payload under `~/.forge/pairing/` so you can paste it into the
+iPhone app if the camera cannot scan.
+
+Direct HTTP/TCP pairing remains available for deliberate LAN, Tailscale, or debugging
+setups. A physical iPhone needs a phone-reachable URL:
+
+```bash
+npx forge-memory pair-ios --manual-http --public-url https://your-mac.tailnet.ts.net/forge/
+```
+
+Without `--public-url`, manual HTTP can point at `127.0.0.1`, which is useful for the
+iOS Simulator but not for a real phone.
 
 The short install path is intentionally the whole base setup. If you want the lower
 level networking details, read the companion transport reference in

@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { PSYCHE_SECTIONS } from "@/components/psyche/psyche-section-nav";
 import type { TranslationKey } from "@/lib/i18n";
+import { ROUTE_VIEW_CATALOG } from "@/routes/route-view-catalog";
 
 export type ShellRouteDefinition = {
   id: string;
@@ -52,7 +53,7 @@ export const PRIMARY_ROUTES: ShellRouteDefinition[] = [
     id: "life-force",
     to: "/life-force",
     label: "Life Force",
-    detail: "Action Point capacity, weekday curves, and instant drains",
+    detail: ROUTE_VIEW_CATALOG["life-force-index"].description,
     icon: BatteryCharging
   },
   {
@@ -101,14 +102,14 @@ export const PRIMARY_ROUTES: ShellRouteDefinition[] = [
     id: "knowledge-graph",
     to: "/knowledge-graph",
     label: "Knowledge Graph",
-    detail: "A living graph of Forge entities, links, and structural layers",
+    detail: ROUTE_VIEW_CATALOG["knowledge-graph-index"].description,
     icon: Orbit
   },
   {
     id: "workbench",
     to: "/workbench",
     label: "Workbench",
-    detail: "Global graph flows, AI tools, and published outputs",
+    detail: ROUTE_VIEW_CATALOG.workbench.description,
     icon: Network
   },
   {
@@ -136,24 +137,21 @@ export const PRIMARY_ROUTES: ShellRouteDefinition[] = [
     id: "training-load",
     to: "/training-load",
     label: "Training Load",
-    detail:
-      "Cardiovascular load, HR zone targets, acute/chronic stress, and adaptation signals",
+    detail: ROUTE_VIEW_CATALOG["training-load-index"].description,
     icon: Gauge
   },
   {
     id: "vitals",
     to: "/vitals",
     label: "Vitals",
-    detail:
-      "Recovery, cardio fitness, breathing, composition, and body signals",
+    detail: ROUTE_VIEW_CATALOG["vitals-index"].description,
     icon: HeartPulse
   },
   {
     id: "weight-loss",
     to: "/weight-loss",
     label: "Weight Loss",
-    detail:
-      "Food logs, body composition, gut comfort, aesthetic signals, and nutrition experiments",
+    detail: ROUTE_VIEW_CATALOG["weight-loss-index"].description,
     icon: Utensils
   },
   {
@@ -174,7 +172,7 @@ export const PRIMARY_ROUTES: ShellRouteDefinition[] = [
     id: "rewards",
     to: "/rewards",
     label: "Trophy Hall",
-    detail: "Forge Smith levels, streaks, trophies, and cosmetic unlocks",
+    detail: ROUTE_VIEW_CATALOG.rewards.description,
     icon: Trophy
   },
   {
@@ -228,6 +226,23 @@ export const PRIMARY_ROUTES: ShellRouteDefinition[] = [
   }
 ];
 
+const PSYCHE_SHORTCUT_DETAILS: Record<string, string> = {
+  "/psyche/metrics": ROUTE_VIEW_CATALOG["psyche-metrics"].description,
+  "/psyche/flashcards": ROUTE_VIEW_CATALOG["psyche-flashcards"].description,
+  "/psyche/values": ROUTE_VIEW_CATALOG["psyche-values"].description,
+  "/psyche/patterns": ROUTE_VIEW_CATALOG["psyche-patterns"].description,
+  "/psyche/questionnaires": ROUTE_VIEW_CATALOG["psyche-questionnaires"].description,
+  "/psyche/self-observation": ROUTE_VIEW_CATALOG["psyche-self-observation"].description,
+  "/psyche/behaviors": ROUTE_VIEW_CATALOG["psyche-behaviors"].description,
+  "/psyche/reports": ROUTE_VIEW_CATALOG["psyche-reports"].description,
+  "/psyche/goal-map": ROUTE_VIEW_CATALOG["psyche-goal-map"].description,
+  "/psyche/schemas-beliefs": ROUTE_VIEW_CATALOG["psyche-schemas-beliefs"].description,
+  "/psyche/modes": ROUTE_VIEW_CATALOG["psyche-modes"].description,
+  "/psyche/screen-time": ROUTE_VIEW_CATALOG["psyche-screen-time"].description,
+  "/preferences": ROUTE_VIEW_CATALOG["preferences-index"].description,
+  "/sleep": ROUTE_VIEW_CATALOG["sleep-index"].description
+};
+
 const PSYCHE_SHORTCUT_ROUTES: ShellRouteDefinition[] = PSYCHE_SECTIONS.filter(
   (route) => route.to !== "/psyche"
 ).map((route) => ({
@@ -235,7 +250,7 @@ const PSYCHE_SHORTCUT_ROUTES: ShellRouteDefinition[] = PSYCHE_SECTIONS.filter(
   to: route.to,
   icon: route.icon,
   label: route.label,
-  detail: "Psyche shortcut"
+  detail: PSYCHE_SHORTCUT_DETAILS[route.to] ?? ROUTE_VIEW_CATALOG["psyche-index"].description
 }));
 
 export const NAV_ROUTE_REGISTRY: ShellRouteDefinition[] = [

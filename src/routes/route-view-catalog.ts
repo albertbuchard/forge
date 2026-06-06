@@ -30,133 +30,133 @@ export const ROUTE_VIEW_CATALOG = {
   overview: {
     surfaceId: "overview",
     title: "Overview",
-    description: "Daily signal, momentum, and current Forge state.",
+    description: "Review today’s priorities, active work, recent evidence, and overall Forge momentum.",
     tone: "core",
     skeleton: { blocks: 5, columns: 3, sideRail: true }
   },
   "life-force-index": {
     surfaceId: "life-force-index",
     title: "Life Force",
-    description: "Action Point capacity, weekday curves, and dynamic drains.",
+    description: "Model daily Action Point capacity, weekday energy curves, drains, and recovery.",
     tone: "core",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "goals-index": {
     surfaceId: "goals-index",
     title: "Goals",
-    description: "Goal planning and long-horizon direction.",
+    description: "Define long-term directions and connect them to strategies, projects, and daily execution.",
     tone: "execution",
     skeleton: { blocks: 6, columns: 2, sideRail: true }
   },
   "habits-index": {
     surfaceId: "habits-index",
     title: "Habits",
-    description: "Recurring commitments, streaks, and check-ins.",
+    description: "Track recurring commitments, negative habits, streaks, missed days, and habit-linked evidence.",
     tone: "execution",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "goal-detail": {
     surfaceId: "goal-detail",
     title: "Goal detail",
-    description: "Goal detail, progress, and linked execution context.",
+    description: "Inspect one goal’s purpose, progress, linked projects, strategies, notes, and execution history.",
     tone: "execution",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "projects-index": {
     surfaceId: "projects-index",
     title: "Projects",
-    description: "PRD-backed projects and execution initiatives.",
+    description: "Manage PRD-backed initiatives and the work items that move them forward.",
     tone: "execution",
     skeleton: { blocks: 6, columns: 2, sideRail: true }
   },
   "project-hierarchy": {
     surfaceId: "project-hierarchy",
     title: "Project hierarchy",
-    description: "Full hierarchy from goals down to subtasks.",
+    description: "Trace the execution ladder from goals through strategies, projects, issues, tasks, and subtasks.",
     tone: "execution",
     skeleton: { blocks: 6, columns: 2, sideRail: true }
   },
   "project-detail": {
     surfaceId: "project-detail",
     title: "Project detail",
-    description: "Project detail, tasks, and execution health.",
+    description: "Review one project’s PRD, linked hierarchy, board state, tasks, and delivery health.",
     tone: "execution",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "strategies-index": {
     surfaceId: "strategies-index",
     title: "Strategies",
-    description: "Strategy graphs and long-range execution plans.",
+    description: "Build strategy graphs that turn goals and projects into ordered execution paths.",
     tone: "execution",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "strategy-detail": {
     surfaceId: "strategy-detail",
     title: "Strategy detail",
-    description: "Strategy DAG detail, targets, and progress.",
+    description: "Inspect one strategy’s graph, dependencies, target states, linked work, and progress.",
     tone: "execution",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "preferences-index": {
     surfaceId: "preferences-index",
     title: "Preferences",
-    description: "Preference profiles, pairwise judgments, and model state.",
+    description: "Compare preferences, record tradeoffs, and inspect the evidence behind taste models.",
     tone: "psyche",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "calendar-index": {
     surfaceId: "calendar-index",
     title: "Calendar",
-    description: "Calendar planning, timeboxes, and provider sync.",
+    description: "Plan timeboxes, manage calendar events, and sync provider calendars into Forge.",
     tone: "core",
     skeleton: { blocks: 6, columns: 3, sideRail: false }
   },
   "knowledge-graph-index": {
     surfaceId: "knowledge-graph-index",
     title: "Knowledge Graph",
-    description: "One connected map of Forge entities and relationships.",
+    description: "Explore Forge records as a connected graph of entities, links, clusters, and relationships.",
     tone: "knowledge",
     skeleton: { blocks: 4, columns: 2, sideRail: true }
   },
   "movement-index": {
     surfaceId: "movement-index",
     title: "Movement",
-    description: "Movement traces, places, and trip evidence.",
+    description: "Review stays, trips, known places, gaps, and movement evidence captured from the phone.",
     tone: "health",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "sleep-index": {
     surfaceId: "sleep-index",
     title: "Sleep",
-    description: "Sleep sessions, health context, and recovery trends.",
+    description: "Inspect overnight sleep sessions, stages, recovery context, and trends by wake date.",
     tone: "health",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "sports-index": {
     surfaceId: "sports-index",
     title: "Sports",
-    description: "Fitness, workouts, and sports context.",
+    description: "Review workouts, routes, preserved HealthKit evidence, sport trends, and reflections.",
     tone: "health",
     skeleton: { blocks: 6, columns: 3, sideRail: true }
   },
   "sports-workout-detail": {
     surfaceId: "sports-workout-detail",
     title: "Workout detail",
-    description: "Raw workout evidence, heart-rate zones, and session context.",
+    description: "Inspect one workout’s heart-rate timeline, route points, zones, events, and raw evidence.",
     tone: "health",
     skeleton: { blocks: 6, columns: 2, sideRail: true }
   },
   "training-load-index": {
     surfaceId: "training-load-index",
     title: "Training Load",
-    description: "Cardiovascular load, intensity distribution, and targets.",
+    description: "Track acute and chronic cardiovascular load, HR zones, intensity mix, and training targets.",
     tone: "health",
     skeleton: { blocks: 6, columns: 3, sideRail: true }
   },
   "vitals-index": {
     surfaceId: "vitals-index",
     title: "Vitals",
-    description: "Body signals, recovery, cardio fitness, and daily metrics.",
+    description: "Review daily HealthKit body signals, recovery markers, cardio fitness, and metric trends.",
     tone: "health",
     skeleton: { blocks: 6, columns: 3, sideRail: true }
   },
@@ -164,336 +164,336 @@ export const ROUTE_VIEW_CATALOG = {
     surfaceId: "weight-loss-index",
     title: "Weight Loss",
     description:
-      "Nutrition, calorie balance, body composition, gut comfort, subjective energy, aesthetic signals, and food experiments.",
+      "Track food, calorie balance, body composition, gut comfort, energy, and appearance experiments.",
     tone: "health",
     skeleton: { blocks: 7, columns: 3, sideRail: true }
   },
   "psyche-index": {
     surfaceId: "psyche-index",
     title: "Psyche",
-    description: "Values, modes, reports, and reflective context.",
+    description: "Navigate Psyche records for values, modes, beliefs, reports, patterns, and self-observation.",
     tone: "psyche",
     skeleton: { blocks: 6, columns: 2, sideRail: true }
   },
   "psyche-metrics": {
     surfaceId: "psyche-metrics",
     title: "Psyche metrics",
-    description: "Daily Psyche metric history with plots and statistics.",
+    description: "Review tracked Psyche metrics such as mood, urges, self-regulation, and conversation-derived signals.",
     tone: "psyche",
     skeleton: { blocks: 5, columns: 3, sideRail: true }
   },
   "psyche-flashcards": {
     surfaceId: "psyche-flashcards",
     title: "Psyche flashcards",
-    description: "Therapeutic reminder cards for urges and triggers.",
+    description: "Create and review therapeutic reminder cards used during urges, triggers, and value pivots.",
     tone: "psyche",
     skeleton: { blocks: 6, columns: 3, sideRail: false }
   },
   "psyche-values": {
     surfaceId: "psyche-values",
     title: "Psyche values",
-    description: "Values and linked goal context.",
+    description: "Define valued directions and connect them to goals, behaviors, beliefs, and reports.",
     tone: "psyche",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "psyche-patterns": {
     surfaceId: "psyche-patterns",
     title: "Psyche patterns",
-    description: "Behavior patterns and recurring loops.",
+    description: "Map recurring behavior loops, their payoffs, costs, triggers, and replacement moves.",
     tone: "psyche",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "psyche-questionnaires": {
     surfaceId: "psyche-questionnaires",
     title: "Questionnaires",
-    description: "Questionnaire library and recent runs.",
+    description: "Manage questionnaire templates, launch runs, and review recent answers and scores.",
     tone: "psyche",
     skeleton: { blocks: 6, columns: 2, sideRail: true }
   },
   "psyche-questionnaire-new": {
     surfaceId: "psyche-questionnaire-new",
     title: "New questionnaire",
-    description: "Questionnaire builder workspace.",
+    description: "Build a new questionnaire with sections, questions, scoring, and instructions.",
     tone: "psyche",
     skeleton: { blocks: 5, columns: 2, sideRail: false }
   },
   "psyche-questionnaire-detail": {
     surfaceId: "psyche-questionnaire-detail",
     title: "Questionnaire detail",
-    description: "Questionnaire detail and scores.",
+    description: "Review a questionnaire’s structure, versions, previous runs, and computed scores.",
     tone: "psyche",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "psyche-questionnaire-edit": {
     surfaceId: "psyche-questionnaire-edit",
     title: "Edit questionnaire",
-    description: "Questionnaire builder workspace.",
+    description: "Edit questionnaire sections, questions, scoring rules, and user instructions.",
     tone: "psyche",
     skeleton: { blocks: 5, columns: 2, sideRail: false }
   },
   "psyche-questionnaire-run": {
     surfaceId: "psyche-questionnaire-run",
     title: "Take questionnaire",
-    description: "Questionnaire runner and answers.",
+    description: "Answer a questionnaire one prompt at a time and save the completed run.",
     tone: "psyche",
     skeleton: { blocks: 4, columns: 1, sideRail: false }
   },
   "psyche-questionnaire-run-detail": {
     surfaceId: "psyche-questionnaire-run-detail",
     title: "Questionnaire run detail",
-    description: "Questionnaire result review.",
+    description: "Review a completed questionnaire run with raw answers, computed scores, and context.",
     tone: "psyche",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "psyche-self-observation": {
     surfaceId: "psyche-self-observation",
     title: "Self observation",
-    description: "Self-observation notes and reflective tracking.",
+    description: "Log dated observations about emotions, thoughts, triggers, body state, and context.",
     tone: "psyche",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "psyche-screen-time": {
     surfaceId: "psyche-screen-time",
     title: "Screen Time",
-    description: "Device-activity patterns and reflective usage history.",
+    description: "Inspect device-use patterns and connect screen time to mood, attention, and routines.",
     tone: "psyche",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "psyche-behaviors": {
     surfaceId: "psyche-behaviors",
     title: "Behaviors",
-    description: "Behavior records and linked evidence.",
+    description: "Describe concrete behaviors, urges, replacement moves, and the evidence linked to them.",
     tone: "psyche",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "psyche-reports": {
     surfaceId: "psyche-reports",
     title: "Reports",
-    description: "Trigger and reflective report review.",
+    description: "Review trigger reports and reflective chains across emotions, thoughts, behaviors, and modes.",
     tone: "psyche",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "psyche-report-detail": {
     surfaceId: "psyche-report-detail",
     title: "Report detail",
-    description: "Detailed reflective report view.",
+    description: "Inspect one report’s event chain, emotions, thoughts, behaviors, modes, and linked records.",
     tone: "psyche",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "psyche-goal-map": {
     surfaceId: "psyche-goal-map",
     title: "Goal map",
-    description: "Goal-to-values relationship map.",
+    description: "See how goals, values, behaviors, and Psyche records pull on each other.",
     tone: "psyche",
     skeleton: { blocks: 4, columns: 2, sideRail: true }
   },
   "psyche-schemas-beliefs": {
     surfaceId: "psyche-schemas-beliefs",
     title: "Schemas and beliefs",
-    description: "Beliefs, schemas, and linked patterns.",
+    description: "Organize recurring schemas and the belief scripts that shape reactions under pressure.",
     tone: "psyche",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "psyche-modes": {
     surfaceId: "psyche-modes",
     title: "Modes",
-    description: "Mode profiles and guides.",
+    description: "Manage mode profiles, their needs, risks, cues, and preferred responses.",
     tone: "psyche",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "psyche-mode-guide": {
     surfaceId: "psyche-mode-guide",
     title: "Mode guide",
-    description: "Guided mode session flow.",
+    description: "Run a guided mode session to name the active part and choose the next response.",
     tone: "psyche",
     skeleton: { blocks: 4, columns: 1, sideRail: false }
   },
   "kanban-index": {
     surfaceId: "kanban-index",
     title: "Kanban",
-    description: "Task board execution surface.",
+    description: "Move projects, issues, tasks, and subtasks through execution lanes without losing hierarchy.",
     tone: "execution",
     skeleton: { blocks: 6, columns: 3, sideRail: false }
   },
   "notes-index": {
     surfaceId: "notes-index",
     title: "Notes",
-    description: "Notes, evidence, and writing surfaces.",
+    description: "Create and search Markdown notes linked to Forge entities, dates, tags, and evidence.",
     tone: "knowledge",
     skeleton: { blocks: 6, columns: 2, sideRail: true }
   },
   "wiki-index": {
     surfaceId: "wiki-index",
     title: "KarpaWiki",
-    description: "KarpaWiki search and page navigation.",
+    description: "Search KarpaWiki pages, backlinks, entity links, and the SQLite-backed memory graph.",
     tone: "knowledge",
     skeleton: { blocks: 6, columns: 2, sideRail: true }
   },
   "wiki-ingest-history": {
     surfaceId: "wiki-ingest-history",
     title: "KarpaWiki ingest history",
-    description: "Ingest jobs and processing history.",
+    description: "Review KarpaWiki ingest jobs, source files, mapped entities, and processing outcomes.",
     tone: "knowledge",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "wiki-page-detail": {
     surfaceId: "wiki-page-detail",
     title: "KarpaWiki page",
-    description: "KarpaWiki page detail and backlinks.",
+    description: "Read one KarpaWiki page with backlinks, linked entities, citations, and related pages.",
     tone: "knowledge",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "wiki-new": {
     surfaceId: "wiki-new",
     title: "New KarpaWiki page",
-    description: "KarpaWiki editor for new pages.",
+    description: "Draft a new KarpaWiki page with Markdown, metadata, and entity links.",
     tone: "knowledge",
     skeleton: { blocks: 4, columns: 1, sideRail: false }
   },
   "wiki-edit": {
     surfaceId: "wiki-edit",
     title: "Edit KarpaWiki page",
-    description: "KarpaWiki editor for existing pages.",
+    description: "Edit an existing KarpaWiki page while preserving links, metadata, and history.",
     tone: "knowledge",
     skeleton: { blocks: 4, columns: 1, sideRail: false }
   },
   "today-index": {
     surfaceId: "today-index",
     title: "Today",
-    description: "Current work, time, and daily runway.",
+    description: "Choose today’s next work, inspect time pressure, and keep active execution visible.",
     tone: "execution",
     skeleton: { blocks: 6, columns: 2, sideRail: true }
   },
   workbench: {
     surfaceId: "workbench",
     title: "Workbench",
-    description: "Search, organize, and launch Forge flows.",
+    description: "Search, organize, and launch graph-based Forge flows, AI tools, and published outputs.",
     tone: "knowledge",
     skeleton: { blocks: 6, columns: 2, sideRail: true }
   },
   "workbench-flow": {
     surfaceId: "workbench-flow",
     title: "Workbench flow",
-    description: "Graph editor and runtime surface for a single flow.",
+    description: "Edit and run one Workbench flow with nodes, contracts, traces, and outputs.",
     tone: "knowledge",
     skeleton: { blocks: 5, columns: 2, sideRail: false }
   },
   "activity-index": {
     surfaceId: "activity-index",
     title: "Activity",
-    description: "Activity log and event history.",
+    description: "Review the audit trail of entity changes, sync events, task work, and system activity.",
     tone: "core",
     skeleton: { blocks: 6, columns: 2, sideRail: true }
   },
   "insights-index": {
     surfaceId: "insights-index",
     title: "Insights",
-    description: "Insight review and decisions.",
+    description: "Store analyses, coaching notes, recommendations, and decisions that should remain visible.",
     tone: "knowledge",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "weekly-review": {
     surfaceId: "weekly-review",
     title: "Weekly review",
-    description: "Weekly review workflow and closeout.",
+    description: "Close out the week, review evidence, and decide the next execution push.",
     tone: "execution",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "settings-index": {
     surfaceId: "settings-index",
     title: "Settings",
-    description: "Operator settings and runtime configuration.",
+    description: "Manage Forge runtime preferences, users, integrations, data, models, and companion setup.",
     tone: "settings",
     skeleton: { blocks: 6, columns: 2, sideRail: true }
   },
   "settings-data": {
     surfaceId: "settings-data",
     title: "Settings data",
-    description: "Runtime storage, backups, exports, and recovery.",
+    description: "Inspect the active data root, create backups, export data, and recover storage state.",
     tone: "settings",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "settings-users": {
     surfaceId: "settings-users",
     title: "Settings users",
-    description: "User directory and ownership settings.",
+    description: "Manage human and bot users, ownership, relationships, and visibility rights.",
     tone: "settings",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "settings-calendar": {
     surfaceId: "settings-calendar",
     title: "Settings calendar",
-    description: "Calendar provider settings and sync.",
+    description: "Connect calendar providers, choose writable calendars, and configure scheduling rules.",
     tone: "settings",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "settings-mobile": {
     surfaceId: "settings-mobile",
     title: "Settings mobile",
-    description: "Mobile companion settings and pairing.",
+    description: "Pair iPhone and watch companions, inspect mobile sync state, and manage device access.",
     tone: "settings",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "settings-mobile-lab": {
     surfaceId: "settings-mobile-lab",
     title: "Companion sync lab",
-    description: "Dev-only source-state and movement gap QA fixtures.",
+    description: "Test mobile source states, movement gap fixtures, and companion sync edge cases.",
     tone: "settings",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "settings-models": {
     surfaceId: "settings-models",
     title: "Settings models",
-    description: "Model connections and defaults.",
+    description: "Configure local and remote model providers, defaults, reasoning settings, and availability.",
     tone: "settings",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "settings-agents": {
     surfaceId: "settings-agents",
     title: "Settings agents",
-    description: "Agent tokens and runtime access.",
+    description: "Manage agent tokens, runtime identities, adapter access, and session visibility.",
     tone: "settings",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "settings-rewards": {
     surfaceId: "settings-rewards",
     title: "Settings rewards",
-    description: "Rewards and XP rule settings.",
+    description: "Configure XP posture, reward assets, trophy rules, and progression display.",
     tone: "settings",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   rewards: {
     surfaceId: "rewards",
     title: "Trophy Hall",
-    description: "Trophies, unlocks, streak pressure, and progression.",
+    description: "Review earned trophies, locked achievements, streak pressure, mascot gear, and unlocks.",
     tone: "execution",
     skeleton: { blocks: 6, columns: 3, sideRail: true }
   },
   "settings-wiki": {
     surfaceId: "settings-wiki",
     title: "KarpaWiki settings",
-    description: "KarpaWiki ingestion and profile settings.",
+    description: "Configure KarpaWiki ingest behavior, wiki profiles, memory settings, and source handling.",
     tone: "settings",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "settings-logs": {
     surfaceId: "settings-logs",
     title: "Settings logs",
-    description: "Diagnostics and event logs.",
+    description: "Inspect diagnostic logs, runtime events, errors, and troubleshooting context.",
     tone: "settings",
     skeleton: { blocks: 6, columns: 2, sideRail: true }
   },
   "settings-bin": {
     surfaceId: "settings-bin",
     title: "Settings bin",
-    description: "Deleted entity recovery.",
+    description: "Review soft-deleted Forge records and restore useful data before permanent cleanup.",
     tone: "settings",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "task-detail": {
     surfaceId: "task-detail",
     title: "Task detail",
-    description: "Task detail, timer, and notes.",
+    description: "Work one task with timer state, instructions, linked context, notes, and closeout.",
     tone: "execution",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   }

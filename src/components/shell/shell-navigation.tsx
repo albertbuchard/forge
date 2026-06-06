@@ -696,7 +696,7 @@ export function ShellNavEditor({
       onOpenChange={onOpenChange}
       eyebrow="Navigation"
       title="Customize navigation"
-      description="Add or remove main routes, Psyche shortcuts, and the Workbench flow workspace."
+      description="Choose which Forge surfaces appear in the sidebar and mobile bar; Psyche entries open specific record families such as metrics, beliefs, modes, and reports."
     >
       <div className="grid gap-5">
         <div className="grid gap-3">

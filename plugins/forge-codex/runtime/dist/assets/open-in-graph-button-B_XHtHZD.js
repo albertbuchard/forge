@@ -1,0 +1,1 @@
+import{b5 as p,j as s,aU as c}from"./vendor-Dnkkx2co.js";import{B as u,cK as m}from"./index-BhkubYaC.js";function d({entityType:a,entityId:e,view:n,label:o="Open in graph",variant:r="secondary",size:t}){const i=p();return s.jsxs(u,{variant:r,size:t,onClick:()=>i(m(a,e,{view:n})),children:[s.jsx(c,{className:"size-4"}),o]})}export{d as O};

@@ -8,6 +8,38 @@ struct ForgeWebView: UIViewRepresentable {
     @Binding var isLoading: Bool
     @Binding var errorMessage: String?
 
+    static let cacheDataTypesForHardRefresh: Set<String> = [
+        WKWebsiteDataTypeDiskCache,
+        WKWebsiteDataTypeMemoryCache,
+        WKWebsiteDataTypeOfflineWebApplicationCache
+    ]
+
+    static func freshRequest(
+        for url: URL,
+        cachePolicy: URLRequest.CachePolicy = .reloadIgnoringLocalCacheData,
+        reloadToken: UUID? = nil
+    ) -> URLRequest {
+        let resolvedURL: URL
+        if let reloadToken,
+           var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        {
+            var queryItems = components.queryItems ?? []
+            queryItems.removeAll { $0.name == "forgeWebRefresh" }
+            queryItems.append(URLQueryItem(name: "forgeWebRefresh", value: reloadToken.uuidString))
+            components.queryItems = queryItems
+            resolvedURL = components.url ?? url
+        } else {
+            resolvedURL = url
+        }
+
+        var request = URLRequest(url: resolvedURL)
+        request.cachePolicy = cachePolicy
+        request.timeoutInterval = 45
+        request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+        request.setValue("no-cache", forHTTPHeaderField: "Pragma")
+        return request
+    }
+
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
     }
@@ -92,24 +124,30 @@ struct ForgeWebView: UIViewRepresentable {
         context.coordinator.lastReloadToken = reloadToken
         context.coordinator.updateViewState(isLoading: true, errorMessage: nil)
         companionDebugLog("ForgeWebView", "makeUIView load request url=\(url.absoluteString)")
-        webView.load(URLRequest(url: url))
+        webView.load(Self.freshRequest(for: url))
         return webView
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
+        context.coordinator.parent = self
+
         if context.coordinator.lastURL != url {
             context.coordinator.lastURL = url
             context.coordinator.updateViewState(isLoading: true, errorMessage: nil)
             companionDebugLog("ForgeWebView", "updateUIView load new url=\(url.absoluteString)")
-            webView.load(URLRequest(url: url))
+            webView.load(Self.freshRequest(for: url))
             return
         }
 
         if context.coordinator.lastReloadToken != reloadToken {
             context.coordinator.lastReloadToken = reloadToken
             context.coordinator.updateViewState(isLoading: true, errorMessage: nil)
-            companionDebugLog("ForgeWebView", "updateUIView reload token=\(reloadToken.uuidString)")
-            webView.reload()
+            companionDebugLog("ForgeWebView", "updateUIView hard refresh token=\(reloadToken.uuidString)")
+            webView.stopLoading()
+            context.coordinator.clearWebViewCaches {
+                companionDebugLog("ForgeWebView", "updateUIView hard refresh load url=\(url.absoluteString)")
+                webView.load(Self.freshRequest(for: url, reloadToken: reloadToken))
+            }
         }
 
         companionDebugLog(
@@ -137,6 +175,15 @@ struct ForgeWebView: UIViewRepresentable {
             let nsError = error as NSError
             return nsError.domain == NSURLErrorDomain &&
                 nsError.code == URLError.cancelled.rawValue
+        }
+
+        func clearWebViewCaches(completion: @escaping () -> Void) {
+            WKWebsiteDataStore.default().removeData(
+                ofTypes: ForgeWebView.cacheDataTypesForHardRefresh,
+                modifiedSince: .distantPast
+            ) {
+                DispatchQueue.main.async(execute: completion)
+            }
         }
 
         func updateViewState(isLoading: Bool, errorMessage: String?) {

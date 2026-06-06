@@ -31,6 +31,22 @@ function run(args, options = {}) {
   return result;
 }
 
+function runFailure(args, options = {}) {
+  const result = spawnSync(process.execPath, [bin, ...args], {
+    cwd: packageRoot,
+    env,
+    encoding: "utf8",
+    timeout: 20_000,
+    ...options
+  });
+  if (result.status === 0) {
+    throw new Error(
+      `forge-memory ${args.join(" ")} unexpectedly succeeded\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`
+    );
+  }
+  return result;
+}
+
 async function inspectMcp() {
   const transport = new StdioClientTransport({
     command: process.execPath,
@@ -55,6 +71,36 @@ async function inspectMcp() {
 
 run(["--help"]);
 run(["--version"]);
+const guidedDryRun = run(
+  [
+    "install",
+    "--yes",
+    "--dry-run",
+    "--no-start",
+    "--skip-pair-ios",
+    "--adapters",
+    "none",
+    "--data-root",
+    dataRoot
+  ],
+  {
+    env: { ...env, NODE_OPTIONS: "--throw-deprecation" }
+  }
+);
+for (const expected of [
+  "Looking for host adapters",
+  "Saving Forge settings",
+  "Preparing Forge data folder",
+  "Skipping host adapter configuration",
+  "Runtime start skipped",
+  "Running Forge doctor",
+  "iOS pairing skipped",
+  "Forge Memory configured and checked."
+]) {
+  if (!guidedDryRun.stdout.includes(expected)) {
+    throw new Error(`Expected guided install output to include: ${expected}`);
+  }
+}
 run([
   "install",
   "--yes",
@@ -92,7 +138,23 @@ run([
   "--json"
 ]);
 run(["status", "--json"]);
+fs.rmSync(dataRoot, { recursive: true, force: true });
+const repairedDoctor = run(["doctor", "--json", "--repair", "--no-start"]);
+const repairedPayload = JSON.parse(repairedDoctor.stdout);
+const dataRootCheck = repairedPayload.checks.find(
+  (check) => check.id === "dataRoot"
+);
+if (!dataRootCheck?.ok || !dataRootCheck.repaired) {
+  throw new Error("Expected doctor --repair --no-start to recreate dataRoot");
+}
 run(["doctor", "--json"]);
+const pairingFailure = runFailure(["pair-ios", "--json", "--no-start"]);
+if (!pairingFailure.stderr.includes("Could not create iOS pairing")) {
+  throw new Error("Expected unreachable pairing to explain the pairing failure");
+}
+if (!pairingFailure.stderr.includes("doctor --repair")) {
+  throw new Error("Expected unreachable pairing to point at doctor --repair");
+}
 run(["stop"]);
 
 fs.mkdirSync(dataRoot, { recursive: true });

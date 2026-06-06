@@ -35,9 +35,9 @@ struct SetupQRScreen: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 VStack(alignment: .leading, spacing: 12) {
-                    step("1", "Open Forge on your computer and go to Settings -> Mobile.")
-                    step("2", "Choose Generate Forge QR.")
-                    step("3", "Scan it here, then approve Health access for the first sync.")
+                    step("1", "Run npx forge-memory and choose iOS pairing, or open Forge Settings -> Mobile.")
+                    step("2", "Scan the compact QR, or paste the saved payload if the camera cannot read it.")
+                    step("3", "Approve Health access after pairing so Forge can start the first sync.")
                 }
 
                 CompanionSectionCard {

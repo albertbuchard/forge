@@ -32,7 +32,7 @@ struct SetupManualScreen: View {
                         .font(.system(size: 28, weight: .bold, design: .rounded))
                         .foregroundStyle(CompanionStyle.textPrimary)
 
-                    Text("Use this only for a known LAN, Tailscale, simulator, or copied payload route.")
+                    Text("Use this for a known LAN or Tailscale host, the simulator, or a copied pairing payload.")
                         .font(.system(size: 15, weight: .medium, design: .rounded))
                         .foregroundStyle(CompanionStyle.textSecondary)
 
@@ -101,7 +101,7 @@ struct SetupManualScreen: View {
                                 .font(.system(size: 16, weight: .bold, design: .rounded))
                                 .foregroundStyle(CompanionStyle.textPrimary)
 
-                            Text("Use this if the camera cannot scan. Copy the fallback payload from Forge Settings -> Mobile on your computer.")
+                            Text("Use this if the camera cannot scan. Copy the payload saved by npx forge-memory under ~/.forge/pairing/, or from Forge Settings -> Mobile.")
                                 .font(.system(size: 13, weight: .medium, design: .rounded))
                                 .foregroundStyle(CompanionStyle.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -196,7 +196,7 @@ struct SetupManualScreen: View {
               let payload = try? JSONDecoder().decode(PairingPayload.self, from: data)
         else {
             companionDebugLog("SetupManualScreen", "connectPairingCode invalid pairing code")
-            localError = "Invalid pairing code."
+            localError = "Invalid pairing payload. Paste the full JSON payload from ~/.forge/pairing/ or Forge Settings -> Mobile."
             return
         }
 
