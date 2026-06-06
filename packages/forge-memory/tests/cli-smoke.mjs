@@ -141,6 +141,10 @@ function writeSmokeConfig(overrides = {}) {
   return JSON.parse(fs.readFileSync(configPath, "utf8"));
 }
 
+function countText(source, pattern) {
+  return source.match(new RegExp(pattern, "gm"))?.length ?? 0;
+}
+
 async function withFakeForgeServer(handler, callback) {
   const requests = [];
   const server = http.createServer(async (request, response) => {
@@ -381,6 +385,71 @@ if (!pairingFailure.stderr.includes("doctor --repair")) {
 const manualHttpFailure = runFailure(["pair-ios", "--json", "--manual-http", "--public-url", "http://127.0.0.1:4317/forge/"]);
 if (!manualHttpFailure.stderr.includes("loopback-only")) {
   throw new Error("Expected manual HTTP pairing to reject loopback public URLs for physical iPhones");
+}
+const codexConfigPath = path.join(tempHome, ".codex", "config.toml");
+fs.mkdirSync(path.dirname(codexConfigPath), { recursive: true });
+fs.writeFileSync(
+  codexConfigPath,
+  [
+    'BROWSER_USE_CODEX_APP_BUILD_FLAVOR = "prod"',
+    'command = "npx"',
+    'args = ["forge-memory", "mcp"]',
+    "",
+    "[mcp_servers.forge.env]",
+    'FORGE_ORIGIN = "http://127.0.0.1"',
+    'FORGE_PORT = "4317"',
+    'FORGE_ACTOR_LABEL = "codex"',
+    "",
+    "[mcp_servers.forge]",
+    'command = "npx"',
+    'args = ["forge-memory", "mcp"]',
+    "",
+    "[mcp_servers.forge.env]",
+    'FORGE_ORIGIN = "http://127.0.0.1"',
+    'FORGE_PORT = "4317"',
+    'FORGE_ACTOR_LABEL = "codex"',
+    'FORGE_TIMEOUT_MS = "15000"',
+    `FORGE_DATA_ROOT = "${dataRoot}"`,
+    "",
+    "[mcp_servers.other]",
+    'command = "npx"',
+    'args = ["some-other-mcp"]',
+    "",
+    "[desktop]",
+    'appearanceTheme = "dark"',
+    ""
+  ].join("\n")
+);
+run([
+  "configure",
+  "--yes",
+  "--no-start",
+  "--skip-pair-ios",
+  "--adapters",
+  "codex",
+  "--json"
+]);
+run([
+  "configure",
+  "--yes",
+  "--no-start",
+  "--skip-pair-ios",
+  "--adapters",
+  "codex",
+  "--json"
+]);
+const codexConfig = fs.readFileSync(codexConfigPath, "utf8");
+if (countText(codexConfig, "^\\[mcp_servers\\.forge\\]$") !== 1) {
+  throw new Error(`Expected one Codex Forge MCP table, got:\n${codexConfig}`);
+}
+if (countText(codexConfig, "^\\[mcp_servers\\.forge\\.env\\]$") !== 1) {
+  throw new Error(`Expected one Codex Forge MCP env table, got:\n${codexConfig}`);
+}
+if (!codexConfig.includes("[desktop]") || !codexConfig.includes('appearanceTheme = "dark"')) {
+  throw new Error(`Expected Codex desktop config to survive Forge MCP patching:\n${codexConfig}`);
+}
+if (!codexConfig.includes("[mcp_servers.other]") || !codexConfig.includes('args = ["some-other-mcp"]')) {
+  throw new Error(`Expected unrelated Codex MCP server config to survive Forge MCP patching:\n${codexConfig}`);
 }
 await withFakeForgeServer(async (request, body) => {
   if (request.url === "/api/v1/health") {

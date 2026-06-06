@@ -742,13 +742,8 @@ async function patchCodexConfig(config, options) {
     `FORGE_DATA_ROOT = "${config.dataRoot.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`,
     ""
   ].join("\n");
-  const pattern =
-    /(?:^|\n)\[mcp_servers\.forge\][\s\S]*?(?=\n\[[^\]]+\]|\s*$)/m;
-  if (pattern.test(source)) {
-    source = source.replace(pattern, `\n${block}`.trimEnd());
-  } else {
-    source = `${source.trimEnd()}\n\n${block}`.trimStart();
-  }
+  const cleaned = stripCodexForgeMcpConfig(source).trimEnd();
+  source = `${cleaned ? `${cleaned}\n\n` : ""}${block}`;
   if (!options.dryRun) {
     await fsp.mkdir(path.dirname(filePath), { recursive: true });
     await backupIfExists(filePath);
@@ -759,6 +754,44 @@ async function patchCodexConfig(config, options) {
     );
   }
   return { filePath };
+}
+
+function stripCodexForgeMcpConfig(source) {
+  const orphanForgeLines = new Set([
+    'command = "npx"',
+    'args = ["forge-memory", "mcp"]',
+    "FORGE_ORIGIN",
+    "FORGE_PORT",
+    "FORGE_ACTOR_LABEL",
+    "FORGE_TIMEOUT_MS",
+    "FORGE_DATA_ROOT"
+  ]);
+  const lines = source.split(/\r?\n/);
+  const kept = [];
+  let skippingForgeTable = false;
+  let currentTable = null;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const tableMatch = trimmed.match(/^\[([^\]]+)\]$/);
+    if (tableMatch) {
+      currentTable = tableMatch[1];
+      skippingForgeTable = currentTable === "mcp_servers.forge" ||
+        currentTable.startsWith("mcp_servers.forge.");
+      if (skippingForgeTable) continue;
+    }
+    if (skippingForgeTable) continue;
+    const isGlobalOrphanForgeLine =
+      currentTable === null &&
+      (orphanForgeLines.has(trimmed) ||
+        Array.from(orphanForgeLines).some((prefix) =>
+          trimmed.startsWith(`${prefix} =`)
+        ));
+    if (isGlobalOrphanForgeLine) {
+      continue;
+    }
+    kept.push(line);
+  }
+  return kept.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd();
 }
 
 async function runCommand(
@@ -1430,14 +1463,9 @@ async function removeCodexAdapterConfig() {
   const filePath = path.join(homeDir(), ".codex", "config.toml");
   if (!fs.existsSync(filePath)) return { filePath, changed: false };
   const source = await fsp.readFile(filePath, "utf8");
-  const pattern =
-    /(?:^|\n)\[mcp_servers\.forge\][\s\S]*?(?=\n\[[^\]]+\]|\s*$)/m;
-  if (!pattern.test(source)) return { filePath, changed: false };
+  const next = stripCodexForgeMcpConfig(source);
+  if (next === source.trimEnd()) return { filePath, changed: false };
   await backupIfExists(filePath);
-  const next = source
-    .replace(pattern, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trimEnd();
   await fsp.writeFile(filePath, next ? `${next}\n` : "", "utf8");
   return { filePath, changed: true };
 }
