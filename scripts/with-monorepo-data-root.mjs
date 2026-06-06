@@ -9,6 +9,10 @@ const monorepoDataRoot = path.resolve(projectRoot, "..", "..", "data", "forge");
 const runtimePreferencePath = path.resolve(projectRoot, "..", "..", "data", "forge-runtime.json");
 
 function resolvePreferredDataRoot() {
+  // Allow explicit env override so non-monorepo setups can pass FORGE_DATA_ROOT directly.
+  if (process.env.FORGE_DATA_ROOT?.trim()) {
+    return path.resolve(process.env.FORGE_DATA_ROOT.trim());
+  }
   if (existsSync(runtimePreferencePath)) {
     try {
       const parsed = JSON.parse(readFileSync(runtimePreferencePath, "utf8"));
