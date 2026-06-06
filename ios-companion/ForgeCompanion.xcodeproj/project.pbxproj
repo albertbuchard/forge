@@ -206,7 +206,6 @@
 		0273258C74CFF59B515D3923 /* lobster-dark-dxSKfHK-.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "lobster-dark-dxSKfHK-.json"; sourceTree = "<group>"; };
 		0289C0EB6BFA22514FE6E019 /* PairedForgeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairedForgeScreen.swift; sourceTree = "<group>"; };
 		039C36D8E30A3B07C3440B41 /* WatchComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchComponents.swift; sourceTree = "<group>"; };
-		42A7B8C9D0E1F234567890AC /* WatchCommandSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchCommandSurface.swift; sourceTree = "<group>"; };
 		0B16BD6500AACAA761DED54F /* temple-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "temple-dark.json"; sourceTree = "<group>"; };
 		0BB7C4D639104DAE20AB76F2 /* slack-ochin-CRg.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "slack-ochin-CRg.json"; sourceTree = "<group>"; };
 		10872B0DA517770C134D17B7 /* ForgeWatchBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeWatchBundle.swift; sourceTree = "<group>"; };
@@ -247,6 +246,7 @@
 		406EDD3C9275931E8F3A6635 /* SetupDiscoveryScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupDiscoveryScreen.swift; sourceTree = "<group>"; };
 		40C0BC58EF0F564EC56A2872 /* ForgeServerDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeServerDiscovery.swift; sourceTree = "<group>"; };
 		42969C3AE526BAB1BCE9BAD3 /* gruvbox-dark-medium.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "gruvbox-dark-medium.json"; sourceTree = "<group>"; };
+		42A7B8C9D0E1F234567890AC /* WatchCommandSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchCommandSurface.swift; sourceTree = "<group>"; };
 		442250B4A055510386087866 /* WatchAppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchAppModel.swift; sourceTree = "<group>"; };
 		4488FD3178035D328C1AA09D /* kanagawa-wave.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "kanagawa-wave.json"; sourceTree = "<group>"; };
 		4B1CB3E6790DB1D4A37C3D34 /* ManagedSettings.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ManagedSettings.framework; path = System/Library/Frameworks/ManagedSettings.framework; sourceTree = SDKROOT; };
@@ -1044,7 +1044,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = "ForgeCompanion/ForgeWatch Watch App/ForgeWatch Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 31;
+				CURRENT_PROJECT_VERSION = 32;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Forge;
@@ -1119,7 +1119,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = "ForgeCompanion/ForgeWatch Watch App/ForgeWatch Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 31;
+				CURRENT_PROJECT_VERSION = 32;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Forge;
@@ -1159,7 +1159,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ForgeCompanion/ForgeWatchExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 31;
+				CURRENT_PROJECT_VERSION = 32;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				INFOPLIST_FILE = ForgeCompanion/ForgeWatch/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1200,7 +1200,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ForgeCompanion/ForgeWatchExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 31;
+				CURRENT_PROJECT_VERSION = 32;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				INFOPLIST_FILE = ForgeCompanion/ForgeWatch/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1247,7 +1247,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = ForgeCompanion/ForgeCompanion/ForgeCompanion.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 31;
+				CURRENT_PROJECT_VERSION = 32;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				INFOPLIST_FILE = ForgeCompanion/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -1327,7 +1327,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = ForgeCompanion/ForgeCompanion/ForgeCompanion.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 31;
+				CURRENT_PROJECT_VERSION = 32;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				INFOPLIST_FILE = ForgeCompanion/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
