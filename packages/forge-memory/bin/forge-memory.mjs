@@ -1451,12 +1451,34 @@ async function removeHermesAdapterConfig() {
     "forge",
     "config.json"
   );
-  const changed = fs.existsSync(forgeConfigPath);
-  if (changed) {
+  let changed = false;
+  if (fs.existsSync(forgeConfigPath)) {
     await backupIfExists(forgeConfigPath);
     await fsp.rm(forgeConfigPath, { force: true });
+    changed = true;
   }
-  return { filePath: forgeConfigPath, changed };
+  const forgeConfigDir = path.dirname(forgeConfigPath);
+  if (fs.existsSync(forgeConfigDir)) {
+    await fsp.rm(forgeConfigDir, { recursive: false, force: true }).catch(() => {});
+  }
+
+  const hermesYamlPath = path.join(homeDir(), ".hermes", "config.yaml");
+  if (fs.existsSync(hermesYamlPath)) {
+    const raw = await fsp.readFile(hermesYamlPath, "utf8");
+    const doc = YAML.parseDocument(raw);
+    const root = doc.toJSON() ?? {};
+    const enabled = Array.isArray(root.plugins?.enabled)
+      ? root.plugins.enabled
+      : null;
+    if (enabled?.includes("forge")) {
+      root.plugins.enabled = enabled.filter((entry) => entry !== "forge");
+      doc.contents = doc.createNode(root);
+      await backupIfExists(hermesYamlPath);
+      await fsp.writeFile(hermesYamlPath, String(doc), "utf8");
+      changed = true;
+    }
+  }
+  return { filePath: forgeConfigPath, yamlPath: hermesYamlPath, changed };
 }
 
 async function removeCodexAdapterConfig() {

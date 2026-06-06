@@ -618,15 +618,52 @@ if (!mcpToolNames.includes("forge_search_wiki")) {
 
 const liveRuntime = await startLiveForgeHealthChild();
 try {
+  const openClawConfigPath = path.join(tempHome, ".openclaw", "openclaw.json");
+  fs.mkdirSync(path.dirname(openClawConfigPath), { recursive: true });
+  fs.writeFileSync(
+    openClawConfigPath,
+    `${JSON.stringify(
+      {
+        plugins: {
+          allow: ["forge-openclaw-plugin", "other-plugin"],
+          entries: {
+            "forge-openclaw-plugin": {
+              enabled: true,
+              config: { dataRoot, port: 4317 }
+            },
+            "other-plugin": {
+              enabled: true,
+              config: { keep: true }
+            }
+          }
+        }
+      },
+      null,
+      2
+    )}\n`
+  );
+  const hermesConfigPath = path.join(tempHome, ".hermes", "config.yaml");
+  const hermesForgeConfigPath = path.join(
+    tempHome,
+    ".hermes",
+    "forge",
+    "config.json"
+  );
+  fs.mkdirSync(path.dirname(hermesForgeConfigPath), { recursive: true });
+  fs.writeFileSync(
+    hermesConfigPath,
+    "plugins:\n  enabled:\n    - forge\n    - other-plugin\n"
+  );
+  fs.writeFileSync(hermesForgeConfigPath, `${JSON.stringify({ dataRoot })}\n`);
   writeSmokeConfig({
     ...config,
     mode: "packaged",
     port: liveRuntime.port,
     dataRoot,
-    adapters: []
+    adapters: ["openclaw", "hermes", "codex"]
   });
   fs.rmSync(path.join(tempHome, ".forge", "run", "forge-memory-runtime.json"), { force: true });
-  const uninstall = run(["uninstall", "--yes", "--json"]);
+  const uninstall = run(["uninstall", "--yes", "--remove-adapters", "--json"]);
   const uninstallPayload = JSON.parse(uninstall.stdout);
   if (!uninstallPayload.stop?.stopped) {
     throw new Error(
@@ -639,6 +676,36 @@ try {
     );
   }
   await waitForExit(liveRuntime.child, "live Forge runtime child");
+  const openClawConfig = JSON.parse(fs.readFileSync(openClawConfigPath, "utf8"));
+  if (openClawConfig.plugins.entries["forge-openclaw-plugin"]) {
+    throw new Error("Expected uninstall --remove-adapters to remove only the Forge OpenClaw entry");
+  }
+  if (!openClawConfig.plugins.entries["other-plugin"]) {
+    throw new Error("Expected uninstall --remove-adapters to preserve unrelated OpenClaw plugin entries");
+  }
+  if (openClawConfig.plugins.allow.includes("forge-openclaw-plugin")) {
+    throw new Error("Expected uninstall --remove-adapters to remove Forge from OpenClaw allow list");
+  }
+  if (!openClawConfig.plugins.allow.includes("other-plugin")) {
+    throw new Error("Expected uninstall --remove-adapters to preserve unrelated OpenClaw allow entries");
+  }
+  const hermesConfig = fs.readFileSync(hermesConfigPath, "utf8");
+  if (hermesConfig.includes("forge")) {
+    throw new Error(`Expected uninstall --remove-adapters to remove Forge from Hermes config:\n${hermesConfig}`);
+  }
+  if (!hermesConfig.includes("other-plugin")) {
+    throw new Error(`Expected uninstall --remove-adapters to preserve unrelated Hermes plugins:\n${hermesConfig}`);
+  }
+  if (fs.existsSync(hermesForgeConfigPath)) {
+    throw new Error("Expected uninstall --remove-adapters to remove Hermes Forge config file");
+  }
+  const codexAfterUninstall = fs.readFileSync(codexConfigPath, "utf8");
+  if (codexAfterUninstall.includes("[mcp_servers.forge]")) {
+    throw new Error(`Expected uninstall --remove-adapters to remove Forge Codex MCP config:\n${codexAfterUninstall}`);
+  }
+  if (!codexAfterUninstall.includes("[mcp_servers.other]")) {
+    throw new Error(`Expected uninstall --remove-adapters to preserve unrelated Codex MCP config:\n${codexAfterUninstall}`);
+  }
 } finally {
   if (liveRuntime.child.exitCode === null && liveRuntime.child.signalCode === null) {
     liveRuntime.child.kill("SIGKILL");
