@@ -759,20 +759,6 @@ export function registerAgentRuntimeSession(input: CreateAgentRuntimeSessionInpu
 
     disconnectSupersededSingletonSessions(parsed, sessionId, agentId, now);
 
-    recordActivityEvent({
-      entityType: "session",
-      entityId: sessionId,
-      eventType: "agent_session_registered",
-      title: `Agent session registered: ${agentLabel}`,
-      description: `${parsed.provider} registered a live agent session.`,
-      actor: parsed.actorLabel,
-      source: "agent",
-      metadata: {
-        provider: parsed.provider,
-        sessionKey: parsed.sessionKey
-      }
-    });
-
     return mapSession(getSessionRowById(sessionId)!);
   });
 }
@@ -977,20 +963,6 @@ export function disconnectAgentRuntimeSession(
       summary: parsed.note,
       metadata: parsed.lastError ? { lastError: parsed.lastError } : {}
     }, now);
-    recordActivityEvent({
-      entityType: "session",
-      entityId: sessionId,
-      eventType: "agent_session_disconnected",
-      title: `Agent session disconnected: ${row.agent_label}`,
-      description:
-        parsed.note || `${row.provider} session marked disconnected.`,
-      actor: row.actor_label,
-      source: "agent",
-      metadata: {
-        provider: row.provider,
-        sessionKey: row.session_key
-      }
-    });
     return mapSession(getSessionRowById(sessionId)!);
   });
 }
