@@ -1,7 +1,5 @@
-Forge Companion 1.0.83 improves first-run onboarding and pairing recovery.
+Forge Companion 1.0.84 fixes CLI QR pairing.
 
-Forge Memory now shows visible installer progress after every prompt, runs doctor checks before finishing, and gives repair steps instead of raw network errors when pairing cannot reach the desktop runtime.
+The iOS app now understands the shorter QR payload emitted by Forge Memory, scans all detected QR candidates before giving up, and logs malformed QR payloads instead of silently ignoring them.
 
-The iOS setup flow now matches the CLI: scan the compact Iroh QR, or paste the saved payload from ~/.forge/pairing/ when the terminal QR is too large to scan.
-
-Manual HTTP setup now clearly requires a Tailscale or LAN URL for a real iPhone, while localhost remains limited to simulator/debugging setups.
+Manual setup is more forgiving too: paste the saved payload from ~/.forge/pairing/, Forge Settings -> Mobile, or the full output from npx forge-memory pair-ios --json.

@@ -10,19 +10,27 @@ final class QRPairingScanner: NSObject, AVCaptureMetadataOutputObjectsDelegate {
         from connection: AVCaptureConnection
     ) {
         companionDebugLog("QRPairingScanner", "metadataOutput count=\(metadataObjects.count)")
-        guard
-            let object = metadataObjects.first as? AVMetadataMachineReadableCodeObject,
-            let stringValue = object.stringValue,
-            let data = stringValue.data(using: .utf8),
-            let payload = try? JSONDecoder().decode(PairingPayload.self, from: data)
-        else {
-            companionDebugLog("QRPairingScanner", "metadataOutput ignored invalid payload")
-            return
+        for metadataObject in metadataObjects {
+            guard
+                let object = metadataObject as? AVMetadataMachineReadableCodeObject,
+                let stringValue = object.stringValue
+            else {
+                continue
+            }
+            do {
+                let payload = try PairingPayload.decodePairingText(stringValue)
+                companionDebugLog(
+                    "QRPairingScanner",
+                    "metadataOutput decoded session=\(payload.sessionId) apiBaseUrl=\(payload.apiBaseUrl)"
+                )
+                onPayload?(payload)
+                return
+            } catch {
+                companionDebugLog(
+                    "QRPairingScanner",
+                    "metadataOutput ignored invalid payload error=\(error.localizedDescription)"
+                )
+            }
         }
-        companionDebugLog(
-            "QRPairingScanner",
-            "metadataOutput decoded session=\(payload.sessionId) apiBaseUrl=\(payload.apiBaseUrl)"
-        )
-        onPayload?(payload)
     }
 }

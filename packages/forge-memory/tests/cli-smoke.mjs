@@ -502,6 +502,26 @@ await withFakeForgeServer(async (request, body) => {
   if (pairingRequest?.headers.cookie !== "forge_operator_session=test-session") {
     throw new Error("Expected pair-ios to send the local operator session cookie to the pairing route");
   }
+  const humanPairing = await runAsync(["pair-ios", "--no-start"]);
+  const payloadSizeMatch = humanPairing.stdout.match(
+    /QR payload bytes: (?<qr>\d+); manual payload bytes: (?<manual>\d+)/
+  );
+  if (!payloadSizeMatch?.groups) {
+    throw new Error("Expected pair-ios to report QR and manual payload byte counts");
+  }
+  if (Number(payloadSizeMatch.groups.qr) >= Number(payloadSizeMatch.groups.manual)) {
+    throw new Error("Expected short QR payload to be smaller than the saved manual payload");
+  }
+  const savedPairingPath = path.join(
+    tempHome,
+    ".forge",
+    "pairing",
+    "forge-companion-pair_test.json"
+  );
+  const savedPairing = JSON.parse(fs.readFileSync(savedPairingPath, "utf8"));
+  if (savedPairing.sessionId !== "pair_test" || savedPairing.pairingToken !== "pairing-token") {
+    throw new Error("Expected pair-ios to save the full manual pairing payload");
+  }
 });
 await withFakeForgeServer(async (request) => {
   if (request.url === "/api/v1/health") return { body: forgeHealthResponse() };

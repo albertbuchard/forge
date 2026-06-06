@@ -231,6 +231,82 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(normalized.transport?.notes.first, "Iroh transport is active.")
     }
 
+    func testPairingPayloadDecodesShortCliQrPayload() throws {
+        let json = """
+        {
+          "k": "fcp1",
+          "a": "forge-iroh://shortnodeid/api/v1",
+          "m": "iroh",
+          "t": {
+            "p": "iroh",
+            "pp": {
+              "v": 1,
+              "n": "shortnodeid",
+              "t": "hosttoken",
+              "h": "test-host",
+              "r": "https://relay.example.com"
+            }
+          },
+          "s": "pair_short",
+          "pt": "pairing-token",
+          "e": "2099-01-01T00:00:00Z",
+          "c": ["health-sync"]
+        }
+        """
+
+        let payload = try JSONDecoder().decode(
+            PairingPayload.self,
+            from: Data(json.utf8)
+        )
+        let normalized = CompanionPairingURLResolver.normalizedPayload(payload)
+
+        XCTAssertEqual(payload.kind, "forge-companion-pairing")
+        XCTAssertEqual(normalized.apiBaseUrl, "forge-iroh://shortnodeid/api/v1")
+        XCTAssertEqual(normalized.uiBaseUrl, "forge-iroh://shortnodeid/forge/")
+        XCTAssertEqual(normalized.transportMode, "iroh")
+        XCTAssertEqual(normalized.transport?.protocolName, "iroh")
+        XCTAssertEqual(normalized.transport?.provider, "forge-companion-iroh")
+        XCTAssertEqual(normalized.transport?.status, "ready")
+        XCTAssertEqual(normalized.transport?.notes, [])
+        XCTAssertEqual(normalized.transport?.pairPayload?.nodeId, "shortnodeid")
+        XCTAssertEqual(normalized.transport?.pairPayload?.token, "hosttoken")
+        XCTAssertEqual(normalized.sessionId, "pair_short")
+        XCTAssertEqual(normalized.pairingToken, "pairing-token")
+    }
+
+    func testPairingPayloadDecoderAcceptsCliJsonEnvelope() throws {
+        let json = """
+        {
+          "qrPayload": {
+            "kind": "forge-companion-pairing",
+            "apiBaseUrl": "forge-iroh://envelopednode/api/v1",
+            "transportMode": "iroh",
+            "transport": {
+              "protocol": "iroh",
+              "provider": "forge-companion-iroh",
+              "pairPayload": {
+                "v": 1,
+                "node_id": "envelopednode",
+                "token": "hosttoken"
+              }
+            },
+            "sessionId": "pair_envelope",
+            "pairingToken": "pairing-token",
+            "expiresAt": "2099-01-01T00:00:00Z",
+            "capabilities": ["health-sync"]
+          }
+        }
+        """
+
+        let payload = try PairingPayload.decodePairingText(json)
+        let normalized = CompanionPairingURLResolver.normalizedPayload(payload)
+
+        XCTAssertEqual(normalized.sessionId, "pair_envelope")
+        XCTAssertEqual(normalized.apiBaseUrl, "forge-iroh://envelopednode/api/v1")
+        XCTAssertEqual(normalized.uiBaseUrl, "forge-iroh://envelopednode/forge/")
+        XCTAssertEqual(normalized.transport?.pairPayload?.nodeId, "envelopednode")
+    }
+
     func testWatchBootstrapDecodesCompactHabitPayload() throws {
         let json = """
         {

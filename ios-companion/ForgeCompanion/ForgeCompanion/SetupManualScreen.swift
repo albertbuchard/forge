@@ -101,7 +101,7 @@ struct SetupManualScreen: View {
                                 .font(.system(size: 16, weight: .bold, design: .rounded))
                                 .foregroundStyle(CompanionStyle.textPrimary)
 
-                            Text("Use this if the camera cannot scan. Copy the payload saved by npx forge-memory under ~/.forge/pairing/, or from Forge Settings -> Mobile.")
+                            Text("Use this if the camera cannot scan. Paste the saved payload from ~/.forge/pairing/, Forge Settings -> Mobile, or npx forge-memory pair-ios --json.")
                                 .font(.system(size: 13, weight: .medium, design: .rounded))
                                 .foregroundStyle(CompanionStyle.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -192,11 +192,12 @@ struct SetupManualScreen: View {
         companionDebugLog("SetupManualScreen", "connectPairingCode start")
         localError = nil
         let trimmed = payloadText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let data = trimmed.data(using: .utf8),
-              let payload = try? JSONDecoder().decode(PairingPayload.self, from: data)
-        else {
+        let payload: PairingPayload
+        do {
+            payload = try PairingPayload.decodePairingText(trimmed)
+        } catch {
             companionDebugLog("SetupManualScreen", "connectPairingCode invalid pairing code")
-            localError = "Invalid pairing payload. Paste the full JSON payload from ~/.forge/pairing/ or Forge Settings -> Mobile."
+            localError = "Invalid pairing payload. Paste the JSON payload from ~/.forge/pairing/, Forge Settings -> Mobile, or npx forge-memory pair-ios --json."
             return
         }
 

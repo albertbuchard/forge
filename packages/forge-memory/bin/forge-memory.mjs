@@ -1766,6 +1766,48 @@ function compactPairingPayload(payload) {
   });
 }
 
+function compactQrPairingPayload(payload) {
+  const manualPayload = compactPairingPayload(payload);
+  const transport = manualPayload.transport
+    ? compactObject({
+        p: manualPayload.transport.protocol,
+        d: manualPayload.transport.provider,
+        s: manualPayload.transport.status,
+        pb: manualPayload.transport.publicBaseUrl,
+        lb: manualPayload.transport.localBaseUrl,
+        n: manualPayload.transport.nodeId,
+        r: manualPayload.transport.relay,
+        a: manualPayload.transport.alpn,
+        g: manualPayload.transport.agent,
+        pp: manualPayload.transport.pairPayload
+          ? compactObject({
+              v: manualPayload.transport.pairPayload.v,
+              n:
+                manualPayload.transport.pairPayload.node_id ??
+                manualPayload.transport.pairPayload.nodeId,
+              t: manualPayload.transport.pairPayload.token,
+              h:
+                manualPayload.transport.pairPayload.host_name ??
+                manualPayload.transport.pairPayload.hostName,
+              r: manualPayload.transport.pairPayload.relay
+            })
+          : undefined,
+        le: manualPayload.transport.lastError
+      })
+    : undefined;
+  return compactObject({
+    k: "fcp1",
+    a: manualPayload.apiBaseUrl,
+    u: manualPayload.uiBaseUrl,
+    m: manualPayload.transportMode,
+    t: transport,
+    s: manualPayload.sessionId,
+    pt: manualPayload.pairingToken,
+    e: manualPayload.expiresAt,
+    c: manualPayload.capabilities
+  });
+}
+
 function compactObject(value) {
   if (Array.isArray(value)) {
     const compacted = value.map((entry) => compactObject(entry)).filter((entry) => entry !== undefined);
@@ -1805,27 +1847,28 @@ function isLoopbackPairingUrl(value) {
 }
 
 async function printPairing(pairing) {
-  const payload = compactPairingPayload(pairing.qrPayload);
-  const payloadText = JSON.stringify(payload);
+  const manualPayload = compactPairingPayload(pairing.qrPayload);
+  const qrPayload = compactQrPairingPayload(pairing.qrPayload);
+  const qrPayloadText = JSON.stringify(qrPayload);
   const terminalColumns = process.stdout.columns ?? 120;
-  if (terminalColumns >= 72 && payloadText.length <= 2_950) {
+  if (terminalColumns >= 72 && qrPayloadText.length <= 1_500) {
     console.log("\nScan this compact QR in Forge Companion:\n");
-    qrcode.generate(payloadText, { small: true });
+    qrcode.generate(qrPayloadText, { small: true });
   } else {
     console.log("");
     console.log(color.yellow("QR skipped because the terminal is too narrow or the payload is too large to scan reliably."));
     console.log("Use Manual connection in the iPhone app and paste the saved payload below.");
   }
-  const transport = payload.transport;
+  const transport = manualPayload.transport;
   if (transport?.provider) {
     const label =
-      payload.transport?.protocol === "iroh"
+      manualPayload.transport?.protocol === "iroh"
         ? "Iroh"
-        : payload.transportMode === "iroh"
+        : manualPayload.transportMode === "iroh"
           ? "Iroh"
           : "Manual HTTP";
-    console.log(`${color.cyan(label)}: ${payload.apiBaseUrl}`);
-    if (label === "Manual HTTP" && isLoopbackPairingUrl(payload.apiBaseUrl)) {
+    console.log(`${color.cyan(label)}: ${manualPayload.apiBaseUrl}`);
+    if (label === "Manual HTTP" && isLoopbackPairingUrl(manualPayload.apiBaseUrl)) {
       console.log(
         color.yellow(
           "Manual HTTP points at this machine's loopback address. That is only useful for the iOS Simulator; a real iPhone needs Iroh, Tailscale, or a LAN URL passed with --public-url."
@@ -1837,7 +1880,7 @@ async function printPairing(pairing) {
     }
   }
   try {
-    const filePath = await writePairingPayloadFile(payload);
+    const filePath = await writePairingPayloadFile(manualPayload);
     console.log("");
     console.log(color.bold("If the QR is too large or the camera will not scan:"));
     console.log("1. Open Manual connection in the iPhone app.");
@@ -1845,14 +1888,18 @@ async function printPairing(pairing) {
     console.log(`3. Paste the payload saved at: ${filePath}`);
     console.log(color.dim(`   cat ${filePath}`));
     console.log("");
-    console.log(color.dim(`Compact payload bytes: ${payloadText.length}`));
+    console.log(
+      color.dim(
+        `QR payload bytes: ${qrPayloadText.length}; manual payload bytes: ${JSON.stringify(manualPayload).length}`
+      )
+    );
   } catch (error) {
     console.log(
       color.yellow(
         `Could not save pairing payload file: ${error instanceof Error ? error.message : String(error)}`
       )
     );
-    console.log(payloadText);
+    console.log(JSON.stringify(manualPayload));
   }
 }
 

@@ -86,6 +86,54 @@ struct PairingTransportPairPayload: Codable, Hashable {
         case hostName = "host_name"
         case relay
     }
+
+    enum ShortCodingKeys: String, CodingKey {
+        case v
+        case nodeId = "n"
+        case token = "t"
+        case hostName = "h"
+        case relay = "r"
+    }
+
+    init(v: Int, nodeId: String, token: String, hostName: String?, relay: String?) {
+        self.v = v
+        self.nodeId = nodeId
+        self.token = token
+        self.hostName = hostName
+        self.relay = relay
+    }
+
+    init(from decoder: Decoder) throws {
+        let full = try decoder.container(keyedBy: CodingKeys.self)
+        let short = try decoder.container(keyedBy: ShortCodingKeys.self)
+        v = (try? full.decode(Int.self, forKey: .v))
+            ?? (try? short.decode(Int.self, forKey: .v))
+            ?? 1
+        guard
+            let decodedNodeId = (try? full.decode(String.self, forKey: .nodeId))
+                ?? (try? short.decode(String.self, forKey: .nodeId))
+        else {
+            throw DecodingError.keyNotFound(
+                CodingKeys.nodeId,
+                DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Missing Iroh node id.")
+            )
+        }
+        guard
+            let decodedToken = (try? full.decode(String.self, forKey: .token))
+                ?? (try? short.decode(String.self, forKey: .token))
+        else {
+            throw DecodingError.keyNotFound(
+                CodingKeys.token,
+                DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Missing Iroh host token.")
+            )
+        }
+        nodeId = decodedNodeId
+        token = decodedToken
+        hostName = (try? full.decodeIfPresent(String.self, forKey: .hostName))
+            ?? (try? short.decodeIfPresent(String.self, forKey: .hostName))
+        relay = (try? full.decodeIfPresent(String.self, forKey: .relay))
+            ?? (try? short.decodeIfPresent(String.self, forKey: .relay))
+    }
 }
 
 struct PairingTransport: Codable, Hashable {
@@ -120,6 +168,86 @@ struct PairingTransport: Codable, Hashable {
         case lastError
         case notes
     }
+
+    enum ShortCodingKeys: String, CodingKey {
+        case protocolName = "p"
+        case provider = "d"
+        case status = "s"
+        case publicBaseUrl = "pb"
+        case localBaseUrl = "lb"
+        case nodeId = "n"
+        case relay = "r"
+        case alpn = "a"
+        case agent = "g"
+        case pairPayload = "pp"
+        case lastError = "le"
+    }
+
+    init(
+        protocolName: String,
+        provider: String,
+        status: String,
+        publicBaseUrl: String?,
+        localBaseUrl: String?,
+        nodeId: String?,
+        relay: String?,
+        alpn: String?,
+        agent: String?,
+        pairPayload: PairingTransportPairPayload?,
+        recreateCommand: String?,
+        startedAt: String?,
+        lastError: String?,
+        notes: [String]
+    ) {
+        self.protocolName = protocolName
+        self.provider = provider
+        self.status = status
+        self.publicBaseUrl = publicBaseUrl
+        self.localBaseUrl = localBaseUrl
+        self.nodeId = nodeId
+        self.relay = relay
+        self.alpn = alpn
+        self.agent = agent
+        self.pairPayload = pairPayload
+        self.recreateCommand = recreateCommand
+        self.startedAt = startedAt
+        self.lastError = lastError
+        self.notes = notes
+    }
+
+    init(from decoder: Decoder) throws {
+        let full = try decoder.container(keyedBy: CodingKeys.self)
+        let short = try decoder.container(keyedBy: ShortCodingKeys.self)
+        let decodedProtocol = (try? full.decode(String.self, forKey: .protocolName))
+            ?? (try? short.decode(String.self, forKey: .protocolName))
+            ?? "iroh"
+        protocolName = decodedProtocol
+        provider = (try? full.decode(String.self, forKey: .provider))
+            ?? (try? short.decode(String.self, forKey: .provider))
+            ?? (decodedProtocol == "iroh" ? "forge-companion-iroh" : "manual-http")
+        status = (try? full.decode(String.self, forKey: .status))
+            ?? (try? short.decode(String.self, forKey: .status))
+            ?? "ready"
+        publicBaseUrl = (try? full.decodeIfPresent(String.self, forKey: .publicBaseUrl))
+            ?? (try? short.decodeIfPresent(String.self, forKey: .publicBaseUrl))
+        localBaseUrl = (try? full.decodeIfPresent(String.self, forKey: .localBaseUrl))
+            ?? (try? short.decodeIfPresent(String.self, forKey: .localBaseUrl))
+        nodeId = (try? full.decodeIfPresent(String.self, forKey: .nodeId))
+            ?? (try? short.decodeIfPresent(String.self, forKey: .nodeId))
+        relay = (try? full.decodeIfPresent(String.self, forKey: .relay))
+            ?? (try? short.decodeIfPresent(String.self, forKey: .relay))
+        alpn = (try? full.decodeIfPresent(String.self, forKey: .alpn))
+            ?? (try? short.decodeIfPresent(String.self, forKey: .alpn))
+        agent = (try? full.decodeIfPresent(String.self, forKey: .agent))
+            ?? (try? short.decodeIfPresent(String.self, forKey: .agent))
+        pairPayload = (try? full.decodeIfPresent(PairingTransportPairPayload.self, forKey: .pairPayload))
+            ?? (try? short.decodeIfPresent(PairingTransportPairPayload.self, forKey: .pairPayload))
+        recreateCommand = try? full.decodeIfPresent(String.self, forKey: .recreateCommand)
+        startedAt = try? full.decodeIfPresent(String.self, forKey: .startedAt)
+        lastError = (try? full.decodeIfPresent(String.self, forKey: .lastError))
+            ?? (try? short.decodeIfPresent(String.self, forKey: .lastError))
+        notes = (try? full.decodeIfPresent([String].self, forKey: .notes)) ?? []
+    }
 }
 
 extension PairingTransport {
@@ -138,6 +266,30 @@ struct PairingPayload: Codable {
     let pairingToken: String
     let expiresAt: String
     let capabilities: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case kind
+        case apiBaseUrl
+        case uiBaseUrl
+        case transportMode
+        case transport
+        case sessionId
+        case pairingToken
+        case expiresAt
+        case capabilities
+    }
+
+    enum ShortCodingKeys: String, CodingKey {
+        case kind = "k"
+        case apiBaseUrl = "a"
+        case uiBaseUrl = "u"
+        case transportMode = "m"
+        case transport = "t"
+        case sessionId = "s"
+        case pairingToken = "pt"
+        case expiresAt = "e"
+        case capabilities = "c"
+    }
 
     init(
         kind: String,
@@ -159,6 +311,82 @@ struct PairingPayload: Codable {
         self.pairingToken = pairingToken
         self.expiresAt = expiresAt
         self.capabilities = capabilities
+    }
+
+    init(from decoder: Decoder) throws {
+        let full = try decoder.container(keyedBy: CodingKeys.self)
+        let short = try decoder.container(keyedBy: ShortCodingKeys.self)
+        let decodedKind = (try? full.decode(String.self, forKey: .kind))
+            ?? (try? short.decode(String.self, forKey: .kind))
+            ?? "forge-companion-pairing"
+        kind = decodedKind == "fcp1" ? "forge-companion-pairing" : decodedKind
+        let decodedTransport = (try? full.decodeIfPresent(PairingTransport.self, forKey: .transport))
+            ?? (try? short.decodeIfPresent(PairingTransport.self, forKey: .transport))
+        transport = decodedTransport
+        if let decodedApiBaseUrl = (try? full.decode(String.self, forKey: .apiBaseUrl))
+            ?? (try? short.decode(String.self, forKey: .apiBaseUrl)) {
+            apiBaseUrl = decodedApiBaseUrl
+        } else if let nodeId = decodedTransport?.pairPayload?.nodeId {
+            apiBaseUrl = "forge-iroh://\(nodeId)/api/v1"
+        } else {
+            throw DecodingError.keyNotFound(
+                CodingKeys.apiBaseUrl,
+                DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Missing Forge API base URL.")
+            )
+        }
+        uiBaseUrl = (try? full.decodeIfPresent(String.self, forKey: .uiBaseUrl))
+            ?? (try? short.decodeIfPresent(String.self, forKey: .uiBaseUrl))
+        transportMode = (try? full.decodeIfPresent(String.self, forKey: .transportMode))
+            ?? (try? short.decodeIfPresent(String.self, forKey: .transportMode))
+        guard
+            let decodedSessionId = (try? full.decode(String.self, forKey: .sessionId))
+                ?? (try? short.decode(String.self, forKey: .sessionId))
+        else {
+            throw DecodingError.keyNotFound(
+                CodingKeys.sessionId,
+                DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Missing pairing session id.")
+            )
+        }
+        guard
+            let decodedPairingToken = (try? full.decode(String.self, forKey: .pairingToken))
+                ?? (try? short.decode(String.self, forKey: .pairingToken))
+        else {
+            throw DecodingError.keyNotFound(
+                CodingKeys.pairingToken,
+                DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Missing pairing token.")
+            )
+        }
+        sessionId = decodedSessionId
+        pairingToken = decodedPairingToken
+        expiresAt = (try? full.decode(String.self, forKey: .expiresAt))
+            ?? (try? short.decode(String.self, forKey: .expiresAt))
+            ?? ""
+        capabilities = (try? full.decode([String].self, forKey: .capabilities))
+            ?? (try? short.decode([String].self, forKey: .capabilities))
+            ?? []
+    }
+}
+
+private struct PairingPayloadEnvelope: Decodable {
+    let qrPayload: PairingPayload
+}
+
+extension PairingPayload {
+    static func decodePairingText(_ text: String) throws -> PairingPayload {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let data = trimmed.data(using: .utf8) else {
+            throw DecodingError.dataCorrupted(
+                DecodingError.Context(codingPath: [], debugDescription: "Pairing text is not valid UTF-8.")
+            )
+        }
+        let decoder = JSONDecoder()
+        if let payload = try? decoder.decode(PairingPayload.self, from: data) {
+            return payload
+        }
+        if let envelope = try? decoder.decode(PairingPayloadEnvelope.self, from: data) {
+            return envelope.qrPayload
+        }
+        return try decoder.decode(PairingPayload.self, from: data)
     }
 }
 
