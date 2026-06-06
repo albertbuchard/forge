@@ -201,6 +201,10 @@ For all other entity creation and update flows, use
 [`entity_conversation_playbooks.md`](./entity_conversation_playbooks.md) before you
 fall back to field-by-field intake. When the user is vague, ask for one small concrete
 example, stake, or desired outcome before asking them to name the record.
+Before asking another follow-up, run the playbook's minimum save-readiness checkpoint:
+if accepted wording, meaningful body, route lane, target object or time scope, and any
+ownership or placement that changes later use are already clear, summarize once and
+write, read, run, or update instead of collecting optional fields.
 Use those same playbooks for action-heavy non-Psyche flows such as
 `work_adjustment`, `preference_judgment`, `preference_signal`, and specialized
 `movement`, `life_force`, or `workbench` work so Hermes starts from the user's real
@@ -218,6 +222,10 @@ ask what the record should help the user understand, decide, notice, remember, o
 change later, then choose the right route. Do not flatten them into forms, but also
 do not automatically turn them into full Psyche intake unless a belief, mode,
 trigger report, or behavior pattern clearly emerges.
+After a Psyche formulation lands, use the Psyche save-readiness checkpoint from the
+playbook. If the belief sentence, functional loop, behavior move, part-state, trigger
+episode, value, event type, emotion definition, or flashcard cue/message is true
+enough to save, ask at most one accuracy question and then use shared batch CRUD.
 When the operation is not already explicit, identify the job first:
 add, update, review, compare, navigate, link, or run. Skip that meta question when
 the action is already obvious from the user's wording.

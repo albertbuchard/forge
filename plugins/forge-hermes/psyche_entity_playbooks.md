@@ -236,6 +236,37 @@ of leaving it as warm reflective prose.
 - Save through shared batch entity routes only after the user accepts the working
   wording or explicitly asks to save.
 
+## Psyche save-readiness checkpoint
+
+Use this before asking another deepening question. Psyche work should feel careful,
+but not endless. Once the user recognizes the working formulation, protect momentum and
+save the record instead of reopening the whole story.
+
+- For `belief_entry`, the minimum is the accepted sentence or prediction plus whether
+  it is mainly about self, others, world/safety, or outcome when that distinction is
+  visible.
+- For `behavior_pattern`, the minimum is a concrete cue or situation, the felt
+  meaning/body shift, the behavior or urge, and at least one payoff or cost. A
+  preferred response is useful, but do not force it before saving a provisional
+  functional analysis.
+- For `behavior`, the minimum is the repeated move, the cue or urge that brings it
+  online, and whether the move functions as avoidance, committed action, repair, or
+  recovery when that is clear.
+- For `mode_profile`, the minimum is the part's voice or posture, what it is trying
+  to protect, and what danger or burden it expects.
+- For `mode_guide_session`, the minimum is the present trigger, a brief summary of
+  what the active part seems to want, and the answers gathered so far.
+- For `trigger_report`, the minimum is the situation, felt stake, meaning or thought,
+  action/urge, and consequence that make it one emotionally meaningful episode.
+- For `psyche_value`, `event_type`, and `emotion_definition`, the minimum is the
+  future use: what this value, recurring moment, or lived feeling label will help
+  future reports notice consistently.
+- For `flashcard`, the minimum is the cue or urge sentence and one brief message the
+  user can recognize while triggered. Link to beliefs, modes, values, or patterns only
+  when the link is already clear or will materially improve retrieval.
+- After the minimum is present, ask one accuracy question at most: "Is this true
+  enough to save as a first version?" If yes, save through shared batch CRUD.
+
 ## Psyche Hypothesis Map
 
 Use these shapes after at least one concrete example is clear. The hypothesis should

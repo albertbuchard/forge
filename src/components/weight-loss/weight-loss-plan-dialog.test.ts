@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildTargetPatchFromPlan,
   buildInitialPlanDraft,
   calculatePlan,
   validateWeightLossPlanDraft,
@@ -16,7 +17,7 @@ const baseDraft: WeightLossPlanDraft = {
   goalWeightKg: "76",
   weeklyRateKg: "0.4",
   activeCaloriesKcal: "500",
-  restingCaloriesKcal: "1700",
+  restingCaloriesKcal: "1292",
   dietStyle: ""
 };
 
@@ -29,9 +30,11 @@ describe("calculatePlan", () => {
     expect(loss.activeCalories).toBe(500);
     expect(gain.activeCalories).toBe(500);
     expect(maintain.activeCalories).toBe(500);
-    expect(loss.maintenanceCalories).toBe(2200);
-    expect(gain.maintenanceCalories).toBe(2200);
-    expect(maintain.maintenanceCalories).toBe(2200);
+    expect(loss.restingCalories).toBe(1743);
+    expect(loss.restingSource).toBe("Mifflin-St Jeor baseline");
+    expect(loss.maintenanceCalories).toBe(2243);
+    expect(gain.maintenanceCalories).toBe(2243);
+    expect(maintain.maintenanceCalories).toBe(2243);
     expect(loss.dailyEnergyAdjustment).toBeLessThan(0);
     expect(gain.dailyEnergyAdjustment).toBeGreaterThan(0);
     expect(maintain.dailyEnergyAdjustment).toBe(0);
@@ -92,7 +95,7 @@ describe("calculatePlan", () => {
     expect(plan.fiberGramsTarget).toBe(21);
   });
 
-  it("computes maintenance from resting plus active before applying the objective", () => {
+  it("computes maintenance from formula resting plus active before applying the objective", () => {
     const plan = calculatePlan({
       ...baseDraft,
       goalMode: "lose",
@@ -101,10 +104,50 @@ describe("calculatePlan", () => {
       weeklyRateKg: "0.7"
     });
 
-    expect(plan.maintenanceCalories).toBe(2300);
-    expect(plan.dailyEnergyAdjustment).toBe(-770);
-    expect(plan.plannedCalorieTarget).toBe(1530);
-    expect(plan.calorieTarget).toBe(1530);
+    expect(plan.restingCalories).toBe(1743);
+    expect(plan.restingSource).toBe("Mifflin-St Jeor baseline");
+    expect(plan.maintenanceCalories).toBe(2393);
+    expect(plan.dailyEnergyAdjustment).toBe(-901);
+    expect(plan.staticDailyEnergyAdjustment).toBe(-770);
+    expect(plan.rateModel).toBe("hall_niddk_linearized_adult_12w");
+    expect(plan.plannedCalorieTarget).toBe(1492);
+    expect(plan.calorieTarget).toBe(1500);
+  });
+
+  it("ignores legacy saved resting values and uses the formula baseline", () => {
+    const plan = calculatePlan({
+      ...baseDraft,
+      ageYears: "39",
+      heightCm: "180",
+      currentWeightKg: "84",
+      restingCaloriesKcal: "1292",
+      activeCaloriesKcal: "388",
+      weeklyRateKg: "0.35"
+    });
+
+    expect(plan.bmr).toBe(1775);
+    expect(plan.restingCalories).toBe(1775);
+    expect(plan.maintenanceCalories).toBe(2163);
+    expect(plan.dailyEnergyAdjustment).toBe(-450);
+    expect(plan.staticDailyEnergyAdjustment).toBe(-385);
+    expect(plan.plannedCalorieTarget).toBe(1713);
+    expect(plan.calorieTarget).toBe(1713);
+  });
+
+  it("saves Hall/NIDDK rate-model provenance with a static comparison", () => {
+    const patch = buildTargetPatchFromPlan({
+      ...baseDraft,
+      ageYears: "39",
+      heightCm: "180",
+      currentWeightKg: "84",
+      activeCaloriesKcal: "388",
+      weeklyRateKg: "0.35"
+    });
+
+    expect(patch.calorieTarget).toBe(1713);
+    expect(patch.notes).toContain("rate_model=hall_niddk_linearized_adult_12w");
+    expect(patch.notes).toContain("rate_model_horizon_days=84");
+    expect(patch.notes).toContain("static_7700_adjustment_kcal=-385");
   });
 
   it("keeps unknown profile fields blank instead of pretending defaults are known", () => {
@@ -129,6 +172,33 @@ describe("calculatePlan", () => {
     expect(draft.heightCm).toBe("");
     expect(draft.currentWeightKg).toBe("");
     expect(draft.goalWeightKg).toBe("76.0");
+  });
+
+  it("prefills formula resting instead of legacy saved resting notes", () => {
+    const view = {
+      target: {
+        notes:
+          "Forge science plan; height_cm=180; age_years=39; sex=male; resting_kcal=1292; activity_kcal=388",
+        bodyGoal: "lose",
+        weightGoalKg: 76,
+        goalBodyWeightKg: null,
+        weeklyRateGoalKg: -0.35,
+        dietStyle: null
+      },
+      weightTrend: {
+        latestWeightKg: 84
+      },
+      energyModel: {
+        formulaRestingKcal: 1775,
+        restingEnergyCalories: 1775
+      }
+    } as WeightLossViewData;
+
+    const draft = buildInitialPlanDraft(view);
+
+    expect(draft.restingCaloriesKcal).toBe("1775");
+    expect(draft.restingCaloriesKcal).not.toBe("1292");
+    expect(draft.activeCaloriesKcal).toBe("388");
   });
 
   it("requires real setup fields before saving the plan", () => {

@@ -13,6 +13,8 @@ export type WeightLossFormulaValues = {
   maintenanceKcal?: number | null;
   weeklyRateKg?: number | null;
   dailyAdjustmentKcal?: number | null;
+  rateModel?: string | null;
+  rateModelHorizonDays?: number | null;
   calorieTarget?: number | null;
   calorieFloor?: number | null;
   proteinReferenceWeightKg?: number | null;
@@ -63,18 +65,19 @@ export function WeightLossFormulaTooltip({
         <div className="grid gap-3">
           <p>
             Forge keeps activity independent from the goal. The goal only adds a
-            deficit, surplus, or zero adjustment to resting plus active
-            calories.
+            deficit, surplus, or zero adjustment to the formula resting
+            baseline plus active calories. Complete HealthKit basal energy is
+            calibration evidence, not the silent baseline.
           </p>
           <ol className="grid gap-2">
             {formulaLine(
-              "Mifflin-St Jeor BMR",
+              "Mifflin-St Jeor resting baseline",
               `10 x weight kg + 6.25 x height cm - 5 x age ${sexConstant}`,
               `Current formula value: ${formatNumber(values?.bmrKcal)} kcal/day.`
             )}
             {formulaLine(
               "Resting calories",
-              "HealthKit basal/resting kcal when present, otherwise BMR",
+              "Mifflin-St Jeor formula baseline; HealthKit basal is complete-day evidence only",
               `Using: ${formatNumber(values?.restingKcal)} kcal/day${values?.restingSource ? ` (${values.restingSource})` : ""}.`
             )}
             {formulaLine(
@@ -84,8 +87,8 @@ export function WeightLossFormulaTooltip({
             )}
             {formulaLine(
               "Objective adjustment",
-              "weekly change kg x 7700 kcal/kg / 7",
-              `Weekly rate ${formatSigned(values?.weeklyRateKg, 2)} kg/week gives ${formatSigned(values?.dailyAdjustmentKcal)} kcal/day.`
+              "Hall/NIDDK linearized adult model, inverted over the planning horizon",
+              `Weekly rate ${formatSigned(values?.weeklyRateKg, 2)} kg/week gives ${formatSigned(values?.dailyAdjustmentKcal)} kcal/day${values?.rateModel ? ` with ${values.rateModel}` : ""}${values?.rateModelHorizonDays ? ` over ${values.rateModelHorizonDays} days` : ""}.`
             )}
             {formulaLine(
               "Daily calorie target",

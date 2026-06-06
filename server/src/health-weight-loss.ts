@@ -11,6 +11,7 @@ import type {
   LlmManager,
   WikiLlmProfileLike
 } from "./managers/platform/llm-manager.js";
+import { hallNiddkWeeklyRateKgToDailyEnergyAdjustment } from "../../src/lib/weight-loss-energy-model.js";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -549,12 +550,33 @@ function average(values: Array<number | null | undefined>) {
   return real.reduce((sum, value) => sum + value, 0) / real.length;
 }
 
-function metricTotal(metrics: Record<string, unknown>, key: string) {
+function median(values: number[]) {
+  const sorted = values
+    .filter((value) => Number.isFinite(value))
+    .sort((left, right) => left - right);
+  if (sorted.length === 0) {
+    return null;
+  }
+  const middle = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 1) {
+    return sorted[middle] ?? null;
+  }
+  return ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2;
+}
+
+function metricRecord(metrics: Record<string, unknown>, key: string) {
   const metric = metrics[key];
   if (!metric || typeof metric !== "object") {
     return null;
   }
-  const record = metric as Record<string, unknown>;
+  return metric as Record<string, unknown>;
+}
+
+function metricTotal(metrics: Record<string, unknown>, key: string) {
+  const record = metricRecord(metrics, key);
+  if (!record) {
+    return null;
+  }
   for (const field of ["total", "average", "latest"]) {
     const value = record[field];
     if (typeof value === "number" && Number.isFinite(value)) {
@@ -562,6 +584,34 @@ function metricTotal(metrics: Record<string, unknown>, key: string) {
     }
   }
   return null;
+}
+
+function metricSampleCount(metrics: Record<string, unknown>, key: string) {
+  const value = metricRecord(metrics, key)?.sampleCount;
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function metricLatestSampleAt(metrics: Record<string, unknown>, key: string) {
+  const value = metricRecord(metrics, key)?.latestSampleAt;
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : null;
+}
+
+function sampleHourOfDay(value: string | null) {
+  if (!value) {
+    return null;
+  }
+  const match = value.match(/T(\d{2}):/);
+  if (match?.[1]) {
+    const parsed = Number(match[1]);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  return date.getHours();
 }
 
 function parsePlanNoteNumber(notes: string | null | undefined, key: string) {
@@ -572,6 +622,41 @@ function parsePlanNoteNumber(notes: string | null | undefined, key: string) {
   const match = notes.match(new RegExp(`${escapedKey}=([^;]+)`));
   const parsed = Number(match?.[1]?.trim());
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parsePlanNoteText(notes: string | null | undefined, key: string) {
+  if (!notes) {
+    return null;
+  }
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = notes.match(new RegExp(`${escapedKey}=([^;]+)`));
+  return match?.[1]?.trim() ?? null;
+}
+
+function mifflinStJeorRestingKcal(input: {
+  sex: string | null;
+  ageYears: number | null;
+  heightCm: number | null;
+  weightKg: number | null;
+}) {
+  if (
+    (input.sex !== "male" && input.sex !== "female") ||
+    input.ageYears == null ||
+    input.ageYears <= 0 ||
+    input.heightCm == null ||
+    input.heightCm <= 0 ||
+    input.weightKg == null ||
+    input.weightKg <= 0
+  ) {
+    return null;
+  }
+  const sexAdjustment = input.sex === "male" ? 5 : -161;
+  return (
+    10 * input.weightKg +
+    6.25 * input.heightCm -
+    5 * input.ageYears +
+    sexAdjustment
+  );
 }
 
 function estimateStepActiveCaloriesKcal(input: {
@@ -630,6 +715,9 @@ function buildStoredEnergyModel(input: {
   defaultActiveCalories: number | null;
   latestWeightKg: number | null;
   dailyActiveOverride: ReturnType<typeof mapDailyEnergyOverride>;
+  formulaRestingKcal: number | null;
+  savedRestingKcal: number | null;
+  activityEatBackFraction: number;
 }) {
   const todayKey = input.dateKey;
   const start = new Date(`${todayKey}T00:00:00.000Z`);
@@ -651,6 +739,8 @@ function buildStoredEnergyModel(input: {
       dateKey: row.date_key,
       activeEnergyKcal: metricTotal(metrics, "activeEnergyBurned"),
       restingEnergyKcal: metricTotal(metrics, "basalEnergyBurned"),
+      restingSampleCount: metricSampleCount(metrics, "basalEnergyBurned"),
+      restingLatestSampleAt: metricLatestSampleAt(metrics, "basalEnergyBurned"),
       exerciseMinutes: metricTotal(metrics, "appleExerciseTime"),
       stepCount: metricTotal(metrics, "stepCount")
     };
@@ -725,9 +815,68 @@ function buildStoredEnergyModel(input: {
   const activeEnergyAverage = average(
     dailyHealthKit.map((day) => day.activeEnergyKcal)
   );
-  const restingEnergyAverage = average(
-    dailyHealthKit.map((day) => day.restingEnergyKcal)
+  const restingEvidenceDays = dailyHealthKit.filter(
+    (day) => day.restingEnergyKcal != null
   );
+  const restingExclusionReasons: string[] = [];
+  const qualifiedRestingDays = restingEvidenceDays.filter((day) => {
+    const reasons: string[] = [];
+    if (day.dateKey >= todayKey) {
+      reasons.push("current_day_or_future_day");
+    }
+    if ((day.restingSampleCount ?? 0) < 24) {
+      reasons.push(`sample_count_${day.restingSampleCount ?? 0}_below_24`);
+    }
+    const latestSampleHour = sampleHourOfDay(day.restingLatestSampleAt);
+    if (latestSampleHour == null) {
+      reasons.push("missing_latest_basal_sample");
+    } else if (latestSampleHour < 20) {
+      reasons.push(`latest_basal_sample_hour_${latestSampleHour}_before_20`);
+    }
+    if (input.formulaRestingKcal != null && day.restingEnergyKcal != null) {
+      const lowThreshold = Math.max(input.formulaRestingKcal * 0.75, 1000);
+      if (day.restingEnergyKcal < lowThreshold) {
+        reasons.push(
+          `basal_${round(day.restingEnergyKcal, 0)}_below_${round(lowThreshold, 0)}`
+        );
+      }
+    }
+    if (reasons.length > 0) {
+      restingExclusionReasons.push(`${day.dateKey}: ${reasons.join(",")}`);
+      return false;
+    }
+    return true;
+  });
+  const wearableRestingKcal = median(
+    qualifiedRestingDays
+      .map((day) => day.restingEnergyKcal)
+      .filter((value): value is number => value != null)
+  );
+  const chosenRestingKcal =
+    input.formulaRestingKcal ?? input.savedRestingKcal ?? null;
+  const chosenRestingSource =
+    input.formulaRestingKcal != null
+      ? "mifflin_profile_baseline"
+      : input.savedRestingKcal != null
+        ? "saved_plan_legacy"
+        : null;
+  const restingConfidence = (() => {
+    if (input.formulaRestingKcal == null && input.savedRestingKcal != null) {
+      return "low";
+    }
+    if (input.formulaRestingKcal == null) {
+      return "low";
+    }
+    if (
+      wearableRestingKcal != null &&
+      Math.abs(wearableRestingKcal - input.formulaRestingKcal) /
+        input.formulaRestingKcal >
+        0.15
+    ) {
+      return "review";
+    }
+    return qualifiedRestingDays.length > 0 ? "high" : "medium";
+  })();
   const workoutEnergyAverage = average([...workoutByDay.values()]);
   const movementCaloriesAverage = average([...movementByDay.values()]);
   const fallbackActiveBurn =
@@ -826,16 +975,21 @@ function buildStoredEnergyModel(input: {
     input.dailyActiveOverride?.activeCaloriesKcal ??
     todayObservedActiveCalories ??
     baselineActiveCalories;
-  const todayTargetAdjustmentKcal =
-    todayActiveCalories - baselineActiveCalories;
+  const todayActiveSurplusKcal = Math.max(
+    0,
+    todayActiveCalories - baselineActiveCalories
+  );
+  const todayActivityBufferKcal =
+    todayActiveSurplusKcal * input.activityEatBackFraction;
+  const todayTargetAdjustmentKcal = todayActivityBufferKcal;
   const estimatedTdeeKcal =
-    activeBurnKcal != null && restingEnergyAverage != null
-      ? round(activeBurnKcal + restingEnergyAverage, 0)
+    activeBurnKcal != null && chosenRestingKcal != null
+      ? round(activeBurnKcal + chosenRestingKcal, 0)
       : input.inferredTdee;
   const hasHealthKitDailyActiveEnergy = activeEnergyAverage != null;
   const hasHealthKitEnergy =
     hasHealthKitDailyActiveEnergy ||
-    restingEnergyAverage != null ||
+    wearableRestingKcal != null ||
     workoutEnergyAverage != null;
   const hasMovementEnergy = movementCaloriesAverage != null;
   const sourceConfidence =
@@ -849,7 +1003,22 @@ function buildStoredEnergyModel(input: {
     activeEnergyCalories:
       activeEnergyAverage != null ? round(activeEnergyAverage, 0) : null,
     restingEnergyCalories:
-      restingEnergyAverage != null ? round(restingEnergyAverage, 0) : null,
+      chosenRestingKcal != null ? round(chosenRestingKcal, 0) : null,
+    formulaRestingKcal:
+      input.formulaRestingKcal != null
+        ? round(input.formulaRestingKcal, 0)
+        : null,
+    wearableRestingKcal:
+      wearableRestingKcal != null ? round(wearableRestingKcal, 0) : null,
+    wearableRestingSource:
+      wearableRestingKcal != null ? "healthkit_basal_energy" : null,
+    wearableRestingDayCount: restingEvidenceDays.length,
+    wearableRestingCoverageQualifiedDayCount: qualifiedRestingDays.length,
+    chosenRestingKcal:
+      chosenRestingKcal != null ? round(chosenRestingKcal, 0) : null,
+    chosenRestingSource,
+    restingConfidence,
+    restingExclusionReasons,
     wearableConfidence: hasHealthKitEnergy
       ? "measured_directional"
       : "directional",
@@ -864,6 +1033,9 @@ function buildStoredEnergyModel(input: {
         : null,
     todayActiveCaloriesSource: todayActiveSource,
     todayTargetAdjustmentKcal: round(todayTargetAdjustmentKcal, 0),
+    todayActiveSurplusKcal: round(todayActiveSurplusKcal, 0),
+    todayActivityBufferKcal: round(todayActivityBufferKcal, 0),
+    activityEatBackFraction: round(input.activityEatBackFraction, 2),
     todayWorkoutEnergyKcal:
       todayWorkoutEnergy != null ? round(todayWorkoutEnergy, 0) : null,
     todayMovementCaloriesKcal:
@@ -2397,13 +2569,28 @@ export function getWeightLossViewData(
   const inferredTdee =
     target.calorieTarget != null
       ? round(
-          target.calorieTarget + Math.abs(n(target.weeklyRateGoalKg)) * 1100,
+          target.calorieTarget +
+            Math.abs(
+              hallNiddkWeeklyRateKgToDailyEnergyAdjustment(
+                target.weeklyRateGoalKg
+              ) ?? 0
+            ),
           0
         )
       : null;
   const defaultActiveCalories = parsePlanNoteNumber(
     target.notes,
     "activity_kcal"
+  );
+  const formulaRestingKcal = mifflinStJeorRestingKcal({
+    sex: parsePlanNoteText(target.notes, "sex"),
+    ageYears: parsePlanNoteNumber(target.notes, "age_years"),
+    heightCm: parsePlanNoteNumber(target.notes, "height_cm"),
+    weightKg: weightTrend.latestWeightKg
+  });
+  const activityEatBackFraction = Math.min(
+    1,
+    Math.max(0, parsePlanNoteNumber(target.notes, "eat_back_fraction") ?? 0.5)
   );
   const dailyActiveOverride = getDailyEnergyOverride(userId, todayKey);
   const energyModel = buildStoredEnergyModel({
@@ -2417,7 +2604,10 @@ export function getWeightLossViewData(
     recentFoodLogDayCount: recentTrackedDays,
     defaultActiveCalories,
     latestWeightKg: weightTrend.latestWeightKg,
-    dailyActiveOverride
+    dailyActiveOverride,
+    formulaRestingKcal,
+    savedRestingKcal: parsePlanNoteNumber(target.notes, "resting_kcal"),
+    activityEatBackFraction
   });
   const todayTargetCalories = Math.max(
     0,

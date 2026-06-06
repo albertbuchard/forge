@@ -188,6 +188,11 @@ Surface rule:
 - Let each question have one job. Know what you are trying to clarify before you ask it.
 - Ask one to three focused questions at a time. One is usually best when the user is
   uncertain, reflective, or emotionally loaded.
+- Before asking another follow-up, run the playbook's minimum save-readiness
+  checkpoint: if accepted wording, meaningful body, route lane, target object or time
+  scope, and any ownership or placement that changes later use are already clear,
+  summarize once and write, read, run, or update instead of collecting optional
+  fields.
 - Use a natural progression of:
   concrete example or intent -> working name -> purpose or meaning -> placement in
   Forge -> operational details -> linked context.
@@ -263,6 +268,11 @@ Surface rule:
   early.
 - If the formulation already lands and no new answer would change the wording or the
   write, stop asking and save.
+- After a Psyche formulation lands, use the Psyche save-readiness checkpoint from the
+  playbook. If the belief sentence, functional loop, behavior move, part-state,
+  trigger episode, value, event type, emotion definition, or flashcard cue/message is
+  true enough to save, ask at most one accuracy question and then use shared batch
+  CRUD.
 - For Psyche updates, start with what feels newly true, newly visible, or newly
   inaccurate, then ask what should stay true before you change the wording or links.
 - If a fresh episode is what made a Psyche update visible, anchor in that episode

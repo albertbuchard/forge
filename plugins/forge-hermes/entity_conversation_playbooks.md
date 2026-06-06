@@ -258,6 +258,39 @@ Most good Forge intake flows follow this sequence:
 
 That sequence is not a script. Skip steps the user already answered.
 
+## Minimum save-readiness checkpoint
+
+Use this before asking another polished follow-up. The question quality is worse, not
+better, when the agent keeps exploring after the record or route is already clear
+enough to act.
+
+- For normal batch entities, save or update when you have the accepted working name
+  or distinctive wording, the meaningful body of the record, and owner scope only if
+  ownership changes accountability. Do not ask for tags, links, dates, priority,
+  assignees, or status just because those fields exist.
+- For strategic and planning records, the minimum is the intended outcome plus the
+  hierarchy placement that would change later retrieval or execution. If placement is
+  not known but the user asked to capture the idea now, save the provisional record
+  with clear wording and leave placement for a later link/update.
+- For operational records, the minimum is the target action plus the time, object, or
+  state that makes the action truthful: event time for a calendar event, recurrence
+  for a work block, task and slot for a timebox, task id for a task run, or target
+  record and signed minutes for a work adjustment. Generate a plain title yourself
+  when the title is obvious.
+- For read-model and review surfaces, the minimum is the practical question plus any
+  scope that would change the answer. Once you have that, read the overview instead
+  of asking for a preferred report shape.
+- For specialized Movement, Life Force, and Workbench writes, the minimum is the
+  selected lane plus the target span/object/weekday/flow/run/node and the intended
+  correction or effect. Do not ask a reflective question after the dedicated route
+  and write shape are already selected.
+- For reflective non-Psyche records, the minimum is what future review should
+  remember and the container that preserves it. If a stronger Psyche container clearly
+  emerges, route there; otherwise do not keep deepening just to make the note more
+  therapeutic.
+- Close the loop in one sentence before acting: "What seems clear now is..." followed
+  by the save, update, read, run, or handoff.
+
 ## Project-management hierarchy playbook
 
 When the conversation is about Forge planning or delivery, preserve this

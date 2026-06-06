@@ -138,6 +138,11 @@ describe("forge skill playbook parity", () => {
       expect(skill).toMatch(/live onboarding disagree[\s\S]*contract bug/i);
       expect(skill).toMatch(/reflection-sensitive records/i);
       expect(skill).toMatch(/understand, decide, notice, remember, or\s+change later/i);
+      expect(skill).toMatch(/minimum save-readiness\s+checkpoint/i);
+      expect(skill).toMatch(/accepted wording[\s\S]*meaningful body[\s\S]*route lane/i);
+      expect(skill).toMatch(/write, read, run, or update[\s\S]*instead of collecting optional\s+fields/i);
+      expect(skill).toMatch(/Psyche save-readiness checkpoint/i);
+      expect(skill).toMatch(/belief sentence[\s\S]*functional loop[\s\S]*flashcard cue\/message/i);
       expect(skill).toMatch(/When one message combines several jobs/i);
       expect(skill).toMatch(
         /read before a correction[\s\S]*formulate[\s\S]*primary Psyche record[\s\S]*flashcard or note/i

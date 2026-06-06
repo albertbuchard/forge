@@ -483,6 +483,22 @@ describe("question flow simulation cycles", () => {
     expect(entityPlaybook).toMatch(
       /Confirm the exact target and the preservation need before destructive work/i
     );
+    expect(entityPlaybook).toMatch(/## Minimum save-readiness checkpoint/i);
+    expect(entityPlaybook).toMatch(
+      /normal batch entities[\s\S]*accepted working name[\s\S]*meaningful body[\s\S]*owner scope/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Do not ask for tags, links, dates, priority,\s+assignees, or status just because those fields exist/i
+    );
+    expect(entityPlaybook).toMatch(
+      /operational records[\s\S]*target action[\s\S]*time, object, or\s+state/i
+    );
+    expect(entityPlaybook).toMatch(
+      /read-model and review surfaces[\s\S]*practical question[\s\S]*scope that would change the answer/i
+    );
+    expect(entityPlaybook).toMatch(
+      /specialized Movement, Life Force, and Workbench writes[\s\S]*selected lane[\s\S]*target span\/object\/weekday\/flow\/run\/node/i
+    );
 
     for (const section of nonPsycheSections) {
       const sectionSlice = getSectionSlice(entityPlaybook, section);
@@ -890,6 +906,25 @@ describe("question flow simulation cycles", () => {
     expect(psychePlaybook).toMatch(
       /Ask one confirmation question about accuracy, not another broad exploration\s+question/i
     );
+    expect(psychePlaybook).toMatch(/## Psyche save-readiness checkpoint/i);
+    expect(psychePlaybook).toMatch(
+      /belief_entry[\s\S]*accepted sentence or prediction/i
+    );
+    expect(psychePlaybook).toMatch(
+      /behavior_pattern[\s\S]*concrete cue or situation[\s\S]*payoff or cost/i
+    );
+    expect(psychePlaybook).toMatch(
+      /mode_profile[\s\S]*part's voice or posture[\s\S]*protect/i
+    );
+    expect(psychePlaybook).toMatch(
+      /trigger_report[\s\S]*situation[\s\S]*felt stake[\s\S]*consequence/i
+    );
+    expect(psychePlaybook).toMatch(
+      /flashcard[\s\S]*cue or urge sentence[\s\S]*brief message/i
+    );
+    expect(psychePlaybook).toMatch(
+      /Is this true\s+enough to save as a first version/i
+    );
 
     const reflectiveNonPsyche = [
       "Goal",
@@ -1183,6 +1218,12 @@ describe("question flow simulation cycles", () => {
       /After one concrete example is clear and a hypothesis lands or is corrected[\s\S]*translate it into a saveable record shape/i
     );
     expect(onboardingSource).toMatch(
+      /minimum save-readiness checkpoint[\s\S]*accepted wording[\s\S]*meaningful body[\s\S]*optional fields exist/i
+    );
+    expect(onboardingSource).toMatch(
+      /Psyche save-readiness[\s\S]*belief sentence[\s\S]*functional loop[\s\S]*flashcard cue\/message/i
+    );
+    expect(onboardingSource).toMatch(
       /workbenchFlowCatalog[\s\S]*"routeKey":"listFlows"/
     );
     expect(onboardingSource).toMatch(
@@ -1246,12 +1287,13 @@ describe("question flow simulation cycles", () => {
 
   it("cycle 3 report retest: durable automation report covers this full run", () => {
     const report = readRepoFile("docs/question-flow-improvement-cycles.md");
-    const latestRun = getSectionSlice(report, "2026-06-05 Automation Pass");
+    const latestRun = getSectionSlice(report, "2026-06-06 Automation Pass");
 
-    expect(report).toMatch(/Latest run date: 2026-06-05/);
+    expect(report).toMatch(/Latest run date: 2026-06-06/);
     expect(latestRun).toMatch(/data\/forge\/forge\.sqlite/i);
     expect(latestRun).toMatch(/repo-local[\s\S]*openclaw-plugin\/dist\/openclaw\/index\.js/i);
-    expect(latestRun).toMatch(/forge-hermes-plugin 0\.2\.106/i);
+    expect(latestRun).toMatch(/forge-openclaw-plugin 0\.2\.109/i);
+    expect(latestRun).toMatch(/forge-hermes-plugin 0\.2\.109/i);
     expect(latestRun).toMatch(/43 entity catalog\s+entries/i);
     expect(latestRun).toMatch(/199 OpenAPI paths/i);
     expect(latestRun).toMatch(/\/api\/v1\/strategies[\s\S]*\/api\/v1\/strategies\/\{id\}/i);
@@ -1268,13 +1310,13 @@ describe("question flow simulation cycles", () => {
     expect(latestRun).toMatch(/training_load[\s\S]*weight_loss/i);
     expect(latestRun).toMatch(/Movement[\s\S]*Life Force[\s\S]*Workbench/i);
     expect(latestRun).toMatch(
-      /Cycle 1[\s\S]*simulation freshness assertions[\s\S]*OpenAPI path-count/i
+      /Cycle 1[\s\S]*minimum save-readiness checkpoint[\s\S]*Psyche save-readiness checkpoint/i
     );
     expect(latestRun).toMatch(
-      /Cycle 2[\s\S]*weight_loss[\s\S]*read-model-only health\s+surface[\s\S]*Read:\s+\/api\/v1/i
+      /Cycle 2[\s\S]*top-level OpenClaw, Hermes, and Codex skills[\s\S]*optional fields/i
     );
     expect(latestRun).toMatch(
-      /Cycle 3[\s\S]*readModelOnlySurfaces[\s\S]*preferredReadPath[\s\S]*generated OpenAPI/i
+      /Cycle 3[\s\S]*durable automation reporting[\s\S]*older adapter version/i
     );
     expect(latestRun).toMatch(/focused retest passed/i);
     expect(latestRun).toMatch(/What happened after retesting/i);

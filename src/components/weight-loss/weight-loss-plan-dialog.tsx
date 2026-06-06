@@ -13,6 +13,11 @@ import type {
   NutritionTargetPatchInput,
   WeightLossViewData
 } from "@/lib/weight-loss-types";
+import {
+  HALL_NIDDK_LINEAR_WEIGHT_MODEL,
+  hallNiddkWeeklyRateKgToDailyEnergyAdjustment,
+  staticKgRateToDailyEnergyAdjustment
+} from "@/lib/weight-loss-energy-model";
 import { formatNumber, numeric } from "./weight-loss-format";
 import { WeightLossFormulaTooltip } from "./weight-loss-formula-tooltip";
 import { buildNutritionTargetGroupsFromValues } from "./weight-loss-nutrition-targets";
@@ -74,6 +79,31 @@ function fiberDri(sex: Sex, ageYears: number) {
   return sex === "male" ? (ageYears >= 51 ? 30 : 38) : ageYears >= 51 ? 21 : 25;
 }
 
+function mifflinStJeorRestingKcal(input: {
+  sex: Sex;
+  ageYears: number | null;
+  heightCm: number | null;
+  weightKg: number | null;
+}) {
+  if (
+    input.ageYears == null ||
+    input.ageYears <= 0 ||
+    input.heightCm == null ||
+    input.heightCm <= 0 ||
+    input.weightKg == null ||
+    input.weightKg <= 0
+  ) {
+    return null;
+  }
+  const sexAdjustment = input.sex === "male" ? 5 : -161;
+  return (
+    10 * input.weightKg +
+    6.25 * input.heightCm -
+    5 * input.ageYears +
+    sexAdjustment
+  );
+}
+
 function weightAtBmi(heightCm: number, bmi: number) {
   const heightM = heightCm / 100;
   return heightM > 0 ? bmi * heightM * heightM : null;
@@ -128,12 +158,8 @@ export function buildInitialPlanDraft(
     numeric(view.energyModel.activeBurnKcal) ??
     numeric(view.energyModel.activeEnergyCalories) ??
     numeric(view.energyModel.movementCaloriesKcal) ??
-    numeric(parsePlanNote(target.notes, "activity_kcal")) ??
+    positiveNumber(parsePlanNote(target.notes, "activity_kcal")) ??
     0;
-  const inferredResting =
-    numeric(view.energyModel.restingEnergyCalories) ??
-    numeric(parsePlanNote(target.notes, "resting_kcal")) ??
-    null;
   const bodyGoal = target.bodyGoal ?? "";
   const goalMode: GoalMode = bodyGoal.includes("gain")
     ? "gain"
@@ -157,7 +183,9 @@ export function buildInitialPlanDraft(
         : defaultWeeklyRateKg(currentWeight, goalMode).toFixed(2),
     activeCaloriesKcal: inferredActive.toFixed(0),
     restingCaloriesKcal:
-      inferredResting != null ? inferredResting.toFixed(0) : "",
+      numeric(view.energyModel.formulaRestingKcal) != null
+        ? String(numeric(view.energyModel.formulaRestingKcal))
+        : "",
     dietStyle: target.dietStyle ?? ""
   };
 }
@@ -193,10 +221,14 @@ export function calculatePlan(draft: WeightLossPlanDraft) {
   const age = Number(draft.ageYears) || 35;
   const goalWeight = positiveNumber(draft.goalWeightKg);
   const activeCalories = Math.max(0, Number(draft.activeCaloriesKcal) || 0);
-  const measuredRestingCalories = positiveNumber(draft.restingCaloriesKcal);
-  const sexAdjustment = draft.sex === "male" ? 5 : -161;
-  const bmr = 10 * weight + 6.25 * height - 5 * age + sexAdjustment;
-  const restingCalories = measuredRestingCalories ?? bmr;
+  const bmr =
+    mifflinStJeorRestingKcal({
+      sex: draft.sex,
+      ageYears: age,
+      heightCm: height,
+      weightKg: weight
+    }) ?? 10 * weight + 6.25 * height - 5 * age + 5;
+  const restingCalories = bmr;
   const maintenanceCalories = restingCalories + activeCalories;
   const weeklyMagnitude = Math.abs(Number(draft.weeklyRateKg) || 0);
   const weeklyRateGoalKg =
@@ -205,7 +237,10 @@ export function calculatePlan(draft: WeightLossPlanDraft) {
       : draft.goalMode === "gain"
         ? weeklyMagnitude
         : 0;
-  const dailyEnergyAdjustment = (weeklyRateGoalKg * 7700) / 7;
+  const dailyEnergyAdjustment =
+    hallNiddkWeeklyRateKgToDailyEnergyAdjustment(weeklyRateGoalKg) ?? 0;
+  const staticDailyEnergyAdjustment =
+    staticKgRateToDailyEnergyAdjustment(weeklyRateGoalKg) ?? 0;
   const minimumCalorieFloor = draft.sex === "male" ? 1500 : 1200;
   const plannedCalorieTarget = Math.round(
     maintenanceCalories + dailyEnergyAdjustment
@@ -255,16 +290,18 @@ export function calculatePlan(draft: WeightLossPlanDraft) {
   return {
     bmr: Math.round(bmr),
     restingCalories: Math.round(restingCalories),
-    restingSource:
-      measuredRestingCalories != null
-        ? "HealthKit basal/resting"
-        : "Mifflin-St Jeor",
+    restingSource: "Mifflin-St Jeor baseline",
     activeCalories: Math.round(activeCalories),
     maintenanceCalories: Math.round(maintenanceCalories),
     plannedCalorieTarget,
     minimumCalorieFloor,
     weeklyRateGoalKg,
     dailyEnergyAdjustment: Math.round(dailyEnergyAdjustment),
+    staticDailyEnergyAdjustment: Math.round(staticDailyEnergyAdjustment),
+    rateModel: HALL_NIDDK_LINEAR_WEIGHT_MODEL.id,
+    rateModelLabel: HALL_NIDDK_LINEAR_WEIGHT_MODEL.label,
+    rateModelPlanningHorizonDays:
+      HALL_NIDDK_LINEAR_WEIGHT_MODEL.defaultPlanningHorizonDays,
     calorieTarget,
     proteinReferenceWeight: Math.round(proteinReferenceWeight * 10) / 10,
     proteinGramsTarget,
@@ -346,7 +383,7 @@ export function validateWeightLossPlanDraft(draft: WeightLossPlanDraft) {
       restingCalories > 3500)
   ) {
     errors.push(
-      "- Resting calories should be blank for formula mode or a plausible HealthKit basal/resting value."
+      "- Formula resting baseline should stay in a plausible daily range."
     );
   }
 
@@ -376,8 +413,11 @@ export function buildTargetPatchFromPlan(
       "bmr_formula=Mifflin-St Jeor",
       `resting_kcal=${plan.restingCalories}`,
       `activity_kcal=${plan.activeCalories}`,
+      "eat_back_fraction=0.5",
       `maintenance_kcal=${plan.maintenanceCalories}`,
-      "rate_model=7700 kcal/kg"
+      `rate_model=${plan.rateModel}`,
+      `rate_model_horizon_days=${plan.rateModelPlanningHorizonDays}`,
+      `static_7700_adjustment_kcal=${plan.staticDailyEnergyAdjustment}`
     ].join("; ")
   };
 }
@@ -402,6 +442,14 @@ export function WeightLossPlanDialog({
   error?: string | null;
 }) {
   const plan = useMemo(() => calculatePlan(value), [value]);
+  const hasFormulaProfile =
+    positiveNumber(value.ageYears) != null &&
+    positiveNumber(value.heightCm) != null &&
+    positiveNumber(value.currentWeightKg) != null;
+  const formulaRestingValue = hasFormulaProfile ? String(plan.bmr) : "";
+  const formulaRestingHint = hasFormulaProfile
+    ? `Forge uses Mifflin-St Jeor as the stable target baseline. Complete HealthKit basal energy stays evidence/calibration, not the silent default. Current formula value: ${plan.bmr} kcal.`
+    : "Forge will calculate this from real age, height, sex, and current weight. Complete HealthKit basal energy stays evidence/calibration, not the silent default.";
   const nutritionPreview = useMemo(
     () =>
       buildNutritionTargetGroupsFromValues({
@@ -516,7 +564,7 @@ export function WeightLossPlanDialog({
           </FlowField>
           <FlowField
             label="Weekly change kg"
-            hint="Loss/gain rate is converted to kcal/day with the 7700 kcal/kg planning model."
+            hint="Loss/gain rate is converted to kcal/day with the Hall/NIDDK adult dynamic model over Forge's 12-week planning horizon."
           >
             <Input
               inputMode="decimal"
@@ -540,16 +588,14 @@ export function WeightLossPlanDialog({
         <div className="grid gap-4">
           <div className="grid gap-4 md:grid-cols-2">
             <FlowField
-              label="Resting calories/day"
-              hint={`Forge uses HealthKit basal energy when present, otherwise Mifflin-St Jeor BMR. Current formula value: ${plan.bmr} kcal.`}
+              label="Formula resting baseline/day"
+              hint={formulaRestingHint}
             >
               <Input
                 inputMode="decimal"
-                value={draft.restingCaloriesKcal}
-                onChange={(event) =>
-                  setDraft({ restingCaloriesKcal: event.target.value })
-                }
-                placeholder={String(plan.bmr)}
+                value={formulaRestingValue}
+                readOnly
+                placeholder="Calculated from profile"
               />
             </FlowField>
             <FlowField
@@ -609,6 +655,8 @@ export function WeightLossPlanDialog({
                 maintenanceKcal: plan.maintenanceCalories,
                 weeklyRateKg: plan.weeklyRateGoalKg,
                 dailyAdjustmentKcal: plan.dailyEnergyAdjustment,
+                rateModel: plan.rateModelLabel,
+                rateModelHorizonDays: plan.rateModelPlanningHorizonDays,
                 calorieTarget: plan.calorieTarget,
                 calorieFloor: plan.minimumCalorieFloor,
                 proteinReferenceWeightKg: plan.proteinReferenceWeight,

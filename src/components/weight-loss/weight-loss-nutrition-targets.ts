@@ -1,4 +1,5 @@
 import type { WeightLossViewData } from "@/lib/weight-loss-types";
+import { hallNiddkDailyEnergyAdjustmentToAverageWeeklyRateKg } from "@/lib/weight-loss-energy-model";
 import { numeric } from "./weight-loss-format";
 
 type Sex = "male" | "female";
@@ -398,7 +399,9 @@ export function buildNutritionTargetGroupsFromValues(
   const potassiumMin = fluidMin != null ? fluidMin * 78 : null;
   const potassiumMax = fluidMax != null ? fluidMax * 312 : null;
   const grossSportWeightEquivalentKgPerWeek =
-    activeBurnKcal != null ? (activeBurnKcal * 7) / 7700 : null;
+    activeBurnKcal != null
+      ? hallNiddkDailyEnergyAdjustmentToAverageWeeklyRateKg(activeBurnKcal)
+      : null;
 
   return {
     profile: {
@@ -541,7 +544,7 @@ export function buildNutritionTargetGroupsFromValues(
           : "n/a",
         "kg/week",
         "Energy equivalent if the active burn were not eaten back; the plan may already include it.",
-        "7700 kcal/kg model"
+        "Hall/NIDDK dynamic model"
       )
     ],
     sportSummary: {

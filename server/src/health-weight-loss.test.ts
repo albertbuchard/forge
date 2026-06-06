@@ -20,6 +20,23 @@ async function issueOperatorSessionCookie(
   return `${cookie.name}=${cookie.value}`;
 }
 
+function insertVitalsDay(input: {
+  id: string;
+  dayKey: string;
+  metrics: Record<string, unknown>;
+  createdAt?: string;
+}) {
+  const now = input.createdAt ?? new Date().toISOString();
+  getDatabase()
+    .prepare(
+      `INSERT INTO health_daily_summaries (
+         id, user_id, date_key, summary_type, metrics_json, derived_json, source, created_at, updated_at
+       )
+       VALUES (?, 'user_operator', ?, 'vitals', ?, '{}', 'healthkit', ?, ?)`
+    )
+    .run(input.id, input.dayKey, JSON.stringify(input.metrics), now, now);
+}
+
 test("weight loss overview reflects food logs and body check-ins", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-weight-loss-"));
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
@@ -143,45 +160,39 @@ test("weight loss overview reflects food logs and body check-ins", async () => {
         dietStyle: "balanced",
         bodyGoal: "lose fat",
         notes:
-          "Forge science plan; resting_kcal=1700; activity_kcal=300; maintenance_kcal=2000"
+          "Forge science plan; sex=male; age_years=39; height_cm=180; resting_kcal=1700; activity_kcal=300; maintenance_kcal=2000"
       }
     });
     assert.equal(updateTarget.statusCode, 200);
-    getDatabase()
-      .prepare(
-        `INSERT INTO health_daily_summaries (
-           id, user_id, date_key, summary_type, metrics_json, derived_json, source, created_at, updated_at
-         )
-         VALUES (?, 'user_operator', ?, 'vitals', ?, '{}', 'healthkit', ?, ?)`
-      )
-      .run(
-        "hds_weight_loss_energy",
-        today,
-        JSON.stringify({
-          activeEnergyBurned: {
-            metric: "activeEnergyBurned",
-            label: "Active energy",
-            category: "activity",
-            unit: "kcal",
-            displayUnit: "kcal",
-            aggregation: "cumulative",
-            total: 420,
-            sampleCount: 12
-          },
-          basalEnergyBurned: {
-            metric: "basalEnergyBurned",
-            label: "Basal energy",
-            category: "activity",
-            unit: "kcal",
-            displayUnit: "kcal",
-            aggregation: "cumulative",
-            total: 1600,
-            sampleCount: 12
-          }
-        }),
-        now,
-        now
-      );
+    insertVitalsDay({
+      id: "hds_weight_loss_energy",
+      dayKey: today,
+      createdAt: now,
+      metrics: {
+        activeEnergyBurned: {
+          metric: "activeEnergyBurned",
+          label: "Active energy",
+          category: "activity",
+          unit: "kcal",
+          displayUnit: "kcal",
+          aggregation: "cumulative",
+          total: 420,
+          sampleCount: 12,
+          latestSampleAt: `${today}T12:00:00.000Z`
+        },
+        basalEnergyBurned: {
+          metric: "basalEnergyBurned",
+          label: "Basal energy",
+          category: "activity",
+          unit: "kcal",
+          displayUnit: "kcal",
+          aggregation: "cumulative",
+          total: 1600,
+          sampleCount: 12,
+          latestSampleAt: `${today}T12:00:00.000Z`
+        }
+      }
+    });
     getDatabase()
       .prepare(
         `INSERT INTO health_workout_sessions (
@@ -243,8 +254,15 @@ test("weight loss overview reflects food logs and body check-ins", async () => {
           todayActiveCaloriesSource: string;
           todayTargetAdjustmentKcal: number;
           todayWorkoutEnergyKcal: number | null;
+          todayActivityBufferKcal: number;
           movementCaloriesKcal: number | null;
           restingEnergyCalories: number | null;
+          formulaRestingKcal: number | null;
+          wearableRestingKcal: number | null;
+          chosenRestingKcal: number | null;
+          chosenRestingSource: string | null;
+          restingConfidence: string;
+          restingExclusionReasons: string[];
           estimatedDailyEnergyBalanceKcal: number | null;
         };
         foodQuality: {
@@ -266,11 +284,11 @@ test("weight loss overview reflects food logs and body check-ins", async () => {
       overviewBody.weightLoss.todayLedger.plannedTargetCalories,
       2100
     );
-    assert.equal(overviewBody.weightLoss.todayLedger.targetCalories, 2220);
-    assert.equal(overviewBody.weightLoss.summary.targetCalories, 2220);
+    assert.equal(overviewBody.weightLoss.todayLedger.targetCalories, 2160);
+    assert.equal(overviewBody.weightLoss.summary.targetCalories, 2160);
     assert.equal(
       overviewBody.weightLoss.todayLedger.activeAdjustmentCalories,
-      120
+      60
     );
     assert.equal(
       overviewBody.weightLoss.todayLedger.activeCaloriesSource,
@@ -301,7 +319,11 @@ test("weight loss overview reflects food logs and body check-ins", async () => {
     );
     assert.equal(
       overviewBody.weightLoss.energyModel.todayTargetAdjustmentKcal,
-      120
+      60
+    );
+    assert.equal(
+      overviewBody.weightLoss.energyModel.todayActivityBufferKcal,
+      60
     );
     assert.equal(
       overviewBody.weightLoss.energyModel.todayWorkoutEnergyKcal,
@@ -309,9 +331,25 @@ test("weight loss overview reflects food logs and body check-ins", async () => {
     );
     assert.equal(
       overviewBody.weightLoss.energyModel.restingEnergyCalories,
-      1600
+      1759
     );
-    assert.equal(overviewBody.weightLoss.energyModel.estimatedTdeeKcal, 2020);
+    assert.equal(overviewBody.weightLoss.energyModel.formulaRestingKcal, 1759);
+    assert.equal(overviewBody.weightLoss.energyModel.wearableRestingKcal, null);
+    assert.equal(overviewBody.weightLoss.energyModel.chosenRestingKcal, 1759);
+    assert.equal(
+      overviewBody.weightLoss.energyModel.chosenRestingSource,
+      "mifflin_profile_baseline"
+    );
+    assert.equal(
+      overviewBody.weightLoss.energyModel.restingConfidence,
+      "medium"
+    );
+    assert.ok(
+      overviewBody.weightLoss.energyModel.restingExclusionReasons.some(
+        (reason) => reason.includes("current_day_or_future_day")
+      )
+    );
+    assert.equal(overviewBody.weightLoss.energyModel.estimatedTdeeKcal, 2179);
     assert.ok(
       typeof overviewBody.weightLoss.energyModel.movementCaloriesKcal ===
         "number" ||
@@ -345,6 +383,189 @@ test("weight loss overview reflects food logs and body check-ins", async () => {
     );
     assert.equal(overviewBody.weightLoss.bodyCheckins.length, 1);
     assert.equal(overviewBody.weightLoss.weightTrend.latestWeightKg, 82.4);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("weight loss overview keeps formula resting baseline despite partial HealthKit basal rows", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-weight-loss-resting-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: false });
+
+  try {
+    const cookie = await issueOperatorSessionCookie(app);
+    const now = new Date().toISOString();
+    const today = "2030-06-06";
+
+    const bodyCheckin = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/weight-loss/body-checkins",
+      headers: { cookie },
+      payload: {
+        checkedAt: "2030-06-06T07:30:00.000Z",
+        weightKg: 84
+      }
+    });
+    assert.equal(bodyCheckin.statusCode, 201);
+
+    const updateTarget = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/health/weight-loss/target",
+      headers: { cookie },
+      payload: {
+        calorieTarget: 1500,
+        proteinGramsTarget: 152,
+        fiberGramsTarget: 21,
+        carbohydrateGramsTarget: 121,
+        fatGramsTarget: 45,
+        weightGoalKg: 76,
+        weeklyRateGoalKg: -0.35,
+        dietStyle: "balanced",
+        bodyGoal: "lose fat",
+        notes:
+          "Forge legacy plan; sex=male; age_years=39; height_cm=180; resting_kcal=1292; activity_kcal=388; maintenance_kcal=1680"
+      }
+    });
+    assert.equal(updateTarget.statusCode, 200);
+
+    const basalRows = [
+      ["2030-06-06", 880, 59, "2030-06-06T09:05:00.000Z", 52],
+      ["2030-06-05", 2129, 99, "2030-06-05T21:51:00.000Z", 596],
+      ["2030-06-04", 2033, 112, "2030-06-04T21:03:00.000Z", 669],
+      ["2030-06-03", 1298, 75, "2030-06-03T21:45:00.000Z", 1419],
+      ["2030-06-02", 75, 1, "2030-06-02T21:07:00.000Z", null],
+      ["2030-06-01", 300, 4, "2030-06-01T21:29:00.000Z", null]
+    ] as const;
+    for (const [
+      dayKey,
+      basalTotal,
+      sampleCount,
+      latestSampleAt,
+      active
+    ] of basalRows) {
+      insertVitalsDay({
+        id: `hds_resting_${dayKey}`,
+        dayKey,
+        createdAt: now,
+        metrics: {
+          ...(active == null
+            ? {}
+            : {
+                activeEnergyBurned: {
+                  metric: "activeEnergyBurned",
+                  unit: "kcal",
+                  total: active,
+                  sampleCount,
+                  latestSampleAt
+                }
+              }),
+          basalEnergyBurned: {
+            metric: "basalEnergyBurned",
+            unit: "kcal",
+            total: basalTotal,
+            sampleCount,
+            latestSampleAt
+          }
+        }
+      });
+    }
+
+    const overview = await app.inject({
+      method: "GET",
+      url: `/api/v1/health/weight-loss?dateKey=${today}`
+    });
+    assert.equal(overview.statusCode, 200);
+    const overviewBody = overview.json() as {
+      weightLoss: {
+        energyModel: {
+          formulaRestingKcal: number | null;
+          wearableRestingKcal: number | null;
+          chosenRestingKcal: number | null;
+          chosenRestingSource: string | null;
+          restingEnergyCalories: number | null;
+          restingConfidence: string;
+          restingExclusionReasons: string[];
+          wearableRestingDayCount: number;
+          wearableRestingCoverageQualifiedDayCount: number;
+          estimatedTdeeKcal: number | null;
+          baselineActiveCaloriesKcal: number;
+          todayActiveCaloriesKcal: number;
+          todayActiveSurplusKcal: number;
+          todayActivityBufferKcal: number;
+          todayTargetAdjustmentKcal: number;
+        };
+        todayLedger: {
+          plannedTargetCalories: number;
+          targetCalories: number;
+          activeAdjustmentCalories: number;
+        };
+      };
+    };
+
+    assert.equal(overviewBody.weightLoss.energyModel.formulaRestingKcal, 1775);
+    assert.equal(overviewBody.weightLoss.energyModel.wearableRestingKcal, 2081);
+    assert.equal(overviewBody.weightLoss.energyModel.chosenRestingKcal, 1775);
+    assert.equal(
+      overviewBody.weightLoss.energyModel.chosenRestingSource,
+      "mifflin_profile_baseline"
+    );
+    assert.equal(
+      overviewBody.weightLoss.energyModel.restingEnergyCalories,
+      1775
+    );
+    assert.equal(overviewBody.weightLoss.energyModel.restingConfidence, "review");
+    assert.equal(
+      overviewBody.weightLoss.energyModel.wearableRestingDayCount,
+      6
+    );
+    assert.equal(
+      overviewBody.weightLoss.energyModel.wearableRestingCoverageQualifiedDayCount,
+      2
+    );
+    assert.ok(
+      overviewBody.weightLoss.energyModel.restingExclusionReasons.some(
+        (reason) =>
+          reason.includes("2030-06-06") &&
+          reason.includes("current_day_or_future_day")
+      )
+    );
+    assert.ok(
+      overviewBody.weightLoss.energyModel.restingExclusionReasons.some(
+        (reason) =>
+          reason.includes("2030-06-03") && reason.includes("below_1331")
+      )
+    );
+    assert.ok(
+      overviewBody.weightLoss.energyModel.restingExclusionReasons.some(
+        (reason) =>
+          reason.includes("2030-06-02") &&
+          reason.includes("sample_count_1_below_24")
+      )
+    );
+    assert.equal(
+      overviewBody.weightLoss.energyModel.baselineActiveCaloriesKcal,
+      388
+    );
+    assert.equal(overviewBody.weightLoss.energyModel.todayActiveCaloriesKcal, 52);
+    assert.equal(overviewBody.weightLoss.energyModel.todayActiveSurplusKcal, 0);
+    assert.equal(overviewBody.weightLoss.energyModel.todayActivityBufferKcal, 0);
+    assert.equal(
+      overviewBody.weightLoss.energyModel.todayTargetAdjustmentKcal,
+      0
+    );
+    assert.equal(
+      overviewBody.weightLoss.todayLedger.plannedTargetCalories,
+      1500
+    );
+    assert.equal(overviewBody.weightLoss.todayLedger.targetCalories, 1500);
+    assert.equal(
+      overviewBody.weightLoss.todayLedger.activeAdjustmentCalories,
+      0
+    );
   } finally {
     await app.close();
     closeDatabase();
@@ -724,6 +945,24 @@ test("weight loss energy gap averages intake over the same recent log window", a
   try {
     const cookie = await issueOperatorSessionCookie(app);
     const now = new Date().toISOString();
+    const updateTarget = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/health/weight-loss/target",
+      headers: { cookie },
+      payload: {
+        calorieTarget: 2000,
+        proteinGramsTarget: 140,
+        fiberGramsTarget: 30,
+        carbohydrateGramsTarget: 220,
+        fatGramsTarget: 65,
+        weightGoalKg: 78,
+        weeklyRateGoalKg: -0.35,
+        dietStyle: "balanced",
+        bodyGoal: "lose fat",
+        notes: "Forge science plan; resting_kcal=1500; activity_kcal=500"
+      }
+    });
+    assert.equal(updateTarget.statusCode, 200);
 
     getDatabase()
       .prepare(
@@ -996,10 +1235,10 @@ test("weight loss overview uses same-day workout, movement, and step active calo
       overviewBody.weightLoss.todayLedger.plannedTargetCalories,
       2000
     );
-    assert.equal(overviewBody.weightLoss.todayLedger.targetCalories, 2687);
+    assert.equal(overviewBody.weightLoss.todayLedger.targetCalories, 2344);
     assert.equal(
       overviewBody.weightLoss.todayLedger.activeAdjustmentCalories,
-      687
+      344
     );
     assert.equal(
       overviewBody.weightLoss.todayLedger.activeCaloriesSource,
@@ -1065,10 +1304,10 @@ test("weight loss overview uses same-day workout, movement, and step active calo
         };
       };
     };
-    assert.equal(overriddenBody.weightLoss.todayLedger.targetCalories, 2500);
+    assert.equal(overriddenBody.weightLoss.todayLedger.targetCalories, 2250);
     assert.equal(
       overriddenBody.weightLoss.todayLedger.activeAdjustmentCalories,
-      500
+      250
     );
     assert.equal(
       overriddenBody.weightLoss.todayLedger.activeCaloriesSource,
@@ -1117,7 +1356,7 @@ test("weight loss overview uses same-day workout, movement, and step active calo
         };
       };
     };
-    assert.equal(resetBody.weightLoss.todayLedger.targetCalories, 2687);
+    assert.equal(resetBody.weightLoss.todayLedger.targetCalories, 2344);
     assert.equal(
       resetBody.weightLoss.todayLedger.activeCaloriesSource,
       "today_workout_movement_step_energy"
@@ -1202,10 +1441,10 @@ test("weight loss overview uses movement calories when only movement trips exist
       };
     };
 
-    assert.equal(overviewBody.weightLoss.todayLedger.targetCalories, 1661);
+    assert.equal(overviewBody.weightLoss.todayLedger.targetCalories, 2000);
     assert.equal(
       overviewBody.weightLoss.todayLedger.activeAdjustmentCalories,
-      -339
+      0
     );
     assert.equal(
       overviewBody.weightLoss.todayLedger.activeCaloriesSource,
@@ -1355,9 +1594,9 @@ test("weight loss overview estimates active calories from steps before using the
     );
     assert.equal(
       overviewBody.weightLoss.todayLedger.activeAdjustmentCalories,
-      47
+      24
     );
-    assert.equal(overviewBody.weightLoss.todayLedger.targetCalories, 2047);
+    assert.equal(overviewBody.weightLoss.todayLedger.targetCalories, 2024);
   } finally {
     await app.close();
     closeDatabase();

@@ -266,6 +266,15 @@ export type WeightLossViewData = {
   energyModel: {
     activeEnergyCalories: number | null;
     restingEnergyCalories: number | null;
+    formulaRestingKcal: number | null;
+    wearableRestingKcal: number | null;
+    wearableRestingSource: string | null;
+    wearableRestingDayCount: number;
+    wearableRestingCoverageQualifiedDayCount: number;
+    chosenRestingKcal: number | null;
+    chosenRestingSource: string | null;
+    restingConfidence: string;
+    restingExclusionReasons: string[];
     wearableConfidence: string;
     inferredTdee: number | null;
     estimatedTdeeKcal: number | null;
@@ -275,6 +284,9 @@ export type WeightLossViewData = {
     todayObservedActiveCaloriesKcal: number | null;
     todayActiveCaloriesSource: string;
     todayTargetAdjustmentKcal: number;
+    todayActiveSurplusKcal: number;
+    todayActivityBufferKcal: number;
+    activityEatBackFraction: number;
     todayWorkoutEnergyKcal: number | null;
     todayMovementCaloriesKcal: number | null;
     todayHealthKitActiveCaloriesKcal: number | null;

@@ -4,6 +4,10 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { SurfacePanel, SurfaceStat } from "@/components/ui/surface";
 import type { WeightLossViewData } from "@/lib/weight-loss-types";
+import {
+  HALL_NIDDK_LINEAR_WEIGHT_MODEL,
+  hallNiddkWeeklyRateKgToDailyEnergyAdjustment
+} from "@/lib/weight-loss-energy-model";
 import { WeightLossFormulaTooltip } from "./weight-loss-formula-tooltip";
 import {
   buildNutritionTargetGroups,
@@ -119,7 +123,7 @@ export function WeightLossNutritionTargetsPanel({
   const weeklyRate = view.target.weeklyRateGoalKg ?? null;
   const dailyAdjustment =
     weeklyRate != null && Number.isFinite(weeklyRate)
-      ? (weeklyRate * 7700) / 7
+      ? hallNiddkWeeklyRateKgToDailyEnergyAdjustment(weeklyRate)
       : null;
   const restingKcal = targets.profile.restingEnergyKcal;
   const activeKcal = targets.profile.activeBurnKcal;
@@ -169,12 +173,15 @@ export function WeightLossNutritionTargetsPanel({
                   restingKcal,
                   restingSource:
                     restingKcal != null
-                      ? "saved HealthKit basal/resting or plan value"
+                      ? "formula baseline; HealthKit complete-day evidence is calibration"
                       : null,
                   activeKcal,
                   maintenanceKcal,
                   weeklyRateKg: weeklyRate,
                   dailyAdjustmentKcal: dailyAdjustment,
+                  rateModel: HALL_NIDDK_LINEAR_WEIGHT_MODEL.label,
+                  rateModelHorizonDays:
+                    HALL_NIDDK_LINEAR_WEIGHT_MODEL.defaultPlanningHorizonDays,
                   calorieTarget: targets.profile.calorieTarget,
                   calorieFloor: targets.profile.sex === "male" ? 1500 : 1200,
                   proteinReferenceWeightKg: null,

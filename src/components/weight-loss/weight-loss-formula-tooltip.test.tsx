@@ -13,7 +13,9 @@ describe("WeightLossFormulaTooltip", () => {
           activeKcal: 500,
           maintenanceKcal: 2200,
           weeklyRateKg: -0.4,
-          dailyAdjustmentKcal: -440,
+          dailyAdjustmentKcal: -515,
+          rateModel: "Hall/NIDDK linearized adult model",
+          rateModelHorizonDays: 84,
           calorieTarget: 1760,
           calorieFloor: 1500,
           proteinReferenceWeightKg: 76,
@@ -33,11 +35,18 @@ describe("WeightLossFormulaTooltip", () => {
     );
 
     expect(screen.getByRole("tooltip")).toHaveTextContent(
-      "Mifflin-St Jeor BMR"
+      "Mifflin-St Jeor resting baseline"
+    );
+    expect(screen.getByRole("tooltip")).toHaveTextContent(
+      "HealthKit basal is complete-day evidence only"
     );
     expect(screen.getByRole("tooltip")).toHaveTextContent(
       "maintenance + objective adjustment"
     );
+    expect(screen.getByRole("tooltip")).toHaveTextContent(
+      "Hall/NIDDK linearized adult model"
+    );
+    expect(screen.getByRole("tooltip")).toHaveTextContent("over 84 days");
     expect(screen.getByRole("tooltip")).toHaveTextContent(
       "Carbohydrate target"
     );

@@ -238,6 +238,11 @@ Entity conversation rule:
 
 - For all entity creation or update flows, first use [`entity_conversation_playbooks.md`](./entity_conversation_playbooks.md) to decide the next best question.
 - Ask only for what is missing or unclear. Do not walk through every schema field.
+- Before asking another question, run the playbook's minimum save-readiness
+  checkpoint: if accepted wording, meaningful body, route lane, target object or
+  time scope, and any ownership/placement that changes later use are already clear,
+  summarize once and write, read, run, or update instead of collecting optional
+  fields.
 - Let each question have one job. Know what you are trying to clarify before you ask it.
 - Before you ask, decide the exact missing thing you need and how that answer will help you name, place, or save the record.
 - Prefer a progression of:
@@ -299,6 +304,11 @@ Psyche interview rule:
 - In that first exploratory turn, ask only one question, do not search Forge or mention whether a matching entity exists, and avoid openings like "This sounds like" or "What you're describing is".
 - In that first exploratory turn, prefer exactly two sentences: one brief empathic reflection and one concrete question. Avoid colons because they tend to trigger list-like answers.
 - Follow the preferred opening-question patterns in [`psyche_entity_playbooks.md`](./psyche_entity_playbooks.md) when they fit the entity the user is exploring.
+- After a Psyche formulation lands, use the Psyche save-readiness checkpoint from
+  the playbook. If the belief sentence, functional loop, behavior move, part-state,
+  trigger episode, value, event type, emotion definition, or flashcard cue/message is
+  true enough to save, ask at most one accuracy question and then use shared batch
+  CRUD.
 - If the user already offers a usable belief sentence, value phrase, or mode name,
   refine from their wording first instead of replacing it with a cleaner label too
   early.
