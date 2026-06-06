@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { scanConversations } from "forge-devrage";
+import { scanConversations } from "./devrage-scanner.js";
 import { getDatabase, runInTransaction } from "../db.js";
 import { psycheMetricsViewDataSchema } from "../psyche-types.js";
 const SWEAR_COUNT_KEY = "swear_count";

@@ -1,10 +1,13 @@
 import { execFile } from "node:child_process";
 import os from "node:os";
 import { promisify } from "node:util";
-import { Bonjour } from "bonjour-service";
+import bonjourService from "bonjour-service";
 import { logForgeDebug } from "./debug.js";
 import { companionIrohApiBaseUrlFromNodeId, companionIrohUiBaseUrlFromNodeId, getCompanionIrohStatus } from "./services/companion-iroh.js";
 const execFileAsync = promisify(execFile);
+const BonjourConstructor = bonjourService.Bonjour ??
+    bonjourService.default ??
+    bonjourService;
 export async function startForgeDiscoveryAdvertiser(options) {
     if (options.enabled === false ||
         process.env.FORGE_DISABLE_DISCOVERY_ADVERTISEMENT === "1") {
@@ -18,7 +21,7 @@ export async function startForgeDiscoveryAdvertiser(options) {
     });
     const irohTransport = getCompanionIrohStatus();
     const irohNodeId = irohTransport.pairPayload?.node_id;
-    const bonjour = new Bonjour({}, (error) => {
+    const bonjour = new BonjourConstructor({}, (error) => {
         logForgeDebug(`[forge-discovery] ignored mDNS advertisement error: ${formatDiscoveryError(error)}`);
     });
     let service;
