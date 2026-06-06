@@ -294,6 +294,19 @@ For upload/process/changelog-only TestFlight builds, keep
 That avoids external beta review submission while still uploading the IPA and
 waiting long enough to attach the changelog.
 
+Icon rule:
+
+- TestFlight and installed iOS/watchOS app icons come from the uploaded binary's
+  Xcode asset catalogs, not from App Store Connect metadata forms.
+- Do not try to repair a TestFlight app icon by using Fastlane `deliver app_icon`;
+  that field is deprecated for the current App Store Connect API.
+- A duplicate build-number response is not a successful icon release. If App Store
+  Connect says the bundle version has already been used, bump `CFBundleVersion`
+  and upload a fresh build.
+- After upload, verify the release summary contains a non-empty
+  `app_store_build_icon_asset_token`; that is App Store Connect's API signal that
+  the processed build includes an app icon from the binary.
+
 Then tag:
 
 ```bash
@@ -321,6 +334,9 @@ Important iOS rule:
 
 - the marketing version in `ios-companion/release/release.yml` must exactly match the
   version embedded in the iOS release tag
+- release completion requires App Store Connect to accept and process a new build
+  number for the intended IPA. Do not count an already-existing TestFlight build as
+  proof that the new binary was released.
 - 2026-05-22: Forge Companion `ios-testflight-v1.0.48` shipped through GitHub
   Actions run `26258880832` and distributed `1.0.48 (26)` to Internal testers.
   Do not re-tag the same TestFlight version just to repair plugin releases.
@@ -332,10 +348,14 @@ Important iOS rule:
   three latest versions at `0.2.81`.
 - 2026-06-04: App Store Connect returned a ContentDelivery checksum `500` after
   accepting Forge Companion `1.0.79 (30)`, then rejected reruns as duplicate build
-  `30`. The Fastlane lane now reconciles ambiguous or duplicate uploader errors by
-  querying App Store Connect for the target marketing/build number before failing.
-  If the workflow still fails after a consumed build number, bump the committed
-  build baseline and tag the next marketing version.
+  `30`. The Fastlane lane may reconcile ambiguous checksum errors by querying App
+  Store Connect, but true duplicate build-number responses must fail unless
+  `FORGE_IOS_ACCEPT_DUPLICATE_TESTFLIGHT_UPLOAD=1` is intentionally set for an
+  identical already-accepted IPA.
+- 2026-06-06: Forge Companion `1.0.82 (32)` was already valid in TestFlight and
+  therefore did not carry the new Forge icon. The corrected icon build is
+  `1.0.82 (33)`. Future TestFlight/App Store lanes verify App Store Connect's
+  `iconAssetToken` and record it in `release-summary.json`.
 - Current non-blocking workflow cleanup: GitHub Actions annotates
   `actions/upload-artifact@v4` as a Node.js 20 action. GitHub will force Node 24
   defaults starting 2026-06-02, so update the artifact action path before that
@@ -396,7 +416,13 @@ When an iOS release tag lands on a `main` commit, the workflow:
 2. Make sure you are on `main`
 3. Run the prepare command for OpenClaw or Hermes
 4. Watch the matching GitHub Actions workflow
-5. Confirm the package version is live on npm or PyPI
+5. Confirm the package version is live on npm or PyPI:
+
+```bash
+npm view forge-openclaw-plugin version dist-tags --json
+npm view forge-memory version dist-tags --json
+python3 -m pip index versions forge-hermes-plugin
+```
 
 ### iOS release
 
@@ -406,6 +432,8 @@ When an iOS release tag lands on a `main` commit, the workflow:
 4. Push the correct iOS tag
 5. Watch the GitHub Actions workflow
 6. Confirm TestFlight upload or App Store submission in App Store Connect
+7. Confirm the release summary has `uploaded: true`, the expected
+   `build_number`, and a non-empty `app_store_build_icon_asset_token`
 
 Normal iOS release commands must be limited to git operations and GitHub Actions
 inspection. Local `./ios-companion/scripts/publish-forge-companion.sh testflight`

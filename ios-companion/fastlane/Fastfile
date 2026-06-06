@@ -72,6 +72,16 @@ platform :ios do
       skip_submission: config.dig(:release, :skip_testflight_submission) == true,
       skip_waiting_for_build_processing: config.dig(:release, :skip_waiting_for_build_processing) == true
     )
+    uploaded_build = wait_for_app_store_connect_build(
+      config: config,
+      marketing_version: config.dig(:version, :marketing).to_s,
+      build_number: build_number
+    )
+    verify_uploaded_build_icon!(
+      build: uploaded_build,
+      marketing_version: config.dig(:version, :marketing).to_s,
+      build_number: build_number
+    )
     write_release_summary(
       artifact_dir: artifact_dir,
       mode: "testflight",
@@ -80,6 +90,7 @@ platform :ios do
       ipa_path: ipa_path,
       build_number: build_number,
       metadata_state: metadata_state,
+      app_store_build: uploaded_build,
       uploaded: true,
       submitted_for_review: false
     )
@@ -120,6 +131,16 @@ platform :ios do
       precheck_include_in_app_purchases: false,
       force: true
     )
+    uploaded_build = wait_for_app_store_connect_build(
+      config: config,
+      marketing_version: config.dig(:version, :marketing).to_s,
+      build_number: build_number
+    )
+    verify_uploaded_build_icon!(
+      build: uploaded_build,
+      marketing_version: config.dig(:version, :marketing).to_s,
+      build_number: build_number
+    )
     write_release_summary(
       artifact_dir: artifact_dir,
       mode: "app-store",
@@ -128,6 +149,7 @@ platform :ios do
       ipa_path: ipa_path,
       build_number: build_number,
       metadata_state: metadata_state,
+      app_store_build: uploaded_build,
       uploaded: true,
       submitted_for_review: true
     )
@@ -381,6 +403,19 @@ def wait_for_app_store_connect_build(config:, marketing_version:, build_number:)
   end
 
   nil
+end
+
+def verify_uploaded_build_icon!(build:, marketing_version:, build_number:)
+  UI.user_error!("App Store Connect did not return build #{marketing_version} (#{build_number}) after upload.") unless build
+
+  icon_asset_token = build.icon_asset_token.to_s.strip
+  UI.user_error!(
+    "App Store Connect build #{marketing_version} (#{build_number}) has no iconAssetToken. " \
+    "The uploaded binary may not include a valid AppIcon asset."
+  ) if icon_asset_token.empty?
+
+  UI.success("Verified App Store Connect build #{marketing_version} (#{build_number}) includes iconAssetToken #{icon_asset_token}.")
+  icon_asset_token
 end
 
 def read_build_setting(target_name:, key:)
@@ -748,6 +783,7 @@ def write_release_summary(
   ipa_path:,
   build_number:,
   metadata_state:,
+  app_store_build: nil,
   uploaded:,
   submitted_for_review:
 )
@@ -761,6 +797,9 @@ def write_release_summary(
     ipa_path: ipa_path,
     metadata_root: metadata_state[:metadata_root],
     locale: metadata_state[:locale],
+    app_store_build_id: app_store_build&.id,
+    app_store_build_processing_state: app_store_build&.processing_state,
+    app_store_build_icon_asset_token: app_store_build&.icon_asset_token,
     uploaded: uploaded,
     submitted_for_review: submitted_for_review,
     generated_at: Time.now.utc.iso8601
