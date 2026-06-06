@@ -323,6 +323,16 @@ rescue StandardError => error
     raise
   end
 
+  if app_store_upload_is_duplicate_build_number?(error: error, build_number: build_number) &&
+     ENV["FORGE_IOS_ACCEPT_DUPLICATE_TESTFLIGHT_UPLOAD"].to_s != "1"
+    UI.user_error!(
+      "App Store Connect already has build #{marketing_version} (#{build_number}). " \
+      "Bump CFBundleVersion and upload a fresh build; set " \
+      "FORGE_IOS_ACCEPT_DUPLICATE_TESTFLIGHT_UPLOAD=1 only when intentionally " \
+      "reconciling a previously accepted identical IPA."
+    )
+  end
+
   UI.important("App Store Connect upload returned an ambiguous/duplicate response. Checking whether build #{marketing_version} (#{build_number}) was accepted.")
   build = wait_for_app_store_connect_build(
     config: config,
@@ -338,6 +348,13 @@ end
 def app_store_upload_may_have_been_accepted?(error:, build_number:)
   message = error.message.to_s
   return true if message.include?("UPDATE buildUploadFiles CHECKSUM") && message.include?("status code 500")
+  return true if app_store_upload_is_duplicate_build_number?(error: error, build_number: build_number)
+
+  false
+end
+
+def app_store_upload_is_duplicate_build_number?(error:, build_number:)
+  message = error.message.to_s
   return true if message.include?("ENTITY_ERROR.ATTRIBUTE.INVALID.DUPLICATE") && message.include?("previously uploaded version")
   return true if message.include?("bundle version must be higher") && message.include?(build_number.to_s)
 
