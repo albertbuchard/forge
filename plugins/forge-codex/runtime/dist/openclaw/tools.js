@@ -613,7 +613,7 @@ export function registerForgePluginTools(api, config) {
     });
     registerReadTool(api, config, {
         name: "forge_get_wiki_settings",
-        label: "Forge Wiki Settings",
+        label: "KarpaWiki Settings",
         description: "Read the current wiki spaces plus enabled LLM and embedding profiles before search, ingest, or page writes.",
         path: () => "/api/v1/wiki/settings"
     });
@@ -643,7 +643,7 @@ export function registerForgePluginTools(api, config) {
     });
     registerReadTool(api, config, {
         name: "forge_get_wiki_health",
-        label: "Forge Wiki Health",
+        label: "KarpaWiki Health",
         description: "Read unresolved links, orphan pages, missing summaries, raw-source counts, and index-path state for one wiki space.",
         parameters: Type.Object({
             spaceId: optionalString()

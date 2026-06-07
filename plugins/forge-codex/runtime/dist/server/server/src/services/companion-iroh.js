@@ -14,8 +14,12 @@ export async function buildCompanionPairingTransport(input) {
     const requestApiBaseUrl = normalizeApiBaseUrl(input.requestApiBaseUrl);
     const requestUiBaseUrl = normalizeUiBaseUrl(input.requestUiBaseUrl) ??
         deriveUiBaseUrlFromApiBaseUrl(requestApiBaseUrl);
+    const selectedFallback = normalizeSelectedFallback(input.publicUrl) ??
+        normalizeRequestFallback(requestApiBaseUrl, requestUiBaseUrl);
     if (input.requestedMode === "manual-http") {
-        return manualHttpTransport(requestApiBaseUrl, requestUiBaseUrl, [
+        const manualApiBaseUrl = selectedFallback?.apiBaseUrl ?? requestApiBaseUrl;
+        const manualUiBaseUrl = selectedFallback?.uiBaseUrl ?? requestUiBaseUrl;
+        return manualHttpTransport(manualApiBaseUrl, manualUiBaseUrl, [
             "Manual HTTP/TCP pairing was explicitly requested."
         ]);
     }
@@ -30,13 +34,18 @@ export async function buildCompanionPairingTransport(input) {
             pairPayload: snapshot.pairPayload,
             alpn: snapshot.alpn ?? COMPANION_IROH_ALPN,
             localBaseUrl: snapshot.localBaseUrl,
-            fallbackApiBaseUrl: requestApiBaseUrl,
-            fallbackUiBaseUrl: requestUiBaseUrl,
+            fallbackApiBaseUrl: selectedFallback?.apiBaseUrl ?? null,
+            fallbackUiBaseUrl: selectedFallback?.uiBaseUrl ?? null,
+            fallbackMode: selectedFallback
+                ? fallbackModeFor(selectedFallback.apiBaseUrl, input.fallbackMode)
+                : "none",
             recreateCommand: snapshot.recreateCommand ?? undefined,
             startedAt: snapshot.startedAt ?? undefined,
             notes: [
                 "Default pairing uses Forge's Rust Iroh transport over QUIC first.",
-                "The QR keeps the request API/UI URL as a direct fallback when Iroh cannot complete a request.",
+                selectedFallback
+                    ? "The QR includes the selected direct URL only as an explicit fallback/direct path."
+                    : "No direct HTTP fallback was selected for this QR.",
                 "The QR payload carries the Iroh node id, host token, optional relay, and ALPN forge-companion/1.",
                 "Manual HTTP/TCP pairing remains available with --manual-http for advanced local setups."
             ]
@@ -201,21 +210,24 @@ function isIrohPairPayload(value) {
 }
 function irohTransport(input) {
     const nodeId = input.pairPayload.node_id;
+    const irohApiBaseUrl = companionIrohApiBaseUrlFromNodeId(nodeId);
+    const irohUiBaseUrl = companionIrohUiBaseUrlFromNodeId(nodeId);
     return {
         transportMode: "iroh",
-        apiBaseUrl: input.fallbackApiBaseUrl,
-        uiBaseUrl: input.fallbackUiBaseUrl,
+        apiBaseUrl: input.fallbackApiBaseUrl ?? irohApiBaseUrl,
+        uiBaseUrl: input.fallbackUiBaseUrl ?? irohUiBaseUrl,
         transport: {
             protocol: "iroh",
             provider: "forge-companion-iroh",
             status: "ready",
-            publicBaseUrl: input.fallbackApiBaseUrl,
+            publicBaseUrl: input.fallbackApiBaseUrl ?? undefined,
             localBaseUrl: input.localBaseUrl,
             nodeId,
             relay: input.pairPayload.relay,
             alpn: input.alpn,
             agent: FORGE_IROH_AGENT,
             pairPayload: input.pairPayload,
+            fallbackMode: input.fallbackMode,
             recreateCommand: input.recreateCommand,
             startedAt: input.startedAt,
             notes: input.notes
@@ -381,6 +393,65 @@ function normalizeUiBaseUrl(value) {
     }
     catch {
         return null;
+    }
+}
+function normalizeSelectedFallback(value) {
+    if (!value?.trim()) {
+        return null;
+    }
+    const apiBaseUrl = normalizeFallbackApiBaseUrl(value);
+    if (isLoopbackUrl(apiBaseUrl)) {
+        return null;
+    }
+    return {
+        apiBaseUrl,
+        uiBaseUrl: normalizeUiBaseUrl(value) ?? deriveUiBaseUrlFromApiBaseUrl(apiBaseUrl)
+    };
+}
+function normalizeRequestFallback(apiBaseUrl, uiBaseUrl) {
+    if (isLoopbackUrl(apiBaseUrl)) {
+        return null;
+    }
+    return {
+        apiBaseUrl,
+        uiBaseUrl
+    };
+}
+function fallbackModeFor(apiBaseUrl, requestedMode) {
+    if (requestedMode === "fixed-ip" || requestedMode === "tailscale") {
+        return requestedMode;
+    }
+    try {
+        const hostname = new URL(apiBaseUrl).hostname.toLowerCase();
+        return hostname.endsWith(".ts.net") ? "tailscale" : "fixed-ip";
+    }
+    catch {
+        return "fixed-ip";
+    }
+}
+function normalizeFallbackApiBaseUrl(value) {
+    try {
+        const url = new URL(value.trim());
+        if (url.pathname.includes("/api/v1")) {
+            return normalizeApiBaseUrl(url.toString());
+        }
+        url.pathname = "/api/v1";
+        url.search = "";
+        url.hash = "";
+        return url.toString().replace(/\/$/u, "");
+    }
+    catch {
+        return normalizeApiBaseUrl(value);
+    }
+}
+function isLoopbackUrl(value) {
+    try {
+        const url = new URL(value);
+        const host = url.hostname.toLowerCase();
+        return host === "127.0.0.1" || host === "localhost" || host === "::1";
+    }
+    catch {
+        return false;
     }
 }
 function deriveUiBaseUrlFromApiBaseUrl(apiBaseUrl) {
