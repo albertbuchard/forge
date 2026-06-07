@@ -1,5 +1,5 @@
-Forge Companion 1.0.85 fixes physical-phone pairing when Forge Memory cannot create a reachable transport.
+Forge Companion 1.0.86 fixes stale and partially applied Forge themes inside the embedded web view.
 
-The app now rejects localhost-only pairing payloads on real iPhones instead of getting stuck after scanning a QR code.
+The native wrapper no longer overrides Forge’s web theme backgrounds, so the current Forge theme controls page backgrounds and cards consistently.
 
-QR scanning also uses the same compact/full payload decoder as manual setup, so old and new Forge Memory payload formats are handled consistently.
+The Refresh Forge cache action now clears modern WebKit fetch and service-worker caches while preserving pairing credentials and local app preferences.

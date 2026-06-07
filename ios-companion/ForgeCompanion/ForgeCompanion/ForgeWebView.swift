@@ -8,11 +8,55 @@ struct ForgeWebView: UIViewRepresentable {
     @Binding var isLoading: Bool
     @Binding var errorMessage: String?
 
-    static let cacheDataTypesForHardRefresh: Set<String> = [
-        WKWebsiteDataTypeDiskCache,
-        WKWebsiteDataTypeMemoryCache,
-        WKWebsiteDataTypeOfflineWebApplicationCache
-    ]
+    static var cacheDataTypesForHardRefresh: Set<String> {
+        var types: Set<String> = [
+            WKWebsiteDataTypeDiskCache,
+            WKWebsiteDataTypeMemoryCache,
+            WKWebsiteDataTypeOfflineWebApplicationCache
+        ]
+
+        if #available(iOS 11.3, *) {
+            types.insert(WKWebsiteDataTypeFetchCache)
+            types.insert(WKWebsiteDataTypeServiceWorkerRegistrations)
+        }
+
+        return types
+    }
+
+    static let companionBootstrapScript = """
+    window.__forgeCompanionEmbedded = true;
+    document.documentElement.dataset.forgeCompanionEmbedded = 'true';
+    window.__forgeCompanionApplyLayout = function(width, height, top, bottom) {
+        const widthPx = width + 'px';
+        const heightPx = height + 'px';
+        const topPx = top + 'px';
+        const bottomPx = bottom + 'px';
+        window.__forgeCompanionViewportInsets = { top, bottom };
+        document.documentElement.style.setProperty('--forge-companion-webview-width', widthPx);
+        document.documentElement.style.setProperty('--forge-companion-webview-height', heightPx);
+        document.documentElement.style.setProperty('--forge-visual-viewport-height', heightPx);
+        document.documentElement.style.setProperty('--forge-visual-viewport-top', topPx);
+        document.documentElement.style.setProperty('--forge-visual-viewport-bottom', bottomPx);
+        document.documentElement.style.setProperty('--forge-safe-area-top', topPx);
+        document.documentElement.style.setProperty('--forge-safe-area-bottom', bottomPx);
+        document.body.style.minHeight = heightPx;
+        document.body.style.margin = '0';
+
+        const root = document.getElementById('root');
+        if (root) {
+            root.style.minHeight = heightPx;
+        }
+    };
+    const style = document.createElement('style');
+    style.innerHTML = `
+    html {
+        background-color: #0B1326;
+    }
+    body {
+        overflow-x: hidden;
+    }`;
+    document.documentElement.appendChild(style);
+    """
 
     static func freshRequest(
         for url: URL,
@@ -59,49 +103,9 @@ struct ForgeWebView: UIViewRepresentable {
             )
         }
 
-        let source = """
-        window.__forgeCompanionEmbedded = true;
-        window.__forgeCompanionApplyLayout = function(width, height, top, bottom) {
-            const widthPx = width + 'px';
-            const heightPx = height + 'px';
-            const topPx = top + 'px';
-            const bottomPx = bottom + 'px';
-            window.__forgeCompanionViewportInsets = { top, bottom };
-            document.documentElement.style.setProperty('--forge-companion-webview-width', widthPx);
-            document.documentElement.style.setProperty('--forge-companion-webview-height', heightPx);
-            document.documentElement.style.setProperty('--forge-visual-viewport-height', heightPx);
-            document.documentElement.style.setProperty('--forge-visual-viewport-top', topPx);
-            document.documentElement.style.setProperty('--forge-visual-viewport-bottom', bottomPx);
-            document.documentElement.style.setProperty('--forge-safe-area-top', topPx);
-            document.documentElement.style.setProperty('--forge-safe-area-bottom', bottomPx);
-            document.documentElement.style.background = '#0B1326';
-            document.body.style.minHeight = heightPx;
-            document.body.style.margin = '0';
-            document.body.style.background = '#0B1326';
-
-            const root = document.getElementById('root');
-            if (root) {
-                root.style.minHeight = heightPx;
-                root.style.background = '#0B1326';
-            }
-        };
-        const style = document.createElement('style');
-        style.innerHTML = `
-        html, body, #root {
-            width: 100% !important;
-            min-height: 100% !important;
-            max-height: none !important;
-            background: #0B1326 !important;
-        }
-        body {
-            overflow-x: hidden !important;
-        }`;
-        document.documentElement.appendChild(style);
-        """
-
         configuration.userContentController.addUserScript(
             WKUserScript(
-                source: source,
+                source: Self.companionBootstrapScript,
                 injectionTime: .atDocumentStart,
                 forMainFrameOnly: true
             )
@@ -281,15 +285,17 @@ struct ForgeWebView: UIViewRepresentable {
             let script = """
             (() => {
               const root = document.getElementById('root');
-              return JSON.stringify({
-                href: location.href,
-                title: document.title,
-                readyState: document.readyState,
-                rootChildren: root ? root.children.length : -1,
-                rootTextSample: root ? (root.innerText || '').slice(0, 160) : '',
-                bodyBackground: getComputedStyle(document.body).backgroundColor,
-                rootBackground: root ? getComputedStyle(root).backgroundColor : 'none'
-              });
+                return JSON.stringify({
+                  href: location.href,
+                  title: document.title,
+                  readyState: document.readyState,
+                  bodyClassName: document.body.className,
+                  theme: document.documentElement.dataset.forgeTheme || '',
+                  rootChildren: root ? root.children.length : -1,
+                  rootTextSample: root ? (root.innerText || '').slice(0, 160) : '',
+                  bodyBackground: getComputedStyle(document.body).backgroundColor,
+                  rootBackground: root ? getComputedStyle(root).backgroundColor : 'none'
+                });
             })();
             """
             webView.evaluateJavaScript(script) { result, error in

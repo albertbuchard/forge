@@ -118,13 +118,29 @@ final class ForgeCompanionTests: XCTestCase {
         )
     }
 
-    func testForgeWebViewHardRefreshClearsOnlyWebCaches() {
+    func testForgeWebViewHardRefreshClearsOnlyWebCachesAndServiceWorkers() {
         XCTAssertTrue(ForgeWebView.cacheDataTypesForHardRefresh.contains(WKWebsiteDataTypeDiskCache))
         XCTAssertTrue(ForgeWebView.cacheDataTypesForHardRefresh.contains(WKWebsiteDataTypeMemoryCache))
+        XCTAssertTrue(ForgeWebView.cacheDataTypesForHardRefresh.contains(WKWebsiteDataTypeOfflineWebApplicationCache))
+        if #available(iOS 11.3, *) {
+            XCTAssertTrue(ForgeWebView.cacheDataTypesForHardRefresh.contains(WKWebsiteDataTypeFetchCache))
+            XCTAssertTrue(ForgeWebView.cacheDataTypesForHardRefresh.contains(WKWebsiteDataTypeServiceWorkerRegistrations))
+        }
         XCTAssertFalse(ForgeWebView.cacheDataTypesForHardRefresh.contains(WKWebsiteDataTypeCookies))
         XCTAssertFalse(ForgeWebView.cacheDataTypesForHardRefresh.contains(WKWebsiteDataTypeLocalStorage))
         XCTAssertFalse(ForgeWebView.cacheDataTypesForHardRefresh.contains(WKWebsiteDataTypeSessionStorage))
         XCTAssertFalse(ForgeWebView.cacheDataTypesForHardRefresh.contains(WKWebsiteDataTypeIndexedDBDatabases))
+    }
+
+    func testForgeWebViewBootstrapDoesNotOverrideForgeThemeBackgrounds() {
+        let script = ForgeWebView.companionBootstrapScript
+
+        XCTAssertTrue(script.contains("__forgeCompanionApplyLayout"))
+        XCTAssertTrue(script.contains("--forge-safe-area-bottom"))
+        XCTAssertFalse(script.contains("!important"))
+        XCTAssertFalse(script.contains("document.body.style.background"))
+        XCTAssertFalse(script.contains("root.style.background"))
+        XCTAssertFalse(script.contains("html, body, #root"))
     }
 
     func testNormalizedPayloadPreservesPreferredUiBaseUrl() {
