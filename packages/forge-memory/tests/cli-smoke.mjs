@@ -10,15 +10,44 @@ const packageRoot = path.resolve(import.meta.dirname, "..");
 const bin = path.join(packageRoot, "bin", "forge-memory.mjs");
 const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "forge-memory-home-"));
 const dataRoot = path.join(tempHome, "data");
-const fakeIrohBin = path.join(tempHome, "bin", process.platform === "win32" ? "forge-companion-iroh.exe" : "forge-companion-iroh");
-fs.mkdirSync(path.dirname(fakeIrohBin), { recursive: true });
+const fakeBinDir = path.join(tempHome, "bin");
+const fakeIrohBin = path.join(fakeBinDir, process.platform === "win32" ? "forge-companion-iroh.exe" : "forge-companion-iroh");
+fs.mkdirSync(fakeBinDir, { recursive: true });
 fs.writeFileSync(fakeIrohBin, process.platform === "win32" ? "@echo off\r\n" : "#!/bin/sh\n");
 if (process.platform !== "win32") fs.chmodSync(fakeIrohBin, 0o755);
+const fakeTailscaleBin = path.join(fakeBinDir, process.platform === "win32" ? "tailscale.cmd" : "tailscale");
+fs.writeFileSync(
+  fakeTailscaleBin,
+  process.platform === "win32"
+    ? [
+        "@echo off",
+        "if \"%1\"==\"status\" if \"%2\"==\"--json\" (echo {\"BackendState\":\"Running\",\"Self\":{\"DNSName\":\"mac.tailnet.ts.net.\"}}& exit /b 0)",
+        "if \"%1\"==\"serve\" (echo %*>>\"%FORGE_MEMORY_FAKE_TAILSCALE_LOG%\"& exit /b 0)",
+        "exit /b 1",
+        ""
+      ].join("\r\n")
+    : [
+        "#!/bin/sh",
+        "if [ \"$1\" = \"status\" ] && [ \"$2\" = \"--json\" ]; then",
+        "  printf '%s\\n' '{\"BackendState\":\"Running\",\"Self\":{\"DNSName\":\"mac.tailnet.ts.net.\"}}'",
+        "  exit 0",
+        "fi",
+        "if [ \"$1\" = \"serve\" ]; then",
+        "  printf '%s\\n' \"$*\" >> \"$FORGE_MEMORY_FAKE_TAILSCALE_LOG\"",
+        "  exit 0",
+        "fi",
+        "exit 1",
+        ""
+      ].join("\n")
+);
+if (process.platform !== "win32") fs.chmodSync(fakeTailscaleBin, 0o755);
 const env = {
   ...process.env,
   HOME: tempHome,
   USERPROFILE: tempHome,
-  FORGE_COMPANION_IROH_BIN: fakeIrohBin
+  PATH: `${fakeBinDir}${path.delimiter}${process.env.PATH ?? ""}`,
+  FORGE_COMPANION_IROH_BIN: fakeIrohBin,
+  FORGE_MEMORY_SKIP_TAILSCALE_AUTODETECT: "1"
 };
 
 function run(args, options = {}) {
@@ -604,6 +633,133 @@ await withFakeForgeServer(async (request, body) => {
   const savedPairing = JSON.parse(fs.readFileSync(savedPairingPath, "utf8"));
   if (savedPairing.sessionId !== "pair_test" || savedPairing.pairingToken !== "pairing-token") {
     throw new Error("Expected pair-ios to save the full manual pairing payload");
+  }
+});
+await withFakeForgeServer(async (request, body) => {
+  if (request.url === "/api/v1/health") return { body: forgeHealthResponse() };
+  if (request.url === "/api/v1/auth/operator-session") {
+    return {
+      headers: { "set-cookie": "forge_operator_session=test-session; Path=/" },
+      body: { session: { id: "ses_test" } }
+    };
+  }
+  if (request.url === "/api/v1/health/pairing-sessions") {
+    const parsed = JSON.parse(body || "{}");
+    if (parsed.transportMode !== "manual-http") {
+      return {
+        statusCode: 400,
+        body: { error: `expected Tailscale primary manual-http, got ${parsed.transportMode}` }
+      };
+    }
+    if (parsed.fallbackMode !== "tailscale") {
+      return {
+        statusCode: 400,
+        body: { error: `expected Tailscale fallbackMode, got ${parsed.fallbackMode}` }
+      };
+    }
+    if (parsed.publicUrl !== "https://mac.tailnet.ts.net/forge/") {
+      return {
+        statusCode: 400,
+        body: { error: `expected Tailscale publicUrl, got ${parsed.publicUrl}` }
+      };
+    }
+    return {
+      statusCode: 201,
+      body: {
+        qrPayload: {
+          kind: "forge_companion_pairing",
+          apiBaseUrl: "https://mac.tailnet.ts.net/api/v1",
+          uiBaseUrl: "https://mac.tailnet.ts.net/forge/",
+          transportMode: "manual-http",
+          transport: {
+            protocol: "http",
+            provider: "manual-http",
+            status: "ready",
+            publicBaseUrl: "https://mac.tailnet.ts.net/api/v1"
+          },
+          sessionId: "pair_tailscale",
+          pairingToken: "pairing-token",
+          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+          capabilities: ["health-sync"]
+        }
+      }
+    };
+  }
+  return { statusCode: 404, body: { error: "not found" } };
+}, async ({ port, requests }) => {
+  writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
+  const pairing = await runAsync(["pair-ios", "--json", "--no-start"], {
+    env: {
+      ...env,
+      FORGE_MEMORY_SKIP_TAILSCALE_AUTODETECT: "0",
+      FORGE_MEMORY_SKIP_TAILSCALE_PUBLIC_PROBE: "1",
+      FORGE_MEMORY_TAILSCALE_PUBLIC_URL: "https://mac.tailnet.ts.net/forge/"
+    }
+  });
+  const payload = JSON.parse(pairing.stdout);
+  if (payload.qrPayload.sessionId !== "pair_tailscale") {
+    throw new Error("Expected Tailscale autodetect to create a Tailscale pairing");
+  }
+  const pairingRequest = requests.find((entry) => entry.url === "/api/v1/health/pairing-sessions");
+  const parsedBody = JSON.parse(pairingRequest?.body || "{}");
+  if (parsedBody.transportMode !== "manual-http" || parsedBody.fallbackMode !== "tailscale") {
+    throw new Error(`Expected Tailscale to be primary pairing transport, got ${pairingRequest?.body}`);
+  }
+});
+await withFakeForgeServer(async (request, body) => {
+  if (request.url === "/api/v1/health") return { body: forgeHealthResponse() };
+  if (request.url === "/api/v1/auth/operator-session") {
+    return {
+      headers: { "set-cookie": "forge_operator_session=test-session; Path=/" },
+      body: { session: { id: "ses_test" } }
+    };
+  }
+  if (request.url === "/api/v1/health/pairing-sessions") {
+    const parsed = JSON.parse(body || "{}");
+    return {
+      statusCode: 201,
+      body: {
+        qrPayload: {
+          kind: "forge_companion_pairing",
+          apiBaseUrl: parsed.publicUrl.replace("/forge/", "/api/v1"),
+          uiBaseUrl: parsed.publicUrl,
+          transportMode: parsed.transportMode,
+          transport: {
+            protocol: "http",
+            provider: "manual-http",
+            status: "ready",
+            publicBaseUrl: parsed.publicUrl.replace("/forge/", "/api/v1")
+          },
+          sessionId: "pair_tailscale_serve",
+          pairingToken: "pairing-token",
+          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+          capabilities: ["health-sync"]
+        }
+      }
+    };
+  }
+  return { statusCode: 404, body: { error: "not found" } };
+}, async ({ port }) => {
+  writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
+  const serveLog = path.join(tempHome, "tailscale-serve.log");
+  const probeSequence = path.join(tempHome, "tailscale-probe-sequence.txt");
+  fs.rmSync(serveLog, { force: true });
+  fs.writeFileSync(probeSequence, "fail\nok\n");
+  const pairing = await runAsync(["pair-ios", "--yes", "--no-start"], {
+    env: {
+      ...env,
+      FORGE_MEMORY_SKIP_TAILSCALE_AUTODETECT: "0",
+      FORGE_MEMORY_TAILSCALE_PUBLIC_URL: "https://mac.tailnet.ts.net/forge/",
+      FORGE_MEMORY_FAKE_TAILSCALE_LOG: serveLog,
+      FORGE_MEMORY_FAKE_TAILSCALE_PUBLIC_PROBE_SEQUENCE: probeSequence
+    }
+  });
+  if (!pairing.stdout.includes("Manual HTTP") || !pairing.stdout.includes("https://mac.tailnet.ts.net/api/v1")) {
+    throw new Error(`Expected human Tailscale Serve pairing output, got:\n${pairing.stdout}`);
+  }
+  const serveInvocation = fs.readFileSync(serveLog, "utf8");
+  if (!serveInvocation.includes(`serve --bg http://127.0.0.1:${port}`)) {
+    throw new Error(`Expected pair-ios --yes to configure tailscale serve for Forge port ${port}, got:\n${serveInvocation}`);
   }
 });
 await withFakeForgeServer(async (request) => {

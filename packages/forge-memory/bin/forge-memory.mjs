@@ -362,6 +362,219 @@ function rustInstallGuidance() {
   ];
 }
 
+function tailscaleInstallPlan() {
+  if (process.platform === "darwin") {
+    return {
+      installable: true,
+      autoInstallCommand: commandExists("brew")
+        ? { command: "brew", args: ["install", "--cask", "tailscale"] }
+        : null,
+      guidance: [
+        "Install Tailscale for macOS from https://tailscale.com/download/mac or with Homebrew: brew install --cask tailscale",
+        "Open Tailscale, sign in, and make sure this Mac and the iPhone are in the same tailnet.",
+        "Then rerun: npx forge-memory pair-ios"
+      ]
+    };
+  }
+  if (process.platform === "linux") {
+    return {
+      installable: true,
+      autoInstallCommand: commandExists("curl")
+        ? {
+            command: "sh",
+            args: ["-c", "curl -fsSL https://tailscale.com/install.sh | sh"]
+          }
+        : null,
+      guidance: [
+        "Install Tailscale with your package manager or the official installer: curl -fsSL https://tailscale.com/install.sh | sh",
+        "Start and authenticate it: sudo tailscale up",
+        "Then rerun: npx forge-memory pair-ios"
+      ]
+    };
+  }
+  if (process.platform === "win32") {
+    return {
+      installable: true,
+      autoInstallCommand: commandExists("winget")
+        ? {
+            command: "winget",
+            args: [
+              "install",
+              "--id",
+              "Tailscale.Tailscale",
+              "-e",
+              "--source",
+              "winget",
+              "--accept-package-agreements",
+              "--accept-source-agreements"
+            ]
+          }
+        : null,
+      guidance: [
+        "Install Tailscale for Windows from https://tailscale.com/download/windows or with winget: winget install Tailscale.Tailscale",
+        "Sign in, make sure this PC and the iPhone are in the same tailnet, then rerun: npx forge-memory pair-ios"
+      ]
+    };
+  }
+  return {
+    installable: false,
+    autoInstallCommand: null,
+    guidance: [
+      "Install Tailscale from https://tailscale.com/download if your platform supports it, then rerun: npx forge-memory pair-ios"
+    ]
+  };
+}
+
+function tailscaleAutodetectDisabled() {
+  return ["1", "true", "yes"].includes(
+    String(process.env.FORGE_MEMORY_SKIP_TAILSCALE_AUTODETECT ?? "").toLowerCase()
+  );
+}
+
+function parseTailscaleStatus(raw) {
+  if (!raw) return { running: false, authenticated: false, dnsName: null };
+  try {
+    const payload = JSON.parse(raw);
+    const self = payload.Self ?? payload.self ?? null;
+    const dnsName = String(self?.DNSName ?? self?.dnsName ?? "")
+      .trim()
+      .replace(/\.$/, "");
+    const backendState = String(payload.BackendState ?? payload.backendState ?? "");
+    const running = backendState.toLowerCase() === "running";
+    return {
+      running,
+      authenticated: running && Boolean(dnsName),
+      dnsName: dnsName || null,
+      backendState: backendState || null
+    };
+  } catch {
+    return { running: false, authenticated: false, dnsName: null };
+  }
+}
+
+function normalizeForgePublicUiUrl(value) {
+  const normalized = normalizePublicPairingUrl(value);
+  if (!normalized) return null;
+  const url = new URL(normalized);
+  if (!url.pathname || url.pathname === "/" || url.pathname.startsWith("/api/")) {
+    url.pathname = "/forge/";
+  }
+  if (!url.pathname.endsWith("/")) url.pathname = `${url.pathname}/`;
+  url.search = "";
+  url.hash = "";
+  return url.toString();
+}
+
+function forgePublicHealthUrl(publicUiUrl) {
+  const url = new URL(publicUiUrl);
+  url.pathname = "/api/v1/health";
+  url.search = "";
+  url.hash = "";
+  return url;
+}
+
+function publicUrlFallbackMode(publicUrl) {
+  try {
+    const host = new URL(publicUrl).hostname.toLowerCase();
+    return host.endsWith(".ts.net") ? "tailscale" : "fixed-ip";
+  } catch {
+    return "fixed-ip";
+  }
+}
+
+function detectTailscaleState() {
+  if (tailscaleAutodetectDisabled()) {
+    return {
+      installed: false,
+      running: false,
+      authenticated: false,
+      publicUrl: null,
+      disabled: true
+    };
+  }
+  if (!commandExists("tailscale")) {
+    return {
+      installed: false,
+      running: false,
+      authenticated: false,
+      publicUrl: null,
+      installPlan: tailscaleInstallPlan()
+    };
+  }
+  const status = parseTailscaleStatus(runCapture("tailscale", ["status", "--json"], 4_000));
+  const envPublicUrl = normalizeForgePublicUiUrl(process.env.FORGE_MEMORY_TAILSCALE_PUBLIC_URL);
+  const publicUrl =
+    envPublicUrl ??
+    (status.dnsName ? `https://${status.dnsName}/forge/` : null);
+  return {
+    installed: true,
+    running: status.running,
+    authenticated: status.authenticated,
+    publicUrl,
+    backendState: status.backendState,
+    dnsName: status.dnsName
+  };
+}
+
+async function probePublicForgeUrl(publicUrl, timeoutMs = 4_000) {
+  if (!publicUrl) return { ok: false, error: "no public URL candidate" };
+  const fakeProbeSequencePath =
+    process.env.FORGE_MEMORY_FAKE_TAILSCALE_PUBLIC_PROBE_SEQUENCE;
+  if (fakeProbeSequencePath) {
+    const source = fs.existsSync(fakeProbeSequencePath)
+      ? fs.readFileSync(fakeProbeSequencePath, "utf8")
+      : "";
+    const entries = source
+      .split(/\r?\n/)
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    const current = entries.shift() ?? "fail";
+    fs.writeFileSync(fakeProbeSequencePath, entries.length ? `${entries.join("\n")}\n` : "");
+    return current === "ok"
+      ? { ok: true, fake: true }
+      : { ok: false, error: current === "fail" ? "fake probe failure" : current };
+  }
+  if (
+    ["1", "true", "yes"].includes(
+      String(process.env.FORGE_MEMORY_SKIP_TAILSCALE_PUBLIC_PROBE ?? "").toLowerCase()
+    )
+  ) {
+    return { ok: true, skipped: true };
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(forgePublicHealthUrl(publicUrl), {
+      headers: { accept: "application/json", "x-forge-runtime-probe": "1" },
+      signal: controller.signal
+    });
+    if (!response.ok) return { ok: false, status: response.status };
+    const payload = await response.json().catch(() => null);
+    if (!isForgeHealthPayload(payload)) {
+      return { ok: false, status: response.status, error: "non-Forge health payload" };
+    }
+    return { ok: true, status: response.status };
+  } catch (error) {
+    return { ok: false, error: describeNetworkError(error) };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function configureTailscaleServe(config, flags) {
+  const target = `http://127.0.0.1:${config.port || DEFAULT_PORT}`;
+  return runCommand("tailscale", ["serve", "--bg", target], {
+    dryRun: flags?.dryRun
+  });
+}
+
+function tailscalePreferredMessage() {
+  return [
+    "Tailscale is preferred when available: it gives the iPhone a normal HTTPS Forge URL, is usually faster and steadier than relayed Iroh, and avoids the custom WebView URL scheme.",
+    "Iroh remains the fallback when Tailscale is missing, declined, or unreachable."
+  ].join(" ");
+}
+
 function refreshCargoPath() {
   const cargoBin = path.join(homeDir(), ".cargo", "bin");
   if (fs.existsSync(cargoBin)) {
@@ -1972,11 +2185,7 @@ async function createPairing(config, options = {}) {
       body: JSON.stringify({
         userId: null,
         transportMode,
-        fallbackMode: publicUrl
-          ? publicUrl.includes(".ts.net")
-            ? "tailscale"
-            : "fixed-ip"
-          : "none",
+        fallbackMode: publicUrl ? publicUrlFallbackMode(publicUrl) : "none",
         publicUrl: publicUrl ?? undefined
       })
     });
@@ -2016,7 +2225,128 @@ async function createPairing(config, options = {}) {
   return pairing;
 }
 
-async function resolveIosPairingOptions(parsed) {
+async function maybeInstallTailscaleForPairing(parsed) {
+  const plan = tailscaleInstallPlan();
+  if (parsed.flags.json || parsed.flags.dryRun || !process.stdin.isTTY) {
+    return { installed: false, guidance: plan.guidance };
+  }
+  console.log(color.bold("Tailscale pairing"));
+  console.log(tailscalePreferredMessage());
+  console.log(color.dim("Tailscale is not installed or not visible on PATH."));
+  for (const item of plan.guidance) console.log(color.dim(`- ${item}`));
+  if (!plan.installable || !plan.autoInstallCommand) {
+    return { installed: false, guidance: plan.guidance };
+  }
+  const shouldInstall = await promptYesNo(
+    "Install Tailscale now before falling back to Iroh?",
+    true
+  );
+  if (!shouldInstall) return { installed: false, guidance: plan.guidance };
+  const result = await runCommand(plan.autoInstallCommand.command, plan.autoInstallCommand.args);
+  return { installed: result.ok, guidance: plan.guidance, result };
+}
+
+async function resolveTailscalePairingOptions(parsed, config) {
+  const state = detectTailscaleState();
+  if (state.disabled) return null;
+  if (!state.installed) {
+    const installAttempt = await maybeInstallTailscaleForPairing(parsed);
+    if (installAttempt.installed) {
+      const installedState = detectTailscaleState();
+      if (installedState.installed && installedState.running && installedState.authenticated) {
+        return resolveTailscalePairingOptions(parsed, config);
+      }
+    }
+    return null;
+  }
+  if (!state.running || !state.authenticated || !state.publicUrl) {
+    if (!parsed.flags.json && process.stdin.isTTY) {
+      console.log(color.bold("Tailscale pairing"));
+      console.log(tailscalePreferredMessage());
+      console.log(
+        color.yellow(
+          "Tailscale is installed, but it is not running/authenticated or does not expose a MagicDNS name."
+        )
+      );
+      console.log(color.dim("Open Tailscale, sign in, then rerun npx forge-memory pair-ios. Falling back to Iroh for this pairing."));
+    }
+    return null;
+  }
+
+  const firstProbe = await probePublicForgeUrl(state.publicUrl);
+  if (firstProbe.ok) {
+    if (!parsed.flags.json) {
+      console.log(color.green(`Using Tailscale for iOS pairing: ${state.publicUrl}`));
+    }
+    return {
+      transportMode: "manual-http",
+      publicUrl: validatePairingOptions({
+        transportMode: "manual-http",
+        publicUrl: state.publicUrl
+      }),
+      source: "tailscale"
+    };
+  }
+
+  const canConfigureServe =
+    !parsed.flags.json &&
+    !parsed.flags.dryRun &&
+    (parsed.flags.yes ||
+      (process.stdin.isTTY &&
+        (await promptYesNo(
+          [
+            `Tailscale is running, but Forge is not reachable at ${state.publicUrl}.`,
+            "Serve Forge through Tailscale now?"
+          ].join(" "),
+          true
+        ))));
+  if (!canConfigureServe) {
+    if (!parsed.flags.json && process.stdin.isTTY) {
+      console.log(
+        color.yellow(
+          `Tailscale is running, but Forge was not reachable at ${state.publicUrl}: ${firstProbe.error ?? firstProbe.status ?? "unknown error"}. Falling back to Iroh.`
+        )
+      );
+    }
+    return null;
+  }
+
+  const serveResult = await configureTailscaleServe(config, parsed.flags);
+  if (!serveResult.ok) {
+    if (!parsed.flags.json) {
+      console.log(
+        color.yellow(
+          "Could not configure Tailscale Serve automatically. Falling back to Iroh."
+        )
+      );
+    }
+    return null;
+  }
+  const secondProbe = await probePublicForgeUrl(state.publicUrl, 8_000);
+  if (!secondProbe.ok) {
+    if (!parsed.flags.json) {
+      console.log(
+        color.yellow(
+          `Tailscale Serve was configured, but Forge still was not reachable at ${state.publicUrl}: ${secondProbe.error ?? secondProbe.status ?? "unknown error"}. Falling back to Iroh.`
+        )
+      );
+    }
+    return null;
+  }
+  if (!parsed.flags.json) {
+    console.log(color.green(`Using Tailscale for iOS pairing: ${state.publicUrl}`));
+  }
+  return {
+    transportMode: "manual-http",
+    publicUrl: validatePairingOptions({
+      transportMode: "manual-http",
+      publicUrl: state.publicUrl
+    }),
+    source: "tailscale"
+  };
+}
+
+async function resolveIosPairingOptions(parsed, config = null) {
   if (parsed.flags.manualHttp) {
     return {
       transportMode: "manual-http",
@@ -2026,7 +2356,21 @@ async function resolveIosPairingOptions(parsed) {
       })
     };
   }
-  if (parsed.flags.yes || parsed.flags.json || !process.stdin.isTTY || parsed.values.publicUrl) {
+  if (parsed.values.publicUrl) {
+    return {
+      transportMode: "manual-http",
+      publicUrl: validatePairingOptions({
+        transportMode: "manual-http",
+        publicUrl: parsed.values.publicUrl
+      }),
+      source: publicUrlFallbackMode(parsed.values.publicUrl)
+    };
+  }
+  if (config) {
+    const tailscalePairing = await resolveTailscalePairingOptions(parsed, config);
+    if (tailscalePairing) return tailscalePairing;
+  }
+  if (parsed.flags.yes || parsed.flags.json || !process.stdin.isTTY) {
     return {
       transportMode: "iroh",
       publicUrl: validatePairingOptions({
@@ -2036,23 +2380,11 @@ async function resolveIosPairingOptions(parsed) {
     };
   }
   console.log(color.bold("iOS companion connection"));
-  console.log(color.dim("Default: Iroh tunnel. You can choose Tailscale or a fixed/private IP as the direct phone path."));
+  console.log(color.dim(tailscalePreferredMessage()));
+  console.log(color.dim("Choose Iroh or a fixed/private IP fallback for this pairing."));
   const choice = (
-    await promptLine("Connection [iroh/tailscale/ip]", "iroh")
+    await promptLine("Connection [iroh/ip]", "iroh")
   ).toLowerCase();
-  if (choice === "tailscale" || choice === "ts") {
-    const publicUrl = await promptLine(
-      "Tailscale Forge URL",
-      parsed.values.publicUrl ?? "https://your-mac.tailnet.ts.net/forge/"
-    );
-    return {
-      transportMode: "manual-http",
-      publicUrl: validatePairingOptions({
-        transportMode: "manual-http",
-        publicUrl
-      })
-    };
-  }
   if (choice === "ip" || choice === "fixed" || choice === "private") {
     const publicUrl = await promptLine(
       "Private/fixed Forge URL",
@@ -2375,22 +2707,6 @@ async function runInstall(parsed, command) {
       (parsed.flags.yes
         ? true
         : await promptYesNo("Pair the iOS companion now?", true)));
-  const pairingOptions = shouldPair
-    ? await resolveIosPairingOptions(parsed)
-    : null;
-  let irohTransportResult = null;
-  if (
-    shouldPair &&
-    pairingOptions?.transportMode !== "manual-http" &&
-    !parsed.flags.dryRun
-  ) {
-    irohTransportResult = await withProgress(
-      "Preparing Forge Companion Iroh transport",
-      "checking Rust/Cargo and building the local host",
-      parsed.flags,
-      () => ensureIrohTransportPrepared(config, parsed.flags)
-    );
-  }
   let runtimeResult = null;
   if (!parsed.flags.noStart && !parsed.flags.dryRun) {
     runtimeResult = await withProgress(
@@ -2428,6 +2744,22 @@ async function runInstall(parsed, command) {
       }
     }
   }
+  const pairingOptions = shouldPair
+    ? await resolveIosPairingOptions(parsed, config)
+    : null;
+  let irohTransportResult = null;
+  if (
+    shouldPair &&
+    pairingOptions?.transportMode !== "manual-http" &&
+    !parsed.flags.dryRun
+  ) {
+    irohTransportResult = await withProgress(
+      "Preparing Forge Companion Iroh transport",
+      "checking Rust/Cargo and building the local host",
+      parsed.flags,
+      () => ensureIrohTransportPrepared(config, parsed.flags)
+    );
+  }
   let pairing = null;
   if (shouldPair && !parsed.flags.dryRun) {
     if (!runtimeResult) {
@@ -2441,7 +2773,7 @@ async function runInstall(parsed, command) {
     assertRuntimeStartedForPairing(runtimeResult, config);
     pairing = await withProgress(
       "Creating iOS companion pairing",
-      parsed.flags.manualHttp ? "manual HTTP" : "Iroh QR",
+      pairingOptions.transportMode === "manual-http" ? "phone-reachable HTTP" : "Iroh QR",
       parsed.flags,
       () =>
         createPairing(config, {
@@ -2672,17 +3004,10 @@ async function runUi(parsed) {
 
 async function runPairIos(parsed) {
   const config = await readConfig();
-  const pairingOptions = await resolveIosPairingOptions(parsed);
-  const transportMode = pairingOptions.transportMode;
-  const publicUrl = pairingOptions.publicUrl;
-  if (transportMode === "iroh") {
-    await withProgress(
-      "Preparing Forge Companion Iroh transport",
-      "checking Rust/Cargo and building the local host",
-      parsed.flags,
-      () => ensureIrohTransportPrepared(config, parsed.flags)
-    );
-  }
+  const explicitPairingOptions =
+    parsed.flags.manualHttp || parsed.values.publicUrl
+      ? await resolveIosPairingOptions(parsed, config)
+      : null;
   if (!parsed.flags.noStart) {
     const runtimeResult = await withProgress(
       "Starting Forge runtime for iOS pairing",
@@ -2696,6 +3021,17 @@ async function runPairIos(parsed) {
     assertRuntimeStartedForPairing(
       { ok: currentHealth.ok, started: false, health: currentHealth },
       config
+    );
+  }
+  const pairingOptions = explicitPairingOptions ?? await resolveIosPairingOptions(parsed, config);
+  const transportMode = pairingOptions.transportMode;
+  const publicUrl = pairingOptions.publicUrl;
+  if (transportMode === "iroh") {
+    await withProgress(
+      "Preparing Forge Companion Iroh transport",
+      "checking Rust/Cargo and building the local host",
+      parsed.flags,
+      () => ensureIrohTransportPrepared(config, parsed.flags)
     );
   }
   const pairing = await createPairing(config, {
@@ -3037,8 +3373,8 @@ Options:
   --adapters <list>     Comma list: openclaw,hermes,codex or none
   --skip-adapters       Configure UI/runtime only
   --skip-pair-ios       Do not prompt or create iOS pairing
-  --manual-http         Use direct HTTP/TCP for iOS pairing instead of the default Iroh transport
-  --public-url <url>    Phone-facing Tailscale/LAN/fixed URL for direct pairing or Iroh fallback; never localhost
+  --manual-http         Force direct HTTP/TCP for iOS pairing
+  --public-url <url>    Phone-facing Tailscale/LAN/fixed URL for direct pairing; never localhost
   --no-start            Configure without starting runtime
   --no-doctor           Skip install-time doctor checks
   --repair              Let doctor create missing folders and restart unhealthy runtime

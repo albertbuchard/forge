@@ -37,32 +37,35 @@ the wiki tools (`forge_search_wiki`, `forge_get_wiki_page`, and maintenance
 tools). It also exposes `forge_memory_mcp_diagnostics` so adapter startup issues
 show up as a tool result instead of a closed MCP transport.
 
-`pair-ios` prefers the Iroh QR. Forge starts a Rust Iroh host, prints a QR payload
-with the desktop node id, pairing token, optional relay hint, ALPN
-`forge-companion/1`, and the request URL as a direct fallback when it is
-phone-reachable. The iPhone app connects through its native Rust bridge first and can
-retry through URLSession when that bridge times out. The CLI renders a short-schema QR
-to keep the terminal code scannable and saves the full manual payload under
-`~/.forge/pairing/` so you can paste it into the iPhone app if the camera cannot scan.
-Use `--manual-http` only when you intentionally want a LAN, Tailscale, or direct
-HTTP/TCP route. For a real iPhone, pass a phone-reachable URL:
+`pair-ios` prefers Tailscale when it is installed, running, authenticated, and Forge
+is reachable through the Mac's MagicDNS HTTPS URL. That gives the iPhone a normal
+phone-reachable web URL for sync and the embedded Forge WebView. If Tailscale is
+running but Forge is not served yet, the installer asks before configuring
+`tailscale serve` for the local Forge runtime. If Tailscale is unavailable or
+declined, Forge falls back to the Iroh QR: a Rust Iroh host with the desktop node id,
+pairing token, optional relay hint, and ALPN `forge-companion/1`.
+
+The CLI renders a short-schema QR to keep the terminal code scannable and saves the
+full manual payload under `~/.forge/pairing/` so you can paste it into the iPhone app
+if the camera cannot scan. Use `--public-url` when you intentionally want to force a
+specific Tailscale, LAN, or fixed/private URL:
 
 ```bash
-npx forge-memory pair-ios --manual-http --public-url https://your-mac.tailnet.ts.net/forge/
+npx forge-memory pair-ios --public-url https://your-mac.tailnet.ts.net/forge/
 ```
 
-Without `--public-url`, manual HTTP may resolve to `127.0.0.1`, which is useful for
-the iOS Simulator but not for a physical phone.
+`--manual-http` is still available as an explicit direct HTTP/TCP override. Loopback
+URLs such as `127.0.0.1` and `localhost` are rejected for physical-phone pairing.
 
 The base install stays one command on purpose. The detailed companion transport
 reference lives in the Forge repo at `docs/companion-iroh.md` and in the published
 docs at `https://albertbuchard.github.io/forge/companion-transport.html`. Forge
 Memory ships Forge's Iroh host source and lockfile, not native desktop binaries. When
-the default iOS pairing flow is selected, the installer checks for Cargo, offers to
-install the minimal Rust toolchain when the platform supports it, builds the local
-host from the bundled source, then creates the QR. If Cargo cannot be installed
-automatically, `install`, `configure`, and `pair-ios` stop with platform-specific
-steps instead of printing a localhost QR that a physical iPhone cannot use.
+the Iroh fallback is selected, the installer checks for Cargo, offers to install the
+minimal Rust toolchain when the platform supports it, builds the local host from the
+bundled source, then creates the QR. If Cargo cannot be installed automatically,
+`install`, `configure`, and `pair-ios` stop with platform-specific steps instead of
+printing a localhost QR that a physical iPhone cannot use.
 
 `configure` reruns the full guided flow using the current config as defaults.
 Install and configure run Forge doctor before finishing. `doctor --repair` creates
