@@ -140,7 +140,11 @@ export async function syncDevrageMetricHistory(options: { forceFull?: boolean; d
 
 export async function syncDevrageMetricHistoryIfNeeded() {
   const state = getDevrageSyncState();
-  const nextSync = getNextDevrageMetricSync(state);
+  const nextSync = getNextDevrageMetricSync(
+    state,
+    new Date(),
+    needsDevrageCumulativeRageBackfill()
+  );
   if (nextSync) {
     await syncDevrageMetricHistory(nextSync);
   }
@@ -148,9 +152,14 @@ export async function syncDevrageMetricHistoryIfNeeded() {
 
 export function getNextDevrageMetricSync(
   state: DevrageSyncStateRow | null,
-  now = new Date()
+  now = new Date(),
+  needsCumulativeRageBackfill = false
 ): { forceFull?: boolean; dateKey?: string } | null {
   if (!state?.full_sync_completed_at) {
+    return { forceFull: true };
+  }
+
+  if (needsCumulativeRageBackfill) {
     return { forceFull: true };
   }
 
@@ -171,6 +180,35 @@ export function getNextDevrageMetricSync(
   }
 
   return null;
+}
+
+export function needsDevrageCumulativeRageBackfill() {
+  const rows = getDatabase()
+    .prepare(
+      `SELECT metric_key, COUNT(*) AS count
+       FROM psyche_devrage_metric_measures
+       WHERE metric_key IN (?, ?, ?, ?)
+       GROUP BY metric_key`
+    )
+    .all(
+      SWEAR_COUNT_KEY,
+      SWEARING_MESSAGE_PERCENT_KEY,
+      AVERAGE_MAX_CUMULATIVE_RAGE_KEY,
+      MAX_CUMULATIVE_RAGE_KEY
+    ) as Array<{ metric_key: string; count: number }>;
+  const counts = new Map(rows.map((row) => [row.metric_key, Number(row.count) || 0]));
+  const legacyRows =
+    (counts.get(SWEAR_COUNT_KEY) ?? 0) > 0 ||
+    (counts.get(SWEARING_MESSAGE_PERCENT_KEY) ?? 0) > 0;
+
+  if (!legacyRows) {
+    return false;
+  }
+
+  return (
+    (counts.get(AVERAGE_MAX_CUMULATIVE_RAGE_KEY) ?? 0) === 0 ||
+    (counts.get(MAX_CUMULATIVE_RAGE_KEY) ?? 0) === 0
+  );
 }
 
 export function getDevrageMetricPayload(): DevrageMetricPayload {

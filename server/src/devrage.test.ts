@@ -13,12 +13,14 @@ import {
 import {
   closeDatabase,
   configureDatabase,
+  getDatabase,
   initializeDatabase
 } from "./db.js";
 import {
   getDevrageMetricPayload,
   getNextDevrageMetricSync,
   getPsycheMetricsViewData,
+  needsDevrageCumulativeRageBackfill,
   storeDevrageReport
 } from "./services/devrage.js";
 import { getPsycheOverview } from "./services/psyche.js";
@@ -190,6 +192,85 @@ test("devrage metrics view stays empty before stored conversation history exists
     assert.equal(metricsView.summary.trackedDays, 0);
     assert.equal(metricsView.summary.metricCount, 0);
     assert.equal(metricsView.metrics.length, 0);
+  } finally {
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("devrage sync forces a full backfill when cumulative rage metric rows are missing", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-devrage-backfill-"));
+  configureDatabase({ dataRoot: rootDir, seedDemoData: true });
+  await initializeDatabase();
+
+  try {
+    assert.equal(needsDevrageCumulativeRageBackfill(), false);
+
+    const database = getDatabase();
+    database
+      .prepare(
+        `INSERT INTO psyche_devrage_metric_measures (
+           id, date_key, metric_key, value, unit, sample_count, computed_at
+         )
+         VALUES (?, ?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        "metric-old-count",
+        "2026-05-14",
+        "swear_count",
+        6,
+        "count",
+        3,
+        "2026-05-14T10:00:00.000Z",
+        "metric-old-percent",
+        "2026-05-14",
+        "swearing_message_percent",
+        25,
+        "percent",
+        30,
+        "2026-05-14T10:00:00.000Z"
+      );
+
+    assert.equal(needsDevrageCumulativeRageBackfill(), true);
+    assert.deepEqual(
+      getNextDevrageMetricSync(
+        {
+          full_sync_completed_at: "2026-05-14T08:00:00.000Z",
+          last_daily_sync_at: "2026-05-19T10:00:00.000Z",
+          last_synced_date_key: "2026-05-19",
+          updated_at: "2026-05-19T10:00:00.000Z"
+        },
+        new Date("2026-05-19T10:30:00.000Z"),
+        true
+      ),
+      { forceFull: true }
+    );
+
+    database
+      .prepare(
+        `INSERT INTO psyche_devrage_metric_measures (
+           id, date_key, metric_key, value, unit, sample_count, computed_at
+         )
+         VALUES (?, ?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        "metric-rage-average",
+        "2026-05-14",
+        "average_max_cumulative_rage",
+        2,
+        "score",
+        3,
+        "2026-05-14T10:00:00.000Z",
+        "metric-rage-max",
+        "2026-05-14",
+        "max_cumulative_rage",
+        6,
+        "score",
+        3,
+        "2026-05-14T10:00:00.000Z"
+      );
+
+    assert.equal(needsDevrageCumulativeRageBackfill(), false);
   } finally {
     closeDatabase();
     await rm(rootDir, { recursive: true, force: true });
