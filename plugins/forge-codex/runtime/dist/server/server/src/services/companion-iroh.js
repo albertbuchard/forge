@@ -30,10 +30,13 @@ export async function buildCompanionPairingTransport(input) {
             pairPayload: snapshot.pairPayload,
             alpn: snapshot.alpn ?? COMPANION_IROH_ALPN,
             localBaseUrl: snapshot.localBaseUrl,
+            fallbackApiBaseUrl: requestApiBaseUrl,
+            fallbackUiBaseUrl: requestUiBaseUrl,
             recreateCommand: snapshot.recreateCommand ?? undefined,
             startedAt: snapshot.startedAt ?? undefined,
             notes: [
-                "Default pairing uses Forge's Rust Iroh transport over QUIC.",
+                "Default pairing uses Forge's Rust Iroh transport over QUIC first.",
+                "The QR keeps the request API/UI URL as a direct fallback when Iroh cannot complete a request.",
                 "The QR payload carries the Iroh node id, host token, optional relay, and ALPN forge-companion/1.",
                 "Manual HTTP/TCP pairing remains available with --manual-http for advanced local setups."
             ]
@@ -200,12 +203,13 @@ function irohTransport(input) {
     const nodeId = input.pairPayload.node_id;
     return {
         transportMode: "iroh",
-        apiBaseUrl: companionIrohApiBaseUrlFromNodeId(nodeId),
-        uiBaseUrl: companionIrohUiBaseUrlFromNodeId(nodeId),
+        apiBaseUrl: input.fallbackApiBaseUrl,
+        uiBaseUrl: input.fallbackUiBaseUrl,
         transport: {
             protocol: "iroh",
             provider: "forge-companion-iroh",
             status: "ready",
+            publicBaseUrl: input.fallbackApiBaseUrl,
             localBaseUrl: input.localBaseUrl,
             nodeId,
             relay: input.pairPayload.relay,

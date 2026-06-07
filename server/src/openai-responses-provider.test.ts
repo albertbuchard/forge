@@ -464,6 +464,26 @@ test("OpenAI Codex wiki ingest sends instructions as a top-level field", async (
     String(createRequest.body.instructions),
     /You convert user-provided source material/
   );
+  assert.match(
+    String(createRequest.body.instructions),
+    /wiki page entities and structured operational entities/
+  );
+  assert.match(
+    String(createRequest.body.instructions),
+    /Do not leave durable people only as \[\[links\]\]/
+  );
+  assert.match(
+    String(createRequest.body.instructions),
+    /Coverage audit before output/
+  );
+  assert.match(
+    String(createRequest.body.instructions),
+    /important dated events/
+  );
+  assert.match(
+    String(createRequest.body.instructions),
+    /named spouse\/partner/
+  );
   const input = createRequest.body.input as Array<{
     role?: string;
     content?: Array<{ type?: string; text?: string }>;

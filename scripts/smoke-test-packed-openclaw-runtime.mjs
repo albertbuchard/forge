@@ -100,7 +100,9 @@ async function verifyPackedIrohPairing() {
   if (
     body?.qrPayload?.transportMode !== "iroh" ||
     body?.qrPayload?.transport?.provider !== "forge-companion-iroh" ||
-    !String(body?.qrPayload?.apiBaseUrl ?? "").startsWith("forge-iroh://")
+    !String(body?.qrPayload?.apiBaseUrl ?? "").startsWith(`http://127.0.0.1:${port}/api/v1`) ||
+    body?.qrPayload?.transport?.publicBaseUrl !== body?.qrPayload?.apiBaseUrl ||
+    !body?.qrPayload?.transport?.pairPayload?.node_id
   ) {
     throw new Error(`packed runtime did not create an Iroh pairing: ${JSON.stringify(body)}`);
   }
