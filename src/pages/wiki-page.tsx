@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
   ChevronDown,
+  ChevronRight,
   History,
   PenSquare,
   Plus,
@@ -79,39 +80,115 @@ function WikiIndexTree({
   return (
     <ul className={cn("grid gap-1", depth > 0 && "mt-1")}>
       {nodes.map((node) => {
-        const active = node.page.slug === activeSlug;
         return (
-          <li key={node.page.id} className="grid gap-1">
-            <Link
-              to={{
-                pathname:
-                  node.page.slug === "index"
-                    ? "/wiki"
-                    : `/wiki/page/${encodeURIComponent(node.page.slug)}`,
-                search: `?spaceId=${encodeURIComponent(spaceId)}`
-              }}
-              className={cn(
-                "rounded-lg px-2 py-1.5 text-[12px] leading-5 transition",
-                active
-                  ? "bg-[var(--ui-surface-2)] text-[var(--ui-ink-strong)]"
-                  : "text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-1)] hover:text-[var(--ui-ink-strong)]"
-              )}
-              style={{ paddingLeft: `${0.5 + depth * 0.7}rem` }}
-            >
-              {node.page.title}
-            </Link>
-            {node.children.length > 0 ? (
-              <WikiIndexTree
-                nodes={node.children}
-                activeSlug={activeSlug}
-                spaceId={spaceId}
-                depth={depth + 1}
-              />
-            ) : null}
-          </li>
+          <WikiIndexTreeItem
+            key={node.page.id}
+            node={node}
+            activeSlug={activeSlug}
+            spaceId={spaceId}
+            depth={depth}
+          />
         );
       })}
     </ul>
+  );
+}
+
+function nodeContainsActive(
+  node: WikiTreeNode,
+  activeSlug: string | null
+): boolean {
+  if (!activeSlug) {
+    return false;
+  }
+  if (node.page.slug === activeSlug) {
+    return true;
+  }
+  return node.children.some((child) => nodeContainsActive(child, activeSlug));
+}
+
+function WikiIndexTreeItem({
+  node,
+  activeSlug,
+  spaceId,
+  depth
+}: {
+  node: WikiTreeNode;
+  activeSlug: string | null;
+  spaceId: string;
+  depth: number;
+}) {
+  const hasChildren = node.children.length > 0;
+  const active = node.page.slug === activeSlug;
+  const activeInSubtree = nodeContainsActive(node, activeSlug);
+  const [expanded, setExpanded] = useState<boolean>(
+    hasChildren && (depth === 0 || activeInSubtree)
+  );
+
+  useEffect(() => {
+    if (activeInSubtree) {
+      setExpanded(true);
+    }
+  }, [activeInSubtree]);
+
+  return (
+    <li className="grid gap-1">
+      <div className="flex items-start gap-1">
+        {hasChildren ? (
+          <button
+            type="button"
+            className={cn(
+              "mt-1 inline-flex size-5 shrink-0 items-center justify-center rounded-md text-[var(--ui-ink-faint)] transition hover:bg-[var(--ui-surface-1)] hover:text-[var(--ui-ink-strong)]",
+              depth > 0 && "size-4"
+            )}
+            style={{ marginLeft: `${depth * 0.7}rem` }}
+            aria-label={
+              expanded
+                ? `Collapse ${node.page.title}`
+                : `Expand ${node.page.title}`
+            }
+            aria-expanded={expanded}
+            onClick={() => setExpanded((current) => !current)}
+          >
+            {expanded ? (
+              <ChevronDown className="size-3.5" />
+            ) : (
+              <ChevronRight className="size-3.5" />
+            )}
+          </button>
+        ) : (
+          <span
+            className="mt-1 size-5 shrink-0"
+            style={{ marginLeft: `${depth * 0.7}rem` }}
+          />
+        )}
+        <Link
+          to={{
+            pathname:
+              node.page.slug === "index"
+                ? "/wiki"
+                : `/wiki/page/${encodeURIComponent(node.page.slug)}`,
+            search: `?spaceId=${encodeURIComponent(spaceId)}`
+          }}
+          className={cn(
+            "min-w-0 flex-1 rounded-lg px-2 py-1.5 text-[12px] leading-5 transition",
+            active
+              ? "bg-[var(--ui-surface-2)] text-[var(--ui-ink-strong)]"
+              : "text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-1)] hover:text-[var(--ui-ink-strong)]"
+          )}
+        >
+          <span className="line-clamp-2">{node.page.title}</span>
+        </Link>
+      </div>
+      {hasChildren && expanded ? (
+        <WikiIndexTree
+          nodes={node.children}
+          activeSlug={activeSlug}
+          spaceId={spaceId}
+          depth={depth + 1}
+        />
+      ) : null}
+    </li>
   );
 }
 
