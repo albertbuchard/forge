@@ -1,5 +1,5 @@
-Forge Companion 1.0.87 improves HealthKit sync recovery after Iroh transport timeouts.
+Forge Companion 1.0.88 fixes Iroh bridge timeout recovery after reconnecting or repairing.
 
-Health sync chunk uploads now get a longer Iroh response window, which helps larger movement batches complete after reconnecting or repairing a pairing.
+Iroh remains the first sync path, but new pairings now keep the direct Forge API/UI URL as a fallback so the app can retry over HTTPS/Tailscale when the Iroh bridge times out.
 
-The native Iroh bridge also handles timeout/error responses more defensively, so retries surface the real transport error instead of degrading into a generic missing-data failure.
+Discovery and pairing metadata were also tightened so stale Iroh endpoints do not block a phone-reachable Forge server.
