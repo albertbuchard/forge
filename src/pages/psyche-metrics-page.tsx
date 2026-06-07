@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { PsycheSectionNav } from "@/components/psyche/psyche-section-nav";
 import { PageHero } from "@/components/shell/page-hero";
 import {
+  DevrageRageFigure,
   MetricDetailSections,
   SpotlightCard,
   formatDateKey,
@@ -96,6 +97,13 @@ export function PsycheMetricsPage() {
         <EmptyPsycheMetrics />
       ) : (
         <>
+          <DevrageRageFigure
+            swearMetric={swearMetric}
+            percentMetric={percentMetric}
+            averageRageMetric={averageRageMetric}
+            maxRageMetric={maxRageMetric}
+          />
+
           <section className="grid gap-4 xl:grid-cols-4">
             <SpotlightCard
               title="Devrage count"

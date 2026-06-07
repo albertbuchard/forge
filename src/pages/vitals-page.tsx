@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { PageHero } from "@/components/shell/page-hero";
 import { useForgeShell } from "@/components/shell/app-shell";
 import {
+  DevrageRageFigure,
   MetricDetailSections,
   SpotlightCard,
   formatDateKey,
@@ -47,6 +48,8 @@ function PsycheMetricsVitalsSection({ metrics }: { metrics: PsycheMetricsViewDat
   const groups = groupDailyMetrics(metrics.metrics, metrics.summary.categoryBreakdown);
   const swearMetric = metrics.metrics.find((metric) => metric.metric === "devrageSwearCount") ?? null;
   const percentMetric = metrics.metrics.find((metric) => metric.metric === "swearingMessagePercent") ?? null;
+  const averageRageMetric = metrics.metrics.find((metric) => metric.metric === "devrageAverageMaxCumulativeRage") ?? null;
+  const maxRageMetric = metrics.metrics.find((metric) => metric.metric === "devrageMaxCumulativeRage") ?? null;
 
   return (
     <section className="grid gap-4">
@@ -64,7 +67,15 @@ function PsycheMetricsVitalsSection({ metrics }: { metrics: PsycheMetricsViewDat
         </Badge>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <DevrageRageFigure
+        swearMetric={swearMetric}
+        percentMetric={percentMetric}
+        averageRageMetric={averageRageMetric}
+        maxRageMetric={maxRageMetric}
+        compact
+      />
+
+      <div className="grid gap-4 xl:grid-cols-4">
         <SpotlightCard
           title="Devrage count"
           description="Daily user-message swear count from stored conversation history."
@@ -74,6 +85,16 @@ function PsycheMetricsVitalsSection({ metrics }: { metrics: PsycheMetricsViewDat
           title="Swearing rate"
           description="Share of scanned user messages that contained at least one tracked swear."
           metric={percentMetric}
+        />
+        <SpotlightCard
+          title="Average rage peak"
+          description="Average per-thread peak after swears add and clean messages cool the score down."
+          metric={averageRageMetric}
+        />
+        <SpotlightCard
+          title="Max rage peak"
+          description="Highest cumulative thread score reached on the latest tracked day."
+          metric={maxRageMetric}
         />
       </div>
 

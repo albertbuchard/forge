@@ -220,6 +220,8 @@ describe("PsycheMetricsPage", () => {
     renderPage();
 
     expect(await screen.findByText("4 daily metrics")).toBeInTheDocument();
+    expect(screen.getByText("Cumulative rage profile")).toBeInTheDocument();
+    expect(screen.getAllByText("Baseline calculation").length).toBeGreaterThan(0);
     expect(screen.getByText("Devrage count")).toBeInTheDocument();
     expect(screen.getAllByText("Average rage peak").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Max rage peak").length).toBeGreaterThan(0);

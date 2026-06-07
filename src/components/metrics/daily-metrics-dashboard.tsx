@@ -1,4 +1,4 @@
-import { useMemo, useState, type ComponentType } from "react";
+import { useId, useMemo, useState, type ComponentType } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
   Activity,
@@ -18,6 +18,7 @@ import {
   Bar,
   CartesianGrid,
   ComposedChart,
+  Line,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -26,6 +27,7 @@ import {
 } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { cn } from "@/lib/utils";
 
 export interface DailyMetricDayRecord {
@@ -112,6 +114,27 @@ export function formatDelta(metric: DailyMetricRecord) {
   }
   const sign = metric.deltaValue > 0 ? "+" : "";
   return `${sign}${formatMetricValue(metric, metric.deltaValue)}`;
+}
+
+function metricBaselineHelp(metric: DailyMetricRecord) {
+  const generic =
+    "Baseline is the average of the previous up to seven stored daily readings for this metric, excluding the latest day. Delta is latest reading minus that previous-window average.";
+  if (metric.category !== "conversationTone") {
+    return generic;
+  }
+  if (metric.metric === "devrageSwearCount") {
+    return `${generic} For devrage swears, days with scanned conversations and zero swears count as 0, but days with no stored scanner rows are not invented into the average.`;
+  }
+  if (
+    metric.metric === "devrageAverageMaxCumulativeRage" ||
+    metric.metric === "devrageMaxCumulativeRage"
+  ) {
+    return `${generic} For cumulative rage, each swear-bearing user message adds its swear count and each clean user message cools the running score by 1, floored at 0. The baseline is the previous tracked-days average of that daily peak metric.`;
+  }
+  if (metric.metric === "swearingMessagePercent") {
+    return `${generic} For swearing rate, the daily value is swear-bearing user messages divided by scanned user messages for that day.`;
+  }
+  return generic;
 }
 
 function roundDisplayValue(value: number) {
@@ -396,7 +419,16 @@ function MetricFullscreenDialog({
                     className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3"
                   >
                     <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
-                      {label}
+                      <span className="inline-flex min-w-0 items-center gap-1.5">
+                        <span>{label}</span>
+                        {label === "Baseline" ? (
+                          <InfoTooltip
+                            label={`Explain ${metric.label} baseline`}
+                            title="Baseline calculation"
+                            content={metricBaselineHelp(metric)}
+                          />
+                        ) : null}
+                      </span>
                     </div>
                     <div className="mt-1 break-words text-xl font-semibold text-[var(--ui-ink-strong)]">
                       {formatMetricValue(
@@ -566,6 +598,364 @@ export function Sparkbar({
   );
 }
 
+function metricValueForDate(metric: DailyMetricRecord | null, dateKey: string) {
+  if (!metric) {
+    return null;
+  }
+  const aggregation = metric.aggregation;
+  const day = metric.days.find((entry) => entry.dateKey === dateKey);
+  return day ? metricPrimaryValue(day, aggregation) : null;
+}
+
+function formatCompactMetricValue(
+  metric: DailyMetricRecord | null,
+  value: number | null
+) {
+  if (!metric) {
+    return "No signal";
+  }
+  return formatMetricValue(metric, value);
+}
+
+function DevrageFigureTooltip({
+  active,
+  payload,
+  label,
+  swearMetric,
+  percentMetric,
+  averageRageMetric,
+  maxRageMetric
+}: {
+  active?: boolean;
+  payload?: Array<{ dataKey?: string | number; value?: number | null }>;
+  label?: string;
+  swearMetric: DailyMetricRecord | null;
+  percentMetric: DailyMetricRecord | null;
+  averageRageMetric: DailyMetricRecord | null;
+  maxRageMetric: DailyMetricRecord | null;
+}) {
+  if (!active || !payload?.length || typeof label !== "string") {
+    return null;
+  }
+
+  const values = new Map(
+    payload
+      .filter((entry) => typeof entry.dataKey === "string")
+      .map((entry) => [String(entry.dataKey), entry.value ?? null])
+  );
+  const rows = [
+    ["Max rage peak", maxRageMetric, values.get("maxPeak") ?? null],
+    ["Average rage peak", averageRageMetric, values.get("averagePeak") ?? null],
+    ["Swears", swearMetric, values.get("swears") ?? null],
+    ["Swearing rate", percentMetric, values.get("rate") ?? null]
+  ] as const;
+
+  return (
+    <div className="min-w-56 rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--surface-glass)] p-3 shadow-[var(--ui-shadow-floating)] backdrop-blur-xl">
+      <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
+        {formatAxisDate(label)}
+      </div>
+      <div className="mt-2 grid gap-2">
+        {rows.map(([title, metric, value]) => (
+          <div
+            key={title}
+            className="flex min-w-0 items-center justify-between gap-3 text-xs"
+          >
+            <span className="min-w-0 text-[var(--ui-ink-soft)]">{title}</span>
+            <span className="min-w-0 break-words text-right font-semibold text-[var(--ui-ink-strong)]">
+              {formatCompactMetricValue(metric, value)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DevrageStatTile({
+  label,
+  metric,
+  fallback = "No signal"
+}: {
+  label: string;
+  metric: DailyMetricRecord | null;
+  fallback?: string;
+}) {
+  const tone = metricTone("conversationTone");
+  return (
+    <div className="min-w-0 rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3">
+      <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
+        {label}
+      </div>
+      <div className="mt-1 break-words text-2xl font-semibold text-[var(--ui-ink-strong)]">
+        {metric ? formatMetricValue(metric, metric.latestValue) : fallback}
+      </div>
+      {metric ? (
+        <div className="mt-2 flex min-w-0 flex-wrap gap-2 text-xs">
+          <Badge className={tone.badge}>{formatDelta(metric)}</Badge>
+          <Badge tone="meta">{metric.coverageDays} days</Badge>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function DevrageRageFigure({
+  swearMetric,
+  percentMetric,
+  averageRageMetric,
+  maxRageMetric,
+  compact = false
+}: {
+  swearMetric: DailyMetricRecord | null;
+  percentMetric: DailyMetricRecord | null;
+  averageRageMetric: DailyMetricRecord | null;
+  maxRageMetric: DailyMetricRecord | null;
+  compact?: boolean;
+}) {
+  const rawId = useId().replace(/:/g, "");
+  const rageGradientId = `devrage-rage-${rawId}`;
+  const swearGradientId = `devrage-swears-${rawId}`;
+  const panelGradientId = `devrage-panel-${rawId}`;
+  const chartData = useMemo(() => {
+    const dateKeys = Array.from(
+      new Set(
+        [swearMetric, percentMetric, averageRageMetric, maxRageMetric].flatMap(
+          (metric) => metric?.days.map((day) => day.dateKey) ?? []
+        )
+      )
+    )
+      .sort()
+      .slice(compact ? -14 : -28);
+
+    return dateKeys.map((dateKey) => ({
+      dateKey,
+      swears: metricValueForDate(swearMetric, dateKey),
+      rate: metricValueForDate(percentMetric, dateKey),
+      averagePeak: metricValueForDate(averageRageMetric, dateKey),
+      maxPeak: metricValueForDate(maxRageMetric, dateKey)
+    }));
+  }, [averageRageMetric, compact, maxRageMetric, percentMetric, swearMetric]);
+  const rageValues = chartData
+    .flatMap((day) => [day.swears, day.averagePeak, day.maxPeak])
+    .filter((value): value is number => value != null);
+  const rateValues = chartData
+    .map((day) => day.rate)
+    .filter((value): value is number => value != null);
+  const hasValues = rageValues.length > 0 || rateValues.length > 0;
+  const rageMax = Math.max(1, ...rageValues);
+  const rateMax = Math.max(10, ...rateValues);
+  const latestDate =
+    maxRageMetric?.latestDateKey ??
+    averageRageMetric?.latestDateKey ??
+    swearMetric?.latestDateKey ??
+    percentMetric?.latestDateKey ??
+    null;
+  const primaryMetric =
+    maxRageMetric ?? averageRageMetric ?? swearMetric ?? percentMetric;
+  const primaryDelta = primaryMetric?.deltaValue ?? null;
+  const primarySignal =
+    primaryDelta == null
+      ? "Baseline forming"
+      : primaryDelta > 0
+        ? "Rage pressure rising"
+        : primaryDelta < 0
+          ? "Rage pressure cooling"
+          : "Rage pressure steady";
+
+  if (!hasValues) {
+    return (
+      <Card className="rounded-[30px] border border-dashed border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)] p-6">
+        <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+          Cumulative rage profile
+        </div>
+        <div className="mt-2 text-2xl font-semibold text-[var(--ui-ink-strong)]">
+          Waiting for devrage history
+        </div>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--ui-ink-soft)]">
+          Forge will draw the rage profile after the local scanner stores daily conversation-tone rows.
+        </p>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="relative overflow-hidden rounded-[30px] border border-[color-mix(in_srgb,var(--warning)_22%,var(--ui-border-subtle)_78%)] bg-[linear-gradient(135deg,color-mix(in_srgb,var(--ui-warning-soft)_30%,var(--ui-surface-section)_70%),var(--ui-surface-section)_48%,color-mix(in_srgb,var(--ui-info-soft)_18%,var(--ui-surface-section)_82%))] p-0 shadow-[var(--card-shadow)]">
+      <div className="pointer-events-none absolute inset-0 opacity-55 [background-image:linear-gradient(rgba(255,255,255,0.055)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:32px_32px]" />
+      <div className="relative grid gap-5 p-5 sm:p-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.75fr)]">
+        <div className="grid min-w-0 gap-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--warning)]">
+                Conversation tone figure
+              </div>
+              <div className="mt-1 break-words text-3xl font-semibold leading-tight text-[var(--ui-ink-strong)] sm:text-4xl">
+                Cumulative rage profile
+              </div>
+              <div className="mt-2 max-w-2xl text-sm leading-6 text-[var(--ui-ink-soft)]">
+                Swear volume, swearing-message rate, average thread peak, and maximum thread peak on one daily surface.
+              </div>
+            </div>
+            <div className="flex min-w-0 flex-wrap gap-2">
+              <Badge className="bg-[var(--ui-warning-soft)] text-[var(--warning)]">
+                {primarySignal}
+              </Badge>
+              {primaryMetric ? (
+                <InfoTooltip
+                  label="Explain devrage baseline"
+                  title="Baseline calculation"
+                  content={metricBaselineHelp(primaryMetric)}
+                />
+              ) : null}
+              <Badge tone="meta">Latest {formatDateKey(latestDate)}</Badge>
+            </div>
+          </div>
+
+          <div
+            className="overflow-hidden rounded-[26px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3"
+            style={{ height: compact ? 280 : 340 }}
+          >
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart
+                data={chartData}
+                margin={{ top: 18, right: 12, bottom: 0, left: 0 }}
+              >
+                <defs>
+                  <linearGradient id={panelGradientId} x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stopColor="var(--warning)" stopOpacity={0.36} />
+                    <stop offset="52%" stopColor="var(--primary)" stopOpacity={0.12} />
+                    <stop offset="100%" stopColor="var(--info)" stopOpacity={0.18} />
+                  </linearGradient>
+                  <linearGradient id={rageGradientId} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--warning)" stopOpacity={0.62} />
+                    <stop offset="58%" stopColor="var(--danger)" stopOpacity={0.2} />
+                    <stop offset="100%" stopColor="var(--danger)" stopOpacity={0.02} />
+                  </linearGradient>
+                  <linearGradient id={swearGradientId} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--ui-ink-strong)" stopOpacity={0.34} />
+                    <stop offset="100%" stopColor="var(--ui-ink-faint)" stopOpacity={0.06} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid stroke={chartGridStroke} strokeDasharray="4 10" vertical={false} />
+                <XAxis
+                  dataKey="dateKey"
+                  tickFormatter={formatAxisDate}
+                  minTickGap={compact ? 36 : 24}
+                  tick={chartTickStyle}
+                  axisLine={chartAxisLineStyle}
+                  tickLine={false}
+                />
+                <YAxis
+                  yAxisId="rage"
+                  width={42}
+                  domain={[0, Math.ceil(rageMax * 1.18)]}
+                  tickFormatter={(value) => Number(value).toFixed(0)}
+                  tick={chartTickStyle}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  yAxisId="rate"
+                  orientation="right"
+                  width={42}
+                  domain={[0, Math.min(100, Math.ceil(rateMax * 1.22))]}
+                  tickFormatter={(value) => `${Number(value).toFixed(0)}%`}
+                  tick={chartTickStyle}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip
+                  cursor={chartCursorStyle}
+                  content={
+                    <DevrageFigureTooltip
+                      swearMetric={swearMetric}
+                      percentMetric={percentMetric}
+                      averageRageMetric={averageRageMetric}
+                      maxRageMetric={maxRageMetric}
+                    />
+                  }
+                />
+                <Bar
+                  yAxisId="rage"
+                  dataKey="swears"
+                  radius={[10, 10, 3, 3]}
+                  fill={`url(#${swearGradientId})`}
+                  maxBarSize={compact ? 16 : 22}
+                />
+                <Area
+                  yAxisId="rage"
+                  type="monotone"
+                  dataKey="averagePeak"
+                  stroke="var(--warning)"
+                  strokeWidth={2}
+                  fill={`url(#${rageGradientId})`}
+                  dot={false}
+                  activeDot={{ r: 5, fill: "var(--warning)" }}
+                />
+                <Line
+                  yAxisId="rage"
+                  type="monotone"
+                  dataKey="maxPeak"
+                  stroke="var(--danger)"
+                  strokeWidth={3}
+                  dot={{ r: 3, fill: "var(--danger)" }}
+                  activeDot={{ r: 6, fill: "var(--danger)" }}
+                />
+                <Line
+                  yAxisId="rate"
+                  type="monotone"
+                  dataKey="rate"
+                  stroke="var(--info)"
+                  strokeWidth={2}
+                  strokeDasharray="6 6"
+                  dot={false}
+                  activeDot={{ r: 5, fill: "var(--info)" }}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="flex min-w-0 flex-wrap gap-2 text-xs text-[var(--ui-ink-soft)]">
+            {[
+              ["Swears", "bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]"],
+              ["Average peak", "bg-[var(--ui-warning-soft)] text-[var(--warning)]"],
+              ["Max peak", "bg-[var(--ui-danger-soft)] text-[var(--danger)]"],
+              ["Swearing rate", "bg-[var(--ui-info-soft)] text-[var(--info)]"]
+            ].map(([label, className]) => (
+              <Badge key={label} className={className}>
+                {label}
+              </Badge>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid min-w-0 content-start gap-3">
+          <div className="rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-5">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+              Latest peak
+            </div>
+            <div className="mt-2 break-words text-5xl font-semibold leading-none text-[var(--ui-ink-strong)]">
+              {formatCompactMetricValue(
+                maxRageMetric ?? averageRageMetric,
+                (maxRageMetric ?? averageRageMetric)?.latestValue ?? null
+              )}
+            </div>
+            <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
+              Peak score is the highest cumulative swear streak pressure reached inside any scanned thread for the day.
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+            <DevrageStatTile label="Average thread peak" metric={averageRageMetric} />
+            <DevrageStatTile label="Swearing rate" metric={percentMetric} />
+            <DevrageStatTile label="Swears" metric={swearMetric} />
+            <DevrageStatTile label="Max thread peak" metric={maxRageMetric} />
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 export function SpotlightCard({
   title,
   description,
@@ -631,6 +1021,13 @@ export function SpotlightCard({
               >
                 {formatDelta(metric)}
               </Badge>
+            ) : null}
+            {metric ? (
+              <InfoTooltip
+                label={`Explain ${metric.label} delta`}
+                title="Delta calculation"
+                content={metricBaselineHelp(metric)}
+              />
             ) : null}
             {metric ? (
               <Badge tone="meta">{metric.coverageDays} days tracked</Badge>
@@ -710,7 +1107,14 @@ function MetricDetailCard({ metric }: { metric: DailyMetricRecord }) {
           </div>
           <div className="grid gap-2 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 text-sm text-[var(--ui-ink-medium)]">
             <div className="flex min-w-0 items-center justify-between gap-2">
-              <span className="min-w-0">Baseline</span>
+              <span className="inline-flex min-w-0 items-center gap-1.5">
+                <span className="min-w-0">Baseline</span>
+                <InfoTooltip
+                  label={`Explain ${metric.label} baseline`}
+                  title="Baseline calculation"
+                  content={metricBaselineHelp(metric)}
+                />
+              </span>
               <span className="min-w-0 break-words text-right font-medium text-[var(--ui-ink-strong)]">
                 {formatMetricValue(metric, metric.baselineValue)}
               </span>

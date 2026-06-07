@@ -146,22 +146,30 @@ test("stores devrage as one history row per measured day", async () => {
     );
     assert.ok(swearCountMetric);
     assert.equal(swearCountMetric.latestValue, 6);
+    assert.equal(swearCountMetric.baselineValue, 3);
+    assert.equal(swearCountMetric.deltaValue, 3);
     assert.equal(swearCountMetric.coverageDays, 3);
     const percentMetric = metricsView.metrics.find(
       (entry) => entry.metric === "swearingMessagePercent"
     );
     assert.ok(percentMetric);
     assert.equal(percentMetric.latestValue, 25);
+    assert.equal(percentMetric.baselineValue, 17.5);
+    assert.equal(percentMetric.deltaValue, 7.5);
     const averageRageMetric = metricsView.metrics.find(
       (entry) => entry.metric === "devrageAverageMaxCumulativeRage"
     );
     assert.ok(averageRageMetric);
     assert.equal(averageRageMetric.latestValue, 6);
+    assert.equal(averageRageMetric.baselineValue, 3);
+    assert.equal(averageRageMetric.deltaValue, 3);
     const maxRageMetric = metricsView.metrics.find(
       (entry) => entry.metric === "devrageMaxCumulativeRage"
     );
     assert.ok(maxRageMetric);
     assert.equal(maxRageMetric.latestValue, 6);
+    assert.equal(maxRageMetric.baselineValue, 3);
+    assert.equal(maxRageMetric.deltaValue, 3);
   } finally {
     closeDatabase();
     await rm(rootDir, { recursive: true, force: true });
