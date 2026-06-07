@@ -330,7 +330,8 @@ struct ForgeSyncClient {
     static let movementTimelineServerCompatibleLimit = 120
     static let legacyHTTPHealthSyncChunkingVersion = "http-v1"
     static let httpBackgroundHealthSyncChunkingVersion = "http-background-v6-content-addressed-base"
-    static let irohHealthSyncChunkingVersion = "iroh-v5-content-addressed-base"
+    static let irohHealthSyncChunkingVersion = "iroh-v6-small-content-addressed-base"
+    static let irohHealthSyncChunkTargetBytes = 180_000
 
     static func healthSyncChunkingVersion(for pairing: PairingPayload) -> String {
         if pairing.transport?.isIrohTransport == true {
@@ -391,6 +392,22 @@ struct ForgeSyncClient {
 
     private struct PairingHeartbeatEnvelope: Decodable {
         let pairingSession: CompanionPairingSessionState
+
+        private enum CodingKeys: String, CodingKey {
+            case pairingSession
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            if container.contains(.pairingSession) {
+                pairingSession = try container.decode(
+                    CompanionPairingSessionState.self,
+                    forKey: .pairingSession
+                )
+                return
+            }
+            pairingSession = try CompanionPairingSessionState(from: decoder)
+        }
     }
 
     private struct MovementBootstrapRequest: Encodable {
@@ -1716,9 +1733,27 @@ struct ForgeSyncClient {
         uploadSession: HealthSyncUploadSession,
         pairing: PairingPayload
     ) -> Int {
+        Self.effectiveHealthSyncChunkTarget(uploadSession: uploadSession, pairing: pairing)
+    }
+
+    static func effectiveHealthSyncChunkTargetForTesting(
+        uploadSession: HealthSyncUploadSession,
+        pairing: PairingPayload
+    ) -> Int {
+        effectiveHealthSyncChunkTarget(uploadSession: uploadSession, pairing: pairing)
+    }
+
+    static func pairingHeartbeatSessionStateForTesting(from data: Data) throws -> CompanionPairingSessionState {
+        try JSONDecoder().decode(PairingHeartbeatEnvelope.self, from: data).pairingSession
+    }
+
+    private static func effectiveHealthSyncChunkTarget(
+        uploadSession: HealthSyncUploadSession,
+        pairing: PairingPayload
+    ) -> Int {
         let protocolTarget = min(uploadSession.chunkTargetBytes, max(64_000, uploadSession.chunkMaxBytes - 32_000))
         if pairing.transport?.isIrohTransport == true {
-            return max(64_000, Int(Double(protocolTarget) * 0.65))
+            return max(64_000, min(protocolTarget, irohHealthSyncChunkTargetBytes))
         }
         // Tailscale/HTTP intermediaries have shown 502s on large route chunks well
         // below the advertised server body limit. The HTTP request body carries a

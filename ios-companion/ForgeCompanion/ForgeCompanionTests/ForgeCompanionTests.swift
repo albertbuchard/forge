@@ -198,6 +198,72 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(refreshed.capabilities, ["healthkit.sleep", "healthkit.fitness", "watch-ready"])
     }
 
+    func testPairingHeartbeatDecoderAcceptsEnvelopeAndLegacyRawSession() throws {
+        let rawSession = """
+        {
+          "id": "pair_test",
+          "userId": "user_1",
+          "label": "iPhone",
+          "status": "paired",
+          "capabilities": ["healthkit.sleep", "watch-ready"],
+          "deviceName": "iPhone",
+          "platform": "ios",
+          "appVersion": "1.0",
+          "apiBaseUrl": "https://forge.example/api/v1",
+          "lastSeenAt": "2026-04-07T10:00:00Z",
+          "lastSyncAt": null,
+          "lastSyncError": null,
+          "pairedAt": "2026-04-07T09:00:00Z",
+          "sourceStates": {
+            "health": {
+              "desiredEnabled": true,
+              "appliedEnabled": true,
+              "authorizationStatus": "approved",
+              "syncEligible": true,
+              "lastObservedAt": "2026-04-07T10:00:00Z",
+              "metadata": {}
+            },
+            "movement": {
+              "desiredEnabled": true,
+              "appliedEnabled": true,
+              "authorizationStatus": "approved",
+              "syncEligible": true,
+              "lastObservedAt": "2026-04-07T10:00:00Z",
+              "metadata": {}
+            },
+            "screenTime": {
+              "desiredEnabled": true,
+              "appliedEnabled": true,
+              "authorizationStatus": "approved",
+              "syncEligible": true,
+              "lastObservedAt": "2026-04-07T10:00:00Z",
+              "metadata": {}
+            }
+          },
+          "expiresAt": "2026-05-07T10:00:00Z",
+          "createdAt": "2026-04-07T09:00:00Z",
+          "updatedAt": "2026-04-07T10:00:00Z"
+        }
+        """
+        let enveloped = """
+        {
+          "pairingSession": \(rawSession)
+        }
+        """
+
+        let legacy = try ForgeSyncClient.pairingHeartbeatSessionStateForTesting(
+            from: Data(rawSession.utf8)
+        )
+        let current = try ForgeSyncClient.pairingHeartbeatSessionStateForTesting(
+            from: Data(enveloped.utf8)
+        )
+
+        XCTAssertEqual(legacy.id, "pair_test")
+        XCTAssertEqual(current.id, "pair_test")
+        XCTAssertEqual(legacy.capabilities, ["healthkit.sleep", "watch-ready"])
+        XCTAssertEqual(current.sourceStates.movement.authorizationStatus, "approved")
+    }
+
     func testPairingPayloadDecodesAndPreservesIrohTransport() throws {
         let json = """
         {
@@ -3462,7 +3528,78 @@ final class ForgeCompanionTests: XCTestCase {
         )
         XCTAssertEqual(
             ForgeSyncClient.irohHealthSyncChunkingVersion,
-            "iroh-v5-content-addressed-base"
+            "iroh-v6-small-content-addressed-base"
+        )
+    }
+
+    func testIrohHealthSyncUsesSmallerChunksThanHttpBackgroundUpload() {
+        let uploadSession = ForgeSyncClient.HealthSyncUploadSession(
+            syncSessionId: "hms_large",
+            schemaVersion: "healthkit-sync-v2",
+            chunkTargetBytes: 12_000_000,
+            chunkMaxBytes: 24_000_000,
+            chunkPayloadEncoding: "payload_json_base64",
+            acceptedPayloadEncodings: ["payload_json_base64"],
+            supportsCompression: true,
+            acceptedFamilies: ["movement"],
+            receivedChunkIds: []
+        )
+        let irohTransport = PairingTransport(
+            protocolName: "iroh",
+            provider: "forge-companion-iroh",
+            status: "ready",
+            publicBaseUrl: nil,
+            localBaseUrl: "http://127.0.0.1:4317",
+            nodeId: "node",
+            relay: nil,
+            alpn: "forge-companion/1",
+            agent: "forge",
+            pairPayload: PairingTransportPairPayload(
+                v: 1,
+                nodeId: "node",
+                token: "host-token",
+                hostName: "Mac",
+                relay: nil
+            ),
+            recreateCommand: nil,
+            startedAt: nil,
+            lastError: nil,
+            notes: []
+        )
+        let irohPayload = PairingPayload(
+            kind: "pairing",
+            apiBaseUrl: "forge-iroh://node/api/v1",
+            uiBaseUrl: "forge-iroh://node/forge/",
+            sessionId: "pair_iroh",
+            pairingToken: "token",
+            expiresAt: "2099-01-01T00:00:00Z",
+            capabilities: [],
+            transportMode: "iroh",
+            transport: irohTransport
+        )
+        let httpPayload = PairingPayload(
+            kind: "pairing",
+            apiBaseUrl: "https://forge.example/api/v1",
+            uiBaseUrl: "https://forge.example/forge/",
+            sessionId: "pair_http",
+            pairingToken: "token",
+            expiresAt: "2099-01-01T00:00:00Z",
+            capabilities: []
+        )
+
+        XCTAssertEqual(
+            ForgeSyncClient.effectiveHealthSyncChunkTargetForTesting(
+                uploadSession: uploadSession,
+                pairing: irohPayload
+            ),
+            ForgeSyncClient.irohHealthSyncChunkTargetBytes
+        )
+        XCTAssertEqual(
+            ForgeSyncClient.effectiveHealthSyncChunkTargetForTesting(
+                uploadSession: uploadSession,
+                pairing: httpPayload
+            ),
+            500_000
         )
     }
 
