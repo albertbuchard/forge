@@ -313,6 +313,24 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(normalized.transport?.notes.first, "Iroh transport is active.")
     }
 
+    func testIrohTransportErrorEnvelopeCanOmitHeaders() throws {
+        let decoded = try ForgeIrohTransportClient.decodedResponseEnvelopeForTesting(
+            """
+            {
+              "ok": false,
+              "status": -1001,
+              "error": "Forge Iroh request timed out."
+            }
+            """
+        )
+
+        XCTAssertFalse(decoded.ok)
+        XCTAssertEqual(decoded.status, -1001)
+        XCTAssertEqual(decoded.error, "Forge Iroh request timed out.")
+        XCTAssertEqual(decoded.headers.count, 0)
+        XCTAssertEqual(decoded.body.count, 0)
+    }
+
     func testPairingPayloadDecodesShortCliQrPayload() throws {
         let json = """
         {

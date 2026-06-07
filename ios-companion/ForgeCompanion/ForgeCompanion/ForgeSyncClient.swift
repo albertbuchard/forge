@@ -15,7 +15,7 @@ struct ForgeIrohTransportResult {
 }
 
 enum ForgeIrohTransportClient {
-    private static let requestTimeoutNanoseconds: UInt64 = 45 * 1_000_000_000
+    private static let defaultRequestTimeoutSeconds: TimeInterval = 45
 
     private struct Header: Codable {
         let name: String
@@ -36,6 +36,23 @@ enum ForgeIrohTransportClient {
         let headers: [Header]
         let bodyBase64: String?
         let error: String?
+
+        private enum CodingKeys: String, CodingKey {
+            case ok
+            case status
+            case headers
+            case bodyBase64
+            case error
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            ok = (try? container.decode(Bool.self, forKey: .ok)) ?? false
+            status = try? container.decode(Int.self, forKey: .status)
+            headers = (try? container.decode([Header].self, forKey: .headers)) ?? []
+            bodyBase64 = try? container.decode(String.self, forKey: .bodyBase64)
+            error = try? container.decode(String.self, forKey: .error)
+        }
     }
 
     static func send(
@@ -43,7 +60,8 @@ enum ForgeIrohTransportClient {
         path: String,
         headers: [String: String],
         body: Data?,
-        transport: PairingTransport
+        transport: PairingTransport,
+        timeoutInterval: TimeInterval? = nil
     ) async throws -> ForgeIrohTransportResult {
         guard transport.isIrohTransport else {
             throw URLError(.unsupportedURL)
@@ -76,16 +94,15 @@ enum ForgeIrohTransportClient {
                 defer { forge_iroh_free_string(outputPointer) }
                 return String(cString: outputPointer)
             }
-            let response = try JSONDecoder().decode(
-                ResponseEnvelope.self,
-                from: Data(outputJson.utf8)
-            )
+            let response = try decodeResponseEnvelope(outputJson)
             guard response.ok else {
                 throw NSError(
                     domain: "ForgeIrohTransport",
                     code: response.status ?? -1,
                     userInfo: [
-                        NSLocalizedDescriptionKey: response.error ?? "Forge Iroh request failed."
+                        NSLocalizedDescriptionKey: response.error
+                            ?? decodedResponseBodyString(response.bodyBase64)
+                            ?? "Forge Iroh request failed."
                     ]
                 )
             }
@@ -107,11 +124,38 @@ enum ForgeIrohTransportClient {
             )
         }
         do {
-            return try await awaitResult(task, timeoutNanoseconds: requestTimeoutNanoseconds)
+            return try await awaitResult(
+                task,
+                timeoutNanoseconds: timeoutNanoseconds(timeoutInterval: timeoutInterval)
+            )
         } catch {
             task.cancel()
             throw error
         }
+    }
+
+    static func decodedResponseEnvelopeForTesting(
+        _ outputJson: String
+    ) throws -> (ok: Bool, status: Int?, headers: [String: String], body: Data, error: String?) {
+        let response = try decodeResponseEnvelope(outputJson)
+        var headerMap: [String: String] = [:]
+        for header in response.headers {
+            headerMap[header.name] = header.value
+        }
+        let body: Data
+        if let bodyBase64 = response.bodyBase64,
+           let decodedBody = Data(base64Encoded: bodyBase64) {
+            body = decodedBody
+        } else {
+            body = Data()
+        }
+        return (
+            ok: response.ok,
+            status: response.status,
+            headers: headerMap,
+            body: body,
+            error: response.error
+        )
     }
 
     private static func awaitResult(
@@ -129,7 +173,7 @@ enum ForgeIrohTransportClient {
                     code: URLError.timedOut.rawValue,
                     userInfo: [
                         NSLocalizedDescriptionKey: "Forge Iroh request timed out.",
-                        NSLocalizedFailureReasonErrorKey: "No response arrived within 45 seconds."
+                        NSLocalizedFailureReasonErrorKey: "No response arrived within \(timeoutSecondsDescription(timeoutNanoseconds)) seconds."
                     ]
                 )
             }
@@ -139,6 +183,44 @@ enum ForgeIrohTransportClient {
             group.cancelAll()
             return result
         }
+    }
+
+    private static func decodeResponseEnvelope(_ outputJson: String) throws -> ResponseEnvelope {
+        do {
+            return try JSONDecoder().decode(
+                ResponseEnvelope.self,
+                from: Data(outputJson.utf8)
+            )
+        } catch {
+            throw NSError(
+                domain: "ForgeIrohTransport",
+                code: URLError.cannotDecodeRawData.rawValue,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Forge Iroh response could not be decoded.",
+                    NSLocalizedFailureReasonErrorKey: outputJson.prefix(500).description
+                ]
+            )
+        }
+    }
+
+    private static func decodedResponseBodyString(_ bodyBase64: String?) -> String? {
+        guard let bodyBase64,
+              let decodedBody = Data(base64Encoded: bodyBase64),
+              let body = String(data: decodedBody, encoding: .utf8),
+              body.isEmpty == false
+        else {
+            return nil
+        }
+        return body
+    }
+
+    private static func timeoutNanoseconds(timeoutInterval: TimeInterval?) -> UInt64 {
+        let seconds = max(timeoutInterval ?? defaultRequestTimeoutSeconds, defaultRequestTimeoutSeconds)
+        return UInt64(seconds * 1_000_000_000)
+    }
+
+    private static func timeoutSecondsDescription(_ timeoutNanoseconds: UInt64) -> String {
+        String(format: "%.0f", Double(timeoutNanoseconds) / 1_000_000_000)
     }
 }
 
@@ -1661,6 +1743,7 @@ struct ForgeSyncClient {
                     payloadJsonBase64: wirePayload.payloadJsonDeflateBase64 == nil ? wirePayload.payloadJsonBase64 : nil
                 ),
                 transport: pairing.transport,
+                timeoutInterval: 120,
                 useBackgroundUpload: true
             )
         } catch {
@@ -2324,7 +2407,8 @@ struct ForgeSyncClient {
                 path: apiRequestPath(apiBaseUrl: apiBaseUrl, endpointPath: path),
                 headers: requestHeaders,
                 body: requestBody,
-                transport: transport
+                transport: transport,
+                timeoutInterval: timeoutInterval
             )
             data = irohResult.data
             guard let response = HTTPURLResponse(
