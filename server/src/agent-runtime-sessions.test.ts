@@ -26,15 +26,19 @@ test("routine agent session lifecycle stays out of general activity", async () =
     const session = registerAgentRuntimeSession({
       provider: "codex",
       agentLabel: "Forge Codex",
+      agentType: "assistant",
       sessionKey: "codex-test-session",
       sessionLabel: "Codex test",
       actorLabel: "Forge Codex",
+      linkedUserIds: [],
       connectionMode: "mcp",
       status: "connected",
       baseUrl: "http://127.0.0.1:4317",
+      webUrl: null,
       dataRoot: rootDir,
       externalSessionId: "external-session-1",
       staleAfterSeconds: 120,
+      lastError: null,
       metadata: {
         singleton: true
       }

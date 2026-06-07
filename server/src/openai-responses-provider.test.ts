@@ -501,7 +501,13 @@ test("OpenAI Codex wiki ingest sends instructions as a top-level field", async (
 test("OpenAI Codex text prompts read event-stream responses", async () => {
   const provider = new OpenAiResponsesProvider();
   const originalFetch = globalThis.fetch;
-  let capturedBody: Record<string, unknown> | null = null;
+  let capturedBody:
+    | {
+        stream?: unknown;
+        store?: unknown;
+        instructions?: unknown;
+      }
+    | null = null;
 
   const jwtPayload = Buffer.from(
     JSON.stringify({
@@ -549,8 +555,13 @@ test("OpenAI Codex text prompts read event-stream responses", async () => {
     globalThis.fetch = originalFetch;
   }
 
-  assert.ok(capturedBody);
-  assert.equal(capturedBody.stream, true);
-  assert.equal(capturedBody.store, false);
-  assert.equal(capturedBody.instructions, "Answer briefly.");
+  const body = capturedBody as {
+    stream?: unknown;
+    store?: unknown;
+    instructions?: unknown;
+  } | null;
+  assert.ok(body);
+  assert.equal(body.stream, true);
+  assert.equal(body.store, false);
+  assert.equal(body.instructions, "Answer briefly.");
 });
