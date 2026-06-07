@@ -235,6 +235,59 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(assetResponse.mimeType, "text/javascript")
     }
 
+    func testForgeIrohCookieJarStoresOperatorSessionCookieForRetries() async {
+        let jar = ForgeIrohURLSchemeCookieJar()
+
+        let storedNames = await jar.storeCookies(
+            from: [
+                "set-cookie": "forge_operator_session=fg_session_cookie; Path=/; HttpOnly; SameSite=Strict; Max-Age=604800"
+            ]
+        )
+        let headers = await jar.headersByAddingStoredCookies(
+            to: ["x-forge-source": "ui"]
+        )
+
+        XCTAssertEqual(storedNames, ["forge_operator_session"])
+        XCTAssertEqual(headers["Cookie"], "forge_operator_session=fg_session_cookie")
+        XCTAssertEqual(headers["x-forge-source"], "ui")
+    }
+
+    func testForgeIrohCookieJarMergesStoredCookieWithExistingCookieHeader() async {
+        let jar = ForgeIrohURLSchemeCookieJar()
+
+        await jar.storeCookies(
+            from: [
+                "Set-Cookie": "forge_operator_session=fg_session_cookie; Path=/; HttpOnly"
+            ]
+        )
+        let headers = await jar.headersByAddingStoredCookies(
+            to: ["Cookie": "other=value"]
+        )
+
+        XCTAssertEqual(
+            headers["Cookie"],
+            "forge_operator_session=fg_session_cookie; other=value"
+        )
+    }
+
+    func testForgeIrohCookieJarDeletesExpiredCookies() async {
+        let jar = ForgeIrohURLSchemeCookieJar()
+
+        await jar.storeCookies(
+            from: [
+                "set-cookie": "forge_operator_session=fg_session_cookie; Path=/; HttpOnly"
+            ]
+        )
+        await jar.storeCookies(
+            from: [
+                "set-cookie": "forge_operator_session=; Path=/; Max-Age=0"
+            ]
+        )
+        let headers = await jar.headersByAddingStoredCookies(to: [:])
+
+        XCTAssertNil(headers["Cookie"])
+    }
+
     func testNormalizedPayloadPreservesPreferredUiBaseUrl() {
         let payload = PairingPayload(
             kind: "pairing",

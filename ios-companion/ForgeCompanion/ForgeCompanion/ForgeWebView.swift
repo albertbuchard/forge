@@ -317,6 +317,7 @@ struct ForgeWebView: UIViewRepresentable {
 
 final class ForgeIrohURLSchemeHandler: NSObject, WKURLSchemeHandler {
     private let transport: PairingTransport
+    private let cookieJar = ForgeIrohURLSchemeCookieJar()
     private var activeTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
 
     init(transport: PairingTransport) {
@@ -336,13 +337,23 @@ final class ForgeIrohURLSchemeHandler: NSObject, WKURLSchemeHandler {
                     "ForgeIrohURLSchemeHandler",
                     "start method=\(request.httpMethod ?? "GET") url=\(url.absoluteString) path=\(path)"
                 )
+                let requestHeaders = await cookieJar.headersByAddingStoredCookies(
+                    to: Self.proxyHeaders(from: request)
+                )
                 let result = try await ForgeIrohTransportClient.send(
                     method: request.httpMethod ?? "GET",
                     path: path,
-                    headers: Self.proxyHeaders(from: request),
+                    headers: requestHeaders,
                     body: request.httpBody,
                     transport: transport
                 )
+                let storedCookies = await cookieJar.storeCookies(from: result.headers)
+                if storedCookies.isEmpty == false {
+                    companionDebugLog(
+                        "ForgeIrohURLSchemeHandler",
+                        "stored cookies names=\(storedCookies.joined(separator: ",")) path=\(path)"
+                    )
+                }
                 if Task.isCancelled {
                     return
                 }
@@ -357,10 +368,17 @@ final class ForgeIrohURLSchemeHandler: NSObject, WKURLSchemeHandler {
                     let redirectResult = try await ForgeIrohTransportClient.send(
                         method: "GET",
                         path: Self.proxyPath(for: redirectURL),
-                        headers: Self.proxyHeaders(from: request),
+                        headers: await cookieJar.headersByAddingStoredCookies(to: requestHeaders),
                         body: nil,
                         transport: transport
                     )
+                    let redirectStoredCookies = await cookieJar.storeCookies(from: redirectResult.headers)
+                    if redirectStoredCookies.isEmpty == false {
+                        companionDebugLog(
+                            "ForgeIrohURLSchemeHandler",
+                            "stored cookies names=\(redirectStoredCookies.joined(separator: ",")) path=\(Self.proxyPath(for: redirectURL))"
+                        )
+                    }
                     let redirectPath = Self.proxyPath(for: redirectURL)
                     try await Self.finish(
                         urlSchemeTask,
@@ -571,6 +589,101 @@ final class ForgeIrohURLSchemeHandler: NSObject, WKURLSchemeHandler {
             }
         }
         return nil
+    }
+}
+
+actor ForgeIrohURLSchemeCookieJar {
+    private var cookies: [String: String] = [:]
+
+    func headersByAddingStoredCookies(to headers: [String: String]) -> [String: String] {
+        guard cookies.isEmpty == false else {
+            return headers
+        }
+        var nextHeaders = headers
+        let storedCookieHeader = Self.cookieHeader(from: cookies)
+        if let existingKey = nextHeaders.keys.first(where: { $0.caseInsensitiveCompare("cookie") == .orderedSame }),
+           let existingValue = nextHeaders[existingKey],
+           existingValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+            nextHeaders[existingKey] = Self.mergeCookieHeaders(existingValue, storedCookieHeader)
+        } else {
+            nextHeaders["Cookie"] = storedCookieHeader
+        }
+        return nextHeaders
+    }
+
+    @discardableResult
+    func storeCookies(from headers: [String: String]) -> [String] {
+        var storedNames: [String] = []
+        for header in headers where header.key.caseInsensitiveCompare("set-cookie") == .orderedSame {
+            for parsedCookie in Self.parseSetCookieHeader(header.value) {
+                if parsedCookie.value.isEmpty || parsedCookie.shouldDelete {
+                    cookies.removeValue(forKey: parsedCookie.name)
+                } else {
+                    cookies[parsedCookie.name] = parsedCookie.value
+                }
+                storedNames.append(parsedCookie.name)
+            }
+        }
+        return storedNames
+    }
+
+    static func cookieHeader(from cookies: [String: String]) -> String {
+        cookies
+            .sorted { $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending }
+            .map { "\($0.key)=\($0.value)" }
+            .joined(separator: "; ")
+    }
+
+    static func mergeCookieHeaders(_ existingHeader: String, _ storedHeader: String) -> String {
+        var cookiesByName: [String: String] = [:]
+        for cookie in parseCookieHeader(existingHeader) {
+            cookiesByName[cookie.name] = cookie.value
+        }
+        for cookie in parseCookieHeader(storedHeader) {
+            cookiesByName[cookie.name] = cookie.value
+        }
+        return cookieHeader(from: cookiesByName)
+    }
+
+    static func parseCookieHeader(_ header: String) -> [(name: String, value: String)] {
+        header
+            .split(separator: ";")
+            .compactMap { part -> (name: String, value: String)? in
+                let trimmed = part.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard let equalsIndex = trimmed.firstIndex(of: "=") else {
+                    return nil
+                }
+                let name = String(trimmed[..<equalsIndex]).trimmingCharacters(in: .whitespacesAndNewlines)
+                let value = String(trimmed[trimmed.index(after: equalsIndex)...])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                guard name.isEmpty == false else {
+                    return nil
+                }
+                return (name, value)
+            }
+    }
+
+    static func parseSetCookieHeader(_ header: String) -> [(name: String, value: String, shouldDelete: Bool)] {
+        let parts = header.split(separator: ";")
+        guard let firstPart = parts.first else {
+            return []
+        }
+        let first = firstPart.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let equalsIndex = first.firstIndex(of: "=") else {
+            return []
+        }
+        let name = String(first[..<equalsIndex]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = String(first[first.index(after: equalsIndex)...])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard name.isEmpty == false else {
+            return []
+        }
+        let shouldDelete = parts.dropFirst().contains { attribute in
+            attribute
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased() == "max-age=0"
+        }
+        return [(name, value, shouldDelete)]
     }
 }
 
