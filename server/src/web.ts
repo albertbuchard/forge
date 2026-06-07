@@ -647,6 +647,7 @@ export async function registerWebRoutes(
   const devWebRuntime = options.devWebRuntime ?? createManagedDevWebRuntime();
   const fetchImpl = options.fetchImpl ?? fetch;
   const devAssetProxy = options.devAssetProxy ?? createDevAssetProxy(fetchImpl);
+  const basePath = normalizeBasePath(getDefaultBasePath());
 
   app.addHook("onClose", async () => {
     await devWebRuntime.stop();
@@ -661,6 +662,16 @@ export async function registerWebRoutes(
         head
       });
     })();
+  });
+  app.get("/__forge-ui-root-redirect", async (_request, reply) => {
+    if (basePath !== "/") {
+      reply.redirect(basePath, 302);
+      return;
+    }
+    return serveAsset("/", reply, { devWebRuntime, devAssetProxy });
+  });
+  app.get("/__forge-ui-base-redirect", async (_request, reply) => {
+    reply.redirect(basePath, 302);
   });
   app.get("/", async (_request, reply) =>
     serveAsset("/", reply, { devWebRuntime, devAssetProxy })

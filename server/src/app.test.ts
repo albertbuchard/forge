@@ -10718,6 +10718,20 @@ test("built frontend assets are served correctly from the /forge base path", asy
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
+    const rootResponse = await app.inject({
+      method: "GET",
+      url: "/"
+    });
+    assert.equal(rootResponse.statusCode, 302);
+    assert.equal(rootResponse.headers.location, "/forge/");
+
+    const basePathNoSlashResponse = await app.inject({
+      method: "GET",
+      url: "/forge"
+    });
+    assert.equal(basePathNoSlashResponse.statusCode, 302);
+    assert.equal(basePathNoSlashResponse.headers.location, "/forge/");
+
     const indexResponse = await app.inject({
       method: "GET",
       url: "/forge/"

@@ -5527,8 +5527,11 @@ function rewriteMountPath(url) {
     const queryIndex = url.indexOf("?");
     const pathname = queryIndex >= 0 ? url.slice(0, queryIndex) : url;
     const search = queryIndex >= 0 ? url.slice(queryIndex) : "";
+    if (pathname === "/") {
+        return `/__forge-ui-root-redirect${search}`;
+    }
     if (pathname === "/forge") {
-        return `/${search}`;
+        return `/__forge-ui-base-redirect${search}`;
     }
     if (pathname.startsWith("/forge/")) {
         return `${pathname.slice("/forge".length) || "/"}${search}`;
