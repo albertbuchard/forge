@@ -22119,6 +22119,43 @@ test("background job manager can run multiple jobs at the same time", async () =
   await manager.stop();
 });
 
+test("background job manager resumes draining when an already queued job is enqueued again", async () => {
+  const manager = new BackgroundJobManager(1);
+  let ran = false;
+  const ranPromise = new Promise<void>((resolve) => {
+    // Simulate a persisted/resumed queue entry that survived without a pending
+    // drain microtask. The duplicate enqueue path must wake the queue.
+    (
+      manager as unknown as {
+        queue: Array<{
+          id: string;
+          label: string;
+          handler: () => Promise<void>;
+        }>;
+      }
+    ).queue.push({
+      id: "bg_resume_duplicate",
+      label: "Resume duplicate",
+      handler: async () => {
+        ran = true;
+        resolve();
+      }
+    });
+  });
+
+  manager.enqueue({
+    id: "bg_resume_duplicate",
+    label: "Resume duplicate",
+    handler: async () => {
+      throw new Error("Duplicate handler should not run");
+    }
+  });
+
+  await ranPromise;
+  assert.equal(ran, true);
+  await manager.stop();
+});
+
 test("wiki ingest diagnostics explain missing llm api key and background job execution", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-wiki-llm-logs-"));
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
