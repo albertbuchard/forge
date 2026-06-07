@@ -521,6 +521,112 @@ def increment_release_versions!(config)
     xcodeproj: xcode_project_path
   )
   increment_build_number(xcodeproj: xcode_project_path)
+  build_number = current_build_number
+  synchronize_release_target_versions!(
+    marketing_version: marketing_version,
+    build_number: build_number
+  )
+  build_number
+end
+
+def release_target_names
+  [
+    "ForgeCompanion",
+    "ForgeWatch Watch App",
+    "ForgeWatchExtension",
+    "ForgeScreenTimeReportExtension"
+  ]
+end
+
+def resolve_project_relative_path(path)
+  raw_path = path.to_s.delete('"').strip
+  return nil if raw_path.empty?
+
+  project_dir = File.dirname(xcode_project_path)
+  expanded = raw_path.gsub("$(SRCROOT)", project_dir)
+  File.expand_path(expanded, project_dir)
+end
+
+def plistbuddy_set_or_add!(plist_path:, key:, type:, value:)
+  escaped_path = Shellwords.escape(plist_path)
+  set_command = "/usr/libexec/PlistBuddy -c #{Shellwords.escape("Set :#{key} #{value}")} #{escaped_path}"
+  Actions.sh(set_command, log: false)
+rescue StandardError
+  add_command = "/usr/libexec/PlistBuddy -c #{Shellwords.escape("Add :#{key} #{type} #{value}")} #{escaped_path}"
+  Actions.sh(add_command, log: false)
+end
+
+def synchronize_release_target_versions!(marketing_version:, build_number:)
+  project = Xcodeproj::Project.open(xcode_project_path)
+  missing_targets = release_target_names - project.targets.map(&:name)
+  UI.user_error!("Missing release targets in Xcode project: #{missing_targets.join(", ")}") unless missing_targets.empty?
+
+  release_target_names.each do |target_name|
+    target = project.targets.find { |candidate| candidate.name == target_name }
+    target.build_configurations.each do |build_config|
+      build_config.build_settings["MARKETING_VERSION"] = marketing_version
+      build_config.build_settings["CURRENT_PROJECT_VERSION"] = build_number
+
+      plist_path = resolve_project_relative_path(build_config.build_settings["INFOPLIST_FILE"])
+      next unless plist_path && File.exist?(plist_path)
+
+      plistbuddy_set_or_add!(
+        plist_path: plist_path,
+        key: "CFBundleShortVersionString",
+        type: "string",
+        value: marketing_version
+      )
+      plistbuddy_set_or_add!(
+        plist_path: plist_path,
+        key: "CFBundleVersion",
+        type: "string",
+        value: build_number
+      )
+    end
+  end
+
+  project.save
+  verify_release_target_versions!(
+    marketing_version: marketing_version,
+    build_number: build_number
+  )
+end
+
+def verify_release_target_versions!(marketing_version:, build_number:)
+  project = Xcodeproj::Project.open(xcode_project_path)
+  release_target_names.each do |target_name|
+    target = project.targets.find { |candidate| candidate.name == target_name }
+    UI.user_error!("Missing release target #{target_name}") unless target
+
+    target.build_configurations.each do |build_config|
+      actual_marketing = build_config.build_settings["MARKETING_VERSION"].to_s
+      actual_build = build_config.build_settings["CURRENT_PROJECT_VERSION"].to_s
+      UI.user_error!(
+        "#{target_name} #{build_config.name} MARKETING_VERSION mismatch: expected #{marketing_version}, got #{actual_marketing}"
+      ) unless actual_marketing == marketing_version
+      UI.user_error!(
+        "#{target_name} #{build_config.name} CURRENT_PROJECT_VERSION mismatch: expected #{build_number}, got #{actual_build}"
+      ) unless actual_build == build_number.to_s
+
+      plist_path = resolve_project_relative_path(build_config.build_settings["INFOPLIST_FILE"])
+      next unless plist_path && File.exist?(plist_path)
+
+      plist_version = Actions.sh(
+        "/usr/libexec/PlistBuddy -c #{Shellwords.escape("Print :CFBundleShortVersionString")} #{Shellwords.escape(plist_path)}",
+        log: false
+      ).strip
+      plist_build = Actions.sh(
+        "/usr/libexec/PlistBuddy -c #{Shellwords.escape("Print :CFBundleVersion")} #{Shellwords.escape(plist_path)}",
+        log: false
+      ).strip
+      UI.user_error!(
+        "#{target_name} #{build_config.name} Info.plist version mismatch: expected #{marketing_version}, got #{plist_version}"
+      ) unless plist_version == marketing_version
+      UI.user_error!(
+        "#{target_name} #{build_config.name} Info.plist build mismatch: expected #{build_number}, got #{plist_build}"
+      ) unless plist_build == build_number.to_s
+    end
+  end
 end
 
 def current_build_number
