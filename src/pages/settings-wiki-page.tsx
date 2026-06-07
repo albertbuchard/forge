@@ -78,9 +78,9 @@ export function SettingsWikiPage() {
   if (settingsQuery.isLoading) {
     return (
       <LoadingState
-        eyebrow="KarpaWiki settings"
-        title="Loading KarpaWiki controls"
-        description="Fetching spaces and profile configuration for KarpaWiki."
+        eyebrow="Forge Wiki settings"
+        title="Loading Forge Wiki controls"
+        description="Fetching spaces and profile configuration for Forge Wiki."
       />
     );
   }
@@ -88,7 +88,7 @@ export function SettingsWikiPage() {
   if (settingsQuery.isError) {
     return (
       <ErrorState
-        eyebrow="KarpaWiki settings"
+        eyebrow="Forge Wiki settings"
         error={settingsQuery.error}
         onRetry={() => void settingsQuery.refetch()}
       />
@@ -99,8 +99,8 @@ export function SettingsWikiPage() {
   if (!settings) {
     return (
       <ErrorState
-        eyebrow="KarpaWiki settings"
-        error={new Error("Forge returned an empty KarpaWiki settings payload.")}
+        eyebrow="Forge Wiki settings"
+        error={new Error("Forge returned an empty Forge Wiki settings payload.")}
         onRetry={() => void settingsQuery.refetch()}
       />
     );
@@ -113,9 +113,9 @@ export function SettingsWikiPage() {
     <div className="mx-auto grid w-full max-w-[1440px] gap-5">
       <PageHero
         eyebrow="SQLite memory"
-        title="KarpaWiki Settings"
-        titleText="KarpaWiki Settings"
-        description="Manage SQLite-backed spaces and refresh KarpaWiki indexes. Model, OAuth, and embedding profile setup lives in Models."
+        title="Forge Wiki Settings"
+        titleText="Forge Wiki Settings"
+        description="Manage SQLite-backed spaces and refresh Forge Wiki indexes. Model, OAuth, and embedding profile setup lives in Models."
         badge={`${settings.spaces.length} spaces · ${settings.embeddingProfiles.length} embedding profiles`}
         actions={
           <>
@@ -153,7 +153,7 @@ export function SettingsWikiPage() {
                 Model configuration moved
               </div>
               <div className={`text-xs leading-5 ${wikiFaintClass}`}>
-                KarpaWiki ingest uses the OpenAI Codex OAuth connection selected
+                Forge Wiki ingest uses the OpenAI Codex OAuth connection selected
                 in Models. OpenAI Platform API keys and embedding profile setup
                 are not configured from this page.
               </div>
@@ -164,7 +164,7 @@ export function SettingsWikiPage() {
             to="/settings/models"
             className={`${wikiActionLinkClass} w-fit`}
           >
-            Manage KarpaWiki models and embeddings
+            Manage Forge Wiki models and embeddings
             <ArrowUpRight className="ml-2 size-4" />
           </Link>
         </Card>

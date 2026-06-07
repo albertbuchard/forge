@@ -642,7 +642,7 @@ export function KnowledgeGraphPage() {
       <LoadingState
         eyebrow="Knowledge Graph"
         title="Loading the Forge world model"
-        description="Gathering goals, projects, KarpaWiki pages, psyche entities, calendar context, and Workbench flows into one graph."
+        description="Gathering goals, projects, Forge Wiki pages, psyche entities, calendar context, and Workbench flows into one graph."
       />
     );
   }

@@ -26,7 +26,7 @@ export const SETTINGS_SECTIONS = [
   { to: "/settings/mobile", label: "Mobile", icon: Smartphone },
   { to: "/settings/models", label: "Models", icon: Cpu },
   { to: "/settings/agents", label: "Agents", icon: Bot },
-  { to: "/settings/wiki", label: "KarpaWiki", icon: BookCopy },
+  { to: "/settings/wiki", label: "Forge Wiki", icon: BookCopy },
   { to: "/settings/logs", label: "Logs", icon: ScrollText },
   { to: "/settings/rewards", label: "Rewards", icon: Trophy },
   { to: "/settings/bin", label: "Bin", icon: ArchiveRestore }

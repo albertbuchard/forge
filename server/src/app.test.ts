@@ -15049,6 +15049,25 @@ test("wiki pages are SQLite-backed, searchable, backlink-aware, and ingestable",
     const titleLinkedBody = titleLinkedPage.json() as {
       page: { id: string };
     };
+    const legacyLinkTimestamp = new Date().toISOString();
+    getDatabase()
+      .prepare(
+        `INSERT INTO wiki_link_edges (
+          source_note_id, target_type, target_note_id, target_entity_type, target_entity_id, label, raw_target, is_embed, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        titleLinkedBody.page.id,
+        "note",
+        personBody.page.id,
+        null,
+        null,
+        "Albert legacy note target",
+        "Albert Buchard",
+        0,
+        legacyLinkTimestamp,
+        legacyLinkTimestamp
+      );
 
     const personDetail = await app.inject({
       method: "GET",
@@ -15059,13 +15078,25 @@ test("wiki pages are SQLite-backed, searchable, backlink-aware, and ingestable",
     });
     assert.equal(personDetail.statusCode, 200);
     const personDetailBody = personDetail.json() as {
-      backlinks: Array<{ sourceNoteId: string; rawTarget: string }>;
+      backlinks: Array<{
+        sourceNoteId: string;
+        rawTarget: string;
+        targetType: string;
+      }>;
     };
     assert.ok(
       personDetailBody.backlinks.some(
         (entry) =>
           entry.sourceNoteId === titleLinkedBody.page.id &&
           entry.rawTarget === "Albert Buchard"
+      )
+    );
+    assert.ok(
+      personDetailBody.backlinks.some(
+        (entry) =>
+          entry.sourceNoteId === titleLinkedBody.page.id &&
+          entry.rawTarget === "Albert Buchard" &&
+          entry.targetType === "page"
       )
     );
 

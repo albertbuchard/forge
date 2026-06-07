@@ -116,6 +116,18 @@ const wikiLinkEdgeSchema = z.object({
   updatedAt: z.string()
 });
 
+function normalizeWikiLinkTargetType(
+  value: string
+): z.infer<typeof wikiLinkEdgeSchema>["targetType"] {
+  if (value === "note") {
+    return "page";
+  }
+  if (value === "page" || value === "entity" || value === "unresolved") {
+    return value;
+  }
+  return "unresolved";
+}
+
 const wikiMediaAssetSchema = z.object({
   id: z.string(),
   spaceId: z.string(),
@@ -2249,7 +2261,7 @@ export function getWikiPageDetail(noteId: string) {
     backlinks: backlinkRows.map((row) =>
       wikiLinkEdgeSchema.parse({
         sourceNoteId: row.source_note_id,
-        targetType: row.target_type,
+        targetType: normalizeWikiLinkTargetType(row.target_type),
         targetNoteId: row.target_note_id,
         targetEntityType: row.target_entity_type,
         targetEntityId: row.target_entity_id,

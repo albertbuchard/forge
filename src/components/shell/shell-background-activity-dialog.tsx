@@ -68,7 +68,7 @@ export function ShellBackgroundActivityDialog({
                 Background activity
               </Dialog.Title>
               <Dialog.Description className={shellDialogDescriptionClassName}>
-                Follow active KarpaWiki ingest jobs and reopen completed reviews
+                Follow active Forge Wiki ingest jobs and reopen completed reviews
                 without leaving your current context.
               </Dialog.Description>
             </div>
@@ -110,7 +110,7 @@ export function ShellBackgroundActivityDialog({
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
-                            KarpaWiki ingest
+                            Forge Wiki ingest
                           </div>
                           <div className="mt-2 text-[14px] font-semibold text-[var(--ui-ink-strong)]">
                             {job.job.titleHint ||

@@ -324,36 +324,36 @@ export const ROUTE_VIEW_CATALOG = {
   },
   "wiki-index": {
     surfaceId: "wiki-index",
-    title: "KarpaWiki",
-    description: "Search KarpaWiki pages, backlinks, entity links, and the SQLite-backed memory graph.",
+    title: "Forge Wiki",
+    description: "Search Forge Wiki pages, backlinks, entity links, and the SQLite-backed memory graph.",
     tone: "knowledge",
     skeleton: { blocks: 6, columns: 2, sideRail: true }
   },
   "wiki-ingest-history": {
     surfaceId: "wiki-ingest-history",
-    title: "KarpaWiki ingest history",
-    description: "Review KarpaWiki ingest jobs, source files, mapped entities, and processing outcomes.",
+    title: "Forge Wiki ingest history",
+    description: "Review Forge Wiki ingest jobs, source files, mapped entities, and processing outcomes.",
     tone: "knowledge",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "wiki-page-detail": {
     surfaceId: "wiki-page-detail",
-    title: "KarpaWiki page",
-    description: "Read one KarpaWiki page with backlinks, linked entities, citations, and related pages.",
+    title: "Forge Wiki page",
+    description: "Read one Forge Wiki page with backlinks, linked entities, citations, and related pages.",
     tone: "knowledge",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
   "wiki-new": {
     surfaceId: "wiki-new",
-    title: "New KarpaWiki page",
-    description: "Draft a new KarpaWiki page with Markdown, metadata, and entity links.",
+    title: "New Forge Wiki page",
+    description: "Draft a new Forge Wiki page with Markdown, metadata, and entity links.",
     tone: "knowledge",
     skeleton: { blocks: 4, columns: 1, sideRail: false }
   },
   "wiki-edit": {
     surfaceId: "wiki-edit",
-    title: "Edit KarpaWiki page",
-    description: "Edit an existing KarpaWiki page while preserving links, metadata, and history.",
+    title: "Edit Forge Wiki page",
+    description: "Edit an existing Forge Wiki page while preserving links, metadata, and history.",
     tone: "knowledge",
     skeleton: { blocks: 4, columns: 1, sideRail: false }
   },
@@ -471,8 +471,8 @@ export const ROUTE_VIEW_CATALOG = {
   },
   "settings-wiki": {
     surfaceId: "settings-wiki",
-    title: "KarpaWiki settings",
-    description: "Configure KarpaWiki ingest behavior, wiki profiles, memory settings, and source handling.",
+    title: "Forge Wiki settings",
+    description: "Configure Forge Wiki ingest behavior, wiki profiles, memory settings, and source handling.",
     tone: "settings",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },

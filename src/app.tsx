@@ -543,8 +543,8 @@ export function App() {
             path="wiki"
             element={surface(
               "wiki-index",
-              "KarpaWiki",
-              "KarpaWiki search and page navigation.",
+              "Forge Wiki",
+              "Forge Wiki search and page navigation.",
               <WikiPage />
             )}
           />
@@ -552,7 +552,7 @@ export function App() {
             path="wiki/ingest-history"
             element={surface(
               "wiki-ingest-history",
-              "KarpaWiki ingest history",
+              "Forge Wiki ingest history",
               "Ingest jobs and processing history.",
               <WikiIngestHistoryPage />
             )}
@@ -561,8 +561,8 @@ export function App() {
             path="wiki/page/:slug"
             element={surface(
               "wiki-page-detail",
-              "KarpaWiki page",
-              "KarpaWiki page detail and backlinks.",
+              "Forge Wiki page",
+              "Forge Wiki page detail and backlinks.",
               <WikiPage />
             )}
           />
@@ -570,8 +570,8 @@ export function App() {
             path="wiki/new"
             element={surface(
               "wiki-new",
-              "New KarpaWiki page",
-              "KarpaWiki editor for new pages.",
+              "New Forge Wiki page",
+              "Forge Wiki editor for new pages.",
               <WikiEditorPage />
             )}
           />
@@ -579,8 +579,8 @@ export function App() {
             path="wiki/edit/:pageId"
             element={surface(
               "wiki-edit",
-              "Edit KarpaWiki page",
-              "KarpaWiki editor for existing pages.",
+              "Edit Forge Wiki page",
+              "Forge Wiki editor for existing pages.",
               <WikiEditorPage />
             )}
           />
@@ -734,8 +734,8 @@ export function App() {
             path="settings/wiki"
             element={surface(
               "settings-wiki",
-              "KarpaWiki settings",
-              "KarpaWiki ingestion and profile settings.",
+              "Forge Wiki settings",
+              "Forge Wiki ingestion and profile settings.",
               <SettingsWikiPage />
             )}
           />

@@ -1194,7 +1194,7 @@ function updateSettingsInternal(
               const connection = getAiModelConnectionById(normalized);
               if (connection?.provider !== "openai-codex") {
                 throw new Error(
-                  "KarpaWiki ingest must use an OpenAI Codex OAuth model connection, not an OpenAI Platform API connection."
+                  "Forge Wiki ingest must use an OpenAI Codex OAuth model connection, not an OpenAI Platform API connection."
                 );
               }
               return normalized;
