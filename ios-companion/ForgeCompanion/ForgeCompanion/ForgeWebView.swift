@@ -361,15 +361,18 @@ final class ForgeIrohURLSchemeHandler: NSObject, WKURLSchemeHandler {
                         body: nil,
                         transport: transport
                     )
+                    let redirectPath = Self.proxyPath(for: redirectURL)
                     try await Self.finish(
                         urlSchemeTask,
                         url: redirectURL,
+                        path: redirectPath,
                         result: redirectResult
                     )
                 } else {
                     try await Self.finish(
                         urlSchemeTask,
                         url: url,
+                        path: path,
                         result: result
                     )
                 }
@@ -460,21 +463,18 @@ final class ForgeIrohURLSchemeHandler: NSObject, WKURLSchemeHandler {
     private static func finish(
         _ urlSchemeTask: WKURLSchemeTask,
         url: URL,
+        path: String,
         result: ForgeIrohTransportResult
     ) async throws {
         if Task.isCancelled {
             return
         }
         let mimeType = mimeType(from: result.headers, fallbackURL: url)
-        let response = URLResponse(
-            url: url,
-            mimeType: mimeType,
-            expectedContentLength: result.data.count,
-            textEncodingName: textEncodingName(from: result.headers)
-        )
+        let response = response(for: url, path: path, result: result)
+        let responseKind = response is HTTPURLResponse ? "http" : "plain"
         companionDebugLog(
             "ForgeIrohURLSchemeHandler",
-            "finish status=\(result.statusCode) url=\(url.absoluteString) bytes=\(result.data.count) mime=\(mimeType)"
+            "finish status=\(result.statusCode) response=\(responseKind) url=\(url.absoluteString) bytes=\(result.data.count) mime=\(mimeType)"
         )
         await MainActor.run {
             urlSchemeTask.didReceive(response)
@@ -483,6 +483,29 @@ final class ForgeIrohURLSchemeHandler: NSObject, WKURLSchemeHandler {
             }
             urlSchemeTask.didFinish()
         }
+    }
+
+    static func response(for url: URL, path: String, result: ForgeIrohTransportResult) -> URLResponse {
+        let mimeType = mimeType(from: result.headers, fallbackURL: url)
+        if shouldUseHTTPResponse(for: path),
+           let response = HTTPURLResponse(
+               url: url,
+               statusCode: result.statusCode,
+               httpVersion: "HTTP/1.1",
+               headerFields: responseHeaders(from: result.headers)
+           ) {
+            return response
+        }
+        return URLResponse(
+            url: url,
+            mimeType: mimeType,
+            expectedContentLength: result.data.count,
+            textEncodingName: textEncodingName(from: result.headers)
+        )
+    }
+
+    static func shouldUseHTTPResponse(for path: String) -> Bool {
+        path == "/api" || path.hasPrefix("/api/") || path.hasPrefix("/api?")
     }
 
     private static func redirectURL(
@@ -514,6 +537,18 @@ final class ForgeIrohURLSchemeHandler: NSObject, WKURLSchemeHandler {
         headers["Content-Length"] = nil
         headers["Transfer-Encoding"] = nil
         return headers
+    }
+
+    static func responseHeaders(from headers: [String: String]) -> [String: String] {
+        headers.filter { header in
+            let lowercased = header.key.lowercased()
+            return lowercased != "connection" &&
+                lowercased != "keep-alive" &&
+                lowercased != "te" &&
+                lowercased != "trailer" &&
+                lowercased != "transfer-encoding" &&
+                lowercased != "upgrade"
+        }
     }
 
     private static func headerValue(_ name: String, in headers: [String: String]) -> String? {

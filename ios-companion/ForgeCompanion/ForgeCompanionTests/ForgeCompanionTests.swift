@@ -178,6 +178,63 @@ final class ForgeCompanionTests: XCTestCase {
         )
     }
 
+    func testForgeIrohWebViewSchemeHandlerUsesHTTPResponseForApiRequests() throws {
+        let url = try XCTUnwrap(
+            URL(string: "forge-iroh://fakednodeid/api/v1/auth/operator-session")
+        )
+        let result = ForgeIrohTransportResult(
+            data: Data(#"{"session":{"active":true}}"#.utf8),
+            statusCode: 201,
+            headers: [
+                "content-type": "application/json; charset=utf-8",
+                "transfer-encoding": "chunked"
+            ]
+        )
+
+        let response = ForgeIrohURLSchemeHandler.response(
+            for: url,
+            path: "/api/v1/auth/operator-session",
+            result: result
+        )
+        let httpResponse = try XCTUnwrap(response as? HTTPURLResponse)
+
+        XCTAssertEqual(httpResponse.statusCode, 201)
+        XCTAssertEqual(httpResponse.mimeType, "application/json")
+        XCTAssertNil(httpResponse.allHeaderFields["transfer-encoding"])
+    }
+
+    func testForgeIrohWebViewSchemeHandlerUsesPlainResponseForForgeDocumentsAndAssets() throws {
+        let documentURL = try XCTUnwrap(
+            URL(string: "forge-iroh://fakednodeid/forge/?forgeWebRefresh=abc")
+        )
+        let assetURL = try XCTUnwrap(
+            URL(string: "forge-iroh://fakednodeid/forge/assets/index.js")
+        )
+        let documentResponse = ForgeIrohURLSchemeHandler.response(
+            for: documentURL,
+            path: "/forge/?forgeWebRefresh=abc",
+            result: ForgeIrohTransportResult(
+                data: Data("<!doctype html>".utf8),
+                statusCode: 200,
+                headers: ["content-type": "text/html; charset=utf-8"]
+            )
+        )
+        let assetResponse = ForgeIrohURLSchemeHandler.response(
+            for: assetURL,
+            path: "/forge/assets/index.js",
+            result: ForgeIrohTransportResult(
+                data: Data("console.log('forge')".utf8),
+                statusCode: 200,
+                headers: [:]
+            )
+        )
+
+        XCTAssertFalse(documentResponse is HTTPURLResponse)
+        XCTAssertEqual(documentResponse.mimeType, "text/html")
+        XCTAssertFalse(assetResponse is HTTPURLResponse)
+        XCTAssertEqual(assetResponse.mimeType, "text/javascript")
+    }
+
     func testNormalizedPayloadPreservesPreferredUiBaseUrl() {
         let payload = PairingPayload(
             kind: "pairing",
