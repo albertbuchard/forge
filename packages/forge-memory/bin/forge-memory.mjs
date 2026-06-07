@@ -427,7 +427,9 @@ function tailscaleInstallPlan() {
 
 function tailscaleAutodetectDisabled() {
   return ["1", "true", "yes"].includes(
-    String(process.env.FORGE_MEMORY_SKIP_TAILSCALE_AUTODETECT ?? "").toLowerCase()
+    String(
+      process.env.FORGE_MEMORY_SKIP_TAILSCALE_AUTODETECT ?? ""
+    ).toLowerCase()
   );
 }
 
@@ -439,7 +441,9 @@ function parseTailscaleStatus(raw) {
     const dnsName = String(self?.DNSName ?? self?.dnsName ?? "")
       .trim()
       .replace(/\.$/, "");
-    const backendState = String(payload.BackendState ?? payload.backendState ?? "");
+    const backendState = String(
+      payload.BackendState ?? payload.backendState ?? ""
+    );
     const running = backendState.toLowerCase() === "running";
     return {
       running,
@@ -456,7 +460,11 @@ function normalizeForgePublicUiUrl(value) {
   const normalized = normalizePublicPairingUrl(value);
   if (!normalized) return null;
   const url = new URL(normalized);
-  if (!url.pathname || url.pathname === "/" || url.pathname.startsWith("/api/")) {
+  if (
+    !url.pathname ||
+    url.pathname === "/" ||
+    url.pathname.startsWith("/api/")
+  ) {
     url.pathname = "/forge/";
   }
   if (!url.pathname.endsWith("/")) url.pathname = `${url.pathname}/`;
@@ -501,8 +509,12 @@ function detectTailscaleState() {
       installPlan: tailscaleInstallPlan()
     };
   }
-  const status = parseTailscaleStatus(runCapture("tailscale", ["status", "--json"], 4_000));
-  const envPublicUrl = normalizeForgePublicUiUrl(process.env.FORGE_MEMORY_TAILSCALE_PUBLIC_URL);
+  const status = parseTailscaleStatus(
+    runCapture("tailscale", ["status", "--json"], 4_000)
+  );
+  const envPublicUrl = normalizeForgePublicUiUrl(
+    process.env.FORGE_MEMORY_TAILSCALE_PUBLIC_URL
+  );
   const publicUrl =
     envPublicUrl ??
     (status.dnsName ? `https://${status.dnsName}/forge/` : null);
@@ -529,14 +541,22 @@ async function probePublicForgeUrl(publicUrl, timeoutMs = 4_000) {
       .map((entry) => entry.trim())
       .filter(Boolean);
     const current = entries.shift() ?? "fail";
-    fs.writeFileSync(fakeProbeSequencePath, entries.length ? `${entries.join("\n")}\n` : "");
+    fs.writeFileSync(
+      fakeProbeSequencePath,
+      entries.length ? `${entries.join("\n")}\n` : ""
+    );
     return current === "ok"
       ? { ok: true, fake: true }
-      : { ok: false, error: current === "fail" ? "fake probe failure" : current };
+      : {
+          ok: false,
+          error: current === "fail" ? "fake probe failure" : current
+        };
   }
   if (
     ["1", "true", "yes"].includes(
-      String(process.env.FORGE_MEMORY_SKIP_TAILSCALE_PUBLIC_PROBE ?? "").toLowerCase()
+      String(
+        process.env.FORGE_MEMORY_SKIP_TAILSCALE_PUBLIC_PROBE ?? ""
+      ).toLowerCase()
     )
   ) {
     return { ok: true, skipped: true };
@@ -551,7 +571,11 @@ async function probePublicForgeUrl(publicUrl, timeoutMs = 4_000) {
     if (!response.ok) return { ok: false, status: response.status };
     const payload = await response.json().catch(() => null);
     if (!isForgeHealthPayload(payload)) {
-      return { ok: false, status: response.status, error: "non-Forge health payload" };
+      return {
+        ok: false,
+        status: response.status,
+        error: "non-Forge health payload"
+      };
     }
     return { ok: true, status: response.status };
   } catch (error) {
@@ -854,7 +878,9 @@ async function withProgress(title, detail, options, task) {
 
 function printStep(title, detail, options = {}) {
   if (!progressEnabled(options)) return;
-  console.log(`${color.cyan("->")} ${title}${detail ? color.dim(` ${detail}`) : ""}`);
+  console.log(
+    `${color.cyan("->")} ${title}${detail ? color.dim(` ${detail}`) : ""}`
+  );
 }
 
 async function promptLine(question, defaultValue) {
@@ -1128,7 +1154,10 @@ async function buildInstallConfig(parsed, currentConfig, discovery, command) {
   const origin = parsed.values.origin ?? currentConfig.origin ?? DEFAULT_ORIGIN;
   const runtimeTarget = await resolveInstallRuntimeTarget({
     origin,
-    requestedPort: normalizePort(parsed.values.port ?? currentConfig.port, DEFAULT_PORT),
+    requestedPort: normalizePort(
+      parsed.values.port ?? currentConfig.port,
+      DEFAULT_PORT
+    ),
     requestedWebPort: normalizePort(
       parsed.values.webPort ?? currentConfig.webPort,
       DEFAULT_WEB_PORT
@@ -1269,7 +1298,8 @@ function stripCodexForgeMcpConfig(source) {
     const tableMatch = trimmed.match(/^\[([^\]]+)\]$/);
     if (tableMatch) {
       currentTable = tableMatch[1];
-      skippingForgeTable = currentTable === "mcp_servers.forge" ||
+      skippingForgeTable =
+        currentTable === "mcp_servers.forge" ||
         currentTable.startsWith("mcp_servers.forge.");
       if (skippingForgeTable) continue;
     }
@@ -1285,7 +1315,10 @@ function stripCodexForgeMcpConfig(source) {
     }
     kept.push(line);
   }
-  return kept.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd();
+  return kept
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trimEnd();
 }
 
 async function runCommand(
@@ -1478,7 +1511,8 @@ function describeNetworkError(error) {
 }
 
 function describeHealthResult(result) {
-  if (result.ok && result.forge === false) return "HTTP 200 from a non-Forge service";
+  if (result.ok && result.forge === false)
+    return "HTTP 200 from a non-Forge service";
   if (result.ok) return "healthy";
   if (result.status) return `HTTP ${result.status}`;
   if (result.error) return result.error;
@@ -1500,6 +1534,45 @@ function processExists(pid) {
   } catch {
     return false;
   }
+}
+
+function signalProcess(pid, signal = "SIGTERM") {
+  try {
+    process.kill(pid, signal);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function signalDetachedProcessGroup(pid, signal = "SIGTERM") {
+  if (process.platform === "win32") return false;
+  try {
+    process.kill(-pid, signal);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForProcessExit(pid, timeoutMs = 1_500) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!processExists(pid)) return true;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return !processExists(pid);
+}
+
+async function stopRecordedRuntimeProcess(pid) {
+  if (!Number.isInteger(pid) || pid <= 0 || !processExists(pid)) return false;
+  const signaled =
+    signalDetachedProcessGroup(pid, "SIGTERM") || signalProcess(pid, "SIGTERM");
+  if (!signaled) return false;
+  if (await waitForProcessExit(pid)) return true;
+  signalDetachedProcessGroup(pid, "SIGKILL") || signalProcess(pid, "SIGKILL");
+  await waitForProcessExit(pid, 500);
+  return true;
 }
 
 async function waitForHealth(config, timeoutMs = 30_000) {
@@ -1540,9 +1613,7 @@ function resolveOpenClawPluginRoot(options = {}) {
 }
 
 async function ensurePackagedRuntimeInstalled(options = {}) {
-  const existing = options.forceInstall
-    ? null
-    : resolveOpenClawPluginRoot();
+  const existing = options.forceInstall ? null : resolveOpenClawPluginRoot();
   if (existing) return existing;
   const installRoot = runtimeInstallRoot();
   await fsp.mkdir(installRoot, { recursive: true });
@@ -1616,7 +1687,9 @@ async function repairPackagedRuntimeCache(config) {
   const rotatedLogPath = await rotateRuntimeLog("repair");
   await fsp.rm(runtimeStatePath(), { force: true });
   await fsp.rm(runtimeInstallRoot(), { recursive: true, force: true });
-  const pluginRoot = await ensurePackagedRuntimeInstalled({ forceInstall: true });
+  const pluginRoot = await ensurePackagedRuntimeInstalled({
+    forceInstall: true
+  });
   const result = await startRuntime(config);
   const record = {
     repairedAt: new Date().toISOString(),
@@ -1631,9 +1704,17 @@ async function repairPackagedRuntimeCache(config) {
     health: result.health ?? { ok: result.ok }
   };
   const stamp = record.repairedAt.replace(/[:.]/g, "-");
-  const repairRecordPath = path.join(forgeHome(), "run", `runtime-repair-${stamp}.json`);
+  const repairRecordPath = path.join(
+    forgeHome(),
+    "run",
+    `runtime-repair-${stamp}.json`
+  );
   await fsp.mkdir(path.dirname(repairRecordPath), { recursive: true });
-  await fsp.writeFile(repairRecordPath, `${JSON.stringify(record, null, 2)}\n`, "utf8");
+  await fsp.writeFile(
+    repairRecordPath,
+    `${JSON.stringify(record, null, 2)}\n`,
+    "utf8"
+  );
   return { ...record, repairRecordPath };
 }
 
@@ -1805,8 +1886,7 @@ async function stopRuntime(config = null) {
   const stopped = [];
   for (const child of state?.children ?? []) {
     if (!child?.pid || !processExists(child.pid)) continue;
-    process.kill(child.pid, "SIGTERM");
-    stopped.push(child.pid);
+    if (await stopRecordedRuntimeProcess(child.pid)) stopped.push(child.pid);
   }
   const current = await health(effectiveConfig);
   const runtimePid = Number(current?.payload?.runtime?.pid);
@@ -1817,8 +1897,7 @@ async function stopRuntime(config = null) {
     !stopped.includes(runtimePid) &&
     processExists(runtimePid)
   ) {
-    process.kill(runtimePid, "SIGTERM");
-    stopped.push(runtimePid);
+    if (await stopRecordedRuntimeProcess(runtimePid)) stopped.push(runtimePid);
   }
   await fsp.rm(runtimeStatePath(), { force: true });
   if (stopped.length === 0) {
@@ -1953,7 +2032,9 @@ async function removeHermesAdapterConfig() {
   }
   const forgeConfigDir = path.dirname(forgeConfigPath);
   if (fs.existsSync(forgeConfigDir)) {
-    await fsp.rm(forgeConfigDir, { recursive: false, force: true }).catch(() => {});
+    await fsp
+      .rm(forgeConfigDir, { recursive: false, force: true })
+      .catch(() => {});
   }
 
   const hermesYamlPath = path.join(homeDir(), ".hermes", "config.yaml");
@@ -2169,7 +2250,10 @@ async function bootstrapLocalOperatorSession(config) {
 
 async function createPairing(config, options = {}) {
   const transportMode = options.transportMode ?? "iroh";
-  const publicUrl = validatePairingOptions({ transportMode, publicUrl: options.publicUrl });
+  const publicUrl = validatePairingOptions({
+    transportMode,
+    publicUrl: options.publicUrl
+  });
   const pairingUrl = forgeApiUrl(config, "/api/v1/health/pairing-sessions");
   const operatorCookie = await bootstrapLocalOperatorSession(config);
   let response;
@@ -2221,7 +2305,9 @@ async function createPairing(config, options = {}) {
     );
   }
   const pairing = await response.json();
-  assertPairingTransportUsable(pairing, { requestedTransportMode: transportMode });
+  assertPairingTransportUsable(pairing, {
+    requestedTransportMode: transportMode
+  });
   return pairing;
 }
 
@@ -2242,7 +2328,10 @@ async function maybeInstallTailscaleForPairing(parsed) {
     true
   );
   if (!shouldInstall) return { installed: false, guidance: plan.guidance };
-  const result = await runCommand(plan.autoInstallCommand.command, plan.autoInstallCommand.args);
+  const result = await runCommand(
+    plan.autoInstallCommand.command,
+    plan.autoInstallCommand.args
+  );
   return { installed: result.ok, guidance: plan.guidance, result };
 }
 
@@ -2253,7 +2342,11 @@ async function resolveTailscalePairingOptions(parsed, config) {
     const installAttempt = await maybeInstallTailscaleForPairing(parsed);
     if (installAttempt.installed) {
       const installedState = detectTailscaleState();
-      if (installedState.installed && installedState.running && installedState.authenticated) {
+      if (
+        installedState.installed &&
+        installedState.running &&
+        installedState.authenticated
+      ) {
         return resolveTailscalePairingOptions(parsed, config);
       }
     }
@@ -2268,7 +2361,11 @@ async function resolveTailscalePairingOptions(parsed, config) {
           "Tailscale is installed, but it is not running/authenticated or does not expose a MagicDNS name."
         )
       );
-      console.log(color.dim("Open Tailscale, sign in, then rerun npx forge-memory pair-ios. Falling back to Iroh for this pairing."));
+      console.log(
+        color.dim(
+          "Open Tailscale, sign in, then rerun npx forge-memory pair-ios. Falling back to Iroh for this pairing."
+        )
+      );
     }
     return null;
   }
@@ -2276,7 +2373,9 @@ async function resolveTailscalePairingOptions(parsed, config) {
   const firstProbe = await probePublicForgeUrl(state.publicUrl);
   if (firstProbe.ok) {
     if (!parsed.flags.json) {
-      console.log(color.green(`Using Tailscale for iOS pairing: ${state.publicUrl}`));
+      console.log(
+        color.green(`Using Tailscale for iOS pairing: ${state.publicUrl}`)
+      );
     }
     return {
       transportMode: "manual-http",
@@ -2334,7 +2433,9 @@ async function resolveTailscalePairingOptions(parsed, config) {
     return null;
   }
   if (!parsed.flags.json) {
-    console.log(color.green(`Using Tailscale for iOS pairing: ${state.publicUrl}`));
+    console.log(
+      color.green(`Using Tailscale for iOS pairing: ${state.publicUrl}`)
+    );
   }
   return {
     transportMode: "manual-http",
@@ -2367,7 +2468,10 @@ async function resolveIosPairingOptions(parsed, config = null) {
     };
   }
   if (config) {
-    const tailscalePairing = await resolveTailscalePairingOptions(parsed, config);
+    const tailscalePairing = await resolveTailscalePairingOptions(
+      parsed,
+      config
+    );
     if (tailscalePairing) return tailscalePairing;
   }
   if (parsed.flags.yes || parsed.flags.json || !process.stdin.isTTY) {
@@ -2381,7 +2485,9 @@ async function resolveIosPairingOptions(parsed, config = null) {
   }
   console.log(color.bold("iOS companion connection"));
   console.log(color.dim(tailscalePreferredMessage()));
-  console.log(color.dim("Choose Iroh or a fixed/private IP fallback for this pairing."));
+  console.log(
+    color.dim("Choose Iroh or a fixed/private IP fallback for this pairing.")
+  );
   const choice = (
     await promptLine("Connection [iroh/ip]", "iroh")
   ).toLowerCase();
@@ -2412,7 +2518,8 @@ function assertPairingTransportUsable(pairing, { requestedTransportMode }) {
   if (!payload || requestedTransportMode !== "iroh") {
     return;
   }
-  const resolvedTransportMode = payload.transportMode ?? payload.transport?.protocol;
+  const resolvedTransportMode =
+    payload.transportMode ?? payload.transport?.protocol;
   const resolvedProtocol = payload.transport?.protocol;
   if (resolvedTransportMode === "iroh" || resolvedProtocol === "iroh") {
     const phoneFacingUrls = [
@@ -2420,7 +2527,9 @@ function assertPairingTransportUsable(pairing, { requestedTransportMode }) {
       payload.uiBaseUrl,
       payload.transport?.publicBaseUrl
     ].filter(Boolean);
-    const loopbackUrl = phoneFacingUrls.find((url) => isLoopbackPairingUrl(url));
+    const loopbackUrl = phoneFacingUrls.find((url) =>
+      isLoopbackPairingUrl(url)
+    );
     if (loopbackUrl) {
       throw new PairingTransportUnavailableError(
         [
@@ -2429,14 +2538,20 @@ function assertPairingTransportUsable(pairing, { requestedTransportMode }) {
           "A physical iPhone cannot reach localhost on this Mac.",
           "Use Iroh logical URLs, a selected Tailscale URL, or a selected private/fixed IP URL."
         ].join(" "),
-        { apiBaseUrl: payload.apiBaseUrl, transportMode: resolvedTransportMode, protocol: resolvedProtocol }
+        {
+          apiBaseUrl: payload.apiBaseUrl,
+          transportMode: resolvedTransportMode,
+          protocol: resolvedProtocol
+        }
       );
     }
     return;
   }
   const apiBaseUrl = payload.apiBaseUrl ?? "";
   const lastError = payload.transport?.lastError;
-  const notes = Array.isArray(payload.transport?.notes) ? payload.transport.notes : [];
+  const notes = Array.isArray(payload.transport?.notes)
+    ? payload.transport.notes
+    : [];
   throw new PairingTransportUnavailableError(
     [
       "Forge created a direct HTTP pairing while default iOS pairing requested Iroh.",
@@ -2450,7 +2565,11 @@ function assertPairingTransportUsable(pairing, { requestedTransportMode }) {
     ]
       .filter(Boolean)
       .join(" "),
-    { apiBaseUrl, transportMode: resolvedTransportMode, protocol: resolvedProtocol }
+    {
+      apiBaseUrl,
+      transportMode: resolvedTransportMode,
+      protocol: resolvedProtocol
+    }
   );
 }
 
@@ -2555,7 +2674,9 @@ function compactQrPairingPayload(payload) {
 
 function compactObject(value) {
   if (Array.isArray(value)) {
-    const compacted = value.map((entry) => compactObject(entry)).filter((entry) => entry !== undefined);
+    const compacted = value
+      .map((entry) => compactObject(entry))
+      .filter((entry) => entry !== undefined);
     return compacted.length ? compacted : undefined;
   }
   if (!value || typeof value !== "object") {
@@ -2564,7 +2685,10 @@ function compactObject(value) {
   const output = {};
   for (const [key, entry] of Object.entries(value)) {
     const compacted = compactObject(entry);
-    if (compacted !== undefined && !(Array.isArray(compacted) && compacted.length === 0)) {
+    if (
+      compacted !== undefined &&
+      !(Array.isArray(compacted) && compacted.length === 0)
+    ) {
       output[key] = compacted;
     }
   }
@@ -2578,7 +2702,11 @@ async function writePairingPayloadFile(payload) {
     pairingDir,
     `forge-companion-${payload.sessionId}.json`
   );
-  await fsp.writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  await fsp.writeFile(
+    filePath,
+    `${JSON.stringify(payload, null, 2)}\n`,
+    "utf8"
+  );
   return filePath;
 }
 
@@ -2601,8 +2729,14 @@ async function printPairing(pairing) {
     qrcode.generate(qrPayloadText, { small: true });
   } else {
     console.log("");
-    console.log(color.yellow("QR skipped because the terminal is too narrow or the payload is too large to scan reliably."));
-    console.log("Use Manual connection in the iPhone app and paste the saved payload below.");
+    console.log(
+      color.yellow(
+        "QR skipped because the terminal is too narrow or the payload is too large to scan reliably."
+      )
+    );
+    console.log(
+      "Use Manual connection in the iPhone app and paste the saved payload below."
+    );
   }
   const transport = manualPayload.transport;
   if (transport?.provider) {
@@ -2613,7 +2747,10 @@ async function printPairing(pairing) {
           ? "Iroh"
           : "Manual HTTP";
     console.log(`${color.cyan(label)}: ${manualPayload.apiBaseUrl}`);
-    if (label === "Manual HTTP" && isLoopbackPairingUrl(manualPayload.apiBaseUrl)) {
+    if (
+      label === "Manual HTTP" &&
+      isLoopbackPairingUrl(manualPayload.apiBaseUrl)
+    ) {
       console.log(
         color.yellow(
           "Manual HTTP points at this machine's loopback address. That is only useful for the iOS Simulator; a real iPhone needs Iroh, Tailscale, or a LAN URL passed with --public-url."
@@ -2627,7 +2764,9 @@ async function printPairing(pairing) {
   try {
     const filePath = await writePairingPayloadFile(manualPayload);
     console.log("");
-    console.log(color.bold("If the QR is too large or the camera will not scan:"));
+    console.log(
+      color.bold("If the QR is too large or the camera will not scan:")
+    );
     console.log("1. Open Manual connection in the iPhone app.");
     console.log("2. Tap Paste pairing payload.");
     console.log(`3. Paste the payload saved at: ${filePath}`);
@@ -2773,7 +2912,9 @@ async function runInstall(parsed, command) {
     assertRuntimeStartedForPairing(runtimeResult, config);
     pairing = await withProgress(
       "Creating iOS companion pairing",
-      pairingOptions.transportMode === "manual-http" ? "phone-reachable HTTP" : "Iroh QR",
+      pairingOptions.transportMode === "manual-http"
+        ? "phone-reachable HTTP"
+        : "Iroh QR",
       parsed.flags,
       () =>
         createPairing(config, {
@@ -2894,7 +3035,7 @@ async function doctorCheckRuntime(config, options) {
       ? "Forge API is reachable."
       : result.ok && result.forge === false
         ? `Port ${config.port || DEFAULT_PORT} responded, but not with Forge runtime health. Stop the conflicting process or choose another --port.`
-      : `Run npx forge-memory doctor --repair, then inspect ${logPath()} if the runtime still does not start. Repair reinstalls only the owned runtime cache and preserves the data folder.`
+        : `Run npx forge-memory doctor --repair, then inspect ${logPath()} if the runtime still does not start. Repair reinstalls only the owned runtime cache and preserves the data folder.`
   };
 }
 
@@ -3038,10 +3179,13 @@ async function runPairIos(parsed) {
   const pairingOptions =
     explicitPairingOptions ??
     noStartPairingOptions ??
-    await resolveIosPairingOptions(parsed, config);
+    (await resolveIosPairingOptions(parsed, config));
   const transportMode = pairingOptions.transportMode;
   const publicUrl = pairingOptions.publicUrl;
-  if (transportMode === "iroh" && noStartPairingOptions?.transportMode !== "iroh") {
+  if (
+    transportMode === "iroh" &&
+    noStartPairingOptions?.transportMode !== "iroh"
+  ) {
     await withProgress(
       "Preparing Forge Companion Iroh transport",
       "checking Rust/Cargo and building the local host",

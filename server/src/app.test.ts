@@ -311,8 +311,14 @@ while true; do sleep 1; done
       payload.qrPayload.transport.publicBaseUrl,
       "https://macbook-pro.example.ts.net/api/v1"
     );
-    assert.equal(payload.qrPayload.transport.localBaseUrl, "http://127.0.0.1:4317");
-    assert.equal(payload.qrPayload.transport.pairPayload.node_id, "fakednodeid");
+    assert.equal(
+      payload.qrPayload.transport.localBaseUrl,
+      "http://127.0.0.1:4317"
+    );
+    assert.equal(
+      payload.qrPayload.transport.pairPayload.node_id,
+      "fakednodeid"
+    );
   } finally {
     await app.close();
     closeDatabase();
@@ -388,8 +394,14 @@ while true; do sleep 1; done
       "https://macbook-pro.example.ts.net/api/v1"
     );
     assert.equal(payload.qrPayload.transport.fallbackMode, "tailscale");
-    assert.equal(payload.qrPayload.transport.localBaseUrl, "http://127.0.0.1:4317");
-    assert.equal(payload.qrPayload.transport.pairPayload.node_id, "fakednodeid");
+    assert.equal(
+      payload.qrPayload.transport.localBaseUrl,
+      "http://127.0.0.1:4317"
+    );
+    assert.equal(
+      payload.qrPayload.transport.pairPayload.node_id,
+      "fakednodeid"
+    );
   } finally {
     await app.close();
     closeDatabase();
@@ -1600,14 +1612,29 @@ test("goal detail, operator context, and retroactive work logging are available 
             sessions: Array<{ id: string }>;
           };
           weightLoss: {
-            summary: { loggedMealCount: number };
+            summary: {
+              loggedMealCount: number;
+              targetCalories: number;
+              remainingCalories: number;
+            };
             todayLedger: {
               mealCount: number;
               totals: { calories: number };
+              plannedTargetCalories: number;
+              targetCalories: number;
+              remainingCalories: number;
+              activeAdjustmentCalories: number;
+              activeCaloriesSource: string;
             };
             energyModel: {
               estimatedTdeeKcal: number | null;
               activeBurnKcal: number | null;
+              baselineActiveCaloriesKcal: number;
+              todayActiveCaloriesKcal: number;
+              todayActiveCaloriesSource: string;
+              todayTargetAdjustmentKcal: number;
+              todayActiveDeltaKcal: number;
+              todayActiveOverride: unknown;
               estimatedDailyEnergyBalanceKcal: number | null;
             };
             foodQuality: {
@@ -1629,8 +1656,30 @@ test("goal detail, operator context, and retroactive work logging are available 
     assert.ok(typeof overview.sleep.summary.averageSleepSeconds === "number");
     assert.ok(Array.isArray(overview.sleep.sessions));
     assert.ok(typeof overview.weightLoss.summary.loggedMealCount === "number");
+    assert.ok(typeof overview.weightLoss.summary.targetCalories === "number");
+    assert.ok(
+      typeof overview.weightLoss.summary.remainingCalories === "number"
+    );
     assert.ok(typeof overview.weightLoss.todayLedger.mealCount === "number");
-    assert.ok(typeof overview.weightLoss.todayLedger.totals.calories === "number");
+    assert.ok(
+      typeof overview.weightLoss.todayLedger.totals.calories === "number"
+    );
+    assert.ok(
+      typeof overview.weightLoss.todayLedger.plannedTargetCalories === "number"
+    );
+    assert.ok(
+      typeof overview.weightLoss.todayLedger.targetCalories === "number"
+    );
+    assert.ok(
+      typeof overview.weightLoss.todayLedger.remainingCalories === "number"
+    );
+    assert.ok(
+      typeof overview.weightLoss.todayLedger.activeAdjustmentCalories ===
+        "number"
+    );
+    assert.ok(
+      typeof overview.weightLoss.todayLedger.activeCaloriesSource === "string"
+    );
     assert.ok(
       typeof overview.weightLoss.energyModel.estimatedTdeeKcal === "number" ||
         overview.weightLoss.energyModel.estimatedTdeeKcal === null
@@ -1638,6 +1687,25 @@ test("goal detail, operator context, and retroactive work logging are available 
     assert.ok(
       typeof overview.weightLoss.energyModel.activeBurnKcal === "number" ||
         overview.weightLoss.energyModel.activeBurnKcal === null
+    );
+    assert.ok(
+      typeof overview.weightLoss.energyModel.baselineActiveCaloriesKcal ===
+        "number"
+    );
+    assert.ok(
+      typeof overview.weightLoss.energyModel.todayActiveCaloriesKcal ===
+        "number"
+    );
+    assert.ok(
+      typeof overview.weightLoss.energyModel.todayActiveCaloriesSource ===
+        "string"
+    );
+    assert.ok(
+      typeof overview.weightLoss.energyModel.todayTargetAdjustmentKcal ===
+        "number"
+    );
+    assert.ok(
+      typeof overview.weightLoss.energyModel.todayActiveDeltaKcal === "number"
     );
     assert.ok(
       typeof overview.weightLoss.energyModel.estimatedDailyEnergyBalanceKcal ===
@@ -4374,9 +4442,11 @@ test("mobile health chunked sync applies movement chunks before final completion
     });
     assert.equal(completeResponse.statusCode, 200, completeResponse.body);
     assert.equal(
-      (completeResponse.json() as {
-        sync: { imported: { movementStays?: number } };
-      }).sync.imported.movementStays,
+      (
+        completeResponse.json() as {
+          sync: { imported: { movementStays?: number } };
+        }
+      ).sync.imported.movementStays,
       1
     );
   } finally {
@@ -4457,7 +4527,11 @@ test("mobile health workout import state reuses count-complete historical eviden
       "2024-04-08T09:00:00.000Z",
       "2024-04-08T10:00:00.000Z",
       JSON.stringify({
-        captureQuality: { status: "partial", heartRateSamples: 4, routePoints: 0 },
+        captureQuality: {
+          status: "partial",
+          heartRateSamples: 4,
+          routePoints: 0
+        },
         syncCursor: {
           timeSeriesSampleCount: 4,
           routePointCount: 0,
@@ -9478,10 +9552,10 @@ test("watch action batch records idempotent command receipts and replays accepte
          WHERE dedupe_key = ?`
       )
       .get("watch-action-capture-1") as {
-        payload_json: string;
-        projection_status: string;
-        projection_details_json: string;
-      };
+      payload_json: string;
+      projection_status: string;
+      projection_details_json: string;
+    };
     assert.deepEqual(JSON.parse(captureRow.payload_json), {
       emotion: "Focused",
       surface: "psyche"
@@ -9502,10 +9576,10 @@ test("watch action batch records idempotent command receipts and replays accepte
          LIMIT 1`
       )
       .get() as {
-        content_markdown: string;
-        tags_json: string;
-        frontmatter_json: string;
-      };
+      content_markdown: string;
+      tags_json: string;
+      frontmatter_json: string;
+    };
     assert.match(watchNote.content_markdown, /Emotion: Focused/);
     assert.ok((JSON.parse(watchNote.tags_json) as string[]).includes("psyche"));
     assert.equal(
@@ -17444,7 +17518,14 @@ test("training-load route exposes zone time series and smart training intelligen
         dayOffset: 1,
         type: "cycling",
         durationSeconds: 3600,
-        zones: { below_z1: 600, zone_1: 1500, zone_2: 1200, zone_3: 240, zone_4: 60, zone_5: 0 },
+        zones: {
+          below_z1: 600,
+          zone_1: 1500,
+          zone_2: 1200,
+          zone_3: 240,
+          zone_4: 60,
+          zone_5: 0
+        },
         trimp: 54,
         avgHr: 132,
         maxHr: 158
@@ -17454,7 +17535,14 @@ test("training-load route exposes zone time series and smart training intelligen
         dayOffset: 1,
         type: "kickboxing",
         durationSeconds: 3000,
-        zones: { below_z1: 180, zone_1: 420, zone_2: 600, zone_3: 780, zone_4: 720, zone_5: 300 },
+        zones: {
+          below_z1: 180,
+          zone_1: 420,
+          zone_2: 600,
+          zone_3: 780,
+          zone_4: 720,
+          zone_5: 300
+        },
         trimp: 96,
         avgHr: 156,
         maxHr: 184
@@ -17464,7 +17552,14 @@ test("training-load route exposes zone time series and smart training intelligen
         dayOffset: 9,
         type: "running",
         durationSeconds: 3300,
-        zones: { below_z1: 500, zone_1: 1200, zone_2: 1000, zone_3: 400, zone_4: 200, zone_5: 0 },
+        zones: {
+          below_z1: 500,
+          zone_1: 1200,
+          zone_2: 1000,
+          zone_3: 400,
+          zone_4: 200,
+          zone_5: 0
+        },
         trimp: 68,
         avgHr: 142,
         maxHr: 170
@@ -17474,7 +17569,14 @@ test("training-load route exposes zone time series and smart training intelligen
         dayOffset: 35,
         type: "walking",
         durationSeconds: 4200,
-        zones: { below_z1: 900, zone_1: 2100, zone_2: 900, zone_3: 300, zone_4: 0, zone_5: 0 },
+        zones: {
+          below_z1: 900,
+          zone_1: 2100,
+          zone_2: 900,
+          zone_3: 300,
+          zone_4: 0,
+          zone_5: 0
+        },
         trimp: 50,
         avgHr: 118,
         maxHr: 139
@@ -17527,7 +17629,10 @@ test("training-load route exposes zone time series and smart training intelligen
     const body = response.json() as {
       trainingLoad: {
         zoneTimeSeries: {
-          daily: Array<{ zoneMinutes: Record<string, number>; confidence: string }>;
+          daily: Array<{
+            zoneMinutes: Record<string, number>;
+            confidence: string;
+          }>;
           weekly: Array<{
             zoneMinutes: Record<string, number>;
             domainMinutes: Record<string, number>;
@@ -17543,7 +17648,9 @@ test("training-load route exposes zone time series and smart training intelligen
             key: string;
             score: number;
             loadBalance: { status: string };
-            nextWeekTargets: { domainMinuteTargets: Record<string, [number, number]> };
+            nextWeekTargets: {
+              domainMinuteTargets: Record<string, [number, number]>;
+            };
             nextWorkout: { fourByFourAppropriate: boolean; reason: string };
           }>;
         };
@@ -17568,7 +17675,10 @@ test("training-load route exposes zone time series and smart training intelligen
       "endurance_pro"
     ]);
     const combat = body.trainingLoad.trainingIntelligence.modes[0];
-    assert.equal(body.trainingLoad.trainingIntelligence.defaultMode, "combat_readiness");
+    assert.equal(
+      body.trainingLoad.trainingIntelligence.defaultMode,
+      "combat_readiness"
+    );
     assert.ok(combat.score >= 0 && combat.score <= 100);
     assert.ok(combat.nextWeekTargets.domainMinuteTargets.low);
     assert.equal(typeof combat.nextWorkout.fourByFourAppropriate, "boolean");
@@ -20089,7 +20199,10 @@ test("settings and local agent token management persist through the versioned AP
     assert.ok(logFoodTool);
     assert.match(logFoodTool.inputShape, /foodId/);
     const logFoodNotes = (logFoodTool as { notes?: string[] }).notes ?? [];
-    assert.match(logFoodNotes.join(" "), /name-only custom foods are rejected/i);
+    assert.match(
+      logFoodNotes.join(" "),
+      /name-only custom foods are rejected/i
+    );
     assert.match(logFoodNotes.join(" "), /internet/i);
     const startRunTool = onboardingBody.onboarding.toolInputCatalog.find(
       (tool) => tool.toolName === "forge_start_task_run"

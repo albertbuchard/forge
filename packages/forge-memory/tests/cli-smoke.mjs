@@ -11,29 +11,40 @@ const bin = path.join(packageRoot, "bin", "forge-memory.mjs");
 const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "forge-memory-home-"));
 const dataRoot = path.join(tempHome, "data");
 const fakeBinDir = path.join(tempHome, "bin");
-const fakeIrohBin = path.join(fakeBinDir, process.platform === "win32" ? "forge-companion-iroh.exe" : "forge-companion-iroh");
+const fakeIrohBin = path.join(
+  fakeBinDir,
+  process.platform === "win32"
+    ? "forge-companion-iroh.exe"
+    : "forge-companion-iroh"
+);
 fs.mkdirSync(fakeBinDir, { recursive: true });
-fs.writeFileSync(fakeIrohBin, process.platform === "win32" ? "@echo off\r\n" : "#!/bin/sh\n");
+fs.writeFileSync(
+  fakeIrohBin,
+  process.platform === "win32" ? "@echo off\r\n" : "#!/bin/sh\n"
+);
 if (process.platform !== "win32") fs.chmodSync(fakeIrohBin, 0o755);
-const fakeTailscaleBin = path.join(fakeBinDir, process.platform === "win32" ? "tailscale.cmd" : "tailscale");
+const fakeTailscaleBin = path.join(
+  fakeBinDir,
+  process.platform === "win32" ? "tailscale.cmd" : "tailscale"
+);
 fs.writeFileSync(
   fakeTailscaleBin,
   process.platform === "win32"
     ? [
         "@echo off",
-        "if \"%1\"==\"status\" if \"%2\"==\"--json\" (echo {\"BackendState\":\"Running\",\"Self\":{\"DNSName\":\"mac.tailnet.ts.net.\"}}& exit /b 0)",
-        "if \"%1\"==\"serve\" (echo %*>>\"%FORGE_MEMORY_FAKE_TAILSCALE_LOG%\"& exit /b 0)",
+        'if "%1"=="status" if "%2"=="--json" (echo {"BackendState":"Running","Self":{"DNSName":"mac.tailnet.ts.net."}}& exit /b 0)',
+        'if "%1"=="serve" (echo %*>>"%FORGE_MEMORY_FAKE_TAILSCALE_LOG%"& exit /b 0)',
         "exit /b 1",
         ""
       ].join("\r\n")
     : [
         "#!/bin/sh",
-        "if [ \"$1\" = \"status\" ] && [ \"$2\" = \"--json\" ]; then",
-        "  printf '%s\\n' '{\"BackendState\":\"Running\",\"Self\":{\"DNSName\":\"mac.tailnet.ts.net.\"}}'",
+        'if [ "$1" = "status" ] && [ "$2" = "--json" ]; then',
+        '  printf \'%s\\n\' \'{"BackendState":"Running","Self":{"DNSName":"mac.tailnet.ts.net."}}\'',
         "  exit 0",
         "fi",
-        "if [ \"$1\" = \"serve\" ]; then",
-        "  printf '%s\\n' \"$*\" >> \"$FORGE_MEMORY_FAKE_TAILSCALE_LOG\"",
+        'if [ "$1" = "serve" ]; then',
+        '  printf \'%s\\n\' "$*" >> "$FORGE_MEMORY_FAKE_TAILSCALE_LOG"',
         "  exit 0",
         "fi",
         "exit 1",
@@ -281,12 +292,18 @@ server.listen(0, "127.0.0.1", () => {
   const port = await new Promise((resolve, reject) => {
     const failBeforeListen = (code) => {
       clearTimeout(timeout);
-      reject(new Error(`Live Forge health child exited before listening: ${code}\n${stderr}`));
+      reject(
+        new Error(
+          `Live Forge health child exited before listening: ${code}\n${stderr}`
+        )
+      );
     };
     const timeout = setTimeout(() => {
       child.off("exit", failBeforeListen);
       child.kill("SIGKILL");
-      reject(new Error(`Timed out waiting for live Forge health child\n${stderr}`));
+      reject(
+        new Error(`Timed out waiting for live Forge health child\n${stderr}`)
+      );
     }, 5_000);
     child.stdout.once("data", (chunk) => {
       clearTimeout(timeout);
@@ -320,6 +337,85 @@ async function waitForExit(child, label) {
       resolve();
     });
   });
+}
+
+function pidExists(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForPidExit(pid, label) {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    if (!pidExists(pid)) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`${label} (${pid}) did not exit`);
+}
+
+async function startDetachedRecordedRuntimeGroup() {
+  const child = spawn(
+    process.execPath,
+    [
+      "-e",
+      `
+const { spawn } = require("node:child_process");
+const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+  stdio: "ignore"
+});
+console.log(JSON.stringify({ parentPid: process.pid, childPid: child.pid }));
+setInterval(() => {}, 1000);
+      `
+    ],
+    {
+      detached: true,
+      stdio: ["ignore", "pipe", "pipe"]
+    }
+  );
+  child.unref();
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  let stderr = "";
+  child.stderr.on("data", (chunk) => {
+    stderr += chunk;
+  });
+  const payload = await new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      if (process.platform !== "win32") {
+        try {
+          process.kill(-child.pid, "SIGKILL");
+        } catch {
+          child.kill("SIGKILL");
+        }
+      } else {
+        child.kill("SIGKILL");
+      }
+      reject(
+        new Error(`Timed out waiting for detached runtime group\n${stderr}`)
+      );
+    }, 5_000);
+    child.stdout.once("data", (chunk) => {
+      clearTimeout(timeout);
+      try {
+        resolve(JSON.parse(String(chunk)));
+      } catch (error) {
+        reject(error);
+      }
+    });
+    child.once("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+  });
+  return {
+    child,
+    parentPid: payload.parentPid,
+    childPid: payload.childPid
+  };
 }
 
 async function inspectMcp() {
@@ -405,39 +501,43 @@ run([
   "0",
   "--json"
 ]);
-await withFakeForgeServer(async (request) => {
-  if (request.url === "/api/v1/health") return { body: forgeHealthResponse() };
-  return { statusCode: 404, body: { error: "not found" } };
-}, async ({ port }) => {
-  await withPlainServer(async ({ port: webPort }) => {
-    const adoptionInstall = await runAsync([
-      "install",
-      "--yes",
-      "--no-start",
-      "--skip-pair-ios",
-      "--adapters",
-      "none",
-      "--data-root",
-      dataRoot,
-      "--port",
-      String(port),
-      "--web-port",
-      String(webPort),
-      "--json"
-    ]);
-    const payload = JSON.parse(adoptionInstall.stdout);
-    if (payload.config.port !== port) {
-      throw new Error(
-        `Expected install to preserve healthy Forge runtime port ${port}, got ${payload.config.port}`
-      );
-    }
-    if (payload.config.webPort !== webPort) {
-      throw new Error(
-        `Expected install to preserve requested dev web port ${webPort}, got ${payload.config.webPort}`
-      );
-    }
-  });
-});
+await withFakeForgeServer(
+  async (request) => {
+    if (request.url === "/api/v1/health")
+      return { body: forgeHealthResponse() };
+    return { statusCode: 404, body: { error: "not found" } };
+  },
+  async ({ port }) => {
+    await withPlainServer(async ({ port: webPort }) => {
+      const adoptionInstall = await runAsync([
+        "install",
+        "--yes",
+        "--no-start",
+        "--skip-pair-ios",
+        "--adapters",
+        "none",
+        "--data-root",
+        dataRoot,
+        "--port",
+        String(port),
+        "--web-port",
+        String(webPort),
+        "--json"
+      ]);
+      const payload = JSON.parse(adoptionInstall.stdout);
+      if (payload.config.port !== port) {
+        throw new Error(
+          `Expected install to preserve healthy Forge runtime port ${port}, got ${payload.config.port}`
+        );
+      }
+      if (payload.config.webPort !== webPort) {
+        throw new Error(
+          `Expected install to preserve requested dev web port ${webPort}, got ${payload.config.webPort}`
+        );
+      }
+    });
+  }
+);
 run([
   "configure",
   "--yes",
@@ -460,20 +560,44 @@ if (!dataRootCheck?.ok || !dataRootCheck.repaired) {
 run(["doctor", "--json"]);
 const pairingFailure = runFailure(["pair-ios", "--json", "--no-start"]);
 if (!pairingFailure.stderr.includes("iOS pairing was not started")) {
-  throw new Error("Expected unreachable pairing to stop before creating a pairing");
+  throw new Error(
+    "Expected unreachable pairing to stop before creating a pairing"
+  );
 }
 if (!pairingFailure.stderr.includes("doctor --repair")) {
   throw new Error("Expected unreachable pairing to point at doctor --repair");
 }
-const manualHttpFailure = runFailure(["pair-ios", "--json", "--manual-http", "--public-url", "http://127.0.0.1:4317/forge/"]);
+const manualHttpFailure = runFailure([
+  "pair-ios",
+  "--json",
+  "--manual-http",
+  "--public-url",
+  "http://127.0.0.1:4317/forge/"
+]);
 if (!manualHttpFailure.stderr.includes("loopback-only")) {
-  throw new Error("Expected manual HTTP pairing to reject loopback public URLs for physical iPhones");
+  throw new Error(
+    "Expected manual HTTP pairing to reject loopback public URLs for physical iPhones"
+  );
 }
 const sourceOnlyRepo = path.join(tempHome, "source-only-iroh-repo");
-fs.mkdirSync(path.join(sourceOnlyRepo, "companion-iroh", "src"), { recursive: true });
-fs.writeFileSync(path.join(sourceOnlyRepo, "companion-iroh", "Cargo.toml"), "[package]\nname = \"forge-companion-iroh\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[[bin]]\nname = \"forge-companion-iroh\"\npath = \"src/main.rs\"\n");
-fs.writeFileSync(path.join(sourceOnlyRepo, "companion-iroh", "src", "main.rs"), "fn main() {}\n");
-writeSmokeConfig({ mode: "dev", repo: sourceOnlyRepo, port: 0, dataRoot, adapters: [] });
+fs.mkdirSync(path.join(sourceOnlyRepo, "companion-iroh", "src"), {
+  recursive: true
+});
+fs.writeFileSync(
+  path.join(sourceOnlyRepo, "companion-iroh", "Cargo.toml"),
+  '[package]\nname = "forge-companion-iroh"\nversion = "0.0.0"\nedition = "2021"\n\n[[bin]]\nname = "forge-companion-iroh"\npath = "src/main.rs"\n'
+);
+fs.writeFileSync(
+  path.join(sourceOnlyRepo, "companion-iroh", "src", "main.rs"),
+  "fn main() {}\n"
+);
+writeSmokeConfig({
+  mode: "dev",
+  repo: sourceOnlyRepo,
+  port: 0,
+  dataRoot,
+  adapters: []
+});
 const missingRustEnv = { ...env, PATH: "" };
 delete missingRustEnv.FORGE_COMPANION_IROH_BIN;
 const missingRustFailure = runFailure(["pair-ios", "--json", "--no-start"], {
@@ -481,10 +605,14 @@ const missingRustFailure = runFailure(["pair-ios", "--json", "--no-start"], {
 });
 const missingRustPayload = JSON.parse(missingRustFailure.stderr);
 if (!missingRustPayload.error.includes("Rust/Cargo is not installed")) {
-  throw new Error("Expected source-only Iroh pairing to explain missing Rust/Cargo");
+  throw new Error(
+    "Expected source-only Iroh pairing to explain missing Rust/Cargo"
+  );
 }
 if (!missingRustPayload.error.includes("Install steps:")) {
-  throw new Error("Expected source-only Iroh pairing to include installer guidance");
+  throw new Error(
+    "Expected source-only Iroh pairing to include installer guidance"
+  );
 }
 const codexConfigPath = path.join(tempHome, ".codex", "config.toml");
 fs.mkdirSync(path.dirname(codexConfigPath), { recursive: true });
@@ -543,381 +671,570 @@ if (countText(codexConfig, "^\\[mcp_servers\\.forge\\]$") !== 1) {
   throw new Error(`Expected one Codex Forge MCP table, got:\n${codexConfig}`);
 }
 if (countText(codexConfig, "^\\[mcp_servers\\.forge\\.env\\]$") !== 1) {
-  throw new Error(`Expected one Codex Forge MCP env table, got:\n${codexConfig}`);
+  throw new Error(
+    `Expected one Codex Forge MCP env table, got:\n${codexConfig}`
+  );
 }
-if (!codexConfig.includes("[desktop]") || !codexConfig.includes('appearanceTheme = "dark"')) {
-  throw new Error(`Expected Codex desktop config to survive Forge MCP patching:\n${codexConfig}`);
+if (
+  !codexConfig.includes("[desktop]") ||
+  !codexConfig.includes('appearanceTheme = "dark"')
+) {
+  throw new Error(
+    `Expected Codex desktop config to survive Forge MCP patching:\n${codexConfig}`
+  );
 }
-if (!codexConfig.includes("[mcp_servers.other]") || !codexConfig.includes('args = ["some-other-mcp"]')) {
-  throw new Error(`Expected unrelated Codex MCP server config to survive Forge MCP patching:\n${codexConfig}`);
+if (
+  !codexConfig.includes("[mcp_servers.other]") ||
+  !codexConfig.includes('args = ["some-other-mcp"]')
+) {
+  throw new Error(
+    `Expected unrelated Codex MCP server config to survive Forge MCP patching:\n${codexConfig}`
+  );
 }
-await withFakeForgeServer(async (request, body) => {
-  if (request.url === "/api/v1/health") {
-    return { body: forgeHealthResponse() };
+await withFakeForgeServer(
+  async (request, body) => {
+    if (request.url === "/api/v1/health") {
+      return { body: forgeHealthResponse() };
+    }
+    if (request.url === "/api/v1/auth/operator-session") {
+      return {
+        headers: {
+          "set-cookie": "forge_operator_session=test-session; Path=/; HttpOnly"
+        },
+        body: {
+          session: {
+            id: "ses_test",
+            actorLabel: "Test",
+            expiresAt: new Date(Date.now() + 60_000).toISOString()
+          }
+        }
+      };
+    }
+    if (request.url === "/api/v1/health/pairing-sessions") {
+      if (request.headers.cookie !== "forge_operator_session=test-session") {
+        return {
+          statusCode: 401,
+          body: {
+            code: "auth_required",
+            error: "An authenticated operator session is required."
+          }
+        };
+      }
+      const parsed = JSON.parse(body || "{}");
+      if (parsed.fallbackMode !== "none") {
+        return {
+          statusCode: 400,
+          body: {
+            error: `expected default Iroh fallbackMode none, got ${parsed.fallbackMode}`
+          }
+        };
+      }
+      if ("publicUrl" in parsed) {
+        return {
+          statusCode: 400,
+          body: { error: "default Iroh pairing should not send publicUrl" }
+        };
+      }
+      return {
+        statusCode: 201,
+        body: {
+          qrPayload: {
+            kind: "forge_companion_pairing",
+            apiBaseUrl: "forge-iroh://fake-node/api/v1",
+            uiBaseUrl: "forge-iroh://fake-node/forge/",
+            transportMode: parsed.transportMode,
+            transport: { protocol: "iroh", provider: "forge-companion-iroh" },
+            sessionId: "pair_test",
+            pairingToken: "pairing-token",
+            expiresAt: new Date(Date.now() + 60_000).toISOString(),
+            capabilities: ["health-sync"]
+          }
+        }
+      };
+    }
+    return { statusCode: 404, body: { error: "not found" } };
+  },
+  async ({ port, requests }) => {
+    writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
+    const pairing = await runAsync(["pair-ios", "--json", "--no-start"]);
+    const payload = JSON.parse(pairing.stdout);
+    if (payload.qrPayload.sessionId !== "pair_test") {
+      throw new Error(
+        "Expected pair-ios --json to return the fake pairing payload"
+      );
+    }
+    const authRequest = requests.find(
+      (entry) => entry.url === "/api/v1/auth/operator-session"
+    );
+    if (!authRequest) {
+      throw new Error(
+        "Expected pair-ios to bootstrap a local operator session before pairing"
+      );
+    }
+    const pairingRequest = requests.find(
+      (entry) => entry.url === "/api/v1/health/pairing-sessions"
+    );
+    if (
+      pairingRequest?.headers.cookie !== "forge_operator_session=test-session"
+    ) {
+      throw new Error(
+        "Expected pair-ios to send the local operator session cookie to the pairing route"
+      );
+    }
+    const humanPairing = await runAsync(["pair-ios", "--no-start"]);
+    const payloadSizeMatch = humanPairing.stdout.match(
+      /QR payload bytes: (?<qr>\d+); manual payload bytes: (?<manual>\d+)/
+    );
+    if (!payloadSizeMatch?.groups) {
+      throw new Error(
+        "Expected pair-ios to report QR and manual payload byte counts"
+      );
+    }
+    if (
+      Number(payloadSizeMatch.groups.qr) >=
+      Number(payloadSizeMatch.groups.manual)
+    ) {
+      throw new Error(
+        "Expected short QR payload to be smaller than the saved manual payload"
+      );
+    }
+    const savedPairingPath = path.join(
+      tempHome,
+      ".forge",
+      "pairing",
+      "forge-companion-pair_test.json"
+    );
+    const savedPairing = JSON.parse(fs.readFileSync(savedPairingPath, "utf8"));
+    if (
+      savedPairing.sessionId !== "pair_test" ||
+      savedPairing.pairingToken !== "pairing-token"
+    ) {
+      throw new Error(
+        "Expected pair-ios to save the full manual pairing payload"
+      );
+    }
   }
-  if (request.url === "/api/v1/auth/operator-session") {
-    return {
-      headers: { "set-cookie": "forge_operator_session=test-session; Path=/; HttpOnly" },
-      body: { session: { id: "ses_test", actorLabel: "Test", expiresAt: new Date(Date.now() + 60_000).toISOString() } }
-    };
+);
+await withFakeForgeServer(
+  async (request, body) => {
+    if (request.url === "/api/v1/health")
+      return { body: forgeHealthResponse() };
+    if (request.url === "/api/v1/auth/operator-session") {
+      return {
+        headers: {
+          "set-cookie": "forge_operator_session=test-session; Path=/"
+        },
+        body: { session: { id: "ses_test" } }
+      };
+    }
+    if (request.url === "/api/v1/health/pairing-sessions") {
+      const parsed = JSON.parse(body || "{}");
+      if (parsed.transportMode !== "manual-http") {
+        return {
+          statusCode: 400,
+          body: {
+            error: `expected Tailscale primary manual-http, got ${parsed.transportMode}`
+          }
+        };
+      }
+      if (parsed.fallbackMode !== "tailscale") {
+        return {
+          statusCode: 400,
+          body: {
+            error: `expected Tailscale fallbackMode, got ${parsed.fallbackMode}`
+          }
+        };
+      }
+      if (parsed.publicUrl !== "https://mac.tailnet.ts.net/forge/") {
+        return {
+          statusCode: 400,
+          body: {
+            error: `expected Tailscale publicUrl, got ${parsed.publicUrl}`
+          }
+        };
+      }
+      return {
+        statusCode: 201,
+        body: {
+          qrPayload: {
+            kind: "forge_companion_pairing",
+            apiBaseUrl: "https://mac.tailnet.ts.net/api/v1",
+            uiBaseUrl: "https://mac.tailnet.ts.net/forge/",
+            transportMode: "manual-http",
+            transport: {
+              protocol: "http",
+              provider: "manual-http",
+              status: "ready",
+              publicBaseUrl: "https://mac.tailnet.ts.net/api/v1"
+            },
+            sessionId: "pair_tailscale",
+            pairingToken: "pairing-token",
+            expiresAt: new Date(Date.now() + 60_000).toISOString(),
+            capabilities: ["health-sync"]
+          }
+        }
+      };
+    }
+    return { statusCode: 404, body: { error: "not found" } };
+  },
+  async ({ port, requests }) => {
+    writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
+    const pairing = await runAsync(["pair-ios", "--json", "--no-start"], {
+      env: {
+        ...env,
+        FORGE_MEMORY_SKIP_TAILSCALE_AUTODETECT: "0",
+        FORGE_MEMORY_SKIP_TAILSCALE_PUBLIC_PROBE: "1",
+        FORGE_MEMORY_TAILSCALE_PUBLIC_URL: "https://mac.tailnet.ts.net/forge/"
+      }
+    });
+    const payload = JSON.parse(pairing.stdout);
+    if (payload.qrPayload.sessionId !== "pair_tailscale") {
+      throw new Error(
+        "Expected Tailscale autodetect to create a Tailscale pairing"
+      );
+    }
+    const pairingRequest = requests.find(
+      (entry) => entry.url === "/api/v1/health/pairing-sessions"
+    );
+    const parsedBody = JSON.parse(pairingRequest?.body || "{}");
+    if (
+      parsedBody.transportMode !== "manual-http" ||
+      parsedBody.fallbackMode !== "tailscale"
+    ) {
+      throw new Error(
+        `Expected Tailscale to be primary pairing transport, got ${pairingRequest?.body}`
+      );
+    }
   }
-  if (request.url === "/api/v1/health/pairing-sessions") {
-    if (request.headers.cookie !== "forge_operator_session=test-session") {
+);
+await withFakeForgeServer(
+  async (request, body) => {
+    if (request.url === "/api/v1/health")
+      return { body: forgeHealthResponse() };
+    if (request.url === "/api/v1/auth/operator-session") {
+      return {
+        headers: {
+          "set-cookie": "forge_operator_session=test-session; Path=/"
+        },
+        body: { session: { id: "ses_test" } }
+      };
+    }
+    if (request.url === "/api/v1/health/pairing-sessions") {
+      const parsed = JSON.parse(body || "{}");
+      return {
+        statusCode: 201,
+        body: {
+          qrPayload: {
+            kind: "forge_companion_pairing",
+            apiBaseUrl: parsed.publicUrl.replace("/forge/", "/api/v1"),
+            uiBaseUrl: parsed.publicUrl,
+            transportMode: parsed.transportMode,
+            transport: {
+              protocol: "http",
+              provider: "manual-http",
+              status: "ready",
+              publicBaseUrl: parsed.publicUrl.replace("/forge/", "/api/v1")
+            },
+            sessionId: "pair_tailscale_serve",
+            pairingToken: "pairing-token",
+            expiresAt: new Date(Date.now() + 60_000).toISOString(),
+            capabilities: ["health-sync"]
+          }
+        }
+      };
+    }
+    return { statusCode: 404, body: { error: "not found" } };
+  },
+  async ({ port }) => {
+    writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
+    const serveLog = path.join(tempHome, "tailscale-serve.log");
+    const probeSequence = path.join(tempHome, "tailscale-probe-sequence.txt");
+    fs.rmSync(serveLog, { force: true });
+    fs.writeFileSync(probeSequence, "fail\nok\n");
+    const pairing = await runAsync(["pair-ios", "--yes", "--no-start"], {
+      env: {
+        ...env,
+        FORGE_MEMORY_SKIP_TAILSCALE_AUTODETECT: "0",
+        FORGE_MEMORY_TAILSCALE_PUBLIC_URL: "https://mac.tailnet.ts.net/forge/",
+        FORGE_MEMORY_FAKE_TAILSCALE_LOG: serveLog,
+        FORGE_MEMORY_FAKE_TAILSCALE_PUBLIC_PROBE_SEQUENCE: probeSequence
+      }
+    });
+    if (
+      !pairing.stdout.includes("Manual HTTP") ||
+      !pairing.stdout.includes("https://mac.tailnet.ts.net/api/v1")
+    ) {
+      throw new Error(
+        `Expected human Tailscale Serve pairing output, got:\n${pairing.stdout}`
+      );
+    }
+    const serveInvocation = fs.readFileSync(serveLog, "utf8");
+    if (!serveInvocation.includes(`serve --bg http://127.0.0.1:${port}`)) {
+      throw new Error(
+        `Expected pair-ios --yes to configure tailscale serve for Forge port ${port}, got:\n${serveInvocation}`
+      );
+    }
+  }
+);
+await withFakeForgeServer(
+  async (request) => {
+    if (request.url === "/api/v1/health")
+      return { body: forgeHealthResponse() };
+    if (request.url === "/api/v1/auth/operator-session") {
+      return {
+        headers: {
+          "set-cookie": "forge_operator_session=test-session; Path=/"
+        },
+        body: { session: { id: "ses_test" } }
+      };
+    }
+    if (request.url === "/api/v1/health/pairing-sessions") {
+      return {
+        statusCode: 201,
+        body: {
+          qrPayload: {
+            kind: "forge-companion-pairing",
+            apiBaseUrl: "http://127.0.0.1:4317/api/v1",
+            uiBaseUrl: "http://127.0.0.1:4317/forge/",
+            transportMode: "manual-http",
+            transport: {
+              protocol: "http",
+              provider: "manual-http",
+              status: "ready",
+              localBaseUrl: "http://127.0.0.1:4317",
+              notes: ["Forge companion Iroh host is unavailable."]
+            },
+            sessionId: "pair_loopback",
+            pairingToken: "pairing-token",
+            expiresAt: new Date(Date.now() + 60_000).toISOString(),
+            capabilities: ["health-sync"]
+          }
+        }
+      };
+    }
+    return { statusCode: 404, body: { error: "not found" } };
+  },
+  async ({ port }) => {
+    writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
+    const failure = await runAsyncFailure(["pair-ios", "--json", "--no-start"]);
+    const payload = JSON.parse(failure.stderr);
+    if (payload.code !== "pairing_transport_unavailable") {
+      throw new Error(
+        `Expected pairing_transport_unavailable, got ${payload.code}`
+      );
+    }
+    if (!payload.error.includes("127.0.0.1")) {
+      throw new Error(
+        "Expected downgraded loopback pairing failure to name 127.0.0.1"
+      );
+    }
+  }
+);
+await withFakeForgeServer(
+  async (request) => {
+    if (request.url === "/api/v1/health")
+      return { body: forgeHealthResponse() };
+    if (request.url === "/api/v1/auth/operator-session") {
+      return {
+        headers: {
+          "set-cookie": "forge_operator_session=test-session; Path=/"
+        },
+        body: { session: { id: "ses_test" } }
+      };
+    }
+    if (request.url === "/api/v1/health/pairing-sessions") {
+      return {
+        statusCode: 201,
+        body: {
+          qrPayload: {
+            kind: "forge-companion-pairing",
+            apiBaseUrl: "http://127.0.0.1:4317/api/v1",
+            uiBaseUrl: "http://127.0.0.1:4317/forge/",
+            transportMode: "iroh",
+            transport: {
+              protocol: "iroh",
+              provider: "forge-companion-iroh",
+              status: "ready",
+              publicBaseUrl: "http://127.0.0.1:4317/api/v1",
+              localBaseUrl: "http://127.0.0.1:4317",
+              nodeId: "fake-node",
+              pairPayload: { v: 1, node_id: "fake-node", token: "host-token" }
+            },
+            sessionId: "pair_bad_iroh",
+            pairingToken: "pairing-token",
+            expiresAt: new Date(Date.now() + 60_000).toISOString(),
+            capabilities: ["health-sync"]
+          }
+        }
+      };
+    }
+    return { statusCode: 404, body: { error: "not found" } };
+  },
+  async ({ port }) => {
+    writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
+    const failure = await runAsyncFailure(["pair-ios", "--json", "--no-start"]);
+    const payload = JSON.parse(failure.stderr);
+    if (payload.code !== "pairing_transport_unavailable") {
+      throw new Error(
+        `Expected bad Iroh loopback QR to fail pairing_transport_unavailable, got ${payload.code}`
+      );
+    }
+    if (
+      !payload.error.includes("Iroh pairing") ||
+      !payload.error.includes("loopback")
+    ) {
+      throw new Error(
+        "Expected bad Iroh loopback QR failure to name Iroh and loopback"
+      );
+    }
+  }
+);
+await withFakeForgeServer(
+  async (request) => {
+    if (request.url === "/api/v1/health")
+      return { body: forgeHealthResponse() };
+    if (request.url === "/api/v1/auth/operator-session") {
+      return { body: { session: { id: "ses_missing_cookie" } } };
+    }
+    return { statusCode: 404, body: { error: "not found" } };
+  },
+  async ({ port }) => {
+    writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
+    const failure = await runAsyncFailure(["pair-ios", "--json", "--no-start"]);
+    const payload = JSON.parse(failure.stderr);
+    if (payload.code !== "pairing_auth_failed") {
+      throw new Error(`Expected pairing_auth_failed, got ${payload.code}`);
+    }
+    if (payload.error.includes("doctor --repair")) {
+      throw new Error(
+        "Expected auth bootstrap failure not to point primarily at doctor --repair"
+      );
+    }
+  }
+);
+await withFakeForgeServer(
+  async (request) => {
+    if (request.url === "/api/v1/health")
+      return { body: forgeHealthResponse() };
+    if (request.url === "/api/v1/auth/operator-session") {
+      return {
+        headers: {
+          "set-cookie": "forge_operator_session=test-session; Path=/"
+        },
+        body: { session: { id: "ses_test" } }
+      };
+    }
+    if (request.url === "/api/v1/health/pairing-sessions") {
       return {
         statusCode: 401,
-        body: { code: "auth_required", error: "An authenticated operator session is required." }
-      };
-    }
-    const parsed = JSON.parse(body || "{}");
-    if (parsed.fallbackMode !== "none") {
-      return {
-        statusCode: 400,
-        body: { error: `expected default Iroh fallbackMode none, got ${parsed.fallbackMode}` }
-      };
-    }
-    if ("publicUrl" in parsed) {
-      return {
-        statusCode: 400,
-        body: { error: "default Iroh pairing should not send publicUrl" }
-      };
-    }
-    return {
-      statusCode: 201,
-      body: {
-        qrPayload: {
-          kind: "forge_companion_pairing",
-          apiBaseUrl: "forge-iroh://fake-node/api/v1",
-          uiBaseUrl: "forge-iroh://fake-node/forge/",
-          transportMode: parsed.transportMode,
-          transport: { protocol: "iroh", provider: "forge-companion-iroh" },
-          sessionId: "pair_test",
-          pairingToken: "pairing-token",
-          expiresAt: new Date(Date.now() + 60_000).toISOString(),
-          capabilities: ["health-sync"]
+        body: {
+          code: "auth_required",
+          error: "An authenticated operator session is required."
         }
-      }
-    };
-  }
-  return { statusCode: 404, body: { error: "not found" } };
-}, async ({ port, requests }) => {
-  writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
-  const pairing = await runAsync(["pair-ios", "--json", "--no-start"]);
-  const payload = JSON.parse(pairing.stdout);
-  if (payload.qrPayload.sessionId !== "pair_test") {
-    throw new Error("Expected pair-ios --json to return the fake pairing payload");
-  }
-  const authRequest = requests.find((entry) => entry.url === "/api/v1/auth/operator-session");
-  if (!authRequest) {
-    throw new Error("Expected pair-ios to bootstrap a local operator session before pairing");
-  }
-  const pairingRequest = requests.find((entry) => entry.url === "/api/v1/health/pairing-sessions");
-  if (pairingRequest?.headers.cookie !== "forge_operator_session=test-session") {
-    throw new Error("Expected pair-ios to send the local operator session cookie to the pairing route");
-  }
-  const humanPairing = await runAsync(["pair-ios", "--no-start"]);
-  const payloadSizeMatch = humanPairing.stdout.match(
-    /QR payload bytes: (?<qr>\d+); manual payload bytes: (?<manual>\d+)/
-  );
-  if (!payloadSizeMatch?.groups) {
-    throw new Error("Expected pair-ios to report QR and manual payload byte counts");
-  }
-  if (Number(payloadSizeMatch.groups.qr) >= Number(payloadSizeMatch.groups.manual)) {
-    throw new Error("Expected short QR payload to be smaller than the saved manual payload");
-  }
-  const savedPairingPath = path.join(
-    tempHome,
-    ".forge",
-    "pairing",
-    "forge-companion-pair_test.json"
-  );
-  const savedPairing = JSON.parse(fs.readFileSync(savedPairingPath, "utf8"));
-  if (savedPairing.sessionId !== "pair_test" || savedPairing.pairingToken !== "pairing-token") {
-    throw new Error("Expected pair-ios to save the full manual pairing payload");
-  }
-});
-await withFakeForgeServer(async (request, body) => {
-  if (request.url === "/api/v1/health") return { body: forgeHealthResponse() };
-  if (request.url === "/api/v1/auth/operator-session") {
-    return {
-      headers: { "set-cookie": "forge_operator_session=test-session; Path=/" },
-      body: { session: { id: "ses_test" } }
-    };
-  }
-  if (request.url === "/api/v1/health/pairing-sessions") {
-    const parsed = JSON.parse(body || "{}");
-    if (parsed.transportMode !== "manual-http") {
-      return {
-        statusCode: 400,
-        body: { error: `expected Tailscale primary manual-http, got ${parsed.transportMode}` }
       };
     }
-    if (parsed.fallbackMode !== "tailscale") {
-      return {
-        statusCode: 400,
-        body: { error: `expected Tailscale fallbackMode, got ${parsed.fallbackMode}` }
-      };
+    return { statusCode: 404, body: { error: "not found" } };
+  },
+  async ({ port }) => {
+    writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
+    const failure = await runAsyncFailure(["pair-ios", "--json", "--no-start"]);
+    const payload = JSON.parse(failure.stderr);
+    if (payload.code !== "pairing_request_failed") {
+      throw new Error(`Expected pairing_request_failed, got ${payload.code}`);
     }
-    if (parsed.publicUrl !== "https://mac.tailnet.ts.net/forge/") {
-      return {
-        statusCode: 400,
-        body: { error: `expected Tailscale publicUrl, got ${parsed.publicUrl}` }
-      };
+    if (payload.guidance.some((entry) => entry.includes("doctor --repair"))) {
+      throw new Error(
+        "Expected authenticated pairing 401 to avoid generic doctor --repair guidance"
+      );
     }
-    return {
-      statusCode: 201,
-      body: {
-        qrPayload: {
-          kind: "forge_companion_pairing",
-          apiBaseUrl: "https://mac.tailnet.ts.net/api/v1",
-          uiBaseUrl: "https://mac.tailnet.ts.net/forge/",
-          transportMode: "manual-http",
-          transport: {
-            protocol: "http",
-            provider: "manual-http",
-            status: "ready",
-            publicBaseUrl: "https://mac.tailnet.ts.net/api/v1"
+  }
+);
+await withFakeForgeServer(
+  async (request) => {
+    if (request.url === "/api/v1/health")
+      return { body: forgeHealthResponse() };
+    return { statusCode: 404, body: { error: "not found" } };
+  },
+  async ({ port }) => {
+    writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
+    fs.rmSync(
+      path.join(tempHome, ".forge", "run", "forge-memory-runtime.json"),
+      { force: true }
+    );
+    const start = await runAsync(["start"]);
+    const payload = JSON.parse(start.stdout);
+    if (!payload.ok || payload.started !== false || payload.adopted !== true) {
+      throw new Error(
+        `Expected healthy runtime adoption without spawning, got ${start.stdout}`
+      );
+    }
+  }
+);
+await withFakeForgeServer(
+  async () => ({
+    statusCode: 404,
+    body: { error: "not Forge" }
+  }),
+  async ({ port }) => {
+    writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
+    const start = await runAsync(["start"]);
+    const payload = JSON.parse(start.stdout);
+    if (payload.ok || !payload.portConflict) {
+      throw new Error(
+        `Expected occupied non-Forge port to be reported as a port conflict, got ${start.stdout}`
+      );
+    }
+  }
+);
+if (process.platform !== "win32") {
+  await withPlainServer(async ({ port }) => {
+    const recordedRuntime = await startDetachedRecordedRuntimeGroup();
+    try {
+      writeSmokeConfig({ mode: "dev", port, dataRoot, adapters: [] });
+      const runtimeStatePath = path.join(
+        tempHome,
+        ".forge",
+        "run",
+        "forge-memory-runtime.json"
+      );
+      fs.mkdirSync(path.dirname(runtimeStatePath), { recursive: true });
+      fs.writeFileSync(
+        runtimeStatePath,
+        `${JSON.stringify(
+          {
+            mode: "dev",
+            baseUrl: `http://127.0.0.1:${port}`,
+            webUrl: `http://127.0.0.1:${port}/forge/`,
+            dataRoot,
+            children: [{ role: "web", pid: recordedRuntime.parentPid }],
+            startedAt: new Date().toISOString()
           },
-          sessionId: "pair_tailscale",
-          pairingToken: "pairing-token",
-          expiresAt: new Date(Date.now() + 60_000).toISOString(),
-          capabilities: ["health-sync"]
+          null,
+          2
+        )}\n`
+      );
+      const stop = run(["stop", "--json"]);
+      const payload = JSON.parse(stop.stdout);
+      if (
+        !payload.stopped ||
+        !payload.pids?.includes(recordedRuntime.parentPid)
+      ) {
+        throw new Error(
+          `Expected stop to report recorded detached runtime pid ${recordedRuntime.parentPid}, got ${stop.stdout}`
+        );
+      }
+      await waitForPidExit(recordedRuntime.childPid, "recorded runtime child");
+    } finally {
+      if (pidExists(recordedRuntime.parentPid)) {
+        try {
+          process.kill(-recordedRuntime.parentPid, "SIGKILL");
+        } catch {
+          recordedRuntime.child.kill("SIGKILL");
         }
       }
-    };
-  }
-  return { statusCode: 404, body: { error: "not found" } };
-}, async ({ port, requests }) => {
-  writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
-  const pairing = await runAsync(["pair-ios", "--json", "--no-start"], {
-    env: {
-      ...env,
-      FORGE_MEMORY_SKIP_TAILSCALE_AUTODETECT: "0",
-      FORGE_MEMORY_SKIP_TAILSCALE_PUBLIC_PROBE: "1",
-      FORGE_MEMORY_TAILSCALE_PUBLIC_URL: "https://mac.tailnet.ts.net/forge/"
     }
   });
-  const payload = JSON.parse(pairing.stdout);
-  if (payload.qrPayload.sessionId !== "pair_tailscale") {
-    throw new Error("Expected Tailscale autodetect to create a Tailscale pairing");
-  }
-  const pairingRequest = requests.find((entry) => entry.url === "/api/v1/health/pairing-sessions");
-  const parsedBody = JSON.parse(pairingRequest?.body || "{}");
-  if (parsedBody.transportMode !== "manual-http" || parsedBody.fallbackMode !== "tailscale") {
-    throw new Error(`Expected Tailscale to be primary pairing transport, got ${pairingRequest?.body}`);
-  }
-});
-await withFakeForgeServer(async (request, body) => {
-  if (request.url === "/api/v1/health") return { body: forgeHealthResponse() };
-  if (request.url === "/api/v1/auth/operator-session") {
-    return {
-      headers: { "set-cookie": "forge_operator_session=test-session; Path=/" },
-      body: { session: { id: "ses_test" } }
-    };
-  }
-  if (request.url === "/api/v1/health/pairing-sessions") {
-    const parsed = JSON.parse(body || "{}");
-    return {
-      statusCode: 201,
-      body: {
-        qrPayload: {
-          kind: "forge_companion_pairing",
-          apiBaseUrl: parsed.publicUrl.replace("/forge/", "/api/v1"),
-          uiBaseUrl: parsed.publicUrl,
-          transportMode: parsed.transportMode,
-          transport: {
-            protocol: "http",
-            provider: "manual-http",
-            status: "ready",
-            publicBaseUrl: parsed.publicUrl.replace("/forge/", "/api/v1")
-          },
-          sessionId: "pair_tailscale_serve",
-          pairingToken: "pairing-token",
-          expiresAt: new Date(Date.now() + 60_000).toISOString(),
-          capabilities: ["health-sync"]
-        }
-      }
-    };
-  }
-  return { statusCode: 404, body: { error: "not found" } };
-}, async ({ port }) => {
-  writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
-  const serveLog = path.join(tempHome, "tailscale-serve.log");
-  const probeSequence = path.join(tempHome, "tailscale-probe-sequence.txt");
-  fs.rmSync(serveLog, { force: true });
-  fs.writeFileSync(probeSequence, "fail\nok\n");
-  const pairing = await runAsync(["pair-ios", "--yes", "--no-start"], {
-    env: {
-      ...env,
-      FORGE_MEMORY_SKIP_TAILSCALE_AUTODETECT: "0",
-      FORGE_MEMORY_TAILSCALE_PUBLIC_URL: "https://mac.tailnet.ts.net/forge/",
-      FORGE_MEMORY_FAKE_TAILSCALE_LOG: serveLog,
-      FORGE_MEMORY_FAKE_TAILSCALE_PUBLIC_PROBE_SEQUENCE: probeSequence
-    }
-  });
-  if (!pairing.stdout.includes("Manual HTTP") || !pairing.stdout.includes("https://mac.tailnet.ts.net/api/v1")) {
-    throw new Error(`Expected human Tailscale Serve pairing output, got:\n${pairing.stdout}`);
-  }
-  const serveInvocation = fs.readFileSync(serveLog, "utf8");
-  if (!serveInvocation.includes(`serve --bg http://127.0.0.1:${port}`)) {
-    throw new Error(`Expected pair-ios --yes to configure tailscale serve for Forge port ${port}, got:\n${serveInvocation}`);
-  }
-});
-await withFakeForgeServer(async (request) => {
-  if (request.url === "/api/v1/health") return { body: forgeHealthResponse() };
-  if (request.url === "/api/v1/auth/operator-session") {
-    return {
-      headers: { "set-cookie": "forge_operator_session=test-session; Path=/" },
-      body: { session: { id: "ses_test" } }
-    };
-  }
-  if (request.url === "/api/v1/health/pairing-sessions") {
-    return {
-      statusCode: 201,
-      body: {
-        qrPayload: {
-          kind: "forge-companion-pairing",
-          apiBaseUrl: "http://127.0.0.1:4317/api/v1",
-          uiBaseUrl: "http://127.0.0.1:4317/forge/",
-          transportMode: "manual-http",
-          transport: {
-            protocol: "http",
-            provider: "manual-http",
-            status: "ready",
-            localBaseUrl: "http://127.0.0.1:4317",
-            notes: ["Forge companion Iroh host is unavailable."]
-          },
-          sessionId: "pair_loopback",
-          pairingToken: "pairing-token",
-          expiresAt: new Date(Date.now() + 60_000).toISOString(),
-          capabilities: ["health-sync"]
-        }
-      }
-    };
-  }
-  return { statusCode: 404, body: { error: "not found" } };
-}, async ({ port }) => {
-  writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
-  const failure = await runAsyncFailure(["pair-ios", "--json", "--no-start"]);
-  const payload = JSON.parse(failure.stderr);
-  if (payload.code !== "pairing_transport_unavailable") {
-    throw new Error(`Expected pairing_transport_unavailable, got ${payload.code}`);
-  }
-  if (!payload.error.includes("127.0.0.1")) {
-    throw new Error("Expected downgraded loopback pairing failure to name 127.0.0.1");
-  }
-});
-await withFakeForgeServer(async (request) => {
-  if (request.url === "/api/v1/health") return { body: forgeHealthResponse() };
-  if (request.url === "/api/v1/auth/operator-session") {
-    return {
-      headers: { "set-cookie": "forge_operator_session=test-session; Path=/" },
-      body: { session: { id: "ses_test" } }
-    };
-  }
-  if (request.url === "/api/v1/health/pairing-sessions") {
-    return {
-      statusCode: 201,
-      body: {
-        qrPayload: {
-          kind: "forge-companion-pairing",
-          apiBaseUrl: "http://127.0.0.1:4317/api/v1",
-          uiBaseUrl: "http://127.0.0.1:4317/forge/",
-          transportMode: "iroh",
-          transport: {
-            protocol: "iroh",
-            provider: "forge-companion-iroh",
-            status: "ready",
-            publicBaseUrl: "http://127.0.0.1:4317/api/v1",
-            localBaseUrl: "http://127.0.0.1:4317",
-            nodeId: "fake-node",
-            pairPayload: { v: 1, node_id: "fake-node", token: "host-token" }
-          },
-          sessionId: "pair_bad_iroh",
-          pairingToken: "pairing-token",
-          expiresAt: new Date(Date.now() + 60_000).toISOString(),
-          capabilities: ["health-sync"]
-        }
-      }
-    };
-  }
-  return { statusCode: 404, body: { error: "not found" } };
-}, async ({ port }) => {
-  writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
-  const failure = await runAsyncFailure(["pair-ios", "--json", "--no-start"]);
-  const payload = JSON.parse(failure.stderr);
-  if (payload.code !== "pairing_transport_unavailable") {
-    throw new Error(`Expected bad Iroh loopback QR to fail pairing_transport_unavailable, got ${payload.code}`);
-  }
-  if (!payload.error.includes("Iroh pairing") || !payload.error.includes("loopback")) {
-    throw new Error("Expected bad Iroh loopback QR failure to name Iroh and loopback");
-  }
-});
-await withFakeForgeServer(async (request) => {
-  if (request.url === "/api/v1/health") return { body: forgeHealthResponse() };
-  if (request.url === "/api/v1/auth/operator-session") {
-    return { body: { session: { id: "ses_missing_cookie" } } };
-  }
-  return { statusCode: 404, body: { error: "not found" } };
-}, async ({ port }) => {
-  writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
-  const failure = await runAsyncFailure(["pair-ios", "--json", "--no-start"]);
-  const payload = JSON.parse(failure.stderr);
-  if (payload.code !== "pairing_auth_failed") {
-    throw new Error(`Expected pairing_auth_failed, got ${payload.code}`);
-  }
-  if (payload.error.includes("doctor --repair")) {
-    throw new Error("Expected auth bootstrap failure not to point primarily at doctor --repair");
-  }
-});
-await withFakeForgeServer(async (request) => {
-  if (request.url === "/api/v1/health") return { body: forgeHealthResponse() };
-  if (request.url === "/api/v1/auth/operator-session") {
-    return {
-      headers: { "set-cookie": "forge_operator_session=test-session; Path=/" },
-      body: { session: { id: "ses_test" } }
-    };
-  }
-  if (request.url === "/api/v1/health/pairing-sessions") {
-    return {
-      statusCode: 401,
-      body: { code: "auth_required", error: "An authenticated operator session is required." }
-    };
-  }
-  return { statusCode: 404, body: { error: "not found" } };
-}, async ({ port }) => {
-  writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
-  const failure = await runAsyncFailure(["pair-ios", "--json", "--no-start"]);
-  const payload = JSON.parse(failure.stderr);
-  if (payload.code !== "pairing_request_failed") {
-    throw new Error(`Expected pairing_request_failed, got ${payload.code}`);
-  }
-  if (payload.guidance.some((entry) => entry.includes("doctor --repair"))) {
-    throw new Error("Expected authenticated pairing 401 to avoid generic doctor --repair guidance");
-  }
-});
-await withFakeForgeServer(async (request) => {
-  if (request.url === "/api/v1/health") return { body: forgeHealthResponse() };
-  return { statusCode: 404, body: { error: "not found" } };
-}, async ({ port }) => {
-  writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
-  fs.rmSync(path.join(tempHome, ".forge", "run", "forge-memory-runtime.json"), { force: true });
-  const start = await runAsync(["start"]);
-  const payload = JSON.parse(start.stdout);
-  if (!payload.ok || payload.started !== false || payload.adopted !== true) {
-    throw new Error(`Expected healthy runtime adoption without spawning, got ${start.stdout}`);
-  }
-});
-await withFakeForgeServer(async () => ({
-  statusCode: 404,
-  body: { error: "not Forge" }
-}), async ({ port }) => {
-  writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
-  const start = await runAsync(["start"]);
-  const payload = JSON.parse(start.stdout);
-  if (payload.ok || !payload.portConflict) {
-    throw new Error(`Expected occupied non-Forge port to be reported as a port conflict, got ${start.stdout}`);
-  }
-});
+}
 run(["stop"]);
 
 fs.mkdirSync(dataRoot, { recursive: true });
@@ -1011,7 +1328,9 @@ try {
     dataRoot,
     adapters: ["openclaw", "hermes", "codex"]
   });
-  fs.rmSync(path.join(tempHome, ".forge", "run", "forge-memory-runtime.json"), { force: true });
+  fs.rmSync(path.join(tempHome, ".forge", "run", "forge-memory-runtime.json"), {
+    force: true
+  });
   const uninstall = run(["uninstall", "--yes", "--remove-adapters", "--json"]);
   const uninstallPayload = JSON.parse(uninstall.stdout);
   if (!uninstallPayload.stop?.stopped) {
@@ -1025,38 +1344,61 @@ try {
     );
   }
   await waitForExit(liveRuntime.child, "live Forge runtime child");
-  const openClawConfig = JSON.parse(fs.readFileSync(openClawConfigPath, "utf8"));
+  const openClawConfig = JSON.parse(
+    fs.readFileSync(openClawConfigPath, "utf8")
+  );
   if (openClawConfig.plugins.entries["forge-openclaw-plugin"]) {
-    throw new Error("Expected uninstall --remove-adapters to remove only the Forge OpenClaw entry");
+    throw new Error(
+      "Expected uninstall --remove-adapters to remove only the Forge OpenClaw entry"
+    );
   }
   if (!openClawConfig.plugins.entries["other-plugin"]) {
-    throw new Error("Expected uninstall --remove-adapters to preserve unrelated OpenClaw plugin entries");
+    throw new Error(
+      "Expected uninstall --remove-adapters to preserve unrelated OpenClaw plugin entries"
+    );
   }
   if (openClawConfig.plugins.allow.includes("forge-openclaw-plugin")) {
-    throw new Error("Expected uninstall --remove-adapters to remove Forge from OpenClaw allow list");
+    throw new Error(
+      "Expected uninstall --remove-adapters to remove Forge from OpenClaw allow list"
+    );
   }
   if (!openClawConfig.plugins.allow.includes("other-plugin")) {
-    throw new Error("Expected uninstall --remove-adapters to preserve unrelated OpenClaw allow entries");
+    throw new Error(
+      "Expected uninstall --remove-adapters to preserve unrelated OpenClaw allow entries"
+    );
   }
   const hermesConfig = fs.readFileSync(hermesConfigPath, "utf8");
   if (hermesConfig.includes("forge")) {
-    throw new Error(`Expected uninstall --remove-adapters to remove Forge from Hermes config:\n${hermesConfig}`);
+    throw new Error(
+      `Expected uninstall --remove-adapters to remove Forge from Hermes config:\n${hermesConfig}`
+    );
   }
   if (!hermesConfig.includes("other-plugin")) {
-    throw new Error(`Expected uninstall --remove-adapters to preserve unrelated Hermes plugins:\n${hermesConfig}`);
+    throw new Error(
+      `Expected uninstall --remove-adapters to preserve unrelated Hermes plugins:\n${hermesConfig}`
+    );
   }
   if (fs.existsSync(hermesForgeConfigPath)) {
-    throw new Error("Expected uninstall --remove-adapters to remove Hermes Forge config file");
+    throw new Error(
+      "Expected uninstall --remove-adapters to remove Hermes Forge config file"
+    );
   }
   const codexAfterUninstall = fs.readFileSync(codexConfigPath, "utf8");
   if (codexAfterUninstall.includes("[mcp_servers.forge]")) {
-    throw new Error(`Expected uninstall --remove-adapters to remove Forge Codex MCP config:\n${codexAfterUninstall}`);
+    throw new Error(
+      `Expected uninstall --remove-adapters to remove Forge Codex MCP config:\n${codexAfterUninstall}`
+    );
   }
   if (!codexAfterUninstall.includes("[mcp_servers.other]")) {
-    throw new Error(`Expected uninstall --remove-adapters to preserve unrelated Codex MCP config:\n${codexAfterUninstall}`);
+    throw new Error(
+      `Expected uninstall --remove-adapters to preserve unrelated Codex MCP config:\n${codexAfterUninstall}`
+    );
   }
 } finally {
-  if (liveRuntime.child.exitCode === null && liveRuntime.child.signalCode === null) {
+  if (
+    liveRuntime.child.exitCode === null &&
+    liveRuntime.child.signalCode === null
+  ) {
     liveRuntime.child.kill("SIGKILL");
   }
 }

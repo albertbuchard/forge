@@ -8051,8 +8051,12 @@ function compactWeightLoss(
       dateKey: weightLoss.todayLedger.dateKey,
       mealCount: weightLoss.todayLedger.meals.length,
       totals: weightLoss.todayLedger.totals,
+      plannedTargetCalories: weightLoss.todayLedger.plannedTargetCalories,
       targetCalories: weightLoss.todayLedger.targetCalories,
+      remainingCalories: weightLoss.todayLedger.remainingCalories,
       calorieDelta: weightLoss.todayLedger.calorieDelta,
+      activeAdjustmentCalories: weightLoss.todayLedger.activeAdjustmentCalories,
+      activeCaloriesSource: weightLoss.todayLedger.activeCaloriesSource,
       proteinCoverage: weightLoss.todayLedger.proteinCoverage,
       fiberCoverage: weightLoss.todayLedger.fiberCoverage,
       unconfirmedCount: weightLoss.todayLedger.unconfirmedCount
@@ -8060,6 +8064,15 @@ function compactWeightLoss(
     energyModel: {
       estimatedTdeeKcal: weightLoss.energyModel.estimatedTdeeKcal,
       activeBurnKcal: weightLoss.energyModel.activeBurnKcal,
+      baselineActiveCaloriesKcal:
+        weightLoss.energyModel.baselineActiveCaloriesKcal,
+      todayActiveCaloriesKcal: weightLoss.energyModel.todayActiveCaloriesKcal,
+      todayActiveCaloriesSource:
+        weightLoss.energyModel.todayActiveCaloriesSource,
+      todayTargetAdjustmentKcal:
+        weightLoss.energyModel.todayTargetAdjustmentKcal,
+      todayActiveDeltaKcal: weightLoss.energyModel.todayActiveDeltaKcal,
+      todayActiveOverride: weightLoss.energyModel.todayActiveOverride,
       movementCaloriesKcal: weightLoss.energyModel.movementCaloriesKcal,
       averageCalorieIntake: weightLoss.energyModel.averageCalorieIntake,
       estimatedDailyEnergyBalanceKcal:

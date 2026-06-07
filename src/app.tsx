@@ -1,7 +1,6 @@
 import { useEffect, type ReactElement } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AppShell } from "@/components/shell/app-shell";
-import { WorkbenchProvider } from "@/components/workbench/workbench-provider";
 import {
   createUiDiagnosticLogger,
   publishUiDiagnosticLog
@@ -152,7 +151,7 @@ export function App() {
   }
 
   return (
-    <WorkbenchProvider>
+    <>
       <DiagnosticsBootstrap />
       <Routes>
         <Route element={<AppShell />}>
@@ -769,6 +768,6 @@ export function App() {
         </Route>
         <Route path="*" element={<Navigate to="/overview" replace />} />
       </Routes>
-    </WorkbenchProvider>
+    </>
   );
 }

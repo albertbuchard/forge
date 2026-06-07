@@ -164,7 +164,7 @@ function energyGapHelp(view: WeightLossViewData) {
       : energy.energySourceConfidence === "workout_movement_fallback"
         ? "HealthKit daily active energy is missing, so active burn falls back to workout energy plus movement-trip calories."
         : "No measured active-burn stream is available, so this is driven by the plan target and should be treated as low-confidence.";
-  const todayTargetFormula = `Today is separate: today's target = baseline plan target + positive activity buffer. Today active evidence currently uses ${activeCaloriesSourceLabel(energy.todayActiveCaloriesSource)}: ${formatNumber(energy.todayActiveCaloriesKcal)} kcal. Default active calories: ${formatNumber(energy.baselineActiveCaloriesKcal)} kcal. Positive surplus: ${formatNumber(energy.todayActiveSurplusKcal)} kcal; eat-back fraction ${formatNumber(energy.activityEatBackFraction * 100, 0)}%; buffer ${formatSigned(energy.todayActivityBufferKcal)} kcal. Low or early same-day activity cannot reduce the target.`;
+  const todayTargetFormula = `Today is separate: today's target = baseline plan target plus the day-specific active adjustment. Today active evidence currently uses ${activeCaloriesSourceLabel(energy.todayActiveCaloriesSource)}: ${formatNumber(energy.todayActiveCaloriesKcal)} kcal. Default active calories: ${formatNumber(energy.baselineActiveCaloriesKcal)} kcal. Eat-back fraction ${formatNumber(energy.activityEatBackFraction * 100, 0)}%; target adjustment ${formatSigned(energy.todayTargetAdjustmentKcal)} kcal. Automatic low or early same-day activity cannot reduce the target; a manual override can raise or lower it for this date.`;
   const dataLineage =
     energy.energySourceConfidence === "healthkit_daily_active_energy"
       ? "Data path: recent food logs provide intake; HealthKit daily active-energy rows provide active burn; Mifflin-St Jeor provides the stable resting baseline. Complete HealthKit basal rows are shown as calibration evidence."
@@ -188,11 +188,9 @@ function energyGapHelp(view: WeightLossViewData) {
         {gapFormula}
       </span>
       <span>
-        <span className="font-semibold text-[var(--ui-ink-strong)]">
-          TDEE:
-        </span>{" "}
-        TDEE means total daily energy expenditure: the estimated calories
-        burned per day. Forge uses{" "}
+        <span className="font-semibold text-[var(--ui-ink-strong)]">TDEE:</span>{" "}
+        TDEE means total daily energy expenditure: the estimated calories burned
+        per day. Forge uses{" "}
         {hasMeasuredTdee
           ? "the formula resting baseline plus the selected active-burn branch"
           : "the configured/inferred plan estimate because formula resting plus active expenditure is incomplete"}
@@ -346,6 +344,81 @@ function activeCaloriesSourceLabel(source: string) {
   }
 }
 
+function formatSignedKcal(value: number) {
+  return `${value >= 0 ? "+" : ""}${value.toFixed(0)} kcal`;
+}
+
+function remainingCaloriesText(value: number) {
+  return value >= 0
+    ? `${value.toFixed(0)} kcal left`
+    : `${Math.abs(value).toFixed(0)} kcal over`;
+}
+
+function normalizeKcalDraft(value: string) {
+  return value.trim() === "" ? "0" : value;
+}
+
+function applyManualActiveCaloriesToView(
+  current: WeightLossViewData,
+  activeCaloriesKcal: number,
+  override: WeightLossViewData["energyModel"]["todayActiveOverride"]
+): WeightLossViewData {
+  const baseline =
+    current.energyModel.baselineActiveCaloriesKcal ??
+    current.energyModel.todayActiveCaloriesKcal ??
+    0;
+  const activityEatBackFraction =
+    current.energyModel.activityEatBackFraction ?? 0;
+  const activeDelta = activeCaloriesKcal - baseline;
+  const targetAdjustment = Math.round(activeDelta * activityEatBackFraction);
+  const previousTargetAdjustment =
+    current.energyModel.todayTargetAdjustmentKcal ?? 0;
+  const plannedTarget =
+    current.todayLedger.plannedTargetCalories ??
+    current.todayLedger.targetCalories - previousTargetAdjustment;
+  const targetCalories = Math.max(
+    0,
+    Math.round(plannedTarget + targetAdjustment)
+  );
+  const calorieDelta = Math.round(
+    current.todayLedger.totals.calories - targetCalories
+  );
+  const remainingCalories = Math.round(
+    targetCalories - current.todayLedger.totals.calories
+  );
+  const activeSurplus = Math.max(0, activeDelta);
+  const activityBuffer = Math.round(activeSurplus * activityEatBackFraction);
+
+  return {
+    ...current,
+    summary: {
+      ...current.summary,
+      targetCalories,
+      todayCalorieDelta: calorieDelta,
+      remainingCalories
+    },
+    todayLedger: {
+      ...current.todayLedger,
+      plannedTargetCalories: plannedTarget,
+      targetCalories,
+      activeAdjustmentCalories: targetAdjustment,
+      activeCaloriesSource: "user_override",
+      calorieDelta,
+      remainingCalories
+    },
+    energyModel: {
+      ...current.energyModel,
+      todayActiveCaloriesKcal: activeCaloriesKcal,
+      todayActiveCaloriesSource: "user_override",
+      todayTargetAdjustmentKcal: targetAdjustment,
+      todayActiveDeltaKcal: Math.round(activeDelta),
+      todayActiveSurplusKcal: Math.round(activeSurplus),
+      todayActivityBufferKcal: activityBuffer,
+      todayActiveOverride: override
+    }
+  };
+}
+
 function getLocalDayBounds(dateKey: string) {
   const [year, month, day] = dateKey.split("-").map(Number);
   const start = new Date(year, month - 1, day);
@@ -467,6 +540,10 @@ export function WeightLossPage() {
 
   const refresh = () => queryClient.invalidateQueries({ queryKey });
 
+  const updateActiveCaloriesDraft = (value: string) => {
+    setActiveCaloriesDraft(normalizeKcalDraft(value));
+  };
+
   const foodSearchMutation = useMutation({
     mutationFn: async (query: string) =>
       (await searchNutritionFoods({ query, userIds: selectedUserIds })).foods
@@ -536,11 +613,53 @@ export function WeightLossPage() {
         },
         selectedUserIds
       ),
-    onSuccess: () => {
+    onMutate: (activeCaloriesKcal) => {
+      if (activeCaloriesKcal == null) {
+        return null;
+      }
+      const previous = queryClient.getQueryData<WeightLossViewData>(queryKey);
+      queryClient.setQueryData<WeightLossViewData | undefined>(
+        queryKey,
+        (current) => {
+          if (!current) {
+            return current;
+          }
+          const now = new Date().toISOString();
+          return applyManualActiveCaloriesToView(current, activeCaloriesKcal, {
+            id: current.energyModel.todayActiveOverride?.id ?? "optimistic",
+            userId: current.userId,
+            dayKey: current.todayLedger.dateKey,
+            activeCaloriesKcal,
+            notes: "Manual active-calorie override from the weight-loss view",
+            createdAt:
+              current.energyModel.todayActiveOverride?.createdAt ?? now,
+            updatedAt: now
+          });
+        }
+      );
+      return previous ? { previous } : null;
+    },
+    onSuccess: (result, activeCaloriesKcal) => {
       setActiveCaloriesError(null);
+      if (activeCaloriesKcal != null) {
+        queryClient.setQueryData<WeightLossViewData | undefined>(
+          queryKey,
+          (current) =>
+            current
+              ? applyManualActiveCaloriesToView(
+                  current,
+                  activeCaloriesKcal,
+                  result.override
+                )
+              : current
+        );
+      }
       void refresh();
     },
-    onError: (error) => {
+    onError: (error, _activeCaloriesKcal, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(queryKey, context.previous);
+      }
       setActiveCaloriesError(
         error instanceof Error
           ? error.message
@@ -671,7 +790,9 @@ export function WeightLossPage() {
   const ledger = view.todayLedger;
   const ledgerTotals = ledger.totals;
   const intakeCalories = ledgerTotals.calories;
-  const remainingCalories = ledger.targetCalories - intakeCalories;
+  const remainingCalories = Number.isFinite(ledger.remainingCalories)
+    ? ledger.remainingCalories
+    : ledger.targetCalories - intakeCalories;
   const plannedTargetCalories =
     ledger.plannedTargetCalories ?? ledger.targetCalories;
   const todayActiveCalories =
@@ -685,8 +806,8 @@ export function WeightLossPage() {
   const activeAdjustment = ledger.activeAdjustmentCalories ?? 0;
   const activeAdjustmentText =
     activeAdjustment === 0
-      ? "no activity buffer"
-      : `+${activeAdjustment.toFixed(0)} kcal activity buffer from ${activeCaloriesSourceLabel(ledger.activeCaloriesSource)}`;
+      ? "no day-specific active adjustment"
+      : `${formatSignedKcal(activeAdjustment)} active adjustment from ${activeCaloriesSourceLabel(ledger.activeCaloriesSource)}`;
   const intakePercent =
     ledger.targetCalories > 0
       ? Math.min(
@@ -743,7 +864,9 @@ export function WeightLossPage() {
   };
 
   const saveActiveCalories = () => {
-    const parsed = Number(activeCaloriesDraft);
+    const normalizedDraft = normalizeKcalDraft(activeCaloriesDraft);
+    setActiveCaloriesDraft(normalizedDraft);
+    const parsed = Number(normalizedDraft);
     if (!Number.isFinite(parsed) || parsed < 0) {
       setActiveCaloriesError("Enter a valid active-calorie value.");
       return;
@@ -791,7 +914,7 @@ export function WeightLossPage() {
             draftValue={activeCaloriesDraft}
             pending={dailyActiveCaloriesMutation.isPending}
             error={activeCaloriesError}
-            onDraftChange={setActiveCaloriesDraft}
+            onDraftChange={updateActiveCaloriesDraft}
             onSave={saveActiveCalories}
             onReset={resetActiveCalories}
           />
@@ -801,11 +924,11 @@ export function WeightLossPage() {
       <section className="grid gap-4 xl:grid-cols-4">
         <WeightLossInsightMetric
           label="Today"
-          value={`${intakeCalories.toFixed(0)} kcal`}
-          detail={`${remainingCalories.toFixed(0)} kcal remaining against today's ${ledger.targetCalories.toFixed(0)} kcal target; ${activeAdjustmentText}.`}
+          value={`${intakeCalories.toFixed(0)} / ${ledger.targetCalories.toFixed(0)} kcal`}
+          detail={`${remainingCaloriesText(remainingCalories)}. Target uses ${todayActiveCalories.toFixed(0)} active kcal today; ${activeAdjustmentText}.`}
           icon={Utensils}
           tone={remainingCalories >= 0 ? "green" : "rose"}
-          help={`Today's target = baseline plan target + positive activity buffer. Here: ${plannedTargetCalories.toFixed(0)} + ${view.energyModel.todayActivityBufferKcal.toFixed(0)} = ${ledger.targetCalories.toFixed(0)} kcal. Same-day evidence is ${todayActiveCalories.toFixed(0)} kcal versus default ${baselineActiveCalories.toFixed(0)} kcal; low or early evidence cannot lower the target.`}
+          help={`Today's target = baseline plan target plus the day-specific active adjustment. Here: ${plannedTargetCalories.toFixed(0)} ${formatSignedKcal(view.energyModel.todayTargetAdjustmentKcal)} = ${ledger.targetCalories.toFixed(0)} kcal. Same-day evidence is ${todayActiveCalories.toFixed(0)} kcal versus default ${baselineActiveCalories.toFixed(0)} kcal. Automatic partial evidence can only add above the baseline; a manual override can raise or lower today's target for this date.`}
         />
         <WeightLossInsightMetric
           label="Protein"

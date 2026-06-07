@@ -1,11 +1,16 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { createPortal } from "react-dom";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode
+} from "react";
 import { Sparkles, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { GoalDialog } from "@/components/goal-dialog";
-import { ProjectDialog } from "@/components/project-dialog";
-import { TaskDialog } from "@/components/task-dialog";
 import { Button } from "@/components/ui/button";
 import { EntityBadge } from "@/components/ui/entity-badge";
 import { useI18n } from "@/lib/i18n";
@@ -25,6 +30,22 @@ import type {
 
 const MOBILE_BREAKPOINT_QUERY = "(max-width: 1023px)";
 const CREATE_ACTION_GROUPS = ["Execution", "Psyche", "Knowledge"] as const;
+
+const LazyGoalDialog = lazy(() =>
+  import("@/components/goal-dialog").then((module) => ({
+    default: module.GoalDialog
+  }))
+);
+const LazyProjectDialog = lazy(() =>
+  import("@/components/project-dialog").then((module) => ({
+    default: module.ProjectDialog
+  }))
+);
+const LazyTaskDialog = lazy(() =>
+  import("@/components/task-dialog").then((module) => ({
+    default: module.TaskDialog
+  }))
+);
 
 export type ForgeCreateActionId =
   | "goal"
@@ -345,45 +366,51 @@ export function useForgeCreateActions({
   );
 
   const dialogs: ReactNode = (
-    <>
-      <GoalDialog
-        open={goalOpen}
-        editingGoal={null}
-        tags={safeTags}
-        users={safeUsers}
-        defaultUserId={defaultUserId}
-        onOpenChange={setGoalOpen}
-        onSubmit={async (input) => {
-          await onCreateGoal(input);
-        }}
-      />
+    <Suspense fallback={null}>
+      {goalOpen ? (
+        <LazyGoalDialog
+          open={goalOpen}
+          editingGoal={null}
+          tags={safeTags}
+          users={safeUsers}
+          defaultUserId={defaultUserId}
+          onOpenChange={setGoalOpen}
+          onSubmit={async (input) => {
+            await onCreateGoal(input);
+          }}
+        />
+      ) : null}
 
-      <ProjectDialog
-        open={projectOpen}
-        goals={safeGoals as Goal[]}
-        users={safeUsers}
-        editingProject={null}
-        defaultUserId={defaultUserId}
-        onOpenChange={setProjectOpen}
-        onSubmit={async (input) => {
-          await onCreateProject(input);
-        }}
-      />
+      {projectOpen ? (
+        <LazyProjectDialog
+          open={projectOpen}
+          goals={safeGoals as Goal[]}
+          users={safeUsers}
+          editingProject={null}
+          defaultUserId={defaultUserId}
+          onOpenChange={setProjectOpen}
+          onSubmit={async (input) => {
+            await onCreateProject(input);
+          }}
+        />
+      ) : null}
 
-      <TaskDialog
-        open={taskOpen}
-        goals={safeGoals as Goal[]}
-        projects={safeProjects}
-        tags={safeTags}
-        users={safeUsers}
-        editingTask={null}
-        defaultUserId={defaultUserId}
-        onOpenChange={setTaskOpen}
-        onSubmit={async (input) => {
-          await onCreateTask(input);
-        }}
-      />
-    </>
+      {taskOpen ? (
+        <LazyTaskDialog
+          open={taskOpen}
+          goals={safeGoals as Goal[]}
+          projects={safeProjects}
+          tags={safeTags}
+          users={safeUsers}
+          editingTask={null}
+          defaultUserId={defaultUserId}
+          onOpenChange={setTaskOpen}
+          onSubmit={async (input) => {
+            await onCreateTask(input);
+          }}
+        />
+      ) : null}
+    </Suspense>
   );
 
   return {

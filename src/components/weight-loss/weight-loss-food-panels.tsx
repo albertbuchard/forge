@@ -11,6 +11,18 @@ import {
   WeightLossRecentMeal
 } from "./weight-loss-cards";
 
+function formatKcal(value: number) {
+  return `${value.toFixed(0)} kcal`;
+}
+
+function remainingLabel(value: number) {
+  return value >= 0 ? "Kcal left" : "Over target";
+}
+
+function remainingValue(value: number) {
+  return value >= 0 ? formatKcal(value) : formatKcal(Math.abs(value));
+}
+
 export function WeightLossLedgerPanel({
   ledger,
   remainingCalories,
@@ -47,6 +59,39 @@ export function WeightLossLedgerPanel({
         <Badge tone="meta">{ledger.meals.length} meals</Badge>
       </div>
       <div>
+        <div className="mb-4 grid gap-3 sm:grid-cols-3">
+          <div className="min-w-0 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-3">
+            <div className="text-[11px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
+              Eaten today
+            </div>
+            <div className="mt-1 text-2xl font-semibold text-[var(--ui-ink-strong)]">
+              {formatKcal(totals.calories)}
+            </div>
+          </div>
+          <div className="min-w-0 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-3">
+            <div className="text-[11px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
+              Target today
+            </div>
+            <div className="mt-1 text-2xl font-semibold text-[var(--ui-ink-strong)]">
+              {formatKcal(ledger.targetCalories)}
+            </div>
+          </div>
+          <div
+            className={cn(
+              "min-w-0 rounded-[8px] border p-3",
+              remainingCalories >= 0
+                ? "border-[color-mix(in_srgb,var(--success)_34%,var(--ui-border-subtle)_66%)] bg-[var(--ui-success-soft)]"
+                : "border-[color-mix(in_srgb,var(--danger)_34%,var(--ui-border-subtle)_66%)] bg-[var(--ui-danger-soft)]"
+            )}
+          >
+            <div className="text-[11px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
+              {remainingLabel(remainingCalories)}
+            </div>
+            <div className="mt-1 text-2xl font-semibold text-[var(--ui-ink-strong)]">
+              {remainingValue(remainingCalories)}
+            </div>
+          </div>
+        </div>
         <div className="h-3 overflow-hidden rounded-full bg-[var(--ui-surface-2)]">
           <div
             className={cn(

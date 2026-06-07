@@ -230,6 +230,7 @@ export type WeightLossViewData = {
     todayCalories: number;
     targetCalories: number;
     todayCalorieDelta: number;
+    remainingCalories: number;
     averageCalories: number | null;
     inferredTdee: number | null;
     proteinCoverage: number | null;
@@ -256,6 +257,7 @@ export type WeightLossViewData = {
     activeAdjustmentCalories: number;
     activeCaloriesSource: string;
     calorieDelta: number;
+    remainingCalories: number;
     proteinCoverage: number | null;
     fiberCoverage: number | null;
     unconfirmedCount: number;
@@ -286,6 +288,7 @@ export type WeightLossViewData = {
     todayObservedActiveCaloriesKcal: number | null;
     todayActiveCaloriesSource: string;
     todayTargetAdjustmentKcal: number;
+    todayActiveDeltaKcal: number;
     todayActiveSurplusKcal: number;
     todayActivityBufferKcal: number;
     activityEatBackFraction: number;

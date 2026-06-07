@@ -115,6 +115,14 @@ function activeEvidenceSummary(energy: WeightLossViewData["energyModel"]) {
     : "No same-day HealthKit active energy, workout calories, movement calories, or steps synced yet.";
 }
 
+function formatSignedKcal(value: number) {
+  return `${value >= 0 ? "+" : ""}${value.toFixed(0)} kcal`;
+}
+
+function normalizeKcalDraft(value: string) {
+  return value.trim() === "" ? "0" : value;
+}
+
 function EvidenceTile({
   label,
   value,
@@ -191,9 +199,11 @@ export function WeightLossActiveCaloriesPanel({
     source === "today_step_estimate";
   const sourceIsDefault = source === "default_active_calories";
   const sourceText = sourceLabel(source);
-  const formula = `${plannedTarget.toFixed(0)} + ${energy.todayActivityBufferKcal.toFixed(0)} = ${target.toFixed(0)} kcal`;
+  const formula = `${plannedTarget.toFixed(0)} ${formatSignedKcal(energy.todayTargetAdjustmentKcal)} = ${target.toFixed(0)} kcal`;
   const evidenceSummary = activeEvidenceSummary(energy);
   const sourceDecision = sourceDecisionLabel(source);
+  const automaticPositiveOnly =
+    "Automatic same-day evidence can only add above the baseline because early or partial syncs are unreliable. A manual override is deliberate, so it can raise or lower today's target for this date.";
 
   return (
     <Card className="grid gap-5 border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)] p-5">
@@ -210,7 +220,7 @@ export function WeightLossActiveCaloriesPanel({
                     Today active-calorie source
                     <InfoTooltip
                       label="Explain active calorie target"
-                      content="This is the active-energy allowance applied to today's food budget. Forge uses a manual override first, then same-day HealthKit active energy because it normally includes steps and workouts, then workout and movement calories, then a step estimate only when it is above the baseline active allowance, then the prior-week measured baseline from the plan."
+                      content={`This is the active-energy allowance applied to today's food budget. Forge uses a manual override first, then same-day HealthKit active energy because it normally includes steps and workouts, then workout and movement calories, then a step estimate only when it is above the baseline active allowance, then the prior-week measured baseline from the plan. ${automaticPositiveOnly}`}
                     />
                   </div>
                   <h2 className="mt-1 text-3xl font-semibold leading-tight text-[var(--ui-ink-strong)]">
@@ -228,8 +238,9 @@ export function WeightLossActiveCaloriesPanel({
                     Same-day workouts, movement calories, HealthKit active
                     energy, or enough step calories create only a positive
                     activity buffer above that baseline. Tiny or early partial
-                    syncs stay visible but never lower the food budget. A
-                    manual edit overrides today only.
+                    syncs stay visible but never lower the food budget. A manual
+                    edit overrides today only and can lower or raise the day
+                    target relative to the baseline active calories.
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[var(--ui-ink-soft)]">
                     <span className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-1">
@@ -291,7 +302,7 @@ export function WeightLossActiveCaloriesPanel({
                         Budget change
                       </div>
                       <div className="mt-1 text-2xl font-semibold text-[var(--ui-ink-strong)]">
-                        +{energy.todayActivityBufferKcal.toFixed(0)} kcal
+                        {formatSignedKcal(energy.todayTargetAdjustmentKcal)}
                       </div>
                     </div>
                   </div>
@@ -300,8 +311,9 @@ export function WeightLossActiveCaloriesPanel({
                       Budget equation:
                     </span>{" "}
                     {formula}. Forge uses {energy.activityEatBackFraction * 100}
-                    % of the positive active surplus above the baseline day, so
-                    same-day activity cannot reduce the target.
+                    % of the active difference versus the baseline day for a
+                    manual override. Automatic same-day evidence still cannot
+                    reduce the target.
                   </div>
                 </div>
               </div>
@@ -324,7 +336,9 @@ export function WeightLossActiveCaloriesPanel({
                     inputMode="decimal"
                     value={baselineDraftValue}
                     onChange={(event) =>
-                      onBaselineDraftChange(event.target.value)
+                      onBaselineDraftChange(
+                        normalizeKcalDraft(event.target.value)
+                      )
                     }
                     aria-label="Baseline active calories per day"
                   />
@@ -361,7 +375,9 @@ export function WeightLossActiveCaloriesPanel({
                   <Input
                     inputMode="decimal"
                     value={draftValue}
-                    onChange={(event) => onDraftChange(event.target.value)}
+                    onChange={(event) =>
+                      onDraftChange(normalizeKcalDraft(event.target.value))
+                    }
                     aria-label="Today active calories"
                   />
                   <span className="flex items-center justify-start rounded-[8px] bg-[var(--ui-surface-1)] px-3 py-2 text-sm font-semibold text-[var(--ui-ink-medium)] sm:justify-center">
@@ -398,9 +414,9 @@ export function WeightLossActiveCaloriesPanel({
             </span>
             , after a{" "}
             <span className="font-semibold text-[var(--ui-ink-strong)]">
-              +{energy.todayActivityBufferKcal.toFixed(0)} kcal
+              {formatSignedKcal(energy.todayTargetAdjustmentKcal)}
             </span>{" "}
-            activity buffer versus the baseline target.
+            active adjustment versus the baseline target.
           </p>
           <div className="mt-3 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
             <span className="font-semibold text-[var(--ui-ink-strong)]">
@@ -422,7 +438,7 @@ export function WeightLossActiveCaloriesPanel({
                 Activity buffer
               </span>
               <span className="font-semibold text-[var(--ui-ink-strong)]">
-                +{energy.todayActivityBufferKcal.toFixed(0)} kcal
+                {formatSignedKcal(energy.todayTargetAdjustmentKcal)}
               </span>
             </div>
             <div className="min-w-0 rounded-[8px] bg-[var(--ui-surface-2)] px-3 py-2">
@@ -468,8 +484,8 @@ export function WeightLossActiveCaloriesPanel({
         />
         <EvidenceTile
           label="Food budget effect"
-          value={`+${energy.todayActivityBufferKcal.toFixed(0)} kcal`}
-          detail="Positive-only buffer applied versus the baseline food budget."
+          value={formatSignedKcal(energy.todayTargetAdjustmentKcal)}
+          detail="Signed manual override adjustment, or positive-only automatic buffer."
         />
         <EvidenceTile
           label="Override"
@@ -519,9 +535,9 @@ export function WeightLossActiveCaloriesPanel({
             Priority: manual override, then same-day HealthKit active energy. If
             HealthKit active energy is missing, Forge adds same-day workout
             calories, movement-trip calories, and estimated step calories from
-            latest known body weight. The baseline target stays fixed; only the
-            positive surplus above the past-week measured baseline creates an
-            activity buffer.
+            latest known body weight. Automatic evidence only adds a positive
+            surplus above the past-week measured baseline. A manual override
+            applies a signed day adjustment.
           </span>
         </div>
       </div>
@@ -550,7 +566,7 @@ export function WeightLossActiveCaloriesMiniCard({
   const ledger = view.todayLedger;
   const override = energy.todayActiveOverride;
   const source = energy.todayActiveCaloriesSource;
-  const formula = `${ledger.plannedTargetCalories.toFixed(0)} + ${energy.todayActivityBufferKcal.toFixed(0)} = ${ledger.targetCalories.toFixed(0)} kcal`;
+  const formula = `${ledger.plannedTargetCalories.toFixed(0)} ${formatSignedKcal(energy.todayTargetAdjustmentKcal)} = ${ledger.targetCalories.toFixed(0)} kcal`;
 
   return (
     <Card className="grid min-w-0 gap-3 border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
@@ -560,7 +576,7 @@ export function WeightLossActiveCaloriesMiniCard({
             Active kcal
             <InfoTooltip
               label="Explain active calories"
-              content={`Today target = baseline food target + positive activity buffer. ${formula}. Same-day activity can only add ${Math.round(energy.activityEatBackFraction * 100)}% of the positive surplus above the baseline day, so early or low activity cannot lower the target. A manual edit overrides today only.`}
+              content={`Today target = baseline food target plus the day-specific active adjustment. ${formula}. Automatic same-day activity can only add ${Math.round(energy.activityEatBackFraction * 100)}% of the positive surplus above the baseline day. A manual edit overrides today only and can raise or lower the target.`}
             />
           </div>
           <div className="mt-1 text-2xl font-semibold leading-tight text-[var(--ui-ink-strong)]">
@@ -591,7 +607,9 @@ export function WeightLossActiveCaloriesMiniCard({
         <Input
           inputMode="decimal"
           value={draftValue}
-          onChange={(event) => onDraftChange(event.target.value)}
+          onChange={(event) =>
+            onDraftChange(normalizeKcalDraft(event.target.value))
+          }
           aria-label="Today active calories"
           className="py-2.5"
         />

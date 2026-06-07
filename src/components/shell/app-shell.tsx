@@ -2,8 +2,10 @@ import {
   createContext,
   useContext,
   useEffect,
+  lazy,
   useMemo,
   useRef,
+  Suspense,
   useState,
   type CSSProperties,
   type ReactNode
@@ -37,7 +39,6 @@ import {
   GamificationMiniHud
 } from "@/components/gamification/gamification-widgets";
 import { GamificationAssetSetupDialog } from "@/components/gamification/gamification-asset-setup-dialog";
-import { ActionBar } from "@/components/experience/action-bar";
 import { RouteTransitionFrame } from "@/components/experience/route-transition-frame";
 import { KnowledgeGraphFocusDrawer } from "@/components/knowledge-graph/knowledge-graph-focus-drawer";
 import { CreateMenu, useForgeCreateActions } from "@/components/create-menu";
@@ -150,6 +151,12 @@ import {
   ROUTE_VIEW_CATALOG,
   resolveRouteViewIdFromPathname
 } from "@/routes/route-view-catalog";
+
+const LazyActionBar = lazy(() =>
+  import("@/components/experience/action-bar").then((module) => ({
+    default: module.ActionBar
+  }))
+);
 
 type ShellContextValue = {
   snapshot: ForgeSnapshot;
@@ -440,13 +447,17 @@ function ShellFrame({
   );
   return (
     <div ref={shellRootRef} className="min-h-screen" style={shellRootStyle}>
-      <ActionBar
-        open={actionBarOpen}
-        onOpenChange={setActionBarOpen}
-        snapshot={shell.snapshot}
-        selectedUserIds={shell.selectedUserIds}
-        createActions={createActions.actions}
-      />
+      <Suspense fallback={null}>
+        {actionBarOpen ? (
+          <LazyActionBar
+            open={actionBarOpen}
+            onOpenChange={setActionBarOpen}
+            snapshot={shell.snapshot}
+            selectedUserIds={shell.selectedUserIds}
+            createActions={createActions.actions}
+          />
+        ) : null}
+      </Suspense>
       {createActions.dialogs}
 
       <div

@@ -27,7 +27,7 @@ import {
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { WorkbenchBox } from "@/components/workbench/workbench-provider";
+import { WorkbenchBox } from "@/components/workbench/workbench-box";
 import {
   getSurfaceLayout,
   resetSurfaceLayout,

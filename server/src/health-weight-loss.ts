@@ -309,9 +309,7 @@ const requiredNutritionFields = [
   "fatGrams"
 ] as const;
 
-function hasNutritionValue(
-  value: number | null | undefined
-): value is number {
+function hasNutritionValue(value: number | null | undefined): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
 
@@ -891,8 +889,12 @@ function buildStoredEnergyModel(input: {
   const movementBaselineEntries = [...movementByDay.entries()].filter(
     ([dateKey, value]) => dateKey < todayKey && value != null
   );
-  const workoutBaselineValues = workoutBaselineEntries.map(([, value]) => value);
-  const movementBaselineValues = movementBaselineEntries.map(([, value]) => value);
+  const workoutBaselineValues = workoutBaselineEntries.map(
+    ([, value]) => value
+  );
+  const movementBaselineValues = movementBaselineEntries.map(
+    ([, value]) => value
+  );
   const workoutEnergyAverage = average(workoutBaselineValues);
   const movementCaloriesAverage = average(movementBaselineValues);
   const fallbackActiveBurn =
@@ -991,13 +993,16 @@ function buildStoredEnergyModel(input: {
     input.dailyActiveOverride?.activeCaloriesKcal ??
     todayObservedActiveCalories ??
     baselineActiveCalories;
-  const todayActiveSurplusKcal = Math.max(
-    0,
-    todayActiveCalories - baselineActiveCalories
-  );
+  const todayActiveDeltaKcal = todayActiveCalories - baselineActiveCalories;
+  const todayActiveSurplusKcal = Math.max(0, todayActiveDeltaKcal);
   const todayActivityBufferKcal =
     todayActiveSurplusKcal * input.activityEatBackFraction;
-  const todayTargetAdjustmentKcal = todayActivityBufferKcal;
+  const todayManualAdjustmentKcal =
+    input.dailyActiveOverride != null
+      ? todayActiveDeltaKcal * input.activityEatBackFraction
+      : null;
+  const todayTargetAdjustmentKcal =
+    todayManualAdjustmentKcal ?? todayActivityBufferKcal;
   const estimatedTdeeKcal =
     activeBurnKcal != null && chosenRestingKcal != null
       ? round(activeBurnKcal + chosenRestingKcal, 0)
@@ -1055,6 +1060,7 @@ function buildStoredEnergyModel(input: {
         : null,
     todayActiveCaloriesSource: todayActiveSource,
     todayTargetAdjustmentKcal: round(todayTargetAdjustmentKcal, 0),
+    todayActiveDeltaKcal: round(todayActiveDeltaKcal, 0),
     todayActiveSurplusKcal: round(todayActiveSurplusKcal, 0),
     todayActivityBufferKcal: round(todayActivityBufferKcal, 0),
     activityEatBackFraction: round(input.activityEatBackFraction, 2),
@@ -2267,6 +2273,7 @@ function buildTodayLedger(
       alcoholGrams: 0
     }
   );
+  const calorieDelta = round(totals.calories - dynamicTargetCalories, 0);
   return {
     dateKey,
     meals: todayLogs,
@@ -2275,7 +2282,8 @@ function buildTodayLedger(
     targetCalories: dynamicTargetCalories,
     activeAdjustmentCalories,
     activeCaloriesSource,
-    calorieDelta: round(totals.calories - dynamicTargetCalories, 0),
+    calorieDelta,
+    remainingCalories: round(dynamicTargetCalories - totals.calories, 0),
     proteinCoverage:
       n(target.proteinGramsTarget) > 0
         ? round(totals.proteinGrams / n(target.proteinGramsTarget), 2)
@@ -2660,6 +2668,7 @@ export function getWeightLossViewData(
       todayCalories: todayLedger.totals.calories,
       targetCalories: todayLedger.targetCalories,
       todayCalorieDelta: todayLedger.calorieDelta,
+      remainingCalories: todayLedger.remainingCalories,
       averageCalories,
       inferredTdee,
       proteinCoverage: todayLedger.proteinCoverage,

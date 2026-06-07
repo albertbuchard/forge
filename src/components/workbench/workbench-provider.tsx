@@ -1,15 +1,11 @@
-import {
-  createContext,
-  useContext,
-  useMemo,
-  type ReactNode
-} from "react";
+import { createContext, useContext, useMemo, type ReactNode } from "react";
 import {
   getWorkbenchNodeCatalog,
   getWorkbenchNodeDefinition,
   listWorkbenchNodeDefinitions
 } from "@/lib/workbench/registry";
 import type { WorkbenchNodeDefinition } from "@/lib/workbench/nodes";
+export { WorkbenchBox } from "@/components/workbench/workbench-box";
 
 type WorkbenchContextValue = {
   definitions: WorkbenchNodeDefinition[];
@@ -56,15 +52,4 @@ export function useWorkbenchNodeDefinition(nodeId: string | null | undefined) {
     return null;
   }
   return registry.getDefinition(nodeId);
-}
-
-export function WorkbenchBox({
-  children
-}: {
-  children: ReactNode;
-  boxId?: string;
-  surfaceId?: string | null;
-  routePath?: string | null;
-}) {
-  return <>{children}</>;
 }

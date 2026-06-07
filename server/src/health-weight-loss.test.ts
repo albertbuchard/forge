@@ -244,8 +244,13 @@ test("weight loss overview reflects food logs and body check-ins", async () => {
           targetCalories: number;
           activeAdjustmentCalories: number;
           activeCaloriesSource: string;
+          remainingCalories: number;
         };
-        summary: { loggedMealCount: number; targetCalories: number };
+        summary: {
+          loggedMealCount: number;
+          targetCalories: number;
+          remainingCalories: number;
+        };
         energyModel: {
           estimatedTdeeKcal: number | null;
           activeBurnKcal: number | null;
@@ -285,7 +290,9 @@ test("weight loss overview reflects food logs and body check-ins", async () => {
       2100
     );
     assert.equal(overviewBody.weightLoss.todayLedger.targetCalories, 2160);
+    assert.equal(overviewBody.weightLoss.todayLedger.remainingCalories, 1660);
     assert.equal(overviewBody.weightLoss.summary.targetCalories, 2160);
+    assert.equal(overviewBody.weightLoss.summary.remainingCalories, 1660);
     assert.equal(
       overviewBody.weightLoss.todayLedger.activeAdjustmentCalories,
       60
@@ -355,7 +362,10 @@ test("weight loss overview reflects food logs and body check-ins", async () => {
         "number" ||
         overviewBody.weightLoss.energyModel.movementCaloriesKcal === null
     );
-    assert.equal(overviewBody.weightLoss.energyModel.movementCaloriesKcal, null);
+    assert.equal(
+      overviewBody.weightLoss.energyModel.movementCaloriesKcal,
+      null
+    );
     assert.equal(
       typeof overviewBody.weightLoss.energyModel
         .estimatedDailyEnergyBalanceKcal,
@@ -517,13 +527,17 @@ test("weight loss overview keeps formula resting baseline despite partial Health
       overviewBody.weightLoss.energyModel.restingEnergyCalories,
       1775
     );
-    assert.equal(overviewBody.weightLoss.energyModel.restingConfidence, "review");
+    assert.equal(
+      overviewBody.weightLoss.energyModel.restingConfidence,
+      "review"
+    );
     assert.equal(
       overviewBody.weightLoss.energyModel.wearableRestingDayCount,
       6
     );
     assert.equal(
-      overviewBody.weightLoss.energyModel.wearableRestingCoverageQualifiedDayCount,
+      overviewBody.weightLoss.energyModel
+        .wearableRestingCoverageQualifiedDayCount,
       2
     );
     assert.ok(
@@ -550,9 +564,15 @@ test("weight loss overview keeps formula resting baseline despite partial Health
       overviewBody.weightLoss.energyModel.baselineActiveCaloriesKcal,
       895
     );
-    assert.equal(overviewBody.weightLoss.energyModel.todayActiveCaloriesKcal, 52);
+    assert.equal(
+      overviewBody.weightLoss.energyModel.todayActiveCaloriesKcal,
+      52
+    );
     assert.equal(overviewBody.weightLoss.energyModel.todayActiveSurplusKcal, 0);
-    assert.equal(overviewBody.weightLoss.energyModel.todayActivityBufferKcal, 0);
+    assert.equal(
+      overviewBody.weightLoss.energyModel.todayActivityBufferKcal,
+      0
+    );
     assert.equal(
       overviewBody.weightLoss.energyModel.todayTargetAdjustmentKcal,
       0
@@ -653,15 +673,30 @@ test("weight loss active baseline averages only measured prior days across the p
     };
 
     assert.equal(overviewBody.weightLoss.energyModel.activeBurnKcal, 200);
-    assert.equal(overviewBody.weightLoss.energyModel.activeBaselineWindowDays, 7);
-    assert.equal(overviewBody.weightLoss.energyModel.activeBaselineEvidenceDays, 2);
+    assert.equal(
+      overviewBody.weightLoss.energyModel.activeBaselineWindowDays,
+      7
+    );
+    assert.equal(
+      overviewBody.weightLoss.energyModel.activeBaselineEvidenceDays,
+      2
+    );
     assert.equal(
       overviewBody.weightLoss.energyModel.baselineActiveCaloriesKcal,
       200
     );
-    assert.equal(overviewBody.weightLoss.energyModel.todayActiveCaloriesKcal, 1000);
-    assert.equal(overviewBody.weightLoss.energyModel.todayActiveSurplusKcal, 800);
-    assert.equal(overviewBody.weightLoss.energyModel.todayActivityBufferKcal, 400);
+    assert.equal(
+      overviewBody.weightLoss.energyModel.todayActiveCaloriesKcal,
+      1000
+    );
+    assert.equal(
+      overviewBody.weightLoss.energyModel.todayActiveSurplusKcal,
+      800
+    );
+    assert.equal(
+      overviewBody.weightLoss.energyModel.todayActivityBufferKcal,
+      400
+    );
     assert.equal(
       overviewBody.weightLoss.energyModel.todayTargetAdjustmentKcal,
       400
@@ -746,7 +781,9 @@ test("custom nutrition foods require calories and macros and are cached for reus
         fatGrams: number | null;
       }>;
     };
-    const customFood = searchBody.foods.find((food) => food.id === customFoodId);
+    const customFood = searchBody.foods.find(
+      (food) => food.id === customFoodId
+    );
     assert.ok(customFood);
     assert.equal(customFood.source, "custom");
     assert.equal(customFood.calories, 310);
@@ -1401,9 +1438,12 @@ test("weight loss overview uses same-day workout, movement, and step active calo
           targetCalories: number;
           activeAdjustmentCalories: number;
           activeCaloriesSource: string;
+          remainingCalories: number;
         };
         energyModel: {
           todayActiveCaloriesKcal: number;
+          todayTargetAdjustmentKcal: number;
+          todayActiveDeltaKcal: number;
           todayActiveCaloriesSource: string;
           todayActiveOverride: { activeCaloriesKcal: number } | null;
         };
@@ -1414,6 +1454,7 @@ test("weight loss overview uses same-day workout, movement, and step active calo
       overriddenBody.weightLoss.todayLedger.activeAdjustmentCalories,
       250
     );
+    assert.equal(overriddenBody.weightLoss.todayLedger.remainingCalories, 2250);
     assert.equal(
       overriddenBody.weightLoss.todayLedger.activeCaloriesSource,
       "user_override"
@@ -1423,6 +1464,14 @@ test("weight loss overview uses same-day workout, movement, and step active calo
       800
     );
     assert.equal(
+      overriddenBody.weightLoss.energyModel.todayTargetAdjustmentKcal,
+      250
+    );
+    assert.equal(
+      overriddenBody.weightLoss.energyModel.todayActiveDeltaKcal,
+      500
+    );
+    assert.equal(
       overriddenBody.weightLoss.energyModel.todayActiveCaloriesSource,
       "user_override"
     );
@@ -1430,6 +1479,62 @@ test("weight loss overview uses same-day workout, movement, and step active calo
       overriddenBody.weightLoss.energyModel.todayActiveOverride
         ?.activeCaloriesKcal,
       800
+    );
+
+    const lowOverride = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/health/weight-loss/daily-active-calories",
+      headers: { cookie },
+      payload: {
+        dayKey: today,
+        activeCaloriesKcal: 100,
+        notes: "Manual low-activity override"
+      }
+    });
+    assert.equal(lowOverride.statusCode, 200);
+
+    const lowOverview = await app.inject({
+      method: "GET",
+      url: "/api/v1/health/weight-loss"
+    });
+    assert.equal(lowOverview.statusCode, 200);
+    const lowBody = lowOverview.json() as {
+      weightLoss: {
+        todayLedger: {
+          targetCalories: number;
+          activeAdjustmentCalories: number;
+          activeCaloriesSource: string;
+          remainingCalories: number;
+        };
+        energyModel: {
+          todayActiveCaloriesKcal: number;
+          todayTargetAdjustmentKcal: number;
+          todayActiveDeltaKcal: number;
+          todayActiveCaloriesSource: string;
+          todayActiveOverride: { activeCaloriesKcal: number } | null;
+        };
+      };
+    };
+    assert.equal(lowBody.weightLoss.todayLedger.targetCalories, 1900);
+    assert.equal(lowBody.weightLoss.todayLedger.activeAdjustmentCalories, -100);
+    assert.equal(lowBody.weightLoss.todayLedger.remainingCalories, 1900);
+    assert.equal(
+      lowBody.weightLoss.todayLedger.activeCaloriesSource,
+      "user_override"
+    );
+    assert.equal(lowBody.weightLoss.energyModel.todayActiveCaloriesKcal, 100);
+    assert.equal(
+      lowBody.weightLoss.energyModel.todayTargetAdjustmentKcal,
+      -100
+    );
+    assert.equal(lowBody.weightLoss.energyModel.todayActiveDeltaKcal, -200);
+    assert.equal(
+      lowBody.weightLoss.energyModel.todayActiveCaloriesSource,
+      "user_override"
+    );
+    assert.equal(
+      lowBody.weightLoss.energyModel.todayActiveOverride?.activeCaloriesKcal,
+      100
     );
 
     const resetOverride = await app.inject({
