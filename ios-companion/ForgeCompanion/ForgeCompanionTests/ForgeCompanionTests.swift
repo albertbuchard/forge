@@ -28,6 +28,153 @@ private let sharedMovementFixtureDateFormatter: ISO8601DateFormatter = {
     return formatter
 }()
 
+private actor ForgeIrohWebViewAuthProbeRecorder {
+    struct ObservedRequest: Equatable {
+        let path: String
+        let cookieHeader: String?
+    }
+
+    private var requests: [ObservedRequest] = []
+
+    func append(path: String, cookieHeader: String?) {
+        requests.append(ObservedRequest(path: path, cookieHeader: cookieHeader))
+    }
+
+    func snapshot() -> [ObservedRequest] {
+        requests
+    }
+}
+
+private final class ForgeIrohWebViewAuthProbeSchemeHandler: NSObject, WKURLSchemeHandler {
+    private let cookieJar = ForgeIrohURLSchemeCookieJar()
+    private let recorder = ForgeIrohWebViewAuthProbeRecorder()
+
+    var observedRequests: [ForgeIrohWebViewAuthProbeRecorder.ObservedRequest] {
+        get async {
+            await recorder.snapshot()
+        }
+    }
+
+    func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
+        let request = urlSchemeTask.request
+        Task {
+            guard let url = request.url else {
+                await fail(urlSchemeTask, with: URLError(.badURL))
+                return
+            }
+            let path = ForgeIrohURLSchemeHandler.proxyPath(for: url)
+            let requestHeaders = await cookieJar.headersByAddingStoredCookies(
+                to: request.allHTTPHeaderFields ?? [:]
+            )
+            await recorder.append(
+                path: path,
+                cookieHeader: Self.headerValue("cookie", in: requestHeaders)
+            )
+            let result = Self.result(for: path, requestHeaders: requestHeaders)
+            await cookieJar.storeCookies(from: result.headers)
+            await finish(urlSchemeTask, url: url, path: path, result: result)
+        }
+    }
+
+    func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {}
+
+    private func finish(
+        _ urlSchemeTask: WKURLSchemeTask,
+        url: URL,
+        path: String,
+        result: ForgeIrohTransportResult
+    ) async {
+        let response = ForgeIrohURLSchemeHandler.response(for: url, path: path, result: result)
+        await MainActor.run {
+            urlSchemeTask.didReceive(response)
+            urlSchemeTask.didReceive(result.data)
+            urlSchemeTask.didFinish()
+        }
+    }
+
+    private func fail(_ urlSchemeTask: WKURLSchemeTask, with error: Error) async {
+        await MainActor.run {
+            urlSchemeTask.didFailWithError(error)
+        }
+    }
+
+    private static func result(
+        for path: String,
+        requestHeaders: [String: String]
+    ) -> ForgeIrohTransportResult {
+        switch path {
+        case "/forge/":
+            return ForgeIrohTransportResult(
+                data: Data(authBootstrapHTML.utf8),
+                statusCode: 200,
+                headers: ["content-type": "text/html; charset=utf-8"]
+            )
+        case "/api/v1/auth/operator-session":
+            return ForgeIrohTransportResult(
+                data: Data(#"{"session":{"active":true}}"#.utf8),
+                statusCode: 200,
+                headers: [
+                    "content-type": "application/json; charset=utf-8",
+                    "set-cookie": "forge_operator_session=fg_session_cookie; Path=/; HttpOnly; SameSite=Strict; Max-Age=604800"
+                ]
+            )
+        case "/api/v1/settings":
+            let cookieHeader = headerValue("cookie", in: requestHeaders) ?? ""
+            if cookieHeader.contains("forge_operator_session=fg_session_cookie") {
+                return ForgeIrohTransportResult(
+                    data: Data(#"{"settings":{"loaded":true}}"#.utf8),
+                    statusCode: 200,
+                    headers: ["content-type": "application/json; charset=utf-8"]
+                )
+            }
+            return ForgeIrohTransportResult(
+                data: Data(#"{"code":"auth_required","error":"A token or operator session is required."}"#.utf8),
+                statusCode: 401,
+                headers: ["content-type": "application/json; charset=utf-8"]
+            )
+        default:
+            return ForgeIrohTransportResult(
+                data: Data(#"{"code":"not_found"}"#.utf8),
+                statusCode: 404,
+                headers: ["content-type": "application/json; charset=utf-8"]
+            )
+        }
+    }
+
+    private static let authBootstrapHTML = """
+    <!doctype html>
+    <html>
+      <head><title>Forge Auth Probe</title></head>
+      <body>
+        <div id="root">FORGE_BOOTING</div>
+        <script>
+          async function loadSettings() {
+            let response = await fetch('/api/v1/settings', { credentials: 'same-origin' });
+            if (response.status === 401) {
+              await fetch('/api/v1/auth/operator-session', { credentials: 'same-origin' });
+              response = await fetch('/api/v1/settings', { credentials: 'same-origin' });
+            }
+            if (!response.ok) {
+              document.body.textContent = 'FORGE_FAILED ' + response.status;
+              return;
+            }
+            document.body.textContent = 'FORGE_LOADED';
+          }
+          loadSettings().catch((error) => {
+            document.body.textContent = 'FORGE_ERROR ' + error.message;
+          });
+        </script>
+      </body>
+    </html>
+    """
+
+    private static func headerValue(_ name: String, in headers: [String: String]) -> String? {
+        headers.first {
+            $0.key.caseInsensitiveCompare(name) == .orderedSame
+        }?.value
+    }
+}
+
 @MainActor
 final class ForgeCompanionTests: XCTestCase {
     private func makeDate(_ value: String) -> Date {
@@ -286,6 +433,58 @@ final class ForgeCompanionTests: XCTestCase {
         let headers = await jar.headersByAddingStoredCookies(to: [:])
 
         XCTAssertNil(headers["Cookie"])
+    }
+
+    func testForgeIrohWebViewCanBootstrapAuthAndRenderThroughCustomScheme() async throws {
+        let schemeHandler = ForgeIrohWebViewAuthProbeSchemeHandler()
+        let configuration = WKWebViewConfiguration()
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+        configuration.setURLSchemeHandler(schemeHandler, forURLScheme: "forge-iroh-test")
+        let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 390, height: 844), configuration: configuration)
+        let url = try XCTUnwrap(URL(string: "forge-iroh-test://fakednodeid/forge/"))
+
+        webView.load(URLRequest(url: url))
+
+        let loaded = try await waitForWebViewText(
+            webView,
+            expectedText: "FORGE_LOADED",
+            timeout: 8
+        )
+        let observedRequests = await schemeHandler.observedRequests
+
+        XCTAssertTrue(loaded.contains("FORGE_LOADED"))
+        XCTAssertEqual(
+            observedRequests.map(\.path),
+            [
+                "/forge/",
+                "/api/v1/settings",
+                "/api/v1/auth/operator-session",
+                "/api/v1/settings"
+            ]
+        )
+        XCTAssertNil(observedRequests[1].cookieHeader)
+        XCTAssertEqual(
+            observedRequests[3].cookieHeader,
+            "forge_operator_session=fg_session_cookie"
+        )
+    }
+
+    private func waitForWebViewText(
+        _ webView: WKWebView,
+        expectedText: String,
+        timeout: TimeInterval
+    ) async throws -> String {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let result = try? await webView.evaluateJavaScript("document.body ? document.body.textContent : ''")
+            if let text = result as? String, text.contains(expectedText) {
+                return text
+            }
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        let finalText = (try? await webView.evaluateJavaScript("document.body ? document.body.textContent : ''")) as? String
+        XCTFail("Timed out waiting for \(expectedText). Final body text: \(finalText ?? "nil")")
+        return finalText ?? ""
     }
 
     func testNormalizedPayloadPreservesPreferredUiBaseUrl() {
