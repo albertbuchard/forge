@@ -1,5 +1,5 @@
-Forge Companion 1.0.84 fixes CLI QR pairing.
+Forge Companion 1.0.85 fixes physical-phone pairing when Forge Memory cannot create a reachable transport.
 
-The iOS app now understands the shorter QR payload emitted by Forge Memory, scans all detected QR candidates before giving up, and logs malformed QR payloads instead of silently ignoring them.
+The app now rejects localhost-only pairing payloads on real iPhones instead of getting stuck after scanning a QR code.
 
-Manual setup is more forgiving too: paste the saved payload from ~/.forge/pairing/, Forge Settings -> Mobile, or the full output from npx forge-memory pair-ios --json.
+QR scanning also uses the same compact/full payload decoder as manual setup, so old and new Forge Memory payload formats are handled consistently.

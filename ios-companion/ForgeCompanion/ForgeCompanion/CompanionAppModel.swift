@@ -78,6 +78,26 @@ enum CompanionPairingURLResolver {
         return components?.url?.absoluteString ?? apiBaseUrl
     }
 
+    static func physicalDeviceReachabilityError(for payload: PairingPayload) -> String? {
+        #if targetEnvironment(simulator)
+        return nil
+        #else
+        let normalizedApiBaseUrl = normalizeApiBaseUrl(payload.apiBaseUrl)
+        guard
+            let url = URL(string: normalizedApiBaseUrl),
+            let scheme = url.scheme?.lowercased(),
+            scheme == "http" || scheme == "https"
+        else {
+            return nil
+        }
+        let host = url.host?.lowercased() ?? ""
+        guard host == "127.0.0.1" || host == "localhost" || host == "::1" else {
+            return nil
+        }
+        return "This QR points to \(normalizedApiBaseUrl), which is only reachable from the Mac or the iOS Simulator. On a physical iPhone, run npx forge-memory pair-ios again after updating Forge Memory, or use manual HTTP with a Tailscale/LAN URL passed through --public-url."
+        #endif
+    }
+
     static func normalizedPayload(
         _ payload: PairingPayload,
         preferredUiBaseUrl: String? = nil,
@@ -739,6 +759,15 @@ final class CompanionAppModel: ObservableObject {
             preferredUiBaseUrl: preferredUiBaseUrl,
             preferredApiBaseUrl: preferredApiBaseUrl
         )
+        if let reachabilityError = CompanionPairingURLResolver.physicalDeviceReachabilityError(for: normalizedPayload) {
+            latestError = reachabilityError
+            companionDebugLog("CompanionAppModel", "verifyAndConnect rejected unreachable pairing: \(reachabilityError)")
+            throw NSError(
+                domain: "ForgeCompanionPairing",
+                code: 1001,
+                userInfo: [NSLocalizedDescriptionKey: reachabilityError]
+            )
+        }
         let verifiedSession = try await syncClient.verifyPairing(
             payload: normalizedPayload,
             apiBaseUrl: normalizedPayload.apiBaseUrl

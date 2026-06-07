@@ -50,6 +50,63 @@ async function waitForHealth() {
   throw new Error(`packed runtime did not become healthy: ${lastError?.message ?? "timed out"}`);
 }
 
+function readSetCookie(headers) {
+  if (typeof headers.getSetCookie === "function") {
+    return headers.getSetCookie();
+  }
+  const header = headers.get("set-cookie");
+  return header ? [header] : [];
+}
+
+function cookiePairFromSetCookie(headers) {
+  for (const header of headers) {
+    const first = String(header).split(";")[0]?.trim();
+    if (first) return first;
+  }
+  return null;
+}
+
+async function verifyPackedIrohPairing() {
+  const sessionResponse = await fetch(`http://127.0.0.1:${port}/api/v1/auth/operator-session`, {
+    headers: {
+      accept: "application/json",
+      host: `127.0.0.1:${port}`
+    }
+  });
+  if (!sessionResponse.ok) {
+    throw new Error(`operator session bootstrap failed with HTTP ${sessionResponse.status}`);
+  }
+  const cookie = cookiePairFromSetCookie(readSetCookie(sessionResponse.headers));
+  if (!cookie) {
+    throw new Error("operator session bootstrap did not return a cookie");
+  }
+
+  const response = await fetch(`http://127.0.0.1:${port}/api/v1/health/pairing-sessions`, {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      cookie,
+      host: `127.0.0.1:${port}`
+    },
+    body: JSON.stringify({ userId: null, transportMode: "iroh" })
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(
+      `packed runtime pairing failed with HTTP ${response.status}: ${JSON.stringify(body)}`
+    );
+  }
+  if (
+    body?.qrPayload?.transportMode !== "iroh" ||
+    body?.qrPayload?.transport?.provider !== "forge-companion-iroh" ||
+    !String(body?.qrPayload?.apiBaseUrl ?? "").startsWith("forge-iroh://")
+  ) {
+    throw new Error(`packed runtime did not create an Iroh pairing: ${JSON.stringify(body)}`);
+  }
+  return body;
+}
+
 try {
   const pack = run("npm", ["pack", "--pack-destination", tempRoot, "--json"], {
     cwd: pluginRoot
@@ -93,6 +150,7 @@ try {
   if (health.backend !== "forge-node-runtime") {
     throw new Error(`packed runtime health returned unexpected backend ${health.backend}`);
   }
+  await verifyPackedIrohPairing();
   console.log("packed openclaw runtime smoke passed");
 } finally {
   if (child && child.exitCode === null) {

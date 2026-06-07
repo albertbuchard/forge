@@ -526,6 +526,50 @@ await withFakeForgeServer(async (request, body) => {
 await withFakeForgeServer(async (request) => {
   if (request.url === "/api/v1/health") return { body: forgeHealthResponse() };
   if (request.url === "/api/v1/auth/operator-session") {
+    return {
+      headers: { "set-cookie": "forge_operator_session=test-session; Path=/" },
+      body: { session: { id: "ses_test" } }
+    };
+  }
+  if (request.url === "/api/v1/health/pairing-sessions") {
+    return {
+      statusCode: 201,
+      body: {
+        qrPayload: {
+          kind: "forge-companion-pairing",
+          apiBaseUrl: "http://127.0.0.1:4317/api/v1",
+          uiBaseUrl: "http://127.0.0.1:4317/forge/",
+          transportMode: "manual-http",
+          transport: {
+            protocol: "http",
+            provider: "manual-http",
+            status: "ready",
+            localBaseUrl: "http://127.0.0.1:4317",
+            notes: ["Forge companion Iroh host is unavailable."]
+          },
+          sessionId: "pair_loopback",
+          pairingToken: "pairing-token",
+          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+          capabilities: ["health-sync"]
+        }
+      }
+    };
+  }
+  return { statusCode: 404, body: { error: "not found" } };
+}, async ({ port }) => {
+  writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
+  const failure = await runAsyncFailure(["pair-ios", "--json", "--no-start"]);
+  const payload = JSON.parse(failure.stderr);
+  if (payload.code !== "pairing_transport_unavailable") {
+    throw new Error(`Expected pairing_transport_unavailable, got ${payload.code}`);
+  }
+  if (!payload.error.includes("127.0.0.1")) {
+    throw new Error("Expected downgraded loopback pairing failure to name 127.0.0.1");
+  }
+});
+await withFakeForgeServer(async (request) => {
+  if (request.url === "/api/v1/health") return { body: forgeHealthResponse() };
+  if (request.url === "/api/v1/auth/operator-session") {
     return { body: { session: { id: "ses_missing_cookie" } } };
   }
   return { statusCode: 404, body: { error: "not found" } };

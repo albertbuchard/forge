@@ -1616,6 +1616,22 @@ class PairingRequestError extends Error {
   }
 }
 
+class PairingTransportUnavailableError extends Error {
+  constructor(message, detail = {}) {
+    super(message);
+    this.name = "PairingTransportUnavailableError";
+    this.code = "pairing_transport_unavailable";
+    this.detail = detail;
+    this.guidance = [
+      "Run npx forge-memory doctor --repair so Forge Memory refreshes the packaged runtime and companion transport files.",
+      "Then rerun npx forge-memory pair-ios.",
+      "On unsupported platforms, install Rust/Cargo so Forge can build the bundled companion Iroh source fallback.",
+      "For an explicit Tailscale or LAN fallback, rerun with npx forge-memory pair-ios --manual-http --public-url <phone-reachable Forge URL>.",
+      "Do not scan a QR whose API URL is 127.0.0.1 on a physical iPhone; that address only works in the iOS Simulator."
+    ];
+  }
+}
+
 async function bootstrapLocalOperatorSession(config) {
   const sessionUrl = forgeApiUrl(config, "/api/v1/auth/operator-session");
   let response;
@@ -1706,7 +1722,39 @@ async function createPairing(config, options = {}) {
       { url: pairingUrl.toString(), status: response.status }
     );
   }
-  return response.json();
+  const pairing = await response.json();
+  assertPairingTransportUsable(pairing, { requestedTransportMode: transportMode });
+  return pairing;
+}
+
+function assertPairingTransportUsable(pairing, { requestedTransportMode }) {
+  const payload = pairing?.qrPayload;
+  if (!payload || requestedTransportMode !== "iroh") {
+    return;
+  }
+  const resolvedTransportMode = payload.transportMode ?? payload.transport?.protocol;
+  const resolvedProtocol = payload.transport?.protocol;
+  if (resolvedTransportMode === "iroh" || resolvedProtocol === "iroh") {
+    return;
+  }
+  const apiBaseUrl = payload.apiBaseUrl ?? "";
+  const lastError = payload.transport?.lastError;
+  const notes = Array.isArray(payload.transport?.notes) ? payload.transport.notes : [];
+  throw new PairingTransportUnavailableError(
+    [
+      "Forge created a direct HTTP pairing while default iOS pairing requested Iroh.",
+      isLoopbackPairingUrl(apiBaseUrl)
+        ? `The generated API URL is ${apiBaseUrl}, which a physical iPhone cannot reach.`
+        : apiBaseUrl
+          ? `The generated API URL is ${apiBaseUrl}, but this was not an Iroh pairing.`
+          : "The response did not include a usable Iroh API URL.",
+      lastError ? `Iroh error: ${lastError}` : "",
+      notes.length ? `Notes: ${notes.join(" ")}` : ""
+    ]
+      .filter(Boolean)
+      .join(" "),
+    { apiBaseUrl, transportMode: resolvedTransportMode, protocol: resolvedProtocol }
+  );
 }
 
 function validatePairingOptions({ transportMode, publicUrl }) {

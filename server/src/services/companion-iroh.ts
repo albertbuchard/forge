@@ -75,7 +75,6 @@ const projectRoot = path.resolve(
   "..",
   ".."
 );
-const companionIrohManifestPath = path.join(projectRoot, "companion-iroh", "Cargo.toml");
 const DEFAULT_IROH_START_TIMEOUT_MS = 25_000;
 const COMPANION_IROH_ALPN = "forge-companion/1" as const;
 const FORGE_IROH_AGENT = "forge" as const;
@@ -427,28 +426,30 @@ function candidateIrohBinaries() {
   const binaryName =
     process.platform === "win32" ? "forge-companion-iroh.exe" : "forge-companion-iroh";
   const platformKey = `${process.platform}-${process.arch}`;
-  return [
-    path.join(projectRoot, "companion-iroh", "target", "release", binaryName),
-    path.join(projectRoot, "companion-iroh", "target", "debug", binaryName),
-    path.join(
-      projectRoot,
-      "openclaw-plugin",
-      "dist",
-      "companion-iroh",
-      platformKey,
-      binaryName
-    ),
-    path.join(projectRoot, "companion-iroh", platformKey, binaryName),
-    path.join(projectRoot, "companion-iroh", binaryName)
-  ];
+  return candidateIrohAssetRoots().flatMap((root) => [
+    path.join(root, "companion-iroh", "target", "release", binaryName),
+    path.join(root, "companion-iroh", "target", "debug", binaryName),
+    path.join(root, "openclaw-plugin", "dist", "companion-iroh", platformKey, binaryName),
+    path.join(root, "companion-iroh", platformKey, binaryName),
+    path.join(root, "companion-iroh", binaryName)
+  ]);
 }
 
 function resolveCompanionIrohManifestPath() {
-  const candidates = [
-    companionIrohManifestPath,
-    path.join(projectRoot, "companion-iroh-src", "Cargo.toml")
-  ];
+  const candidates = candidateIrohAssetRoots().flatMap((root) => [
+    path.join(root, "companion-iroh", "Cargo.toml"),
+    path.join(root, "companion-iroh-src", "Cargo.toml")
+  ]);
   return candidates.find((candidate) => existsSync(candidate)) ?? null;
+}
+
+function candidateIrohAssetRoots() {
+  const roots = [
+    projectRoot,
+    path.resolve(projectRoot, ".."),
+    path.resolve(projectRoot, "..", "..")
+  ];
+  return [...new Set(roots)];
 }
 
 function shouldAutoStartIrohHost() {

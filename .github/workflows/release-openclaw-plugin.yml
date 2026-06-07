@@ -30,6 +30,10 @@ jobs:
             rust-target: x86_64-apple-darwin
             platform-key: darwin-x64
             binary-name: forge-companion-iroh
+          - os: windows-latest
+            rust-target: x86_64-pc-windows-msvc
+            platform-key: win32-x64
+            binary-name: forge-companion-iroh.exe
 
     steps:
       - name: Checkout repository
@@ -41,6 +45,7 @@ jobs:
           targets: ${{ matrix.rust-target }}
 
       - name: Build Forge Iroh host
+        shell: bash
         run: |
           cargo build \
             --release \
@@ -49,6 +54,7 @@ jobs:
             --target "${{ matrix.rust-target }}"
 
       - name: Stage binary artifact
+        shell: bash
         run: |
           mkdir -p "artifact/companion-iroh/${{ matrix.platform-key }}"
           cp \

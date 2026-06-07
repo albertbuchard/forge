@@ -167,6 +167,31 @@ The Rust host forwards that request into the local Fastify runtime and returns:
 That lets Forge keep the same backend routes while replacing the phone-to-desktop
 wire transport.
 
+## How The Host Is Delivered
+
+The production installer should not compile the Rust transport on every first run.
+That would make `npx forge-memory` slow, require every user to have Rust installed,
+and fail in noninteractive setups that otherwise could pair immediately. The release
+package therefore uses a two-layer delivery model:
+
+1. GitHub Actions builds precompiled `forge-companion-iroh` binaries for common
+   desktop platforms and places them in the published runtime package.
+2. The same package also includes the Rust source and lockfile as
+   `companion-iroh-src/`, so unsupported platforms can still build the host locally
+   when `cargo` is available.
+
+At runtime Forge resolves the host in this order:
+
+1. explicit `FORGE_COMPANION_IROH_BIN`
+2. source checkout build outputs for development installs
+3. packaged prebuilt binaries under `dist/companion-iroh/<platform>/`
+4. packaged Rust source fallback through `cargo run --manifest-path ...`
+
+If none of those paths can run, `pair-ios` must fail with a clear transport error. It
+must not print a QR code that falls back to `127.0.0.1` for a physical iPhone. Manual
+HTTP remains available only when the user explicitly passes a phone-reachable
+`--public-url`.
+
 ## Where The Code Lives
 
 - `companion-iroh/`: Forge-owned Rust host binary and iOS static library.

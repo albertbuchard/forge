@@ -104,17 +104,20 @@ struct QRScannerCameraView: UIViewRepresentable {
             didOutput metadataObjects: [AVMetadataObject],
             from connection: AVCaptureConnection
         ) {
-            guard
-                let code = metadataObjects.first as? AVMetadataMachineReadableCodeObject,
-                let stringValue = code.stringValue,
-                let data = stringValue.data(using: .utf8),
-                let payload = try? JSONDecoder().decode(PairingPayload.self, from: data)
-            else {
+            for metadataObject in metadataObjects {
+                guard
+                    let code = metadataObject as? AVMetadataMachineReadableCodeObject,
+                    let stringValue = code.stringValue
+                else {
+                    continue
+                }
+                guard let payload = try? PairingPayload.decodePairingText(stringValue) else {
+                    continue
+                }
+                session.stopRunning()
+                onPayload?(payload)
                 return
             }
-
-            session.stopRunning()
-            onPayload?(payload)
         }
     }
 }
