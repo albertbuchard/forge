@@ -1969,7 +1969,16 @@ async function createPairing(config, options = {}) {
         cookie: operatorCookie,
         ...(publicUrl ? { referer: publicUrl } : {})
       },
-      body: JSON.stringify({ userId: null, transportMode })
+      body: JSON.stringify({
+        userId: null,
+        transportMode,
+        fallbackMode: publicUrl
+          ? publicUrl.includes(".ts.net")
+            ? "tailscale"
+            : "fixed-ip"
+          : "none",
+        publicUrl: publicUrl ?? undefined
+      })
     });
   } catch (error) {
     const healthResult = await health(config, 1_500);
@@ -2007,6 +2016,65 @@ async function createPairing(config, options = {}) {
   return pairing;
 }
 
+async function resolveIosPairingOptions(parsed) {
+  if (parsed.flags.manualHttp) {
+    return {
+      transportMode: "manual-http",
+      publicUrl: validatePairingOptions({
+        transportMode: "manual-http",
+        publicUrl: parsed.values.publicUrl
+      })
+    };
+  }
+  if (parsed.flags.yes || parsed.flags.json || !process.stdin.isTTY || parsed.values.publicUrl) {
+    return {
+      transportMode: "iroh",
+      publicUrl: validatePairingOptions({
+        transportMode: "iroh",
+        publicUrl: parsed.values.publicUrl
+      })
+    };
+  }
+  console.log(color.bold("iOS companion connection"));
+  console.log(color.dim("Default: Iroh tunnel. You can choose Tailscale or a fixed/private IP as the direct phone path."));
+  const choice = (
+    await promptLine("Connection [iroh/tailscale/ip]", "iroh")
+  ).toLowerCase();
+  if (choice === "tailscale" || choice === "ts") {
+    const publicUrl = await promptLine(
+      "Tailscale Forge URL",
+      parsed.values.publicUrl ?? "https://your-mac.tailnet.ts.net/forge/"
+    );
+    return {
+      transportMode: "manual-http",
+      publicUrl: validatePairingOptions({
+        transportMode: "manual-http",
+        publicUrl
+      })
+    };
+  }
+  if (choice === "ip" || choice === "fixed" || choice === "private") {
+    const publicUrl = await promptLine(
+      "Private/fixed Forge URL",
+      parsed.values.publicUrl ?? "http://192.168.1.98:4317/forge/"
+    );
+    return {
+      transportMode: "manual-http",
+      publicUrl: validatePairingOptions({
+        transportMode: "manual-http",
+        publicUrl
+      })
+    };
+  }
+  return {
+    transportMode: "iroh",
+    publicUrl: validatePairingOptions({
+      transportMode: "iroh",
+      publicUrl: parsed.values.publicUrl
+    })
+  };
+}
+
 function assertPairingTransportUsable(pairing, { requestedTransportMode }) {
   const payload = pairing?.qrPayload;
   if (!payload || requestedTransportMode !== "iroh") {
@@ -2015,6 +2083,23 @@ function assertPairingTransportUsable(pairing, { requestedTransportMode }) {
   const resolvedTransportMode = payload.transportMode ?? payload.transport?.protocol;
   const resolvedProtocol = payload.transport?.protocol;
   if (resolvedTransportMode === "iroh" || resolvedProtocol === "iroh") {
+    const phoneFacingUrls = [
+      payload.apiBaseUrl,
+      payload.uiBaseUrl,
+      payload.transport?.publicBaseUrl
+    ].filter(Boolean);
+    const loopbackUrl = phoneFacingUrls.find((url) => isLoopbackPairingUrl(url));
+    if (loopbackUrl) {
+      throw new PairingTransportUnavailableError(
+        [
+          "Forge created an Iroh pairing that exposes a loopback URL as phone-facing pairing data.",
+          `Bad URL: ${loopbackUrl}.`,
+          "A physical iPhone cannot reach localhost on this Mac.",
+          "Use Iroh logical URLs, a selected Tailscale URL, or a selected private/fixed IP URL."
+        ].join(" "),
+        { apiBaseUrl: payload.apiBaseUrl, transportMode: resolvedTransportMode, protocol: resolvedProtocol }
+      );
+    }
     return;
   }
   const apiBaseUrl = payload.apiBaseUrl ?? "";
@@ -2039,6 +2124,15 @@ function assertPairingTransportUsable(pairing, { requestedTransportMode }) {
 
 function validatePairingOptions({ transportMode, publicUrl }) {
   const normalizedPublicUrl = normalizePublicPairingUrl(publicUrl);
+  if (normalizedPublicUrl && isLoopbackPairingUrl(normalizedPublicUrl)) {
+    throw new Error(
+      [
+        `--public-url points at ${normalizedPublicUrl}, which is loopback-only.`,
+        "A physical iPhone cannot reach localhost on this Mac.",
+        "Use Iroh, Tailscale, or a private/fixed IP URL."
+      ].join(" ")
+    );
+  }
   if (transportMode !== "manual-http") {
     return normalizedPublicUrl;
   }
@@ -2049,15 +2143,6 @@ function validatePairingOptions({ transportMode, publicUrl }) {
         "Use a phone-reachable Tailscale or LAN Forge URL, for example:",
         "npx forge-memory pair-ios --manual-http --public-url https://your-mac.tailnet.ts.net/forge/",
         "For normal pairing, omit --manual-http and use the default Iroh transport."
-      ].join(" ")
-    );
-  }
-  if (isLoopbackPairingUrl(normalizedPublicUrl)) {
-    throw new Error(
-      [
-        `Manual HTTP --public-url points at ${normalizedPublicUrl}, which is loopback-only.`,
-        "A physical iPhone cannot reach localhost on this Mac.",
-        "Use a Tailscale or LAN URL, or omit --manual-http and use Iroh pairing."
       ].join(" ")
     );
   }
@@ -2290,10 +2375,13 @@ async function runInstall(parsed, command) {
       (parsed.flags.yes
         ? true
         : await promptYesNo("Pair the iOS companion now?", true)));
+  const pairingOptions = shouldPair
+    ? await resolveIosPairingOptions(parsed)
+    : null;
   let irohTransportResult = null;
   if (
     shouldPair &&
-    !parsed.flags.manualHttp &&
+    pairingOptions?.transportMode !== "manual-http" &&
     !parsed.flags.dryRun
   ) {
     irohTransportResult = await withProgress(
@@ -2357,8 +2445,8 @@ async function runInstall(parsed, command) {
       parsed.flags,
       () =>
         createPairing(config, {
-          transportMode: parsed.flags.manualHttp ? "manual-http" : "iroh",
-          publicUrl: parsed.values.publicUrl
+          transportMode: pairingOptions.transportMode,
+          publicUrl: pairingOptions.publicUrl
         })
     );
     if (pairing?.qrPayload && !parsed.flags.json) {
@@ -2584,11 +2672,9 @@ async function runUi(parsed) {
 
 async function runPairIos(parsed) {
   const config = await readConfig();
-  const transportMode = parsed.flags.manualHttp ? "manual-http" : "iroh";
-  const publicUrl = validatePairingOptions({
-    transportMode,
-    publicUrl: parsed.values.publicUrl
-  });
+  const pairingOptions = await resolveIosPairingOptions(parsed);
+  const transportMode = pairingOptions.transportMode;
+  const publicUrl = pairingOptions.publicUrl;
   if (transportMode === "iroh") {
     await withProgress(
       "Preparing Forge Companion Iroh transport",
@@ -2952,7 +3038,7 @@ Options:
   --skip-adapters       Configure UI/runtime only
   --skip-pair-ios       Do not prompt or create iOS pairing
   --manual-http         Use direct HTTP/TCP for iOS pairing instead of the default Iroh transport
-  --public-url <url>    Phone-reachable URL for manual HTTP pairing, such as a Tailscale or LAN Forge URL
+  --public-url <url>    Phone-facing Tailscale/LAN/fixed URL for direct pairing or Iroh fallback; never localhost
   --no-start            Configure without starting runtime
   --no-doctor           Skip install-time doctor checks
   --repair              Let doctor create missing folders and restart unhealthy runtime

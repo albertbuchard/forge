@@ -10100,7 +10100,9 @@ export async function buildServer(
     const pairingTransport = await buildCompanionPairingTransport({
       requestedMode: parsed.transportMode,
       requestApiBaseUrl,
-      requestUiBaseUrl: buildUiBaseUrlFromApiBaseUrl(requestApiBaseUrl)
+      requestUiBaseUrl: buildUiBaseUrlFromApiBaseUrl(requestApiBaseUrl),
+      fallbackMode: parsed.fallbackMode,
+      publicUrl: parsed.publicUrl
     });
     reply.code(201);
     return createCompanionPairingSession(pairingTransport, parsed);

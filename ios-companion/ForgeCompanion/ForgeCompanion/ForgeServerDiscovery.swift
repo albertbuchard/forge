@@ -13,6 +13,16 @@ final class ForgeServerDiscovery {
 
     private enum StorageKeys {
         static let recentHosts = "forge_companion_recent_runtime_hosts"
+        static let recentIrohEndpoints = "forge_companion_recent_iroh_endpoints"
+    }
+
+    private struct RememberedIrohEndpoint: Codable, Hashable {
+        let nodeId: String
+        let token: String
+        let hostName: String?
+        let relay: String?
+        let publicBaseUrl: String?
+        let rememberedAt: String
     }
 
     private struct TailscalePeerFetchResult {
@@ -121,11 +131,13 @@ final class ForgeServerDiscovery {
         }
 
         if candidates.isEmpty {
+            let rememberedIrohCandidates = Self.rememberedIrohServers()
+            candidates.append(contentsOf: rememberedIrohCandidates)
             let rememberedCandidates = await Self.probeRememberedHosts()
             candidates.append(contentsOf: rememberedCandidates)
             companionDebugLog(
                 "ForgeServerDiscovery",
-                "discoverEnvironment rememberedCandidates=\(rememberedCandidates.count)"
+                "discoverEnvironment rememberedIrohCandidates=\(rememberedIrohCandidates.count) rememberedCandidates=\(rememberedCandidates.count)"
             )
         }
 
@@ -933,6 +945,105 @@ final class ForgeServerDiscovery {
             hosts = Array(hosts.prefix(maxRememberedHosts))
         }
         UserDefaults.standard.set(hosts, forKey: StorageKeys.recentHosts)
+    }
+
+    static func rememberSuccessfulIrohTransport(
+        _ transport: PairingTransport,
+        publicBaseUrl: String?
+    ) {
+        guard
+            transport.isIrohTransport,
+            let pairPayload = transport.pairPayload
+        else {
+            return
+        }
+        let nodeId = pairPayload.nodeId.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let token = pairPayload.token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard nodeId.isEmpty == false, token.isEmpty == false else {
+            return
+        }
+        let endpoint = RememberedIrohEndpoint(
+            nodeId: nodeId,
+            token: token,
+            hostName: pairPayload.hostName,
+            relay: pairPayload.relay ?? transport.relay,
+            publicBaseUrl: publicBaseUrl,
+            rememberedAt: ISO8601DateFormatter().string(from: Date())
+        )
+        var endpoints = recentIrohEndpoints().filter { $0.nodeId != nodeId }
+        endpoints.insert(endpoint, at: 0)
+        if endpoints.count > maxRememberedHosts {
+            endpoints = Array(endpoints.prefix(maxRememberedHosts))
+        }
+        saveRecentIrohEndpoints(endpoints)
+    }
+
+    static func rememberedIrohServersForTesting() -> [DiscoveredForgeServer] {
+        rememberedIrohServers()
+    }
+
+    static func clearRememberedIrohEndpointsForTesting() {
+        UserDefaults.standard.removeObject(forKey: StorageKeys.recentIrohEndpoints)
+    }
+
+    private static func recentIrohEndpoints() -> [RememberedIrohEndpoint] {
+        guard
+            let data = UserDefaults.standard.data(forKey: StorageKeys.recentIrohEndpoints),
+            let decoded = try? JSONDecoder().decode([RememberedIrohEndpoint].self, from: data)
+        else {
+            return []
+        }
+        return decoded.filter {
+            $0.nodeId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                && $0.token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+        }
+    }
+
+    private static func saveRecentIrohEndpoints(_ endpoints: [RememberedIrohEndpoint]) {
+        guard let data = try? JSONEncoder().encode(endpoints) else {
+            return
+        }
+        UserDefaults.standard.set(data, forKey: StorageKeys.recentIrohEndpoints)
+    }
+
+    private static func rememberedIrohServers() -> [DiscoveredForgeServer] {
+        recentIrohEndpoints().map { endpoint in
+            let transport = PairingTransport(
+                protocolName: "iroh",
+                provider: "forge-companion-iroh",
+                status: "ready",
+                publicBaseUrl: endpoint.publicBaseUrl,
+                localBaseUrl: endpoint.publicBaseUrl ?? "forge-iroh://\(endpoint.nodeId)",
+                nodeId: endpoint.nodeId,
+                relay: endpoint.relay,
+                alpn: "forge-companion/1",
+                agent: "forge",
+                pairPayload: PairingTransportPairPayload(
+                    v: 1,
+                    nodeId: endpoint.nodeId,
+                    token: endpoint.token,
+                    hostName: endpoint.hostName,
+                    relay: endpoint.relay
+                ),
+                recreateCommand: nil,
+                startedAt: nil,
+                lastError: nil,
+                notes: ["Remembered Iroh endpoint from a previous successful pairing."]
+            )
+            let label = endpoint.hostName?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let name = label?.isEmpty == false ? label! : "Remembered Iroh Forge"
+            return DiscoveredForgeServer(
+                id: "forge-iroh-\(endpoint.nodeId)",
+                name: name,
+                host: endpoint.nodeId,
+                apiBaseUrl: "forge-iroh://\(endpoint.nodeId)/api/v1",
+                uiBaseUrl: "forge-iroh://\(endpoint.nodeId)/forge/",
+                source: .iroh,
+                canBootstrapPairing: true,
+                detail: "Remembered Iroh endpoint from a previous pairing.",
+                transport: transport
+            )
+        }
     }
 
     private static func formattedHostForURL(_ host: String) -> String {

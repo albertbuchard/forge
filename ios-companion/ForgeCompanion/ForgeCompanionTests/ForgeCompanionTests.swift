@@ -353,6 +353,191 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(normalized.transport?.pairPayload?.token, "hosttoken")
     }
 
+    func testLoopbackIrohPairingPayloadNormalizesToIrohLogicalUrls() throws {
+        let json = """
+        {
+          "kind": "forge-companion-pairing",
+          "apiBaseUrl": "http://127.0.0.1:4317/api/v1",
+          "uiBaseUrl": "http://127.0.0.1:4317/forge/",
+          "transportMode": "iroh",
+          "transport": {
+            "protocol": "iroh",
+            "provider": "forge-companion-iroh",
+            "status": "ready",
+            "publicBaseUrl": "http://127.0.0.1:4317/api/v1",
+            "localBaseUrl": "http://127.0.0.1:4317",
+            "pairPayload": {
+              "v": 1,
+              "node_id": "fakednodeid",
+              "token": "hosttoken"
+            }
+          },
+          "sessionId": "pair_test",
+          "pairingToken": "token",
+          "expiresAt": "2099-01-01T00:00:00Z",
+          "capabilities": ["healthkit.sleep"]
+        }
+        """
+
+        let payload = try JSONDecoder().decode(PairingPayload.self, from: Data(json.utf8))
+        let normalized = CompanionPairingURLResolver.normalizedPayload(payload)
+
+        XCTAssertEqual(normalized.apiBaseUrl, "forge-iroh://fakednodeid/api/v1")
+        XCTAssertEqual(normalized.uiBaseUrl, "forge-iroh://fakednodeid/forge/")
+    }
+
+    func testLoopbackIrohPairingPayloadCanUseNonLoopbackPublicFallback() throws {
+        let json = """
+        {
+          "kind": "forge-companion-pairing",
+          "apiBaseUrl": "http://127.0.0.1:4317/api/v1",
+          "uiBaseUrl": "http://127.0.0.1:4317/forge/",
+          "transportMode": "iroh",
+          "transport": {
+            "protocol": "iroh",
+            "provider": "forge-companion-iroh",
+            "status": "ready",
+            "publicBaseUrl": "https://macbook-pro.example.ts.net/api/v1",
+            "localBaseUrl": "http://127.0.0.1:4317",
+            "pairPayload": {
+              "v": 1,
+              "node_id": "fakednodeid",
+              "token": "hosttoken"
+            }
+          },
+          "sessionId": "pair_test",
+          "pairingToken": "token",
+          "expiresAt": "2099-01-01T00:00:00Z",
+          "capabilities": ["healthkit.sleep"]
+        }
+        """
+
+        let payload = try JSONDecoder().decode(PairingPayload.self, from: Data(json.utf8))
+        let normalized = CompanionPairingURLResolver.normalizedPayload(payload)
+
+        XCTAssertEqual(normalized.apiBaseUrl, "https://macbook-pro.example.ts.net/api/v1")
+        XCTAssertEqual(normalized.uiBaseUrl, "https://macbook-pro.example.ts.net/forge/")
+    }
+
+    func testIrohOnlyPairingDoesNotRememberNodeIdAsHost() throws {
+        let payload = PairingPayload(
+            kind: "forge-companion-pairing",
+            apiBaseUrl: "forge-iroh://fakednodeid/api/v1",
+            uiBaseUrl: "forge-iroh://fakednodeid/forge/",
+            sessionId: "pair_test",
+            pairingToken: "token",
+            expiresAt: "2099-01-01T00:00:00Z",
+            capabilities: ["healthkit.sleep"],
+            transportMode: "iroh",
+            transport: PairingTransport(
+                protocolName: "iroh",
+                provider: "forge-companion-iroh",
+                status: "ready",
+                publicBaseUrl: nil,
+                localBaseUrl: "http://127.0.0.1:4317",
+                nodeId: "fakednodeid",
+                relay: "https://relay.example.com",
+                alpn: "forge-companion/1",
+                agent: "forge",
+                pairPayload: PairingTransportPairPayload(
+                    v: 1,
+                    nodeId: "fakednodeid",
+                    token: "hosttoken",
+                    hostName: "test-host",
+                    relay: "https://relay.example.com"
+                ),
+                recreateCommand: nil,
+                startedAt: nil,
+                lastError: nil,
+                notes: []
+            )
+        )
+
+        XCTAssertNil(CompanionPairingURLResolver.rememberableHost(for: payload))
+    }
+
+    func testRememberedIrohTransportBecomesPairableDiscoveryCandidate() throws {
+        ForgeServerDiscovery.clearRememberedIrohEndpointsForTesting()
+        defer { ForgeServerDiscovery.clearRememberedIrohEndpointsForTesting() }
+        let transport = PairingTransport(
+            protocolName: "iroh",
+            provider: "forge-companion-iroh",
+            status: "ready",
+            publicBaseUrl: nil,
+            localBaseUrl: "http://127.0.0.1:4317",
+            nodeId: "fakednodeid",
+            relay: "https://relay.example.com",
+            alpn: "forge-companion/1",
+            agent: "forge",
+            pairPayload: PairingTransportPairPayload(
+                v: 1,
+                nodeId: "fakednodeid",
+                token: "hosttoken",
+                hostName: "test-host",
+                relay: "https://relay.example.com"
+            ),
+            recreateCommand: nil,
+            startedAt: nil,
+            lastError: nil,
+            notes: []
+        )
+
+        ForgeServerDiscovery.rememberSuccessfulIrohTransport(
+            transport,
+            publicBaseUrl: nil
+        )
+        let servers = ForgeServerDiscovery.rememberedIrohServersForTesting()
+        let server = try XCTUnwrap(servers.first)
+
+        XCTAssertEqual(server.source, .iroh)
+        XCTAssertEqual(server.host, "fakednodeid")
+        XCTAssertEqual(server.apiBaseUrl, "forge-iroh://fakednodeid/api/v1")
+        XCTAssertEqual(server.uiBaseUrl, "forge-iroh://fakednodeid/forge/")
+        XCTAssertTrue(server.canBootstrapPairing)
+        XCTAssertEqual(server.transport?.pairPayload?.nodeId, "fakednodeid")
+        XCTAssertEqual(server.transport?.pairPayload?.token, "hosttoken")
+    }
+
+    func testIrohPairingWithPublicFallbackRemembersTailscaleHost() throws {
+        let payload = PairingPayload(
+            kind: "forge-companion-pairing",
+            apiBaseUrl: "https://macbook-pro.example.ts.net/api/v1",
+            uiBaseUrl: "https://macbook-pro.example.ts.net/forge/",
+            sessionId: "pair_test",
+            pairingToken: "token",
+            expiresAt: "2099-01-01T00:00:00Z",
+            capabilities: ["healthkit.sleep"],
+            transportMode: "iroh",
+            transport: PairingTransport(
+                protocolName: "iroh",
+                provider: "forge-companion-iroh",
+                status: "ready",
+                publicBaseUrl: "https://macbook-pro.example.ts.net/api/v1",
+                localBaseUrl: "http://127.0.0.1:4317",
+                nodeId: "fakednodeid",
+                relay: "https://relay.example.com",
+                alpn: "forge-companion/1",
+                agent: "forge",
+                pairPayload: PairingTransportPairPayload(
+                    v: 1,
+                    nodeId: "fakednodeid",
+                    token: "hosttoken",
+                    hostName: "test-host",
+                    relay: "https://relay.example.com"
+                ),
+                recreateCommand: nil,
+                startedAt: nil,
+                lastError: nil,
+                notes: []
+            )
+        )
+
+        XCTAssertEqual(
+            CompanionPairingURLResolver.rememberableHost(for: payload),
+            "macbook-pro.example.ts.net"
+        )
+    }
+
     func testIrohTransportTimeoutUsesUrlSessionFallbackOnlyForHttpPairingUrls() {
         XCTAssertTrue(
             ForgeSyncClient.shouldFallbackFromIrohToUrlSessionForTesting(

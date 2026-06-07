@@ -999,7 +999,8 @@ struct ForgeSyncClient {
     func bootstrapPairingSession(
         baseUrl: String,
         label: String,
-        capabilities: [String]
+        capabilities: [String],
+        transport: PairingTransport? = nil
     ) async throws -> PairingPayload {
         companionDebugLog(
             "ForgeSyncClient",
@@ -1011,7 +1012,8 @@ struct ForgeSyncClient {
             apiBaseUrl: normalizedApiBaseUrl(from: baseUrl),
             method: "GET",
             body: Optional<String>.none as String?,
-            session: session
+            session: session,
+            transport: transport
         ) as OperatorSessionEnvelope
 
         let envelope: PairingSessionEnvelope = try await sendRequest(
@@ -1019,7 +1021,8 @@ struct ForgeSyncClient {
             apiBaseUrl: normalizedApiBaseUrl(from: baseUrl),
             method: "POST",
             body: PairingSessionRequest(label: label, capabilities: capabilities),
-            session: session
+            session: session,
+            transport: transport
         )
         companionDebugLog(
             "ForgeSyncClient",

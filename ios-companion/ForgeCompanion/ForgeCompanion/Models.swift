@@ -17,6 +17,29 @@ struct DiscoveredForgeServer: Identifiable, Hashable {
     let source: ForgeDiscoverySource
     let canBootstrapPairing: Bool
     let detail: String
+    let transport: PairingTransport?
+
+    init(
+        id: String,
+        name: String,
+        host: String,
+        apiBaseUrl: String,
+        uiBaseUrl: String,
+        source: ForgeDiscoverySource,
+        canBootstrapPairing: Bool,
+        detail: String,
+        transport: PairingTransport? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.host = host
+        self.apiBaseUrl = apiBaseUrl
+        self.uiBaseUrl = uiBaseUrl
+        self.source = source
+        self.canBootstrapPairing = canBootstrapPairing
+        self.detail = detail
+        self.transport = transport
+    }
 }
 
 struct DiscoveredTailscaleDevice: Identifiable, Hashable {

@@ -78,6 +78,92 @@ enum CompanionPairingURLResolver {
         return components?.url?.absoluteString ?? apiBaseUrl
     }
 
+    static func isLoopbackUrl(_ rawValue: String?) -> Bool {
+        guard
+            let rawValue,
+            let url = URL(string: rawValue),
+            let host = url.host?.lowercased()
+        else {
+            return false
+        }
+        return host == "127.0.0.1" || host == "localhost" || host == "::1"
+    }
+
+    private static func irohApiBaseUrl(for payload: PairingPayload) -> String? {
+        guard
+            payload.transport?.isIrohTransport == true,
+            let nodeId = payload.transport?.pairPayload?.nodeId ?? payload.transport?.nodeId,
+            nodeId.isEmpty == false
+        else {
+            return nil
+        }
+        return "forge-iroh://\(nodeId)/api/v1"
+    }
+
+    private static func irohUiBaseUrl(for payload: PairingPayload) -> String? {
+        guard
+            payload.transport?.isIrohTransport == true,
+            let nodeId = payload.transport?.pairPayload?.nodeId ?? payload.transport?.nodeId,
+            nodeId.isEmpty == false
+        else {
+            return nil
+        }
+        return "forge-iroh://\(nodeId)/forge/"
+    }
+
+    private static func nonLoopbackPublicApiBaseUrl(for payload: PairingPayload) -> String? {
+        guard
+            let publicBaseUrl = payload.transport?.publicBaseUrl,
+            isLoopbackUrl(publicBaseUrl) == false
+        else {
+            return nil
+        }
+        return normalizeApiBaseUrl(publicBaseUrl)
+    }
+
+    static func rememberableHost(for payload: PairingPayload) -> String? {
+        let candidates = [
+            payload.transport?.publicBaseUrl,
+            payload.apiBaseUrl,
+            payload.uiBaseUrl
+        ]
+        for candidate in candidates {
+            guard
+                let candidate,
+                isLoopbackUrl(candidate) == false,
+                let url = URL(string: candidate),
+                let scheme = url.scheme?.lowercased(),
+                scheme == "http" || scheme == "https",
+                let host = url.host?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+                host.isEmpty == false
+            else {
+                continue
+            }
+            return host
+        }
+        return nil
+    }
+
+    static func rememberablePublicBaseUrl(for payload: PairingPayload) -> String? {
+        let candidates = [
+            payload.transport?.publicBaseUrl,
+            payload.apiBaseUrl
+        ]
+        for candidate in candidates {
+            guard
+                let candidate,
+                isLoopbackUrl(candidate) == false,
+                let url = URL(string: candidate),
+                let scheme = url.scheme?.lowercased(),
+                scheme == "http" || scheme == "https"
+            else {
+                continue
+            }
+            return normalizeApiBaseUrl(candidate)
+        }
+        return nil
+    }
+
     static func physicalDeviceReachabilityError(for payload: PairingPayload) -> String? {
         #if targetEnvironment(simulator)
         return nil
@@ -106,8 +192,23 @@ enum CompanionPairingURLResolver {
         preferredUiBaseUrl: String? = nil,
         preferredApiBaseUrl: String? = nil
     ) -> PairingPayload {
-        let normalizedApiBaseUrl = normalizeApiBaseUrl(preferredApiBaseUrl ?? payload.apiBaseUrl)
-        let resolvedUiBaseUrl = preferredUiBaseUrl ?? payload.uiBaseUrl
+        let rawApiBaseUrl = preferredApiBaseUrl ?? payload.apiBaseUrl
+        let normalizedRawApiBaseUrl = normalizeApiBaseUrl(rawApiBaseUrl)
+        let publicApiBaseUrl = nonLoopbackPublicApiBaseUrl(for: payload)
+        let irohApiBaseUrl = irohApiBaseUrl(for: payload)
+        let normalizedApiBaseUrl: String
+        if isLoopbackUrl(normalizedRawApiBaseUrl), let irohApiBaseUrl {
+            normalizedApiBaseUrl = publicApiBaseUrl ?? irohApiBaseUrl
+        } else {
+            normalizedApiBaseUrl = normalizedRawApiBaseUrl
+        }
+        let rawUiBaseUrl = preferredUiBaseUrl ?? payload.uiBaseUrl
+        let resolvedUiBaseUrl: String?
+        if isLoopbackUrl(rawUiBaseUrl), let irohUiBaseUrl = irohUiBaseUrl(for: payload) {
+            resolvedUiBaseUrl = publicApiBaseUrl.map { deriveUiBaseUrl(from: $0) } ?? irohUiBaseUrl
+        } else {
+            resolvedUiBaseUrl = rawUiBaseUrl
+        }
         return PairingPayload(
             kind: payload.kind,
             apiBaseUrl: normalizedApiBaseUrl,
@@ -803,6 +904,10 @@ final class CompanionAppModel: ObservableObject {
             "CompanionAppModel",
             "disconnect start currentSession=\(pairing?.sessionId ?? "nil")"
         )
+        cancelActiveSync(
+            reason: "disconnect",
+            userMessage: "Not paired"
+        )
         cancelHistoricalWorkoutImport(reason: "disconnect")
         pairing = nil
         syncState = .disconnected
@@ -1022,7 +1127,8 @@ final class CompanionAppModel: ObservableObject {
         let payload = try await syncClient.bootstrapPairingSession(
             baseUrl: server.apiBaseUrl,
             label: UIDevice.current.name,
-            capabilities: SimulatorLocalForge.capabilities
+            capabilities: SimulatorLocalForge.capabilities,
+            transport: server.transport
         )
         companionDebugLog(
             "CompanionAppModel",
@@ -1438,9 +1544,25 @@ final class CompanionAppModel: ObservableObject {
             "CompanionAppModel",
             "completeConnection start session=\(payload.sessionId) apiBaseUrl=\(payload.apiBaseUrl)"
         )
+        if pairing?.sessionId != nil, pairing?.sessionId != payload.sessionId {
+            cancelActiveSync(
+                reason: "new pairing \(payload.sessionId)",
+                userMessage: "Switching Forge pairing"
+            )
+            cancelHistoricalWorkoutImport(reason: "new pairing \(payload.sessionId)")
+        }
         pairing = normalizedPairingPayload(payload, preferredUiBaseUrl: preferredUiBaseUrl)
-        if let host = URL(string: pairing?.apiBaseUrl ?? payload.apiBaseUrl)?.host {
+        if let activePairing = pairing,
+           let host = CompanionPairingURLResolver.rememberableHost(for: activePairing) {
             ForgeServerDiscovery.rememberSuccessfulHost(host)
+        }
+        if let activePairing = pairing,
+           let transport = activePairing.transport,
+           transport.isIrohTransport {
+            ForgeServerDiscovery.rememberSuccessfulIrohTransport(
+                transport,
+                publicBaseUrl: CompanionPairingURLResolver.rememberablePublicBaseUrl(for: activePairing)
+            )
         }
         healthPermissionPromptDeferred = false
         movementPermissionPromptDeferred = false
@@ -1893,6 +2015,13 @@ final class CompanionAppModel: ObservableObject {
                 movementPayload: movementPayload,
                 screenTimePayload: screenTimePayload
             )
+            guard self.pairing?.sessionId == pairing.sessionId else {
+                companionDebugLog(
+                    "CompanionAppModel",
+                    "performSync ignored stale result trigger=\(trigger) staleSession=\(pairing.sessionId) currentSession=\(self.pairing?.sessionId ?? "nil")"
+                )
+                return false
+            }
             let receipt = syncResult.receipt
             let payloadSummary = syncResult.payloadSummary
             if let pairingSession = receipt.pairingSession {

@@ -540,6 +540,18 @@ await withFakeForgeServer(async (request, body) => {
       };
     }
     const parsed = JSON.parse(body || "{}");
+    if (parsed.fallbackMode !== "none") {
+      return {
+        statusCode: 400,
+        body: { error: `expected default Iroh fallbackMode none, got ${parsed.fallbackMode}` }
+      };
+    }
+    if ("publicUrl" in parsed) {
+      return {
+        statusCode: 400,
+        body: { error: "default Iroh pairing should not send publicUrl" }
+      };
+    }
     return {
       statusCode: 201,
       body: {
@@ -636,6 +648,52 @@ await withFakeForgeServer(async (request) => {
   }
   if (!payload.error.includes("127.0.0.1")) {
     throw new Error("Expected downgraded loopback pairing failure to name 127.0.0.1");
+  }
+});
+await withFakeForgeServer(async (request) => {
+  if (request.url === "/api/v1/health") return { body: forgeHealthResponse() };
+  if (request.url === "/api/v1/auth/operator-session") {
+    return {
+      headers: { "set-cookie": "forge_operator_session=test-session; Path=/" },
+      body: { session: { id: "ses_test" } }
+    };
+  }
+  if (request.url === "/api/v1/health/pairing-sessions") {
+    return {
+      statusCode: 201,
+      body: {
+        qrPayload: {
+          kind: "forge-companion-pairing",
+          apiBaseUrl: "http://127.0.0.1:4317/api/v1",
+          uiBaseUrl: "http://127.0.0.1:4317/forge/",
+          transportMode: "iroh",
+          transport: {
+            protocol: "iroh",
+            provider: "forge-companion-iroh",
+            status: "ready",
+            publicBaseUrl: "http://127.0.0.1:4317/api/v1",
+            localBaseUrl: "http://127.0.0.1:4317",
+            nodeId: "fake-node",
+            pairPayload: { v: 1, node_id: "fake-node", token: "host-token" }
+          },
+          sessionId: "pair_bad_iroh",
+          pairingToken: "pairing-token",
+          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+          capabilities: ["health-sync"]
+        }
+      }
+    };
+  }
+  return { statusCode: 404, body: { error: "not found" } };
+}, async ({ port }) => {
+  writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
+  const failure = await runAsyncFailure(["pair-ios", "--json", "--no-start"]);
+  const payload = JSON.parse(failure.stderr);
+  if (payload.code !== "pairing_transport_unavailable") {
+    throw new Error(`Expected bad Iroh loopback QR to fail pairing_transport_unavailable, got ${payload.code}`);
+  }
+  if (!payload.error.includes("Iroh pairing") || !payload.error.includes("loopback")) {
+    throw new Error("Expected bad Iroh loopback QR failure to name Iroh and loopback");
   }
 });
 await withFakeForgeServer(async (request) => {

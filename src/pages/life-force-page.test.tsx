@@ -10,7 +10,10 @@ const { useForgeShellMock, userScopeSelectorMock } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/components/shell/app-shell", () => ({
-  useForgeShell: useForgeShellMock,
+  useForgeShell: useForgeShellMock
+}));
+
+vi.mock("@/components/shell/user-scope-selector", () => ({
   UserScopeSelector: (props: {
     users: Array<{ id: string; displayName: string }>;
     selectedUserIds: string[];
