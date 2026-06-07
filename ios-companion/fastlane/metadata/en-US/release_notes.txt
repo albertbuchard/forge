@@ -1,5 +1,5 @@
-Forge Companion 1.0.88 fixes Iroh bridge timeout recovery after reconnecting or repairing.
+Forge Companion 1.0.89 fixes pairing and reconnect routing for Iroh-first companion sync.
 
-Iroh remains the first sync path, but new pairings now keep the direct Forge API/UI URL as a fallback so the app can retry over HTTPS/Tailscale when the Iroh bridge times out.
+New Iroh pairings no longer expose localhost as a phone-facing API or UI URL. The app now uses the Iroh tunnel by default and only keeps Tailscale, LAN, or fixed-IP fallbacks when Forge actually provides a phone-reachable address.
 
-Discovery and pairing metadata were also tightened so stale Iroh endpoints do not block a phone-reachable Forge server.
+Re-pairing now switches the active Forge cleanly, cancels stale sync work from the previous pairing, and remembers prior Iroh/direct endpoints separately so they can be selected again without trying to sync against an old server.
