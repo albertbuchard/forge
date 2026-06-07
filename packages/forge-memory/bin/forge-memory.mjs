@@ -3008,6 +3008,18 @@ async function runPairIos(parsed) {
     parsed.flags.manualHttp || parsed.values.publicUrl
       ? await resolveIosPairingOptions(parsed, config)
       : null;
+  const noStartPairingOptions =
+    !explicitPairingOptions && parsed.flags.noStart
+      ? await resolveIosPairingOptions(parsed, config)
+      : null;
+  if (noStartPairingOptions?.transportMode === "iroh") {
+    await withProgress(
+      "Preparing Forge Companion Iroh transport",
+      "checking Rust/Cargo and building the local host",
+      parsed.flags,
+      () => ensureIrohTransportPrepared(config, parsed.flags)
+    );
+  }
   if (!parsed.flags.noStart) {
     const runtimeResult = await withProgress(
       "Starting Forge runtime for iOS pairing",
@@ -3023,10 +3035,13 @@ async function runPairIos(parsed) {
       config
     );
   }
-  const pairingOptions = explicitPairingOptions ?? await resolveIosPairingOptions(parsed, config);
+  const pairingOptions =
+    explicitPairingOptions ??
+    noStartPairingOptions ??
+    await resolveIosPairingOptions(parsed, config);
   const transportMode = pairingOptions.transportMode;
   const publicUrl = pairingOptions.publicUrl;
-  if (transportMode === "iroh") {
+  if (transportMode === "iroh" && noStartPairingOptions?.transportMode !== "iroh") {
     await withProgress(
       "Preparing Forge Companion Iroh transport",
       "checking Rust/Cargo and building the local host",

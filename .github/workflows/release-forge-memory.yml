@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Exact forge-memory semver to publish"
+        required: true
+        type: string
 
 concurrency:
   group: release-forge-memory-${{ github.ref }}
@@ -34,7 +40,11 @@ jobs:
       - name: Resolve release version
         id: release_meta
         run: |
-          RELEASE_VERSION="${GITHUB_REF_NAME#v}"
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            RELEASE_VERSION="${{ inputs.release_version }}"
+          else
+            RELEASE_VERSION="${GITHUB_REF_NAME#v}"
+          fi
           if ! printf '%s' "${RELEASE_VERSION}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
             echo "Unsupported forge-memory release tag: ${GITHUB_REF_NAME}" >&2
             exit 1
