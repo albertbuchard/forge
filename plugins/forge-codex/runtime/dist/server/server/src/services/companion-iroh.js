@@ -301,6 +301,10 @@ function candidateIrohBinaries() {
     return candidateIrohAssetRoots().flatMap((root) => [
         path.join(root, "companion-iroh", "target", "release", binaryName),
         path.join(root, "companion-iroh", "target", "debug", binaryName),
+        path.join(root, "companion-iroh-src", "target", "release", binaryName),
+        path.join(root, "companion-iroh-src", "target", "debug", binaryName),
+        path.join(root, "dist", "companion-iroh-src", "target", "release", binaryName),
+        path.join(root, "dist", "companion-iroh-src", "target", "debug", binaryName),
         path.join(root, "openclaw-plugin", "dist", "companion-iroh", platformKey, binaryName),
         path.join(root, "companion-iroh", platformKey, binaryName),
         path.join(root, "companion-iroh", binaryName)
@@ -309,7 +313,8 @@ function candidateIrohBinaries() {
 function resolveCompanionIrohManifestPath() {
     const candidates = candidateIrohAssetRoots().flatMap((root) => [
         path.join(root, "companion-iroh", "Cargo.toml"),
-        path.join(root, "companion-iroh-src", "Cargo.toml")
+        path.join(root, "companion-iroh-src", "Cargo.toml"),
+        path.join(root, "dist", "companion-iroh-src", "Cargo.toml")
     ]);
     return candidates.find((candidate) => existsSync(candidate)) ?? null;
 }

@@ -20,8 +20,11 @@ const MODEL_CONTEXT_WINDOWS = {
 };
 const DEFAULT_CONTEXT_WINDOW = 400_000;
 const RESERVED_RESPONSE_TOKENS = 140_000;
+const CODEX_WIKI_COMPILE_CONTEXT_WINDOW = 120_000;
+const CODEX_WIKI_COMPILE_RESERVED_RESPONSE_TOKENS = 60_000;
 const APPROX_CHARS_PER_TOKEN = 4;
 const REQUEST_TIMEOUT_MS = 90_000;
+const CODEX_FOREGROUND_COMPILE_TIMEOUT_MS = 10 * 60_000;
 const BACKGROUND_POLL_INTERVAL_MS = 2_000;
 const DEFAULT_CODEX_BASE_URL = "https://chatgpt.com/backend-api";
 const CODEX_JWT_CLAIM_PATH = "https://api.openai.com/auth";
@@ -358,8 +361,14 @@ function estimateTokens(text) {
     return Math.ceil(text.length / APPROX_CHARS_PER_TOKEN);
 }
 function computeSourceExcerpt(profile, sourceText) {
-    const contextWindow = MODEL_CONTEXT_WINDOWS[profile.model] ?? DEFAULT_CONTEXT_WINDOW;
-    const inputBudget = Math.max(16_000, contextWindow - RESERVED_RESPONSE_TOKENS);
+    const configuredContextWindow = MODEL_CONTEXT_WINDOWS[profile.model] ?? DEFAULT_CONTEXT_WINDOW;
+    const contextWindow = isCodexProfile(profile)
+        ? Math.min(configuredContextWindow, CODEX_WIKI_COMPILE_CONTEXT_WINDOW)
+        : configuredContextWindow;
+    const reservedResponseTokens = isCodexProfile(profile)
+        ? CODEX_WIKI_COMPILE_RESERVED_RESPONSE_TOKENS
+        : RESERVED_RESPONSE_TOKENS;
+    const inputBudget = Math.max(16_000, contextWindow - reservedResponseTokens);
     const estimatedTokens = estimateTokens(sourceText);
     if (estimatedTokens <= inputBudget) {
         return {
@@ -617,6 +626,10 @@ export class OpenAiResponsesProvider {
             "- For chats and transcripts, extract the durable parts: people, relationships, ongoing projects, commitments, habits, values, decisions, questions, sources, and evidence.",
             "- Merge repetitive back-and-forth into concise summaries.",
             "- Use short quotes only when the exact phrase matters.",
+            "Sensitive information rules:",
+            "- Never store or reproduce secrets, passwords, passphrases, recovery codes, API keys, access tokens, refresh tokens, session cookies, private keys, seed phrases, one-time codes, full payment card numbers, or equivalent credentials.",
+            "- If the source contains a secret or credential, replace the value with [REDACTED SECRET] and keep only the minimum non-secret context needed to explain why it appeared.",
+            "- Do not create wiki pages, notes, entity proposals, aliases, tags, titles, or page update suggestions that preserve secret values.",
             "How to split pages:",
             "- Keep markdown as the overview page for this source.",
             "- If one topic deserves its own page, put it in articleCandidates with title, slug, summary, rationale, markdown, tags, aliases, and parentSlug.",
@@ -820,7 +833,9 @@ export class OpenAiResponsesProvider {
                             }
                         })
                     }),
-                    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+                    signal: AbortSignal.timeout(isCodexProfile(profile)
+                        ? CODEX_FOREGROUND_COMPILE_TIMEOUT_MS
+                        : REQUEST_TIMEOUT_MS)
                 });
             }
             catch (error) {

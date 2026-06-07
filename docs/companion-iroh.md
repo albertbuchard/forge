@@ -176,28 +176,31 @@ wire transport.
 
 ## How The Host Is Delivered
 
-The production installer should not compile the Rust transport on every first run.
-That would make `npx forge-memory` slow, require every user to have Rust installed,
-and fail in noninteractive setups that otherwise could pair immediately. The release
-package therefore uses a two-layer delivery model:
+The published npm runtime ships Forge's Rust source and lockfile for the companion
+Iroh host under `companion-iroh-src/`. It does not bundle native desktop host
+binaries. That keeps the package small and avoids shipping one binary per target
+platform.
 
-1. GitHub Actions builds precompiled `forge-companion-iroh` binaries for common
-   desktop platforms and places them in the published runtime package.
-2. The same package also includes the Rust source and lockfile as
-   `companion-iroh-src/`, so unsupported platforms can still build the host locally
-   when `cargo` is available.
+`npx forge-memory install`, `npx forge-memory configure`, and
+`npx forge-memory pair-ios` prepare the default Iroh transport before creating a QR.
+The installer checks for an existing host binary, checks for Cargo, offers to install
+the minimal Rust toolchain when it can do so on the current platform, and then runs:
+
+```bash
+cargo build --release --manifest-path <companion-iroh-src/Cargo.toml> --bin forge-companion-iroh
+```
 
 At runtime Forge resolves the host in this order:
 
 1. explicit `FORGE_COMPANION_IROH_BIN`
 2. source checkout build outputs for development installs
-3. packaged prebuilt binaries under `dist/companion-iroh/<platform>/`
+3. source-built package outputs under `companion-iroh-src/target/`
 4. packaged Rust source fallback through `cargo run --manifest-path ...`
 
-If none of those paths can run, `pair-ios` must fail with a clear transport error. It
-must not print a QR code that falls back to `127.0.0.1` for a physical iPhone. Manual
-HTTP remains available only when the user explicitly passes a phone-reachable
-`--public-url`.
+If none of those paths can run, the installer and `pair-ios` must fail with clear
+Rust/Cargo install guidance. They must not print a QR code that falls back to
+`127.0.0.1` for a physical iPhone. Manual HTTP remains available only when the user
+explicitly passes a phone-reachable `--public-url`.
 
 ## Where The Code Lives
 

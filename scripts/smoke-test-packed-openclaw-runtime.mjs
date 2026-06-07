@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -124,10 +124,27 @@ try {
     cwd: tempRoot
   });
 
+  const installedPluginRoot = path.join(tempRoot, "node_modules", "forge-openclaw-plugin");
+  const sourceManifest = path.join(installedPluginRoot, "dist", "companion-iroh-src", "Cargo.toml");
+  if (!existsSync(sourceManifest)) {
+    throw new Error("packed runtime did not include companion-iroh-src/Cargo.toml");
+  }
+  run("cargo", [
+    "build",
+    "--release",
+    "--manifest-path",
+    sourceManifest,
+    "--bin",
+    "forge-companion-iroh"
+  ], {
+    cwd: path.dirname(sourceManifest),
+    timeout: 180_000
+  });
+
   mkdirSync(installRoot, { recursive: true });
   child = spawn(
     process.execPath,
-    [path.join(tempRoot, "node_modules", "forge-openclaw-plugin", "server", "index.js")],
+    [path.join(installedPluginRoot, "server", "index.js")],
     {
       cwd: installRoot,
       env: {

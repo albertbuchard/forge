@@ -57,10 +57,12 @@ the iOS Simulator but not for a physical phone.
 The base install stays one command on purpose. The detailed companion transport
 reference lives in the Forge repo at `docs/companion-iroh.md` and in the published
 docs at `https://albertbuchard.github.io/forge/companion-transport.html`. Forge
-Memory ships prebuilt Iroh host binaries for common desktop platforms and a bundled
-Rust source fallback for other machines. If neither a prebuilt host nor Cargo is
-available, `pair-ios` stops with transport-specific repair guidance instead of
-printing a localhost QR that a physical iPhone cannot use.
+Memory ships Forge's Iroh host source and lockfile, not native desktop binaries. When
+the default iOS pairing flow is selected, the installer checks for Cargo, offers to
+install the minimal Rust toolchain when the platform supports it, builds the local
+host from the bundled source, then creates the QR. If Cargo cannot be installed
+automatically, `install`, `configure`, and `pair-ios` stop with platform-specific
+steps instead of printing a localhost QR that a physical iPhone cannot use.
 
 `configure` reruns the full guided flow using the current config as defaults.
 Install and configure run Forge doctor before finishing. `doctor --repair` creates

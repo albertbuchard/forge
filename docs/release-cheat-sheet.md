@@ -59,8 +59,9 @@ not to invent local registry secrets or switch away from tag-driven CI.
 - the `projects/forge` nested repo must be connected to GitHub with Actions enabled
 - you need permission to push `main` and push tags
 - the workflows must stay in the Forge repo, not only in the parent monorepo
-- Rust stable must be available for OpenClaw builds because the package now bundles
-  Forge's `companion-iroh` transport host for iOS pairing
+- Rust stable must be available for release smoke tests because the package now
+  ships Forge's `companion-iroh` source and verifies that the host can be built
+  locally for iOS pairing
 
 ### OpenClaw npm release
 
@@ -109,8 +110,9 @@ Notes:
 - npm Trusted Publishing currently requires GitHub-hosted runners
 - the workflow installs Node `22.14.0` and upgrades npm to `11.5.1+` because that is
   required for npm trusted publishing
-- the workflow installs Rust stable before packaging so `npm run build:openclaw-plugin`
-  can build the `forge-companion-iroh` binary and copy the Rust source fallback
+- the workflow installs Rust stable so smoke tests can build the bundled
+  `companion-iroh-src` on the target machine; the published npm package should not
+  include native `forge-companion-iroh` desktop binaries
 
 ### Hermes PyPI release
 

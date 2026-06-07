@@ -277,6 +277,231 @@ function runCapture(command, args, timeoutMs = 2_000) {
   return `${result.stdout}${result.stderr}`.trim();
 }
 
+function binaryNameForPlatform() {
+  return process.platform === "win32"
+    ? "forge-companion-iroh.exe"
+    : "forge-companion-iroh";
+}
+
+function candidateIrohRoots(config) {
+  const roots = [];
+  if (config.mode === "dev" && config.repo) {
+    roots.push(config.repo);
+    roots.push(path.join(config.repo, "openclaw-plugin", "dist"));
+  }
+  const pluginRoot = resolveOpenClawPluginRoot();
+  if (pluginRoot) {
+    roots.push(pluginRoot);
+    roots.push(path.join(pluginRoot, "dist"));
+  }
+  return [...new Set(roots.map((entry) => path.resolve(entry)))];
+}
+
+function candidateIrohBinariesForInstall(config) {
+  const binaryName = binaryNameForPlatform();
+  const platformKey = `${process.platform}-${process.arch}`;
+  const explicitBin = process.env.FORGE_COMPANION_IROH_BIN?.trim();
+  return [
+    ...(explicitBin ? [explicitBin] : []),
+    ...candidateIrohRoots(config).flatMap((root) => [
+      path.join(root, "companion-iroh", "target", "release", binaryName),
+      path.join(root, "companion-iroh", "target", "debug", binaryName),
+      path.join(root, "companion-iroh-src", "target", "release", binaryName),
+      path.join(root, "companion-iroh-src", "target", "debug", binaryName),
+      path.join(root, "companion-iroh", platformKey, binaryName),
+      path.join(root, "companion-iroh", binaryName)
+    ])
+  ];
+}
+
+function findIrohBinaryForInstall(config) {
+  return candidateIrohBinariesForInstall(config).find((candidate) =>
+    fs.existsSync(candidate)
+  );
+}
+
+function candidateIrohManifestsForInstall(config) {
+  return candidateIrohRoots(config).flatMap((root) => [
+    path.join(root, "companion-iroh", "Cargo.toml"),
+    path.join(root, "companion-iroh-src", "Cargo.toml")
+  ]);
+}
+
+function findIrohManifestForInstall(config) {
+  return candidateIrohManifestsForInstall(config).find((candidate) =>
+    fs.existsSync(candidate)
+  );
+}
+
+function rustInstallGuidance() {
+  if (process.platform === "darwin") {
+    return [
+      "Install Apple's command line tools first if prompted: xcode-select --install",
+      "Then install Rust with the official minimal installer:",
+      "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal",
+      "Restart the terminal or run: source ~/.cargo/env"
+    ];
+  }
+  if (process.platform === "linux") {
+    return [
+      "Install build tools with your system package manager, for example: sudo apt-get install -y build-essential pkg-config libssl-dev",
+      "Then install Rust with the official minimal installer:",
+      "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal",
+      "Restart the terminal or run: source ~/.cargo/env"
+    ];
+  }
+  if (process.platform === "win32") {
+    return [
+      "Install Rustup for Windows:",
+      "winget install Rustlang.Rustup",
+      "Then reopen PowerShell and rerun: npx forge-memory install"
+    ];
+  }
+  return [
+    "Install Rust/Cargo from https://rustup.rs, then rerun: npx forge-memory install"
+  ];
+}
+
+function refreshCargoPath() {
+  const cargoBin = path.join(homeDir(), ".cargo", "bin");
+  if (fs.existsSync(cargoBin)) {
+    const current = process.env.PATH ?? "";
+    if (!current.split(path.delimiter).includes(cargoBin)) {
+      process.env.PATH = `${cargoBin}${path.delimiter}${current}`;
+    }
+  }
+}
+
+async function maybeInstallRustToolchain(flags) {
+  refreshCargoPath();
+  if (commandExists("cargo")) {
+    return { ok: true, installed: false };
+  }
+  const guidance = rustInstallGuidance();
+  const canUseRustupScript =
+    (process.platform === "darwin" || process.platform === "linux") &&
+    commandExists("curl");
+  const canUseWinget = process.platform === "win32" && commandExists("winget");
+  if (!canUseRustupScript && !canUseWinget) {
+    return {
+      ok: false,
+      installed: false,
+      guidance:
+        process.platform === "darwin" || process.platform === "linux"
+          ? ["Install curl first, then install Rust/Cargo.", ...guidance]
+          : guidance
+    };
+  }
+  if (flags?.json || flags?.dryRun) {
+    return { ok: false, installed: false, guidance };
+  }
+  const shouldInstall = flags?.yes
+    ? true
+    : await promptYesNo(
+        "Forge Companion Iroh needs Rust/Cargo to build the local transport host. Install the minimal Rust toolchain now?",
+        true
+      );
+  if (!shouldInstall) {
+    return { ok: false, installed: false, guidance };
+  }
+  console.log(color.cyan("Installing minimal Rust toolchain..."));
+  const result = canUseWinget
+    ? await runCommand("winget", [
+        "install",
+        "--id",
+        "Rustlang.Rustup",
+        "-e",
+        "--source",
+        "winget",
+        "--accept-package-agreements",
+        "--accept-source-agreements"
+      ])
+    : await runCommand("sh", [
+        "-c",
+        "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal"
+      ]);
+  refreshCargoPath();
+  return {
+    ok: result.ok && commandExists("cargo"),
+    installed: result.ok,
+    guidance
+  };
+}
+
+async function ensureIrohTransportPrepared(config, flags = {}) {
+  const existingBinary = findIrohBinaryForInstall(config);
+  if (existingBinary) {
+    return { ok: true, built: false, binary: existingBinary };
+  }
+
+  if (config.mode !== "dev") {
+    await ensurePackagedRuntimeInstalled();
+  }
+
+  const manifestPath = findIrohManifestForInstall(config);
+  if (!manifestPath) {
+    throw new Error(
+      [
+        "Forge could not find the bundled companion Iroh source.",
+        "Run npx forge-memory doctor --repair so Forge Memory refreshes the packaged runtime.",
+        `Runtime log: ${logPath()}.`
+      ].join(" ")
+    );
+  }
+
+  const rust = await maybeInstallRustToolchain(flags);
+  if (!rust.ok) {
+    throw new Error(
+      [
+        "Forge Companion Iroh is source-built on this machine, but Rust/Cargo is not installed yet.",
+        "Install steps:",
+        ...rustInstallGuidance().map((entry) => `- ${entry}`),
+        "Then rerun: npx forge-memory install",
+        "For a temporary direct network fallback, use: npx forge-memory pair-ios --manual-http --public-url <phone-reachable Forge URL>"
+      ].join("\n")
+    );
+  }
+
+  const result = await runLoggedCommand(
+    "cargo",
+    [
+      "build",
+      "--release",
+      "--manifest-path",
+      manifestPath,
+      "--bin",
+      "forge-companion-iroh"
+    ],
+    {
+      cwd: path.dirname(manifestPath),
+      dryRun: flags.dryRun,
+      env: process.env,
+      logFile: logPath()
+    }
+  );
+  if (!result.ok) {
+    throw new Error(
+      [
+        "Forge could not build the local companion Iroh transport host from source.",
+        `Manifest: ${manifestPath}`,
+        `Log: ${logPath()}`,
+        "Install or repair Rust/Cargo, then rerun: npx forge-memory install"
+      ].join(" ")
+    );
+  }
+  const binary = findIrohBinaryForInstall(config);
+  if (!binary && !flags.dryRun) {
+    throw new Error(
+      [
+        "Cargo finished, but Forge could not find the built companion Iroh binary.",
+        `Manifest: ${manifestPath}`,
+        `Expected one of: ${candidateIrohBinariesForInstall(config).join(", ")}`
+      ].join(" ")
+    );
+  }
+  return { ok: true, built: true, binary: binary ?? null, manifestPath };
+}
+
 function detectOpenClaw() {
   const installed =
     commandExists("openclaw") ||
@@ -1679,9 +1904,8 @@ class PairingTransportUnavailableError extends Error {
     this.code = "pairing_transport_unavailable";
     this.detail = detail;
     this.guidance = [
-      "Run npx forge-memory doctor --repair so Forge Memory refreshes the packaged runtime and companion transport files.",
-      "Then rerun npx forge-memory pair-ios.",
-      "On unsupported platforms, install Rust/Cargo so Forge can build the bundled companion Iroh source fallback.",
+      "Run npx forge-memory install or npx forge-memory configure so the installer can prepare the Iroh transport.",
+      "If Rust/Cargo is missing, the installer will guide you through installing the minimal Rust toolchain and building Forge's bundled Iroh host source.",
       "For an explicit Tailscale or LAN fallback, rerun with npx forge-memory pair-ios --manual-http --public-url <phone-reachable Forge URL>.",
       "Do not scan a QR whose API URL is 127.0.0.1 on a physical iPhone; that address only works in the iOS Simulator."
     ];
@@ -2060,6 +2284,25 @@ async function runInstall(parsed, command) {
         dryRun: parsed.flags.dryRun
       })
   );
+  const shouldPair =
+    parsed.flags.pairIos ||
+    (!parsed.flags.skipPairIos &&
+      (parsed.flags.yes
+        ? true
+        : await promptYesNo("Pair the iOS companion now?", true)));
+  let irohTransportResult = null;
+  if (
+    shouldPair &&
+    !parsed.flags.manualHttp &&
+    !parsed.flags.dryRun
+  ) {
+    irohTransportResult = await withProgress(
+      "Preparing Forge Companion Iroh transport",
+      "checking Rust/Cargo and building the local host",
+      parsed.flags,
+      () => ensureIrohTransportPrepared(config, parsed.flags)
+    );
+  }
   let runtimeResult = null;
   if (!parsed.flags.noStart && !parsed.flags.dryRun) {
     runtimeResult = await withProgress(
@@ -2097,12 +2340,6 @@ async function runInstall(parsed, command) {
       }
     }
   }
-  const shouldPair =
-    parsed.flags.pairIos ||
-    (!parsed.flags.skipPairIos &&
-      (parsed.flags.yes
-        ? true
-        : await promptYesNo("Pair the iOS companion now?", true)));
   let pairing = null;
   if (shouldPair && !parsed.flags.dryRun) {
     if (!runtimeResult) {
@@ -2141,6 +2378,7 @@ async function runInstall(parsed, command) {
     adapterResults,
     runtimeResult,
     doctorResult,
+    irohTransportResult,
     pairing: Boolean(pairing)
   };
   if (parsed.flags.json) console.log(JSON.stringify(summary, null, 2));
@@ -2351,6 +2589,14 @@ async function runPairIos(parsed) {
     transportMode,
     publicUrl: parsed.values.publicUrl
   });
+  if (transportMode === "iroh") {
+    await withProgress(
+      "Preparing Forge Companion Iroh transport",
+      "checking Rust/Cargo and building the local host",
+      parsed.flags,
+      () => ensureIrohTransportPrepared(config, parsed.flags)
+    );
+  }
   if (!parsed.flags.noStart) {
     const runtimeResult = await withProgress(
       "Starting Forge runtime for iOS pairing",

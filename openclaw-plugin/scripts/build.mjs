@@ -20,6 +20,9 @@ const companionIrohManifest = path.join(companionIrohRoot, "Cargo.toml");
 const companionIrohBinaryName = process.platform === "win32" ? "forge-companion-iroh.exe" : "forge-companion-iroh";
 const companionIrohPlatformKey = `${process.platform}-${process.arch}`;
 const companionIrohPrebuiltDir = (process.env.FORGE_COMPANION_IROH_PREBUILT_DIR ?? "").trim();
+const companionIrohPackageMode = (process.env.FORGE_COMPANION_IROH_PACKAGE_MODE ?? "source-only")
+  .trim()
+  .toLowerCase();
 const pluginServerEntrySource = `import { existsSync } from "node:fs";
 import { spawn } from "node:child_process";
 import path from "node:path";
@@ -249,6 +252,30 @@ async function copyPrebuiltCompanionIroh() {
 }
 
 async function packageCompanionIroh() {
+  const sourceDir = path.join(pluginDistDir, "companion-iroh-src");
+  await removePath(sourceDir);
+  await mkdir(sourceDir, { recursive: true });
+  await copyFile(path.join(companionIrohRoot, "Cargo.toml"), path.join(sourceDir, "Cargo.toml"));
+  await copyFile(path.join(companionIrohRoot, "Cargo.lock"), path.join(sourceDir, "Cargo.lock"));
+  await cp(path.join(companionIrohRoot, "src"), path.join(sourceDir, "src"), {
+    recursive: true,
+    force: true
+  });
+
+  if (companionIrohPackageMode === "source-only") {
+    return;
+  }
+
+  if (
+    companionIrohPackageMode !== "local-binary" &&
+    companionIrohPackageMode !== "local-and-prebuilt"
+  ) {
+    throw new Error(
+      `Unsupported FORGE_COMPANION_IROH_PACKAGE_MODE ${JSON.stringify(companionIrohPackageMode)}. ` +
+        "Use source-only, local-binary, or local-and-prebuilt."
+    );
+  }
+
   await run(
     "cargo",
     [
@@ -278,17 +305,10 @@ async function packageCompanionIroh() {
   if (process.platform !== "win32") {
     await chmod(path.join(binaryDir, companionIrohBinaryName), 0o755);
   }
-  await copyPrebuiltCompanionIroh();
 
-  const sourceDir = path.join(pluginDistDir, "companion-iroh-src");
-  await removePath(sourceDir);
-  await mkdir(sourceDir, { recursive: true });
-  await copyFile(path.join(companionIrohRoot, "Cargo.toml"), path.join(sourceDir, "Cargo.toml"));
-  await copyFile(path.join(companionIrohRoot, "Cargo.lock"), path.join(sourceDir, "Cargo.lock"));
-  await cp(path.join(companionIrohRoot, "src"), path.join(sourceDir, "src"), {
-    recursive: true,
-    force: true
-  });
+  if (companionIrohPackageMode === "local-and-prebuilt") {
+    await copyPrebuiltCompanionIroh();
+  }
 }
 
 await removePath(pluginDistDir);

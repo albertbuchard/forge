@@ -10,6 +10,8 @@ import { createNoteLinkSchema, crudEntityTypeSchema, noteKindSchema, noteSchema 
 import { deleteEncryptedSecret, readEncryptedSecret, storeEncryptedSecret } from "./calendar.js";
 import { isEntityDeleted } from "./deleted-entities.js";
 import { recordDiagnosticLog } from "./diagnostic-logs.js";
+const MAX_WIKI_INGEST_TEXT_CHUNK_CHARS = 220_000;
+const WIKI_INGEST_TEXT_CHUNK_OVERLAP_CHARS = 2_000;
 const wikiSpaceSchema = z.object({
     id: z.string(),
     slug: z.string(),
@@ -2017,6 +2019,115 @@ export async function reindexWikiEmbeddings(input, secrets) {
         chunkCount
     };
 }
+function isChunkableWikiIngestTextAsset(asset) {
+    const mimeType = asset.mime_type.toLowerCase();
+    const fileName = asset.file_name.toLowerCase();
+    if (!existsSync(asset.file_path)) {
+        return false;
+    }
+    if (asset.size_bytes <= MAX_WIKI_INGEST_TEXT_CHUNK_CHARS) {
+        return false;
+    }
+    const metadata = parseJsonRecord(asset.metadata_json);
+    if (metadata?.chunkParentAssetId || metadata?.textChunked) {
+        return false;
+    }
+    return (mimeType.startsWith("text/") ||
+        fileName.endsWith(".txt") ||
+        fileName.endsWith(".md") ||
+        fileName.endsWith(".markdown") ||
+        fileName.endsWith(".csv") ||
+        fileName.endsWith(".json"));
+}
+function splitWikiIngestTextIntoChunks(sourceText, maxChars) {
+    const text = sourceText.trim();
+    if (text.length <= maxChars) {
+        return [text];
+    }
+    const chunks = [];
+    let start = 0;
+    while (start < text.length) {
+        const hardEnd = Math.min(text.length, start + maxChars);
+        let end = hardEnd;
+        if (hardEnd < text.length) {
+            const newline = text.lastIndexOf("\n", hardEnd);
+            if (newline > start + Math.floor(maxChars * 0.65)) {
+                end = newline + 1;
+            }
+        }
+        const chunk = text.slice(start, end).trim();
+        if (chunk.length > 0) {
+            chunks.push(chunk);
+        }
+        if (end >= text.length) {
+            break;
+        }
+        start = Math.max(0, end - WIKI_INGEST_TEXT_CHUNK_OVERLAP_CHARS);
+    }
+    return chunks;
+}
+async function splitLargeWikiIngestTextAsset(options) {
+    if (!isChunkableWikiIngestTextAsset(options.asset)) {
+        return 0;
+    }
+    const sourceText = await readFile(options.asset.file_path, "utf8");
+    const chunks = splitWikiIngestTextIntoChunks(sourceText, MAX_WIKI_INGEST_TEXT_CHUNK_CHARS);
+    if (chunks.length <= 1) {
+        return 0;
+    }
+    const extension = path.extname(options.asset.file_name) || ".txt";
+    const baseName = path.basename(options.asset.file_name, extension) ||
+        options.asset.file_name ||
+        "source";
+    const width = String(chunks.length).length;
+    for (const [index, chunk] of chunks.entries()) {
+        const chunkNumber = index + 1;
+        const chunkFileName = `${baseName}-part-${String(chunkNumber).padStart(width, "0")}-of-${String(chunks.length).padStart(width, "0")}${extension}`;
+        const chunkHeader = [
+            `Source file: ${options.asset.file_name}`,
+            `Source locator: ${options.asset.source_locator || options.asset.file_name}`,
+            `Chunk: ${chunkNumber}/${chunks.length}`,
+            `Parent checksum: ${options.asset.checksum}`,
+            "",
+            chunk
+        ].join("\n");
+        const persisted = await persistIngestUpload({
+            jobId: options.jobId,
+            fileName: chunkFileName,
+            mimeType: options.asset.mime_type || "text/plain",
+            payload: Buffer.from(chunkHeader, "utf8")
+        });
+        createWikiIngestAssetRecord({
+            jobId: options.jobId,
+            sourceKind: "upload",
+            sourceLocator: `${options.asset.source_locator || options.asset.file_name}#chunk-${chunkNumber}`,
+            fileName: chunkFileName,
+            mimeType: options.asset.mime_type || "text/plain",
+            filePath: persisted.filePath,
+            sizeBytes: persisted.sizeBytes,
+            checksum: persisted.checksum,
+            metadata: {
+                chunkParentAssetId: options.asset.id,
+                chunkParentChecksum: options.asset.checksum,
+                chunkIndex: chunkNumber,
+                chunkCount: chunks.length,
+                chunkOverlapChars: WIKI_INGEST_TEXT_CHUNK_OVERLAP_CHARS,
+                chunkMaxChars: MAX_WIKI_INGEST_TEXT_CHUNK_CHARS
+            }
+        });
+    }
+    updateWikiIngestAsset(options.asset.id, {
+        status: "completed",
+        metadata: {
+            ...parseJsonRecord(options.asset.metadata_json),
+            textChunked: true,
+            textChunkCount: chunks.length,
+            textChunkMaxChars: MAX_WIKI_INGEST_TEXT_CHUNK_CHARS,
+            textChunkOverlapChars: WIKI_INGEST_TEXT_CHUNK_OVERLAP_CHARS
+        }
+    });
+    return chunks.length;
+}
 function getWikiIngestJobDir(jobId) {
     return path.join(resolveDataDir(), "wiki-ingest", jobId);
 }
@@ -2615,7 +2726,10 @@ export async function processWikiIngestJob(jobId, options) {
     const initialAssets = listWikiIngestJobAssetsInternal(jobId);
     let processedFiles = initialAssets.filter((asset) => asset.status === "completed").length;
     let totalFiles = Math.max(job.total_files, initialAssets.length);
-    let hadSuccess = false;
+    let hadSuccess = (() => {
+        const counts = refreshCounts();
+        return counts.pageCount + counts.entityCount > 0;
+    })();
     while (assetQueue().length > 0) {
         const nextAsset = assetQueue().find((asset) => ["processing", "queued"].includes(asset.status));
         if (!nextAsset) {
@@ -2675,6 +2789,27 @@ export async function processWikiIngestJob(jobId, options) {
                 updateWikiIngestAsset(nextAsset.id, { status: "failed" });
                 createWikiIngestLog(jobId, error instanceof Error ? error.message : "ZIP extraction failed.", "error");
             }
+            continue;
+        }
+        const derivedChunkCount = await splitLargeWikiIngestTextAsset({
+            jobId,
+            asset: nextAsset
+        });
+        if (derivedChunkCount > 0) {
+            totalFiles = Math.max(derivedChunkCount, totalFiles - 1 + derivedChunkCount);
+            updateWikiIngestJob(jobId, {
+                totalFiles,
+                latestMessage: `Split ${nextAsset.file_name || "large text source"} into ${derivedChunkCount} chunks.`
+            });
+            createWikiIngestLog(jobId, `Split ${nextAsset.file_name || "large text source"} into ${derivedChunkCount} chunks.`, "info", {
+                sourceAssetId: nextAsset.id,
+                fileName: nextAsset.file_name,
+                sourceLocator: nextAsset.source_locator,
+                checksum: nextAsset.checksum,
+                chunkCount: derivedChunkCount,
+                chunkMaxChars: MAX_WIKI_INGEST_TEXT_CHUNK_CHARS,
+                chunkOverlapChars: WIKI_INGEST_TEXT_CHUNK_OVERLAP_CHARS
+            });
             continue;
         }
         updateWikiIngestAsset(nextAsset.id, { status: "processing" });

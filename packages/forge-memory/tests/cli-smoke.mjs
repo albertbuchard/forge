@@ -10,10 +10,15 @@ const packageRoot = path.resolve(import.meta.dirname, "..");
 const bin = path.join(packageRoot, "bin", "forge-memory.mjs");
 const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "forge-memory-home-"));
 const dataRoot = path.join(tempHome, "data");
+const fakeIrohBin = path.join(tempHome, "bin", process.platform === "win32" ? "forge-companion-iroh.exe" : "forge-companion-iroh");
+fs.mkdirSync(path.dirname(fakeIrohBin), { recursive: true });
+fs.writeFileSync(fakeIrohBin, process.platform === "win32" ? "@echo off\r\n" : "#!/bin/sh\n");
+if (process.platform !== "win32") fs.chmodSync(fakeIrohBin, 0o755);
 const env = {
   ...process.env,
   HOME: tempHome,
-  USERPROFILE: tempHome
+  USERPROFILE: tempHome,
+  FORGE_COMPANION_IROH_BIN: fakeIrohBin
 };
 
 function run(args, options = {}) {
@@ -434,6 +439,23 @@ if (!pairingFailure.stderr.includes("doctor --repair")) {
 const manualHttpFailure = runFailure(["pair-ios", "--json", "--manual-http", "--public-url", "http://127.0.0.1:4317/forge/"]);
 if (!manualHttpFailure.stderr.includes("loopback-only")) {
   throw new Error("Expected manual HTTP pairing to reject loopback public URLs for physical iPhones");
+}
+const sourceOnlyRepo = path.join(tempHome, "source-only-iroh-repo");
+fs.mkdirSync(path.join(sourceOnlyRepo, "companion-iroh", "src"), { recursive: true });
+fs.writeFileSync(path.join(sourceOnlyRepo, "companion-iroh", "Cargo.toml"), "[package]\nname = \"forge-companion-iroh\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[[bin]]\nname = \"forge-companion-iroh\"\npath = \"src/main.rs\"\n");
+fs.writeFileSync(path.join(sourceOnlyRepo, "companion-iroh", "src", "main.rs"), "fn main() {}\n");
+writeSmokeConfig({ mode: "dev", repo: sourceOnlyRepo, port: 0, dataRoot, adapters: [] });
+const missingRustEnv = { ...env, PATH: "" };
+delete missingRustEnv.FORGE_COMPANION_IROH_BIN;
+const missingRustFailure = runFailure(["pair-ios", "--json", "--no-start"], {
+  env: missingRustEnv
+});
+const missingRustPayload = JSON.parse(missingRustFailure.stderr);
+if (!missingRustPayload.error.includes("Rust/Cargo is not installed")) {
+  throw new Error("Expected source-only Iroh pairing to explain missing Rust/Cargo");
+}
+if (!missingRustPayload.error.includes("Install steps:")) {
+  throw new Error("Expected source-only Iroh pairing to include installer guidance");
 }
 const codexConfigPath = path.join(tempHome, ".codex", "config.toml");
 fs.mkdirSync(path.dirname(codexConfigPath), { recursive: true });

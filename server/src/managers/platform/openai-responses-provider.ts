@@ -34,8 +34,11 @@ const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
 };
 const DEFAULT_CONTEXT_WINDOW = 400_000;
 const RESERVED_RESPONSE_TOKENS = 140_000;
+const CODEX_WIKI_COMPILE_CONTEXT_WINDOW = 120_000;
+const CODEX_WIKI_COMPILE_RESERVED_RESPONSE_TOKENS = 60_000;
 const APPROX_CHARS_PER_TOKEN = 4;
 const REQUEST_TIMEOUT_MS = 90_000;
+const CODEX_FOREGROUND_COMPILE_TIMEOUT_MS = 10 * 60_000;
 const BACKGROUND_POLL_INTERVAL_MS = 2_000;
 
 type JsonSchema = Record<string, unknown>;
@@ -427,8 +430,15 @@ function estimateTokens(text: string) {
 }
 
 function computeSourceExcerpt(profile: WikiLlmProfileLike, sourceText: string) {
-  const contextWindow = MODEL_CONTEXT_WINDOWS[profile.model] ?? DEFAULT_CONTEXT_WINDOW;
-  const inputBudget = Math.max(16_000, contextWindow - RESERVED_RESPONSE_TOKENS);
+  const configuredContextWindow =
+    MODEL_CONTEXT_WINDOWS[profile.model] ?? DEFAULT_CONTEXT_WINDOW;
+  const contextWindow = isCodexProfile(profile)
+    ? Math.min(configuredContextWindow, CODEX_WIKI_COMPILE_CONTEXT_WINDOW)
+    : configuredContextWindow;
+  const reservedResponseTokens = isCodexProfile(profile)
+    ? CODEX_WIKI_COMPILE_RESERVED_RESPONSE_TOKENS
+    : RESERVED_RESPONSE_TOKENS;
+  const inputBudget = Math.max(16_000, contextWindow - reservedResponseTokens);
   const estimatedTokens = estimateTokens(sourceText);
   if (estimatedTokens <= inputBudget) {
     return {
@@ -983,7 +993,11 @@ export class OpenAiResponsesProvider implements WikiLlmProvider {
                 }
               })
             }),
-            signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+            signal: AbortSignal.timeout(
+              isCodexProfile(profile)
+                ? CODEX_FOREGROUND_COMPILE_TIMEOUT_MS
+                : REQUEST_TIMEOUT_MS
+            )
           }
         );
       } catch (error) {
