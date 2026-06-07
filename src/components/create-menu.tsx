@@ -259,7 +259,7 @@ function buildForgeCreateActionSpecs(
       title: "Wiki page",
       quickActionTitle: "Create wiki page",
       description:
-        "Open a fresh Forge Wiki page draft in the current knowledge workspace.",
+        "Open a fresh KarpaWiki page draft in the current knowledge workspace.",
       aliases: ["wiki", "wiki page", "karpawiki", "page", "article"],
       filterIds: ["wiki_page"]
     }

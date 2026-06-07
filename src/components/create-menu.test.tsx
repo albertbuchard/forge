@@ -54,7 +54,7 @@ const actions: ForgeCreateAction[] = [
     group: "Knowledge",
     title: "Wiki page",
     quickActionTitle: "Create wiki page",
-    description: "Open a fresh Forge Wiki page draft.",
+    description: "Open a fresh KarpaWiki page draft.",
     aliases: ["wiki"],
     filterIds: ["wiki_page"],
     onSelect: vi.fn()

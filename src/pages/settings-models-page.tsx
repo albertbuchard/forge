@@ -411,7 +411,7 @@ export function SettingsModelsPage() {
 
           <label className={modelPanelClass}>
             <span className={`text-sm ${modelBodyClass}`}>
-              Forge Wiki Codex OAuth connection
+              KarpaWiki Codex OAuth connection
             </span>
             <select
               className={modelInputClass}
@@ -438,7 +438,7 @@ export function SettingsModelsPage() {
               placeholder="Model"
             />
             <span className={`text-xs leading-5 ${modelFaintClass}`}>
-              Forge Wiki smart ingest uses ChatGPT/Codex OAuth only. It does not
+              KarpaWiki smart ingest uses ChatGPT/Codex OAuth only. It does not
               use metered OpenAI Platform API keys.
             </span>
           </label>
@@ -460,8 +460,8 @@ export function SettingsModelsPage() {
           </Badge>
           <Badge className={modelMetaBadgeClass}>
             {settings.modelSettings.forgeAgent.wiki.connectionLabel
-              ? `Forge Wiki OAuth: ${settings.modelSettings.forgeAgent.wiki.connectionLabel}`
-              : "Forge Wiki: no Codex OAuth model selected"}
+              ? `KarpaWiki OAuth: ${settings.modelSettings.forgeAgent.wiki.connectionLabel}`
+              : "KarpaWiki: no Codex OAuth model selected"}
           </Badge>
           {connectedCodexOauthConnections.length === 0 ? (
             <Badge className={modelWarningBadgeClass}>
@@ -475,10 +475,10 @@ export function SettingsModelsPage() {
         <div className="flex items-center gap-3">
           <DatabaseZap className="size-4 text-[var(--secondary)]" />
           <div>
-            <div className={modelTitleClass}>Forge Wiki embeddings</div>
+            <div className={modelTitleClass}>KarpaWiki embeddings</div>
             <div className={`text-xs leading-5 ${modelFaintClass}`}>
               Semantic search profiles live with model settings. They remain
-              optional; Forge Wiki text search and entity-linked search still
+              optional; KarpaWiki text search and entity-linked search still
               work without embeddings.
             </div>
           </div>
@@ -491,7 +491,7 @@ export function SettingsModelsPage() {
             ) : null}
             {wikiSettingsQuery.isError ? (
               <div className={modelDangerPanelClass}>
-                Could not load Forge Wiki embedding profiles.
+                Could not load KarpaWiki embedding profiles.
               </div>
             ) : null}
             {wikiSettingsQuery.data?.settings.embeddingProfiles.length === 0 ? (

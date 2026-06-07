@@ -5854,7 +5854,7 @@ function buildAgentOnboardingPayload(request: {
       taskRun:
         "A live work session attached to a task. Start, heartbeat, focus, complete, and release runs instead of faking work with status alone.",
       note: "A Markdown work note that can link to one or many entities. Use notes for progress evidence, context, and close-out summaries.",
-      wiki: "Forge Wiki is the SQLite-backed memory layer: Markdown content in notes rows plus media, backlinks, optional embeddings, explicit spaces, and structured links back to Forge entities.",
+      wiki: "KarpaWiki is the SQLite-backed memory layer: Markdown content in notes rows plus media, backlinks, optional embeddings, explicit spaces, and structured links back to Forge entities.",
       sleepSession:
         "A sleep session is a first-class health record with timing, sleep and bed duration, stage breakdown, recovery metrics, annotations, and Forge links back to planning or Psyche context.",
       workoutSession:

@@ -156,8 +156,8 @@ const WORKBENCH_SURFACE_ROUTES: Record<
     href: "/psyche"
   },
   wiki: {
-    title: "Forge Wiki Surface",
-    subtitle: "Forge Wiki memory workspace",
+    title: "KarpaWiki Surface",
+    subtitle: "KarpaWiki memory workspace",
     href: "/wiki"
   },
   strategies: {

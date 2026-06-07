@@ -138,7 +138,7 @@ function WikiSpacePickerDialog({
           <div className="flex items-start justify-between gap-4">
             <div>
               <Dialog.Title className="font-display text-[1.2rem] tracking-[-0.04em] text-[var(--ui-ink-strong)]">
-                Choose Forge Wiki space
+                Choose KarpaWiki space
               </Dialog.Title>
               <Dialog.Description className="mt-1 text-[13px] leading-6 text-[var(--ui-ink-soft)]">
                 Switch the reading space without leaving the article surface.
@@ -421,7 +421,7 @@ export function WikiPage() {
       return;
     }
     const confirmed = window.confirm(
-      `Delete Forge Wiki page "${selectedPage.title}"? You can restore it later from the bin.`
+      `Delete KarpaWiki page "${selectedPage.title}"? You can restore it later from the bin.`
     );
     if (!confirmed) {
       return;
@@ -461,9 +461,9 @@ export function WikiPage() {
   ) {
     return (
       <LoadingState
-        eyebrow="Forge Wiki"
+        eyebrow="KarpaWiki"
         title="Loading the article"
-        description="Preparing the current space, article, and Forge Wiki index."
+        description="Preparing the current space, article, and KarpaWiki index."
       />
     );
   }
@@ -478,7 +478,7 @@ export function WikiPage() {
   ) {
     return (
       <ErrorState
-        eyebrow="Forge Wiki"
+        eyebrow="KarpaWiki"
         error={
           settingsQuery.error ??
           homeQuery.error ??
@@ -499,7 +499,7 @@ export function WikiPage() {
     if (missingLinkedTitle) {
       return (
         <LoadingState
-          eyebrow="Forge Wiki"
+          eyebrow="KarpaWiki"
           title="Opening a new page"
           description={`Creating a draft for ${missingLinkedTitle}.`}
         />
@@ -507,7 +507,7 @@ export function WikiPage() {
     }
     return (
       <EmptyState
-        eyebrow="Forge Wiki"
+        eyebrow="KarpaWiki"
         title="Article not found"
         description="This page does not exist in the selected space."
       />
@@ -522,7 +522,7 @@ export function WikiPage() {
             <div className="flex flex-wrap items-center gap-2">
               <EntityBadge
                 kind="wiki_page"
-                label="Forge Wiki page"
+                label="KarpaWiki page"
                 compact
                 gradient={false}
               />
@@ -552,7 +552,7 @@ export function WikiPage() {
                 onClick={() => setSearchOpen(true)}
               >
                 <Search className="size-4 shrink-0 text-[var(--ui-ink-faint)]" />
-                <span>Search Forge Wiki</span>
+                <span>Search KarpaWiki</span>
               </button>
 
               <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
@@ -565,7 +565,7 @@ export function WikiPage() {
                     Space
                   </span>
                   <span className="max-w-[16rem] truncate">
-                    {activeSpace?.label ?? "Forge Wiki space"}
+                    {activeSpace?.label ?? "KarpaWiki space"}
                   </span>
                   <ChevronDown className="size-3.5 text-[var(--ui-ink-faint)]" />
                 </button>
@@ -666,8 +666,8 @@ export function WikiPage() {
                   disabled={!canDeletePage}
                   title={
                     canDeletePage
-                      ? "Delete this Forge Wiki page"
-                      : "The Forge Wiki home page cannot be deleted"
+                      ? "Delete this KarpaWiki page"
+                      : "The KarpaWiki home page cannot be deleted"
                   }
                 >
                   <Trash2 className="size-3.5" />
@@ -738,7 +738,7 @@ export function WikiPage() {
                   <div className="mb-4 rounded-[18px] border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
                     {deletePageMutation.error instanceof Error
                       ? deletePageMutation.error.message
-                      : "Forge could not delete this Forge Wiki page."}
+                      : "Forge could not delete this KarpaWiki page."}
                   </div>
                 ) : null}
                 <WikiArticleMarkdown
@@ -836,7 +836,7 @@ export function WikiPage() {
                 autoFocus
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search Forge Wiki pages"
+                placeholder="Search KarpaWiki pages"
                 className="h-11 rounded-2xl border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[14px] text-[var(--ui-ink-strong)] placeholder:text-[var(--ui-ink-faint)]"
               />
 
@@ -880,17 +880,17 @@ export function WikiPage() {
             <div className="mt-4 max-h-[60vh] overflow-y-auto">
               {!searchQuery.trim() ? (
                 <div className="rounded-2xl border border-dashed border-[var(--ui-border-subtle)] px-4 py-10 text-center text-[13px] leading-6 text-[var(--ui-ink-faint)]">
-                  Start typing to search the current Forge Wiki space.
+                  Start typing to search the current KarpaWiki space.
                 </div>
               ) : searchResultsQuery.isLoading ? (
                 <LoadingState
-                  eyebrow="Forge Wiki search"
+                  eyebrow="KarpaWiki search"
                   title="Searching"
                   description="Ranking matching pages for this query."
                 />
               ) : searchResultsQuery.isError ? (
                 <ErrorState
-                  eyebrow="Forge Wiki search"
+                  eyebrow="KarpaWiki search"
                   error={searchResultsQuery.error}
                   onRetry={() => void searchResultsQuery.refetch()}
                 />

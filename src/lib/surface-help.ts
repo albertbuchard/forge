@@ -167,9 +167,9 @@ const SURFACE_HELP_BY_ID: Record<string, SurfaceHelp> = {
       "Capture raw context here, then link it to goals, projects, tasks, Psyche records, or wiki pages."
   },
   wiki: {
-    title: "Forge Wiki",
+    title: "KarpaWiki",
     purpose:
-      "Forge Wiki is the durable knowledge surface for authored pages, imported material, links, summaries, and entity memory.",
+      "KarpaWiki is the durable knowledge surface for authored pages, imported material, links, summaries, and entity memory.",
     primaryAction:
       "Search before creating, then write or ingest when the knowledge should become reusable."
   },

@@ -270,7 +270,7 @@ export function ActionBar({
         label: filter.label,
         description:
           filter.id === "wiki_page"
-            ? "Search only Forge Wiki pages."
+            ? "Search only KarpaWiki pages."
             : filter.id === "note"
               ? "Search notes and evidence that are not wiki pages."
               : `Search ${filter.label.toLowerCase()} records.`,
