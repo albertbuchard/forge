@@ -1,5 +1,5 @@
-Forge Companion 1.0.86 fixes stale and partially applied Forge themes inside the embedded web view.
+Forge Companion 1.0.87 improves HealthKit sync recovery after Iroh transport timeouts.
 
-The native wrapper no longer overrides Forge’s web theme backgrounds, so the current Forge theme controls page backgrounds and cards consistently.
+Health sync chunk uploads now get a longer Iroh response window, which helps larger movement batches complete after reconnecting or repairing a pairing.
 
-The Refresh Forge cache action now clears modern WebKit fetch and service-worker caches while preserving pairing credentials and local app preferences.
+The native Iroh bridge also handles timeout/error responses more defensively, so retries surface the real transport error instead of degrading into a generic missing-data failure.
