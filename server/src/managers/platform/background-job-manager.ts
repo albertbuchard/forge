@@ -32,6 +32,7 @@ export class BackgroundJobManager extends AbstractManager {
         },
         functionName: "enqueue"
       });
+      this.scheduleDrain();
       return;
     }
     this.queue.push(input);
