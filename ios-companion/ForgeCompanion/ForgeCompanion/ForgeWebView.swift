@@ -315,7 +315,7 @@ struct ForgeWebView: UIViewRepresentable {
     }
 }
 
-private final class ForgeIrohURLSchemeHandler: NSObject, WKURLSchemeHandler {
+final class ForgeIrohURLSchemeHandler: NSObject, WKURLSchemeHandler {
     private let transport: PairingTransport
     private var activeTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
 
@@ -331,35 +331,65 @@ private final class ForgeIrohURLSchemeHandler: NSObject, WKURLSchemeHandler {
                 guard let url = request.url else {
                     throw URLError(.badURL)
                 }
-                var path = url.path.isEmpty ? "/" : url.path
-                if let query = url.query, !query.isEmpty {
-                    path += "?\(query)"
-                }
+                let path = Self.proxyPath(for: url)
+                companionDebugLog(
+                    "ForgeIrohURLSchemeHandler",
+                    "start method=\(request.httpMethod ?? "GET") url=\(url.absoluteString) path=\(path)"
+                )
                 let result = try await ForgeIrohTransportClient.send(
                     method: request.httpMethod ?? "GET",
                     path: path,
-                    headers: request.allHTTPHeaderFields ?? [:],
+                    headers: Self.proxyHeaders(from: request),
                     body: request.httpBody,
                     transport: transport
                 )
-                guard let response = HTTPURLResponse(
-                    url: url,
-                    statusCode: result.statusCode,
-                    httpVersion: "HTTP/1.1",
-                    headerFields: result.headers
-                ) else {
-                    throw URLError(.badServerResponse)
+                if Task.isCancelled {
+                    return
+                }
+                if let redirectURL = Self.redirectURL(
+                    from: result,
+                    originalURL: url
+                ) {
+                    companionDebugLog(
+                        "ForgeIrohURLSchemeHandler",
+                        "redirect status=\(result.statusCode) url=\(url.absoluteString) location=\(redirectURL.absoluteString)"
+                    )
+                    let redirectResult = try await ForgeIrohTransportClient.send(
+                        method: "GET",
+                        path: Self.proxyPath(for: redirectURL),
+                        headers: Self.proxyHeaders(from: request),
+                        body: nil,
+                        transport: transport
+                    )
+                    try await Self.finish(
+                        urlSchemeTask,
+                        url: redirectURL,
+                        result: redirectResult
+                    )
+                } else {
+                    try await Self.finish(
+                        urlSchemeTask,
+                        url: url,
+                        result: result
+                    )
                 }
                 await MainActor.run {
-                    urlSchemeTask.didReceive(response)
-                    urlSchemeTask.didReceive(result.data)
-                    urlSchemeTask.didFinish()
-                    activeTasks.removeValue(forKey: key)
+                    _ = activeTasks.removeValue(forKey: key)
                 }
             } catch {
+                if Task.isCancelled {
+                    await MainActor.run {
+                        _ = activeTasks.removeValue(forKey: key)
+                    }
+                    return
+                }
+                companionDebugLog(
+                    "ForgeIrohURLSchemeHandler",
+                    "fail url=\(request.url?.absoluteString ?? "nil") error=\(error.localizedDescription)"
+                )
                 await MainActor.run {
                     urlSchemeTask.didFailWithError(error)
-                    activeTasks.removeValue(forKey: key)
+                    _ = activeTasks.removeValue(forKey: key)
                 }
             }
         }
@@ -368,8 +398,144 @@ private final class ForgeIrohURLSchemeHandler: NSObject, WKURLSchemeHandler {
 
     func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {
         let key = ObjectIdentifier(urlSchemeTask as AnyObject)
+        companionDebugLog(
+            "ForgeIrohURLSchemeHandler",
+            "stop url=\(urlSchemeTask.request.url?.absoluteString ?? "nil")"
+        )
         activeTasks[key]?.cancel()
         activeTasks.removeValue(forKey: key)
+    }
+
+    static func proxyPath(for url: URL) -> String {
+        let absoluteString = url.absoluteString
+        if let schemeSeparatorRange = absoluteString.range(of: "://") {
+            let afterAuthority = absoluteString[schemeSeparatorRange.upperBound...]
+            if let pathStartIndex = afterAuthority.firstIndex(of: "/") {
+                var pathAndQuery = String(afterAuthority[pathStartIndex...])
+                if let fragmentStartIndex = pathAndQuery.firstIndex(of: "#") {
+                    pathAndQuery = String(pathAndQuery[..<fragmentStartIndex])
+                }
+                return pathAndQuery.isEmpty ? "/" : pathAndQuery
+            }
+        }
+        var normalizedPath = url.path.isEmpty ? "/" : url.path
+        if let query = url.query, !query.isEmpty {
+            normalizedPath += "?\(query)"
+        }
+        return normalizedPath
+    }
+
+    static func mimeType(from headers: [String: String], fallbackURL url: URL) -> String {
+        let contentType = headerValue("content-type", in: headers)?
+            .split(separator: ";", maxSplits: 1)
+            .first
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+        if let contentType, contentType.isEmpty == false {
+            return contentType
+        }
+        switch url.pathExtension.lowercased() {
+        case "css":
+            return "text/css"
+        case "js", "mjs", "ts", "tsx":
+            return "text/javascript"
+        case "json", "map":
+            return "application/json"
+        case "svg":
+            return "image/svg+xml"
+        case "png":
+            return "image/png"
+        case "jpg", "jpeg":
+            return "image/jpeg"
+        case "ico":
+            return "image/x-icon"
+        case "woff":
+            return "font/woff"
+        case "woff2":
+            return "font/woff2"
+        default:
+            return "text/html"
+        }
+    }
+
+    private static func finish(
+        _ urlSchemeTask: WKURLSchemeTask,
+        url: URL,
+        result: ForgeIrohTransportResult
+    ) async throws {
+        if Task.isCancelled {
+            return
+        }
+        let mimeType = mimeType(from: result.headers, fallbackURL: url)
+        let response = URLResponse(
+            url: url,
+            mimeType: mimeType,
+            expectedContentLength: result.data.count,
+            textEncodingName: textEncodingName(from: result.headers)
+        )
+        companionDebugLog(
+            "ForgeIrohURLSchemeHandler",
+            "finish status=\(result.statusCode) url=\(url.absoluteString) bytes=\(result.data.count) mime=\(mimeType)"
+        )
+        await MainActor.run {
+            urlSchemeTask.didReceive(response)
+            if result.data.isEmpty == false {
+                urlSchemeTask.didReceive(result.data)
+            }
+            urlSchemeTask.didFinish()
+        }
+    }
+
+    private static func redirectURL(
+        from result: ForgeIrohTransportResult,
+        originalURL: URL
+    ) -> URL? {
+        guard (300 ... 399).contains(result.statusCode),
+              let location = headerValue("location", in: result.headers),
+              location.isEmpty == false
+        else {
+            return nil
+        }
+        if let absoluteURL = URL(string: location), absoluteURL.scheme != nil {
+            if absoluteURL.scheme == "forge-iroh" {
+                return absoluteURL
+            }
+            var components = URLComponents(url: originalURL, resolvingAgainstBaseURL: false)
+            components?.path = absoluteURL.path
+            components?.query = absoluteURL.query
+            return components?.url
+        }
+        return URL(string: location, relativeTo: originalURL)?.absoluteURL
+    }
+
+    private static func proxyHeaders(from request: URLRequest) -> [String: String] {
+        var headers = request.allHTTPHeaderFields ?? [:]
+        headers["Host"] = nil
+        headers["Connection"] = nil
+        headers["Content-Length"] = nil
+        headers["Transfer-Encoding"] = nil
+        return headers
+    }
+
+    private static func headerValue(_ name: String, in headers: [String: String]) -> String? {
+        headers.first {
+            $0.key.caseInsensitiveCompare(name) == .orderedSame
+        }?.value
+    }
+
+    private static func textEncodingName(from headers: [String: String]) -> String? {
+        guard let contentType = headerValue("content-type", in: headers) else {
+            return nil
+        }
+        let parts = contentType
+            .split(separator: ";")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        for part in parts {
+            let lowercased = part.lowercased()
+            if lowercased.hasPrefix("charset=") {
+                return String(part.dropFirst("charset=".count))
+            }
+        }
+        return nil
     }
 }
 

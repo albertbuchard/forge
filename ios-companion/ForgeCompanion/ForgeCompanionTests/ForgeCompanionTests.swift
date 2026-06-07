@@ -143,6 +143,41 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertFalse(script.contains("html, body, #root"))
     }
 
+    func testForgeIrohWebViewSchemeHandlerPreservesForgePathAndRefreshQuery() throws {
+        let url = try XCTUnwrap(
+            URL(string: "forge-iroh://fakednodeid/forge/?forgeWebRefresh=abc&tab=today")
+        )
+
+        XCTAssertEqual(
+            ForgeIrohURLSchemeHandler.proxyPath(for: url),
+            "/forge/?forgeWebRefresh=abc&tab=today"
+        )
+    }
+
+    func testForgeIrohWebViewSchemeHandlerDerivesWebMimeTypes() throws {
+        XCTAssertEqual(
+            ForgeIrohURLSchemeHandler.mimeType(
+                from: ["content-type": "text/html; charset=utf-8"],
+                fallbackURL: try XCTUnwrap(URL(string: "forge-iroh://fakednodeid/forge/"))
+            ),
+            "text/html"
+        )
+        XCTAssertEqual(
+            ForgeIrohURLSchemeHandler.mimeType(
+                from: [:],
+                fallbackURL: try XCTUnwrap(URL(string: "forge-iroh://fakednodeid/forge/src/main.tsx"))
+            ),
+            "text/javascript"
+        )
+        XCTAssertEqual(
+            ForgeIrohURLSchemeHandler.mimeType(
+                from: [:],
+                fallbackURL: try XCTUnwrap(URL(string: "forge-iroh://fakednodeid/forge/assets/app.woff2"))
+            ),
+            "font/woff2"
+        )
+    }
+
     func testNormalizedPayloadPreservesPreferredUiBaseUrl() {
         let payload = PairingPayload(
             kind: "pairing",

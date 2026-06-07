@@ -1,5 +1,5 @@
-Forge Companion 1.0.89 fixes pairing and reconnect routing for Iroh-first companion sync.
+Forge Companion 1.0.90 fixes Forge WebView loading over Iroh pairings.
 
-New Iroh pairings no longer expose localhost as a phone-facing API or UI URL. The app now uses the Iroh tunnel by default and only keeps Tailscale, LAN, or fixed-IP fallbacks when Forge actually provides a phone-reachable address.
+The embedded Forge view now preserves the exact `/forge/` path and refresh query when proxying through `forge-iroh://`, avoiding the WebKit “Frame load interrupted” failure seen after successful sync.
 
-Re-pairing now switches the active Forge cleanly, cancels stale sync work from the previous pairing, and remembers prior Iroh/direct endpoints separately so they can be selected again without trying to sync against an old server.
+The Iroh WebView bridge also now returns WebKit-safe responses, follows Forge redirects explicitly, and logs scheme-handler request/response details for easier diagnosis.
