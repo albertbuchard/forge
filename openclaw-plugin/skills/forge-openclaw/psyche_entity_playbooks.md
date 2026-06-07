@@ -197,6 +197,38 @@ material without a usable formulation.
 - Do not make the user supply every interpretation alone. If the sequence is clear
   enough, do the formulation work in plain language and invite correction.
 
+## Hypothesis Timing Checkpoint
+
+Use this before asking a second or third deepening question. The point is not to sound
+insightful; the point is to help the user test a formulation that their own example
+already supports.
+
+Offer a hypothesis now when:
+
+- the user has given one concrete episode, body cue, belief sentence, behavior, or
+  mode voice
+- the same material is appearing in two nearby forms and another question would make
+  the user do all of the formulation work alone
+- you can point to evidence in the user's words and name one function, prediction,
+  protection, payoff, relief, or cost
+- the hypothesis would change the record shape, wording, links, or next action rather
+  than merely adding empathic color
+
+Do not offer a hypothesis yet when:
+
+- no concrete moment is visible and you would be inventing from an abstraction
+- the user asked for a direct mechanical save and the wording is already accurate
+  enough to store
+- the user seems flooded, unsafe, or too activated to evaluate an interpretation; first
+  contain, ground, or ask for immediate support needs
+- the only available interpretation would be a diagnosis-like label, origin story,
+  trauma explanation, or certainty claim
+
+After the hypothesis, ask exactly one correction question. If the user accepts or
+corrects it, bridge toward the record shape. If the user rejects it without offering a
+replacement, ask for one contrast that would disconfirm the hypothesis instead of
+offering another theory.
+
 ## Hypothesis Wording Shape
 
 Use this when reflection alone would leave the user with warmth but no clearer

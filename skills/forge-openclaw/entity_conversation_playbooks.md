@@ -77,6 +77,9 @@ Forge correctly, and gather only the structure that still matters.
   genuinely structural.
 - For review requests, ask what practical question they want the read to answer before
   you ask for more scope.
+- For review-first requests, do not ask write-shaped questions until the read has
+  answered the user's practical question. Only ask for write details after the result
+  points to a concrete save, correction, link, run, enrichment, or publish action.
 - For meaning-bearing updates, especially in Psyche-adjacent work, briefly say what
   feels newly true before you ask for the one structural detail that still changes the
   save.
@@ -183,6 +186,26 @@ worked.
   the next move is a Psyche formulation, a flashcard, a note, a task, a habit, or no
   write at all. Do not widen into a new taxonomy choice unless the read made the
   container genuinely ambiguous.
+
+## Review-before-write checkpoint
+
+Use this when the user asks to review, guide, inspect, compare, or understand before
+changing anything. The read is part of the help, not a pretext for a new form.
+
+- Ask only for the scope that changes the read: the record, owner, timeframe,
+  comparison target, movement span, weekday, flow, run, node, or published output.
+- Use the correct read posture first: shared batch search or read hints for normal
+  entities, wiki/calendar dedicated reads for specialized CRUD, read-model routes for
+  overviews, and Movement, Life Force, or Workbench dedicated reads for those domain
+  surfaces.
+- After the read, answer the practical question in plain language before asking for
+  any write detail.
+- If the answer does not create a concrete next action, close cleanly. Do not ask
+  whether to save, update, link, enrich, run, or publish just to keep the conversation
+  going.
+- If the read does create a next action, ask only the one detail that changes that
+  action: the exact correction, target record, link, weekday-template change,
+  overlay span, node result, run scope, or published-output preservation need.
 
 ## Psyche and memory routing
 

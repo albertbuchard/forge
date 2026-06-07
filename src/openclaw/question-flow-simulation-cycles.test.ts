@@ -876,8 +876,21 @@ describe("question flow simulation cycles", () => {
     expect(psychePlaybook).toMatch(/lived signature/i);
     expect(psychePlaybook).toMatch(/Interpretive Hypotheses/i);
     expect(psychePlaybook).toMatch(/Hypothesis Wording Shape/i);
+    expect(psychePlaybook).toMatch(/Hypothesis Timing Checkpoint/i);
     expect(psychePlaybook).toMatch(/evidence in the user's own example/i);
     expect(psychePlaybook).toMatch(/function without blame/i);
+    expect(psychePlaybook).toMatch(
+      /second or third deepening question[\s\S]*concrete episode, body cue, belief sentence, behavior, or\s+mode voice/i
+    );
+    expect(psychePlaybook).toMatch(
+      /hypothesis would change the record shape, wording, links, or next action/i
+    );
+    expect(psychePlaybook).toMatch(
+      /Do not offer a hypothesis yet[\s\S]*direct mechanical save[\s\S]*diagnosis-like label, origin story/i
+    );
+    expect(psychePlaybook).toMatch(
+      /After the hypothesis, ask exactly one correction question/i
+    );
     expect(psychePlaybook).toMatch(/Hypothesis To Record Bridge/i);
     expect(psychePlaybook).toMatch(/collaborative formulations/i);
     expect(psychePlaybook).toMatch(/protecting, predicting, relieving, or\s+costing/i);
@@ -1047,6 +1060,13 @@ describe("question flow simulation cycles", () => {
     expect(entityPlaybook).toMatch(/do not ask a broad review question again/i);
     expect(entityPlaybook).toMatch(
       /After a review, overview, navigation, or specialized read returns data/i
+    );
+    expect(entityPlaybook).toMatch(/Review-before-write checkpoint/i);
+    expect(entityPlaybook).toMatch(
+      /review, guide, inspect, compare, or understand before\s+changing anything/i
+    );
+    expect(entityPlaybook).toMatch(
+      /shared batch search or read hints[\s\S]*wiki\/calendar dedicated reads[\s\S]*read-model routes[\s\S]*Movement, Life Force, or Workbench dedicated reads/i
     );
     expect(entityPlaybook).toMatch(
       /First answer the practical question[\s\S]*Name one implication or uncertainty/i
@@ -1218,6 +1238,15 @@ describe("question flow simulation cycles", () => {
       /After one concrete example is clear and a hypothesis lands or is corrected[\s\S]*translate it into a saveable record shape/i
     );
     expect(onboardingSource).toMatch(
+      /hypothesis timing checkpoint[\s\S]*second or third deepening question[\s\S]*concrete episode, body cue, belief sentence, behavior, or mode voice/i
+    );
+    expect(onboardingSource).toMatch(
+      /hypothesis would change the record shape, wording, links, or next action/i
+    );
+    expect(onboardingSource).toMatch(
+      /Do not hypothesize yet[\s\S]*no concrete moment is visible[\s\S]*direct mechanical save[\s\S]*flooded or unsafe[\s\S]*diagnosis-like/i
+    );
+    expect(onboardingSource).toMatch(
       /minimum save-readiness checkpoint[\s\S]*accepted wording[\s\S]*meaningful body[\s\S]*optional fields exist/i
     );
     expect(onboardingSource).toMatch(
@@ -1287,15 +1316,16 @@ describe("question flow simulation cycles", () => {
 
   it("cycle 3 report retest: durable automation report covers this full run", () => {
     const report = readRepoFile("docs/question-flow-improvement-cycles.md");
-    const latestRun = getSectionSlice(report, "2026-06-06 Automation Pass");
+    const latestRun = getSectionSlice(report, "2026-06-07 Automation Pass");
 
-    expect(report).toMatch(/Latest run date: 2026-06-06/);
+    expect(report).toMatch(/Latest run date: 2026-06-07/);
     expect(latestRun).toMatch(/data\/forge\/forge\.sqlite/i);
     expect(latestRun).toMatch(/repo-local[\s\S]*openclaw-plugin\/dist\/openclaw\/index\.js/i);
-    expect(latestRun).toMatch(/forge-openclaw-plugin 0\.2\.109/i);
-    expect(latestRun).toMatch(/forge-hermes-plugin 0\.2\.109/i);
+    expect(latestRun).toMatch(/forge-openclaw-plugin 0\.3\.0/i);
+    expect(latestRun).toMatch(/forge-hermes-plugin 0\.3\.0/i);
     expect(latestRun).toMatch(/43 entity catalog\s+entries/i);
     expect(latestRun).toMatch(/199 OpenAPI paths/i);
+    expect(latestRun).toMatch(/44 checks/i);
     expect(latestRun).toMatch(/\/api\/v1\/strategies[\s\S]*\/api\/v1\/strategies\/\{id\}/i);
     expect(latestRun).toMatch(/training_load[\s\S]*weight_loss/i);
     expect(latestRun).toMatch(
@@ -1310,13 +1340,13 @@ describe("question flow simulation cycles", () => {
     expect(latestRun).toMatch(/training_load[\s\S]*weight_loss/i);
     expect(latestRun).toMatch(/Movement[\s\S]*Life Force[\s\S]*Workbench/i);
     expect(latestRun).toMatch(
-      /Cycle 1[\s\S]*minimum save-readiness checkpoint[\s\S]*Psyche save-readiness checkpoint/i
+      /Cycle 1[\s\S]*review-first requests[\s\S]*Review-before-write checkpoint/i
     );
     expect(latestRun).toMatch(
-      /Cycle 2[\s\S]*top-level OpenClaw, Hermes, and Codex skills[\s\S]*optional fields/i
+      /Cycle 2[\s\S]*Psyche second and\s+third turns[\s\S]*Hypothesis Timing Checkpoint/i
     );
     expect(latestRun).toMatch(
-      /Cycle 3[\s\S]*durable automation reporting[\s\S]*older adapter version/i
+      /Cycle 3[\s\S]*durable\s+automation freshness[\s\S]*older\s+adapter versions/i
     );
     expect(latestRun).toMatch(/focused retest passed/i);
     expect(latestRun).toMatch(/What happened after retesting/i);

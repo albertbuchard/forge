@@ -150,6 +150,19 @@ describe("question flow quality coverage", () => {
     expect(entityPlaybook).toMatch(
       /After a review, overview, navigation, or specialized read returns data/i
     );
+    expect(entityPlaybook).toMatch(/## Review-before-write checkpoint/i);
+    expect(entityPlaybook).toMatch(
+      /Use this when the user asks to review, guide, inspect, compare, or understand before\s+changing anything/i
+    );
+    expect(entityPlaybook).toMatch(
+      /shared batch search or read hints[\s\S]*wiki\/calendar dedicated reads[\s\S]*read-model routes[\s\S]*Movement, Life Force, or Workbench dedicated reads/i
+    );
+    expect(entityPlaybook).toMatch(
+      /After the read, answer the practical question[\s\S]*before asking for\s+any write detail/i
+    );
+    expect(entityPlaybook).toMatch(
+      /If the answer does not create a concrete next action, close cleanly/i
+    );
     expect(entityPlaybook).toMatch(
       /Ask a follow-up only if it changes the next action:[\s\S]*save, update, correct, link,\s+schedule, run, publish, enrich, or open the UI/i
     );
@@ -589,6 +602,22 @@ describe("question flow quality coverage", () => {
     expect(psychePlaybook).toMatch(/Does that fit, or is the danger\/need somewhere else/i);
     expect(psychePlaybook).toMatch(
       /If the user rejects the hypothesis, accept the correction and revise once/i
+    );
+    expect(psychePlaybook).toMatch(/## Hypothesis Timing Checkpoint/i);
+    expect(psychePlaybook).toMatch(
+      /before asking a second or third deepening question/i
+    );
+    expect(psychePlaybook).toMatch(
+      /one concrete episode, body cue, belief sentence, behavior, or\s+mode voice/i
+    );
+    expect(psychePlaybook).toMatch(
+      /would change the record shape, wording, links, or next action/i
+    );
+    expect(psychePlaybook).toMatch(
+      /Do not offer a hypothesis yet[\s\S]*no concrete moment is visible[\s\S]*direct mechanical save[\s\S]*flooded, unsafe/i
+    );
+    expect(psychePlaybook).toMatch(
+      /rejects it without offering a\s+replacement[\s\S]*one contrast that would disconfirm the hypothesis/i
     );
     expect(psychePlaybook).toMatch(
       /moment is still hot[\s\S]*painful, dangerous, or protective/i

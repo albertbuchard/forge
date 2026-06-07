@@ -835,13 +835,13 @@ describe("forge onboarding contract", () => {
           /Movement, Life Force, and Workbench[\s\S]*forge_call_movement_route[\s\S]*forge_call_life_force_route[\s\S]*forge_call_workbench_route[\s\S]*read the relevant view back[\s\S]*\/forge\/v1\/movement[\s\S]*\/forge\/v1\/life-force[\s\S]*\/forge\/v1\/workbench/i
         ),
         reviewShortcutRule: expect.stringMatching(
-          /reviewing or correcting an existing record/i
+          /reviewing or correcting an existing record[\s\S]*correct read posture[\s\S]*shared batch search or read hints[\s\S]*wiki\/calendar dedicated reads[\s\S]*read-model routes[\s\S]*Movement, Life Force, or Workbench dedicated reads[\s\S]*answer the practical question/i
         ),
         readModelWriteRule: expect.stringMatching(
           /Self-observation is note-backed[\s\S]*Sleep and workout sessions stay on batch CRUD by default/i
         ),
         psycheHypothesisRule: expect.stringMatching(
-          /concrete Psyche example[\s\S]*user's own example[\s\S]*protection, prediction, relief, or cost[\s\S]*Do not present schema, mode, belief, or pattern language as a verdict/i
+          /concrete Psyche example[\s\S]*user's own example[\s\S]*protection, prediction, relief, or cost[\s\S]*hypothesis timing checkpoint[\s\S]*second or third deepening question[\s\S]*record shape, wording, links, or next action[\s\S]*Do not hypothesize yet[\s\S]*direct mechanical save[\s\S]*flooded or unsafe[\s\S]*Do not present schema, mode, belief, or pattern language as a verdict/i
         ),
         mixedIntentSequencingRule: expect.stringMatching(
           /several Forge jobs[\s\S]*read first[\s\S]*Movement timeline or box detail[\s\S]*Workbench run or node detail[\s\S]*Life Force overview[\s\S]*primary Psyche record first[\s\S]*flashcard, note, link, task, or habit/i
@@ -1134,6 +1134,9 @@ describe("forge onboarding contract", () => {
     );
     expect(onboarding.conversationRules.join(" ")).toMatch(
       /understand, decide, notice, remember, or change later[\s\S]*batch CRUD[\s\S]*questionnaire run actions[\s\S]*self-observation calendar reads[\s\S]*wiki routes/i
+    );
+    expect(onboarding.conversationRules.join(" ")).toMatch(
+      /review-first requests[\s\S]*correct read posture[\s\S]*shared batch search or read hints[\s\S]*wiki\/calendar dedicated reads[\s\S]*read-model routes[\s\S]*Movement, Life Force, or Workbench dedicated reads/i
     );
     expect(onboarding.conversationRules.join(" ")).toMatch(
       /Self-observation is not the default container[\s\S]*behavior_pattern for a recurring loop and functional analysis/i

@@ -143,11 +143,25 @@ describe("forge skill playbook parity", () => {
       expect(skill).toMatch(/write, read, run, or update[\s\S]*instead of collecting optional\s+fields/i);
       expect(skill).toMatch(/Psyche save-readiness checkpoint/i);
       expect(skill).toMatch(/belief sentence[\s\S]*functional loop[\s\S]*flashcard cue\/message/i);
+      expect(skill).toMatch(/hypothesis timing checkpoint/i);
+      expect(skill).toMatch(
+        /concrete episode, body cue, belief sentence,\s+behavior[\s\S]*record shape,\s+wording, links, or next action/i
+      );
+      expect(skill).toMatch(
+        /no concrete moment is\s+visible[\s\S]*direct mechanical save[\s\S]*flooded or unsafe/i
+      );
       expect(skill).toMatch(/When one message combines several jobs/i);
       expect(skill).toMatch(
         /read before a correction[\s\S]*formulate[\s\S]*primary Psyche record[\s\S]*flashcard or note/i
       );
       expect(skill).toMatch(/Search before creating duplicates|check for duplicates/i);
+      expect(skill).toMatch(/review-first requests/i);
+      expect(skill).toMatch(
+        /shared batch search or read hints[\s\S]*wiki\/calendar[\s\S]*read-model routes[\s\S]*Movement, Life Force, or Workbench dedicated reads/i
+      );
+      expect(skill).toMatch(
+        /answer the practical question[\s\S]*before asking for any save, correction,\s+link,\s+run, enrichment, or publish detail/i
+      );
       expect(skill).toMatch(
         /update (?:it|that record), link to it, or save a separate new record/i
       );
@@ -278,9 +292,16 @@ describe("forge skill playbook parity", () => {
       expect(skill).toMatch(/Do not minimize functional analysis/i);
       expect(skill).toMatch(/interpretive hypothesis/i);
       expect(skill).toMatch(/collaborative and testable/i);
+      expect(skill).toMatch(/hypothesis timing checkpoint/i);
     }
     expect(readRepoFile("skills/forge-openclaw/psyche_entity_playbooks.md")).toMatch(
       /Hypotheses are not decorative reassurance[\s\S]*Do not make the user supply every interpretation alone/i
+    );
+    expect(readRepoFile("skills/forge-openclaw/psyche_entity_playbooks.md")).toMatch(
+      /Hypothesis Timing Checkpoint[\s\S]*second or third deepening question[\s\S]*record shape, wording, links, or next action/i
+    );
+    expect(readRepoFile("skills/forge-openclaw/psyche_entity_playbooks.md")).toMatch(
+      /no concrete moment is\s+visible[\s\S]*direct mechanical save[\s\S]*flooded, unsafe[\s\S]*diagnosis-like label/i
     );
     expect(
       readRepoFile("skills/forge-openclaw/entity_conversation_playbooks.md")
@@ -350,6 +371,10 @@ describe("forge skill playbook parity", () => {
     expect(entityPlaybook).toMatch(/When the user is clear, say what the record seems to be becoming/i);
     expect(entityPlaybook).toMatch(/Steering moves/i);
     expect(entityPlaybook).toMatch(/Review And Navigation Moves/i);
+    expect(entityPlaybook).toMatch(/Review-before-write checkpoint/i);
+    expect(entityPlaybook).toMatch(
+      /The read is part of the help, not a pretext for a new form/i
+    );
     expect(entityPlaybook).toMatch(/Question Calibration Loop/i);
     expect(entityPlaybook).toMatch(/Turn shapes/i);
     expect(entityPlaybook).toMatch(/Name, Define, Connect/i);
