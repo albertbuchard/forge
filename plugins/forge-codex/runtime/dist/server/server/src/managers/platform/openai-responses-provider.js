@@ -25,6 +25,7 @@ const CODEX_WIKI_COMPILE_RESERVED_RESPONSE_TOKENS = 60_000;
 const APPROX_CHARS_PER_TOKEN = 4;
 const REQUEST_TIMEOUT_MS = 90_000;
 const CODEX_FOREGROUND_COMPILE_TIMEOUT_MS = 10 * 60_000;
+const CODEX_STREAM_READ_TIMEOUT_MS = 10 * 60_000;
 const BACKGROUND_POLL_INTERVAL_MS = 2_000;
 const DEFAULT_CODEX_BASE_URL = "https://chatgpt.com/backend-api";
 const CODEX_JWT_CLAIM_PATH = "https://api.openai.com/auth";
@@ -264,8 +265,51 @@ function parseCodexEventStreamPayload(streamText) {
 }
 async function readProviderPayload(response, profile) {
     return isCodexProfile(profile)
-        ? parseCodexEventStreamPayload(await response.text())
+        ? parseCodexEventStreamPayload(await readResponseTextWithTimeout(response, CODEX_STREAM_READ_TIMEOUT_MS))
         : readJsonPayload(response);
+}
+async function readResponseTextWithTimeout(response, timeoutMs) {
+    if (!response.body) {
+        return response.text();
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    const chunks = [];
+    const deadline = Date.now() + timeoutMs;
+    try {
+        while (true) {
+            const remainingMs = Math.max(1, deadline - Date.now());
+            const result = await readStreamChunkWithTimeout(reader, remainingMs, timeoutMs);
+            if (result.done) {
+                break;
+            }
+            chunks.push(decoder.decode(result.value, { stream: true }));
+        }
+        chunks.push(decoder.decode());
+        return chunks.join("");
+    }
+    catch (error) {
+        await reader.cancel().catch(() => undefined);
+        throw error;
+    }
+    finally {
+        reader.releaseLock();
+    }
+}
+function readStreamChunkWithTimeout(reader, remainingMs, totalTimeoutMs) {
+    let timeout = null;
+    return Promise.race([
+        reader.read(),
+        new Promise((_, reject) => {
+            timeout = setTimeout(() => {
+                reject(new Error(`Codex stream read timed out after ${Math.round(totalTimeoutMs / 1000)}s.`));
+            }, remainingMs);
+        })
+    ]).finally(() => {
+        if (timeout) {
+            clearTimeout(timeout);
+        }
+    });
 }
 function readReasoningEffort(profile) {
     return typeof profile.metadata.reasoningEffort === "string"
