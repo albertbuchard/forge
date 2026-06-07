@@ -422,6 +422,20 @@ struct ForgeSyncClient {
         return httpBackgroundHealthSyncChunkingVersion
     }
 
+    static func shouldFallbackFromIrohToUrlSessionForTesting(
+        apiBaseUrl: String,
+        errorDomain: String,
+        errorCode: Int,
+        errorDescription: String
+    ) -> Bool {
+        let error = NSError(
+            domain: errorDomain,
+            code: errorCode,
+            userInfo: [NSLocalizedDescriptionKey: errorDescription]
+        )
+        return shouldFallbackFromIrohToUrlSession(apiBaseUrl: apiBaseUrl, error: error)
+    }
+
     private static let bootstrapSession: URLSession = {
         let configuration = URLSessionConfiguration.default
         configuration.httpCookieAcceptPolicy = .always
@@ -2399,50 +2413,60 @@ struct ForgeSyncClient {
             "ForgeSyncClient",
             "sendRequest start method=\(method) url=\(url.absoluteString) bodyBytes=\(requestBody?.count ?? 0) transport=\(useBackgroundUpload && transport?.isIrohTransport != true ? "urlsession-background" : transport?.protocolName ?? "urlsession")"
         )
-        let data: Data
-        let httpResponse: HTTPURLResponse
+        var data: Data
+        var httpResponse: HTTPURLResponse
         if let transport, transport.isIrohTransport {
-            let irohResult = try await ForgeIrohTransportClient.send(
+            do {
+                let irohResult = try await ForgeIrohTransportClient.send(
+                    method: method,
+                    path: apiRequestPath(apiBaseUrl: apiBaseUrl, endpointPath: path),
+                    headers: requestHeaders,
+                    body: requestBody,
+                    transport: transport,
+                    timeoutInterval: timeoutInterval
+                )
+                data = irohResult.data
+                guard let response = HTTPURLResponse(
+                    url: url,
+                    statusCode: irohResult.statusCode,
+                    httpVersion: "HTTP/1.1",
+                    headerFields: irohResult.headers
+                ) else {
+                    throw URLError(.badServerResponse)
+                }
+                httpResponse = response
+            } catch {
+                guard Self.shouldFallbackFromIrohToUrlSession(apiBaseUrl: apiBaseUrl, error: error) else {
+                    throw error
+                }
+                companionDebugLog(
+                    "ForgeSyncClient",
+                    "sendRequest irohFallback method=\(method) url=\(url.absoluteString) error=\(error.localizedDescription)"
+                )
+                let fallback = try await urlSessionResponse(
+                    url: url,
+                    method: method,
+                    headers: requestHeaders,
+                    body: requestBody,
+                    session: session,
+                    timeoutInterval: timeoutInterval,
+                    useBackgroundUpload: useBackgroundUpload
+                )
+                data = fallback.data
+                httpResponse = fallback.response
+            }
+        } else {
+            let result = try await urlSessionResponse(
+                url: url,
                 method: method,
-                path: apiRequestPath(apiBaseUrl: apiBaseUrl, endpointPath: path),
                 headers: requestHeaders,
                 body: requestBody,
-                transport: transport,
-                timeoutInterval: timeoutInterval
+                session: session,
+                timeoutInterval: timeoutInterval,
+                useBackgroundUpload: useBackgroundUpload
             )
-            data = irohResult.data
-            guard let response = HTTPURLResponse(
-                url: url,
-                statusCode: irohResult.statusCode,
-                httpVersion: "HTTP/1.1",
-                headerFields: irohResult.headers
-            ) else {
-                throw URLError(.badServerResponse)
-            }
-            httpResponse = response
-        } else {
-            var request = URLRequest(url: url)
-            request.httpMethod = method
-            for (name, value) in requestHeaders {
-                request.setValue(value, forHTTPHeaderField: name)
-            }
-            request.httpBody = requestBody
-            request.timeoutInterval = timeoutInterval
-            let (urlSessionData, response): (Data, URLResponse)
-            if useBackgroundUpload, method == "POST", let requestBody {
-                (urlSessionData, response) = try await ForgeBackgroundUploadCoordinator.shared.upload(
-                    request: request,
-                    body: requestBody
-                )
-            } else {
-                (urlSessionData, response) = try await (session ?? Self.bootstrapSession).data(for: request)
-            }
-            guard let urlSessionResponse = response as? HTTPURLResponse else {
-                companionDebugLog("ForgeSyncClient", "sendRequest badServerResponse url=\(url.absoluteString)")
-                throw URLError(.badServerResponse)
-            }
-            data = urlSessionData
-            httpResponse = urlSessionResponse
+            data = result.data
+            httpResponse = result.response
         }
 
         companionDebugLog(
@@ -2495,6 +2519,67 @@ struct ForgeSyncClient {
 
         companionDebugLog("ForgeSyncClient", "sendRequest decode success url=\(url.absoluteString)")
         return try JSONDecoder().decode(Response.self, from: data)
+    }
+
+    private func urlSessionResponse(
+        url: URL,
+        method: String,
+        headers: [String: String],
+        body: Data?,
+        session: URLSession?,
+        timeoutInterval: TimeInterval,
+        useBackgroundUpload: Bool
+    ) async throws -> (data: Data, response: HTTPURLResponse) {
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        for (name, value) in headers {
+            request.setValue(value, forHTTPHeaderField: name)
+        }
+        request.httpBody = body
+        request.timeoutInterval = timeoutInterval
+        let (data, response): (Data, URLResponse)
+        if useBackgroundUpload, method == "POST", let body {
+            (data, response) = try await ForgeBackgroundUploadCoordinator.shared.upload(
+                request: request,
+                body: body
+            )
+        } else {
+            (data, response) = try await (session ?? Self.bootstrapSession).data(for: request)
+        }
+        guard let httpResponse = response as? HTTPURLResponse else {
+            companionDebugLog("ForgeSyncClient", "sendRequest badServerResponse url=\(url.absoluteString)")
+            throw URLError(.badServerResponse)
+        }
+        return (data, httpResponse)
+    }
+
+    private static func shouldFallbackFromIrohToUrlSession(apiBaseUrl: String, error: Error) -> Bool {
+        guard
+            let url = URL(string: apiBaseUrl),
+            let scheme = url.scheme?.lowercased(),
+            scheme == "http" || scheme == "https"
+        else {
+            return false
+        }
+        let nsError = error as NSError
+        guard nsError.domain == "ForgeIrohTransport" else {
+            return false
+        }
+        if nsError.code == URLError.timedOut.rawValue ||
+            nsError.code == URLError.cannotConnectToHost.rawValue ||
+            nsError.code == URLError.networkConnectionLost.rawValue {
+            return true
+        }
+        if nsError.code >= 400 && nsError.code < 600 {
+            return false
+        }
+        let message = "\(nsError.localizedDescription) \(nsError.localizedFailureReason ?? "")"
+            .lowercased()
+        return message.contains("timed out") ||
+            message.contains("timeout") ||
+            message.contains("connect") ||
+            message.contains("no response") ||
+            message.contains("unreachable")
     }
 
     private func apiRequestPath(apiBaseUrl: String, endpointPath: String) -> String {

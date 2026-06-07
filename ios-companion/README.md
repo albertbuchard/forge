@@ -74,15 +74,16 @@ Forge web settings generate a QR payload with:
 - `transportMode`
 - `transport`
 
-The default `transportMode` is `iroh`. In that mode the QR contains
-`forge-iroh://` API and UI URLs plus a transport payload with the desktop Iroh node
-id, the pairing token, an optional relay hint, and ALPN `forge-companion/1`.
+The default `transportMode` is `iroh`. In that mode the QR keeps the request API/UI
+URLs as the direct fallback path and includes a transport payload with the desktop Iroh
+node id, the pairing token, an optional relay hint, and ALPN `forge-companion/1`.
 
 The companion scans the QR payload, stores it in the keychain-backed app model,
 requests the relevant permissions, then sends sync payloads to Forge. For Iroh
 payloads, the Swift app uses the native Rust bridge to dial the desktop node id over
-Iroh/QUIC and carries Forge API request envelopes over the authenticated stream. For
-manual payloads, it keeps the older direct HTTP/TCP path.
+Iroh/QUIC and carries Forge API request envelopes over the authenticated stream. If the
+Iroh bridge times out and the pairing has an HTTP(S) API URL, the app retries that
+request over URLSession. For manual payloads, it keeps the direct HTTP/TCP path.
 
 Manual HTTP/TCP remains available when the operator intentionally wants LAN,
 Tailscale, or debugging behavior:
@@ -98,8 +99,8 @@ before sending a refreshed compact snapshot back to the watch and widget surface
 
 Runtime discovery can still surface Bonjour candidates for known local or manual
 routes, but Iroh QR pairing is the default. When Forge advertises `_forge._tcp`, it
-can include Iroh metadata such as the `forge-iroh://` URLs and `forge-companion/1`
-ALPN alongside manual network hints.
+can include Iroh metadata such as the node id, pair payload, and `forge-companion/1`
+ALPN alongside phone-reachable HTTPS/Tailscale API and UI hints.
 
 The deeper transport reference lives in `docs/companion-iroh.md`.
 

@@ -3,11 +3,7 @@ import os from "node:os";
 import { promisify } from "node:util";
 import bonjourService from "bonjour-service";
 import { logForgeDebug } from "./debug.js";
-import {
-  companionIrohApiBaseUrlFromNodeId,
-  companionIrohUiBaseUrlFromNodeId,
-  getCompanionIrohStatus
-} from "./services/companion-iroh.js";
+import { getCompanionIrohStatus } from "./services/companion-iroh.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -82,12 +78,8 @@ export async function startForgeDiscoveryAdvertiser(
         tsApiBaseUrl: tailscaleTargets.apiBaseUrl ?? "",
         tsUiBaseUrl: tailscaleTargets.uiBaseUrl ?? "",
         tsDnsName: tailscaleTargets.dnsName ?? "",
-        irohApiBaseUrl: irohNodeId
-          ? companionIrohApiBaseUrlFromNodeId(irohNodeId)
-          : "",
-        irohUiBaseUrl: irohNodeId
-          ? companionIrohUiBaseUrlFromNodeId(irohNodeId)
-          : "",
+        irohApiBaseUrl: irohNodeId ? tailscaleTargets.apiBaseUrl ?? "" : "",
+        irohUiBaseUrl: irohNodeId ? tailscaleTargets.uiBaseUrl ?? "" : "",
         irohProvider: irohNodeId ? "forge-companion-iroh" : "",
         irohNodeId: irohNodeId ?? "",
         irohRelay: irohTransport.pairPayload?.relay ?? "",

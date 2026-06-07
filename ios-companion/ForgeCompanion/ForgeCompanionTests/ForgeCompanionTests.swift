@@ -268,13 +268,14 @@ final class ForgeCompanionTests: XCTestCase {
         let json = """
         {
           "kind": "forge-companion-pairing",
-          "apiBaseUrl": "forge-iroh://fakednodeid/api/v1",
-          "uiBaseUrl": "forge-iroh://fakednodeid/forge/",
+          "apiBaseUrl": "https://macbook-pro.example.ts.net/api/v1",
+          "uiBaseUrl": "https://macbook-pro.example.ts.net/forge/",
           "transportMode": "iroh",
           "transport": {
             "protocol": "iroh",
             "provider": "forge-companion-iroh",
             "status": "ready",
+            "publicBaseUrl": "https://macbook-pro.example.ts.net/api/v1",
             "localBaseUrl": "http://127.0.0.1:4317",
             "nodeId": "fakednodeid",
             "relay": "https://relay.example.com",
@@ -305,12 +306,86 @@ final class ForgeCompanionTests: XCTestCase {
         let normalized = CompanionPairingURLResolver.normalizedPayload(payload)
 
         XCTAssertEqual(normalized.transportMode, "iroh")
+        XCTAssertEqual(normalized.apiBaseUrl, "https://macbook-pro.example.ts.net/api/v1")
+        XCTAssertEqual(normalized.uiBaseUrl, "https://macbook-pro.example.ts.net/forge/")
         XCTAssertEqual(normalized.transport?.protocolName, "iroh")
         XCTAssertEqual(normalized.transport?.provider, "forge-companion-iroh")
+        XCTAssertEqual(normalized.transport?.publicBaseUrl, "https://macbook-pro.example.ts.net/api/v1")
         XCTAssertEqual(normalized.transport?.nodeId, "fakednodeid")
         XCTAssertEqual(normalized.transport?.alpn, "forge-companion/1")
         XCTAssertEqual(normalized.transport?.pairPayload?.token, "hosttoken")
         XCTAssertEqual(normalized.transport?.notes.first, "Iroh transport is active.")
+    }
+
+    func testLegacyIrohOnlyPairingPayloadStillDecodes() throws {
+        let json = """
+        {
+          "kind": "forge-companion-pairing",
+          "apiBaseUrl": "forge-iroh://fakednodeid/api/v1",
+          "uiBaseUrl": "forge-iroh://fakednodeid/forge/",
+          "transportMode": "iroh",
+          "transport": {
+            "protocol": "iroh",
+            "provider": "forge-companion-iroh",
+            "status": "ready",
+            "localBaseUrl": "http://127.0.0.1:4317",
+            "pairPayload": {
+              "v": 1,
+              "node_id": "fakednodeid",
+              "token": "hosttoken"
+            }
+          },
+          "sessionId": "pair_test",
+          "pairingToken": "token",
+          "expiresAt": "2099-01-01T00:00:00Z",
+          "capabilities": ["healthkit.sleep"]
+        }
+        """
+
+        let payload = try JSONDecoder().decode(
+            PairingPayload.self,
+            from: Data(json.utf8)
+        )
+        let normalized = CompanionPairingURLResolver.normalizedPayload(payload)
+
+        XCTAssertEqual(normalized.apiBaseUrl, "forge-iroh://fakednodeid/api/v1")
+        XCTAssertEqual(normalized.uiBaseUrl, "forge-iroh://fakednodeid/forge/")
+        XCTAssertEqual(normalized.transport?.pairPayload?.token, "hosttoken")
+    }
+
+    func testIrohTransportTimeoutUsesUrlSessionFallbackOnlyForHttpPairingUrls() {
+        XCTAssertTrue(
+            ForgeSyncClient.shouldFallbackFromIrohToUrlSessionForTesting(
+                apiBaseUrl: "https://macbook-pro.example.ts.net/api/v1",
+                errorDomain: "ForgeIrohTransport",
+                errorCode: URLError.timedOut.rawValue,
+                errorDescription: "Forge Iroh request timed out."
+            )
+        )
+        XCTAssertTrue(
+            ForgeSyncClient.shouldFallbackFromIrohToUrlSessionForTesting(
+                apiBaseUrl: "https://macbook-pro.example.ts.net/api/v1",
+                errorDomain: "ForgeIrohTransport",
+                errorCode: -1,
+                errorDescription: "connecting over Forge Iroh bridge: timed out"
+            )
+        )
+        XCTAssertFalse(
+            ForgeSyncClient.shouldFallbackFromIrohToUrlSessionForTesting(
+                apiBaseUrl: "forge-iroh://fakednodeid/api/v1",
+                errorDomain: "ForgeIrohTransport",
+                errorCode: URLError.timedOut.rawValue,
+                errorDescription: "Forge Iroh request timed out."
+            )
+        )
+        XCTAssertFalse(
+            ForgeSyncClient.shouldFallbackFromIrohToUrlSessionForTesting(
+                apiBaseUrl: "https://macbook-pro.example.ts.net/api/v1",
+                errorDomain: "ForgeIrohTransport",
+                errorCode: 401,
+                errorDescription: "Unauthorized"
+            )
+        )
     }
 
     func testIrohTransportErrorEnvelopeCanOmitHeaders() throws {

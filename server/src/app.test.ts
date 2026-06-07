@@ -198,6 +198,7 @@ while true; do sleep 1; done
         transport: {
           protocol: string;
           provider: string;
+          publicBaseUrl: string;
           nodeId: string;
           relay: string;
           alpn: string;
@@ -213,14 +214,18 @@ while true; do sleep 1; done
     assert.equal(payload.qrPayload.transportMode, "iroh");
     assert.equal(
       payload.qrPayload.apiBaseUrl,
-      "forge-iroh://fakednodeid/api/v1"
+      "http://127.0.0.1:4317/api/v1"
     );
     assert.equal(
       payload.qrPayload.uiBaseUrl,
-      "forge-iroh://fakednodeid/forge/"
+      "http://127.0.0.1:4317/forge/"
     );
     assert.equal(payload.qrPayload.transport.protocol, "iroh");
     assert.equal(payload.qrPayload.transport.provider, "forge-companion-iroh");
+    assert.equal(
+      payload.qrPayload.transport.publicBaseUrl,
+      "http://127.0.0.1:4317/api/v1"
+    );
     assert.equal(payload.qrPayload.transport.nodeId, "fakednodeid");
     assert.equal(
       payload.qrPayload.transport.relay,
@@ -234,6 +239,81 @@ while true; do sleep 1; done
       "fakednodeid"
     );
     assert.equal(payload.qrPayload.transport.pairPayload.token, "hosttoken");
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+    if (originalIrohBin === undefined) {
+      delete process.env.FORGE_COMPANION_IROH_BIN;
+    } else {
+      process.env.FORGE_COMPANION_IROH_BIN = originalIrohBin;
+    }
+  }
+});
+
+test("companion Iroh pairing preserves a Tailscale request URL for phone fallback", async () => {
+  const originalIrohBin = process.env.FORGE_COMPANION_IROH_BIN;
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-companion-iroh-fallback-")
+  );
+  const fakeIrohBin = path.join(rootDir, "fake-forge-companion-iroh.sh");
+  await writeFile(
+    fakeIrohBin,
+    `#!/bin/sh
+printf '%s\\n' '{"event":"ready","pairPayload":{"v":1,"node_id":"fakednodeid","token":"hosttoken","host_name":"test-host","relay":"https://relay.example.com"},"alpn":"forge-companion/1"}'
+while true; do sleep 1; done
+`
+  );
+  await chmod(fakeIrohBin, 0o755);
+  process.env.FORGE_COMPANION_IROH_BIN = fakeIrohBin;
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317",
+        referer: "https://macbook-pro.example.ts.net/forge/settings/mobile"
+      },
+      payload: {
+        userId: "user_operator"
+      }
+    });
+    assert.equal(response.statusCode, 201);
+    const payload = response.json() as {
+      qrPayload: {
+        apiBaseUrl: string;
+        uiBaseUrl: string;
+        transportMode: string;
+        transport: {
+          protocol: string;
+          provider: string;
+          publicBaseUrl: string;
+          localBaseUrl: string;
+          pairPayload: { node_id: string };
+        };
+      };
+    };
+    assert.equal(payload.qrPayload.transportMode, "iroh");
+    assert.equal(
+      payload.qrPayload.apiBaseUrl,
+      "https://macbook-pro.example.ts.net/api/v1"
+    );
+    assert.equal(
+      payload.qrPayload.uiBaseUrl,
+      "https://macbook-pro.example.ts.net/forge/"
+    );
+    assert.equal(payload.qrPayload.transport.protocol, "iroh");
+    assert.equal(payload.qrPayload.transport.provider, "forge-companion-iroh");
+    assert.equal(
+      payload.qrPayload.transport.publicBaseUrl,
+      "https://macbook-pro.example.ts.net/api/v1"
+    );
+    assert.equal(payload.qrPayload.transport.localBaseUrl, "http://127.0.0.1:4317");
+    assert.equal(payload.qrPayload.transport.pairPayload.node_id, "fakednodeid");
   } finally {
     await app.close();
     closeDatabase();

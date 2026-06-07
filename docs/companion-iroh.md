@@ -13,10 +13,13 @@ or, after Forge is already installed:
 npx forge-memory pair-ios
 ```
 
-Those commands start the local Forge runtime, create an Iroh pairing payload, and
-show a compact QR code for the iPhone app. The CLI also saves the compact payload
-under `~/.forge/pairing/` so it can be pasted into the iPhone app when a terminal QR is
-too large or the camera cannot scan it.
+Those commands start the local Forge runtime, create an Iroh-first pairing payload,
+and show a compact QR code for the iPhone app. The payload also keeps the request
+API/UI URL as a direct fallback. If the native Iroh bridge times out and that URL is
+phone-reachable HTTPS/Tailscale, the app retries the same Forge request through
+URLSession instead of leaving the pairing stuck on a bridge timeout. The CLI also
+saves the compact payload under `~/.forge/pairing/` so it can be pasted into the
+iPhone app when a terminal QR is too large or the camera cannot scan it.
 
 Manual HTTP/TCP remains available for explicit LAN, Tailscale, or debugging setups. A
 physical iPhone needs a phone-reachable URL:
@@ -65,13 +68,15 @@ The QR code gives the iPhone:
 - the pairing token
 - the Forge protocol label, `forge-companion/1`
 - the optional relay hint
-- the `forge-iroh://` API and UI URLs
+- the request API and UI URLs, which may be HTTPS/Tailscale fallback URLs
+- the Iroh transport payload used for the first request attempt
 
 Iroh then resolves and dials that endpoint identity. It can try direct QUIC when the
 network allows it. When direct connectivity fails, Iroh can keep the encrypted QUIC
 traffic moving through a relay. That means Forge does not require Tailscale for the
-default iOS path, but it still depends on Iroh discovery/relay infrastructure for
-reliable internet pairing.
+default first attempt, but it still depends on Iroh discovery/relay infrastructure for
+reliable internet pairing. If that bridge fails and the pairing was created from a
+phone-reachable Forge URL, the iPhone falls back to the preserved direct route.
 
 ## What The Relay Does
 
@@ -100,13 +105,15 @@ metadata. A simplified Iroh payload looks like:
 
 ```json
 {
-  "apiBaseUrl": "forge-iroh://<node-id>/api/v1",
-  "uiBaseUrl": "forge-iroh://<node-id>/forge/",
+  "apiBaseUrl": "https://your-mac.tailnet.ts.net/api/v1",
+  "uiBaseUrl": "https://your-mac.tailnet.ts.net/forge/",
   "transportMode": "iroh",
   "transport": {
     "protocol": "iroh",
     "provider": "forge-companion-iroh",
     "status": "ready",
+    "publicBaseUrl": "https://your-mac.tailnet.ts.net/api/v1",
+    "localBaseUrl": "http://127.0.0.1:4317",
     "nodeId": "<node-id>",
     "relay": "https://relay.example",
     "alpn": "forge-companion/1",
@@ -197,11 +204,15 @@ HTTP remains available only when the user explicitly passes a phone-reachable
 - `companion-iroh/`: Forge-owned Rust host binary and iOS static library.
 - `server/src/services/companion-iroh.ts`: starts the host, parses readiness, and
   builds the QR transport payload.
+- `server/src/discovery-advertiser.ts`: advertises Bonjour/Tailscale discovery
+  hints; Iroh discovery uses phone-reachable HTTPS/Tailscale URLs when available
+  instead of synthetic `forge-iroh://` API bases.
 - `server/src/app.ts`: exposes mobile pairing routes and companion Iroh status.
 - `src/pages/settings-mobile-page.tsx`: web settings UI for Iroh QR generation and
   manual HTTP fallback.
 - `ios-companion/ForgeCompanion/ForgeCompanion/ForgeSyncClient.swift`: sends mobile
-  API calls over Iroh when the pairing payload is Iroh.
+  API calls over Iroh when the pairing payload is Iroh and retries through URLSession
+  when the Iroh bridge times out and the pairing has an HTTP(S) fallback URL.
 - `ios-companion/ForgeCompanion/ForgeCompanion/ForgeWebView.swift`: registers the
   `forge-iroh://` scheme for the embedded Forge web app.
 - `ios-companion/RustBridge/build-for-xcode.sh`: builds the Rust static library for

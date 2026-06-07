@@ -38,11 +38,12 @@ tools). It also exposes `forge_memory_mcp_diagnostics` so adapter startup issues
 show up as a tool result instead of a closed MCP transport.
 
 `pair-ios` prefers the Iroh QR. Forge starts a Rust Iroh host, prints a QR payload
-with the desktop node id, pairing token, optional relay hint, and ALPN
-`forge-companion/1`, and the iPhone app connects through its native Rust bridge. The
-CLI renders a short-schema QR to keep the terminal code scannable and saves the
-full manual payload under `~/.forge/pairing/` so you can paste it into the iPhone
-app if the camera cannot scan.
+with the desktop node id, pairing token, optional relay hint, ALPN
+`forge-companion/1`, and the request URL as a direct fallback when it is
+phone-reachable. The iPhone app connects through its native Rust bridge first and can
+retry through URLSession when that bridge times out. The CLI renders a short-schema QR
+to keep the terminal code scannable and saves the full manual payload under
+`~/.forge/pairing/` so you can paste it into the iPhone app if the camera cannot scan.
 Use `--manual-http` only when you intentionally want a LAN, Tailscale, or direct
 HTTP/TCP route. For a real iPhone, pass a phone-reachable URL:
 

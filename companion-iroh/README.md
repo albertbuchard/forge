@@ -7,7 +7,8 @@ forwards framed Forge HTTP requests into the local Fastify runtime.
 
 The crate also builds as a `staticlib` for the Swift iOS app. The Swift layer calls the
 C ABI in `src/lib.rs` and sends Forge request envelopes over the same Iroh/QUIC stream
-shape instead of using a LAN URL or Tailscale address by default.
+shape first. Pairing still preserves the request API/UI URL so the app can retry over a
+phone-reachable HTTPS/Tailscale route when the Iroh bridge itself times out.
 
 ## Runtime Shape
 

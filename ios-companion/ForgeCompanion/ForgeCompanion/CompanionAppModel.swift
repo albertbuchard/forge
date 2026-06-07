@@ -82,6 +82,9 @@ enum CompanionPairingURLResolver {
         #if targetEnvironment(simulator)
         return nil
         #else
+        if payload.transport?.isIrohTransport == true, payload.transport?.pairPayload != nil {
+            return nil
+        }
         let normalizedApiBaseUrl = normalizeApiBaseUrl(payload.apiBaseUrl)
         guard
             let url = URL(string: normalizedApiBaseUrl),
