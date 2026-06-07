@@ -5,7 +5,7 @@ import { listHabits } from "../repositories/habits.js";
 import { buildNotesSummaryByEntity } from "../repositories/notes.js";
 import { listTagsByIds, listTags } from "../repositories/tags.js";
 import { listTasks } from "../repositories/tasks.js";
-import { buildAchievementSignals, buildGamificationProfile, buildMilestoneRewards } from "./gamification.js";
+import { buildGamificationDashboardSignals } from "./gamification.js";
 import { listProjectSummaries } from "./projects.js";
 import { dashboardExecutionBucketSchema, dashboardPayloadSchema, dashboardStatsSchema } from "../types.js";
 function startOfWeek(date) {
@@ -153,9 +153,9 @@ export function getDashboard(options = {}) {
     const suggestedTags = tags.filter((tag) => ["value", "execution"].includes(tag.kind)).slice(0, 6);
     const owners = [...new Set(tasks.map((task) => task.owner).filter(Boolean))].sort((left, right) => left.localeCompare(right));
     const executionBuckets = buildExecutionBuckets(tasks, todayIso, weekEndIso);
-    const gamification = buildGamificationProfile(goals, tasks, habits, now);
-    const achievements = buildAchievementSignals(goals, tasks, habits, now);
-    const milestoneRewards = buildMilestoneRewards(goals, tasks, habits, now);
+    const { profile: gamification, achievements, milestoneRewards } = buildGamificationDashboardSignals(goals, tasks, habits, now, {
+        userIds: options.userIds
+    });
     const visibleIds = {
         goal: new Set(goals.map((goal) => goal.id)),
         project: new Set(projects.map((project) => project.id)),

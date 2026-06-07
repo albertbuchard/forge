@@ -609,9 +609,13 @@ function buildStoredEnergyModel(input) {
     const todayActiveCalories = input.dailyActiveOverride?.activeCaloriesKcal ??
         todayObservedActiveCalories ??
         baselineActiveCalories;
-    const todayActiveSurplusKcal = Math.max(0, todayActiveCalories - baselineActiveCalories);
+    const todayActiveDeltaKcal = todayActiveCalories - baselineActiveCalories;
+    const todayActiveSurplusKcal = Math.max(0, todayActiveDeltaKcal);
     const todayActivityBufferKcal = todayActiveSurplusKcal * input.activityEatBackFraction;
-    const todayTargetAdjustmentKcal = todayActivityBufferKcal;
+    const todayManualAdjustmentKcal = input.dailyActiveOverride != null
+        ? todayActiveDeltaKcal * input.activityEatBackFraction
+        : null;
+    const todayTargetAdjustmentKcal = todayManualAdjustmentKcal ?? todayActivityBufferKcal;
     const estimatedTdeeKcal = activeBurnKcal != null && chosenRestingKcal != null
         ? round(activeBurnKcal + chosenRestingKcal, 0)
         : input.inferredTdee;
@@ -658,6 +662,7 @@ function buildStoredEnergyModel(input) {
             : null,
         todayActiveCaloriesSource: todayActiveSource,
         todayTargetAdjustmentKcal: round(todayTargetAdjustmentKcal, 0),
+        todayActiveDeltaKcal: round(todayActiveDeltaKcal, 0),
         todayActiveSurplusKcal: round(todayActiveSurplusKcal, 0),
         todayActivityBufferKcal: round(todayActivityBufferKcal, 0),
         activityEatBackFraction: round(input.activityEatBackFraction, 2),
@@ -1462,6 +1467,7 @@ function buildTodayLedger(logs, target, dateKey, dynamicTargetCalories, activeAd
         caffeineMg: 0,
         alcoholGrams: 0
     });
+    const calorieDelta = round(totals.calories - dynamicTargetCalories, 0);
     return {
         dateKey,
         meals: todayLogs,
@@ -1470,7 +1476,8 @@ function buildTodayLedger(logs, target, dateKey, dynamicTargetCalories, activeAd
         targetCalories: dynamicTargetCalories,
         activeAdjustmentCalories,
         activeCaloriesSource,
-        calorieDelta: round(totals.calories - dynamicTargetCalories, 0),
+        calorieDelta,
+        remainingCalories: round(dynamicTargetCalories - totals.calories, 0),
         proteinCoverage: n(target.proteinGramsTarget) > 0
             ? round(totals.proteinGrams / n(target.proteinGramsTarget), 2)
             : null,
@@ -1737,6 +1744,7 @@ export function getWeightLossViewData(userIds, options = {}) {
             todayCalories: todayLedger.totals.calories,
             targetCalories: todayLedger.targetCalories,
             todayCalorieDelta: todayLedger.calorieDelta,
+            remainingCalories: todayLedger.remainingCalories,
             averageCalories,
             inferredTdee,
             proteinCoverage: todayLedger.proteinCoverage,

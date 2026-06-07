@@ -850,6 +850,47 @@ function syncCatalog(input) {
     });
 }
 function buildGamificationState(goals, tasks, habits, options = {}) {
+    const profileState = buildGamificationProfileState(goals, tasks, habits, options);
+    const { scope, scopedRewards, profile, persistableUserId, activeDateKeys, missedDays, lastActiveDateKey } = profileState;
+    const now = options.now ?? new Date();
+    const equipment = persistableUserId
+        ? getGamificationEquipment(persistableUserId)
+        : emptyGamificationEquipment();
+    const metricValues = buildMetricValues({
+        scope,
+        profile,
+        scopedRewards,
+        tasks,
+        habits,
+        activeDateKeys
+    });
+    const mascot = buildMascotState({
+        profile,
+        equipment,
+        missedDays,
+        lastActiveDateKey
+    });
+    const catalog = syncCatalog({
+        scope,
+        persistableUserId,
+        profile,
+        metricValues,
+        equipment,
+        mascot,
+        now
+    });
+    return {
+        scope,
+        scopedRewards,
+        profile,
+        metricValues,
+        equipment,
+        mascot,
+        catalog,
+        persistableUserId
+    };
+}
+function buildGamificationProfileState(goals, tasks, habits, options = {}) {
     const now = options.now ?? new Date();
     const scope = resolveGamificationScope(options.userIds);
     const persistableUserId = persistableUserIdForScope(scope);
@@ -906,45 +947,18 @@ function buildGamificationState(goals, tasks, habits, options = {}) {
         topGoalId: topGoal?.goalId ?? null,
         topGoalTitle: topGoal?.goalTitle ?? null
     });
-    const equipment = persistableUserId
-        ? getGamificationEquipment(persistableUserId)
-        : emptyGamificationEquipment();
-    const metricValues = buildMetricValues({
-        scope,
-        profile,
-        scopedRewards,
-        tasks,
-        habits,
-        activeDateKeys
-    });
-    const mascot = buildMascotState({
-        profile,
-        equipment,
-        missedDays,
-        lastActiveDateKey
-    });
-    const catalog = syncCatalog({
-        scope,
-        persistableUserId,
-        profile,
-        metricValues,
-        equipment,
-        mascot,
-        now
-    });
     return {
         scope,
         scopedRewards,
         profile,
-        metricValues,
-        equipment,
-        mascot,
-        catalog,
-        persistableUserId
+        persistableUserId,
+        activeDateKeys,
+        missedDays,
+        lastActiveDateKey
     };
 }
 export function buildGamificationProfile(goals, tasks, habits, now = new Date(), options = {}) {
-    return buildGamificationState(goals, tasks, habits, {
+    return buildGamificationProfileState(goals, tasks, habits, {
         userIds: options.userIds,
         now
     }).profile;
@@ -1036,7 +1050,7 @@ function buildAchievementSignalsFromProfile(input) {
     ].map((achievement) => achievementSignalSchema.parse(achievement));
 }
 export function buildAchievementSignals(goals, tasks, habits, now = new Date(), options = {}) {
-    const state = buildGamificationState(goals, tasks, habits, {
+    const state = buildGamificationProfileState(goals, tasks, habits, {
         userIds: options.userIds,
         now
     });
@@ -1122,6 +1136,31 @@ function buildMilestoneRewardsFromProfile(input) {
 export function buildMilestoneRewards(goals, tasks, habits, now = new Date(), options = {}) {
     const profile = buildGamificationProfile(goals, tasks, habits, now, options);
     return buildMilestoneRewardsFromProfile({ goals, tasks, habits, now, profile });
+}
+export function buildGamificationDashboardSignals(goals, tasks, habits, now = new Date(), options = {}) {
+    const state = buildGamificationProfileState(goals, tasks, habits, {
+        userIds: options.userIds,
+        now
+    });
+    const achievements = buildAchievementSignalsFromProfile({
+        goals,
+        tasks,
+        habits,
+        now,
+        profile: state.profile
+    });
+    const milestoneRewards = buildMilestoneRewardsFromProfile({
+        goals,
+        tasks,
+        habits,
+        now,
+        profile: state.profile
+    });
+    return {
+        profile: state.profile,
+        achievements,
+        milestoneRewards
+    };
 }
 function buildXpMomentumPulseFromParts(input) {
     const { profile, achievements, milestoneRewards } = input;
