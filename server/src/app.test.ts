@@ -14647,6 +14647,71 @@ test("wiki pages are SQLite-backed, searchable, backlink-aware, and ingestable",
   try {
     const operatorCookie = await issueOperatorSessionCookie(app);
 
+    getDatabase()
+      .prepare(
+        `UPDATE users
+         SET handle = 'albert', display_name = 'Albert', updated_at = ?
+         WHERE id = 'user_operator'`
+      )
+      .run(new Date().toISOString());
+
+    const legacyPersonalSpaceId = "wiki_space_user_user-operator";
+    const legacySpaceTimestamp = new Date().toISOString();
+    getDatabase()
+      .prepare(
+        `INSERT INTO wiki_spaces (id, slug, label, description, owner_user_id, visibility, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        legacyPersonalSpaceId,
+        "user-user-operator",
+        "user_operator Wiki",
+        "Personal Forge wiki space.",
+        "user_operator",
+        "personal",
+        legacySpaceTimestamp,
+        legacySpaceTimestamp
+      );
+
+    const repairPersonalSpace = await app.inject({
+      method: "POST",
+      url: "/api/v1/wiki/pages",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        userId: "user_operator",
+        title: "Personal repair probe",
+        contentMarkdown:
+          "# Personal repair probe\n\nThis page exists only to trigger personal wiki-space repair.",
+        links: [],
+        tags: []
+      }
+    });
+    assert.equal(repairPersonalSpace.statusCode, 201);
+
+    const spacesResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/wiki/spaces",
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(spacesResponse.statusCode, 200);
+    const spacesBody = spacesResponse.json() as {
+      spaces: Array<{
+        slug: string;
+        label: string;
+        ownerUserId: string | null;
+      }>;
+    };
+    const personalSpace = spacesBody.spaces.find(
+      (space) => space.ownerUserId === "user_operator"
+    );
+    assert.ok(personalSpace);
+    assert.equal(personalSpace.label, "Albert Wiki");
+    assert.equal(personalSpace.slug, "albert");
+
     const starterTree = await app.inject({
       method: "GET",
       url: "/api/v1/wiki/tree",
