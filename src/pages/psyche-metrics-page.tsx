@@ -75,6 +75,8 @@ export function PsycheMetricsPage() {
   const groups = groupMetrics(metrics);
   const swearMetric = metrics.metrics.find((metric) => metric.metric === "devrageSwearCount") ?? null;
   const percentMetric = metrics.metrics.find((metric) => metric.metric === "swearingMessagePercent") ?? null;
+  const averageRageMetric = metrics.metrics.find((metric) => metric.metric === "devrageAverageMaxCumulativeRage") ?? null;
+  const maxRageMetric = metrics.metrics.find((metric) => metric.metric === "devrageMaxCumulativeRage") ?? null;
 
   return (
     <div className="mx-auto grid w-full max-w-[1380px] gap-5">
@@ -105,6 +107,16 @@ export function PsycheMetricsPage() {
               description="Percentage of user messages that contained at least one tracked swear."
               metric={percentMetric}
             />
+            <SpotlightCard
+              title="Average rage peak"
+              description="Average per-thread peak after swears add and clean messages cool the score down."
+              metric={averageRageMetric}
+            />
+            <SpotlightCard
+              title="Max rage peak"
+              description="Highest cumulative thread score reached on the latest tracked day."
+              metric={maxRageMetric}
+            />
             <Card className="rounded-[28px] border border-amber-200/12 bg-[linear-gradient(180deg,rgba(39,31,17,0.96),rgba(19,21,17,0.95))] p-5">
               <div className="text-[11px] uppercase tracking-[0.18em] text-amber-100/72">
                 Seven-day averages
@@ -120,6 +132,18 @@ export function PsycheMetricsPage() {
                   <span className="text-sm text-white/58">Swearing messages</span>
                   <span className="text-xl font-semibold text-white">
                     {formatPercent(metrics.context.weeklyAverage.swearingMessagePercent)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3 rounded-[18px] bg-white/[0.045] px-4 py-3">
+                  <span className="text-sm text-white/58">Average rage peak</span>
+                  <span className="text-xl font-semibold text-white">
+                    {formatCount(metrics.context.weeklyAverage.averageMaxCumulativeRage)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3 rounded-[18px] bg-white/[0.045] px-4 py-3">
+                  <span className="text-sm text-white/58">Max rage peak</span>
+                  <span className="text-xl font-semibold text-white">
+                    {formatCount(metrics.context.weeklyAverage.maxCumulativeRage)}
                   </span>
                 </div>
               </div>
@@ -197,10 +221,10 @@ export function PsycheMetricsPage() {
                 </div>
                 <div className="grid gap-3 text-sm leading-6 text-white/58">
                   <div>
-                    Daily average: {formatCount(metrics.context.dailyAverage.rawSwearCount)} swears and {formatPercent(metrics.context.dailyAverage.swearingMessagePercent)} swearing messages.
+                    Daily average: {formatCount(metrics.context.dailyAverage.rawSwearCount)} swears, {formatPercent(metrics.context.dailyAverage.swearingMessagePercent)} swearing messages, and {formatCount(metrics.context.dailyAverage.averageMaxCumulativeRage)} average rage peak.
                   </div>
                   <div>
-                    Weekly average: {formatCount(metrics.context.weeklyAverage.rawSwearCount)} swears and {formatPercent(metrics.context.weeklyAverage.swearingMessagePercent)} swearing messages.
+                    Weekly average: {formatCount(metrics.context.weeklyAverage.rawSwearCount)} swears, {formatPercent(metrics.context.weeklyAverage.swearingMessagePercent)} swearing messages, and {formatCount(metrics.context.weeklyAverage.maxCumulativeRage)} max rage peak.
                   </div>
                   <div>
                     {formatCount(metrics.context.messagesWithSwears)} user messages contained at least one tracked swear.

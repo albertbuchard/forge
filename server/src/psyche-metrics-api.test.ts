@@ -16,6 +16,9 @@ function reportFixture(): DevrageReport {
     messagesScanned: 12,
     messagesWithSwears: 3,
     totalSwears: 6,
+    averageMaxCumulativeRage: 6,
+    maxCumulativeRage: 6,
+    maxSwearingStreak: 3,
     byAgent: [{ agent: "codex", messages: 12, messagesWithSwears: 3, swears: 6 }],
     bySource: [
       {
@@ -35,7 +38,9 @@ function reportFixture(): DevrageReport {
         dateKey: "2026-05-14",
         messages: 12,
         messagesWithSwears: 3,
-        swears: 6
+        swears: 6,
+        maxCumulativeRage: 6,
+        maxSwearingStreak: 3
       }
     ],
     daily: [],
@@ -71,9 +76,13 @@ test("psyche metrics API returns stored devrage daily metrics", async () => {
       };
     };
     assert.equal(body.metrics.summary.hasData, true);
-    assert.equal(body.metrics.summary.metricCount, 2);
+    assert.equal(body.metrics.summary.metricCount, 4);
     assert.equal(
       body.metrics.metrics.find((metric) => metric.metric === "devrageSwearCount")?.latestValue,
+      6
+    );
+    assert.equal(
+      body.metrics.metrics.find((metric) => metric.metric === "devrageMaxCumulativeRage")?.latestValue,
       6
     );
   } finally {

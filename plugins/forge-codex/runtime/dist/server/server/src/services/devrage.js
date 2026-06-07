@@ -4,6 +4,8 @@ import { getDatabase, runInTransaction } from "../db.js";
 import { psycheMetricsViewDataSchema } from "../psyche-types.js";
 const SWEAR_COUNT_KEY = "swear_count";
 const SWEARING_MESSAGE_PERCENT_KEY = "swearing_message_percent";
+const AVERAGE_MAX_CUMULATIVE_RAGE_KEY = "average_max_cumulative_rage";
+const MAX_CUMULATIVE_RAGE_KEY = "max_cumulative_rage";
 const DEFAULT_ROLE_FILTER = new Set(["user"]);
 const DAILY_RESYNC_INTERVAL_MS = 60 * 60 * 1000;
 const PSYCHE_METRIC_DEFINITIONS = {
@@ -19,6 +21,20 @@ const PSYCHE_METRIC_DEFINITIONS = {
         label: "Swearing messages",
         category: "conversationTone",
         unit: "%",
+        aggregation: "discrete"
+    },
+    [AVERAGE_MAX_CUMULATIVE_RAGE_KEY]: {
+        metric: "devrageAverageMaxCumulativeRage",
+        label: "Average max cumulative rage",
+        category: "conversationTone",
+        unit: "score",
+        aggregation: "discrete"
+    },
+    [MAX_CUMULATIVE_RAGE_KEY]: {
+        metric: "devrageMaxCumulativeRage",
+        label: "Max cumulative rage",
+        category: "conversationTone",
+        unit: "score",
         aggregation: "discrete"
     }
 };
@@ -69,16 +85,23 @@ export function getDevrageMetricPayload() {
         latestDateKey: latest?.dateKey ?? null,
         rawSwearCount: latest?.rawSwearCount ?? 0,
         swearingMessagePercent: latest?.swearingMessagePercent ?? 0,
+        averageMaxCumulativeRage: latest?.averageMaxCumulativeRage ?? 0,
+        maxCumulativeRage: latest?.maxCumulativeRage ?? 0,
+        maxSwearingStreak: latest?.maxSwearingStreak ?? 0,
         conversationsScanned: latest?.conversationsScanned ?? 0,
         messagesScanned: latest?.messagesScanned ?? 0,
         messagesWithSwears: latest?.messagesWithSwears ?? 0,
         dailyAverage: {
             rawSwearCount: dailyAverages.rawSwearCount,
-            swearingMessagePercent: dailyAverages.swearingMessagePercent
+            swearingMessagePercent: dailyAverages.swearingMessagePercent,
+            averageMaxCumulativeRage: dailyAverages.averageMaxCumulativeRage,
+            maxCumulativeRage: dailyAverages.maxCumulativeRage
         },
         weeklyAverage: {
             rawSwearCount: weeklyAverages.rawSwearCount,
-            swearingMessagePercent: weeklyAverages.swearingMessagePercent
+            swearingMessagePercent: weeklyAverages.swearingMessagePercent,
+            averageMaxCumulativeRage: weeklyAverages.averageMaxCumulativeRage,
+            maxCumulativeRage: weeklyAverages.maxCumulativeRage
         },
         history,
         sync: {
@@ -220,11 +243,15 @@ export function getPsycheMetricsViewData() {
             totalSwears: Number(context.swear_count) || 0,
             dailyAverage: {
                 rawSwearCount: dailyAverages.rawSwearCount,
-                swearingMessagePercent: dailyAverages.swearingMessagePercent
+                swearingMessagePercent: dailyAverages.swearingMessagePercent,
+                averageMaxCumulativeRage: dailyAverages.averageMaxCumulativeRage,
+                maxCumulativeRage: dailyAverages.maxCumulativeRage
             },
             weeklyAverage: {
                 rawSwearCount: weeklyAverages.rawSwearCount,
-                swearingMessagePercent: weeklyAverages.swearingMessagePercent
+                swearingMessagePercent: weeklyAverages.swearingMessagePercent,
+                averageMaxCumulativeRage: weeklyAverages.averageMaxCumulativeRage,
+                maxCumulativeRage: weeklyAverages.maxCumulativeRage
             },
             sync: {
                 fullSyncCompletedAt: state?.full_sync_completed_at ?? null,
@@ -255,20 +282,23 @@ export function storeDevrageReport(report, options) {
         const deleteDate = database.prepare(`DELETE FROM psyche_devrage_conversation_measures WHERE date_key = ?`);
         const insertConversation = database.prepare(`INSERT INTO psyche_devrage_conversation_measures (
          id, source, conversation_id, date_key, updated_at, messages,
-         messages_with_swears, swear_count, scanned_at
+         messages_with_swears, swear_count, max_cumulative_rage,
+         max_swearing_streak, scanned_at
        )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(source, conversation_id, date_key) DO UPDATE SET
          updated_at = excluded.updated_at,
          messages = excluded.messages,
          messages_with_swears = excluded.messages_with_swears,
          swear_count = excluded.swear_count,
+         max_cumulative_rage = excluded.max_cumulative_rage,
+         max_swearing_streak = excluded.max_swearing_streak,
          scanned_at = excluded.scanned_at`);
         for (const dateKey of affectedDateKeys) {
             deleteDate.run(dateKey);
         }
         for (const conversation of report.conversations) {
-            insertConversation.run(stableId("devrage_conversation", conversation.source, conversation.conversationId, conversation.dateKey), conversation.source, conversation.conversationId, conversation.dateKey, conversation.updatedAt, conversation.messages, conversation.messagesWithSwears, conversation.swears, scannedAt);
+            insertConversation.run(stableId("devrage_conversation", conversation.source, conversation.conversationId, conversation.dateKey), conversation.source, conversation.conversationId, conversation.dateKey, conversation.updatedAt, conversation.messages, conversation.messagesWithSwears, conversation.swears, conversation.maxCumulativeRage, conversation.maxSwearingStreak, scannedAt);
         }
         for (const dateKey of affectedDateKeys) {
             recomputeMetricMeasuresForDate(dateKey, scannedAt);
@@ -287,16 +317,23 @@ function recomputeMetricMeasuresForDate(dateKey, computedAt) {
          COUNT(*) AS conversations,
          COALESCE(SUM(messages), 0) AS messages,
          COALESCE(SUM(messages_with_swears), 0) AS messages_with_swears,
-         COALESCE(SUM(swear_count), 0) AS swear_count
+         COALESCE(SUM(swear_count), 0) AS swear_count,
+         COALESCE(AVG(max_cumulative_rage), 0) AS average_max_cumulative_rage,
+         COALESCE(MAX(max_cumulative_rage), 0) AS max_cumulative_rage,
+         COALESCE(MAX(max_swearing_streak), 0) AS max_swearing_streak
        FROM psyche_devrage_conversation_measures
        WHERE date_key = ?`)
         .get(dateKey);
     const messages = Number(aggregate.messages) || 0;
     const messagesWithSwears = Number(aggregate.messages_with_swears) || 0;
     const swearCount = Number(aggregate.swear_count) || 0;
+    const averageMaxCumulativeRage = Number(aggregate.average_max_cumulative_rage) || 0;
+    const maxCumulativeRage = Number(aggregate.max_cumulative_rage) || 0;
     const percent = messages > 0 ? (messagesWithSwears / messages) * 100 : 0;
     upsertMetricMeasure(dateKey, SWEAR_COUNT_KEY, swearCount, "count", Number(aggregate.conversations) || 0, computedAt);
     upsertMetricMeasure(dateKey, SWEARING_MESSAGE_PERCENT_KEY, percent, "percent", messages, computedAt);
+    upsertMetricMeasure(dateKey, AVERAGE_MAX_CUMULATIVE_RAGE_KEY, averageMaxCumulativeRage, "score", Number(aggregate.conversations) || 0, computedAt);
+    upsertMetricMeasure(dateKey, MAX_CUMULATIVE_RAGE_KEY, maxCumulativeRage, "score", Number(aggregate.conversations) || 0, computedAt);
 }
 function upsertMetricMeasure(dateKey, metricKey, value, unit, sampleCount, computedAt) {
     getDatabase()
@@ -339,7 +376,10 @@ function getDevrageDailyHistory(limit) {
          COUNT(*) AS conversations,
          COALESCE(SUM(messages), 0) AS messages,
          COALESCE(SUM(messages_with_swears), 0) AS messages_with_swears,
-         COALESCE(SUM(swear_count), 0) AS swear_count
+         COALESCE(SUM(swear_count), 0) AS swear_count,
+         COALESCE(AVG(max_cumulative_rage), 0) AS average_max_cumulative_rage,
+         COALESCE(MAX(max_cumulative_rage), 0) AS max_cumulative_rage,
+         COALESCE(MAX(max_swearing_streak), 0) AS max_swearing_streak
        FROM psyche_devrage_conversation_measures
        GROUP BY date_key
        ORDER BY date_key DESC
@@ -352,6 +392,9 @@ function getDevrageDailyHistory(limit) {
             dateKey: row.date_key,
             rawSwearCount: Number(row.swear_count) || 0,
             swearingMessagePercent: messages > 0 ? (messagesWithSwears / messages) * 100 : 0,
+            averageMaxCumulativeRage: Number(row.average_max_cumulative_rage) || 0,
+            maxCumulativeRage: Number(row.max_cumulative_rage) || 0,
+            maxSwearingStreak: Number(row.max_swearing_streak) || 0,
             conversationsScanned: Number(row.conversations) || 0,
             messagesScanned: messages,
             messagesWithSwears
@@ -375,9 +418,13 @@ function getMetricAverages(days) {
         .all(...(days ? [days] : []));
     const swearAverage = rows.find((row) => row.metric_key === SWEAR_COUNT_KEY)?.value ?? 0;
     const percentAverage = rows.find((row) => row.metric_key === SWEARING_MESSAGE_PERCENT_KEY)?.value ?? 0;
+    const averageMaxCumulativeRage = rows.find((row) => row.metric_key === AVERAGE_MAX_CUMULATIVE_RAGE_KEY)?.value ?? 0;
+    const maxCumulativeRage = rows.find((row) => row.metric_key === MAX_CUMULATIVE_RAGE_KEY)?.value ?? 0;
     return {
         rawSwearCount: round(Number(swearAverage) || 0, 1),
-        swearingMessagePercent: round(Number(percentAverage) || 0, 1)
+        swearingMessagePercent: round(Number(percentAverage) || 0, 1),
+        averageMaxCumulativeRage: round(Number(averageMaxCumulativeRage) || 0, 1),
+        maxCumulativeRage: round(Number(maxCumulativeRage) || 0, 1)
     };
 }
 function getDevrageConversationTotals() {
@@ -387,7 +434,10 @@ function getDevrageConversationTotals() {
          COUNT(DISTINCT source) AS sources,
          COALESCE(SUM(messages), 0) AS messages,
          COALESCE(SUM(messages_with_swears), 0) AS messages_with_swears,
-         COALESCE(SUM(swear_count), 0) AS swear_count
+         COALESCE(SUM(swear_count), 0) AS swear_count,
+         COALESCE(AVG(max_cumulative_rage), 0) AS average_max_cumulative_rage,
+         COALESCE(MAX(max_cumulative_rage), 0) AS max_cumulative_rage,
+         COALESCE(MAX(max_swearing_streak), 0) AS max_swearing_streak
        FROM psyche_devrage_conversation_measures`)
         .get();
 }

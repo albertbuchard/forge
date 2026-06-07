@@ -63,6 +63,8 @@ export interface ConversationStats {
   messages: number;
   messagesWithSwears: number;
   swears: number;
+  maxCumulativeRage: number;
+  maxSwearingStreak: number;
 }
 
 export interface DailyStats {
@@ -72,6 +74,9 @@ export interface DailyStats {
   messagesWithSwears: number;
   swears: number;
   swearingMessagePercent: number;
+  averageMaxCumulativeRage: number;
+  maxCumulativeRage: number;
+  maxSwearingStreak: number;
 }
 
 export interface WordStats {
@@ -93,6 +98,9 @@ export interface DevrageReport {
   messagesScanned: number;
   messagesWithSwears: number;
   totalSwears: number;
+  averageMaxCumulativeRage: number;
+  maxCumulativeRage: number;
+  maxSwearingStreak: number;
   byAgent: Array<{ agent: string; messages: number; messagesWithSwears: number; swears: number }>;
   bySource: SourceStats[];
   conversations: ConversationStats[];
@@ -144,7 +152,8 @@ type UnknownRecord = Record<string, unknown>;
 const tokenPattern = /[a-z][a-z0-9'*_-]*/gi;
 
 const defaultSwearLexicon: SwearEntry[] = [
-  { root: "fuck", variants: ["fuck", "fucked", "fucker", "fuckers", "fuckin", "fucking", "fucks", "motherfuck", "motherfucked", "motherfucker", "motherfuckers", "motherfucking"] },
+  { root: "fuck", variants: ["fuck", "f*ck", "f**k", "fck", "fuk", "fucked", "fucker", "fuckers", "fuckin", "fucking", "fucks", "motherfuck", "motherfucked", "motherfucker", "motherfuckers", "motherfucking"] },
+  { root: "ffs", variants: ["ffs", "for fucks sake", "for fuck's sake", "for-fucks-sake", "for-fuck's-sake"] },
   { root: "wtf", variants: ["wtf"] },
   { root: "shit", variants: ["shit", "shitshow", "shits", "shitty", "bullshit", "bullshitting", "dipshit", "dipshits"] },
   { root: "dick", variants: ["dick", "dicks", "dickhead", "dickheads"] },
@@ -172,11 +181,7 @@ const ADAPTER_FACTORIES: Record<string, () => Adapter> = {
       join(homedir(), ".hermes", "**/*.{json,jsonl}"),
       join(homedir(), ".config", "hermes", "**/*.{json,jsonl}")
     ]),
-  openclaw: () =>
-    genericLocalLogAdapter("openclaw", [
-      join(homedir(), ".openclaw", "**/*.{json,jsonl}"),
-      join(homedir(), "Library", "Application Support", "OpenClaw", "**/*.{json,jsonl}")
-    ]),
+  openclaw: openclawAdapter,
   opencode: opencodeAdapter,
   zed: zedAdapter
 };
@@ -216,7 +221,7 @@ function allAdapters(): Adapter[] {
   return availableSources().map((source) => createAdapter(source));
 }
 
-function analyzeConversations(
+export function analyzeConversations(
   conversations: ConversationRecord[],
   options: ScanOptions,
   generatedAt = new Date().toISOString()
@@ -242,6 +247,10 @@ function analyzeConversations(
     let conversationMessages = 0;
     let conversationMessagesWithSwears = 0;
     let conversationSwears = 0;
+    let cumulativeRage = 0;
+    let maxCumulativeRage = 0;
+    let swearingStreak = 0;
+    let maxSwearingStreak = 0;
 
     const currentSource =
       sourceStats.get(conversation.source) ?? {
@@ -285,8 +294,15 @@ function analyzeConversations(
         currentSource.messagesWithSwears += 1;
         currentAgent.messagesWithSwears += 1;
         currentAgent.swears += swearsInMessage;
+        cumulativeRage += swearsInMessage;
+        swearingStreak += 1;
+      } else {
+        cumulativeRage = Math.max(0, cumulativeRage - 1);
+        swearingStreak = 0;
       }
 
+      maxCumulativeRage = Math.max(maxCumulativeRage, cumulativeRage);
+      maxSwearingStreak = Math.max(maxSwearingStreak, swearingStreak);
       agentStats.set(agent, currentAgent);
     }
 
@@ -300,9 +316,18 @@ function analyzeConversations(
       dateKey,
       messages: conversationMessages,
       messagesWithSwears: conversationMessagesWithSwears,
-      swears: conversationSwears
+      swears: conversationSwears,
+      maxCumulativeRage,
+      maxSwearingStreak
     });
   }
+  const maxCumulativeRage = Math.max(0, ...conversationStats.map((conversation) => conversation.maxCumulativeRage));
+  const maxSwearingStreak = Math.max(0, ...conversationStats.map((conversation) => conversation.maxSwearingStreak));
+  const averageMaxCumulativeRage =
+    conversationStats.length === 0
+      ? 0
+      : conversationStats.reduce((sum, conversation) => sum + conversation.maxCumulativeRage, 0) /
+        conversationStats.length;
 
   return {
     generatedAt,
@@ -311,6 +336,9 @@ function analyzeConversations(
     messagesScanned,
     messagesWithSwears,
     totalSwears,
+    averageMaxCumulativeRage,
+    maxCumulativeRage,
+    maxSwearingStreak,
     byAgent: [...agentStats.entries()]
       .map(([agent, stats]) => ({ agent, ...stats }))
       .sort(
@@ -615,6 +643,35 @@ function genericLocalLogAdapter(source: DevrageSource, patterns: string[]): Adap
   };
 }
 
+function openclawAdapter(): Adapter {
+  return {
+    source: "openclaw",
+    async read() {
+      const trajectoryResult = await readJsonlTree(
+        "openclaw",
+        [
+          join(homedir(), ".openclaw", "agents"),
+          join(homedir(), "Library", "Application Support", "OpenClaw", "agents")
+        ],
+        parseOpenClawTrajectoryLine
+      );
+      const genericResult = await genericLocalLogAdapter("openclaw", [
+        join(homedir(), ".openclaw", "**/*.{json,jsonl}"),
+        join(homedir(), "Library", "Application Support", "OpenClaw", "**/*.{json,jsonl}")
+      ]).read();
+      return {
+        conversations: [
+          ...trajectoryResult.conversations,
+          ...genericResult.conversations.filter(
+            (conversation) => !conversation.sourceFile.endsWith(".trajectory.jsonl")
+          )
+        ],
+        warnings: [...trajectoryResult.warnings, ...genericResult.warnings]
+      };
+    }
+  };
+}
+
 async function readJsonlTree(
   source: DevrageSource,
   roots: string[],
@@ -765,6 +822,56 @@ function parseGenericJsonLine(record: unknown, context: Parameters<JsonlParser>[
   });
 }
 
+export function parseOpenClawTrajectoryLine(
+  record: unknown,
+  context: Parameters<JsonlParser>[1]
+): ConversationMessage | null {
+  if (!isObject(record) || record.type !== "prompt.submitted" || !isObject(record.data)) {
+    return null;
+  }
+
+  const data = record.data;
+  const text =
+    typeof data.prompt === "string" && data.prompt.trim().length > 0
+      ? data.prompt.trim()
+      : latestOpenClawUserMessageText(data.messages);
+  if (!text || isContextInjection("user", text)) {
+    return null;
+  }
+
+  return {
+    agent: "openclaw",
+    source: "openclaw",
+    conversationId: context.conversationId.replace(/\.trajectory$/, ""),
+    role: "user",
+    text,
+    timestamp:
+      stringTimestamp(record.ts) ??
+      stringTimestamp(record.timestamp) ??
+      stringTimestamp(data.timestamp) ??
+      numberTimestamp(record.ts) ??
+      context.fallbackTimestamp,
+    sourceFile: context.sourceFile
+  };
+}
+
+function latestOpenClawUserMessageText(messages: unknown): string {
+  if (!Array.isArray(messages)) {
+    return "";
+  }
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (!isObject(message) || normalizeRole(message.role ?? message.type) !== "user") {
+      continue;
+    }
+    const text = extractText(message.content ?? message.text).join("\n").trim();
+    if (text) {
+      return text;
+    }
+  }
+  return "";
+}
+
 function parseGenericMessage(
   entry: unknown,
   context: {
@@ -859,7 +966,7 @@ function buildLexiconIndexes(lexicon = defaultSwearLexicon): {
         });
         continue;
       }
-      tokenIndex.set(normalizedVariant, entry.root);
+      tokenIndex.set(normalizeToken(normalizedVariant), entry.root);
     }
   }
   phraseVariants.sort(
@@ -954,7 +1061,7 @@ function addOccurrence(
 }
 
 function buildDailyStats(conversations: ConversationStats[]): DailyStats[] {
-  const byDay = new Map<string, DailyStats>();
+  const byDay = new Map<string, DailyStats & { maxCumulativeRageSum: number }>();
   for (const conversation of conversations) {
     const current =
       byDay.get(conversation.dateKey) ??
@@ -964,17 +1071,38 @@ function buildDailyStats(conversations: ConversationStats[]): DailyStats[] {
         messages: 0,
         messagesWithSwears: 0,
         swears: 0,
-        swearingMessagePercent: 0
+        swearingMessagePercent: 0,
+        averageMaxCumulativeRage: 0,
+        maxCumulativeRage: 0,
+        maxSwearingStreak: 0,
+        maxCumulativeRageSum: 0
       };
     current.conversations += 1;
     current.messages += conversation.messages;
     current.messagesWithSwears += conversation.messagesWithSwears;
     current.swears += conversation.swears;
+    current.maxCumulativeRageSum += conversation.maxCumulativeRage;
+    current.maxCumulativeRage = Math.max(current.maxCumulativeRage, conversation.maxCumulativeRage);
+    current.maxSwearingStreak = Math.max(current.maxSwearingStreak, conversation.maxSwearingStreak);
     current.swearingMessagePercent =
       current.messages === 0 ? 0 : (current.messagesWithSwears / current.messages) * 100;
+    current.averageMaxCumulativeRage =
+      current.conversations === 0 ? 0 : current.maxCumulativeRageSum / current.conversations;
     byDay.set(conversation.dateKey, current);
   }
-  return [...byDay.values()].sort((left, right) => right.dateKey.localeCompare(left.dateKey));
+  return [...byDay.values()]
+    .map((stats) => ({
+      dateKey: stats.dateKey,
+      conversations: stats.conversations,
+      messages: stats.messages,
+      messagesWithSwears: stats.messagesWithSwears,
+      swears: stats.swears,
+      swearingMessagePercent: stats.swearingMessagePercent,
+      averageMaxCumulativeRage: stats.averageMaxCumulativeRage,
+      maxCumulativeRage: stats.maxCumulativeRage,
+      maxSwearingStreak: stats.maxSwearingStreak
+    }))
+    .sort((left, right) => right.dateKey.localeCompare(left.dateKey));
 }
 
 function compactMessage(message: ConversationMessage | null): ConversationMessage[] {

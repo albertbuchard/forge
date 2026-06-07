@@ -4766,6 +4766,9 @@ export function buildOpenApiDocument() {
             "latestDateKey",
             "rawSwearCount",
             "swearingMessagePercent",
+            "averageMaxCumulativeRage",
+            "maxCumulativeRage",
+            "maxSwearingStreak",
             "conversationsScanned",
             "messagesScanned",
             "messagesWithSwears",
@@ -4780,25 +4783,42 @@ export function buildOpenApiDocument() {
             latestDateKey: nullable({ type: "string" }),
             rawSwearCount: { type: "number" },
             swearingMessagePercent: { type: "number" },
+            averageMaxCumulativeRage: { type: "number" },
+            maxCumulativeRage: { type: "number" },
+            maxSwearingStreak: { type: "integer" },
             conversationsScanned: { type: "integer" },
             messagesScanned: { type: "integer" },
             messagesWithSwears: { type: "integer" },
             dailyAverage: {
                 type: "object",
                 additionalProperties: false,
-                required: ["rawSwearCount", "swearingMessagePercent"],
+                required: [
+                    "rawSwearCount",
+                    "swearingMessagePercent",
+                    "averageMaxCumulativeRage",
+                    "maxCumulativeRage"
+                ],
                 properties: {
                     rawSwearCount: { type: "number" },
-                    swearingMessagePercent: { type: "number" }
+                    swearingMessagePercent: { type: "number" },
+                    averageMaxCumulativeRage: { type: "number" },
+                    maxCumulativeRage: { type: "number" }
                 }
             },
             weeklyAverage: {
                 type: "object",
                 additionalProperties: false,
-                required: ["rawSwearCount", "swearingMessagePercent"],
+                required: [
+                    "rawSwearCount",
+                    "swearingMessagePercent",
+                    "averageMaxCumulativeRage",
+                    "maxCumulativeRage"
+                ],
                 properties: {
                     rawSwearCount: { type: "number" },
-                    swearingMessagePercent: { type: "number" }
+                    swearingMessagePercent: { type: "number" },
+                    averageMaxCumulativeRage: { type: "number" },
+                    maxCumulativeRage: { type: "number" }
                 }
             },
             history: arrayOf({
@@ -4808,6 +4828,9 @@ export function buildOpenApiDocument() {
                     "dateKey",
                     "rawSwearCount",
                     "swearingMessagePercent",
+                    "averageMaxCumulativeRage",
+                    "maxCumulativeRage",
+                    "maxSwearingStreak",
                     "conversationsScanned",
                     "messagesScanned",
                     "messagesWithSwears"
@@ -4816,6 +4839,9 @@ export function buildOpenApiDocument() {
                     dateKey: { type: "string" },
                     rawSwearCount: { type: "number" },
                     swearingMessagePercent: { type: "number" },
+                    averageMaxCumulativeRage: { type: "number" },
+                    maxCumulativeRage: { type: "number" },
+                    maxSwearingStreak: { type: "integer" },
                     conversationsScanned: { type: "integer" },
                     messagesScanned: { type: "integer" },
                     messagesWithSwears: { type: "integer" }
@@ -4952,19 +4978,33 @@ export function buildOpenApiDocument() {
                     dailyAverage: {
                         type: "object",
                         additionalProperties: false,
-                        required: ["rawSwearCount", "swearingMessagePercent"],
+                        required: [
+                            "rawSwearCount",
+                            "swearingMessagePercent",
+                            "averageMaxCumulativeRage",
+                            "maxCumulativeRage"
+                        ],
                         properties: {
                             rawSwearCount: { type: "number" },
-                            swearingMessagePercent: { type: "number" }
+                            swearingMessagePercent: { type: "number" },
+                            averageMaxCumulativeRage: { type: "number" },
+                            maxCumulativeRage: { type: "number" }
                         }
                     },
                     weeklyAverage: {
                         type: "object",
                         additionalProperties: false,
-                        required: ["rawSwearCount", "swearingMessagePercent"],
+                        required: [
+                            "rawSwearCount",
+                            "swearingMessagePercent",
+                            "averageMaxCumulativeRage",
+                            "maxCumulativeRage"
+                        ],
                         properties: {
                             rawSwearCount: { type: "number" },
-                            swearingMessagePercent: { type: "number" }
+                            swearingMessagePercent: { type: "number" },
+                            averageMaxCumulativeRage: { type: "number" },
+                            maxCumulativeRage: { type: "number" }
                         }
                     },
                     sync: {

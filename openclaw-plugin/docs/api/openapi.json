@@ -9858,13 +9858,21 @@
                 "additionalProperties": false,
                 "required": [
                   "rawSwearCount",
-                  "swearingMessagePercent"
+                  "swearingMessagePercent",
+                  "averageMaxCumulativeRage",
+                  "maxCumulativeRage"
                 ],
                 "properties": {
                   "rawSwearCount": {
                     "type": "number"
                   },
                   "swearingMessagePercent": {
+                    "type": "number"
+                  },
+                  "averageMaxCumulativeRage": {
+                    "type": "number"
+                  },
+                  "maxCumulativeRage": {
                     "type": "number"
                   }
                 }
@@ -9874,13 +9882,21 @@
                 "additionalProperties": false,
                 "required": [
                   "rawSwearCount",
-                  "swearingMessagePercent"
+                  "swearingMessagePercent",
+                  "averageMaxCumulativeRage",
+                  "maxCumulativeRage"
                 ],
                 "properties": {
                   "rawSwearCount": {
                     "type": "number"
                   },
                   "swearingMessagePercent": {
+                    "type": "number"
+                  },
+                  "averageMaxCumulativeRage": {
+                    "type": "number"
+                  },
+                  "maxCumulativeRage": {
                     "type": "number"
                   }
                 }
@@ -10190,6 +10206,9 @@
               "latestDateKey",
               "rawSwearCount",
               "swearingMessagePercent",
+              "averageMaxCumulativeRage",
+              "maxCumulativeRage",
+              "maxSwearingStreak",
               "conversationsScanned",
               "messagesScanned",
               "messagesWithSwears",
@@ -10222,6 +10241,15 @@
               "swearingMessagePercent": {
                 "type": "number"
               },
+              "averageMaxCumulativeRage": {
+                "type": "number"
+              },
+              "maxCumulativeRage": {
+                "type": "number"
+              },
+              "maxSwearingStreak": {
+                "type": "integer"
+              },
               "conversationsScanned": {
                 "type": "integer"
               },
@@ -10236,13 +10264,21 @@
                 "additionalProperties": false,
                 "required": [
                   "rawSwearCount",
-                  "swearingMessagePercent"
+                  "swearingMessagePercent",
+                  "averageMaxCumulativeRage",
+                  "maxCumulativeRage"
                 ],
                 "properties": {
                   "rawSwearCount": {
                     "type": "number"
                   },
                   "swearingMessagePercent": {
+                    "type": "number"
+                  },
+                  "averageMaxCumulativeRage": {
+                    "type": "number"
+                  },
+                  "maxCumulativeRage": {
                     "type": "number"
                   }
                 }
@@ -10252,13 +10288,21 @@
                 "additionalProperties": false,
                 "required": [
                   "rawSwearCount",
-                  "swearingMessagePercent"
+                  "swearingMessagePercent",
+                  "averageMaxCumulativeRage",
+                  "maxCumulativeRage"
                 ],
                 "properties": {
                   "rawSwearCount": {
                     "type": "number"
                   },
                   "swearingMessagePercent": {
+                    "type": "number"
+                  },
+                  "averageMaxCumulativeRage": {
+                    "type": "number"
+                  },
+                  "maxCumulativeRage": {
                     "type": "number"
                   }
                 }
@@ -10272,6 +10316,9 @@
                     "dateKey",
                     "rawSwearCount",
                     "swearingMessagePercent",
+                    "averageMaxCumulativeRage",
+                    "maxCumulativeRage",
+                    "maxSwearingStreak",
                     "conversationsScanned",
                     "messagesScanned",
                     "messagesWithSwears"
@@ -10285,6 +10332,15 @@
                     },
                     "swearingMessagePercent": {
                       "type": "number"
+                    },
+                    "averageMaxCumulativeRage": {
+                      "type": "number"
+                    },
+                    "maxCumulativeRage": {
+                      "type": "number"
+                    },
+                    "maxSwearingStreak": {
+                      "type": "integer"
                     },
                     "conversationsScanned": {
                       "type": "integer"
@@ -18745,6 +18801,205 @@
           "Notes"
         ],
         "operationId": "deletenotes_id"
+      }
+    },
+    "/api/v1/strategies": {
+      "get": {
+        "summary": "List strategies",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "active",
+                "paused",
+                "completed"
+              ]
+            }
+          },
+          {
+            "name": "userIds",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Strategy collection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "strategies"
+                  ],
+                  "properties": {
+                    "strategies": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Strategy"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Strategies"
+        ],
+        "operationId": "getstrategies"
+      },
+      "post": {
+        "summary": "Create a strategy",
+        "responses": {
+          "201": {
+            "description": "Created strategy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "strategy"
+                  ],
+                  "properties": {
+                    "strategy": {
+                      "$ref": "#/components/schemas/Strategy"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Strategies"
+        ],
+        "operationId": "poststrategies"
+      }
+    },
+    "/api/v1/strategies/{id}": {
+      "get": {
+        "summary": "Get a strategy",
+        "responses": {
+          "200": {
+            "description": "Strategy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "strategy"
+                  ],
+                  "properties": {
+                    "strategy": {
+                      "$ref": "#/components/schemas/Strategy"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Strategies"
+        ],
+        "operationId": "getstrategies_id"
+      },
+      "patch": {
+        "summary": "Update a strategy",
+        "responses": {
+          "200": {
+            "description": "Updated strategy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "strategy"
+                  ],
+                  "properties": {
+                    "strategy": {
+                      "$ref": "#/components/schemas/Strategy"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Strategies"
+        ],
+        "operationId": "patchstrategies_id"
+      },
+      "delete": {
+        "summary": "Delete a strategy",
+        "responses": {
+          "200": {
+            "description": "Deleted strategy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "strategy"
+                  ],
+                  "properties": {
+                    "strategy": {
+                      "$ref": "#/components/schemas/Strategy"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Strategies"
+        ],
+        "operationId": "deletestrategies_id"
       }
     },
     "/api/v1/projects": {

@@ -40,11 +40,6 @@ const psycheSecondaryActionClassName =
 const psycheFallbackCtaClassName =
   "bg-[linear-gradient(135deg,color-mix(in_srgb,var(--primary)_34%,var(--ui-surface-2)_66%),color-mix(in_srgb,var(--primary)_18%,var(--ui-surface-1)_82%))] text-[var(--ui-ink-strong)]";
 
-function formatSignedAverage(value: number, unit: "count" | "percent") {
-  const formatted = unit === "percent" ? formatPercent(value) : formatCount(value);
-  return formatted;
-}
-
 function DevrageMetricCard({ metric }: { metric: DevrageMetricPayload }) {
   const latestHistory = metric.history.slice(0, 7).reverse();
   const maxSwears = Math.max(1, ...latestHistory.map((day) => day.rawSwearCount));
@@ -73,15 +68,15 @@ function DevrageMetricCard({ metric }: { metric: DevrageMetricPayload }) {
           </div>
         </div>
         <div className="min-w-0 rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3">
-          <div className="text-xs text-[var(--ui-ink-faint)]">Daily average</div>
+          <div className="text-xs text-[var(--ui-ink-faint)]">Rage peak</div>
           <div className="mt-1 break-words text-2xl font-semibold text-[var(--ui-ink-strong)]">
-            {formatSignedAverage(metric.dailyAverage.rawSwearCount, "count")}
+            {formatCount(metric.maxCumulativeRage)}
           </div>
         </div>
         <div className="min-w-0 rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3">
-          <div className="text-xs text-[var(--ui-ink-faint)]">Weekly average</div>
+          <div className="text-xs text-[var(--ui-ink-faint)]">Avg thread peak</div>
           <div className="mt-1 break-words text-2xl font-semibold text-[var(--ui-ink-strong)]">
-            {formatSignedAverage(metric.weeklyAverage.rawSwearCount, "count")}
+            {formatCount(metric.averageMaxCumulativeRage)}
           </div>
         </div>
       </div>
@@ -95,7 +90,7 @@ function DevrageMetricCard({ metric }: { metric: DevrageMetricPayload }) {
               style={{
                 height: `${Math.max(8, (day.rawSwearCount / maxSwears) * 64)}px`
               }}
-              title={`${day.dateKey}: ${formatCount(day.rawSwearCount)} swears, ${formatPercent(day.swearingMessagePercent)} swearing messages`}
+              title={`${day.dateKey}: ${formatCount(day.rawSwearCount)} swears, ${formatPercent(day.swearingMessagePercent)} swearing messages, ${formatCount(day.maxCumulativeRage)} max cumulative rage`}
             />
           ))
         ) : (
@@ -109,6 +104,7 @@ function DevrageMetricCard({ metric }: { metric: DevrageMetricPayload }) {
         <span>{formatCount(metric.conversationsScanned)} conversations</span>
         <span>{formatCount(metric.messagesScanned)} messages</span>
         <span>{formatCount(metric.messagesWithSwears)} flagged</span>
+        <span>{formatCount(metric.maxSwearingStreak)} max streak</span>
       </div>
 
       <Link

@@ -265,21 +265,31 @@ export interface DevrageMetricPayload {
   latestDateKey: string | null;
   rawSwearCount: number;
   swearingMessagePercent: number;
+  averageMaxCumulativeRage: number;
+  maxCumulativeRage: number;
+  maxSwearingStreak: number;
   conversationsScanned: number;
   messagesScanned: number;
   messagesWithSwears: number;
   dailyAverage: {
     rawSwearCount: number;
     swearingMessagePercent: number;
+    averageMaxCumulativeRage: number;
+    maxCumulativeRage: number;
   };
   weeklyAverage: {
     rawSwearCount: number;
     swearingMessagePercent: number;
+    averageMaxCumulativeRage: number;
+    maxCumulativeRage: number;
   };
   history: Array<{
     dateKey: string;
     rawSwearCount: number;
     swearingMessagePercent: number;
+    averageMaxCumulativeRage: number;
+    maxCumulativeRage: number;
+    maxSwearingStreak: number;
     conversationsScanned: number;
     messagesScanned: number;
     messagesWithSwears: number;
@@ -325,10 +335,14 @@ export interface PsycheMetricsViewData {
     dailyAverage: {
       rawSwearCount: number;
       swearingMessagePercent: number;
+      averageMaxCumulativeRage: number;
+      maxCumulativeRage: number;
     };
     weeklyAverage: {
       rawSwearCount: number;
       swearingMessagePercent: number;
+      averageMaxCumulativeRage: number;
+      maxCumulativeRage: number;
     };
     sync: {
       fullSyncCompletedAt: string | null;

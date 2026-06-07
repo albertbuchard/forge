@@ -279,7 +279,7 @@ Food logging must preserve reusable nutrition facts instead of creating name-onl
 
 ### 14. Psyche Daily Metrics
 
-Psyche metrics are daily, local-first measurements derived from stored observations rather than live page-time scanners. Devrage is the first metric family: it stores conversation-day counts and daily metric rows for user-message swear count and swearing-message percentage, exposes those rows through a Psyche Metrics view, and renders them with the same history, coverage, baseline, delta, and sparkline treatment as Vitals. If no conversations or stored metric rows exist, devrage-specific cards stay hidden while the generic Metrics route remains available for future Psyche measures.
+Psyche metrics are daily, local-first measurements derived from stored observations rather than live page-time scanners. Devrage is the first metric family: it stores conversation-day counts and daily metric rows for user-message swear count, swearing-message percentage, average per-thread max cumulative rage, and max cumulative rage, exposes those rows through a Psyche Metrics view, and renders them with the same history, coverage, baseline, delta, and sparkline treatment as Vitals. The cumulative rage score is intentionally simple: swear-bearing user messages add their swear count, clean user messages cool the thread score down by one, and Forge records the per-thread peak plus daily averages and maxima. If no conversations or stored metric rows exist, devrage-specific cards stay hidden while the generic Metrics route remains available for future Psyche measures.
 
 ### 15. Gamified Progression
 

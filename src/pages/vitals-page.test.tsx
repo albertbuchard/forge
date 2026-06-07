@@ -147,11 +147,15 @@ describe("VitalsPage", () => {
           totalSwears: 0,
           dailyAverage: {
             rawSwearCount: 0,
-            swearingMessagePercent: 0
+            swearingMessagePercent: 0,
+            averageMaxCumulativeRage: 0,
+            maxCumulativeRage: 0
           },
           weeklyAverage: {
             rawSwearCount: 0,
-            swearingMessagePercent: 0
+            swearingMessagePercent: 0,
+            averageMaxCumulativeRage: 0,
+            maxCumulativeRage: 0
           },
           sync: {
             fullSyncCompletedAt: null,
@@ -202,11 +206,15 @@ describe("VitalsPage", () => {
           totalSwears: 12,
           dailyAverage: {
             rawSwearCount: 6,
-            swearingMessagePercent: 20
+            swearingMessagePercent: 20,
+            averageMaxCumulativeRage: 5,
+            maxCumulativeRage: 6
           },
           weeklyAverage: {
             rawSwearCount: 6,
-            swearingMessagePercent: 20
+            swearingMessagePercent: 20,
+            averageMaxCumulativeRage: 5,
+            maxCumulativeRage: 6
           },
           sync: {
             fullSyncCompletedAt: "2026-05-14T00:00:00.000Z",

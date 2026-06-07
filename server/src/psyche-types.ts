@@ -304,22 +304,32 @@ export const devrageMetricPayloadSchema = z.object({
   latestDateKey: z.string().nullable(),
   rawSwearCount: z.number().nonnegative(),
   swearingMessagePercent: z.number().nonnegative(),
+  averageMaxCumulativeRage: z.number().nonnegative(),
+  maxCumulativeRage: z.number().nonnegative(),
+  maxSwearingStreak: z.number().int().nonnegative(),
   conversationsScanned: z.number().int().nonnegative(),
   messagesScanned: z.number().int().nonnegative(),
   messagesWithSwears: z.number().int().nonnegative(),
   dailyAverage: z.object({
     rawSwearCount: z.number().nonnegative(),
-    swearingMessagePercent: z.number().nonnegative()
+    swearingMessagePercent: z.number().nonnegative(),
+    averageMaxCumulativeRage: z.number().nonnegative(),
+    maxCumulativeRage: z.number().nonnegative()
   }),
   weeklyAverage: z.object({
     rawSwearCount: z.number().nonnegative(),
-    swearingMessagePercent: z.number().nonnegative()
+    swearingMessagePercent: z.number().nonnegative(),
+    averageMaxCumulativeRage: z.number().nonnegative(),
+    maxCumulativeRage: z.number().nonnegative()
   }),
   history: z.array(
     z.object({
       dateKey: z.string(),
       rawSwearCount: z.number().nonnegative(),
       swearingMessagePercent: z.number().nonnegative(),
+      averageMaxCumulativeRage: z.number().nonnegative(),
+      maxCumulativeRage: z.number().nonnegative(),
+      maxSwearingStreak: z.number().int().nonnegative(),
       conversationsScanned: z.number().int().nonnegative(),
       messagesScanned: z.number().int().nonnegative(),
       messagesWithSwears: z.number().int().nonnegative()
@@ -367,11 +377,15 @@ export const psycheMetricsViewDataSchema = z.object({
     totalSwears: z.number().nonnegative(),
     dailyAverage: z.object({
       rawSwearCount: z.number().nonnegative(),
-      swearingMessagePercent: z.number().nonnegative()
+      swearingMessagePercent: z.number().nonnegative(),
+      averageMaxCumulativeRage: z.number().nonnegative(),
+      maxCumulativeRage: z.number().nonnegative()
     }),
     weeklyAverage: z.object({
       rawSwearCount: z.number().nonnegative(),
-      swearingMessagePercent: z.number().nonnegative()
+      swearingMessagePercent: z.number().nonnegative(),
+      averageMaxCumulativeRage: z.number().nonnegative(),
+      maxCumulativeRage: z.number().nonnegative()
     }),
     sync: z.object({
       fullSyncCompletedAt: z.string().nullable(),

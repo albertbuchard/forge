@@ -191,16 +191,23 @@ const emptyDevrageMetric = {
   latestDateKey: null,
   rawSwearCount: 0,
   swearingMessagePercent: 0,
+  averageMaxCumulativeRage: 0,
+  maxCumulativeRage: 0,
+  maxSwearingStreak: 0,
   conversationsScanned: 0,
   messagesScanned: 0,
   messagesWithSwears: 0,
   dailyAverage: {
     rawSwearCount: 0,
-    swearingMessagePercent: 0
+    swearingMessagePercent: 0,
+    averageMaxCumulativeRage: 0,
+    maxCumulativeRage: 0
   },
   weeklyAverage: {
     rawSwearCount: 0,
-    swearingMessagePercent: 0
+    swearingMessagePercent: 0,
+    averageMaxCumulativeRage: 0,
+    maxCumulativeRage: 0
   },
   history: [],
   sync: {

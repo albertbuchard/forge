@@ -496,6 +496,8 @@ export function metricIcon(
     case "swearingMessagePercent":
       return Percent;
     case "devrageSwearCount":
+    case "devrageAverageMaxCumulativeRage":
+    case "devrageMaxCumulativeRage":
       return MessageCircleWarning;
     default:
       return Activity;

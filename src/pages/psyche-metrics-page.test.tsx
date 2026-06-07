@@ -71,11 +71,15 @@ const emptyMetrics = {
     totalSwears: 0,
     dailyAverage: {
       rawSwearCount: 0,
-      swearingMessagePercent: 0
+      swearingMessagePercent: 0,
+      averageMaxCumulativeRage: 0,
+      maxCumulativeRage: 0
     },
     weeklyAverage: {
       rawSwearCount: 0,
-      swearingMessagePercent: 0
+      swearingMessagePercent: 0,
+      averageMaxCumulativeRage: 0,
+      maxCumulativeRage: 0
     },
     sync: {
       fullSyncCompletedAt: null,
@@ -112,11 +116,11 @@ describe("PsycheMetricsPage", () => {
         summary: {
           hasData: true,
           trackedDays: 2,
-          metricCount: 2,
+          metricCount: 4,
           latestDateKey: "2026-05-14",
-          latestMetricCount: 2,
+          latestMetricCount: 4,
           categoryBreakdown: [
-            { category: "conversationTone", metricCount: 2, coverageDays: 2 }
+            { category: "conversationTone", metricCount: 4, coverageDays: 2 }
           ]
         },
         context: {
@@ -128,11 +132,15 @@ describe("PsycheMetricsPage", () => {
           totalSwears: 12,
           dailyAverage: {
             rawSwearCount: 6,
-            swearingMessagePercent: 20
+            swearingMessagePercent: 20,
+            averageMaxCumulativeRage: 5,
+            maxCumulativeRage: 6
           },
           weeklyAverage: {
             rawSwearCount: 6,
-            swearingMessagePercent: 20
+            swearingMessagePercent: 20,
+            averageMaxCumulativeRage: 5,
+            maxCumulativeRage: 6
           },
           sync: {
             fullSyncCompletedAt: "2026-05-14T00:00:00.000Z",
@@ -172,6 +180,38 @@ describe("PsycheMetricsPage", () => {
               { dateKey: "2026-05-13", average: 12.5, minimum: 12.5, maximum: 12.5, latest: 12.5, total: null, sampleCount: 8, latestSampleAt: "2026-05-13T00:00:00.000Z" },
               { dateKey: "2026-05-14", average: 25, minimum: 25, maximum: 25, latest: 25, total: null, sampleCount: 12, latestSampleAt: "2026-05-14T00:00:00.000Z" }
             ]
+          },
+          {
+            metric: "devrageAverageMaxCumulativeRage",
+            label: "Average max cumulative rage",
+            category: "conversationTone",
+            unit: "score",
+            aggregation: "discrete",
+            latestValue: 5,
+            latestDateKey: "2026-05-14",
+            baselineValue: 3,
+            deltaValue: 2,
+            coverageDays: 2,
+            days: [
+              { dateKey: "2026-05-13", average: 3, minimum: 3, maximum: 3, latest: 3, total: null, sampleCount: 1, latestSampleAt: "2026-05-13T00:00:00.000Z" },
+              { dateKey: "2026-05-14", average: 5, minimum: 5, maximum: 5, latest: 5, total: null, sampleCount: 2, latestSampleAt: "2026-05-14T00:00:00.000Z" }
+            ]
+          },
+          {
+            metric: "devrageMaxCumulativeRage",
+            label: "Max cumulative rage",
+            category: "conversationTone",
+            unit: "score",
+            aggregation: "discrete",
+            latestValue: 6,
+            latestDateKey: "2026-05-14",
+            baselineValue: 4,
+            deltaValue: 2,
+            coverageDays: 2,
+            days: [
+              { dateKey: "2026-05-13", average: 4, minimum: 4, maximum: 4, latest: 4, total: null, sampleCount: 1, latestSampleAt: "2026-05-13T00:00:00.000Z" },
+              { dateKey: "2026-05-14", average: 6, minimum: 6, maximum: 6, latest: 6, total: null, sampleCount: 2, latestSampleAt: "2026-05-14T00:00:00.000Z" }
+            ]
           }
         ]
       }
@@ -179,8 +219,10 @@ describe("PsycheMetricsPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("2 daily metrics")).toBeInTheDocument();
+    expect(await screen.findByText("4 daily metrics")).toBeInTheDocument();
     expect(screen.getByText("Devrage count")).toBeInTheDocument();
+    expect(screen.getAllByText("Average rage peak").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Max rage peak").length).toBeGreaterThan(0);
     expect(screen.getByText("Summary statistics")).toBeInTheDocument();
     expect(screen.getByText(/12 total swears across stored history/i)).toBeInTheDocument();
     expect(screen.getAllByText("Devrage swears").length).toBeGreaterThan(0);
