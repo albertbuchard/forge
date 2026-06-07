@@ -3,11 +3,10 @@ import { z } from "zod";
 import { getDatabase } from "./db.js";
 import { HttpError } from "./errors.js";
 import { recordActivityEvent } from "./repositories/activity-events.js";
-import { createNote, getNoteById, updateNote } from "./repositories/notes.js";
+import { getNoteById, updateNote } from "./repositories/notes.js";
 import { createManualRewardGrant } from "./repositories/rewards.js";
 import { listTaskRuns } from "./repositories/task-runs.js";
 import { getDefaultUser } from "./repositories/users.js";
-import { listWikiSpaces } from "./repositories/wiki-memory.js";
 import { getScreenTimeOverlapSummary } from "./screen-time.js";
 const movementPublishModeSchema = z.enum([
     "auto_publish",
@@ -206,7 +205,7 @@ const movementTripInputSchema = z.object({
 });
 export const movementSettingsInputSchema = z.object({
     trackingEnabled: z.boolean().default(false),
-    publishMode: movementPublishModeSchema.default("auto_publish"),
+    publishMode: movementPublishModeSchema.default("draft_review"),
     retentionMode: movementRetentionModeSchema.default("aggregates_only"),
     locationPermissionStatus: z.string().trim().default("not_determined"),
     motionPermissionStatus: z.string().trim().default("unknown"),
@@ -1030,7 +1029,7 @@ function defaultMovementSettings(userId) {
     return {
         userId,
         trackingEnabled: false,
-        publishMode: "auto_publish",
+        publishMode: "draft_review",
         retentionMode: "aggregates_only",
         locationPermissionStatus: "not_determined",
         motionPermissionStatus: "unknown",
@@ -1278,7 +1277,7 @@ function ensureMovementSettings(userId) {
          background_tracking_ready, last_companion_sync_at, metadata_json,
          created_at, updated_at
        )
-       VALUES (?, 0, 'auto_publish', 'aggregates_only', 'not_determined', 'unknown', 0, NULL, '{}', ?, ?)`)
+       VALUES (?, 0, 'draft_review', 'aggregates_only', 'not_determined', 'unknown', 0, NULL, '{}', ?, ?)`)
         .run(userId, now, now);
     return getMovementSettingsRow(userId);
 }
@@ -1362,9 +1361,6 @@ function listTripStops(tripIds) {
        WHERE trip_id IN (${placeholders})
        ORDER BY trip_id ASC, sequence_index ASC`)
         .all(...tripIds);
-}
-function defaultSpaceId() {
-    return listWikiSpaces()[0]?.id;
 }
 function syncPlaceWikiMetadata(placeId) {
     const row = getDatabase()
@@ -1561,176 +1557,6 @@ function resolvePlaceForPatch(input) {
     }
     return undefined;
 }
-function createMovementNote(input) {
-    const spaceId = defaultSpaceId();
-    if (!spaceId) {
-        return null;
-    }
-    return createNote({
-        kind: "evidence",
-        title: input.title,
-        slug: "",
-        summary: "",
-        contentMarkdown: input.contentMarkdown,
-        spaceId,
-        parentSlug: null,
-        indexOrder: 0,
-        showInIndex: false,
-        aliases: [],
-        userId: input.userId,
-        author: null,
-        links: [],
-        tags: input.tags,
-        destroyAt: null,
-        sourcePath: "",
-        frontmatter: input.frontmatter,
-        revisionHash: ""
-    }, { actor: "Movement sync", source: "system" });
-}
-function formatMovementDurationForNote(valueSeconds) {
-    if (valueSeconds >= 86_400) {
-        return `${round(valueSeconds / 86_400, 1)} days`;
-    }
-    if (valueSeconds >= 3_600) {
-        return `${round(valueSeconds / 3_600, 1)} hours`;
-    }
-    return `${Math.max(1, Math.round(valueSeconds / 60))} minutes`;
-}
-function mergeMovementNoteTags(existingTags, existingFrontmatter, generatedTags) {
-    const movement = existingFrontmatter.movement &&
-        typeof existingFrontmatter.movement === "object" &&
-        !Array.isArray(existingFrontmatter.movement)
-        ? existingFrontmatter.movement
-        : null;
-    const previousGeneratedTags = Array.isArray(movement?.generatedTags)
-        ? movement.generatedTags.filter((value) => typeof value === "string")
-        : [];
-    const previousGeneratedTagSet = new Set(previousGeneratedTags.map((tag) => tag.toLowerCase()));
-    const preservedTags = existingTags.filter((tag) => !previousGeneratedTagSet.has(tag.toLowerCase()));
-    return uniqStrings([...preservedTags, ...generatedTags]);
-}
-function syncMovementNote(input) {
-    const existingNote = input.publishedNoteId
-        ? getNoteById(input.publishedNoteId)
-        : null;
-    if (existingNote && !Array.isArray(existingNote)) {
-        const updated = updateNote(existingNote.id, {
-            title: input.title,
-            contentMarkdown: input.contentMarkdown,
-            tags: mergeMovementNoteTags(existingNote.tags ?? [], existingNote.frontmatter, input.generatedTags),
-            frontmatter: {
-                ...existingNote.frontmatter,
-                ...input.frontmatter
-            }
-        }, { actor: "Movement sync", source: "system" });
-        return updated?.id ?? existingNote.id;
-    }
-    const created = createMovementNote({
-        userId: input.userId,
-        title: input.title,
-        contentMarkdown: input.contentMarkdown,
-        tags: input.generatedTags,
-        frontmatter: input.frontmatter
-    });
-    return created?.id ?? null;
-}
-function syncStayNote(settings, stay, place) {
-    if (!settings || settings.publishMode === "no_publish") {
-        return null;
-    }
-    const label = place?.label || stay.label || "Unlabeled stay";
-    const durationSecondsValue = durationSeconds(stay.started_at, stay.ended_at);
-    const live = stay.status.trim().toLowerCase() !== "completed" &&
-        stay.status.trim().toLowerCase() !== "closed";
-    const generatedTags = uniqStrings([
-        "movement",
-        "stay",
-        ...(place ? safeJsonParse(place.category_tags_json, []) : [])
-    ]);
-    const content = [
-        live ? `Currently staying at **${label}**.` : `Stayed at **${label}**.`,
-        "",
-        `- Started: ${stay.started_at}`,
-        `- ${live ? "Current end" : "Ended"}: ${stay.ended_at}`,
-        `- Duration: ${formatMovementDurationForNote(durationSecondsValue)}`,
-        `- Radius: ${Math.round(stay.radius_meters)} m`,
-        `- Classification: ${stay.classification || "stationary"}`
-    ].join("\n");
-    return syncMovementNote({
-        userId: stay.user_id,
-        publishedNoteId: stay.published_note_id,
-        title: `Stay · ${label}`,
-        contentMarkdown: content,
-        generatedTags,
-        frontmatter: {
-            observedAt: stay.started_at,
-            movement: {
-                kind: "stay",
-                state: live ? "live" : "closed",
-                stayId: stay.id,
-                publishMode: settings.publishMode,
-                placeId: place?.id ?? null,
-                placeLabel: label,
-                startedAt: stay.started_at,
-                endedAt: stay.ended_at,
-                durationSeconds: durationSecondsValue,
-                generatedTags
-            }
-        }
-    });
-}
-function syncTripNote(settings, trip, startPlace, endPlace) {
-    if (!settings || settings.publishMode === "no_publish") {
-        return null;
-    }
-    const startLabel = startPlace?.label || "Unknown start";
-    const endLabel = endPlace?.label || "Unknown end";
-    const durationSecondsValue = durationSeconds(trip.started_at, trip.ended_at);
-    const distanceKm = round(trip.distance_meters / 1000, 2);
-    const live = trip.status.trim().toLowerCase() !== "completed" &&
-        trip.status.trim().toLowerCase() !== "closed";
-    const generatedTags = uniqStrings([
-        "movement",
-        "trip",
-        ...safeJsonParse(trip.tags_json, [])
-    ]);
-    const content = [
-        live
-            ? `Currently moving from **${startLabel}** to **${endLabel}**.`
-            : `Travelled from **${startLabel}** to **${endLabel}**.`,
-        "",
-        `- Started: ${trip.started_at}`,
-        `- ${live ? "Current end" : "Ended"}: ${trip.ended_at}`,
-        `- Duration: ${formatMovementDurationForNote(durationSecondsValue)}`,
-        `- Distance: ${distanceKm} km`,
-        `- Activity: ${trip.activity_type || trip.travel_mode}`
-    ].join("\n");
-    return syncMovementNote({
-        userId: trip.user_id,
-        publishedNoteId: trip.published_note_id,
-        title: `Trip · ${startLabel} → ${endLabel}`,
-        contentMarkdown: content,
-        generatedTags,
-        frontmatter: {
-            observedAt: trip.started_at,
-            movement: {
-                kind: "trip",
-                state: live ? "live" : "closed",
-                tripId: trip.id,
-                publishMode: settings.publishMode,
-                startPlaceId: startPlace?.id ?? null,
-                endPlaceId: endPlace?.id ?? null,
-                startPlaceLabel: startLabel,
-                endPlaceLabel: endLabel,
-                startedAt: trip.started_at,
-                endedAt: trip.ended_at,
-                durationSeconds: durationSecondsValue,
-                distanceMeters: trip.distance_meters,
-                generatedTags
-            }
-        }
-    });
-}
 function awardMovementXp(input) {
     const deltaXp = estimateMovementXp(input.categoryTags, input.distanceMeters);
     if (deltaXp <= 0) {
@@ -1905,16 +1731,6 @@ function upsertMovementStay(pairing, settings, input) {
         .prepare(`SELECT * FROM movement_stays WHERE user_id = ? AND external_uid = ?`)
         .get(pairing.user_id, parsed.externalUid);
     const freshMetadata = safeJsonParse(fresh.metadata_json, {});
-    if (settings?.publishMode === "auto_publish" && !hasInvalidMovementRecord(freshMetadata)) {
-        const publishedNoteId = syncStayNote(settings, fresh, matchedPlace);
-        if (publishedNoteId && publishedNoteId !== fresh.published_note_id) {
-            getDatabase()
-                .prepare(`UPDATE movement_stays
-           SET published_note_id = ?, updated_at = ?
-           WHERE id = ?`)
-                .run(publishedNoteId, nowIso(), fresh.id);
-        }
-    }
     return {
         mode: existing ? "updated" : "created",
         stayId: fresh.id
@@ -2040,16 +1856,6 @@ function upsertMovementTrip(pairing, settings, input) {
         .prepare(`SELECT * FROM movement_trips WHERE id = ?`)
         .get(fresh.id);
     const freshMetadata = safeJsonParse(refreshed.metadata_json, {});
-    if (settings?.publishMode === "auto_publish" && !hasInvalidMovementRecord(freshMetadata)) {
-        const publishedNoteId = syncTripNote(settings, refreshed, startPlace, endPlace);
-        if (publishedNoteId && publishedNoteId !== refreshed.published_note_id) {
-            getDatabase()
-                .prepare(`UPDATE movement_trips
-           SET published_note_id = ?, updated_at = ?
-           WHERE id = ?`)
-                .run(publishedNoteId, nowIso(), refreshed.id);
-        }
-    }
     if (!existing && settings?.publishMode === "auto_publish" && !hasInvalidMovementRecord(freshMetadata)) {
         awardMovementXp({
             userId: pairing.user_id,

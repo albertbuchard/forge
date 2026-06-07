@@ -1515,6 +1515,7 @@ export function listWikiPages(query) {
     ensureWikiSpaceSeedPages(spaceId);
     return listAllNotes()
         .filter((note) => note.spaceId === spaceId)
+        .filter((note) => (query.includeHidden ? true : note.showInIndex))
         .filter((note) => (query.kind ? note.kind === query.kind : true))
         .sort(compareWikiPageOrder)
         .slice(0, query.limit ?? 100);
@@ -1638,6 +1639,7 @@ export async function searchWikiPages(input, secrets) {
     const parsed = wikiSearchQuerySchema.parse(input);
     const pages = listAllNotes()
         .filter((page) => (parsed.spaceId ? page.spaceId === parsed.spaceId : true))
+        .filter((page) => page.showInIndex)
         .filter((page) => (parsed.kind ? page.kind === parsed.kind : true));
     const scores = new Map();
     const addScore = (noteId, value) => {

@@ -606,6 +606,59 @@ function findForgeRepo(start = process.cwd()) {
   }
 }
 
+function resolveRuntimeStorageRoot(healthResult) {
+  const storageRoot = healthResult?.payload?.runtime?.storageRoot;
+  return typeof storageRoot === "string" && storageRoot.trim()
+    ? path.resolve(storageRoot)
+    : null;
+}
+
+function pathsMatch(left, right) {
+  return path.resolve(left) === path.resolve(right);
+}
+
+async function resolveInstallRuntimeTarget({
+  origin,
+  requestedPort,
+  requestedWebPort,
+  dataRoot,
+  dataRootWasExplicit
+}) {
+  if (requestedPort !== 0) {
+    const desiredConfig = { origin, port: requestedPort };
+    const desiredHealth = await health(desiredConfig);
+    if (isHealthyForgeRuntime(desiredHealth)) {
+      const liveDataRoot = resolveRuntimeStorageRoot(desiredHealth);
+      if (liveDataRoot && !pathsMatch(liveDataRoot, dataRoot)) {
+        if (dataRootWasExplicit) {
+          throw new Error(
+            [
+              `A healthy Forge runtime is already running at ${baseUrl(desiredConfig)}, but it uses a different data folder.`,
+              `Live data folder: ${liveDataRoot}.`,
+              `Requested data folder: ${path.resolve(dataRoot)}.`,
+              "Stop or restart that runtime before switching data folders. Your data folder is unchanged."
+            ].join(" ")
+          );
+        }
+        dataRoot = liveDataRoot;
+      }
+      return {
+        port: requestedPort,
+        webPort: requestedWebPort,
+        dataRoot: path.resolve(dataRoot),
+        adoptedExistingRuntime: true
+      };
+    }
+  }
+
+  return {
+    port: await findFreePort(requestedPort),
+    webPort: await findFreePort(requestedWebPort),
+    dataRoot: path.resolve(dataRoot),
+    adoptedExistingRuntime: false
+  };
+}
+
 async function buildInstallConfig(parsed, currentConfig, discovery, command) {
   const repo = parsed.values.repo
     ? path.resolve(parsed.values.repo)
@@ -634,22 +687,25 @@ async function buildInstallConfig(parsed, currentConfig, discovery, command) {
   const dataRoot = parsed.flags.yes
     ? dataRootDefault
     : await promptLine("Forge data folder", dataRootDefault);
-  const portInput = parsed.values.port ?? currentConfig.port;
-  const port = await findFreePort(normalizePort(portInput, DEFAULT_PORT));
-  const webPort = await findFreePort(
-    normalizePort(
+  const origin = parsed.values.origin ?? currentConfig.origin ?? DEFAULT_ORIGIN;
+  const runtimeTarget = await resolveInstallRuntimeTarget({
+    origin,
+    requestedPort: normalizePort(parsed.values.port ?? currentConfig.port, DEFAULT_PORT),
+    requestedWebPort: normalizePort(
       parsed.values.webPort ?? currentConfig.webPort,
       DEFAULT_WEB_PORT
-    )
-  );
+    ),
+    dataRoot,
+    dataRootWasExplicit: typeof parsed.values.dataRoot === "string"
+  });
 
   return {
     version: VERSION,
     mode: parsed.flags.dev ? "dev" : mode,
-    origin: parsed.values.origin ?? currentConfig.origin ?? DEFAULT_ORIGIN,
-    port,
-    webPort,
-    dataRoot: path.resolve(dataRoot),
+    origin,
+    port: runtimeTarget.port,
+    webPort: runtimeTarget.webPort,
+    dataRoot: runtimeTarget.dataRoot,
     adapters,
     repo,
     command

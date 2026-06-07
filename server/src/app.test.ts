@@ -6417,37 +6417,18 @@ test("movement sync stores places, stays, trips, and serves the movement workspa
     });
     assert.equal(syncResponse.statusCode, 200);
 
-    const firstObservationCalendarResponse = await app.inject({
-      method: "GET",
-      url:
-        "/api/v1/psyche/self-observation/calendar" +
-        "?from=2026-04-06T00:00:00.000Z&to=2026-04-07T00:00:00.000Z"
-    });
-    assert.equal(firstObservationCalendarResponse.statusCode, 200);
-    const firstObservationCalendar =
-      firstObservationCalendarResponse.json() as {
-        calendar: {
-          observations: Array<{
-            note: {
-              id: string;
-              tags: string[];
-              contentMarkdown: string;
-              frontmatter: Record<string, unknown>;
-            };
-          }>;
-        };
-      };
-    assert.equal(firstObservationCalendar.calendar.observations.length, 3);
-    const firstGroceryStayObservation =
-      firstObservationCalendar.calendar.observations.find((entry) =>
-        entry.note.contentMarkdown.includes(
-          "Currently staying at **Corner Grocery**."
+    const generatedMovementNoteCount = (
+      getDatabase()
+        .prepare(
+          `SELECT COUNT(*) AS count
+           FROM notes
+           WHERE source = 'system'
+             AND kind = 'evidence'
+             AND json_extract(frontmatter_json, '$.movement.kind') IN ('stay', 'trip')`
         )
-      );
-    assert.ok(firstGroceryStayObservation);
-    assert.ok(firstGroceryStayObservation?.note.tags.includes("movement"));
-    const rollingStayNoteId = firstGroceryStayObservation?.note.id ?? "";
-    assert.ok(rollingStayNoteId);
+        .get() as { count: number }
+    ).count;
+    assert.equal(generatedMovementNoteCount, 0);
 
     const secondSyncResponse = await app.inject({
       method: "POST",
@@ -6913,50 +6894,27 @@ test("movement sync stores places, stays, trips, and serves the movement workspa
     assert.ok((patchedMobileStay.place?.latitude ?? 0) > 46.19);
     assert.ok((patchedMobileStay.place?.longitude ?? 0) > 6.15);
 
-    const secondObservationCalendarResponse = await app.inject({
-      method: "GET",
-      url:
-        "/api/v1/psyche/self-observation/calendar" +
-        "?from=2026-04-06T00:00:00.000Z&to=2026-04-07T00:00:00.000Z"
-    });
-    assert.equal(secondObservationCalendarResponse.statusCode, 200);
-    const secondObservationCalendar =
-      secondObservationCalendarResponse.json() as {
-        calendar: {
-          observations: Array<{
-            note: {
-              id: string;
-              tags: string[];
-              contentMarkdown: string;
-              frontmatter: Record<string, unknown>;
-            };
-          }>;
-        };
-      };
-    assert.equal(secondObservationCalendar.calendar.observations.length, 4);
-    const updatedStayObservation =
-      secondObservationCalendar.calendar.observations.find(
-        (entry) => entry.note.id === rollingStayNoteId
-      );
-    assert.ok(updatedStayObservation);
-    assert.match(
-      updatedStayObservation?.note.contentMarkdown ?? "",
-      /Stayed at \*\*Corner Grocery\*\*\./
-    );
-    const updatedMovementFrontmatter = updatedStayObservation?.note.frontmatter
-      .movement as
-      | {
-          state?: string;
-          endedAt?: string;
-          durationSeconds?: number;
-        }
-      | undefined;
-    assert.equal(updatedMovementFrontmatter?.state, "closed");
-    assert.equal(
-      updatedMovementFrontmatter?.endedAt,
-      "2026-04-06T09:15:00.000Z"
-    );
-    assert.equal(updatedMovementFrontmatter?.durationSeconds, 3300);
+    const generatedMovementNoteCountAfterUpdate = (
+      getDatabase()
+        .prepare(
+          `SELECT COUNT(*) AS count
+           FROM notes
+           WHERE source = 'system'
+             AND kind = 'evidence'
+             AND json_extract(frontmatter_json, '$.movement.kind') IN ('stay', 'trip')`
+        )
+        .get() as { count: number }
+    ).count;
+    assert.equal(generatedMovementNoteCountAfterUpdate, 0);
+
+    const updatedGroceryStay = getDatabase()
+      .prepare(
+        `SELECT ended_at
+         FROM movement_stays
+         WHERE external_uid = 'stay_grocery_after'`
+      )
+      .get() as { ended_at: string };
+    assert.equal(updatedGroceryStay.ended_at, "2026-04-06T09:15:00.000Z");
 
     const deleteUserBoxResponse = await app.inject({
       method: "DELETE",
@@ -14727,6 +14685,33 @@ test("wiki pages are SQLite-backed, searchable, backlink-aware, and ingestable",
       note: { id: string; sourcePath: string };
     };
     assert.equal(evidenceNoteBody.note.sourcePath, "");
+
+    const defaultEvidencePages = await app.inject({
+      method: "GET",
+      url: "/api/v1/wiki/pages?kind=evidence",
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(defaultEvidencePages.statusCode, 200);
+    assert.deepEqual(
+      (defaultEvidencePages.json() as { pages: Array<{ id: string }> }).pages,
+      []
+    );
+
+    const hiddenEvidencePages = await app.inject({
+      method: "GET",
+      url: "/api/v1/wiki/pages?kind=evidence&includeHidden=true",
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(hiddenEvidencePages.statusCode, 200);
+    assert.ok(
+      (
+        hiddenEvidencePages.json() as { pages: Array<{ id: string }> }
+      ).pages.some((page) => page.id === evidenceNoteBody.note.id)
+    );
 
     const treeAfterEvidence = await app.inject({
       method: "GET",

@@ -11933,12 +11933,14 @@ export async function buildServer(
       spaceId?: string;
       kind?: Note["kind"];
       limit?: string;
+      includeHidden?: string;
     };
     return {
       pages: listWikiPages({
         spaceId: query.spaceId,
         kind: query.kind,
-        limit: query.limit ? Number(query.limit) : undefined
+        limit: query.limit ? Number(query.limit) : undefined,
+        includeHidden: query.includeHidden === "true"
       })
     };
   });

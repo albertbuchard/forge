@@ -178,6 +178,20 @@ async function withFakeForgeServer(handler, callback) {
   }
 }
 
+async function withPlainServer(callback) {
+  const server = http.createServer((request, response) => {
+    response.statusCode = 204;
+    response.end();
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    return await callback({ port: address.port });
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+}
+
 function forgeHealthResponse() {
   return {
     app: "forge",
@@ -308,7 +322,9 @@ const guidedDryRun = run(
     "--adapters",
     "none",
     "--data-root",
-    dataRoot
+    dataRoot,
+    "--port",
+    "0"
   ],
   {
     env: { ...env, NODE_OPTIONS: "--throw-deprecation" }
@@ -355,6 +371,39 @@ run([
   "0",
   "--json"
 ]);
+await withFakeForgeServer(async (request) => {
+  if (request.url === "/api/v1/health") return { body: forgeHealthResponse() };
+  return { statusCode: 404, body: { error: "not found" } };
+}, async ({ port }) => {
+  await withPlainServer(async ({ port: webPort }) => {
+    const adoptionInstall = await runAsync([
+      "install",
+      "--yes",
+      "--no-start",
+      "--skip-pair-ios",
+      "--adapters",
+      "none",
+      "--data-root",
+      dataRoot,
+      "--port",
+      String(port),
+      "--web-port",
+      String(webPort),
+      "--json"
+    ]);
+    const payload = JSON.parse(adoptionInstall.stdout);
+    if (payload.config.port !== port) {
+      throw new Error(
+        `Expected install to preserve healthy Forge runtime port ${port}, got ${payload.config.port}`
+      );
+    }
+    if (payload.config.webPort !== webPort) {
+      throw new Error(
+        `Expected install to preserve requested dev web port ${webPort}, got ${payload.config.webPort}`
+      );
+    }
+  });
+});
 run([
   "configure",
   "--yes",

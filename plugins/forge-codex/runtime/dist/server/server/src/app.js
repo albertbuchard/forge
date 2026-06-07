@@ -9179,7 +9179,8 @@ export async function buildServer(options = {}) {
             pages: listWikiPages({
                 spaceId: query.spaceId,
                 kind: query.kind,
-                limit: query.limit ? Number(query.limit) : undefined
+                limit: query.limit ? Number(query.limit) : undefined,
+                includeHidden: query.includeHidden === "true"
             })
         };
     });

@@ -278,6 +278,87 @@ describe("forge local runtime", () => {
     }
   });
 
+  it("stops superseded plugin-managed runtimes on alternate ports when the configured runtime is healthy", async () => {
+    const tempHome = mkdtempSync(path.join(tmpdir(), "forge-runtime-home-"));
+    vi.stubEnv("HOME", tempHome);
+    try {
+      const stalePid = 987654;
+      let stalePidAlive = true;
+      const killSpy = vi.spyOn(process, "kill").mockImplementation((pid: number, signal?: string | number) => {
+        if (pid !== stalePid) {
+          return true;
+        }
+        if (signal === 0 || signal === undefined) {
+          if (!stalePidAlive) {
+            const error = Object.assign(new Error("stale process gone"), { code: "ESRCH" });
+            throw error;
+          }
+          return true;
+        }
+        stalePidAlive = false;
+        return true;
+      });
+
+      const stateDir = path.join(tempHome, ".openclaw", "run", "forge-openclaw-plugin");
+      const staleStatePath = path.join(stateDir, "127.0.0.1-4318.json");
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input: RequestInfo | URL) => {
+          const url = input instanceof URL ? input : new URL(typeof input === "string" ? input : input.url);
+          if (url.pathname !== "/api/v1/health") {
+            throw new Error(`unexpected probe ${url.toString()}`);
+          }
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              runtime: {
+                pid: url.port === "4317" ? process.pid : stalePid,
+                storageRoot: "/tmp/shared-forge-root",
+                basePath: "/forge/"
+              }
+            }),
+            {
+              status: 200,
+              headers: { "content-type": "application/json" }
+            }
+          );
+        })
+      );
+
+      const { mkdirSync, writeFileSync, existsSync } = await import("node:fs");
+      mkdirSync(stateDir, { recursive: true });
+      writeFileSync(
+        staleStatePath,
+        `${JSON.stringify(
+          {
+            pid: stalePid,
+            origin: "http://127.0.0.1",
+            port: 4318,
+            baseUrl: "http://127.0.0.1:4318",
+            startedAt: new Date().toISOString(),
+            logPath: null
+          },
+          null,
+          2
+        )}\n`
+      );
+
+      const { ensureForgeRuntimeReady } = await import("./local-runtime");
+      const config = createLocalConfig({
+        dataRoot: "/tmp/shared-forge-root",
+        portSource: "configured"
+      });
+
+      await ensureForgeRuntimeReady(config);
+
+      expect(killSpy).toHaveBeenCalledWith(stalePid, "SIGTERM");
+      expect(existsSync(staleStatePath)).toBe(false);
+      expect(config.port).toBe(4317);
+    } finally {
+      rmSync(tempHome, { recursive: true, force: true });
+    }
+  });
+
   it("enables managed dev web supervision for local dev runtimes", async () => {
     const tempHome = mkdtempSync(path.join(tmpdir(), "forge-runtime-home-"));
     vi.stubEnv("HOME", tempHome);

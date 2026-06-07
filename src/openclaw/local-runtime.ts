@@ -3,7 +3,7 @@ import { closeSync, existsSync, mkdirSync, openSync } from "node:fs";
 import net from "node:net";
 import { homedir } from "node:os";
 import path from "node:path";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import type { ForgePluginConfig } from "./api-client.js";
 
@@ -117,6 +117,14 @@ function getRuntimeStatePath(config: ForgePluginConfig) {
   return path.join(homedir(), ".openclaw", "run", FORGE_PLUGIN_ID, `${origin}-${config.port}.json`);
 }
 
+function getRuntimeStateDir() {
+  return path.join(homedir(), ".openclaw", "run", FORGE_PLUGIN_ID);
+}
+
+function getRuntimeStateOrigin(config: ForgePluginConfig) {
+  return new URL(config.origin).hostname.toLowerCase().replace(/[^a-z0-9._-]+/g, "-");
+}
+
 function getPreferredPortStatePath(origin: string) {
   const hostname = new URL(origin).hostname.toLowerCase().replace(/[^a-z0-9._-]+/g, "-");
   return path.join(homedir(), ".openclaw", "run", FORGE_PLUGIN_ID, `${hostname}-preferred-port.json`);
@@ -217,6 +225,11 @@ async function clearRuntimeState(config: ForgePluginConfig) {
   await rm(getRuntimeStatePath(config), { force: true });
 }
 
+async function clearRuntimeStateForState(state: ForgeRuntimeState) {
+  const origin = new URL(state.origin).hostname.toLowerCase().replace(/[^a-z0-9._-]+/g, "-");
+  await rm(path.join(getRuntimeStateDir(), `${origin}-${state.port}.json`), { force: true });
+}
+
 async function readRuntimeState(config: ForgePluginConfig): Promise<ForgeRuntimeState | null> {
   try {
     const payload = await readFile(getRuntimeStatePath(config), "utf8");
@@ -237,12 +250,92 @@ async function readRuntimeState(config: ForgePluginConfig): Promise<ForgeRuntime
   }
 }
 
+async function readRuntimeStateFile(filePath: string): Promise<ForgeRuntimeState | null> {
+  try {
+    const payload = await readFile(filePath, "utf8");
+    const parsed = JSON.parse(payload) as Partial<ForgeRuntimeState>;
+    if (
+      typeof parsed.pid !== "number" ||
+      !Number.isFinite(parsed.pid) ||
+      typeof parsed.origin !== "string" ||
+      typeof parsed.port !== "number" ||
+      !Number.isFinite(parsed.port)
+    ) {
+      return null;
+    }
+    return {
+      pid: Math.trunc(parsed.pid),
+      origin: parsed.origin,
+      port: Math.trunc(parsed.port),
+      baseUrl: typeof parsed.baseUrl === "string" ? parsed.baseUrl : buildForgeBaseUrl(parsed.origin, parsed.port),
+      startedAt: typeof parsed.startedAt === "string" ? parsed.startedAt : new Date(0).toISOString(),
+      logPath: typeof parsed.logPath === "string" ? parsed.logPath : null
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function readRuntimeStatesForOrigin(config: ForgePluginConfig) {
+  const stateDir = getRuntimeStateDir();
+  const origin = getRuntimeStateOrigin(config);
+  let entries: string[];
+  try {
+    entries = await readdir(stateDir);
+  } catch {
+    return [];
+  }
+
+  const states: ForgeRuntimeState[] = [];
+  for (const entry of entries) {
+    if (!entry.startsWith(`${origin}-`) || !entry.endsWith(".json") || entry.endsWith("-preferred-port.json")) {
+      continue;
+    }
+    const state = await readRuntimeStateFile(path.join(stateDir, entry));
+    if (state) {
+      states.push(state);
+    }
+  }
+  return states;
+}
+
 function processExists(pid: number) {
   try {
     process.kill(pid, 0);
     return true;
   } catch (error) {
     return !(error instanceof Error) || !("code" in error) || error.code !== "ESRCH";
+  }
+}
+
+async function cleanupSupersededManagedRuntimes(config: ForgePluginConfig, expectedDataRoot: string | null) {
+  const states = await readRuntimeStatesForOrigin(config);
+  for (const state of states) {
+    if (state.port === config.port) {
+      continue;
+    }
+    if (!processExists(state.pid)) {
+      await clearRuntimeStateForState(state);
+      continue;
+    }
+
+    const alternateConfig = {
+      ...config,
+      port: state.port,
+      baseUrl: buildForgeBaseUrl(state.origin, state.port),
+      webAppUrl: buildForgeWebAppUrl(state.origin, state.port)
+    };
+    const alternateProbe = await probeForgeRuntime(alternateConfig, HEALTHCHECK_TIMEOUT_MS);
+    if (!alternateProbe.healthy || !isExpectedDataRoot(expectedDataRoot, alternateProbe.storageRoot)) {
+      continue;
+    }
+
+    process.kill(state.pid, "SIGTERM");
+    if (!(await waitForProcessExit(state.pid, 5_000))) {
+      process.kill(state.pid, "SIGKILL");
+      await waitForProcessExit(state.pid, 2_000);
+    }
+    await clearRuntimeStateForState(state);
   }
 }
 
@@ -636,6 +729,7 @@ export async function ensureForgeRuntimeReady(config: ForgePluginConfig) {
   const expectedDataRoot = getExpectedDataRoot(config);
   const initialProbe = await probeForgeRuntime(config, HEALTHCHECK_TIMEOUT_MS);
   if (initialProbe.healthy && isExpectedDataRoot(expectedDataRoot, initialProbe.storageRoot)) {
+    await cleanupSupersededManagedRuntimes(config, expectedDataRoot);
     const existingState = await readRuntimeState(config);
     if (!existingState) {
       await adoptManagedRuntimeState(config, initialProbe);
