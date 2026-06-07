@@ -196,6 +196,116 @@ function parseOutputText(payload: Record<string, unknown>) {
   return null;
 }
 
+function buildOutputTextPayload(text: string): Record<string, unknown> {
+  return {
+    status: "completed",
+    output: [
+      {
+        content: [{ type: "output_text", text }]
+      }
+    ]
+  };
+}
+
+function parseCodexEventStreamPayload(streamText: string): Record<string, unknown> {
+  const chunks: string[] = [];
+  let latestResponse: Record<string, unknown> | null = null;
+  let failedError: unknown = null;
+  let dataLines: string[] = [];
+
+  const flushEvent = () => {
+    if (dataLines.length === 0) {
+      return;
+    }
+    const raw = dataLines.join("\n");
+    dataLines = [];
+    if (raw.trim() === "[DONE]") {
+      return;
+    }
+    let payload: Record<string, unknown>;
+    try {
+      payload = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      return;
+    }
+    const payloadType =
+      typeof payload.type === "string" ? payload.type : null;
+    if (payloadType === "response.output_text.delta") {
+      if (typeof payload.delta === "string") {
+        chunks.push(payload.delta);
+      }
+      return;
+    }
+    if (payloadType === "response.output_text.done") {
+      if (typeof payload.text === "string" && chunks.length === 0) {
+        chunks.push(payload.text);
+      }
+      return;
+    }
+    if (
+      payloadType === "response.completed" ||
+      payloadType === "response.failed"
+    ) {
+      const response = payload.response;
+      if (response && typeof response === "object") {
+        latestResponse = response as Record<string, unknown>;
+        const text = parseOutputText(latestResponse);
+        if (text && chunks.length === 0) {
+          chunks.push(text);
+        }
+      }
+      if (payloadType === "response.failed") {
+        failedError =
+          payload.error ??
+          (latestResponse?.error as unknown) ??
+          "Codex response failed.";
+      }
+    }
+  };
+
+  for (const line of streamText.split(/\r?\n/)) {
+    if (line === "") {
+      flushEvent();
+      continue;
+    }
+    if (line.startsWith(":")) {
+      continue;
+    }
+    if (line.startsWith("data:")) {
+      dataLines.push(line.slice("data:".length).trimStart());
+    }
+  }
+  flushEvent();
+
+  if (failedError) {
+    throw new Error(`Codex response failed: ${JSON.stringify(failedError)}`);
+  }
+  const text = chunks.join("");
+  if (latestResponse) {
+    if (!parseOutputText(latestResponse) && text) {
+      return buildOutputTextPayload(text);
+    }
+    return latestResponse;
+  }
+  if (text) {
+    return buildOutputTextPayload(text);
+  }
+  try {
+    return JSON.parse(streamText) as Record<string, unknown>;
+  } catch {
+    return buildOutputTextPayload("");
+  }
+}
+
+async function readProviderPayload(
+  response: Response,
+  profile: WikiLlmProfileLike
+) {
+  return isCodexProfile(profile)
+    ? parseCodexEventStreamPayload(await response.text())
+    : readJsonPayload(response);
+}
+
 function readReasoningEffort(profile: WikiLlmProfileLike) {
   return typeof profile.metadata.reasoningEffort === "string"
     ? profile.metadata.reasoningEffort
@@ -281,6 +391,7 @@ function buildRequestHeaders(
   headers["OpenAI-Beta"] = "responses=experimental";
   headers.originator = "pi";
   headers["chatgpt-account-id"] = extractCodexAccountId(apiKey);
+  headers.accept = "text/event-stream";
   return headers;
 }
 
@@ -302,6 +413,13 @@ function buildTextConfiguration(options: {
     text.format = options.format;
   }
   return Object.keys(text).length > 0 ? text : undefined;
+}
+
+function buildInstructionsPayload(
+  profile: WikiLlmProfileLike,
+  instructions: string
+) {
+  return isCodexProfile(profile) ? { instructions } : {};
 }
 
 function estimateTokens(text: string) {
@@ -449,7 +567,14 @@ export class OpenAiResponsesProvider implements WikiLlmProvider {
           }),
           body: JSON.stringify({
             model: profile.model,
-            input: "Reply with the single word ok.",
+            ...buildInstructionsPayload(
+              profile,
+              "Reply with the single word ok."
+            ),
+            input: isCodexProfile(profile)
+              ? "Connection test."
+              : "Reply with the single word ok.",
+            ...(isCodexProfile(profile) ? { stream: true, store: false } : {}),
             max_output_tokens: 24,
             reasoning: buildReasoningConfiguration(profile),
             text: buildTextConfiguration({ profile })
@@ -501,7 +626,7 @@ export class OpenAiResponsesProvider implements WikiLlmProvider {
       );
     }
 
-    const payload = await readJsonPayload(response);
+    const payload = await readProviderPayload(response, profile);
     emitDiagnostic(logger, {
       level: "info",
       message: "OpenAI connection test completed.",
@@ -548,20 +673,34 @@ export class OpenAiResponsesProvider implements WikiLlmProvider {
       }),
       body: JSON.stringify({
         model: profile.model,
-        input: [
-          ...(systemPrompt?.trim()
-            ? [
-                {
-                  role: "system",
-                  content: [{ type: "input_text", text: systemPrompt.trim() }]
-                }
-              ]
-            : []),
-          {
-            role: "user",
-            content: [{ type: "input_text", text: prompt }]
-          }
-        ],
+        ...buildInstructionsPayload(
+          profile,
+          systemPrompt?.trim() || "Follow the user's request."
+        ),
+        input: isCodexProfile(profile)
+          ? [
+              {
+                role: "user",
+                content: [{ type: "input_text", text: prompt }]
+              }
+            ]
+          : [
+              ...(systemPrompt?.trim()
+                ? [
+                    {
+                      role: "system",
+                      content: [
+                        { type: "input_text", text: systemPrompt.trim() }
+                      ]
+                    }
+                  ]
+                : []),
+              {
+                role: "user",
+                content: [{ type: "input_text", text: prompt }]
+              }
+            ],
+        ...(isCodexProfile(profile) ? { stream: true, store: false } : {}),
         reasoning: buildReasoningConfiguration(profile),
         text: buildTextConfiguration({ profile }),
         max_output_tokens: 1200
@@ -575,7 +714,7 @@ export class OpenAiResponsesProvider implements WikiLlmProvider {
         }`
       );
     }
-    const payload = await readJsonPayload(response);
+    const payload = await readProviderPayload(response, profile);
     return {
       outputText: parseOutputText(payload)?.trim() || ""
     };
@@ -744,6 +883,8 @@ export class OpenAiResponsesProvider implements WikiLlmProvider {
       role: "user",
       content: userContent
     });
+    const requestInputs = isCodexProfile(profile) ? inputs.slice(1) : inputs;
+    const useStoredBackgroundResponse = !isCodexProfile(profile);
 
     let payload: Record<string, unknown>;
     let responseId = resumeResponseId?.trim() || null;
@@ -805,12 +946,18 @@ export class OpenAiResponsesProvider implements WikiLlmProvider {
             }),
             body: JSON.stringify({
               model: profile.model,
-              input: inputs,
-              store: true,
-              background: true,
-              prompt_cache_retention:
-                profile.model === "gpt-5.4" ? "24h" : "in_memory",
-              prompt_cache_key: `forge-wiki-ingest:${profile.model}:${input.parseStrategy}:${input.mimeType}`,
+              ...buildInstructionsPayload(profile, prompt),
+              input: requestInputs,
+              store: useStoredBackgroundResponse,
+              ...(isCodexProfile(profile) ? { stream: true } : {}),
+              ...(useStoredBackgroundResponse
+                ? {
+                    background: true,
+                    prompt_cache_retention:
+                      profile.model === "gpt-5.4" ? "24h" : "in_memory",
+                    prompt_cache_key: `forge-wiki-ingest:${profile.model}:${input.parseStrategy}:${input.mimeType}`
+                  }
+                : {}),
               reasoning: buildReasoningConfiguration(profile),
               text: buildTextConfiguration({
                 profile,
@@ -879,9 +1026,9 @@ export class OpenAiResponsesProvider implements WikiLlmProvider {
         );
       }
 
-      payload = await readJsonPayload(createResponse);
+      payload = await readProviderPayload(createResponse, profile);
       responseId = readResponseId(payload);
-      if (!responseId) {
+      if (useStoredBackgroundResponse && !responseId) {
         throw new Error(
           "OpenAI background response did not include an id for polling."
         );
@@ -889,11 +1036,14 @@ export class OpenAiResponsesProvider implements WikiLlmProvider {
 
       emitDiagnostic(logger, {
         level: "info",
-        message:
-          "OpenAI accepted the wiki compilation job for background processing.",
+        message: useStoredBackgroundResponse
+          ? "OpenAI accepted the wiki compilation job for background processing."
+          : "OpenAI Codex returned a foreground wiki compilation response.",
         details: {
           scope: "wiki_llm",
-          eventKey: "llm_compile_background_started",
+          eventKey: useStoredBackgroundResponse
+            ? "llm_compile_background_started"
+            : "llm_compile_foreground_completed",
           provider: profile.provider,
           baseUrl: profile.baseUrl,
           model: profile.model,
@@ -906,7 +1056,10 @@ export class OpenAiResponsesProvider implements WikiLlmProvider {
 
     let pollCount = 0;
     let consecutivePollFailures = 0;
-    while (!isTerminalBackgroundStatus(readResponseStatus(payload))) {
+    while (
+      useStoredBackgroundResponse &&
+      !isTerminalBackgroundStatus(readResponseStatus(payload))
+    ) {
       await new Promise((resolve) =>
         setTimeout(resolve, BACKGROUND_POLL_INTERVAL_MS)
       );
@@ -1001,7 +1154,7 @@ export class OpenAiResponsesProvider implements WikiLlmProvider {
     }
 
     const finalStatus = readResponseStatus(payload);
-    if (finalStatus !== "completed") {
+    if (finalStatus && finalStatus !== "completed") {
       const errorMessage =
         readResponseError(payload) ??
         `OpenAI background wiki compilation ended with status ${finalStatus}.`;

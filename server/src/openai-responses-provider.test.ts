@@ -263,17 +263,22 @@ test("OpenAI Codex connection tests use the ChatGPT Codex backend and headers", 
       headers: new Headers(init?.headers),
       body: JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>
     };
-    return new Response(
-      JSON.stringify({
+    const eventPayload = {
+      type: "response.completed",
+      response: {
+        status: "completed",
         output: [
           {
             content: [{ type: "output_text", text: "ok" }]
           }
         ]
-      }),
+      }
+    };
+    return new Response(
+      `data: ${JSON.stringify(eventPayload)}\n\ndata: [DONE]\n\n`,
       {
         status: 200,
-        headers: { "content-type": "application/json" }
+        headers: { "content-type": "text/event-stream" }
       }
     );
   }) as typeof fetch;
@@ -317,4 +322,215 @@ test("OpenAI Codex connection tests use the ChatGPT Codex backend and headers", 
     "responses=experimental"
   );
   assert.equal(request.body.model, "gpt-5.4-mini");
+  assert.equal(request.body.instructions, "Reply with the single word ok.");
+  assert.equal(request.body.input, "Connection test.");
+  assert.equal(request.body.stream, true);
+  assert.equal(request.body.store, false);
+});
+
+test("OpenAI Codex wiki ingest sends instructions as a top-level field", async () => {
+  const provider = new OpenAiResponsesProvider();
+  const originalFetch = globalThis.fetch;
+  type CapturedRequest = {
+    url: string;
+    headers: Headers;
+    body: Record<string, unknown>;
+  };
+  const capturedRequests: CapturedRequest[] = [];
+
+  const jwtPayload = Buffer.from(
+    JSON.stringify({
+      "https://api.openai.com/auth": {
+        chatgpt_account_id: "acct_codex_456"
+      }
+    })
+  ).toString("base64url");
+  const oauthAccessToken = `header.${jwtPayload}.sig`;
+
+  globalThis.fetch = (async (request, init) => {
+    const body =
+      init?.method === "POST"
+        ? (JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>)
+        : {};
+    capturedRequests.push({
+      url: String(request),
+      headers: new Headers(init?.headers),
+      body
+    });
+    if (init?.method === "POST") {
+      const eventPayload = {
+        type: "response.completed",
+        response: {
+          id: "resp_codex_ingest",
+          status: "completed",
+          output: [
+            {
+              content: [
+                {
+                  type: "output_text",
+                  text: JSON.stringify({
+                    title: "Codex import",
+                    summary: "Completed through Codex OAuth",
+                    markdown: "# Codex import",
+                    tags: [],
+                    entityProposals: [],
+                    pageUpdateSuggestions: [],
+                    articleCandidates: []
+                  })
+                }
+              ]
+            }
+          ]
+        }
+      };
+      return new Response(
+        `data: ${JSON.stringify(eventPayload)}\n\ndata: [DONE]\n\n`,
+        {
+          status: 200,
+          headers: { "content-type": "text/event-stream" }
+        }
+      );
+    }
+    return new Response(
+      JSON.stringify({
+        id: "resp_codex_ingest",
+        status: "completed",
+        output: [
+          {
+            content: [
+              {
+                type: "output_text",
+                text: JSON.stringify({
+                  title: "Codex import",
+                  summary: "Completed through Codex OAuth",
+                  markdown: "# Codex import",
+                  tags: [],
+                  entityProposals: [],
+                  pageUpdateSuggestions: [],
+                  articleCandidates: []
+                })
+              }
+            ]
+          }
+        ]
+      }),
+      {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      }
+    );
+  }) as typeof fetch;
+
+  try {
+    const result = await provider.compile({
+      apiKey: oauthAccessToken,
+      profile: {
+        provider: "openai-codex",
+        baseUrl: "https://chatgpt.com/backend-api",
+        model: "gpt-5.4-mini",
+        systemPrompt: "",
+        secretId: null,
+        metadata: {}
+      },
+      input: {
+        titleHint: "Codex OAuth import",
+        rawText: "Example source text",
+        binary: null,
+        mimeType: "text/plain",
+        parseStrategy: "auto"
+      }
+    });
+    assert.equal(result?.summary, "Completed through Codex OAuth");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(capturedRequests.length, 1);
+  const createRequest = capturedRequests[0];
+  assert.equal(
+    createRequest.url,
+    "https://chatgpt.com/backend-api/codex/responses"
+  );
+  assert.equal(
+    createRequest.headers.get("authorization"),
+    `Bearer ${oauthAccessToken}`
+  );
+  assert.equal(
+    createRequest.headers.get("chatgpt-account-id"),
+    "acct_codex_456"
+  );
+  assert.equal(typeof createRequest.body.instructions, "string");
+  assert.match(
+    String(createRequest.body.instructions),
+    /You convert user-provided source material/
+  );
+  const input = createRequest.body.input as Array<{
+    role?: string;
+    content?: Array<{ type?: string; text?: string }>;
+  }>;
+  assert.equal(input.length, 1);
+  assert.equal(input[0].role, "user");
+  assert.match(input[0].content?.[0]?.text ?? "", /Title hint/);
+  assert.equal(createRequest.body.stream, true);
+  assert.equal(createRequest.body.background, undefined);
+  assert.equal(createRequest.body.store, false);
+  assert.equal(createRequest.body.prompt_cache_retention, undefined);
+  assert.equal(createRequest.body.prompt_cache_key, undefined);
+});
+
+test("OpenAI Codex text prompts read event-stream responses", async () => {
+  const provider = new OpenAiResponsesProvider();
+  const originalFetch = globalThis.fetch;
+  let capturedBody: Record<string, unknown> | null = null;
+
+  const jwtPayload = Buffer.from(
+    JSON.stringify({
+      "https://api.openai.com/auth": {
+        chatgpt_account_id: "acct_codex_text"
+      }
+    })
+  ).toString("base64url");
+  const oauthAccessToken = `header.${jwtPayload}.sig`;
+
+  globalThis.fetch = (async (_request, init) => {
+    capturedBody = JSON.parse(String(init?.body ?? "{}")) as Record<
+      string,
+      unknown
+    >;
+    const eventPayload = {
+      type: "response.output_text.done",
+      text: "done"
+    };
+    return new Response(
+      `data: ${JSON.stringify(eventPayload)}\n\ndata: [DONE]\n\n`,
+      {
+        status: 200,
+        headers: { "content-type": "text/event-stream" }
+      }
+    );
+  }) as typeof fetch;
+
+  try {
+    const result = await provider.runText?.({
+      apiKey: oauthAccessToken,
+      profile: {
+        provider: "openai-codex",
+        baseUrl: "https://chatgpt.com/backend-api",
+        model: "gpt-5.4-mini",
+        systemPrompt: "",
+        secretId: null,
+        metadata: {}
+      },
+      systemPrompt: "Answer briefly.",
+      prompt: "Say done."
+    });
+    assert.equal(result?.outputText, "done");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.ok(capturedBody);
+  assert.equal(capturedBody.stream, true);
+  assert.equal(capturedBody.store, false);
+  assert.equal(capturedBody.instructions, "Answer briefly.");
 });
