@@ -7260,7 +7260,13 @@ function buildV1Context(
     scope,
     new Set(goals.map((goal) => goal.id))
   );
-  const dashboard = getDashboard({ userIds: scopedUserIdsForReads });
+  const dashboard = getDashboard({
+    userIds: scopedUserIdsForReads,
+    goals,
+    projects,
+    tasks,
+    habits
+  });
   const selectedUsers =
     validScopedUserIds !== undefined
       ? users.filter((user) => validScopedUserIds.includes(user.id))
@@ -7273,9 +7279,7 @@ function buildV1Context(
       backend: "forge-node-runtime",
       mode: "transitional-node" as const
     },
-    metrics: buildGamificationProfile(goals, tasks, habits, now, {
-      userIds: scopedUserIdsForReads
-    }),
+    metrics: dashboard.gamification,
     dashboard,
     overview: getOverviewContext(now, {
       userIds: scopedUserIdsForReads,
@@ -7313,6 +7317,30 @@ function buildV1Context(
     activity: dashboard.recentActivity,
     lifeForce: buildLifeForcePayload(now, scopedUserIdsForReads)
   };
+}
+
+function compactV1ContextForShell(
+  context: ReturnType<typeof buildV1Context>
+) {
+  return {
+    ...context,
+    dashboard: {
+      ...context.dashboard,
+      projects: undefined,
+      tasks: undefined,
+      habits: undefined,
+      tags: undefined,
+      recentActivity: undefined
+    },
+    activity: undefined
+  };
+}
+
+function shouldUseShellContextProfile(query: Record<string, unknown>) {
+  const profile = typeof query.profile === "string" ? query.profile.trim() : "";
+  const compact =
+    typeof query.compact === "string" ? query.compact.trim() : query.compact;
+  return profile === "shell" || compact === "1" || compact === true;
 }
 
 function buildXpMetricsPayload(
@@ -9245,9 +9273,13 @@ export async function buildServer(
     const auth = authenticateRequest(
       request.headers as Record<string, unknown>
     );
-    return buildV1Context(
-      resolveEffectiveReadScope(request.query as Record<string, unknown>, auth)
+    const query = request.query as Record<string, unknown>;
+    const context = buildV1Context(
+      resolveEffectiveReadScope(query, auth)
     );
+    return shouldUseShellContextProfile(query)
+      ? compactV1ContextForShell(context)
+      : context;
   });
   app.get("/api/v1/life-force", async (request) => ({
     lifeForce: buildLifeForcePayload(
@@ -10408,12 +10440,53 @@ export async function buildServer(
         "Recorded moves are immutable in product UI. Create or edit a user-defined movement box instead."
     };
   });
+  function estimatedJsonBytes(value: unknown) {
+    try {
+      return Buffer.byteLength(JSON.stringify(value ?? null), "utf8");
+    } catch {
+      return 0;
+    }
+  }
+
+  function watchRouteMeasurement(
+    operation: string,
+    startedAt: bigint,
+    requestBody: unknown,
+    responseBody: unknown,
+    extra: Record<string, unknown> = {}
+  ) {
+    return {
+      operation,
+      backendDurationMs: Number(
+        (Number(process.hrtime.bigint() - startedAt) / 1_000_000).toFixed(2)
+      ),
+      requestBytes: estimatedJsonBytes(requestBody),
+      responseBytes: estimatedJsonBytes(responseBody),
+      ...extra
+    };
+  }
+
   app.post("/api/v1/mobile/watch/bootstrap", async (request) => {
+    const startedAt = process.hrtime.bigint();
     const parsed = mobileWatchBootstrapSchema.parse(request.body ?? {});
     const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
     assertWatchReady(pairing);
-    return {
+    const responseBody = {
       watch: buildWatchBootstrap(pairing)
+    };
+    return {
+      ...responseBody,
+      measurement: watchRouteMeasurement(
+        "watch.bootstrap",
+        startedAt,
+        request.body ?? {},
+        responseBody,
+        {
+          surfaceCount: responseBody.watch.surfaces.length,
+          habitCount: responseBody.watch.habits.length,
+          promptCount: responseBody.watch.pendingPrompts.length
+        }
+      )
     };
   });
   app.post(
@@ -10450,21 +10523,56 @@ export async function buildServer(
     }
   );
   app.post("/api/v1/mobile/watch/capture-events:batch", async (request) => {
+    const startedAt = process.hrtime.bigint();
     const parsed = mobileWatchCaptureBatchSchema.parse(request.body ?? {});
     const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
     assertWatchReady(pairing);
-    return {
-      receipt: ingestWatchCaptureBatch(pairing, parsed),
+    const receipt = ingestWatchCaptureBatch(pairing, parsed);
+    const responseBody = {
+      receipt,
       watch: buildWatchBootstrap(pairing)
+    };
+    return {
+      ...responseBody,
+      measurement: watchRouteMeasurement(
+        "watch.capture_batch",
+        startedAt,
+        request.body ?? {},
+        responseBody,
+        {
+          eventCount: parsed.events.length,
+          storedCount: receipt.storedCount,
+          duplicateCount: receipt.duplicateCount,
+          projectedCount: receipt.projectedCount,
+          projectionFailedCount: receipt.projectionFailedCount
+        }
+      )
     };
   });
   app.post("/api/v1/mobile/watch/actions:batch", async (request) => {
+    const startedAt = process.hrtime.bigint();
     const parsed = mobileWatchCommandBatchSchema.parse(request.body ?? {});
     const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
     assertWatchReady(pairing);
-    return {
-      receipt: ingestWatchCommandBatch(pairing, parsed),
+    const receipt = ingestWatchCommandBatch(pairing, parsed);
+    const responseBody = {
+      receipt,
       watch: buildWatchBootstrap(pairing)
+    };
+    return {
+      ...responseBody,
+      measurement: watchRouteMeasurement(
+        "watch.action_batch",
+        startedAt,
+        request.body ?? {},
+        responseBody,
+        {
+          commandCount: parsed.commands.length,
+          processedCount: receipt.processedCount,
+          replayedCount: receipt.replayedCount,
+          failedCount: receipt.failedCount
+        }
+      )
     };
   });
   app.post("/api/v1/mobile/healthkit/sync-sessions", async (request) => ({

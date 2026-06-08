@@ -14,80 +14,13 @@ final class WatchAppModel: NSObject, ObservableObject {
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     private let previewMode: Bool
+    private let refreshRequestCooldown: TimeInterval = 8
+    private var lastRefreshRequestAt: Date?
 
     init(preview: Bool = false) {
         self.previewMode = preview
         if preview {
-            self.bootstrap = ForgeWatchBootstrap(
-                schemaVersion: 2,
-                generatedAt: ISO8601DateFormatter().string(from: Date()),
-                surfaces: [
-                    .init(id: "now", title: "Now", icon: "sparkle"),
-                    .init(id: "work", title: "Work", icon: "kanban"),
-                    .init(id: "habits", title: "Habits", icon: "habit"),
-                    .init(id: "goals", title: "Goals", icon: "scope"),
-                    .init(id: "today", title: "Today", icon: "calendar"),
-                    .init(id: "health", title: "Health", icon: "heart"),
-                    .init(id: "movement", title: "Move", icon: "location"),
-                    .init(id: "psyche", title: "Psyche", icon: "mind"),
-                    .init(id: "inbox", title: "Inbox", icon: "tray"),
-                    .init(id: "sync", title: "Sync", icon: "antenna")
-                ],
-                now: nil,
-                work: nil,
-                goals: nil,
-                projects: nil,
-                today: nil,
-                health: nil,
-                movement: nil,
-                psyche: nil,
-                inbox: nil,
-                sync: nil,
-                habits: [
-                    ForgeWatchHabitSummary(
-                        id: "habit_preview",
-                        title: "Morning planning",
-                        polarity: "positive",
-                        frequency: "daily",
-                        targetCount: 1,
-                        weekDays: [],
-                        streakCount: 4,
-                        dueToday: true,
-                        cadenceLabel: "1x daily",
-                        alignedActionLabel: "Done",
-                        unalignedActionLabel: "Missed",
-                        currentPeriodStatus: .unknown,
-                        last7History: [
-                            .init(id: "1", label: "S", periodKey: "1", current: false, state: .aligned),
-                            .init(id: "2", label: "M", periodKey: "2", current: false, state: .aligned),
-                            .init(id: "3", label: "T", periodKey: "3", current: false, state: .unaligned),
-                            .init(id: "4", label: "W", periodKey: "4", current: false, state: .aligned),
-                            .init(id: "5", label: "T", periodKey: "5", current: false, state: .aligned),
-                            .init(id: "6", label: "F", periodKey: "6", current: false, state: .unknown),
-                            .init(id: "7", label: "S", periodKey: "7", current: true, state: .unknown)
-                        ]
-                    )
-                ],
-                checkInOptions: ForgeWatchQuickOptions(
-                    activities: ["Working", "Walking", "Resting"],
-                    emotions: ["Focused", "Calm", "Tired"],
-                    triggers: ["Conflict", "Pleasant moment", "Rumination"],
-                    placeCategories: ["Home", "Work", "Nature"],
-                    routinePrompts: ["Medication taken?", "Meal?"],
-                    recentPeople: ["Julien", "Family"]
-                ),
-                pendingPrompts: [
-                    ForgeWatchPrompt(
-                        id: "prompt_preview",
-                        kind: "new_place",
-                        title: "New place detected",
-                        message: "What is this place?",
-                        createdAt: ISO8601DateFormatter().string(from: Date()),
-                        linkedContext: .empty,
-                        choices: ["Home", "Work", "Nature"]
-                    )
-                ]
-            )
+            self.bootstrap = Self.previewBootstrap()
         } else {
             self.bootstrap = ForgeWatchBootstrap.empty
         }
@@ -145,8 +78,14 @@ final class WatchAppModel: NSObject, ObservableObject {
         }
     }
 
-    func requestPhoneRefresh(reason: String = "manual") {
+    func requestPhoneRefresh(reason: String = "manual", force: Bool = false) {
         guard previewMode == false, WCSession.isSupported() else { return }
+        let now = Date()
+        if force == false, let lastRefreshRequestAt, now.timeIntervalSince(lastRefreshRequestAt) < refreshRequestCooldown {
+            lastStatusMessage = "Refresh already queued"
+            return
+        }
+        lastRefreshRequestAt = now
         let request = ForgeWatchControlRequest(
             id: UUID().uuidString,
             createdAt: ISO8601DateFormatter().string(from: Date()),
@@ -165,6 +104,260 @@ final class WatchAppModel: NSObject, ObservableObject {
                 ForgeWatchStorage.syncRequestMessageKey: data
             ])
         }
+    }
+
+    private static func previewBootstrap() -> ForgeWatchBootstrap {
+        let now = ISO8601DateFormatter().string(from: Date())
+        let task = ForgeWatchTaskSummary(
+            id: "task_watch_quality",
+            title: "Improve watch navigation and fast logging",
+            status: "focus",
+            level: "task",
+            priority: "high",
+            dueDate: String(now.prefix(10)),
+            projectId: "project_forge_watch",
+            goalId: "goal_forge_quality",
+            parentWorkItemId: nil,
+            points: 5,
+            effort: "medium",
+            energy: "focus",
+            updatedAt: now
+        )
+        let secondTask = ForgeWatchTaskSummary(
+            id: "task_sync_metrics",
+            title: "Check sync timing and duplicate requests",
+            status: "in_progress",
+            level: "task",
+            priority: "medium",
+            dueDate: String(now.prefix(10)),
+            projectId: "project_forge_watch",
+            goalId: "goal_forge_quality",
+            parentWorkItemId: nil,
+            points: 3,
+            effort: "low",
+            energy: "calm",
+            updatedAt: now
+        )
+        let run = ForgeWatchTaskRunSummary(
+            id: "run_watch_quality",
+            taskId: task.id,
+            taskTitle: task.title,
+            actor: "albert",
+            status: "active",
+            isCurrent: true,
+            timerMode: "focus",
+            plannedDurationSeconds: 1800,
+            creditedSeconds: 742,
+            claimedAt: now,
+            heartbeatAt: now,
+            leaseExpiresAt: now
+        )
+        let habits = [
+            previewHabit(
+                id: "habit_morning_plan",
+                title: "Morning planning",
+                polarity: "positive",
+                streak: 4,
+                due: true,
+                aligned: "Done",
+                unaligned: "Missed"
+            ),
+            previewHabit(
+                id: "habit_scroll_break",
+                title: "Avoid late screen spiral",
+                polarity: "negative",
+                streak: 2,
+                due: true,
+                aligned: "Resisted",
+                unaligned: "Indulged"
+            )
+        ]
+
+        let prompts = [
+            ForgeWatchPrompt(
+                id: "prompt_place",
+                kind: "new_place",
+                title: "New place detected",
+                message: "Label the stay without opening the phone.",
+                createdAt: now,
+                linkedContext: ForgeWatchLinkedContext(placeId: "place_preview", stayId: "stay_preview", tripId: nil, workoutId: nil),
+                choices: ["Home", "Work", "Gym"]
+            ),
+            ForgeWatchPrompt(
+                id: "prompt_social",
+                kind: "social_follow_up",
+                title: "Social context",
+                message: "Capture who was involved while it is fresh.",
+                createdAt: now,
+                linkedContext: .empty,
+                choices: ["Friend", "Work", "Family"]
+            )
+        ]
+
+        return ForgeWatchBootstrap(
+            schemaVersion: 2,
+            generatedAt: now,
+            surfaces: [
+                .init(id: "now", title: "Now", icon: "sparkle"),
+                .init(id: "work", title: "Work", icon: "kanban"),
+                .init(id: "habits", title: "Habits", icon: "habit"),
+                .init(id: "goals", title: "Goals", icon: "scope"),
+                .init(id: "today", title: "Today", icon: "calendar"),
+                .init(id: "health", title: "Health", icon: "heart"),
+                .init(id: "movement", title: "Move", icon: "location"),
+                .init(id: "psyche", title: "Psyche", icon: "mind"),
+                .init(id: "inbox", title: "Inbox", icon: "tray"),
+                .init(id: "sync", title: "Sync", icon: "antenna")
+            ],
+            now: ForgeWatchNowSnapshot(
+                currentRun: run,
+                nextTask: task,
+                dueHabitCount: habits.filter(\.dueToday).count,
+                pendingPromptCount: prompts.count,
+                generatedAt: now
+            ),
+            work: ForgeWatchWorkSnapshot(
+                actor: "albert",
+                activeRuns: [run],
+                currentRun: run,
+                nextTask: task,
+                lanes: [
+                    ForgeWatchWorkLane(id: "focus", title: "Focus", count: 1, tasks: [task]),
+                    ForgeWatchWorkLane(id: "progress", title: "In progress", count: 1, tasks: [secondTask])
+                ],
+                visibleCount: 2,
+                doneCount: 1
+            ),
+            goals: [
+                ForgeWatchGoalSummary(
+                    id: "goal_forge_quality",
+                    title: "Make Forge faster and easier to command",
+                    horizon: "quarter",
+                    status: "active",
+                    targetPoints: 120
+                )
+            ],
+            projects: [
+                ForgeWatchProjectSummary(
+                    id: "project_forge_watch",
+                    title: "Forge watchOS companion",
+                    status: "active",
+                    workflowStatus: "building",
+                    goalId: "goal_forge_quality",
+                    goalTitle: "Make Forge faster and easier to command",
+                    activeRunCount: 1,
+                    openTaskCount: 2
+                )
+            ],
+            today: ForgeWatchTodaySnapshot(
+                dateKey: String(now.prefix(10)),
+                dueTasks: [task, secondTask],
+                dueCount: 2,
+                recentDone: []
+            ),
+            health: ForgeWatchHealthSnapshot(
+                lastWorkout: ForgeWatchHealthSnapshot.Workout(
+                    id: "workout_preview",
+                    workoutType: "Kickboxing",
+                    startedAt: now,
+                    endedAt: now,
+                    durationSeconds: 5400,
+                    averageHeartRate: 148,
+                    maxHeartRate: 181,
+                    trainingLoad: 72,
+                    heartRateSampleCount: 1240
+                ),
+                latestVitals: ForgeWatchHealthSnapshot.Vitals(dayKey: String(now.prefix(10)), metricCount: 8)
+            ),
+            movement: ForgeWatchMovementSnapshot(
+                latestStay: ForgeWatchMovementSnapshot.Segment(id: "stay_preview", label: "Office", startedAt: now, endedAt: nil),
+                latestTrip: ForgeWatchMovementSnapshot.Segment(id: "trip_preview", label: "Bike commute", startedAt: now, endedAt: nil),
+                unlabeledPlaceCount: 1
+            ),
+            psyche: ForgeWatchPsycheSnapshot(
+                emotionOptions: ["Focused", "Calm", "Tired"],
+                triggerOptions: ["Conflict", "Rumination", "Pleasant moment"],
+                routinePromptOptions: ["Medication taken?", "Meal?", "Recovery break?"],
+                questions: [
+                    ForgeWatchPsycheSnapshot.Question(
+                        id: "question_emotion",
+                        title: "Mood check",
+                        prompt: "What is dominant right now?",
+                        eventType: "emotion_check_in",
+                        options: [
+                            .init(id: "focused", label: "Focused", subtitle: "Good direction", payload: ["emotion": "focused"]),
+                            .init(id: "tense", label: "Tense", subtitle: "Needs regulation", payload: ["emotion": "tense"]),
+                            .init(id: "tired", label: "Tired", subtitle: "Low energy", payload: ["emotion": "tired"])
+                        ]
+                    ),
+                    ForgeWatchPsycheSnapshot.Question(
+                        id: "question_trigger",
+                        title: "Trigger",
+                        prompt: "Did anything pull attention?",
+                        eventType: "trigger_capture",
+                        options: [
+                            .init(id: "none", label: "No trigger", subtitle: "Stable", payload: ["trigger": "none"]),
+                            .init(id: "conflict", label: "Conflict", subtitle: "Interpersonal", payload: ["trigger": "conflict"]),
+                            .init(id: "rumination", label: "Rumination", subtitle: "Thought loop", payload: ["trigger": "rumination"])
+                        ]
+                    )
+                ],
+                recentReports: [
+                    ForgeWatchPsycheSnapshot.RecentReport(id: "report_preview", title: "Evening reflection", occurredAt: now, status: "open")
+                ]
+            ),
+            inbox: ForgeWatchInboxSnapshot(prompts: prompts),
+            sync: ForgeWatchSyncSnapshot(
+                pairingSessionId: "pair_preview",
+                generatedAt: now,
+                storedCaptureCount: 3,
+                actionReceiptCount: 7
+            ),
+            habits: habits,
+            checkInOptions: ForgeWatchQuickOptions(
+                activities: ["Working", "Walking", "Resting"],
+                emotions: ["Focused", "Calm", "Tired"],
+                triggers: ["Conflict", "Pleasant moment", "Rumination"],
+                placeCategories: ["Home", "Work", "Gym"],
+                routinePrompts: ["Medication taken?", "Meal?", "Recovery break?"],
+                recentPeople: ["Julien", "Family", "Coach"]
+            ),
+            pendingPrompts: prompts
+        )
+    }
+
+    private static func previewHabit(
+        id: String,
+        title: String,
+        polarity: String,
+        streak: Int,
+        due: Bool,
+        aligned: String,
+        unaligned: String
+    ) -> ForgeWatchHabitSummary {
+        ForgeWatchHabitSummary(
+            id: id,
+            title: title,
+            polarity: polarity,
+            frequency: "daily",
+            targetCount: 1,
+            weekDays: [],
+            streakCount: streak,
+            dueToday: due,
+            cadenceLabel: "1x daily",
+            alignedActionLabel: aligned,
+            unalignedActionLabel: unaligned,
+            currentPeriodStatus: .unknown,
+            last7History: [
+                .init(id: "\(id)-1", label: "S", periodKey: "1", current: false, state: .aligned),
+                .init(id: "\(id)-2", label: "M", periodKey: "2", current: false, state: .aligned),
+                .init(id: "\(id)-3", label: "T", periodKey: "3", current: false, state: .unaligned),
+                .init(id: "\(id)-4", label: "W", periodKey: "4", current: false, state: .aligned),
+                .init(id: "\(id)-5", label: "T", periodKey: "5", current: false, state: .aligned),
+                .init(id: "\(id)-6", label: "F", periodKey: "6", current: false, state: .unknown),
+                .init(id: "\(id)-7", label: "S", periodKey: "7", current: true, state: .unknown)
+            ]
+        )
     }
 
     func queueHabitCheckIn(for habit: ForgeWatchHabitSummary, status: String, note: String = "") {

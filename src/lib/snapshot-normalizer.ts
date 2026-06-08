@@ -320,6 +320,11 @@ export function normalizeForgeSnapshot(
   raw: ForgeSnapshot | LegacySnapshot
 ): ForgeSnapshot {
   const legacy = raw as LegacySnapshot;
+  const rootTasks = (raw.tasks ?? []).map(normalizeTask);
+  const rootTags = (raw.tags ?? []).map(normalizeTag);
+  const rootHabits = (raw.habits ?? raw.dashboard?.habits ?? []).map(
+    normalizeHabit
+  );
   const rootProjects = (legacy.projects ?? legacy.campaigns ?? []).map(
     normalizeProject
   );
@@ -385,9 +390,9 @@ export function normalizeForgeSnapshot(
         ...normalizeGoal(goal)
       })),
       projects: dashboardProjects,
-      tasks: (raw.dashboard?.tasks ?? []).map(normalizeTask),
-      habits: (raw.dashboard?.habits ?? raw.habits ?? []).map(normalizeHabit),
-      tags: (raw.dashboard?.tags ?? []).map(normalizeTag),
+      tasks: (raw.dashboard?.tasks ?? rootTasks).map(normalizeTask),
+      habits: (raw.dashboard?.habits ?? rootHabits).map(normalizeHabit),
+      tags: (raw.dashboard?.tags ?? rootTags).map(normalizeTag),
       suggestedTags: (raw.dashboard?.suggestedTags ?? []).map(normalizeTag),
       owners: raw.dashboard?.owners ?? [],
       executionBuckets: (raw.dashboard?.executionBuckets ?? []).map(
@@ -419,7 +424,7 @@ export function normalizeForgeSnapshot(
       },
       achievements: raw.dashboard?.achievements ?? [],
       milestoneRewards: raw.dashboard?.milestoneRewards ?? [],
-      recentActivity: raw.dashboard?.recentActivity ?? [],
+      recentActivity: raw.dashboard?.recentActivity ?? raw.activity ?? [],
       notesSummaryByEntity: raw.dashboard?.notesSummaryByEntity ?? {}
     },
     overview: {
@@ -502,10 +507,10 @@ export function normalizeForgeSnapshot(
     },
     goals: (raw.goals ?? []).map(normalizeGoal),
     projects: rootProjects,
-    tags: (raw.tags ?? []).map(normalizeTag),
-    tasks: (raw.tasks ?? []).map(normalizeTask),
-    habits: (raw.habits ?? raw.dashboard?.habits ?? []).map(normalizeHabit),
-    activity: raw.activity ?? [],
+    tags: rootTags,
+    tasks: rootTasks,
+    habits: rootHabits,
+    activity: raw.activity ?? raw.dashboard?.recentActivity ?? [],
     activeTaskRuns: raw.activeTaskRuns ?? [],
     lifeForce: raw.lifeForce ?? {
       userId: "",

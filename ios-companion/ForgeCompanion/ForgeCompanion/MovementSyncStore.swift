@@ -494,8 +494,10 @@ final class MovementSyncStore: NSObject, ObservableObject, @preconcurrency CLLoc
         persistState()
     }
 
-    func buildMovementPayload() -> CompanionSyncPayload.MovementPayload {
-        refreshDerivedTimelineState(referenceDate: Date())
+    func buildMovementPayload(
+        referenceDate: Date = Date()
+    ) -> CompanionSyncPayload.MovementPayload {
+        refreshDerivedTimelineState(referenceDate: referenceDate)
         pruneLongTermRawPointsIfNeeded()
         if trackingEnabled == false {
             return CompanionSyncPayload.MovementPayload(

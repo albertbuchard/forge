@@ -780,6 +780,7 @@ struct ForgeSyncClient {
 
     private struct WatchBootstrapEnvelope: Decodable {
         let watch: ForgeWatchBootstrap
+        let measurement: WatchRouteMeasurement?
     }
 
     private struct WatchHabitCheckInRequest: Encodable {
@@ -813,6 +814,7 @@ struct ForgeSyncClient {
 
     private struct WatchCaptureBatchEnvelope: Decodable {
         let watch: ForgeWatchBootstrap
+        let measurement: WatchRouteMeasurement?
     }
 
     private struct WatchCommandBatchRequest: Encodable {
@@ -832,11 +834,28 @@ struct ForgeSyncClient {
     private struct WatchCommandBatchEnvelope: Decodable {
         let receipt: ForgeWatchCommandBatchReceipt
         let watch: ForgeWatchBootstrap
+        let measurement: WatchRouteMeasurement?
     }
 
     struct WatchCommandBatchResult {
         let receipt: ForgeWatchCommandBatchReceipt
         let watch: ForgeWatchBootstrap
+    }
+
+    private struct WatchRouteMeasurement: Decodable {
+        let operation: String?
+        let backendDurationMs: Double?
+        let requestBytes: Int?
+        let responseBytes: Int?
+        let eventCount: Int?
+        let commandCount: Int?
+        let processedCount: Int?
+        let replayedCount: Int?
+        let failedCount: Int?
+        let storedCount: Int?
+        let duplicateCount: Int?
+        let projectedCount: Int?
+        let projectionFailedCount: Int?
     }
 
     private struct MovementTimelineRequest: Encodable {
@@ -1863,7 +1882,7 @@ struct ForgeSyncClient {
 
     private func encodedByteCount(_ value: some Encodable) -> Int {
         do {
-            return try JSONEncoder().encode(value).count
+            return try Self.healthSyncChunkPayloadData(value).count
         } catch {
             return Int.max
         }
@@ -1881,7 +1900,7 @@ struct ForgeSyncClient {
         _ payload: some Encodable,
         compress: Bool = false
     ) throws -> HealthSyncChunkWirePayload {
-        let payloadData = try JSONEncoder().encode(payload)
+        let payloadData = try healthSyncChunkPayloadData(payload)
         let compressedData = compress ? try? (payloadData as NSData).compressed(using: .zlib) as Data : nil
         return HealthSyncChunkWirePayload(
             payloadData: payloadData,
@@ -1892,6 +1911,12 @@ struct ForgeSyncClient {
             byteCount: payloadData.count,
             compressedByteCount: compressedData?.count
         )
+    }
+
+    private static func healthSyncChunkPayloadData(_ payload: some Encodable) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return try encoder.encode(payload)
     }
 
     private static func sha256Hex(_ data: Data) -> String {
@@ -1971,22 +1996,30 @@ struct ForgeSyncClient {
     }
 
     func fetchWatchBootstrap(payload: PairingPayload) async throws -> ForgeWatchBootstrap {
+        let startedAt = Date()
+        let request = WatchBootstrapRequest(
+            sessionId: payload.sessionId,
+            pairingToken: payload.pairingToken
+        )
+        let requestBytes = (try? JSONEncoder().encode(request).count) ?? 0
         companionDebugLog(
             "ForgeSyncClient",
-            "fetchWatchBootstrap start session=\(payload.sessionId)"
+            "fetchWatchBootstrap start session=\(payload.sessionId) requestBytes=\(requestBytes)"
         )
         let envelope: WatchBootstrapEnvelope = try await sendRequest(
             path: "/mobile/watch/bootstrap",
             apiBaseUrl: payload.apiBaseUrl,
-            body: WatchBootstrapRequest(
-                sessionId: payload.sessionId,
-                pairingToken: payload.pairingToken
-            ),
+            body: request,
             transport: payload.transport
         )
+        let responseBytes = (try? JSONEncoder().encode(envelope.watch).count) ?? 0
+        let durationMs = Int(Date().timeIntervalSince(startedAt) * 1000)
+        let serverMeasurement = envelope.measurement.map {
+            " backendDurationMs=\($0.backendDurationMs ?? -1) backendRequestBytes=\($0.requestBytes ?? -1) backendResponseBytes=\($0.responseBytes ?? -1)"
+        } ?? ""
         companionDebugLog(
             "ForgeSyncClient",
-            "fetchWatchBootstrap success habits=\(envelope.watch.habits.count) prompts=\(envelope.watch.pendingPrompts.count)"
+            "fetchWatchBootstrap success habits=\(envelope.watch.habits.count) prompts=\(envelope.watch.pendingPrompts.count) responseBytes=\(responseBytes) durationMs=\(durationMs)\(serverMeasurement)"
         )
         return envelope.watch
     }
@@ -2275,33 +2308,41 @@ struct ForgeSyncClient {
         actions: [ForgeWatchCaptureEventAction],
         pairing: PairingPayload
     ) async throws -> ForgeWatchBootstrap {
+        let startedAt = Date()
+        let request = WatchCaptureBatchRequest(
+            sessionId: pairing.sessionId,
+            pairingToken: pairing.pairingToken,
+            device: device,
+            events: actions.enumerated().map { index, action in
+                WatchCaptureBatchRequest.Event(
+                    dedupeKey: actions.count == 1 ? envelopeId : "\(envelopeId)-\(index)",
+                    eventType: action.eventType,
+                    recordedAt: action.recordedAt,
+                    promptId: action.promptId,
+                    linkedContext: action.linkedContext,
+                    payload: action.payload
+                )
+            }
+        )
+        let requestBytes = (try? JSONEncoder().encode(request).count) ?? 0
         companionDebugLog(
             "ForgeSyncClient",
-            "submitWatchCaptureBatch start action=\(envelopeId) events=\(actions.count)"
+            "submitWatchCaptureBatch start action=\(envelopeId) events=\(actions.count) requestBytes=\(requestBytes)"
         )
         let envelope: WatchCaptureBatchEnvelope = try await sendRequest(
             path: "/mobile/watch/capture-events:batch",
             apiBaseUrl: pairing.apiBaseUrl,
-            body: WatchCaptureBatchRequest(
-                sessionId: pairing.sessionId,
-                pairingToken: pairing.pairingToken,
-                device: device,
-                events: actions.enumerated().map { index, action in
-                    WatchCaptureBatchRequest.Event(
-                        dedupeKey: actions.count == 1 ? envelopeId : "\(envelopeId)-\(index)",
-                        eventType: action.eventType,
-                        recordedAt: action.recordedAt,
-                        promptId: action.promptId,
-                        linkedContext: action.linkedContext,
-                        payload: action.payload
-                    )
-                }
-            ),
+            body: request,
             transport: pairing.transport
         )
+        let responseBytes = (try? JSONEncoder().encode(envelope.watch).count) ?? 0
+        let durationMs = Int(Date().timeIntervalSince(startedAt) * 1000)
+        let serverMeasurement = envelope.measurement.map {
+            " backendDurationMs=\($0.backendDurationMs ?? -1) backendRequestBytes=\($0.requestBytes ?? -1) backendResponseBytes=\($0.responseBytes ?? -1) stored=\($0.storedCount ?? -1) duplicate=\($0.duplicateCount ?? -1) projected=\($0.projectedCount ?? -1) projectionFailed=\($0.projectionFailedCount ?? -1)"
+        } ?? ""
         companionDebugLog(
             "ForgeSyncClient",
-            "submitWatchCaptureBatch success action=\(envelopeId)"
+            "submitWatchCaptureBatch success action=\(envelopeId) responseBytes=\(responseBytes) durationMs=\(durationMs)\(serverMeasurement)"
         )
         return envelope.watch
     }
@@ -2311,10 +2352,7 @@ struct ForgeSyncClient {
         envelopes: [ForgeWatchOutboundEnvelope],
         pairing: PairingPayload
     ) async throws -> WatchCommandBatchResult {
-        companionDebugLog(
-            "ForgeSyncClient",
-            "submitWatchCommandBatch start commands=\(envelopes.count)"
-        )
+        let startedAt = Date()
         let commands = envelopes.compactMap { envelope -> WatchCommandBatchRequest.Command? in
             if let habit = envelope.habitCheckIn {
                 return WatchCommandBatchRequest.Command(
@@ -2365,20 +2403,33 @@ struct ForgeSyncClient {
             }
             return nil
         }
+        let duplicateCount = max(0, envelopes.count - Set(envelopes.map(\.id)).count)
+        let request = WatchCommandBatchRequest(
+            sessionId: pairing.sessionId,
+            pairingToken: pairing.pairingToken,
+            device: device,
+            commands: commands
+        )
+        let requestBytes = (try? JSONEncoder().encode(request).count) ?? 0
+        companionDebugLog(
+            "ForgeSyncClient",
+            "submitWatchCommandBatch start envelopes=\(envelopes.count) commands=\(commands.count) duplicateIds=\(duplicateCount) requestBytes=\(requestBytes)"
+        )
         let envelope: WatchCommandBatchEnvelope = try await sendRequest(
             path: "/mobile/watch/actions:batch",
             apiBaseUrl: pairing.apiBaseUrl,
-            body: WatchCommandBatchRequest(
-                sessionId: pairing.sessionId,
-                pairingToken: pairing.pairingToken,
-                device: device,
-                commands: commands
-            ),
+            body: request,
             transport: pairing.transport
         )
+        let responseBytes = ((try? JSONEncoder().encode(envelope.watch).count) ?? 0)
+            + ((try? JSONEncoder().encode(envelope.receipt).count) ?? 0)
+        let durationMs = Int(Date().timeIntervalSince(startedAt) * 1000)
+        let serverMeasurement = envelope.measurement.map {
+            " backendDurationMs=\($0.backendDurationMs ?? -1) backendRequestBytes=\($0.requestBytes ?? -1) backendResponseBytes=\($0.responseBytes ?? -1)"
+        } ?? ""
         companionDebugLog(
             "ForgeSyncClient",
-            "submitWatchCommandBatch success commands=\(commands.count) processed=\(envelope.receipt.processedCount) replayed=\(envelope.receipt.replayedCount) failed=\(envelope.receipt.failedCount)"
+            "submitWatchCommandBatch success commands=\(commands.count) processed=\(envelope.receipt.processedCount) replayed=\(envelope.receipt.replayedCount) failed=\(envelope.receipt.failedCount) responseBytes=\(responseBytes) durationMs=\(durationMs)\(serverMeasurement)"
         )
         return WatchCommandBatchResult(receipt: envelope.receipt, watch: envelope.watch)
     }

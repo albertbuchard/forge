@@ -2007,7 +2007,10 @@ final class CompanionAppModel: ObservableObject {
         syncState = .syncing
         do {
             await screenTimeStore.prepareSnapshotForSync(reason: trigger)
-            let movementPayload = movementStore.buildMovementPayload()
+            let movementReferenceDate = activeHealthSyncCheckpoint?.windowEnd ?? Date()
+            let movementPayload = movementStore.buildMovementPayload(
+                referenceDate: movementReferenceDate
+            )
             let screenTimePayload = screenTimeStore.buildScreenTimePayload()
             let syncResult = try await runChunkedHealthSync(
                 pairing: pairing,

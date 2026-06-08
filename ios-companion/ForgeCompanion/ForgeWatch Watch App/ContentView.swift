@@ -24,7 +24,7 @@ struct ContentView: View {
                     onCommandTap: { selectedCommand = $0 },
                     onCommand: appModel.queueCommand,
                     onCapture: appModel.queueCaptureEvent,
-                    onRefresh: { appModel.requestPhoneRefresh(reason: "surface_refresh") },
+                    onRefresh: { appModel.requestPhoneRefresh(reason: "surface_refresh", force: true) },
                     onRetry: appModel.flushPendingActions
                 )
                 .id(navigation.selectedSurface)
@@ -1003,35 +1003,59 @@ private struct PsycheQuestionCard: View {
 
     var body: some View {
         WatchCard {
-            VStack(alignment: .leading, spacing: 7) {
+            VStack(alignment: .leading, spacing: 5) {
                 Text(question.title)
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
                     .foregroundStyle(WatchTheme.textPrimary)
-                    .lineLimit(2)
+                    .lineLimit(1)
                 Text(question.prompt)
-                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .font(.system(size: 9, weight: .medium, design: .rounded))
                     .foregroundStyle(WatchTheme.textMuted)
-                    .lineLimit(2)
-                ForEach(question.options.prefix(4)) { option in
+                    .lineLimit(1)
+                ForEach(question.options.prefix(2)) { option in
                     Button {
                         onSelect(option)
                     } label: {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(option.label)
-                                .font(.system(size: 11, weight: .bold, design: .rounded))
-                                .lineLimit(1)
-                            if option.subtitle.isEmpty == false {
-                                Text(option.subtitle)
-                                    .font(.system(size: 9, weight: .medium, design: .rounded))
-                                    .foregroundStyle(WatchTheme.textMuted)
+                        HStack(spacing: 6) {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(option.label)
+                                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                                    .foregroundStyle(WatchTheme.textPrimary)
                                     .lineLimit(1)
+                                if option.subtitle.isEmpty == false {
+                                    Text(option.subtitle)
+                                        .font(.system(size: 8, weight: .medium, design: .rounded))
+                                        .foregroundStyle(WatchTheme.textMuted)
+                                        .lineLimit(1)
+                                }
                             }
+                            Spacer(minLength: 4)
+                            Image(systemName: "checkmark.circle")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(WatchTheme.accent)
                         }
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(Color.white.opacity(0.09))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                        .stroke(WatchTheme.border, lineWidth: 1)
+                                )
+                        )
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.plain)
+                }
+                if question.options.count > 2 {
+                    Text("+ \(question.options.count - 2) more on iPhone")
+                        .font(.system(size: 8, weight: .semibold, design: .rounded))
+                        .foregroundStyle(WatchTheme.textMuted)
+                        .lineLimit(1)
                 }
             }
+            .padding(.top, 4)
         }
     }
 }

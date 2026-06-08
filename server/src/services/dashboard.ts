@@ -14,6 +14,9 @@ import {
   type DashboardExecutionBucket,
   type DashboardGoal,
   type DashboardPayload,
+  type Goal,
+  type Habit,
+  type ProjectSummary,
   type Task
 } from "../types.js";
 
@@ -134,10 +137,22 @@ function buildGoalSummary(tasks: Task[], goalId: string): Pick<DashboardGoal, "p
   return { progress, totalTasks, completedTasks, earnedPoints, momentumLabel };
 }
 
-export function getDashboard(options: { userIds?: string[] } = {}): DashboardPayload {
-  const goals = filterOwnedEntities("goal", listGoals(), options.userIds);
-  const tasks = filterOwnedEntities("task", listTasks(), options.userIds);
-  const habits = filterOwnedEntities("habit", listHabits(), options.userIds);
+export function getDashboard(
+  options: {
+    userIds?: string[];
+    goals?: Goal[];
+    tasks?: Task[];
+    habits?: Habit[];
+    projects?: ProjectSummary[];
+  } = {}
+): DashboardPayload {
+  const goals =
+    options.goals ?? filterOwnedEntities("goal", listGoals(), options.userIds);
+  const tasks =
+    options.tasks ?? filterOwnedEntities("task", listTasks(), options.userIds);
+  const habits =
+    options.habits ??
+    filterOwnedEntities("habit", listHabits(), options.userIds);
   const tags = listTags();
   const now = new Date();
   const weekStart = startOfWeek(now).toISOString();
@@ -175,7 +190,8 @@ export function getDashboard(options: { userIds?: string[] } = {}): DashboardPay
       tags: listTagsByIds(goal.tagIds)
     };
   });
-  const projects = listProjectSummaries({ userIds: options.userIds });
+  const projects =
+    options.projects ?? listProjectSummaries({ userIds: options.userIds });
 
   const suggestedTags = tags.filter((tag) => ["value", "execution"].includes(tag.kind)).slice(0, 6);
   const owners = [...new Set(tasks.map((task) => task.owner).filter(Boolean))].sort((left, right) =>

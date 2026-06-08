@@ -753,6 +753,7 @@ actor HealthSyncStore {
                     try Task.checkCancellation()
                     let sessions = try await self.mapWorkoutSessionsBounded(
                         batchWorkouts,
+                        exportedAt: endDate,
                         concurrencyLimit: mappingConcurrencyLimit
                     )
                         .sorted { $0.startedAt > $1.startedAt }
@@ -863,6 +864,7 @@ actor HealthSyncStore {
                 let batchWorkouts = Array(windowWorkouts[lowerBound..<upperBound])
                 let sessions = try await mapWorkoutSessionsBounded(
                     batchWorkouts,
+                    exportedAt: window.end,
                     concurrencyLimit: workoutMappingConcurrencyLimit
                 )
                     .sorted { $0.startedAt > $1.startedAt }
@@ -1109,7 +1111,7 @@ actor HealthSyncStore {
             "fetchWorkoutSessions start start=\(isoString(startDate)) end=\(isoString(endDate))"
         )
         let workouts = try await queryWorkouts(startDate: startDate, endDate: endDate)
-        let sessions = try await mapWorkoutSessionsBounded(workouts)
+        let sessions = try await mapWorkoutSessionsBounded(workouts, exportedAt: endDate)
             .sorted { $0.startedAt > $1.startedAt }
         companionDebugLog(
             "HealthSyncStore",
@@ -1120,6 +1122,7 @@ actor HealthSyncStore {
 
     private func mapWorkoutSessionsBounded(
         _ workouts: [HKWorkout],
+        exportedAt: Date,
         concurrencyLimit: Int = 4
     ) async throws -> [CompanionSyncPayload.WorkoutSession] {
         guard workouts.isEmpty == false else {
@@ -1129,7 +1132,7 @@ actor HealthSyncStore {
             "HealthSyncStore",
             "mapWorkoutSessionsBulk start workouts=\(workouts.count) concurrencyHint=\(concurrencyLimit)"
         )
-        let summaries = workouts.map(mapWorkoutSummary)
+        let summaries = workouts.map { mapWorkoutSummary($0, exportedAt: exportedAt) }
         let evidence = try await fetchWorkoutEvidenceForBatch(workouts)
         let sessions = summaries.map { summary in
             workoutSessionWithEvidence(
@@ -1217,7 +1220,20 @@ actor HealthSyncStore {
         return .init(daySummaries: daySummaries)
     }
 
-    private func mapWorkoutSummary(_ workout: HKWorkout) -> CompanionSyncPayload.WorkoutSession {
+    nonisolated static func workoutSyncCursor(
+        exportedAtIso: String
+    ) -> [String: CompanionSyncPayload.ScalarValue] {
+        [
+            "workoutImportedAt": .string(exportedAtIso),
+            "rawEvidenceVersion": .string(HealthSyncEvidenceContract.workoutRawEvidenceVersion),
+            "phoneMappingMode": .string("summary_plus_bulk_evidence")
+        ]
+    }
+
+    private func mapWorkoutSummary(
+        _ workout: HKWorkout,
+        exportedAt: Date
+    ) -> CompanionSyncPayload.WorkoutSession {
         let activityDescriptor = workoutActivityDescriptor(for: workout.workoutActivityType)
         let totalEnergy = safeDoubleValue(
             workout.totalEnergyBurned,
@@ -1280,11 +1296,7 @@ actor HealthSyncStore {
                 fallbackTimeWindowUsed: false,
                 condensedSeriesExpanded: false
             ),
-            syncCursor: [
-                "workoutImportedAt": .string(isoString(Date())),
-                "rawEvidenceVersion": .string(HealthSyncEvidenceContract.workoutRawEvidenceVersion),
-                "phoneMappingMode": .string("summary_plus_bulk_evidence")
-            ],
+            syncCursor: Self.workoutSyncCursor(exportedAtIso: isoString(exportedAt)),
             links: [],
             annotations: .init(
                 subjectiveEffort: nil,

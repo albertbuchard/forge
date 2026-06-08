@@ -5774,7 +5774,8 @@ function upsertMobileSyncFamilyCursors(
 
 function validateMobileSyncExpectedCounts(
   syncSessionId: string,
-  expectedCounts: Record<string, number>
+  expectedCounts: Record<string, number>,
+  chunks?: MobileSyncChunkRow[]
 ) {
   const expectedEntries = Object.entries(expectedCounts).filter(
     ([, expected]) => Number.isFinite(expected) && expected > 0
@@ -5782,7 +5783,9 @@ function validateMobileSyncExpectedCounts(
   if (expectedEntries.length === 0) {
     return;
   }
-  const progress = updateMobileSyncSessionProgress(syncSessionId);
+  const progress = chunks
+    ? mobileSyncChunkProgressFromRows(chunks)
+    : updateMobileSyncSessionProgress(syncSessionId);
   const missingFamilies = expectedEntries
     .map(([family, expected]) => ({
       family,
@@ -5798,6 +5801,49 @@ function validateMobileSyncExpectedCounts(
       { families: missingFamilies }
     );
   }
+}
+
+function mobileSyncChunkProgressFromRows(chunks: MobileSyncChunkRow[]) {
+  const receivedCounts: Record<string, number> = {};
+  const byteTotals: Record<string, number> = {};
+  for (const chunk of chunks) {
+    receivedCounts[chunk.family] =
+      (receivedCounts[chunk.family] ?? 0) + chunk.record_count;
+    byteTotals[chunk.family] =
+      (byteTotals[chunk.family] ?? 0) + chunk.byte_count;
+  }
+  return {
+    receivedCounts,
+    byteTotals,
+    chunkCount: chunks.length,
+    receivedBytes: chunks.reduce((sum, chunk) => sum + chunk.byte_count, 0)
+  };
+}
+
+function dedupeMobileSyncChunksForCompletion(chunks: MobileSyncChunkRow[]) {
+  const latestBySlot = new Map<string, MobileSyncChunkRow>();
+  for (const chunk of chunks) {
+    const slotKey = `${chunk.family}:${chunk.sequence}`;
+    const previous = latestBySlot.get(slotKey);
+    if (!previous) {
+      latestBySlot.set(slotKey, chunk);
+      continue;
+    }
+    const chunkReceivedAt = Date.parse(chunk.received_at);
+    const previousReceivedAt = Date.parse(previous.received_at);
+    if (
+      chunkReceivedAt > previousReceivedAt ||
+      (chunkReceivedAt === previousReceivedAt && chunk.id > previous.id)
+    ) {
+      latestBySlot.set(slotKey, chunk);
+    }
+  }
+  return Array.from(latestBySlot.values()).sort((left, right) => {
+    if (left.sequence !== right.sequence) {
+      return left.sequence - right.sequence;
+    }
+    return left.family.localeCompare(right.family);
+  });
 }
 
 function aggregateMobileSyncChunkCounts(chunks: MobileSyncChunkRow[]) {
@@ -5948,15 +5994,20 @@ export function completeMobileHealthSyncSession(
       "The HealthKit sync session has no accepted chunks."
     );
   }
+  const completionChunks = dedupeMobileSyncChunksForCompletion(chunks);
   const pairing = getDatabase()
     .prepare(`SELECT * FROM companion_pairing_sessions WHERE id = ?`)
     .get(session.pairing_session_id) as PairingSessionRow;
   try {
     return runInTransaction(() => {
-      validateMobileSyncExpectedCounts(syncSessionId, parsed.expectedCounts);
+      validateMobileSyncExpectedCounts(
+        syncSessionId,
+        parsed.expectedCounts,
+        completionChunks
+      );
       const { assembled, tombstones } = mergeMobileHealthSyncChunks(
         session,
-        chunks,
+        completionChunks,
         { skipImmediatelyApplied: true }
       );
       const sync = ingestMobileHealthSync(assembled);
@@ -5972,10 +6023,12 @@ export function completeMobileHealthSyncSession(
         )
         .run(JSON.stringify(parsed.expectedCounts), now, now, syncSessionId);
       return {
-        ...syncReceiptWithChunkCounts(sync, chunks),
+        ...syncReceiptWithChunkCounts(sync, completionChunks),
         upload: {
           syncSessionId,
           chunks: chunks.length,
+          effectiveChunks: completionChunks.length,
+          supersededChunks: chunks.length - completionChunks.length,
           deletedWorkoutCount
         }
       };

@@ -5376,6 +5376,203 @@ test("mobile health chunked sync can recover when an empty resumed chunk is repl
   }
 });
 
+test("mobile health chunked completion supersedes repeated resumed logical slots", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-health-superseded-resume-slot-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const pairingResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: {
+        userId: "user_operator"
+      }
+    });
+    assert.equal(pairingResponse.statusCode, 201);
+    const qrPayload = (
+      pairingResponse.json() as {
+        qrPayload: {
+          sessionId: string;
+          pairingToken: string;
+        };
+      }
+    ).qrPayload;
+
+    const sharedStartPayload = {
+      sessionId: qrPayload.sessionId,
+      pairingToken: qrPayload.pairingToken,
+      device: {
+        name: "Omar iPhone",
+        platform: "ios",
+        appVersion: "1.0",
+        sourceDevice: "iPhone"
+      },
+      permissions: {
+        healthKitAuthorized: true,
+        backgroundRefreshEnabled: true,
+        motionReady: false,
+        locationReady: false,
+        screenTimeReady: false
+      },
+      requestedFamilies: ["sleep_nights"]
+    };
+    const startResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync-sessions",
+      payload: sharedStartPayload
+    });
+    assert.equal(startResponse.statusCode, 200, startResponse.body);
+    const syncSessionId = (
+      startResponse.json() as { upload: { syncSessionId: string } }
+    ).upload.syncSessionId;
+
+    const stalePayload = {
+      sleepNights: [
+        {
+          externalUid: "night_stale_resume_slot",
+          startedAt: "2026-05-25T22:00:00.000Z",
+          endedAt: "2026-05-26T06:00:00.000Z",
+          sourceTimezone: "Europe/Zurich",
+          localDateKey: "2026-05-26",
+          timeInBedSeconds: 28_800,
+          asleepSeconds: 25_200,
+          awakeSeconds: 3_600,
+          rawSegmentCount: 2,
+          stageBreakdown: [{ stage: "core", seconds: 25_200 }],
+          recoveryMetrics: {},
+          sourceMetrics: {},
+          links: [],
+          annotations: {}
+        }
+      ]
+    };
+    const staleChecksum = sha256Json(stalePayload);
+    const staleResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/chunks`,
+      payload: {
+        chunkId: `${syncSessionId}-000000-sleep_nights-${staleChecksum.slice(0, 20)}`,
+        sequence: 0,
+        family: "sleep_nights",
+        recordCount: 1,
+        byteCount: Buffer.byteLength(JSON.stringify(stalePayload), "utf8"),
+        checksumSha256: staleChecksum,
+        payload: stalePayload
+      }
+    });
+    assert.equal(staleResponse.statusCode, 200, staleResponse.body);
+
+    const resumeResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync-sessions",
+      payload: {
+        ...sharedStartPayload,
+        metadata: {
+          resumeSyncSessionId: syncSessionId
+        }
+      }
+    });
+    assert.equal(resumeResponse.statusCode, 200, resumeResponse.body);
+    assert.equal(
+      (resumeResponse.json() as { upload: { syncSessionId: string } }).upload
+        .syncSessionId,
+      syncSessionId
+    );
+
+    const latestPayload = {
+      sleepNights: [
+        {
+          externalUid: "night_latest_resume_slot",
+          startedAt: "2026-05-26T22:10:00.000Z",
+          endedAt: "2026-05-27T06:30:00.000Z",
+          sourceTimezone: "Europe/Zurich",
+          localDateKey: "2026-05-27",
+          timeInBedSeconds: 30_000,
+          asleepSeconds: 27_600,
+          awakeSeconds: 2_400,
+          rawSegmentCount: 3,
+          stageBreakdown: [
+            { stage: "core", seconds: 16_000 },
+            { stage: "rem", seconds: 7_000 },
+            { stage: "deep", seconds: 4_600 }
+          ],
+          recoveryMetrics: {},
+          sourceMetrics: {},
+          links: [],
+          annotations: {}
+        }
+      ]
+    };
+    const latestChecksum = sha256Json(latestPayload);
+    const latestResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/chunks`,
+      payload: {
+        chunkId: `${syncSessionId}-000000-sleep_nights-${latestChecksum.slice(0, 20)}`,
+        sequence: 0,
+        family: "sleep_nights",
+        recordCount: 1,
+        byteCount: Buffer.byteLength(JSON.stringify(latestPayload), "utf8"),
+        checksumSha256: latestChecksum,
+        payload: latestPayload
+      }
+    });
+    assert.equal(latestResponse.statusCode, 200, latestResponse.body);
+
+    const completeResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/complete`,
+      payload: {
+        expectedCounts: {
+          sleep_nights: 1
+        }
+      }
+    });
+    assert.equal(completeResponse.statusCode, 200, completeResponse.body);
+    const completeBody = completeResponse.json() as {
+      sync: {
+        imported: { sleepNights: number };
+        upload: {
+          chunks: number;
+          effectiveChunks: number;
+          supersededChunks: number;
+        };
+      };
+    };
+    assert.equal(completeBody.sync.imported.sleepNights, 1);
+    assert.equal(completeBody.sync.upload.chunks, 2);
+    assert.equal(completeBody.sync.upload.effectiveChunks, 1);
+    assert.equal(completeBody.sync.upload.supersededChunks, 1);
+
+    const storedSleepNights = getDatabase()
+      .prepare(
+        `SELECT external_uid
+         FROM health_sleep_sessions
+         WHERE external_uid IN (?, ?)
+         ORDER BY external_uid ASC`
+      )
+      .all(
+        "night_latest_resume_slot",
+        "night_stale_resume_slot"
+      ) as Array<{ external_uid: string }>;
+    assert.deepEqual(
+      storedSleepNights.map((row) => row.external_uid),
+      ["night_latest_resume_slot"]
+    );
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("context ignores invalid scoped user ids instead of blanking the board", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-user-scope-"));
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
@@ -9034,8 +9231,17 @@ test("watch bootstrap serves compact habit state for legacy pairings and watch h
       }
     });
     assert.equal(bootstrapResponse.statusCode, 200);
-    const initialBootstrap = (
+    const initialBootstrapBody = (
       bootstrapResponse.json() as {
+        measurement: {
+          operation: string;
+          requestBytes: number;
+          responseBytes: number;
+          backendDurationMs: number;
+          surfaceCount: number;
+          habitCount: number;
+          promptCount: number;
+        };
         watch: {
           habits: Array<{
             id: string;
@@ -9050,7 +9256,18 @@ test("watch bootstrap serves compact habit state for legacy pairings and watch h
           }>;
         };
       }
-    ).watch;
+    );
+    const initialBootstrap = initialBootstrapBody.watch;
+    assert.equal(initialBootstrapBody.measurement.operation, "watch.bootstrap");
+    assert.ok(initialBootstrapBody.measurement.requestBytes > 0);
+    assert.ok(initialBootstrapBody.measurement.responseBytes > 0);
+    assert.ok(initialBootstrapBody.measurement.backendDurationMs >= 0);
+    assert.ok(initialBootstrapBody.measurement.surfaceCount >= 10);
+    assert.equal(
+      initialBootstrapBody.measurement.habitCount,
+      initialBootstrap.habits.length
+    );
+    assert.ok(initialBootstrapBody.measurement.promptCount >= 0);
     assert.ok(initialBootstrap.habits.length >= 2);
     assert.equal(initialBootstrap.habits[0]?.dueToday, true);
     assert.equal(
@@ -9335,6 +9552,17 @@ test("watch capture batch stores raw events, dedupes repeats, and projects exact
     });
     assert.equal(captureResponse.statusCode, 200);
     const captureBody = captureResponse.json() as {
+      measurement: {
+        operation: string;
+        requestBytes: number;
+        responseBytes: number;
+        backendDurationMs: number;
+        eventCount: number;
+        storedCount: number;
+        duplicateCount: number;
+        projectedCount: number;
+        projectionFailedCount: number;
+      };
       receipt: {
         receivedCount: number;
         storedCount: number;
@@ -9342,6 +9570,15 @@ test("watch capture batch stores raw events, dedupes repeats, and projects exact
         projectedCount: number;
       };
     };
+    assert.equal(captureBody.measurement.operation, "watch.capture_batch");
+    assert.ok(captureBody.measurement.requestBytes > 0);
+    assert.ok(captureBody.measurement.responseBytes > 0);
+    assert.ok(captureBody.measurement.backendDurationMs >= 0);
+    assert.equal(captureBody.measurement.eventCount, 2);
+    assert.equal(captureBody.measurement.storedCount, 2);
+    assert.equal(captureBody.measurement.duplicateCount, 0);
+    assert.equal(captureBody.measurement.projectedCount, 2);
+    assert.equal(captureBody.measurement.projectionFailedCount, 0);
     assert.equal(captureBody.receipt.receivedCount, 2);
     assert.equal(captureBody.receipt.storedCount, 2);
     assert.equal(captureBody.receipt.duplicateCount, 0);
@@ -9412,8 +9649,18 @@ test("watch capture batch stores raw events, dedupes repeats, and projects exact
     });
     assert.equal(duplicateResponse.statusCode, 200);
     const duplicateBody = duplicateResponse.json() as {
+      measurement: {
+        operation: string;
+        eventCount: number;
+        storedCount: number;
+        duplicateCount: number;
+      };
       receipt: { storedCount: number; duplicateCount: number };
     };
+    assert.equal(duplicateBody.measurement.operation, "watch.capture_batch");
+    assert.equal(duplicateBody.measurement.eventCount, 1);
+    assert.equal(duplicateBody.measurement.storedCount, 0);
+    assert.equal(duplicateBody.measurement.duplicateCount, 1);
     assert.equal(duplicateBody.receipt.storedCount, 0);
     assert.equal(duplicateBody.receipt.duplicateCount, 1);
   } finally {
@@ -9609,6 +9856,16 @@ test("watch action batch records idempotent command receipts and replays accepte
     });
     assert.equal(actionResponse.statusCode, 200, actionResponse.body);
     const actionBody = actionResponse.json() as {
+      measurement: {
+        operation: string;
+        requestBytes: number;
+        responseBytes: number;
+        backendDurationMs: number;
+        commandCount: number;
+        processedCount: number;
+        replayedCount: number;
+        failedCount: number;
+      };
       receipt: {
         processedCount: number;
         replayedCount: number;
@@ -9617,6 +9874,14 @@ test("watch action batch records idempotent command receipts and replays accepte
       };
       watch: { schemaVersion: number; surfaces: Array<{ id: string }> };
     };
+    assert.equal(actionBody.measurement.operation, "watch.action_batch");
+    assert.ok(actionBody.measurement.requestBytes > 0);
+    assert.ok(actionBody.measurement.responseBytes > 0);
+    assert.ok(actionBody.measurement.backendDurationMs >= 0);
+    assert.equal(actionBody.measurement.commandCount, 5);
+    assert.equal(actionBody.measurement.processedCount, 5);
+    assert.equal(actionBody.measurement.replayedCount, 0);
+    assert.equal(actionBody.measurement.failedCount, 0);
     assert.equal(actionBody.receipt.processedCount, 5);
     assert.equal(actionBody.receipt.replayedCount, 0);
     assert.equal(actionBody.receipt.failedCount, 0);
@@ -9636,6 +9901,13 @@ test("watch action batch records idempotent command receipts and replays accepte
     });
     assert.equal(replayResponse.statusCode, 200, replayResponse.body);
     const replayBody = replayResponse.json() as {
+      measurement: {
+        operation: string;
+        commandCount: number;
+        processedCount: number;
+        replayedCount: number;
+        failedCount: number;
+      };
       receipt: {
         processedCount: number;
         replayedCount: number;
@@ -9643,6 +9915,11 @@ test("watch action batch records idempotent command receipts and replays accepte
         receipts: Array<{ actionId: string; status: string }>;
       };
     };
+    assert.equal(replayBody.measurement.operation, "watch.action_batch");
+    assert.equal(replayBody.measurement.commandCount, 5);
+    assert.equal(replayBody.measurement.processedCount, 0);
+    assert.equal(replayBody.measurement.replayedCount, 5);
+    assert.equal(replayBody.measurement.failedCount, 0);
     assert.equal(replayBody.receipt.processedCount, 0);
     assert.equal(replayBody.receipt.replayedCount, 5);
     assert.equal(replayBody.receipt.failedCount, 0);
@@ -11895,6 +12172,61 @@ test("command-center context exposes first-class projects across dashboard and o
       body.dashboard.projects.every((project) => project.goalId.length > 0)
     );
     assert.ok(body.overview.projects.length >= 1);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("v1 context shell profile omits redundant dashboard collections for faster bootstrap", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-context-shell-profile-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const fullResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/context"
+    });
+    assert.equal(fullResponse.statusCode, 200);
+    const shellResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/context?profile=shell"
+    });
+    assert.equal(shellResponse.statusCode, 200);
+    const fullBody = fullResponse.json() as {
+      dashboard: {
+        projects?: unknown[];
+        tasks?: unknown[];
+        habits?: unknown[];
+        tags?: unknown[];
+        recentActivity?: unknown[];
+      };
+      projects: unknown[];
+      tasks: unknown[];
+      habits: unknown[];
+      tags: unknown[];
+      activity?: unknown[];
+    };
+    const shellBody = shellResponse.json() as typeof fullBody;
+
+    assert.ok(Array.isArray(fullBody.dashboard.tasks));
+    assert.equal(Object.hasOwn(shellBody.dashboard, "tasks"), false);
+    assert.equal(Object.hasOwn(shellBody.dashboard, "projects"), false);
+    assert.equal(Object.hasOwn(shellBody.dashboard, "habits"), false);
+    assert.equal(Object.hasOwn(shellBody.dashboard, "tags"), false);
+    assert.equal(Object.hasOwn(shellBody.dashboard, "recentActivity"), false);
+    assert.equal(Object.hasOwn(shellBody, "activity"), false);
+    assert.equal(shellBody.tasks.length, fullBody.tasks.length);
+    assert.equal(shellBody.projects.length, fullBody.projects.length);
+    assert.equal(shellBody.habits.length, fullBody.habits.length);
+    assert.equal(shellBody.tags.length, fullBody.tags.length);
+    assert.ok(
+      Buffer.byteLength(shellResponse.body, "utf8") <
+        Buffer.byteLength(fullResponse.body, "utf8")
+    );
   } finally {
     await app.close();
     closeDatabase();

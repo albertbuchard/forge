@@ -3189,6 +3189,60 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(payload.knownPlaces.first?.label, "Work")
     }
 
+    func testMovementPayloadUsesFrozenReferenceDateForResumeStableChunks() throws {
+        func makeStore() -> MovementSyncStore {
+            MovementSyncStore(
+                testingState: MovementSyncStore.PersistedState(
+                    trackingEnabled: true,
+                    publishMode: "auto_publish",
+                    retentionMode: "aggregates_only",
+                    knownPlaces: [],
+                    stays: [
+                        MovementSyncStore.StoredStay(
+                            id: "stay-active",
+                            label: "Current stay",
+                            status: "active",
+                            classification: "stationary",
+                            startedAt: makeDate("2026-06-08T08:00:00.000Z"),
+                            endedAt: makeDate("2026-06-08T09:00:00.000Z"),
+                            centerLatitude: 46.5191,
+                            centerLongitude: 6.6323,
+                            radiusMeters: 80,
+                            sampleCount: 4,
+                            placeExternalUid: "",
+                            placeLabel: "",
+                            tags: [],
+                            metadata: [:]
+                        )
+                    ],
+                    trips: []
+                )
+            )
+        }
+
+        let frozenReferenceDate = makeDate("2026-06-08T10:00:00.000Z")
+        let wallClockReferenceDate = makeDate("2026-06-08T10:05:00.000Z")
+        let firstPayload = makeStore().buildMovementPayload(
+            referenceDate: frozenReferenceDate
+        )
+        let retryPayload = makeStore().buildMovementPayload(
+            referenceDate: frozenReferenceDate
+        )
+        let wallClockPayload = makeStore().buildMovementPayload(
+            referenceDate: wallClockReferenceDate
+        )
+
+        let firstWirePayload = try ForgeSyncClient.healthSyncChunkWirePayloadForTesting(firstPayload)
+        let retryWirePayload = try ForgeSyncClient.healthSyncChunkWirePayloadForTesting(retryPayload)
+        let wallClockWirePayload = try ForgeSyncClient.healthSyncChunkWirePayloadForTesting(wallClockPayload)
+
+        XCTAssertEqual(firstPayload.stays.first?.endedAt, "2026-06-08T10:00:00.000Z")
+        XCTAssertEqual(wallClockPayload.stays.first?.endedAt, "2026-06-08T10:05:00.000Z")
+        XCTAssertEqual(firstWirePayload.checksumSha256, retryWirePayload.checksumSha256)
+        XCTAssertEqual(firstWirePayload.byteCount, retryWirePayload.byteCount)
+        XCTAssertNotEqual(firstWirePayload.checksumSha256, wallClockWirePayload.checksumSha256)
+    }
+
     func testRemoteMovementTimelineItemPreservesCanonicalUserDefinedBoxSemantics() throws {
         let segment = try loadSharedMovementFixture(
             id: "user_defined_missing_override"
@@ -3793,6 +3847,58 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(Data(base64Encoded: encodedCompressed), compressed)
         XCTAssertLessThan(compressed.count, wirePayload.payloadData.count)
         XCTAssertEqual(wirePayload.compressedByteCount, compressed.count)
+    }
+
+    func testWorkoutSyncCursorUsesFrozenExportTimestampForResumeStableChunks() throws {
+        struct WorkoutChunkPayload: Encodable {
+            let workouts: [Workout]
+
+            struct Workout: Encodable {
+                let externalUid: String
+                let syncCursor: [String: CompanionSyncPayload.ScalarValue]
+            }
+        }
+
+        let frozenExportedAt = "2026-06-08T10:00:00.000Z"
+        let retryExportedAt = "2026-06-08T10:00:05.000Z"
+        let firstPayload = WorkoutChunkPayload(
+            workouts: [
+                .init(
+                    externalUid: "workout-byte-stable",
+                    syncCursor: HealthSyncStore.workoutSyncCursor(
+                        exportedAtIso: frozenExportedAt
+                    )
+                )
+            ]
+        )
+        let retryPayload = WorkoutChunkPayload(
+            workouts: [
+                .init(
+                    externalUid: "workout-byte-stable",
+                    syncCursor: HealthSyncStore.workoutSyncCursor(
+                        exportedAtIso: frozenExportedAt
+                    )
+                )
+            ]
+        )
+        let wallClockPayload = WorkoutChunkPayload(
+            workouts: [
+                .init(
+                    externalUid: "workout-byte-stable",
+                    syncCursor: HealthSyncStore.workoutSyncCursor(
+                        exportedAtIso: retryExportedAt
+                    )
+                )
+            ]
+        )
+
+        let firstWirePayload = try ForgeSyncClient.healthSyncChunkWirePayloadForTesting(firstPayload)
+        let retryWirePayload = try ForgeSyncClient.healthSyncChunkWirePayloadForTesting(retryPayload)
+        let wallClockWirePayload = try ForgeSyncClient.healthSyncChunkWirePayloadForTesting(wallClockPayload)
+
+        XCTAssertEqual(firstWirePayload.checksumSha256, retryWirePayload.checksumSha256)
+        XCTAssertEqual(firstWirePayload.byteCount, retryWirePayload.byteCount)
+        XCTAssertNotEqual(firstWirePayload.checksumSha256, wallClockWirePayload.checksumSha256)
     }
 
     func testHealthSyncUploadSessionRequiresByteStablePayloadEncoding() {
