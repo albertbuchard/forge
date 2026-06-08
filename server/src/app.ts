@@ -9413,7 +9413,12 @@ export async function buildServer(
   });
   app.get("/api/v1/health/fitness", async (request) => ({
     fitness: getFitnessViewData(
-      resolveScopedUserIds(request.query as Record<string, unknown>)
+      resolveScopedUserIds(request.query as Record<string, unknown>),
+      {
+        compact:
+          (request.query as Record<string, unknown>).compact === "1" ||
+          (request.query as Record<string, unknown>).compact === "true"
+      }
     )
   }));
   app.get("/api/v1/health/training-load", async (request) => ({

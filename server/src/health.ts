@@ -4361,6 +4361,58 @@ function readMobileSyncSession(syncSessionId: string) {
     .get(syncSessionId) as MobileSyncSessionRow | undefined;
 }
 
+function mobileSyncSessionReceivedChunkIds(syncSessionId: string) {
+  return getDatabase()
+    .prepare(
+      `SELECT chunk_id
+       FROM health_mobile_sync_chunks
+       WHERE sync_session_id = ?
+       ORDER BY sequence ASC`
+    )
+    .all(syncSessionId)
+    .map((row) => (row as { chunk_id: string }).chunk_id);
+}
+
+function mobileSyncSessionCanResume(
+  session: MobileSyncSessionRow,
+  requestedFamilies: MobileHealthSyncFamily[]
+) {
+  const existingFamilies = safeJsonParse<MobileHealthSyncFamily[]>(
+    session.requested_families_json,
+    []
+  );
+  return (
+    session.schema_version === HEALTH_MOBILE_SYNC_SCHEMA_VERSION &&
+    requestedFamilies.every((family) => existingFamilies.includes(family))
+  );
+}
+
+function findResumableMobileSyncSessionForPairing(
+  pairingId: string,
+  requestedFamilies: MobileHealthSyncFamily[]
+) {
+  const rows = getDatabase()
+    .prepare(
+      `SELECT s.*
+       FROM health_mobile_sync_sessions s
+       WHERE s.pairing_session_id = ?
+         AND s.status = 'running'
+         AND EXISTS (
+           SELECT 1
+           FROM health_mobile_sync_chunks c
+           WHERE c.sync_session_id = s.id
+         )
+       ORDER BY s.updated_at DESC, s.started_at DESC
+       LIMIT 8`
+    )
+    .all(pairingId) as MobileSyncSessionRow[];
+  return (
+    rows.find((session) =>
+      mobileSyncSessionCanResume(session, requestedFamilies)
+    ) ?? null
+  );
+}
+
 function mobileSyncSessionProgress(syncSessionId: string) {
   const chunks = getDatabase()
     .prepare(
@@ -5248,26 +5300,11 @@ export function startMobileHealthSyncSession(
       existing.pairing_session_id === pairing.id &&
       existing.status === "running"
     ) {
-      const existingFamilies = safeJsonParse<MobileHealthSyncFamily[]>(
-        existing.requested_families_json,
-        []
-      );
-      const canResume =
-        existing.schema_version === HEALTH_MOBILE_SYNC_SCHEMA_VERSION &&
-        parsed.requestedFamilies.every((family) =>
-          existingFamilies.includes(family)
+      if (mobileSyncSessionCanResume(existing, parsed.requestedFamilies)) {
+        return mobileSyncSessionUploadPayload(
+          existing,
+          mobileSyncSessionReceivedChunkIds(existing.id)
         );
-      if (canResume) {
-        const receivedChunkIds = getDatabase()
-          .prepare(
-            `SELECT chunk_id
-             FROM health_mobile_sync_chunks
-             WHERE sync_session_id = ?
-             ORDER BY sequence ASC`
-          )
-          .all(resumeSyncSessionId)
-          .map((row) => (row as { chunk_id: string }).chunk_id);
-        return mobileSyncSessionUploadPayload(existing, receivedChunkIds);
       }
       getDatabase()
         .prepare(
@@ -5277,6 +5314,16 @@ export function startMobileHealthSyncSession(
         )
         .run(nowIso(), nowIso(), existing.id);
     }
+  }
+  const implicitResumeSession = findResumableMobileSyncSessionForPairing(
+    pairing.id,
+    parsed.requestedFamilies
+  );
+  if (implicitResumeSession) {
+    return mobileSyncSessionUploadPayload(
+      implicitResumeSession,
+      mobileSyncSessionReceivedChunkIds(implicitResumeSession.id)
+    );
   }
   const now = nowIso();
   const syncSessionId = mobileSyncSessionId();
@@ -7650,19 +7697,26 @@ export function getTrainingLoadViewData(userIds?: string[]) {
   };
 }
 
-export function getFitnessViewData(userIds?: string[]) {
+export function getFitnessViewData(
+  userIds?: string[],
+  options: { compact?: boolean } = {}
+) {
   const workoutRows = listWorkoutRows(userIds);
   const recent = workoutRows
     .slice(0, 40)
     .map((row) => mapWorkoutSession(row, { includeAnalytics: true }));
-  const browserSessions = workoutRows
-    .slice(0, 2000)
-    .map((row, index) =>
-      mapWorkoutSession(row, { includeAnalytics: index < 40 })
-    );
-  const analysisSessions = workoutRows
-    .slice(0, 500)
-    .map((row) => mapWorkoutSession(row, { includeAnalytics: true }));
+  const browserSessions = options.compact
+    ? []
+    : workoutRows
+        .slice(0, 2000)
+        .map((row, index) =>
+          mapWorkoutSession(row, { includeAnalytics: index < 40 })
+        );
+  const analysisSessions = options.compact
+    ? []
+    : workoutRows
+        .slice(0, 500)
+        .map((row) => mapWorkoutSession(row, { includeAnalytics: true }));
   const vitalsTrend = buildFitnessVitalsTrend(
     listDailySummaryRows("vitals", userIds)
   );

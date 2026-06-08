@@ -229,7 +229,8 @@ export function OverviewPage() {
   const fitnessQuery =
     useQuery({
       queryKey: ["forge-overview-fitness", ...selectedUserIds],
-      queryFn: async () => (await getFitnessView(selectedUserIds)).fitness,
+      queryFn: async () =>
+        (await getFitnessView(selectedUserIds, { compact: true })).fitness,
       enabled: enableOverviewSideData,
       staleTime: 60_000
     }) ?? {};

@@ -4982,6 +4982,136 @@ test("mobile health chunked sync does not resume stale sessions missing requeste
   }
 });
 
+test("mobile health chunked sync implicitly resumes compatible running sessions with accepted chunks", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-health-implicit-resume-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const pairingResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/pairing-sessions",
+      headers: {
+        cookie: operatorCookie,
+        host: "127.0.0.1:4317"
+      },
+      payload: { userId: "user_operator" }
+    });
+    assert.equal(pairingResponse.statusCode, 201);
+    const qrPayload = (
+      pairingResponse.json() as {
+        qrPayload: { sessionId: string; pairingToken: string };
+      }
+    ).qrPayload;
+    const sharedPayload = {
+      sessionId: qrPayload.sessionId,
+      pairingToken: qrPayload.pairingToken,
+      device: {
+        name: "Omar iPhone",
+        platform: "ios",
+        appVersion: "1.0",
+        sourceDevice: "iPhone"
+      },
+      permissions: {
+        healthKitAuthorized: true,
+        backgroundRefreshEnabled: true,
+        motionReady: false,
+        locationReady: false,
+        screenTimeReady: false
+      },
+      sourceStates: {
+        health: {
+          desiredEnabled: true,
+          appliedEnabled: true,
+          authorizationStatus: "approved",
+          syncEligible: true,
+          lastObservedAt: "2026-04-07T08:00:00.000Z",
+          metadata: {}
+        },
+        movement: {
+          desiredEnabled: false,
+          appliedEnabled: false,
+          authorizationStatus: "disabled",
+          syncEligible: false,
+          lastObservedAt: "2026-04-07T08:00:00.000Z",
+          metadata: {}
+        },
+        screenTime: {
+          desiredEnabled: false,
+          appliedEnabled: false,
+          authorizationStatus: "disabled",
+          syncEligible: false,
+          lastObservedAt: "2026-04-07T08:00:00.000Z",
+          metadata: {}
+        }
+      },
+      requestedFamilies: ["vitals", "movement"]
+    };
+
+    const firstStartResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync-sessions",
+      payload: sharedPayload
+    });
+    assert.equal(firstStartResponse.statusCode, 200, firstStartResponse.body);
+    const firstUpload = (
+      firstStartResponse.json() as {
+        upload: { syncSessionId: string };
+      }
+    ).upload;
+    const vitalsPayload = { vitals: { daySummaries: [] } };
+    const chunkResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/mobile/healthkit/sync-sessions/${firstUpload.syncSessionId}/chunks`,
+      payload: {
+        chunkId: "chunk-vitals-accepted",
+        sequence: 0,
+        family: "vitals",
+        recordCount: 0,
+        byteCount: Buffer.byteLength(JSON.stringify(vitalsPayload), "utf8"),
+        checksumSha256: sha256Json(vitalsPayload),
+        payload: vitalsPayload
+      }
+    });
+    assert.equal(chunkResponse.statusCode, 200, chunkResponse.body);
+
+    const secondStartResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync-sessions",
+      payload: sharedPayload
+    });
+    assert.equal(secondStartResponse.statusCode, 200, secondStartResponse.body);
+    const secondUpload = (
+      secondStartResponse.json() as {
+        upload: {
+          syncSessionId: string;
+          receivedChunkIds: string[];
+          progress: { chunkCount: number };
+        };
+      }
+    ).upload;
+
+    assert.equal(secondUpload.syncSessionId, firstUpload.syncSessionId);
+    assert.deepEqual(secondUpload.receivedChunkIds, ["chunk-vitals-accepted"]);
+    assert.equal(secondUpload.progress.chunkCount, 1);
+
+    const runningSessionCount = getDatabase()
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM health_mobile_sync_sessions
+         WHERE status = 'running'`
+      )
+      .get() as { count: number };
+    assert.equal(runningSessionCount.count, 1);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("mobile health chunked sync rejects incomplete expected counts without advancing pairing sync state", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-health-incomplete-chunked-")
