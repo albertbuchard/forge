@@ -23,6 +23,32 @@ function remainingValue(value: number) {
   return value >= 0 ? formatKcal(value) : formatKcal(Math.abs(value));
 }
 
+function mealGroupLabel(meal: NutritionFoodLog) {
+  const label = meal.mealLabel?.trim();
+  return label ? label : "No meal marker";
+}
+
+function groupMealsByMarker(meals: NutritionFoodLog[]) {
+  const groups: Array<{
+    label: string;
+    calories: number;
+    meals: NutritionFoodLog[];
+  }> = [];
+  const index = new Map<string, (typeof groups)[number]>();
+  for (const meal of meals) {
+    const label = mealGroupLabel(meal);
+    let group = index.get(label);
+    if (!group) {
+      group = { label, calories: 0, meals: [] };
+      groups.push(group);
+      index.set(label, group);
+    }
+    group.meals.push(meal);
+    group.calories += meal.totals.calories;
+  }
+  return groups;
+}
+
 export function WeightLossLedgerPanel({
   ledger,
   remainingCalories,
@@ -41,6 +67,7 @@ export function WeightLossLedgerPanel({
   onDeleteMeal: (meal: NutritionFoodLog) => void;
 }) {
   const totals = ledger.totals;
+  const mealGroups = groupMealsByMarker(ledger.meals);
   return (
     <Card className="grid gap-5 border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -52,17 +79,17 @@ export function WeightLossLedgerPanel({
             <span>Calories, macros, and meal evidence</span>
             <InfoTooltip
               label="Explain food log"
-              content="The food log is today's editable record of what was eaten. Edit a meal to change quantities, remove items, correct food parameters, or delete the meal entirely."
+              content="The food log is the selected day's editable record of what was eaten. Meal markers are optional; they group entries as breakfast, lunch, snack, dinner, or any personal label."
             />
           </h2>
         </div>
-        <Badge tone="meta">{ledger.meals.length} meals</Badge>
+        <Badge tone="meta">{ledger.meals.length} logs</Badge>
       </div>
       <div>
         <div className="mb-4 grid gap-3 sm:grid-cols-3">
           <div className="min-w-0 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-3">
             <div className="text-[11px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
-              Eaten today
+              Eaten
             </div>
             <div className="mt-1 text-2xl font-semibold text-[var(--ui-ink-strong)]">
               {formatKcal(totals.calories)}
@@ -70,7 +97,7 @@ export function WeightLossLedgerPanel({
           </div>
           <div className="min-w-0 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-3">
             <div className="text-[11px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
-              Target today
+              Target
             </div>
             <div className="mt-1 text-2xl font-semibold text-[var(--ui-ink-strong)]">
               {formatKcal(ledger.targetCalories)}
@@ -112,19 +139,38 @@ export function WeightLossLedgerPanel({
       </div>
       <div className="grid gap-3">
         {ledger.meals.length > 0 ? (
-          ledger.meals.map((meal) => (
-            <WeightLossRecentMeal
-              key={meal.id}
-              meal={meal}
-              pending={logSavedPending}
-              onLogAgain={onLogAgain}
-              onEdit={onEditMeal}
-              onDelete={onDeleteMeal}
-            />
+          mealGroups.map((group) => (
+            <section
+              key={group.label}
+              className="grid gap-2 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-3"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-sm font-semibold text-[var(--ui-ink-strong)]">
+                  {group.label}
+                </div>
+                <div className="text-xs text-[var(--ui-ink-soft)]">
+                  {group.meals.length} log{group.meals.length === 1 ? "" : "s"}{" "}
+                  · {formatKcal(group.calories)}
+                </div>
+              </div>
+              <div className="grid gap-2">
+                {group.meals.map((meal) => (
+                  <WeightLossRecentMeal
+                    key={meal.id}
+                    meal={meal}
+                    pending={logSavedPending}
+                    hideMealLabel
+                    onLogAgain={onLogAgain}
+                    onEdit={onEditMeal}
+                    onDelete={onDeleteMeal}
+                  />
+                ))}
+              </div>
+            </section>
           ))
         ) : (
           <WeightLossEmptyState>
-            No meals logged today yet.
+            No food logged for this day yet.
           </WeightLossEmptyState>
         )}
       </div>

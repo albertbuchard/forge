@@ -100,7 +100,7 @@ describe("WeightLossActiveCaloriesMiniCard", () => {
       />
     );
 
-    fireEvent.change(screen.getByLabelText("Today active calories"), {
+    fireEvent.change(screen.getByLabelText("Selected day active calories"), {
       target: { value: "" }
     });
 

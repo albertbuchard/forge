@@ -576,7 +576,7 @@ export function WeightLossActiveCaloriesMiniCard({
             Active kcal
             <InfoTooltip
               label="Explain active calories"
-              content={`Today target = baseline food target plus the day-specific active adjustment. ${formula}. Automatic same-day activity can only add ${Math.round(energy.activityEatBackFraction * 100)}% of the positive surplus above the baseline day. A manual edit overrides today only and can raise or lower the target.`}
+              content={`Selected-day target = baseline food target plus the day-specific active adjustment. ${formula}. Automatic same-day activity can only add ${Math.round(energy.activityEatBackFraction * 100)}% of the positive surplus above the baseline day. A manual edit overrides this date only and can raise or lower the target.`}
             />
           </div>
           <div className="mt-1 text-2xl font-semibold leading-tight text-[var(--ui-ink-strong)]">
@@ -610,7 +610,7 @@ export function WeightLossActiveCaloriesMiniCard({
           onChange={(event) =>
             onDraftChange(normalizeKcalDraft(event.target.value))
           }
-          aria-label="Today active calories"
+          aria-label="Selected day active calories"
           className="py-2.5"
         />
         <Button

@@ -12,7 +12,6 @@ import { Input } from "@/components/ui/input";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { SurfacePanel, SurfaceStat } from "@/components/ui/surface";
 import { Textarea } from "@/components/ui/textarea";
-import { formatLocalDateKey } from "@/lib/date-keys";
 import type {
   NutritionFoodLog,
   NutritionFoodLogInput,
@@ -44,13 +43,14 @@ export type WeightLossFoodDraft = {
   notes: string;
   loggedAt?: string;
   dayKey?: string | null;
+  timeZone?: string;
   source?: NutritionFoodLogInput["source"];
   selectedItems: WeightLossSelectedFood[];
 };
 
 export function buildInitialFoodDraft(): WeightLossFoodDraft {
   return {
-    mealLabel: "Meal",
+    mealLabel: "",
     notes: "",
     source: "search",
     selectedItems: []
@@ -239,7 +239,7 @@ export function buildFoodDraftFromLog(
   meal: NutritionFoodLog
 ): WeightLossFoodDraft {
   return {
-    mealLabel: meal.mealLabel ?? "Meal",
+    mealLabel: meal.mealLabel ?? "",
     notes: meal.notes ?? "",
     loggedAt: meal.loggedAt,
     dayKey: meal.dayKey,
@@ -258,10 +258,11 @@ export function buildFoodDraftFromInput(
   source = input.source ?? "manual"
 ): WeightLossFoodDraft {
   return {
-    mealLabel: input.mealLabel ?? "Meal",
+    mealLabel: input.mealLabel ?? "",
     notes: input.notes ?? "",
     loggedAt: input.loggedAt,
     dayKey: input.dayKey,
+    timeZone: input.timeZone,
     source: input.source ?? "manual",
     selectedItems: input.items.map((item, index) => ({
       localId: `${source}-${index}-${Date.now()}`,
@@ -302,7 +303,7 @@ function buildCustomFoodResult(): NutritionFoodSearchResult {
 
 export function buildInitialCustomFoodDraft(): WeightLossFoodDraft {
   return {
-    mealLabel: "Meal",
+    mealLabel: "",
     notes: "",
     source: "manual",
     selectedItems: [
@@ -669,15 +670,36 @@ export function WeightLossFoodLogDialog({
       render: (draft, setDraftValue) => (
         <div className="grid gap-4">
           <FlowField
-            label="Meal label"
-            labelHelp="The label groups the edited items as breakfast, lunch, snack, dinner, or any personal meal name."
+            label="Meal marker (optional)"
+            labelHelp="Use a marker such as breakfast, lunch, snack, or dinner when it helps group the day. Leave it blank when the log should stand alone without a meal label."
           >
+            <div className="mb-2 flex flex-wrap gap-2">
+              {["Breakfast", "Lunch", "Dinner", "Snack"].map((label) => (
+                <Button
+                  key={label}
+                  type="button"
+                  size="sm"
+                  variant={draft.mealLabel === label ? "primary" : "secondary"}
+                  onClick={() => setDraftValue({ mealLabel: label })}
+                >
+                  {label}
+                </Button>
+              ))}
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => setDraftValue({ mealLabel: "" })}
+              >
+                Clear
+              </Button>
+            </div>
             <Input
               value={draft.mealLabel}
               onChange={(event) =>
                 setDraftValue({ mealLabel: event.target.value })
               }
-              placeholder="Breakfast"
+              placeholder="Breakfast, lunch, snack, dinner, or blank"
             />
           </FlowField>
           <FlowField
@@ -721,12 +743,14 @@ export function WeightLossFoodLogDialog({
 }
 
 export function buildFoodLogInput(
-  draft: WeightLossFoodDraft
+  draft: WeightLossFoodDraft,
+  options: { dateKey?: string; timeZone?: string } = {}
 ): NutritionFoodLogInput {
   return {
     loggedAt: draft.loggedAt,
-    dayKey: draft.dayKey ?? formatLocalDateKey(),
-    mealLabel: asFoodDraftString(draft.mealLabel, "Meal"),
+    dayKey: draft.dayKey ?? options.dateKey ?? null,
+    timeZone: draft.timeZone ?? options.timeZone,
+    mealLabel: asFoodDraftString(draft.mealLabel),
     source: draft.source ?? "search",
     confirmationState: "confirmed",
     notes: asFoodDraftString(draft.notes),
@@ -775,9 +799,10 @@ function resolveCatalogFoodId(item: WeightLossSelectedFood) {
 }
 
 export function buildFoodLogPatchInput(
-  draft: WeightLossFoodDraft
+  draft: WeightLossFoodDraft,
+  options: { dateKey?: string; timeZone?: string } = {}
 ): NutritionFoodLogPatchInput {
-  return buildFoodLogInput(draft);
+  return buildFoodLogInput(draft, options);
 }
 
 function numericFoodPatchValue(value: string) {

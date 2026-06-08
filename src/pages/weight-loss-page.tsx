@@ -1,8 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Beef, Dumbbell, Gauge, Utensils, Waves } from "lucide-react";
+import {
+  Activity,
+  Beef,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Dumbbell,
+  Gauge,
+  Utensils,
+  Waves
+} from "lucide-react";
 import { PageHero } from "@/components/shell/page-hero";
 import { useForgeShell } from "@/components/shell/app-shell";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { ErrorState, LoadingState } from "@/components/ui/page-state";
 import { WeightLossActionPanel } from "@/components/weight-loss/weight-loss-action-panel";
 import { WeightLossActiveCaloriesMiniCard } from "@/components/weight-loss/weight-loss-active-calories-panel";
@@ -42,7 +54,7 @@ import {
   insightArray,
   scoreLabel
 } from "@/components/weight-loss/weight-loss-format";
-import { formatLocalDateKey } from "@/lib/date-keys";
+import { formatLocalDateKey, getRuntimeTimeZone } from "@/lib/date-keys";
 import {
   createNutritionAppearanceCheckin,
   createNutritionBodyCheckin,
@@ -429,6 +441,20 @@ function getLocalDayBounds(dateKey: string) {
   };
 }
 
+function addDaysToDateKey(dateKey: string, days: number) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return formatLocalDateKey(new Date(year, month - 1, day + days));
+}
+
+function formatDayHeading(dateKey: string) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: "long",
+    month: "short",
+    day: "numeric"
+  }).format(new Date(year, month - 1, day, 12));
+}
+
 function millisecondsUntilNextLocalDay() {
   const now = new Date();
   const next = new Date(now);
@@ -440,6 +466,8 @@ export function WeightLossPage() {
   const shell = useForgeShell();
   const queryClient = useQueryClient();
   const selectedUserIds = shell.selectedUserIds;
+  const runtimeTimeZone = useMemo(() => getRuntimeTimeZone(), []);
+  const todayDateKey = formatLocalDateKey();
   const [currentDateKey, setCurrentDateKey] = useState(() =>
     formatLocalDateKey()
   );
@@ -448,9 +476,15 @@ export function WeightLossPage() {
     [currentDateKey]
   );
   const queryKey = useMemo(
-    () => ["forge-weight-loss-view", currentDateKey, ...selectedUserIds],
-    [currentDateKey, selectedUserIds]
+    () => [
+      "forge-weight-loss-view",
+      currentDateKey,
+      runtimeTimeZone,
+      ...selectedUserIds
+    ],
+    [currentDateKey, runtimeTimeZone, selectedUserIds]
   );
+  const isSelectedToday = currentDateKey === todayDateKey;
 
   const [planOpen, setPlanOpen] = useState(false);
   const [autoPlanPrompted, setAutoPlanPrompted] = useState(false);
@@ -482,7 +516,8 @@ export function WeightLossPage() {
       (
         await getWeightLossView(selectedUserIds, {
           dateKey: currentDateKey,
-          ...currentDayBounds
+          ...currentDayBounds,
+          timeZone: runtimeTimeZone
         })
       ).weightLoss
   });
@@ -490,6 +525,9 @@ export function WeightLossPage() {
 
   useEffect(() => {
     const syncDateKey = () => {
+      if (!isSelectedToday) {
+        return;
+      }
       setCurrentDateKey((previous) => {
         const next = formatLocalDateKey();
         return next === previous ? previous : next;
@@ -506,7 +544,7 @@ export function WeightLossPage() {
       window.removeEventListener("focus", syncDateKey);
       document.removeEventListener("visibilitychange", syncDateKey);
     };
-  }, [currentDateKey]);
+  }, [currentDateKey, isSelectedToday]);
 
   useEffect(() => {
     if (
@@ -557,13 +595,23 @@ export function WeightLossPage() {
         commitCandidate: false
       }),
     onSuccess: ({ candidate }) => {
-      setFoodDraft(buildFoodDraftFromInput(candidate, "chatgpt"));
+      setFoodDraft({
+        ...buildFoodDraftFromInput(candidate, "chatgpt"),
+        dayKey: currentDateKey,
+        timeZone: runtimeTimeZone
+      });
     }
   });
 
   const createFoodLogMutation = useMutation({
     mutationFn: async (draft: WeightLossFoodDraft) =>
-      createNutritionFoodLog(buildFoodLogInput(draft), selectedUserIds),
+      createNutritionFoodLog(
+        buildFoodLogInput(draft, {
+          dateKey: currentDateKey,
+          timeZone: runtimeTimeZone
+        }),
+        selectedUserIds
+      ),
     onSuccess: () => {
       setFoodDraft(buildInitialFoodDraft());
       setFoodOpen(false);
@@ -581,7 +629,10 @@ export function WeightLossPage() {
     }) =>
       patchNutritionFoodLog(
         foodLogId,
-        buildFoodLogPatchInput(draft),
+        buildFoodLogPatchInput(draft, {
+          dateKey: currentDateKey,
+          timeZone: runtimeTimeZone
+        }),
         selectedUserIds
       ),
     onSuccess: () => {
@@ -605,6 +656,7 @@ export function WeightLossPage() {
       updateNutritionDailyActiveCalories(
         {
           dayKey: loadedView?.todayLedger.dateKey,
+          timeZone: runtimeTimeZone,
           activeCaloriesKcal,
           notes:
             activeCaloriesKcal == null
@@ -731,7 +783,9 @@ export function WeightLossPage() {
     mutationFn: async (meal: NutritionFoodLog) =>
       createNutritionFoodLog(
         {
-          mealLabel: meal.mealLabel ?? "Saved meal",
+          dayKey: currentDateKey,
+          timeZone: runtimeTimeZone,
+          mealLabel: meal.mealLabel ?? "",
           source: "saved_meal",
           confirmationState: "confirmed",
           notes: meal.notes ?? "",
@@ -834,11 +888,15 @@ export function WeightLossPage() {
     setEditingFoodLogId(null);
     setFoodDialogIntent(intent);
     setFoodInitialStepId(intent === "custom" ? "amounts" : "search");
-    setFoodDraft(
+    const nextDraft =
       intent === "custom"
         ? buildInitialCustomFoodDraft()
-        : buildInitialFoodDraft()
-    );
+        : buildInitialFoodDraft();
+    setFoodDraft({
+      ...nextDraft,
+      dayKey: currentDateKey,
+      timeZone: runtimeTimeZone
+    });
     setFoodOpen(true);
   };
 
@@ -846,7 +904,10 @@ export function WeightLossPage() {
     setEditingFoodLogId(meal.id);
     setFoodDialogIntent("search");
     setFoodInitialStepId("amounts");
-    setFoodDraft(buildFoodDraftFromLog(meal));
+    setFoodDraft({
+      ...buildFoodDraftFromLog(meal),
+      timeZone: runtimeTimeZone
+    });
     setFoodOpen(true);
     setHistoryOpen(false);
   };
@@ -886,6 +947,63 @@ export function WeightLossPage() {
         badge={`${ledger.targetCalories.toFixed(0)} kcal budget · ${view.summary.loggedMealCount} food logs`}
       />
 
+      <Card className="grid gap-4 border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
+            <CalendarDays className="size-4" />
+            Food day
+          </div>
+          <div className="mt-1 text-2xl font-semibold text-[var(--ui-ink-strong)]">
+            {isSelectedToday ? "Today" : formatDayHeading(currentDateKey)}
+          </div>
+          <div className="mt-1 text-sm leading-6 text-[var(--ui-ink-soft)]">
+            Local day {currentDateKey} in {runtimeTimeZone}. Food logs, manual
+            active calories, target, and kcal left are scoped to this day.
+          </div>
+        </div>
+        <div className="grid min-w-0 gap-2 sm:grid-cols-[auto_minmax(0,11rem)_auto_auto]">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() =>
+              setCurrentDateKey(addDaysToDateKey(currentDateKey, -1))
+            }
+            aria-label="Previous day"
+          >
+            <ChevronLeft className="size-4" />
+          </Button>
+          <input
+            type="date"
+            value={currentDateKey}
+            onChange={(event) => {
+              if (event.target.value) {
+                setCurrentDateKey(event.target.value);
+              }
+            }}
+            aria-label="Selected food day"
+            className="interactive-tap min-h-10 min-w-0 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm font-medium text-[var(--ui-ink-strong)] outline-none"
+          />
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={isSelectedToday}
+            onClick={() => setCurrentDateKey(todayDateKey)}
+          >
+            Today
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() =>
+              setCurrentDateKey(addDaysToDateKey(currentDateKey, 1))
+            }
+            aria-label="Next day"
+          >
+            <ChevronRight className="size-4" />
+          </Button>
+        </div>
+      </Card>
+
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
         <WeightLossLedgerPanel
           ledger={ledger}
@@ -923,9 +1041,9 @@ export function WeightLossPage() {
 
       <section className="grid gap-4 xl:grid-cols-4">
         <WeightLossInsightMetric
-          label="Today"
+          label={isSelectedToday ? "Today" : "Selected day"}
           value={`${intakeCalories.toFixed(0)} / ${ledger.targetCalories.toFixed(0)} kcal`}
-          detail={`${remainingCaloriesText(remainingCalories)}. Target uses ${todayActiveCalories.toFixed(0)} active kcal today; ${activeAdjustmentText}.`}
+          detail={`${remainingCaloriesText(remainingCalories)}. Target uses ${todayActiveCalories.toFixed(0)} active kcal for this day; ${activeAdjustmentText}.`}
           icon={Utensils}
           tone={remainingCalories >= 0 ? "green" : "rose"}
           help={`Today's target = baseline plan target plus the day-specific active adjustment. Here: ${plannedTargetCalories.toFixed(0)} ${formatSignedKcal(view.energyModel.todayTargetAdjustmentKcal)} = ${ledger.targetCalories.toFixed(0)} kcal. Same-day evidence is ${todayActiveCalories.toFixed(0)} kcal versus default ${baselineActiveCalories.toFixed(0)} kcal. Automatic partial evidence can only add above the baseline; a manual override can raise or lower today's target for this date.`}

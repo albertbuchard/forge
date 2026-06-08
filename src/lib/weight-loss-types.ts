@@ -33,6 +33,7 @@ export type NutritionMealItem = NutritionMealItemInput & {
 export type NutritionFoodLogInput = {
   userId?: string;
   loggedAt?: string;
+  timeZone?: string;
   mealLabel?: string | null;
   source?: "manual" | "search" | "barcode" | "chatgpt" | "photo" | "saved_meal";
   confirmationState?: "candidate" | "confirmed" | "needs_review" | "discarded";

@@ -222,7 +222,38 @@ describe("buildFoodLogInput", () => {
     Object.assign(draft, { notes: null, mealLabel: null });
 
     const input = buildFoodLogInput(draft);
-    expect(input.mealLabel).toBe("Meal");
+    expect(input.mealLabel).toBe("");
     expect(input.notes).toBe("");
+  });
+
+  it("passes the selected day and timezone when the draft has no dayKey", () => {
+    const input = buildFoodLogInput(draftWithFood("1", "serving"), {
+      dateKey: "2030-01-02",
+      timeZone: "Europe/Zurich"
+    });
+
+    expect(input.dayKey).toBe("2030-01-02");
+    expect(input.timeZone).toBe("Europe/Zurich");
+  });
+
+  it("keeps an explicit empty meal marker instead of inventing a default label", () => {
+    const draft = buildFoodDraftFromInput(
+      {
+        mealLabel: "",
+        source: "manual",
+        items: [
+          {
+            name: "Plain yogurt",
+            quantity: 100,
+            unit: "g",
+            calories: 60
+          }
+        ]
+      },
+      "manual"
+    );
+
+    expect(draft.mealLabel).toBe("");
+    expect(buildFoodLogInput(draft).mealLabel).toBe("");
   });
 });

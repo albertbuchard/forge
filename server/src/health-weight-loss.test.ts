@@ -1078,6 +1078,85 @@ test("weight loss ledger and active override are scoped to the requested local d
   }
 });
 
+test("food logs without dayKey use the supplied local timezone day", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-weight-loss-timezone-day-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: false });
+
+  try {
+    const cookie = await issueOperatorSessionCookie(app);
+    const createLog = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/weight-loss/food-logs",
+      headers: { cookie },
+      payload: {
+        loggedAt: "2030-01-01T23:30:00.000Z",
+        timeZone: "Europe/Zurich",
+        mealLabel: "",
+        source: "manual",
+        confirmationState: "confirmed",
+        items: [
+          {
+            name: "Late pasta",
+            quantity: 1,
+            unit: "bowl",
+            calories: 321,
+            proteinGrams: 12,
+            carbohydrateGrams: 55,
+            fatGrams: 7
+          }
+        ]
+      }
+    });
+    assert.equal(createLog.statusCode, 201);
+    const createBody = createLog.json() as {
+      log: { dayKey: string; totals: { calories: number } };
+    };
+    assert.equal(createBody.log.dayKey, "2030-01-02");
+    assert.equal(createBody.log.totals.calories, 321);
+
+    const dayOneOverview = await app.inject({
+      method: "GET",
+      url:
+        "/api/v1/health/weight-loss?dateKey=2030-01-01" +
+        "&timeZone=Europe%2FZurich"
+    });
+    assert.equal(dayOneOverview.statusCode, 200);
+    const dayOneBody = dayOneOverview.json() as {
+      weightLoss: {
+        todayLedger: { meals: unknown[]; totals: { calories: number } };
+      };
+    };
+    assert.equal(dayOneBody.weightLoss.todayLedger.meals.length, 0);
+    assert.equal(dayOneBody.weightLoss.todayLedger.totals.calories, 0);
+
+    const dayTwoOverview = await app.inject({
+      method: "GET",
+      url:
+        "/api/v1/health/weight-loss?dateKey=2030-01-02" +
+        "&timeZone=Europe%2FZurich"
+    });
+    assert.equal(dayTwoOverview.statusCode, 200);
+    const dayTwoBody = dayTwoOverview.json() as {
+      weightLoss: {
+        todayLedger: {
+          dateKey: string;
+          meals: unknown[];
+          totals: { calories: number };
+        };
+      };
+    };
+    assert.equal(dayTwoBody.weightLoss.todayLedger.dateKey, "2030-01-02");
+    assert.equal(dayTwoBody.weightLoss.todayLedger.meals.length, 1);
+    assert.equal(dayTwoBody.weightLoss.todayLedger.totals.calories, 321);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("weight loss energy gap averages intake over the same recent log window", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-weight-loss-energy-gap-")

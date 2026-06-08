@@ -3395,6 +3395,7 @@ export function getWeightLossView(
     dateKey?: string;
     dayStartAt?: string;
     dayEndAt?: string;
+    timeZone?: string;
   }
 ) {
   const search = new URLSearchParams();
@@ -3407,6 +3408,9 @@ export function getWeightLossView(
   }
   if (options?.dayEndAt) {
     search.set("dayEndAt", options.dayEndAt);
+  }
+  if (options?.timeZone) {
+    search.set("timeZone", options.timeZone);
   }
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
   return request<{ weightLoss: WeightLossViewData }>(
@@ -3433,6 +3437,7 @@ export function updateNutritionTarget(
 export function updateNutritionDailyActiveCalories(
   patch: {
     dayKey?: string;
+    timeZone?: string;
     activeCaloriesKcal?: number | null;
     notes?: string;
   },
